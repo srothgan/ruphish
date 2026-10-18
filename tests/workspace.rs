@@ -1,4 +1,4 @@
-//! Structural guarantees that must survive moving the product to another repository.
+//! Structural guarantees for the seven product crate boundaries.
 
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};

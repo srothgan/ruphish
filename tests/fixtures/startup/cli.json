@@ -1,0 +1,115 @@
+{
+  "reference_commit": "95618469799295e2c0fec980805a2dfbb818816b",
+  "cases": [
+    {
+      "args": [
+        "--disable-mailer",
+        "--config",
+        "absent-config.json"
+      ],
+      "exit_code": 1,
+      "stdout_empty": true,
+      "stderr_empty": false,
+      "configuration_read_attempted": true
+    },
+    {
+      "args": [
+        "--disable-mailer=false",
+        "--config",
+        "absent-config.json"
+      ],
+      "exit_code": 1,
+      "stdout_empty": true,
+      "stderr_empty": false,
+      "configuration_read_attempted": false
+    },
+    {
+      "args": [
+        "--no-disable-mailer",
+        "--config",
+        "absent-config.json"
+      ],
+      "exit_code": 1,
+      "stdout_empty": true,
+      "stderr_empty": false,
+      "configuration_read_attempted": true
+    },
+    {
+      "args": [
+        "--disable-mailer=TRUE",
+        "--config",
+        "absent-config.json"
+      ],
+      "exit_code": 1,
+      "stdout_empty": true,
+      "stderr_empty": false,
+      "configuration_read_attempted": false
+    },
+    {
+      "args": [
+        "--disable-mailer=1",
+        "--config",
+        "absent-config.json"
+      ],
+      "exit_code": 1,
+      "stdout_empty": true,
+      "stderr_empty": false,
+      "configuration_read_attempted": false
+    },
+    {
+      "args": [
+        "--disable-mailer=invalid",
+        "--config",
+        "absent-config.json"
+      ],
+      "exit_code": 1,
+      "stdout_empty": true,
+      "stderr_empty": false,
+      "configuration_read_attempted": false
+    },
+    {
+      "args": [
+        "--help",
+        "--unknown-flag"
+      ],
+      "exit_code": 1,
+      "stdout_empty": true,
+      "stderr_empty": false,
+      "configuration_read_attempted": false
+    },
+    {
+      "args": [
+        "--unknown-flag",
+        "--help"
+      ],
+      "exit_code": 1,
+      "stdout_empty": true,
+      "stderr_empty": false,
+      "configuration_read_attempted": false
+    },
+    {
+      "args": [
+        "--version",
+        "--unknown-flag"
+      ],
+      "exit_code": 0,
+      "stdout_empty": true,
+      "stderr_empty": false,
+      "configuration_read_attempted": false
+    },
+    {
+      "args": [
+        "--mode",
+        "admin",
+        "--mode",
+        "phish",
+        "--config",
+        "absent-config.json"
+      ],
+      "exit_code": 1,
+      "stdout_empty": true,
+      "stderr_empty": false,
+      "configuration_read_attempted": false
+    }
+  ]
+}

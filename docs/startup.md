@@ -1,0 +1,51 @@
+# Native application startup
+
+The executable runs on Windows and Unix systems. Tokio supplies the shared runtime and network lifecycle; small OS-specific modules handle private-file permissions and termination signals. Windows and Linux execution are verified separately. macOS/BSD execution requires a matching host and is not inferred from Linux Docker results.
+
+## Local use
+
+Build the actual admin distribution before starting an admin listener or running the complete native suite:
+
+```sh
+npm ci --prefix crates/ruphish-ui/web
+trunk build --release --locked
+cargo build --workspace --exclude ruphish-ui --locked
+```
+
+Copy config.example.json to config.json, then run from this product directory:
+
+```sh
+cargo run -p ruphish --locked -- --config ./config.json --mode all
+```
+
+The example uses local admin HTTPS on 3333 and public HTTP on 8081. The decoder itself has Go's zero defaults, not these sample values. Existing Go JSON fields and GOPHISH_INITIAL_ADMIN_PASSWORD / GOPHISH_INITIAL_ADMIN_API_TOKEN environment names are preserved. Paths resolve against the process working directory, including when --config points into another directory. Unknown fields remain accepted; invalid known-field types fail. test_flag cannot enable test mode. SQLite is supported; MySQL is explicitly rejected until its planned implementation.
+
+--mode admin and --mode phish start only the selected listener. Inactive listeners do not need assets, usable addresses or certificates. --disable-mailer and --no-disable-mailer retain the intended policy values; this startup milestone does not execute SMTP or IMAP workers. Login, resource APIs and campaign/public interactions remain their later feature packages. The current admin page is the functional editor workbench.
+
+Readiness is emitted to stderr as RUPHISH_READY followed by a JSON object containing the selected bound addresses, independently of logging level. Port 0 is supported for isolated testing. Readiness follows successful asset validation, both selected socket reservations, certificate preparation, database preparation, atomic bootstrap and listener startup. No fake health/shutdown endpoints are added. A fatal initialization/runtime failure exits with status 1; normal Ctrl+C, Windows Ctrl+Break and Unix SIGTERM shutdown exit successfully.
+
+## Existing databases and recovery
+
+Stop all old application instances before a schema upgrade. The short .ruphish-startup.lock serializes cooperating Rust startup operations; it does not establish that a Go process has stopped. Separate admin/public processes can share a current database after startup preparation.
+
+An older recognized SQLite database is upgraded at its configured path. Startup reserves the writer transaction, takes a separate SQLite VACUUM INTO snapshot including committed WAL contents, validates the snapshot's integrity and history, syncs it, and publishes a private ruphish-pre-upgrade-*.sqlite3 file before applying pending migrations in the original transaction. Temporary snapshots use a different hidden name and are not advertised as recoverable backups. Failed migrations roll back; backups remain available. Unknown/future/inconsistent schemas and corrupt files fail without being initialized as empty. A current schema is not repeatedly backed up or migrated. Arbitrary SQL supplied through migrations_prefix is refused; an external directory must match the full verified migration set.
+
+To restore a snapshot, stop every application process and restore the verified SQLite snapshot to a separate path, then configure db_path to that path. Do not copy a lone live database file over a running database or splice its WAL files. The snapshot contains pre-upgrade state; later application writes are outside that recovery point. Power-loss durability and hostile concurrent filesystem replacement are not established by process-kill tests.
+
+Bootstrap creates the first admin, admin role link, bcrypt hash, API token and password-change flag in one transaction. A still-temporary default admin password is refreshed on restart as in Go. Established password hashes, tokens, renamed accounts and existing records are retained. Generated passwords appear only on the controlled process console; supplied passwords and API tokens are never echoed or put in ordinary logs. Setting an initial password does not bypass bcrypt's 72-byte input limit. Login and forced-password-change handlers are package 5.
+
+## TLS, assets and shutdown
+
+Supplied EC SEC1 and RSA PKCS#1 PEM pairs are loaded and validated without rewriting their bytes. When both files are absent, startup generates a P-384 certificate/key pair with localhost and configured-host SANs. One missing file or a mismatched pair fails explicitly. Because two files cannot be published atomically, a hard interruption can leave an incomplete pair; repair it explicitly before restart. Generated keys, new databases and recoverable backups use Unix mode 0600 or a protected Windows DACL granting the current identity access. Existing operator-supplied files retain their permissions.
+
+TLS uses Rustls with ring and TLS 1.2/1.3. Obsolete protocol/key-exchange support is not reproduced. Self-signed generated certificates require explicit trust; the synthetic legacy no-SAN compatibility fixture is the sole test that bypasses identity validation.
+
+Trunk.toml explicitly runs web/build.mjs to generate editor modules before compilation, then generates asset-manifest.json over the staged output. The native admin router checks every file against that manifest and mounts explicit asset routes. Missing JavaScript/WASM, unknown API routes and traversal requests return 404 rather than a SPA shell. The public listener never exposes admin assets. Distribution symlinks are rejected. Keep the configured distribution immutable while a server runs; the manifest checks build coherence at startup, not ongoing filesystem authenticity.
+
+Incomplete HTTP headers and TLS handshakes have ten-second deadlines. Request-body budgets will be integrated with the handlers that consume those bodies. HTTP serving tasks are supervised and required-listener failure triggers application shutdown. Termination stops accepting and drains active requests for up to ten seconds, closes the SQLite pool and flushes the owned log worker. The Tokio runtime has a bounded shutdown wait. Access logs omit query strings, which can contain API keys and recipient identifiers. Logging appends to an existing file, accepts legacy level names, and represents fatal failures using tracing's ERROR severity; logging text layout is modernized.
+
+Application debug/trace levels do not enable dependency debug/trace dumps: dependency output is capped at warnings while still respecting a stricter configured threshold. This keeps transport internals and full SQL diagnostics out of ordinary application logs. Temporary snapshot files can remain after a hard process termination; their hidden .ruphish-backup-tmp- names distinguish them from verified published backups.
+
+## Verification
+
+AGENTS.md lists direct checks. tests/startup_cli.rs runs the real executable with isolated working directories, separate stdout/stderr capture and deadlines. tests/startup_process.rs uses native PTYs, real listeners, actual built WASM/JavaScript, synthetic environments, bounded output and observable readiness. It covers all 25 populated legacy schemas, migration rollback and hard termination during a live migration journal, bootstrap, restart, shared modes, preflight failure, HTTP/TLS, traversal, stale assets, logs and native signals. Adapter integration tests additionally check committed WAL data, untouched queue ownership, migration-directory validation and platform file permissions. Config observations come from unchanged Go code. No production failure/termination endpoint or browser automation is used.

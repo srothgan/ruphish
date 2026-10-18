@@ -8,12 +8,17 @@ publish.workspace = true
 
 [dependencies]
 bcrypt = "0.19.3"
+getrandom = "0.4.3"
 gtmpl-ng = "1.0.0"
+hex = "0.4.3"
+rcgen = "0.14.10"
 ruphish-application = { version = "0.1.0-dev", path = "../ruphish-application" }
 ruphish-domain = { version = "0.1.0-dev", path = "../ruphish-domain" }
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite"] }
 tempfile = "3.27.0"
 thiserror = "2.0.21"
+time = "0.3.55"
+tokio = { version = "1.53.3", features = ["rt", "time", "sync"] }
 
 [lints]
 workspace = true
@@ -22,3 +27,6 @@ workspace = true
 serde_json = "1.0.154"
 tempfile = "3.27.0"
 tokio = { version = "1.53.3", features = ["macros", "rt-multi-thread"] }
+
+[target."cfg(windows)".dependencies]
+windows-permissions = "0.2.4"

@@ -7,7 +7,20 @@ public_url = "/"
 locked = true
 filehash = true
 
+[[hooks]]
+stage = "pre_build"
+command = "node"
+command_arguments = ["crates/ruphish-ui/web/build.mjs"]
+
+[[hooks]]
+stage = "post_build"
+command = "node"
+command_arguments = ["crates/ruphish-ui/web/build.mjs", "manifest"]
+
 [serve]
 addresses = ["127.0.0.1"]
 port = 8080
 open = false
+
+[watch]
+ignore = ["crates/ruphish-ui/web/generated"]

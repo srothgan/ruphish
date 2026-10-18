@@ -1,6 +1,9 @@
 //! Recognize Goose history and upgrade a database copy without altering the original.
 
 mod migrations;
+mod startup;
+
+pub use startup::{StartupDatabase, StartupError};
 
 use migrations::MIGRATIONS;
 use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
@@ -26,6 +29,7 @@ pub enum UpgradeError {
 /// Create a fresh schema without creating bootstrap accounts.
 pub async fn create(path: &Path) -> Result<(), UpgradeError> {
     let temporary = temporary_destination(path)?;
+    crate::private_file::protect(temporary.path())?;
     let mut connection = connect(temporary.path(), false).await?;
     let migration = migrate(&mut connection, true).await;
     let closed = connection.close().await;
@@ -41,6 +45,7 @@ pub async fn create(path: &Path) -> Result<(), UpgradeError> {
 /// application before cutover so later writes cannot be lost after this snapshot.
 pub async fn upgrade_copy(source: &Path, destination: &Path) -> Result<(), UpgradeError> {
     let temporary = temporary_destination(destination)?;
+    crate::private_file::protect(temporary.path())?;
     let mut original = connect(source, true).await?;
     let snapshot = sqlx::query("VACUUM INTO ?")
         .bind(temporary.path().to_string_lossy().as_ref())
@@ -100,18 +105,25 @@ fn up(source: &str) -> &str {
 }
 
 async fn migrate(connection: &mut SqliteConnection, fresh: bool) -> Result<(), UpgradeError> {
+    let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+    if fresh {
+        sqlx::raw_sql("CREATE TABLE goose_db_version(id INTEGER PRIMARY KEY AUTOINCREMENT, version_id INTEGER NOT NULL, is_applied INTEGER NOT NULL, tstamp TIMESTAMP DEFAULT(datetime('now'))); INSERT INTO goose_db_version(version_id,is_applied) VALUES(0,1);").execute(&mut *transaction).await?;
+    }
+    let count = inspect(&mut transaction, fresh).await?;
+    apply_pending(&mut transaction, count).await?;
+    transaction.commit().await?;
+    Ok(())
+}
+
+async fn inspect(connection: &mut SqliteConnection, fresh: bool) -> Result<usize, UpgradeError> {
     let integrity: String = sqlx::query_scalar("PRAGMA integrity_check")
         .fetch_one(&mut *connection)
         .await?;
     if integrity != "ok" {
         return Err(UpgradeError::Unrecognized(integrity));
     }
-    let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
-    if fresh {
-        sqlx::raw_sql("CREATE TABLE goose_db_version(id INTEGER PRIMARY KEY AUTOINCREMENT, version_id INTEGER NOT NULL, is_applied INTEGER NOT NULL, tstamp TIMESTAMP DEFAULT(datetime('now'))); INSERT INTO goose_db_version(version_id,is_applied) VALUES(0,1);").execute(&mut *transaction).await?;
-    }
     let history = sqlx::query("SELECT version_id,is_applied FROM goose_db_version ORDER BY id")
-        .fetch_all(&mut *transaction)
+        .fetch_all(&mut *connection)
         .await?;
     if history.is_empty() {
         return Err(UpgradeError::Unrecognized("empty migration history".into()));
@@ -148,19 +160,25 @@ async fn migrate(connection: &mut SqliteConnection, fresh: bool) -> Result<(), U
             "no application migration applied".into(),
         ));
     }
-    validate_schema(&mut transaction, count).await?;
+    validate_schema(connection, count).await?;
+    Ok(count)
+}
+
+async fn apply_pending(
+    connection: &mut SqliteConnection,
+    count: usize,
+) -> Result<(), UpgradeError> {
     for (version, source) in &MIGRATIONS[count..] {
         if *version == 20160227180335 {
-            convert_early_smtp(&mut transaction).await?;
+            convert_early_smtp(connection).await?;
         } else {
-            sqlx::raw_sql(up(source)).execute(&mut *transaction).await?;
+            sqlx::raw_sql(up(source)).execute(&mut *connection).await?;
         }
         sqlx::query("INSERT INTO goose_db_version(version_id,is_applied) VALUES(?,1)")
             .bind(version)
-            .execute(&mut *transaction)
+            .execute(&mut *connection)
             .await?;
     }
-    transaction.commit().await?;
     Ok(())
 }
 

@@ -42,9 +42,10 @@ source_receiver = ""
 source_body_sha256 = "8db086765e99b50e1c13dab7afcdafacd8909f8dbb152b9368ece36d0e72a1fc"
 guarantee = "Load valid config and preserve validation/error behavior for missing/malformed configuration and derived migration path."
 strategy = "Translate the existing scenario and independent expected values; use real boundary effects where the original only mocked internals. Preserve all original table cases."
-target_crate = "ruphish-adapters"
-target_path = "crates/ruphish-adapters/tests/legacy_config.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/startup_config.rs"
+status = "implemented"
+target_test = "unchanged_go_configuration_observations_preserve_merges_nulls_types_and_defaults"
 source_subtests = []
 
 [[tests]]
@@ -532,9 +533,10 @@ source_receiver = ""
 source_body_sha256 = "34ce3470d16acc80d49f3b45de605d9d1a12f2606bc72bef16a10c77aa9a66f2"
 guarantee = "Accept supported configured logging levels and reject invalid levels."
 strategy = "Translate the existing scenario and independent expected values; use real boundary effects where the original only mocked internals. Preserve all original table cases."
-target_crate = "ruphish-adapters"
-target_path = "crates/ruphish-adapters/tests/legacy_logger.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/startup_process.rs"
+status = "implemented"
+target_test = "log_levels_append_and_never_record_query_credentials"
 source_subtests = []
 
 [[tests]]

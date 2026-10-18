@@ -1,0 +1,19 @@
+{
+  "admin_server": {
+    "listen_url": "127.0.0.1:3333",
+    "use_tls": true,
+    "cert_path": "ruphish_admin.crt",
+    "key_path": "ruphish_admin.key"
+  },
+  "phish_server": {
+    "listen_url": "127.0.0.1:8081",
+    "use_tls": false,
+    "cert_path": "ruphish_public.crt",
+    "key_path": "ruphish_public.key"
+  },
+  "db_name": "sqlite3",
+  "db_path": "ruphish.db",
+  "migrations_prefix": "db/db_",
+  "contact_address": "",
+  "logging": { "filename": "ruphish.log", "level": "info" }
+}

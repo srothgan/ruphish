@@ -5,3 +5,12 @@
 /PERSONAL.md
 **/node_modules/
 /crates/ruphish-ui/web/generated/
+/config.json
+/ruphish.db*
+/ruphish.log
+/ruphish_admin.crt
+/ruphish_admin.key
+/ruphish_public.crt
+/ruphish_public.key
+/ruphish-pre-upgrade-*.sqlite3
+/.ruphish-backup-tmp-*.sqlite3

@@ -1,0 +1,387 @@
+[
+  {
+    "accepted": true,
+    "body": "{}",
+    "expected": {
+      "admin_server": {
+        "listen_url": "",
+        "use_tls": false,
+        "cert_path": "",
+        "key_path": "",
+        "csrf_key": "",
+        "allowed_internal_hosts": null,
+        "trusted_origins": null
+      },
+      "phish_server": {
+        "listen_url": "",
+        "use_tls": false,
+        "cert_path": "",
+        "key_path": ""
+      },
+      "db_name": "",
+      "db_path": "",
+      "db_sslca_path": "",
+      "migrations_prefix": "",
+      "test_flag": false,
+      "contact_address": "",
+      "logging": {
+        "filename": "",
+        "level": ""
+      }
+    }
+  },
+  {
+    "accepted": true,
+    "body": "null",
+    "expected": {
+      "admin_server": {
+        "listen_url": "",
+        "use_tls": false,
+        "cert_path": "",
+        "key_path": "",
+        "csrf_key": "",
+        "allowed_internal_hosts": null,
+        "trusted_origins": null
+      },
+      "phish_server": {
+        "listen_url": "",
+        "use_tls": false,
+        "cert_path": "",
+        "key_path": ""
+      },
+      "db_name": "",
+      "db_path": "",
+      "db_sslca_path": "",
+      "migrations_prefix": "",
+      "test_flag": false,
+      "contact_address": "",
+      "logging": {
+        "filename": "",
+        "level": ""
+      }
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{\"admin_server\":{\"listen_url\":\"127.0.0.1:3333\",\"use_tls\":true,\"cert_path\":\"gophish_admin.crt\",\"key_path\":\"gophish_admin.key\"},\"phish_server\":{\"listen_url\":\"0.0.0.0:8080\",\"use_tls\":false,\"cert_path\":\"example.crt\",\"key_path\":\"example.key\"},\"db_name\":\"sqlite3\",\"db_path\":\"gophish.db\",\"migrations_prefix\":\"db/db_\",\"contact_address\":\"\"}",
+    "expected": {
+      "admin_server": {
+        "listen_url": "127.0.0.1:3333",
+        "use_tls": true,
+        "cert_path": "gophish_admin.crt",
+        "key_path": "gophish_admin.key",
+        "csrf_key": "",
+        "allowed_internal_hosts": null,
+        "trusted_origins": null
+      },
+      "phish_server": {
+        "listen_url": "0.0.0.0:8080",
+        "use_tls": false,
+        "cert_path": "example.crt",
+        "key_path": "example.key"
+      },
+      "db_name": "sqlite3",
+      "db_path": "gophish.db",
+      "db_sslca_path": "",
+      "migrations_prefix": "db/db_sqlite3",
+      "test_flag": false,
+      "contact_address": "",
+      "logging": {
+        "filename": "",
+        "level": ""
+      }
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{\"db_name\":\"sqlite3\",\"db_path\":\"a.db\",\"test_flag\":true,\"unknown\":{\"secret\":\"ignored\"}}",
+    "expected": {
+      "admin_server": {
+        "listen_url": "",
+        "use_tls": false,
+        "cert_path": "",
+        "key_path": "",
+        "csrf_key": "",
+        "allowed_internal_hosts": null,
+        "trusted_origins": null
+      },
+      "phish_server": {
+        "listen_url": "",
+        "use_tls": false,
+        "cert_path": "",
+        "key_path": ""
+      },
+      "db_name": "sqlite3",
+      "db_path": "a.db",
+      "db_sslca_path": "",
+      "migrations_prefix": "sqlite3",
+      "test_flag": false,
+      "contact_address": "",
+      "logging": {
+        "filename": "",
+        "level": ""
+      }
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{\"db_path\":\"first\",\"DB_PATH\":\"last\",\"db_path\":null,\"admin_server\":{\"listen_url\":\"a\",\"use_tls\":true},\"ADMIN_SERVER\":{\"cert_path\":\"b\"},\"admin_server\":null}",
+    "expected": {
+      "admin_server": {
+        "listen_url": "a",
+        "use_tls": true,
+        "cert_path": "b",
+        "key_path": "",
+        "csrf_key": "",
+        "allowed_internal_hosts": null,
+        "trusted_origins": null
+      },
+      "phish_server": {
+        "listen_url": "",
+        "use_tls": false,
+        "cert_path": "",
+        "key_path": ""
+      },
+      "db_name": "",
+      "db_path": "last",
+      "db_sslca_path": "",
+      "migrations_prefix": "",
+      "test_flag": false,
+      "contact_address": "",
+      "logging": {
+        "filename": "",
+        "level": ""
+      }
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{\"logging\":{\"filename\":\"first\",\"level\":\"debug\"},\"logging\":{\"level\":\"warn\"}}",
+    "expected": {
+      "admin_server": {
+        "listen_url": "",
+        "use_tls": false,
+        "cert_path": "",
+        "key_path": "",
+        "csrf_key": "",
+        "allowed_internal_hosts": null,
+        "trusted_origins": null
+      },
+      "phish_server": {
+        "listen_url": "",
+        "use_tls": false,
+        "cert_path": "",
+        "key_path": ""
+      },
+      "db_name": "",
+      "db_path": "",
+      "db_sslca_path": "",
+      "migrations_prefix": "",
+      "test_flag": false,
+      "contact_address": "",
+      "logging": {
+        "filename": "first",
+        "level": "warn"
+      }
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{\"logging\":{\"level\":\"debug\"},\"logging\":null}",
+    "expected": {
+      "admin_server": {
+        "listen_url": "",
+        "use_tls": false,
+        "cert_path": "",
+        "key_path": "",
+        "csrf_key": "",
+        "allowed_internal_hosts": null,
+        "trusted_origins": null
+      },
+      "phish_server": {
+        "listen_url": "",
+        "use_tls": false,
+        "cert_path": "",
+        "key_path": ""
+      },
+      "db_name": "",
+      "db_path": "",
+      "db_sslca_path": "",
+      "migrations_prefix": "",
+      "test_flag": false,
+      "contact_address": "",
+      "logging": {
+        "filename": "",
+        "level": ""
+      }
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{\"logging\":null,\"logging\":{\"level\":\"fatal\"}}",
+    "expected": {
+      "admin_server": {
+        "listen_url": "",
+        "use_tls": false,
+        "cert_path": "",
+        "key_path": "",
+        "csrf_key": "",
+        "allowed_internal_hosts": null,
+        "trusted_origins": null
+      },
+      "phish_server": {
+        "listen_url": "",
+        "use_tls": false,
+        "cert_path": "",
+        "key_path": ""
+      },
+      "db_name": "",
+      "db_path": "",
+      "db_sslca_path": "",
+      "migrations_prefix": "",
+      "test_flag": false,
+      "contact_address": "",
+      "logging": {
+        "filename": "",
+        "level": "fatal"
+      }
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{\"admin_server\":{\"allowed_internal_hosts\":[\"a\"],\"trusted_origins\":[\"b\"]},\"admin_server\":{\"allowed_internal_hosts\":null,\"trusted_origins\":[]}}",
+    "expected": {
+      "admin_server": {
+        "listen_url": "",
+        "use_tls": false,
+        "cert_path": "",
+        "key_path": "",
+        "csrf_key": "",
+        "allowed_internal_hosts": null,
+        "trusted_origins": []
+      },
+      "phish_server": {
+        "listen_url": "",
+        "use_tls": false,
+        "cert_path": "",
+        "key_path": ""
+      },
+      "db_name": "",
+      "db_path": "",
+      "db_sslca_path": "",
+      "migrations_prefix": "",
+      "test_flag": false,
+      "contact_address": "",
+      "logging": {
+        "filename": "",
+        "level": ""
+      }
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{\"admin_server\":{\"listen_url\":\"first\",\"LISTEN_URL\":\"last\",\"listen_url\":null,\"use_tls\":true,\"use_tls\":null,\"cſrf_Key\":\"folded\"}}",
+    "expected": {
+      "admin_server": {
+        "listen_url": "last",
+        "use_tls": true,
+        "cert_path": "",
+        "key_path": "",
+        "csrf_key": "folded",
+        "allowed_internal_hosts": null,
+        "trusted_origins": null
+      },
+      "phish_server": {
+        "listen_url": "",
+        "use_tls": false,
+        "cert_path": "",
+        "key_path": ""
+      },
+      "db_name": "",
+      "db_path": "",
+      "db_sslca_path": "",
+      "migrations_prefix": "",
+      "test_flag": false,
+      "contact_address": "",
+      "logging": {
+        "filename": "",
+        "level": ""
+      }
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{\"phish_server\":{\"csrf_key\":12,\"trusted_origins\":false,\"unknown\":[]}}",
+    "expected": {
+      "admin_server": {
+        "listen_url": "",
+        "use_tls": false,
+        "cert_path": "",
+        "key_path": "",
+        "csrf_key": "",
+        "allowed_internal_hosts": null,
+        "trusted_origins": null
+      },
+      "phish_server": {
+        "listen_url": "",
+        "use_tls": false,
+        "cert_path": "",
+        "key_path": ""
+      },
+      "db_name": "",
+      "db_path": "",
+      "db_sslca_path": "",
+      "migrations_prefix": "",
+      "test_flag": false,
+      "contact_address": "",
+      "logging": {
+        "filename": "",
+        "level": ""
+      }
+    }
+  },
+  {
+    "accepted": false,
+    "body": "{\"admin_server\":{\"use_tls\":\"false\"}}"
+  },
+  {
+    "accepted": false,
+    "body": "{\"db_name\":12}"
+  },
+  {
+    "accepted": false,
+    "body": "{\"db_path\":\"ok\",\"DB_PATH\":12,\"db_path\":\"last\"}"
+  },
+  {
+    "accepted": false,
+    "body": "{\"admin_server\":{\"allowed_internal_hosts\":[1]}}"
+  },
+  {
+    "accepted": false,
+    "body": "{\"logging\":[]}"
+  },
+  {
+    "accepted": false,
+    "body": "{\"test_flag\":\"true\"}"
+  },
+  {
+    "accepted": false,
+    "body": "[]"
+  },
+  {
+    "accepted": false,
+    "body": "true"
+  },
+  {
+    "accepted": false,
+    "body": ""
+  },
+  {
+    "accepted": false,
+    "body": "{"
+  },
+  {
+    "accepted": false,
+    "body": "{} {}"
+  }
+]

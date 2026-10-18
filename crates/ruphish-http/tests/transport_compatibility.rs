@@ -22,6 +22,7 @@ impl Drop for Server {
 }
 
 async fn serve(router: Router) -> Result<(String, Server), Box<dyn std::error::Error>> {
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let address = listener.local_addr()?;
     let task = tokio::spawn(async move {

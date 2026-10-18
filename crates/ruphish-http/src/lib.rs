@@ -4,3 +4,4 @@
 //! concrete adapters. No application routes have been implemented yet.
 
 pub mod response;
+pub mod server;
