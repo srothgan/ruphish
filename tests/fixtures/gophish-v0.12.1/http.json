@@ -1,0 +1,528 @@
+[
+  {
+    "id": "missing-key",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/groups/",
+    "headers": null,
+    "body": "",
+    "expected_status": 401,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": {
+      "data": null,
+      "message": "API Key not set",
+      "success": false
+    }
+  },
+  {
+    "id": "invalid-key",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/groups/",
+    "headers": {
+      "Authorization": "Bearer invalid"
+    },
+    "body": "",
+    "expected_status": 401,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": {
+      "data": null,
+      "message": "Invalid API Key",
+      "success": false
+    }
+  },
+  {
+    "id": "query-key",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/groups/?api_key=1111111111111111111111111111111111111111111111111111111111111111",
+    "headers": null,
+    "body": "",
+    "expected_status": 200,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": []
+  },
+  {
+    "id": "preflight",
+    "boundary": "api-router",
+    "method": "OPTIONS",
+    "path": "/api/groups/",
+    "headers": null,
+    "body": "",
+    "expected_status": 200,
+    "expected_headers": {
+      "Access-Control-Allow-Headers": "Origin, X-Requested-With, Content-Type, Accept",
+      "Access-Control-Allow-Methods": "POST, GET, OPTIONS, PUT, DELETE",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Max-Age": "1000"
+    },
+    "expected_text": ""
+  },
+  {
+    "id": "slash-redirect",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/groups",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "",
+    "expected_status": 301,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "text/html; charset=utf-8",
+      "Location": "/api/groups/"
+    },
+    "expected_text": "\u003ca href=\"/api/groups/\"\u003eMoved Permanently\u003c/a\u003e.\n\n"
+  },
+  {
+    "id": "write-slash-redirect",
+    "boundary": "api-router",
+    "method": "POST",
+    "path": "/api/groups",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"name\":\"not-created\"}",
+    "expected_status": 301,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Location": "/api/groups/"
+    },
+    "expected_text": ""
+  },
+  {
+    "id": "empty-api-groups",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/groups/",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "",
+    "expected_status": 200,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": []
+  },
+  {
+    "id": "empty-api-groups-summary",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/groups/summary",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "",
+    "expected_status": 200,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": {
+      "groups": [],
+      "total": 0
+    }
+  },
+  {
+    "id": "empty-api-templates",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/templates/",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "",
+    "expected_status": 200,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": []
+  },
+  {
+    "id": "empty-api-pages",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/pages/",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "",
+    "expected_status": 200,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": []
+  },
+  {
+    "id": "empty-api-smtp",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/smtp/",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "",
+    "expected_status": 200,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": []
+  },
+  {
+    "id": "empty-api-campaigns",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/campaigns/",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "",
+    "expected_status": 200,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": []
+  },
+  {
+    "id": "empty-api-campaigns-summary",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/campaigns/summary",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "",
+    "expected_status": 200,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": {
+      "campaigns": [],
+      "total": 0
+    }
+  },
+  {
+    "id": "empty-api-imap",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/imap/",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "",
+    "expected_status": 200,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": []
+  },
+  {
+    "id": "empty-api-webhooks",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/webhooks/",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "",
+    "expected_status": 200,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": []
+  },
+  {
+    "id": "group-invalid-json",
+    "boundary": "api-router",
+    "method": "POST",
+    "path": "/api/groups/",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "{",
+    "expected_status": 400,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": {
+      "data": null,
+      "message": "Invalid JSON structure",
+      "success": false
+    }
+  },
+  {
+    "id": "group-missing-name",
+    "boundary": "api-router",
+    "method": "POST",
+    "path": "/api/groups/",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"targets\":[{\"email\":\"ada@example.test\"}]}",
+    "expected_status": 400,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": {
+      "data": null,
+      "message": "Group name not specified",
+      "success": false
+    }
+  },
+  {
+    "id": "group-missing-targets",
+    "boundary": "api-router",
+    "method": "POST",
+    "path": "/api/groups/",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"name\":\"No targets\"}",
+    "expected_status": 400,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": {
+      "data": null,
+      "message": "No targets specified",
+      "success": false
+    }
+  },
+  {
+    "id": "group-create",
+    "boundary": "api-router",
+    "method": "POST",
+    "path": "/api/groups/",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"name\":\"Fixture group\",\"targets\":[{\"email\":\"ada@example.test\",\"first_name\":\"Ada\",\"last_name\":\"Example\",\"position\":\"Engineer\"}]}",
+    "expected_status": 201,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": {
+      "id": 1,
+      "modified_date": "\u003cgenerated-time\u003e",
+      "name": "Fixture group",
+      "targets": [
+        {
+          "email": "ada@example.test",
+          "first_name": "Ada",
+          "last_name": "Example",
+          "position": "Engineer"
+        }
+      ]
+    },
+    "normalized_json_pointers": [
+      "/modified_date"
+    ]
+  },
+  {
+    "id": "group-read",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/groups/1",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "",
+    "expected_status": 200,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": {
+      "id": 1,
+      "modified_date": "\u003cgenerated-time\u003e",
+      "name": "Fixture group",
+      "targets": [
+        {
+          "email": "ada@example.test",
+          "first_name": "Ada",
+          "last_name": "Example",
+          "position": "Engineer"
+        }
+      ]
+    },
+    "normalized_json_pointers": [
+      "/modified_date"
+    ]
+  },
+  {
+    "id": "group-not-found",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/groups/999",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "",
+    "expected_status": 404,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": {
+      "data": null,
+      "message": "Group not found",
+      "success": false
+    }
+  },
+  {
+    "id": "group-unsupported-method",
+    "boundary": "api-router",
+    "method": "PATCH",
+    "path": "/api/groups/1",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "",
+    "expected_status": 200,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*"
+    },
+    "expected_text": ""
+  },
+  {
+    "id": "campaign-not-found",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/campaigns/999",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "",
+    "expected_status": 404,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": {
+      "data": null,
+      "message": "Campaign not found",
+      "success": false
+    }
+  },
+  {
+    "id": "imap-get-validation",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/imap/validate",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "",
+    "expected_status": 400,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": {
+      "data": null,
+      "message": "Only POSTs allowed",
+      "success": false
+    }
+  },
+  {
+    "id": "test-email-wrong-method",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/util/send_test_email",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "",
+    "expected_status": 400,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": {
+      "data": null,
+      "message": "Method not allowed",
+      "success": false
+    }
+  },
+  {
+    "id": "unknown-route",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/not-a-route",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "",
+    "expected_status": 404,
+    "expected_headers": {
+      "Content-Type": "text/plain; charset=utf-8"
+    },
+    "expected_text": "404 page not found\n"
+  },
+  {
+    "id": "query-precedes-bearer",
+    "boundary": "api-router",
+    "method": "GET",
+    "path": "/api/groups/?api_key=invalid",
+    "headers": {
+      "Authorization": "Bearer 1111111111111111111111111111111111111111111111111111111111111111",
+      "Content-Type": "application/json"
+    },
+    "body": "",
+    "expected_status": 401,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "application/json"
+    },
+    "expected_json": {
+      "data": null,
+      "message": "Invalid API Key",
+      "success": false
+    }
+  }
+]

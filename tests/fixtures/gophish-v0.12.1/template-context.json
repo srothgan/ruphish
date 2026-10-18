@@ -1,0 +1,71 @@
+[
+  {
+    "base_url": "https://training.example.test",
+    "expected": {
+      "From": "Training Team",
+      "URL": "https://training.example.test?rid=fixture-rid",
+      "Tracker": "\u003cimg alt='' style='display: none' src='https://training.example.test/track?rid=fixture-rid'/\u003e",
+      "TrackingURL": "https://training.example.test/track?rid=fixture-rid",
+      "RId": "fixture-rid",
+      "BaseURL": "https://training.example.test",
+      "email": "ada@example.test",
+      "first_name": "ada",
+      "last_name": "Example",
+      "position": ""
+    },
+    "from_address": "Training Team \u003csender@example.test\u003e",
+    "recipient": {
+      "email": "ada@example.test",
+      "first_name": "ada",
+      "last_name": "Example",
+      "position": ""
+    },
+    "rid": "fixture-rid"
+  },
+  {
+    "base_url": "https://training.example.test/path?z=last\u0026existing=a+b",
+    "expected": {
+      "From": "Training Team",
+      "URL": "https://training.example.test/path?existing=a+b\u0026rid=fixture-rid\u0026z=last",
+      "Tracker": "\u003cimg alt='' style='display: none' src='https://training.example.test/path/track?existing=a+b\u0026rid=fixture-rid\u0026z=last'/\u003e",
+      "TrackingURL": "https://training.example.test/path/track?existing=a+b\u0026rid=fixture-rid\u0026z=last",
+      "RId": "fixture-rid",
+      "BaseURL": "https://training.example.test",
+      "email": "ada@example.test",
+      "first_name": "ada",
+      "last_name": "Example",
+      "position": ""
+    },
+    "from_address": "Training Team \u003csender@example.test\u003e",
+    "recipient": {
+      "email": "ada@example.test",
+      "first_name": "ada",
+      "last_name": "Example",
+      "position": ""
+    },
+    "rid": "fixture-rid"
+  },
+  {
+    "base_url": "https://{{.FirstName}}.example.test/path",
+    "expected": {
+      "From": "Training Team",
+      "URL": "https://ada.example.test/path?rid=fixture-rid",
+      "Tracker": "\u003cimg alt='' style='display: none' src='https://ada.example.test/path/track?rid=fixture-rid'/\u003e",
+      "TrackingURL": "https://ada.example.test/path/track?rid=fixture-rid",
+      "RId": "fixture-rid",
+      "BaseURL": "https://ada.example.test",
+      "email": "ada@example.test",
+      "first_name": "ada",
+      "last_name": "Example",
+      "position": ""
+    },
+    "from_address": "Training Team \u003csender@example.test\u003e",
+    "recipient": {
+      "email": "ada@example.test",
+      "first_name": "ada",
+      "last_name": "Example",
+      "position": ""
+    },
+    "rid": "fixture-rid"
+  }
+]

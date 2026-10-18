@@ -1,0 +1,79 @@
+# Product development instructions
+
+## Scope and structure
+
+The seven crate boundaries are domain, wire contracts, application use cases, adapters, HTTP, WASM UI, and executable composition. Keep domain rules authoritative, handlers/adapters thin, dependencies directed inward, and browser contracts free of backend secrets or infrastructure. Workspace architecture tests enforce the declared boundary policy; update that policy only for an intentional architectural change.
+
+Native libraries are scaffolds until functionality is implemented with its tests; do not add fake domain models, no-op operations, or success-returning placeholder handlers. Existing compatibility fixtures are independent expectations, not evidence that Rust already supports those features. Preserve the legacy-test map's honest statuses and all original scenario guarantees as they are implemented.
+
+## Working discipline
+
+- Inspect relevant implementation, fixtures, consumers, and error paths before changing behavior. Follow complete workflows through validation, persistence, emitted effects, and recovery.
+- Each invariant, transition, relationship, and derived value has one authoritative owner. Avoid duplicated state, redundant validation, and alternative stale implementations.
+- Use `cargo new`, `cargo add`, `cargo remove`, `cargo update`, `cargo install`, and `rustup` commands for crate creation, dependency/tool installation and changes; let the CLI write dependency version entries and lockfiles rather than adding dependencies by manually typing versions into manifests. Editing workspace metadata, profiles, feature configuration, and lint policy is normal configuration work.
+- Preserve external wire/data/template contracts and meaningful negative guarantees. Record an intentional compatibility difference and its tests explicitly before adopting it.
+- Prefer typed errors at library boundaries and contextual startup errors. Production code forbids unsafe code and accidental unwrap/expect/panic/exit/todo/unimplemented/dbg usage; tests have narrow Clippy exemptions for assertions and setup.
+- Add tests for actual domain/functionality guarantees, persisted state, protocols, and real failure boundaries. Do not add mirror tests for trivial code or claim scaffold checks establish feature parity.
+- The user performs manual visual/UI interaction tests. Compile and build WASM; do not add browser/screenshot automation by default.
+- Never manually hard-wrap Markdown paragraphs or list items. Use one source line per paragraph or list item.
+
+## Toolchain and verification
+
+`rust-toolchain.toml` pins Rust 1.95.0, rustfmt, Clippy, and wasm32-unknown-unknown. Manifests inherit edition 2024 and supported Rust 1.95. Lower compiler versions have not been validated. Keep the application Cargo.lock and use locked checks. Native default members exclude the browser binary deliberately; native success is not WASM verification.
+
+Run checks directly from this directory. Do not add a task runner, check script, Cargo alias layer, or npm wrapper around these commands. Keep the actual commands visible here and report their individual results.
+
+After native Rust changes, run:
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --workspace --exclude ruphish-ui --all-targets --locked -- -D warnings
+cargo test --workspace --exclude ruphish-ui --locked
+cargo build --workspace --exclude ruphish-ui --locked
+```
+
+After browser/contract changes, separately check, lint, and build the browser target:
+
+```sh
+cargo check -p ruphish-ui --target wasm32-unknown-unknown --locked
+cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --locked -- -D warnings
+trunk build --release --locked
+```
+
+Trunk 0.21.14 expects NO_COLOR to be a boolean. If the invoking environment has NO_COLOR=1, set the process value to true before direct Trunk commands: `$env:NO_COLOR = 'true'` in PowerShell, or `NO_COLOR=true trunk build --release --locked` in a POSIX shell. Do not change persistent user/system environment settings.
+
+For dependency changes and the full workspace acceptance pass, run:
+
+```sh
+cargo deny --version
+cargo deny check bans licenses sources advisories
+```
+
+The required cargo-deny version is recorded in Cargo.toml workspace metadata; Trunk enforces its own exact version from Trunk.toml. Do not silently skip unavailable tools or failed checks. No application feature flags exist yet; document and check supported combinations as features are introduced.
+
+Browser output is generated in dist/admin. Do not hand-edit or check in target/ or dist/, and rebuild after UI changes.
+
+Shared lints must be inherited by every member. Native and browser dependency graphs are checked separately. Dependency policy allows reviewed permissive licenses and crates.io sources, rejects unknown Git/registry sources and advisories/yanked packages, and reports duplicate versions for review. Do not silence a finding with broad exemptions; record narrow, reasoned exceptions only where necessary.
+
+## Data and side effects
+
+SQLite is the initial complete target; MySQL follows later. Database upgrades must preserve a recoverable original and be tested against independent legacy data. Fixtures contain synthetic credentials and must be copied before mutation. Product tests must not contact real recipients or external integration endpoints.
+
+Do not operate on GitHub, create releases/tags, publish, package for distribution, or deploy unless explicitly requested. Stop only development processes started in the current session. Report commands actually run and any unresolved checks or reachable defects honestly. Optional PERSONAL.md in this directory adds local preferences if present.
+
+## Git and commit messages
+
+Read-only Git inspection such as `git status`, `git diff`, `git log`, and `git show` is allowed.
+
+Commit and push only when the user asks for it in that turn, never as a side effect of finishing a task. One approval covers that commit or push only; it does not carry over to later ones.
+
+Do not merge, rebase, create/delete/rename branches, switch branches, or rewrite history unless explicitly requested.
+
+When writing or suggesting a commit message:
+
+- Describe the net changes against `HEAD`, not the local implementation path.
+- Use imperative mood, present tense, and concise language.
+- Use the format `<type>(<scope>): <message>`; scope is optional. Allowed types are `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`, and `revert`.
+- Include 2–5 precise bullet points in the body.
+- Do not mention temporary or uncommitted planning files unless they are part of the intended change.
+- Do not add a `Co-Authored-By` trailer, a generated-by footer, or any other agent attribution.

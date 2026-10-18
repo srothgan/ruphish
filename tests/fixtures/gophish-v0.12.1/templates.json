@@ -1,0 +1,230 @@
+[
+  {
+    "context": {
+      "From": "Sender \u0026 Team",
+      "URL": "https://training.example.test/path?rid=fixture-rid",
+      "Tracker": "\u003cimg src='https://training.example.test/path/track?rid=fixture-rid'/\u003e",
+      "TrackingURL": "https://training.example.test/path/track?rid=fixture-rid",
+      "RId": "fixture-rid",
+      "BaseURL": "https://training.example.test",
+      "email": "ada@example.test",
+      "first_name": "Ada \u0026 \u003cTeam\u003e",
+      "last_name": "Example",
+      "position": "Engineer"
+    },
+    "expected_error_kind": "",
+    "expected_output": "Hello Ada \u0026 \u003cTeam\u003e Example: https://training.example.test/path?rid=fixture-rid",
+    "id": "fields",
+    "observed_go_error": "",
+    "text": "Hello {{.FirstName}} {{.LastName}}: {{.URL}}"
+  },
+  {
+    "context": {
+      "From": "Sender \u0026 Team",
+      "URL": "https://training.example.test/path?rid=fixture-rid",
+      "Tracker": "\u003cimg src='https://training.example.test/path/track?rid=fixture-rid'/\u003e",
+      "TrackingURL": "https://training.example.test/path/track?rid=fixture-rid",
+      "RId": "fixture-rid",
+      "BaseURL": "https://training.example.test",
+      "email": "ada@example.test",
+      "first_name": "Ada \u0026 \u003cTeam\u003e",
+      "last_name": "Example",
+      "position": "Engineer"
+    },
+    "expected_error_kind": "",
+    "expected_output": "Ada \u0026 \u003cTeam\u003e",
+    "id": "if_else",
+    "observed_go_error": "",
+    "text": "{{if .FirstName}}{{.FirstName}}{{else}}Friend{{end}}"
+  },
+  {
+    "context": {
+      "From": "Sender \u0026 Team",
+      "URL": "https://training.example.test/path?rid=fixture-rid",
+      "Tracker": "\u003cimg src='https://training.example.test/path/track?rid=fixture-rid'/\u003e",
+      "TrackingURL": "https://training.example.test/path/track?rid=fixture-rid",
+      "RId": "fixture-rid",
+      "BaseURL": "https://training.example.test",
+      "email": "ada@example.test",
+      "first_name": "Ada \u0026 \u003cTeam\u003e",
+      "last_name": "Example",
+      "position": "Engineer"
+    },
+    "expected_error_kind": "",
+    "expected_output": "Example/Engineer",
+    "id": "variable_pipeline",
+    "observed_go_error": "",
+    "text": "{{$name := .LastName}}{{printf \"%s/%s\" $name .Position}}"
+  },
+  {
+    "context": {
+      "From": "Sender \u0026 Team",
+      "URL": "https://training.example.test/path?rid=fixture-rid",
+      "Tracker": "\u003cimg src='https://training.example.test/path/track?rid=fixture-rid'/\u003e",
+      "TrackingURL": "https://training.example.test/path/track?rid=fixture-rid",
+      "RId": "fixture-rid",
+      "BaseURL": "https://training.example.test",
+      "email": "ada@example.test",
+      "first_name": "Ada \u0026 \u003cTeam\u003e",
+      "last_name": "Example",
+      "position": "Engineer"
+    },
+    "expected_error_kind": "",
+    "expected_output": "leftExampleright",
+    "id": "whitespace_trim",
+    "observed_go_error": "",
+    "text": "left \n {{- .LastName -}} \n right"
+  },
+  {
+    "context": {
+      "From": "Sender \u0026 Team",
+      "URL": "https://training.example.test/path?rid=fixture-rid",
+      "Tracker": "\u003cimg src='https://training.example.test/path/track?rid=fixture-rid'/\u003e",
+      "TrackingURL": "https://training.example.test/path/track?rid=fixture-rid",
+      "RId": "fixture-rid",
+      "BaseURL": "https://training.example.test",
+      "email": "ada@example.test",
+      "first_name": "Ada \u0026 \u003cTeam\u003e",
+      "last_name": "Example",
+      "position": "Engineer"
+    },
+    "expected_error_kind": "",
+    "expected_output": "\u003cp\u003eAda \u0026 \u003cTeam\u003e\u003c/p\u003e\u003cimg src='https://training.example.test/path/track?rid=fixture-rid'/\u003e",
+    "id": "raw_html",
+    "observed_go_error": "",
+    "text": "\u003cp\u003e{{.FirstName}}\u003c/p\u003e{{.Tracker}}"
+  },
+  {
+    "context": {
+      "From": "Sender \u0026 Team",
+      "URL": "https://training.example.test/path?rid=fixture-rid",
+      "Tracker": "\u003cimg src='https://training.example.test/path/track?rid=fixture-rid'/\u003e",
+      "TrackingURL": "https://training.example.test/path/track?rid=fixture-rid",
+      "RId": "fixture-rid",
+      "BaseURL": "https://training.example.test",
+      "email": "ada@example.test",
+      "first_name": "Ada \u0026 \u003cTeam\u003e",
+      "last_name": "Example",
+      "position": "Engineer"
+    },
+    "expected_error_kind": "",
+    "expected_output": "Ada \u0026amp; \u0026lt;Team\u0026gt;",
+    "id": "html_builtin",
+    "observed_go_error": "",
+    "text": "{{html .FirstName}}"
+  },
+  {
+    "context": {
+      "From": "Sender \u0026 Team",
+      "URL": "https://training.example.test/path?rid=fixture-rid",
+      "Tracker": "\u003cimg src='https://training.example.test/path/track?rid=fixture-rid'/\u003e",
+      "TrackingURL": "https://training.example.test/path/track?rid=fixture-rid",
+      "RId": "fixture-rid",
+      "BaseURL": "https://training.example.test",
+      "email": "ada@example.test",
+      "first_name": "Ada \u0026 \u003cTeam\u003e",
+      "last_name": "Example",
+      "position": "Engineer"
+    },
+    "expected_error_kind": "",
+    "expected_output": "Ada+%26+%3CTeam%3E",
+    "id": "urlquery_builtin",
+    "observed_go_error": "",
+    "text": "{{urlquery .FirstName}}"
+  },
+  {
+    "context": {
+      "From": "Sender \u0026 Team",
+      "URL": "https://training.example.test/path?rid=fixture-rid",
+      "Tracker": "\u003cimg src='https://training.example.test/path/track?rid=fixture-rid'/\u003e",
+      "TrackingURL": "https://training.example.test/path/track?rid=fixture-rid",
+      "RId": "fixture-rid",
+      "BaseURL": "https://training.example.test",
+      "email": "ada@example.test",
+      "first_name": "Ada \u0026 \u003cTeam\u003e",
+      "last_name": "Example",
+      "position": "Engineer"
+    },
+    "expected_error_kind": "",
+    "expected_output": "ada@example.test",
+    "id": "with",
+    "observed_go_error": "",
+    "text": "{{with .Email}}{{.}}{{end}}"
+  },
+  {
+    "context": {
+      "From": "Sender \u0026 Team",
+      "URL": "https://training.example.test/path?rid=fixture-rid",
+      "Tracker": "\u003cimg src='https://training.example.test/path/track?rid=fixture-rid'/\u003e",
+      "TrackingURL": "https://training.example.test/path/track?rid=fixture-rid",
+      "RId": "fixture-rid",
+      "BaseURL": "https://training.example.test",
+      "email": "ada@example.test",
+      "first_name": "Ada \u0026 \u003cTeam\u003e",
+      "last_name": "Example",
+      "position": "Engineer"
+    },
+    "expected_error_kind": "",
+    "expected_output": "yes",
+    "id": "comparison",
+    "observed_go_error": "",
+    "text": "{{if eq .Position \"Engineer\"}}yes{{else}}no{{end}}"
+  },
+  {
+    "context": {
+      "From": "Sender \u0026 Team",
+      "URL": "https://training.example.test/path?rid=fixture-rid",
+      "Tracker": "\u003cimg src='https://training.example.test/path/track?rid=fixture-rid'/\u003e",
+      "TrackingURL": "https://training.example.test/path/track?rid=fixture-rid",
+      "RId": "fixture-rid",
+      "BaseURL": "https://training.example.test",
+      "email": "ada@example.test",
+      "first_name": "Ada \u0026 \u003cTeam\u003e",
+      "last_name": "Example",
+      "position": "Engineer"
+    },
+    "expected_error_kind": "execution",
+    "expected_output": "",
+    "id": "missing_field",
+    "observed_go_error": "template: template:1:2: executing \"template\" at \u003c.DoesNotExist\u003e: can't evaluate field DoesNotExist in type models.PhishingTemplateContext",
+    "text": "{{.DoesNotExist}}"
+  },
+  {
+    "context": {
+      "From": "Sender \u0026 Team",
+      "URL": "https://training.example.test/path?rid=fixture-rid",
+      "Tracker": "\u003cimg src='https://training.example.test/path/track?rid=fixture-rid'/\u003e",
+      "TrackingURL": "https://training.example.test/path/track?rid=fixture-rid",
+      "RId": "fixture-rid",
+      "BaseURL": "https://training.example.test",
+      "email": "ada@example.test",
+      "first_name": "Ada \u0026 \u003cTeam\u003e",
+      "last_name": "Example",
+      "position": "Engineer"
+    },
+    "expected_error_kind": "parse",
+    "expected_output": "",
+    "id": "parse_error",
+    "observed_go_error": "template: template:1: unexpected EOF",
+    "text": "{{if .FirstName}}missing end"
+  },
+  {
+    "context": {
+      "From": "Sender \u0026 Team",
+      "URL": "https://training.example.test/path?rid=fixture-rid",
+      "Tracker": "\u003cimg src='https://training.example.test/path/track?rid=fixture-rid'/\u003e",
+      "TrackingURL": "https://training.example.test/path/track?rid=fixture-rid",
+      "RId": "fixture-rid",
+      "BaseURL": "https://training.example.test",
+      "email": "ada@example.test",
+      "first_name": "Ada \u0026 \u003cTeam\u003e",
+      "last_name": "Example",
+      "position": "Engineer"
+    },
+    "expected_error_kind": "",
+    "expected_output": "",
+    "id": "empty",
+    "observed_go_error": "",
+    "text": ""
+  }
+]

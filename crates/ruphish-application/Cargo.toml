@@ -1,0 +1,13 @@
+[package]
+name = "ruphish-application"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+ruphish-domain = { version = "0.1.0-dev", path = "../ruphish-domain" }
+
+[lints]
+workspace = true

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "reference_commit": "95618469799295e2c0fec980805a2dfbb818816b",
+  "files": {
+    "capture.json": "d3c0c26322a6c826cf30f380df47ff1f579d4249b2aeb5197d3285befac5af63",
+    "csv.json": "41d6d08e91849f13f8ed247806e84bfbce4ae0529f86c65bd96b77530bd7823a",
+    "http.json": "43359ade33bd9e40057b2d3968be79ac80d66070bf353cd3d3d01bce2b474177",
+    "legacy-latest.sqlite3": "720e4faa3a837d3169075119c118c53f95c9dedfbbb75f9d3dbffbce1673bedc",
+    "pages.json": "7f2d0aac823c893a6a5e199b4773650d7707d75f60f7f75d03bea4992938f659",
+    "password-policy.json": "1d6bca47485410960d4433b6710902cced42cc8ca74776901bf74217fa7e5c29",
+    "password.json": "49182f536214c18fecbe2730e37e65fc635002f130cb8b0e63238a19659c085a",
+    "public-http.json": "643d6d0ee5868a4858f4b433307ebaa6dca51d83b67591279fa709c098b554ba",
+    "README.md": "0e0184c9581a89d96911d3dcbf5d53473313701694b5e06deab65110cf500921",
+    "sqlite-runtime-schema.json": "e441f57bdae2423478d0a1ebc8265f58a2d19a366d6a59b925e74d9651a44eb4",
+    "template-context.json": "859a43b4e1dafbcf94c8c2c396a43cb9041c67d83f7df158e4d33e8c4a067f22",
+    "templates.json": "38644d04d39ae4f11c084275e27034a1790059d00b0d0f028beb8d77d96e537a",
+    "webhook.json": "7138124d9e948244ea375aa3e81a63220fc114fc22df03b46a9f6011c47415d0"
+  }
+}

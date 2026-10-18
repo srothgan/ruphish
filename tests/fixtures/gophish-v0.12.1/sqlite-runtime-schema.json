@@ -1,0 +1,82 @@
+[
+  {
+    "name": "attachments",
+    "sql": "CREATE TABLE \"attachments\" (\"id\" integer primary key autoincrement,\"template_id\" bigint,\"content\" varchar(255),\"type\" varchar(255),\"name\" varchar(255) )"
+  },
+  {
+    "name": "campaigns",
+    "sql": "CREATE TABLE \"campaigns\" (\"id\" integer primary key autoincrement,\"user_id\" bigint,\"name\" varchar(255) NOT NULL ,\"created_date\" datetime,\"completed_date\" datetime,\"template_id\" bigint,\"page_id\" bigint,\"status\" varchar(255),\"url\" varchar(255) , \"smtp_id\" bigint, \"launch_date\" DATETIME, send_by_date DATETIME)"
+  },
+  {
+    "name": "email_requests",
+    "sql": "CREATE TABLE \"email_requests\" (\n    \"id\" integer primary key autoincrement,\n    \"user_id\" integer,\n    \"template_id\" integer,\n    \"page_id\" integer,\n    \"first_name\" varchar(255),\n    \"last_name\" varchar(255),\n    \"email\" varchar(255),\n    \"position\" varchar(255),\n    \"url\" varchar(255),\n    \"r_id\" varchar(255),\n    \"from_address\" varchar(255)\n)"
+  },
+  {
+    "name": "events",
+    "sql": "CREATE TABLE \"events\" (\"id\" integer primary key autoincrement,\"campaign_id\" bigint,\"email\" varchar(255),\"time\" datetime,\"message\" varchar(255) , details BLOB)"
+  },
+  {
+    "name": "goose_db_version",
+    "sql": "CREATE TABLE goose_db_version (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                version_id INTEGER NOT NULL,\n                is_applied INTEGER NOT NULL,\n                tstamp TIMESTAMP DEFAULT (datetime('now'))\n            )"
+  },
+  {
+    "name": "group_targets",
+    "sql": "CREATE TABLE \"group_targets\" (\"group_id\" bigint,\"target_id\" bigint )"
+  },
+  {
+    "name": "groups",
+    "sql": "CREATE TABLE \"groups\" (\"id\" integer primary key autoincrement,\"user_id\" bigint,\"name\" varchar(255),\"modified_date\" datetime )"
+  },
+  {
+    "name": "headers",
+    "sql": "CREATE TABLE headers(\n\tid integer primary key autoincrement,\n\tkey varchar(255),\n\tvalue varchar(255),\n\t\"smtp_id\" bigint\n)"
+  },
+  {
+    "name": "imap",
+    "sql": "CREATE TABLE \"imap\" (\"user_id\" bigint, \"host\" varchar(255), \"port\" integer, \"username\" varchar(255), \"password\" varchar(255), \"modified_date\" datetime default CURRENT_TIMESTAMP, \"tls\" BOOLEAN, \"enabled\" BOOLEAN, \"folder\" varchar(255), \"restrict_domain\" varchar(255), \"delete_reported_campaign_email\" BOOLEAN, \"last_login\" datetime, \"imap_freq\" integer, ignore_cert_errors BOOLEAN)"
+  },
+  {
+    "name": "mail_logs",
+    "sql": "CREATE TABLE \"mail_logs\" (\n    \"id\" integer primary key autoincrement,\n    \"campaign_id\" integer,\n    \"user_id\" integer,\n    \"send_date\" datetime,\n    \"send_attempt\" integer,\n    \"r_id\" varchar(255),\n    \"processing\" boolean)"
+  },
+  {
+    "name": "pages",
+    "sql": "CREATE TABLE \"pages\" (\"id\" integer primary key autoincrement,\"user_id\" bigint,\"name\" varchar(255),\"html\" varchar(255),\"modified_date\" datetime , capture_credentials BOOLEAN, capture_passwords BOOLEAN, redirect_url VARCHAR(255))"
+  },
+  {
+    "name": "permissions",
+    "sql": "CREATE TABLE \"permissions\" (\n    \"id\"          INTEGER PRIMARY KEY AUTOINCREMENT,\n    \"slug\"        VARCHAR(255) NOT NULL UNIQUE,\n    \"name\"        VARCHAR(255) NOT NULL UNIQUE,\n    \"description\" VARCHAR(255)\n)"
+  },
+  {
+    "name": "results",
+    "sql": "CREATE TABLE \"results\" (\"id\" integer primary key autoincrement,\"campaign_id\" bigint,\"user_id\" bigint,\"r_id\" varchar(255),\"email\" varchar(255),\"first_name\" varchar(255),\"last_name\" varchar(255),\"status\" varchar(255) NOT NULL ,\"ip\" varchar(255),\"latitude\" real,\"longitude\" real , position VARCHAR(255), send_date DATETIME, reported boolean default 0, modified_date DATETIME)"
+  },
+  {
+    "name": "role_permissions",
+    "sql": "CREATE TABLE \"role_permissions\" (\n    \"role_id\"       INTEGER NOT NULL,\n    \"permission_id\" INTEGER NOT NULL\n)"
+  },
+  {
+    "name": "roles",
+    "sql": "CREATE TABLE \"roles\" (\n    \"id\"          INTEGER PRIMARY KEY AUTOINCREMENT,\n    \"slug\"        VARCHAR(255) NOT NULL UNIQUE,\n    \"name\"        VARCHAR(255) NOT NULL UNIQUE,\n    \"description\" VARCHAR(255)\n)"
+  },
+  {
+    "name": "smtp",
+    "sql": "CREATE TABLE smtp(\n\tid integer primary key autoincrement,\n\tuser_id bigint,\n\tinterface_type varchar(255),\n\tname varchar(255),\n\thost varchar(255),\n\tusername varchar(255),\n\tpassword varchar(255),\n\tfrom_address varchar(255),\n\tmodified_date datetime default CURRENT_TIMESTAMP,\n\tignore_cert_errors BOOLEAN\n)"
+  },
+  {
+    "name": "targets",
+    "sql": "CREATE TABLE \"targets\" (\"id\" integer primary key autoincrement,\"first_name\" varchar(255),\"last_name\" varchar(255),\"email\" varchar(255),\"position\" varchar(255) )"
+  },
+  {
+    "name": "templates",
+    "sql": "CREATE TABLE \"templates\" (\"id\" integer primary key autoincrement,\"user_id\" bigint,\"name\" varchar(255),\"subject\" varchar(255),\"text\" varchar(255),\"html\" varchar(255),\"modified_date\" datetime , envelope_sender varchar(255))"
+  },
+  {
+    "name": "users",
+    "sql": "CREATE TABLE \"users\" (\"id\" integer primary key autoincrement,\"username\" varchar(255) NOT NULL UNIQUE,\"hash\" varchar(255),\"api_key\" varchar(255) NOT NULL UNIQUE , \"role_id\" INTEGER, password_change_required BOOLEAN, last_login datetime, account_locked BOOLEAN)"
+  },
+  {
+    "name": "webhooks",
+    "sql": "CREATE TABLE \"webhooks\" (\n    \"id\" integer primary key autoincrement,\n    \"name\" varchar(255),\n    \"url\" varchar(1000),\n    \"secret\" varchar(255),\n    \"is_active\" boolean default 0\n)"
+  }
+]

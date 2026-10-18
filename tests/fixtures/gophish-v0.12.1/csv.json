@@ -1,0 +1,28 @@
+[
+  {
+    "csv": "First Name,Last Name,Email\nAda,Example,\u003cada@example.test\u003e\n",
+    "expected": [
+      {
+        "email": "ada@example.test",
+        "first_name": "Ada",
+        "last_name": "Example",
+        "position": ""
+      }
+    ],
+    "filename": "fixture.csv",
+    "multipart_field": "files[]"
+  },
+  {
+    "csv": "First Name,Last Name,Email,Position\nAda,Example,ada@example.test,Engineer\n",
+    "expected": [
+      {
+        "email": "ada@example.test",
+        "first_name": "Ada",
+        "last_name": "Example",
+        "position": "Engineer"
+      }
+    ],
+    "filename": "fixture.csv",
+    "multipart_field": "files[]"
+  }
+]

@@ -1,0 +1,13 @@
+trunk-version = "=0.21.14"
+
+[build]
+target = "crates/ruphish-ui/index.html"
+dist = "dist/admin"
+public_url = "/"
+locked = true
+filehash = true
+
+[serve]
+addresses = ["127.0.0.1"]
+port = 8080
+open = false

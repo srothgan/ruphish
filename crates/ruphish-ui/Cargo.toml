@@ -1,0 +1,22 @@
+[package]
+name = "ruphish-ui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+ruphish-contracts = { version = "0.1.0-dev", path = "../ruphish-contracts" }
+
+[[bin]]
+name = "ruphish-ui"
+path = "src/main.rs"
+test = false
+bench = false
+
+[lints]
+workspace = true
+
+[target.wasm32-unknown-unknown.dependencies]
+leptos = { version = "0.8.22", default-features = false, features = ["csr"] }

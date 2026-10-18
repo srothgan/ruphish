@@ -1,0 +1,55 @@
+[
+  {
+    "id": "robots",
+    "boundary": "public-direct-handler",
+    "method": "GET",
+    "path": "/robots.txt",
+    "headers": null,
+    "body": "",
+    "expected_status": 200,
+    "expected_headers": {
+      "Content-Type": "text/plain; charset=utf-8"
+    },
+    "expected_text": "User-agent: *\nDisallow: /\n"
+  },
+  {
+    "id": "track-missing-rid",
+    "boundary": "public-direct-handler",
+    "method": "GET",
+    "path": "/track",
+    "headers": null,
+    "body": "",
+    "expected_status": 404,
+    "expected_headers": {
+      "Content-Type": "text/plain; charset=utf-8"
+    },
+    "expected_text": "404 page not found\n"
+  },
+  {
+    "id": "landing-invalid-rid",
+    "boundary": "public-direct-handler",
+    "method": "GET",
+    "path": "/?rid=invalid",
+    "headers": null,
+    "body": "",
+    "expected_status": 404,
+    "expected_headers": {
+      "Content-Type": "text/plain; charset=utf-8"
+    },
+    "expected_text": "404 page not found\n"
+  },
+  {
+    "id": "report-missing-rid",
+    "boundary": "public-direct-handler",
+    "method": "GET",
+    "path": "/report",
+    "headers": null,
+    "body": "",
+    "expected_status": 404,
+    "expected_headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Type": "text/plain; charset=utf-8"
+    },
+    "expected_text": "404 page not found\n"
+  }
+]

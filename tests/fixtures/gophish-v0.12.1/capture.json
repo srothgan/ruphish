@@ -1,0 +1,17 @@
+{
+  "api_key": "1111111111111111111111111111111111111111111111111111111111111111",
+  "captured_utc": "2026-10-18T13:08:26Z",
+  "database": "legacy-latest.sqlite3",
+  "generated_time_placeholder": "\u003cgenerated-time\u003e",
+  "limitations": [
+    "No Rust implementation tested",
+    "Public direct-handler fixtures do not prove router/middleware parity",
+    "No external SMTP or IMAP service contacted",
+    "Latest SQLite database only; populated intermediate-version upgrades remain to be captured",
+    "bcrypt salt is generated once at capture, stored in fixture, and deterministic for subsequent verification"
+  ],
+  "normalization": "Only explicitly recorded JSON pointers for generated timestamp fields; compare zero times, seeded times, IDs, strings, array order, and missing/null fields exactly",
+  "provenance": "Unmodified Gophish exports and API router; public cases explicitly use direct handlers",
+  "reference_commit": "95618469799295e2c0fec980805a2dfbb818816b",
+  "synthetic_test_credentials_only": true
+}

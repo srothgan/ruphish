@@ -1,0 +1,33 @@
+[graph]
+targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+all-features = false
+
+[advisories]
+unmaintained = "workspace"
+yanked = "deny"
+ignore = []
+
+[licenses]
+allow = ["MIT", "Apache-2.0", "ISC", "Zlib", "Unicode-3.0"]
+confidence-threshold = 0.93
+include-dev = true
+
+# Leptos WASM split macro helper; reviewed LICENSE-CC0 in this exact crate.
+[[licenses.exceptions]]
+crate = "base16@=0.2.1"
+allow = ["CC0-1.0"]
+
+# Leptos/server_fn hashing dependency; reviewed the bundled Boost license.
+[[licenses.exceptions]]
+crate = "xxhash-rust@=0.8.19"
+allow = ["BSL-1.0"]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

@@ -1,0 +1,82 @@
+[
+  {
+    "expected": {
+      "id": 0,
+      "name": "Fixture page",
+      "html": "\u003chtml\u003e\u003chead\u003e\u003c/head\u003e\u003cbody\u003e\u003cform action=\"\"\u003e\u003cinput/\u003e\u003cinput type=\"password\"/\u003e\u003c/form\u003e\u003c/body\u003e\u003c/html\u003e",
+      "capture_credentials": false,
+      "capture_passwords": false,
+      "redirect_url": "",
+      "modified_date": "0001-01-01T00:00:00Z"
+    },
+    "input": {
+      "id": 0,
+      "name": "Fixture page",
+      "html": "\u003cform action=\"https://other.example.test\"\u003e\u003cinput name=\"email\"\u003e\u003cinput type=\"password\" name=\"secret\"\u003e\u003c/form\u003e",
+      "capture_credentials": false,
+      "capture_passwords": false,
+      "redirect_url": "",
+      "modified_date": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "expected": {
+      "id": 0,
+      "name": "Fixture page",
+      "html": "\u003chtml\u003e\u003chead\u003e\u003c/head\u003e\u003cbody\u003e\u003cform action=\"\"\u003e\u003cinput name=\"email\"/\u003e\u003cinput type=\"password\"/\u003e\u003c/form\u003e\u003c/body\u003e\u003c/html\u003e",
+      "capture_credentials": true,
+      "capture_passwords": false,
+      "redirect_url": "",
+      "modified_date": "0001-01-01T00:00:00Z"
+    },
+    "input": {
+      "id": 0,
+      "name": "Fixture page",
+      "html": "\u003cform action=\"https://other.example.test\"\u003e\u003cinput name=\"email\"\u003e\u003cinput type=\"password\" name=\"secret\"\u003e\u003c/form\u003e",
+      "capture_credentials": true,
+      "capture_passwords": false,
+      "redirect_url": "",
+      "modified_date": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "expected": {
+      "id": 0,
+      "name": "Fixture page",
+      "html": "\u003chtml\u003e\u003chead\u003e\u003c/head\u003e\u003cbody\u003e\u003cform action=\"\"\u003e\u003cinput name=\"email\"/\u003e\u003cinput type=\"password\" name=\"password\"/\u003e\u003c/form\u003e\u003c/body\u003e\u003c/html\u003e",
+      "capture_credentials": true,
+      "capture_passwords": true,
+      "redirect_url": "",
+      "modified_date": "0001-01-01T00:00:00Z"
+    },
+    "input": {
+      "id": 0,
+      "name": "Fixture page",
+      "html": "\u003cform action=\"https://other.example.test\"\u003e\u003cinput name=\"email\"\u003e\u003cinput type=\"password\" name=\"secret\"\u003e\u003c/form\u003e",
+      "capture_credentials": true,
+      "capture_passwords": true,
+      "redirect_url": "",
+      "modified_date": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "expected": {
+      "id": 0,
+      "name": "Fixture page",
+      "html": "\u003chtml\u003e\u003chead\u003e\u003c/head\u003e\u003cbody\u003e\u003cform action=\"\"\u003e\u003cinput name=\"email\"/\u003e\u003cinput type=\"password\" name=\"password\"/\u003e\u003c/form\u003e\u003c/body\u003e\u003c/html\u003e",
+      "capture_credentials": true,
+      "capture_passwords": true,
+      "redirect_url": "",
+      "modified_date": "0001-01-01T00:00:00Z"
+    },
+    "input": {
+      "id": 0,
+      "name": "Fixture page",
+      "html": "\u003cform action=\"https://other.example.test\"\u003e\u003cinput name=\"email\"\u003e\u003cinput type=\"password\" name=\"secret\"\u003e\u003c/form\u003e",
+      "capture_credentials": false,
+      "capture_passwords": true,
+      "redirect_url": "",
+      "modified_date": "0001-01-01T00:00:00Z"
+    }
+  }
+]
