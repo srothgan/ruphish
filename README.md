@@ -2,7 +2,7 @@
 
 Ruphish is a Rust backend and Rust/WASM admin application being built to preserve Gophish's supported external contracts while modernizing its implementation and interface.
 
-The native application now loads legacy configuration, prepares SQLite with recoverable upgrades, bootstraps the administrator, serves built admin assets and public listeners over HTTP/TLS, and shuts down on native signals. Compatibility proofs and the local CodeMirror/Jodit template workbench remain covered by regression tests. Login, resource APIs, campaign execution and API-connected UI remain later work. The user reports the workbench is functional; UI/UX polish and detailed browser/security checks remain open.
+The native application now loads legacy configuration, prepares SQLite with recoverable upgrades, bootstraps the administrator, serves built admin assets and public listeners over HTTP/TLS, and shuts down on native signals. Compatibility proofs and the local CodeMirror/Jodit template workbench remain covered by regression tests. Authentication and account administration now include browser sessions, forced password changes, user management, permissions, API keys and explicit impersonation. See [authentication and manual checks](docs/authentication.md). Resource APIs and campaign execution remain later work; manual acceptance of the new account UI is pending.
 
 ## Getting started
 

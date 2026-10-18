@@ -72,6 +72,16 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
         if arguments.mode.admin() {
             tracing::info!(mailer_requested = !arguments.disable_mailer, "Mailer and IMAP execution are not implemented in this startup milestone");
         }
+        let admin_router = if let Some(assets) = admin_router {
+            let sessions = ruphish_adapters::sqlite::sessions::Sessions::new(database.pool());
+            sessions.cleanup().await?;
+            let key = sessions.cookie_key().await?;
+            let service = ruphish_application::auth::Service::new(
+                std::sync::Arc::new(ruphish_adapters::sqlite::accounts::Accounts::new(database.pool())),
+                std::sync::Arc::new(ruphish_adapters::password_worker::PasswordWorker::default()),
+            );
+            Some(ruphish_http::auth::router(assets, service, sessions, &key, config.admin.use_tls, config.admin.trusted_origins.clone(), config.admin.csrf_key.clone()))
+        } else { None };
         supervise(arguments.mode, admin_listener, phish_listener, admin_tls, phish_tls, admin_router, termination).await
     }.await;
     // Both normal and failing server lifecycles close the pool before returning.
@@ -256,12 +266,12 @@ async fn serve(
         if let Some(tls) = tls {
             configured(axum_server::from_tcp_rustls(listener, tls)?)
                 .handle(owned_handle)
-                .serve(router.into_make_service())
+                .serve(router.into_make_service_with_connect_info::<SocketAddr>())
                 .await
         } else {
             configured(axum_server::from_tcp(listener)?)
                 .handle(owned_handle)
-                .serve(router.into_make_service())
+                .serve(router.into_make_service_with_connect_info::<SocketAddr>())
                 .await
         }
     };

@@ -11,7 +11,7 @@ use tower_http::{compression::CompressionLayer, services::ServeFile};
 /// Validate and mount an explicit set of built admin assets without SPA catch-all routing.
 ///
 /// Symlinks, hidden files, API namespaces and non-asset extensions are rejected.
-pub fn admin_router(directory: &Path) -> Result<Router, std::io::Error> {
+pub fn admin_router(directory: &Path) -> Result<AdminAssets, std::io::Error> {
     let root = directory.canonicalize()?;
     let mut files = Vec::new();
     collect(&root, &root, &mut files)?;
@@ -54,19 +54,29 @@ pub fn admin_router(directory: &Path) -> Result<Router, std::io::Error> {
             "Missing compiled admin WASM",
         ));
     }
+    let index = std::fs::read_to_string(root.join("index.html"))?;
     let mut router = Router::new();
     for (name, path) in files {
-        let route = if name == "index.html" {
-            "/".to_owned()
-        } else {
-            format!("/{name}")
-        };
+        if name == "index.html" {
+            continue;
+        }
+        let route = format!("/{name}");
         router = router.route_service(&route, get_service(ServeFile::new(path)));
     }
-    Ok(router
+    Ok(AdminAssets { router, index })
+}
+
+/// Validated generated assets, composed with authenticated application routes at startup.
+pub struct AdminAssets {
+    pub(crate) router: Router,
+    pub(crate) index: String,
+}
+
+pub(crate) fn finish(router: Router) -> Router {
+    router
         .fallback(|| async { super::response::not_found() })
         .layer(CompressionLayer::new())
-        .layer(middleware::from_fn(access_log)))
+        .layer(middleware::from_fn(access_log))
 }
 
 /// Public listener with the existing unknown-route contract; no admin application exposure.

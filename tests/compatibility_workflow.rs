@@ -1,7 +1,7 @@
 //! A migrated installation must retain usable credentials, relationships, and stored content.
 
 use ruphish_adapters::{
-    password, sqlite,
+    password_worker as password, sqlite,
     template::{self, Context},
 };
 use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
@@ -21,8 +21,14 @@ async fn migrated_installation_can_authenticate_and_render_its_saved_campaign_fo
             .await
             .unwrap();
     let account=sqlx::query("SELECT u.id,u.hash,u.api_key,r.slug FROM users AS u JOIN roles AS r ON r.id=u.role_id WHERE username=?").bind("historical-admin").fetch_one(&mut connection).await.unwrap();
-    assert!(password::verify("FixtureOnlyPassword42!", &account.get::<String, _>("hash")).unwrap());
-    assert!(!password::verify("wrong password", &account.get::<String, _>("hash")).unwrap());
+    assert!(password::verify(
+        "FixtureOnlyPassword42!",
+        &account.get::<String, _>("hash")
+    ));
+    assert!(!password::verify(
+        "wrong password",
+        &account.get::<String, _>("hash")
+    ));
     assert_eq!(account.get::<String, _>("api_key"), "historical-key");
     assert_eq!(account.get::<String, _>("slug"), "admin");
     let row=sqlx::query("SELECT t.html,r.first_name,r.last_name,r.email,r.r_id FROM campaigns AS c JOIN templates AS t ON t.id=c.template_id AND t.user_id=c.user_id JOIN results AS r ON r.campaign_id=c.id AND r.user_id=c.user_id WHERE c.id=53 AND c.user_id=?").bind(account.get::<i64,_>("id")).fetch_one(&mut connection).await.unwrap();

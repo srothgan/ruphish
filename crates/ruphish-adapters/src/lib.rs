@@ -2,7 +2,7 @@
 //!
 //! Adapters implement application interfaces without duplicating domain rules.
 
-pub mod password;
+pub mod password_worker;
 mod private_file;
 pub mod sqlite;
 pub mod template;

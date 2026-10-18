@@ -1,6 +1,6 @@
 //! Upgrade actual Goose-created databases and test preservation and failure boundaries.
 
-use ruphish_adapters::{password, sqlite};
+use ruphish_adapters::{password_worker as password, sqlite};
 use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::{
     fs,
@@ -40,9 +40,10 @@ async fn all_populated_goose_versions_upgrade_without_losing_records_or_the_sour
             .unwrap();
         assert_eq!(user.get::<String, _>("username"), "historical-admin");
         assert_eq!(user.get::<String, _>("api_key"), "historical-key");
-        assert!(
-            password::verify("FixtureOnlyPassword42!", &user.get::<String, _>("hash")).unwrap()
-        );
+        assert!(password::verify(
+            "FixtureOnlyPassword42!",
+            &user.get::<String, _>("hash")
+        ));
         let role: String = sqlx::query_scalar("SELECT slug FROM roles WHERE id=?")
             .bind(user.get::<i64, _>("role_id"))
             .fetch_one(&mut connection)
@@ -133,7 +134,7 @@ async fn latest_real_gophish_database_is_preserved_and_repeated_upgrades_are_ide
             .fetch_one(&mut connection)
             .await
             .unwrap();
-        assert!(password::verify("FixtureOnlyPassword42!", &hash).unwrap());
+        assert!(password::verify("FixtureOnlyPassword42!", &hash));
         assert_eq!(
             sqlx::query_scalar::<_, String>("SELECT email FROM targets")
                 .fetch_one(&mut connection)

@@ -6,9 +6,11 @@ compile_error!(
 );
 
 #[cfg(target_arch = "wasm32")]
+mod account;
+#[cfg(target_arch = "wasm32")]
 mod editor;
 
 #[cfg(target_arch = "wasm32")]
 fn main() {
-    leptos::mount::mount_to_body(editor::editor_workbench);
+    leptos::mount::mount_to_body(account::app);
 }

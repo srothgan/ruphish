@@ -33,6 +33,10 @@ pub struct StartupDatabase {
 }
 
 impl StartupDatabase {
+    /// Share the owned pool with adapters; shutdown still belongs to the executable.
+    pub fn pool(&self) -> SqlitePool {
+        self.pool.clone()
+    }
     /// Open a current database or initialize/upgrade it with no-clobber backup publication.
     ///
     /// All old application instances must be stopped before a schema upgrade. The
@@ -41,10 +45,16 @@ impl StartupDatabase {
         verify_migrations(migrations_prefix)?;
         let path = resolved(path)?;
         let _startup_lock = startup_lock(&path).await?;
-        if !path.try_exists()? {
+        let fresh = !path.try_exists()?;
+        if fresh {
             super::create(&path).await?;
         }
         let mut connection = connect(&path, false).await?;
+        if fresh {
+            let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+            super::auth_schema::migrate(&mut transaction).await?;
+            transaction.commit().await?;
+        }
         let prepared = prepare(&mut connection, &path).await;
         let closed = connection.close().await;
         let backup = prepared?;
@@ -101,15 +111,15 @@ impl StartupDatabase {
         }
         let password = match password.filter(|value| !value.is_empty()) {
             Some(value) => value,
-            None => random_hex(8)?,
+            None => random_hex(16)?,
         };
-        if password.len() > 72 {
+        if password.len() > 1024 {
             return Err(StartupError::Invalid(
-                "Initial administrator password exceeds bcrypt's 72-byte limit".into(),
+                "Initial administrator password exceeds the supported length".into(),
             ));
         }
         let candidate = password.clone();
-        let hash = tokio::task::spawn_blocking(move || bcrypt::hash(candidate.as_bytes(), 10))
+        let hash = tokio::task::spawn_blocking(move || crate::password_worker::hash(&candidate))
             .await
             .map_err(|_| StartupError::Invalid("Password hashing task failed".into()))?
             .map_err(|_| StartupError::Invalid("Password hashing failed".into()))?;
@@ -123,11 +133,13 @@ impl StartupDatabase {
             };
             sqlx::query("INSERT INTO users(username,hash,api_key,role_id,password_change_required,last_login,account_locked) VALUES('admin',?,?,?,1,'0001-01-01 00:00:00',0)").bind(hash).bind(token).bind(role).execute(&mut *transaction).await?;
         } else if let Some(row) = existing.first() {
+            let id: i64 = row.try_get("id")?;
             sqlx::query("UPDATE users SET hash=?,password_change_required=1 WHERE id=?")
                 .bind(hash)
-                .bind(row.try_get::<i64, _>("id")?)
+                .bind(id)
                 .execute(&mut *transaction)
                 .await?;
+            sqlx::query("INSERT INTO ruphish_auth_state(user_id,epoch) VALUES(?,1) ON CONFLICT(user_id) DO UPDATE SET epoch=epoch+1").bind(id).execute(&mut *transaction).await?;
         }
         transaction.commit().await?;
         Ok(Some(password))
@@ -200,7 +212,7 @@ async fn prepare(
     // appear between the recoverable backup and the migration transaction.
     let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
     let count = inspect(&mut transaction, false).await?;
-    if count == MIGRATIONS.len() {
+    if count == MIGRATIONS.len() && super::auth_schema::validate_version(&mut transaction).await? {
         transaction.rollback().await?;
         return Ok(None);
     }
@@ -236,6 +248,7 @@ async fn prepare(
         .map_err(|error| error.error)?;
     drop(file);
     apply_pending(&mut transaction, count).await?;
+    super::auth_schema::migrate(&mut transaction).await?;
     inspect(&mut transaction, false).await?;
     transaction.commit().await?;
     Ok(Some(backup_path))

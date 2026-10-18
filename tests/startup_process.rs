@@ -14,6 +14,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[path = "auth_process.rs"]
+mod auth_process;
+
 struct Process {
     child: Box<dyn portable_pty::Child + Send + Sync>,
     writer: Option<Box<dyn Write + Send>>,
@@ -599,13 +602,10 @@ fn every_populated_goose_version_starts_in_place_with_a_verified_recoverable_sna
         );
         assert_eq!(rows[0].get::<String, _>("username"), "historical-admin");
         assert_eq!(rows[0].get::<String, _>("api_key"), "historical-key");
-        assert!(
-            ruphish_adapters::password::verify(
-                "FixtureOnlyPassword42!",
-                &rows[0].get::<String, _>("hash")
-            )
-            .unwrap()
-        );
+        assert!(ruphish_adapters::password_worker::verify(
+            "FixtureOnlyPassword42!",
+            &rows[0].get::<String, _>("hash")
+        ));
         assert_eq!(
             database(
                 directory.path(),
@@ -618,7 +618,7 @@ fn every_populated_goose_version_starts_in_place_with_a_verified_recoverable_sna
         let snapshots = backups(directory.path());
         assert_eq!(
             snapshots.len(),
-            usize::from(old != ruphish_adapters::sqlite::LATEST_LEGACY_VERSION)
+            1, // Every Go schema receives the independently versioned authentication upgrade.
         );
         if let Some(snapshot) = snapshots.first() {
             let restore = tempfile::tempdir().unwrap();
@@ -656,13 +656,10 @@ fn bootstrap_is_atomic_refreshes_only_temporary_credentials_and_preserves_establ
     assert_eq!(row.len(), 1);
     assert_eq!(row[0].get::<String, _>("slug"), "admin");
     assert!(row[0].get::<bool, _>("password_change_required"));
-    assert!(
-        ruphish_adapters::password::verify(
-            "synthetic-bootstrap-password",
-            &row[0].get::<String, _>("hash")
-        )
-        .unwrap()
-    );
+    assert!(ruphish_adapters::password_worker::verify(
+        "synthetic-bootstrap-password",
+        &row[0].get::<String, _>("hash")
+    ));
     let mut refresh = Process::with_credentials(
         directory.path(),
         "admin",
@@ -673,7 +670,10 @@ fn bootstrap_is_atomic_refreshes_only_temporary_credentials_and_preserves_establ
     refresh.stop();
     let row = database(directory.path(), "SELECT hash,api_key FROM users");
     let hash: String = row[0].get("hash");
-    assert!(ruphish_adapters::password::verify("new-temporary-password", &hash).unwrap());
+    assert!(ruphish_adapters::password_worker::verify(
+        "new-temporary-password",
+        &hash
+    ));
     assert_eq!(
         row[0].get::<String, _>("api_key"),
         "synthetic-bootstrap-token"
@@ -701,7 +701,7 @@ fn failed_bootstrap_rolls_back_then_forced_process_death_allows_clean_restart() 
     use sqlx::Row;
     let directory = workspace();
     let mut rejected =
-        Process::with_credentials(directory.path(), "phish", Some(&"x".repeat(73)), None);
+        Process::with_credentials(directory.path(), "phish", Some(&"x".repeat(1025)), None);
     rejected.fail();
     assert_eq!(
         database(directory.path(), "SELECT count(*) FROM users")[0].get::<i64, _>(0),
@@ -720,9 +720,10 @@ fn failed_bootstrap_rolls_back_then_forced_process_death_allows_clean_restart() 
         .trim_end_matches('\r')
         .to_owned();
     let row = database(directory.path(), "SELECT hash,api_key FROM users");
-    assert!(
-        ruphish_adapters::password::verify(&password, &row[0].get::<String, _>("hash")).unwrap()
-    );
+    assert!(ruphish_adapters::password_worker::verify(
+        &password,
+        &row[0].get::<String, _>("hash")
+    ));
     assert_eq!(row[0].get::<String, _>("api_key").len(), 64);
     database(
         directory.path(),

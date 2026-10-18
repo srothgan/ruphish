@@ -1,6 +1,9 @@
 //! Recognize Goose history and upgrade a database copy without altering the original.
 
+pub mod accounts;
+mod auth_schema;
 mod migrations;
+pub mod sessions;
 mod startup;
 
 pub use startup::{StartupDatabase, StartupError};
@@ -243,6 +246,11 @@ async fn validate_schema(
     let mut expected = SqliteConnection::connect("sqlite::memory:").await?;
     for (_, source) in &MIGRATIONS[..count] {
         sqlx::raw_sql(up(source)).execute(&mut expected).await?;
+    }
+    if auth_schema::validate_version(connection).await? {
+        sqlx::raw_sql(auth_schema::SCHEMA)
+            .execute(&mut expected)
+            .await?;
     }
     if schema(connection).await? != schema(&mut expected).await? {
         return Err(UpgradeError::Unrecognized(

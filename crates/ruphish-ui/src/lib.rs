@@ -3,6 +3,8 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use ruphish_contracts::legacy::{self, Attachment, EmailTemplate};
 
+pub mod session;
+
 /// Exported Go template fields offered by the editor.
 pub const VARIABLES: &[&str] = &[
     "FirstName",

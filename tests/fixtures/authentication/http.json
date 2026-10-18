@@ -1,0 +1,278 @@
+[
+  {
+    "id": "missing-key",
+    "method": "GET",
+    "path": "/api/users/",
+    "key": "",
+    "body": "",
+    "status": 401,
+    "json": {
+      "data": null,
+      "message": "API Key not set",
+      "success": false
+    }
+  },
+  {
+    "id": "invalid-key",
+    "method": "GET",
+    "path": "/api/users/",
+    "key": "wrong",
+    "body": "",
+    "status": 401,
+    "json": {
+      "data": null,
+      "message": "Invalid API Key",
+      "success": false
+    }
+  },
+  {
+    "id": "list",
+    "method": "GET",
+    "path": "/api/users/",
+    "key": "1111111111111111111111111111111111111111111111111111111111111111",
+    "body": "",
+    "status": 200,
+    "json": [
+      {
+        "account_locked": false,
+        "api_key": "1111111111111111111111111111111111111111111111111111111111111111",
+        "id": 1,
+        "last_login": "2030-01-02T03:04:05Z",
+        "password_change_required": false,
+        "role": {
+          "description": "System administrator with full permissions",
+          "name": "Admin",
+          "slug": "admin"
+        },
+        "username": "admin"
+      }
+    ]
+  },
+  {
+    "id": "get-admin",
+    "method": "GET",
+    "path": "/api/users/1",
+    "key": "1111111111111111111111111111111111111111111111111111111111111111",
+    "body": "",
+    "status": 200,
+    "json": {
+      "account_locked": false,
+      "api_key": "1111111111111111111111111111111111111111111111111111111111111111",
+      "id": 1,
+      "last_login": "2030-01-02T03:04:05Z",
+      "password_change_required": false,
+      "role": {
+        "description": "System administrator with full permissions",
+        "name": "Admin",
+        "slug": "admin"
+      },
+      "username": "admin"
+    }
+  },
+  {
+    "id": "missing-user",
+    "method": "GET",
+    "path": "/api/users/999",
+    "key": "1111111111111111111111111111111111111111111111111111111111111111",
+    "body": "",
+    "status": 404,
+    "json": {
+      "data": null,
+      "message": "User not found",
+      "success": false
+    }
+  },
+  {
+    "id": "empty-name",
+    "method": "POST",
+    "path": "/api/users/",
+    "key": "1111111111111111111111111111111111111111111111111111111111111111",
+    "body": "{\"role\":\"user\",\"password\":\"valid-password\"}",
+    "status": 400,
+    "json": {
+      "data": null,
+      "message": "No username provided",
+      "success": false
+    }
+  },
+  {
+    "id": "empty-role",
+    "method": "POST",
+    "path": "/api/users/",
+    "key": "1111111111111111111111111111111111111111111111111111111111111111",
+    "body": "{\"username\":\"alice\",\"password\":\"valid-password\"}",
+    "status": 400,
+    "json": {
+      "data": null,
+      "message": "No role specified",
+      "success": false
+    }
+  },
+  {
+    "id": "duplicate-create",
+    "method": "POST",
+    "path": "/api/users/",
+    "key": "1111111111111111111111111111111111111111111111111111111111111111",
+    "body": "{\"username\":\"admin\",\"role\":\"user\",\"password\":\"valid-password\"}",
+    "status": 400,
+    "json": {
+      "data": null,
+      "message": "Username already taken",
+      "success": false
+    }
+  },
+  {
+    "id": "unknown-role",
+    "method": "POST",
+    "path": "/api/users/",
+    "key": "1111111111111111111111111111111111111111111111111111111111111111",
+    "body": "{\"username\":\"alice\",\"role\":\"missing\",\"password\":\"valid-password\"}",
+    "status": 500,
+    "json": {
+      "data": null,
+      "message": "record not found",
+      "success": false
+    }
+  },
+  {
+    "id": "create",
+    "method": "POST",
+    "path": "/api/users/",
+    "key": "1111111111111111111111111111111111111111111111111111111111111111",
+    "body": "{\"username\":\"alice\",\"role\":\"user\",\"password\":\"valid-password\"}",
+    "status": 200,
+    "json": {
+      "account_locked": false,
+      "api_key": "\u003cgenerated-api-key\u003e",
+      "id": 2,
+      "last_login": "0001-01-01T00:00:00Z",
+      "password_change_required": false,
+      "role": {
+        "description": "User role with edit access to objects and campaigns",
+        "name": "User",
+        "slug": "user"
+      },
+      "username": "alice"
+    }
+  },
+  {
+    "id": "own-get",
+    "method": "GET",
+    "path": "/api/users/2",
+    "key": "\u003ccreated-user-key\u003e",
+    "body": "",
+    "status": 200,
+    "json": {
+      "account_locked": false,
+      "api_key": "\u003cgenerated-api-key\u003e",
+      "id": 2,
+      "last_login": "0001-01-01T00:00:00Z",
+      "password_change_required": false,
+      "role": {
+        "description": "User role with edit access to objects and campaigns",
+        "name": "User",
+        "slug": "user"
+      },
+      "username": "alice"
+    }
+  },
+  {
+    "id": "forbidden-list",
+    "method": "GET",
+    "path": "/api/users/",
+    "key": "\u003ccreated-user-key\u003e",
+    "body": "",
+    "status": 403,
+    "json": {
+      "data": null,
+      "message": "Forbidden",
+      "success": false
+    }
+  },
+  {
+    "id": "forbidden-get",
+    "method": "GET",
+    "path": "/api/users/1",
+    "key": "\u003ccreated-user-key\u003e",
+    "body": "",
+    "status": 403,
+    "json": {
+      "data": null,
+      "message": "Forbidden",
+      "success": false
+    }
+  },
+  {
+    "id": "forbidden-role",
+    "method": "PUT",
+    "path": "/api/users/2",
+    "key": "\u003ccreated-user-key\u003e",
+    "body": "{\"username\":\"alice\",\"role\":\"admin\"}",
+    "status": 400,
+    "json": {
+      "data": null,
+      "message": "Permission denied",
+      "success": false
+    }
+  },
+  {
+    "id": "duplicate-update",
+    "method": "PUT",
+    "path": "/api/users/2",
+    "key": "\u003ccreated-user-key\u003e",
+    "body": "{\"username\":\"admin\",\"role\":\"user\"}",
+    "status": 400,
+    "json": {
+      "data": null,
+      "message": "Username already taken",
+      "success": false
+    }
+  },
+  {
+    "id": "self-update",
+    "method": "PUT",
+    "path": "/api/users/2",
+    "key": "\u003ccreated-user-key\u003e",
+    "body": "{\"username\":\"alice-renamed\",\"role\":\"user\",\"password\":\"changed-password\"}",
+    "status": 200,
+    "json": {
+      "account_locked": false,
+      "api_key": "\u003cgenerated-api-key\u003e",
+      "id": 2,
+      "last_login": "0001-01-01T00:00:00Z",
+      "password_change_required": false,
+      "role": {
+        "description": "User role with edit access to objects and campaigns",
+        "name": "User",
+        "slug": "user"
+      },
+      "username": "alice-renamed"
+    }
+  },
+  {
+    "id": "delete",
+    "method": "DELETE",
+    "path": "/api/users/2",
+    "key": "1111111111111111111111111111111111111111111111111111111111111111",
+    "body": "",
+    "status": 200,
+    "json": {
+      "data": null,
+      "message": "User deleted Successfully!",
+      "success": true
+    }
+  },
+  {
+    "id": "delete-last-admin",
+    "method": "DELETE",
+    "path": "/api/users/1",
+    "key": "1111111111111111111111111111111111111111111111111111111111111111",
+    "body": "",
+    "status": 500,
+    "json": {
+      "data": null,
+      "message": "Cannot remove the only administrator",
+      "success": false
+    }
+  }
+]
