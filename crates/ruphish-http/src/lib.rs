@@ -5,5 +5,6 @@
 
 pub mod auth;
 mod rate;
+mod resources;
 pub mod response;
 pub mod server;

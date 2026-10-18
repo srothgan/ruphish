@@ -1,0 +1,370 @@
+[
+  {
+    "id": "groups-empty",
+    "method": "GET",
+    "path": "/api/groups/",
+    "body": "",
+    "status": 200,
+    "json": []
+  },
+  {
+    "id": "groups-no-name",
+    "method": "POST",
+    "path": "/api/groups/",
+    "body": "{\"targets\":[{\"email\":\"alice@example.test\"}]}",
+    "status": 400,
+    "json": {
+      "data": null,
+      "message": "Group name not specified",
+      "success": false
+    }
+  },
+  {
+    "id": "groups-no-targets",
+    "method": "POST",
+    "path": "/api/groups/",
+    "body": "{\"name\":\"Empty\"}",
+    "status": 400,
+    "json": {
+      "data": null,
+      "message": "No targets specified",
+      "success": false
+    }
+  },
+  {
+    "id": "groups-create",
+    "method": "POST",
+    "path": "/api/groups/",
+    "body": "{\"name\":\"First\",\"targets\":[{\"email\":\"alice@example.test\",\"first_name\":\"Alice\",\"last_name\":\"Example\",\"position\":\"Analyst\"}]}",
+    "status": 201,
+    "json": {
+      "id": 1,
+      "modified_date": "\u003cmodified\u003e",
+      "name": "First",
+      "targets": [
+        {
+          "email": "alice@example.test",
+          "first_name": "Alice",
+          "last_name": "Example",
+          "position": "Analyst"
+        }
+      ]
+    }
+  },
+  {
+    "id": "groups-create-shared",
+    "method": "POST",
+    "path": "/api/groups/",
+    "body": "{\"name\":\"Second\",\"targets\":[{\"email\":\"alice@example.test\",\"first_name\":\"Alice\",\"last_name\":\"Example\",\"position\":\"Analyst\"}]}",
+    "status": 201,
+    "json": {
+      "id": 2,
+      "modified_date": "\u003cmodified\u003e",
+      "name": "Second",
+      "targets": [
+        {
+          "email": "alice@example.test",
+          "first_name": "Alice",
+          "last_name": "Example",
+          "position": "Analyst"
+        }
+      ]
+    }
+  },
+  {
+    "id": "groups-clear",
+    "method": "PUT",
+    "path": "/api/groups/1",
+    "body": "{\"id\":1,\"name\":\"First\",\"targets\":[{\"email\":\"alice@example.test\",\"first_name\":\"\",\"last_name\":\"Example\",\"position\":\"\"}]}",
+    "status": 200,
+    "json": {
+      "id": 1,
+      "modified_date": "\u003cmodified\u003e",
+      "name": "First",
+      "targets": [
+        {
+          "email": "alice@example.test",
+          "first_name": "",
+          "last_name": "Example",
+          "position": ""
+        }
+      ]
+    }
+  },
+  {
+    "id": "groups-shared-after-edit",
+    "method": "GET",
+    "path": "/api/groups/2",
+    "body": "",
+    "status": 200,
+    "json": {
+      "id": 2,
+      "modified_date": "\u003cmodified\u003e",
+      "name": "Second",
+      "targets": [
+        {
+          "email": "alice@example.test",
+          "first_name": "",
+          "last_name": "Example",
+          "position": ""
+        }
+      ]
+    }
+  },
+  {
+    "id": "groups-summary",
+    "method": "GET",
+    "path": "/api/groups/summary",
+    "body": "",
+    "status": 200,
+    "json": {
+      "groups": [
+        {
+          "id": 1,
+          "modified_date": "\u003cmodified\u003e",
+          "name": "First",
+          "num_targets": 1
+        },
+        {
+          "id": 2,
+          "modified_date": "\u003cmodified\u003e",
+          "name": "Second",
+          "num_targets": 1
+        }
+      ],
+      "total": 2
+    }
+  },
+  {
+    "id": "groups-duplicate",
+    "method": "POST",
+    "path": "/api/groups/",
+    "body": "{\"name\":\"First\",\"targets\":[{\"email\":\"other@example.test\"}]}",
+    "status": 409,
+    "json": {
+      "data": null,
+      "message": "Group name already in use",
+      "success": false
+    }
+  },
+  {
+    "id": "groups-mismatch",
+    "method": "PUT",
+    "path": "/api/groups/1",
+    "body": "{\"id\":99,\"name\":\"First\",\"targets\":[{\"email\":\"other@example.test\"}]}",
+    "status": 500,
+    "json": {
+      "data": null,
+      "message": "Error: /:id and group_id mismatch",
+      "success": false
+    }
+  },
+  {
+    "id": "templates-empty",
+    "method": "GET",
+    "path": "/api/templates/",
+    "body": "",
+    "status": 200,
+    "json": []
+  },
+  {
+    "id": "templates-text-only",
+    "method": "POST",
+    "path": "/api/templates/",
+    "body": "{\"name\":\"Text only\",\"text\":\"Hello {{.FirstName}}\"}",
+    "status": 201,
+    "json": {
+      "attachments": null,
+      "envelope_sender": "",
+      "html": "",
+      "id": 1,
+      "modified_date": "\u003cmodified\u003e",
+      "name": "Text only",
+      "subject": "",
+      "text": "Hello {{.FirstName}}"
+    }
+  },
+  {
+    "id": "templates-html-only",
+    "method": "POST",
+    "path": "/api/templates/",
+    "body": "{\"name\":\"HTML only\",\"html\":\"\u003cp\u003eHello {{.FirstName}}\u003c/p\u003e\"}",
+    "status": 201,
+    "json": {
+      "attachments": null,
+      "envelope_sender": "",
+      "html": "\u003cp\u003eHello {{.FirstName}}\u003c/p\u003e",
+      "id": 2,
+      "modified_date": "\u003cmodified\u003e",
+      "name": "HTML only",
+      "subject": "",
+      "text": ""
+    }
+  },
+  {
+    "id": "templates-no-content",
+    "method": "POST",
+    "path": "/api/templates/",
+    "body": "{\"name\":\"No content\"}",
+    "status": 400,
+    "json": {
+      "data": null,
+      "message": "Need to specify at least plaintext or HTML content",
+      "success": false
+    }
+  },
+  {
+    "id": "templates-unknown-field",
+    "method": "POST",
+    "path": "/api/templates/",
+    "body": "{\"name\":\"Invalid expression\",\"text\":\"{{.Unknown}}\"}",
+    "status": 500,
+    "json": {
+      "data": null,
+      "message": "Error inserting template into database",
+      "success": false
+    }
+  },
+  {
+    "id": "templates-duplicate",
+    "method": "POST",
+    "path": "/api/templates/",
+    "body": "{\"name\":\"Text only\",\"text\":\"Other\"}",
+    "status": 409,
+    "json": {
+      "data": null,
+      "message": "Template name already in use",
+      "success": false
+    }
+  },
+  {
+    "id": "pages-empty-html",
+    "method": "POST",
+    "path": "/api/pages/",
+    "body": "{\"name\":\"Empty\"}",
+    "status": 201,
+    "json": {
+      "capture_credentials": false,
+      "capture_passwords": false,
+      "html": "\u003chtml\u003e\u003chead\u003e\u003c/head\u003e\u003cbody\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": 1,
+      "modified_date": "\u003cmodified\u003e",
+      "name": "Empty",
+      "redirect_url": ""
+    }
+  },
+  {
+    "id": "pages-capture",
+    "method": "POST",
+    "path": "/api/pages/",
+    "body": "{\"name\":\"Capture\",\"html\":\"\u003cform action='/external'\u003e\u003cinput name='user'\u003e\u003cinput type='password' name='secret'\u003e\u003c/form\u003e\",\"capture_passwords\":true}",
+    "status": 201,
+    "json": {
+      "capture_credentials": true,
+      "capture_passwords": true,
+      "html": "\u003chtml\u003e\u003chead\u003e\u003c/head\u003e\u003cbody\u003e\u003cform action=\"\"\u003e\u003cinput name=\"user\"/\u003e\u003cinput type=\"password\" name=\"password\"/\u003e\u003c/form\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": 2,
+      "modified_date": "\u003cmodified\u003e",
+      "name": "Capture",
+      "redirect_url": ""
+    }
+  },
+  {
+    "id": "pages-no-capture",
+    "method": "POST",
+    "path": "/api/pages/",
+    "body": "{\"name\":\"No capture\",\"html\":\"\u003cform action='/external'\u003e\u003cinput name='user'\u003e\u003cinput type='password' name='secret'\u003e\u003c/form\u003e\"}",
+    "status": 201,
+    "json": {
+      "capture_credentials": false,
+      "capture_passwords": false,
+      "html": "\u003chtml\u003e\u003chead\u003e\u003c/head\u003e\u003cbody\u003e\u003cform action=\"\"\u003e\u003cinput/\u003e\u003cinput type=\"password\"/\u003e\u003c/form\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": 3,
+      "modified_date": "\u003cmodified\u003e",
+      "name": "No capture",
+      "redirect_url": ""
+    }
+  },
+  {
+    "id": "profiles-create",
+    "method": "POST",
+    "path": "/api/smtp/",
+    "body": "{\"name\":\"Local\",\"host\":\"localhost:2525\",\"from_address\":\"training@example.test\",\"headers\":[{\"key\":\"X-Training\",\"value\":\"Hello {{.FirstName}}\"}]}",
+    "status": 201,
+    "json": {
+      "from_address": "training@example.test",
+      "headers": [
+        {
+          "key": "X-Training",
+          "value": "Hello {{.FirstName}}"
+        }
+      ],
+      "host": "localhost:2525",
+      "id": 1,
+      "ignore_cert_errors": false,
+      "interface_type": "",
+      "modified_date": "\u003cmodified\u003e",
+      "name": "Local"
+    }
+  },
+  {
+    "id": "profiles-duplicate",
+    "method": "POST",
+    "path": "/api/smtp/",
+    "body": "{\"name\":\"Local\",\"host\":\"localhost:2525\",\"from_address\":\"training@example.test\"}",
+    "status": 409,
+    "json": {
+      "data": null,
+      "message": "SMTP name already in use",
+      "success": false
+    }
+  },
+  {
+    "id": "profiles-delete",
+    "method": "DELETE",
+    "path": "/api/smtp/1",
+    "body": "",
+    "status": 200,
+    "json": {
+      "data": null,
+      "message": "SMTP Deleted Successfully",
+      "success": true
+    }
+  },
+  {
+    "id": "templates-delete",
+    "method": "DELETE",
+    "path": "/api/templates/1",
+    "body": "",
+    "status": 200,
+    "json": {
+      "data": null,
+      "message": "Template deleted successfully!",
+      "success": true
+    }
+  },
+  {
+    "id": "pages-delete",
+    "method": "DELETE",
+    "path": "/api/pages/1",
+    "body": "",
+    "status": 200,
+    "json": {
+      "data": null,
+      "message": "Page Deleted Successfully",
+      "success": true
+    }
+  },
+  {
+    "id": "groups-delete",
+    "method": "DELETE",
+    "path": "/api/groups/1",
+    "body": "",
+    "status": 200,
+    "json": {
+      "data": null,
+      "message": "Group deleted successfully!",
+      "success": true
+    }
+  }
+]

@@ -9,6 +9,8 @@ pub enum SessionAction {
     Continue,
     /// Authentication ended; clear the view and sign in again.
     SignIn,
+    /// Explicit sign-out succeeded; clear authenticated state and show login.
+    SignedOut,
     /// Identity or permissions changed; rebuild the view from current server state.
     Reload,
 }
@@ -23,6 +25,10 @@ impl SessionMonitor {
     /// Current UI disposition, independent of incidental server error wording.
     pub fn action(&self) -> SessionAction {
         self.action
+    }
+    /// Successful logout is terminal, including for outstanding successful requests.
+    pub fn signed_out(&mut self) {
+        self.action = SessionAction::SignedOut;
     }
     /// A rejected login is an inline form error; protected-request 401s end the view.
     pub fn response(&mut self, path: &str, status: u16) {
@@ -121,5 +127,21 @@ mod tests {
         }
         monitor.response("/api/users/", 500);
         assert_eq!(monitor.action(), SessionAction::Continue);
+    }
+
+    #[test]
+    fn successful_signout_is_terminal_but_failed_signout_preserves_the_session() {
+        let signed_in = session();
+        let mut monitor = SessionMonitor::default();
+        monitor.observe(&signed_in);
+        for status in [403, 500, 503] {
+            monitor.response("/logout", status);
+            assert_eq!(monitor.action(), SessionAction::Continue);
+        }
+        monitor.signed_out();
+        monitor.response("/api/users/1", 200);
+        monitor.observe(&signed_in);
+        monitor.response("/api/groups/", 401);
+        assert_eq!(monitor.action(), SessionAction::SignedOut);
     }
 }

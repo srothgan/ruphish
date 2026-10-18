@@ -6,7 +6,7 @@ import {syntaxHighlighting, defaultHighlightStyle} from '@codemirror/language';
 import {createState, templateCompletions, applyVisual} from './state.mjs';
 import {visualFrameDocument} from './visual-shell.mjs';
 
-export function mountEditor(parent, source, onChange, variablesJson) {
+export function mountEditor(parent, source, onChange, variablesJson, onVisualState = () => {}, readOnly = false) {
   const variables = JSON.parse(variablesJson);
   const modes = document.createElement('div'); modes.className = 'editor-mode';
   const mode = document.createElement('strong'); mode.textContent = 'HTML source';
@@ -14,17 +14,17 @@ export function mountEditor(parent, source, onChange, variablesJson) {
   const picker = document.createElement('select'); picker.append(new Option('Choose a field…', ''));
   for (const name of variables) picker.append(new Option(name, name));
   variableLabel.append(picker);
-  const open = document.createElement('button'); open.type = 'button'; open.textContent = 'Edit visually';
-  const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel visual edits'; cancel.hidden = true;
+  const open = document.createElement('button'); open.type = 'button'; open.textContent = 'Edit visually'; open.disabled = readOnly; picker.disabled = readOnly;
+  const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'text-danger'; cancel.textContent = 'Cancel visual edits'; cancel.hidden = true;
   const note = document.createElement('p'); note.className = 'editor-help'; note.setAttribute('role', 'status');
   const sourcePane = document.createElement('div'); sourcePane.className = 'source';
   const container = document.createElement('div');
   modes.append(mode, variableLabel, open, cancel); parent.append(modes, note, sourcePane, container);
   const sourceHelp = 'Edit the HTML directly, or choose “Edit visually” to format the rendered message. Recipient fields stay as {{…}} until sending.';
-  note.textContent = sourceHelp;
+  note.setAttribute('role', 'status'); note.textContent = sourceHelp;
   const editable = new Compartment();
   const extensions = [
-    editable.of(EditorView.editable.of(true)),
+    editable.of(EditorView.editable.of(!readOnly)),
     lineNumbers(), drawSelection(), highlightActiveLine(),
     syntaxHighlighting(defaultHighlightStyle),
     keymap.of([...completionKeymap, ...defaultKeymap, ...historyKeymap]),
@@ -40,13 +40,15 @@ export function mountEditor(parent, source, onChange, variablesJson) {
     if (!visual) return;
     window.removeEventListener('message', visual.listener);
     visual.frame.remove(); visual = null;
-    sourcePane.hidden = false; open.disabled = false; cancel.hidden = true; variableLabel.hidden = false;
-    mode.textContent = 'HTML source'; note.textContent = sourceHelp;
-    view.dispatch({effects: editable.reconfigure(EditorView.editable.of(true))});
+    onVisualState(false);
+    sourcePane.hidden = false; open.disabled = readOnly; cancel.hidden = true; variableLabel.hidden = false;
+    mode.textContent = 'HTML source'; note.setAttribute('role', 'status'); note.textContent = sourceHelp;
+    view.dispatch({effects: editable.reconfigure(EditorView.editable.of(!readOnly))});
   };
   const editor = {
     replace(source) { closeVisual(); view.setState(createState(source, extensions)); },
     insert(name) {
+      if (readOnly) return;
       if (visual) {
         if (!visual.ready) visual.pending.push(name);
         else visual.frame.contentWindow.postMessage({type: 'insert', token: visual.token, name}, '*');
@@ -55,6 +57,7 @@ export function mountEditor(parent, source, onChange, variablesJson) {
       view.dispatch(view.state.replaceSelection(`{{.${name}}}`)); view.focus();
     },
     openVisual() {
+      if (readOnly) return;
       closeVisual(); container.replaceChildren();
       const frame = document.createElement('iframe');
       frame.className = 'visual-frame'; frame.title = 'Visual HTML editor';
@@ -83,6 +86,7 @@ export function mountEditor(parent, source, onChange, variablesJson) {
           return;
         }
         if (message.type === 'failed') {
+          note.setAttribute('role', 'alert');
           note.textContent = 'Visual editing could not start. Your HTML source is unchanged. Choose “Cancel visual edits” to return.';
           return;
         }
@@ -98,6 +102,7 @@ export function mountEditor(parent, source, onChange, variablesJson) {
         if (transaction) view.dispatch(transaction);
       };
       visual = {frame, listener, token, booted: false, ready: false, pending: []};
+      onVisualState(true);
       window.addEventListener('message', listener);
       view.dispatch({effects: editable.reconfigure(EditorView.editable.of(false))});
       sourcePane.hidden = true; open.disabled = true; cancel.hidden = false; variableLabel.hidden = true;

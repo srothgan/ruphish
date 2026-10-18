@@ -16,6 +16,8 @@ use std::{
 
 #[path = "auth_process.rs"]
 mod auth_process;
+#[path = "resource_process.rs"]
+mod resource_process;
 
 struct Process {
     child: Box<dyn portable_pty::Child + Send + Sync>,
@@ -413,13 +415,18 @@ fn actual_http_servers_serve_built_assets_isolate_public_routes_and_shutdown_on_
     let response = client.get(format!("http://{admin}/")).send().unwrap();
     assert_eq!(response.status(), 200);
     assert!(response.text().unwrap().contains("Ruphish"));
-    for entry in std::fs::read_dir(directory.path().join("dist/admin")).unwrap() {
-        let entry = entry.unwrap();
-        if !entry.file_type().unwrap().is_file() {
-            continue;
-        }
-        let name = entry.file_name().to_str().unwrap().to_owned();
-        let route = if name == "index.html" { "" } else { &name };
+    let asset_root = directory.path().join("dist/admin");
+    let manifest: std::collections::BTreeMap<String, String> =
+        serde_json::from_slice(&std::fs::read(asset_root.join("asset-manifest.json")).unwrap())
+            .unwrap();
+    // ES module imports live under snippets/, so testing only root files misses
+    // missing modules and incorrect MIME types that prevent WASM from mounting.
+    for name in manifest
+        .keys()
+        .map(String::as_str)
+        .chain(["asset-manifest.json"])
+    {
+        let route = if name == "index.html" { "" } else { name };
         let response = client
             .get(format!("http://{admin}/{route}"))
             .send()
@@ -428,9 +435,18 @@ fn actual_http_servers_serve_built_assets_isolate_public_routes_and_shutdown_on_
         if name.ends_with(".wasm") {
             assert_eq!(response.headers()["content-type"], "application/wasm");
         }
+        if name.ends_with(".js") || name.ends_with(".mjs") {
+            assert!(
+                response.headers()["content-type"]
+                    .to_str()
+                    .unwrap()
+                    .contains("javascript"),
+                "{name}"
+            );
+        }
         assert_eq!(
             response.bytes().unwrap().as_ref(),
-            std::fs::read(entry.path()).unwrap(),
+            std::fs::read(asset_root.join(name)).unwrap(),
             "{name}"
         );
     }

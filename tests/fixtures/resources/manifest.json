@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "reference_commit": "95618469799295e2c0fec980805a2dfbb818816b",
+  "capture_tool": "tools/resource_capture/main.go",
+  "capture_tool_sha256": "3de4a514178f940568ad8d11f7343a52fb57a12cf1ab1c251151fdf28606bb2a",
+  "files": {
+    "http.json": "80c2e122b151af78d4a6f7b2eafc22b4f8b95dd11aba3613a66e45e9d19814c7",
+    "shared-recipients.sqlite3": "841f457dfde105a7ce59fc51ff86a63595a433821dee1f48618eba5c295b340f",
+    "preview-pixel.png": "3eb10792d1f0c7e07e7248273540f1952d9a5a2996f4b5df70ab026cd9f05517"
+  },
+  "pixel_source": "gophish/static/images/pixel.png"
+}

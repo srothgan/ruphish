@@ -1,4 +1,18 @@
-/* Account UI: ink #183348, paper #ffffff, mist #eef3f5, teal #006b67, slate #526875, danger #a12c39. */
+* { box-sizing: border-box; }
+body { margin: 0; }
+[hidden] { display: none !important; }
+.account-app { font-size: 16px; line-height: 1.5; }
+.account-app h1 { margin: 0; }
+.account-app h2 { font-size: 20px; font-weight: 650; }
+.account-app p { max-width: 80ch; }
+.account-app label { display: block; font-size: 14px; font-weight: 600; }
+.account-app input:not([type=file]):not([type=checkbox]), .account-app textarea { display: block; width: 100%; margin-top: 6px; padding: 10px 12px; border: 1px solid #a6b3c3; border-radius: 4px; background: white; color: inherit; font: inherit; }
+.account-app textarea { font: 14px/1.6 Consolas, monospace; }
+.account-app button, .account-app select { font: inherit; padding: 7px 12px; color: inherit; background: white; border: 1px solid #a6b3c3; border-radius: 4px; cursor: pointer; }
+.account-app button:hover:not(:disabled) { background: #edf2f8; border-color: #526875; }
+.account-app button:disabled { cursor: default; opacity: .55; }
+.account-app :focus-visible { outline: 3px solid #006b67; outline-offset: 3px; }
+/* Account UI: ink #183348, paper #ffffff, mist #eef3f5, teal #006b67, slate #526875, danger via --color-danger. */
 .account-app { min-height: 100vh; background: #eef3f5; color: #183348; font-family: "Segoe UI", "Helvetica Neue", sans-serif; }
 .account-app h1 { font-size: 30px; line-height: 1.2; font-weight: 650; color: #183348; }
 .account-app a { color: #006b67; text-underline-offset: 3px; }
@@ -15,18 +29,34 @@
 .login-form > p { color: #526875; margin-bottom: 28px; }
 .login-form form { display: grid; gap: 22px; }
 .login-form button { margin-top: 6px; width: 100%; }
-.admin-shell { display: grid; grid-template-columns: 200px minmax(0,1fr); min-height: 100vh; }
-.admin-nav { position: sticky; top: 0; height: 100vh; height: 100dvh; align-self: start; overflow-y: auto; background: #183348; color: white; display: flex; flex-direction: column; padding: 30px 18px; gap: 32px; }
-.admin-nav .product-name { color: white; text-decoration: none; font-size: 25px; font-weight: 750; padding: 0 10px; }
-.admin-nav nav { display: grid; gap: 6px; }
+.admin-shell { display: grid; grid-template-columns: 244px minmax(0,1fr); min-height: 100vh; }
+.admin-nav { position: sticky; top: 0; height: 100vh; height: 100dvh; align-self: start; overflow: hidden; background: #183348; color: white; display: flex; flex-direction: column; padding: 30px 18px 18px; gap: 28px; }
+.admin-nav .product-name { flex-shrink: 0; color: white; text-decoration: none; font-size: 25px; font-weight: 750; padding: 0 10px; }
+.admin-nav nav { display: grid; align-content: start; flex: 1; min-height: 0; overflow-y: auto; gap: 26px; }
+.admin-nav .nav-section { display: grid; gap: 4px; }
+.admin-nav .nav-section h2 { margin: 0 12px 6px; color: #afc6d3; font-size: 12px; font-weight: 600; }
+.admin-nav nav a, .admin-nav .nav-placeholder { display: flex; align-items: center; gap: 11px; font-size: 14px; }
+.admin-nav .nav-icon { width: 19px; height: 19px; flex: 0 0 19px; }
+.admin-nav .nav-placeholder { color: #9eb3bf; padding: 10px 12px; }
+.admin-nav .nav-placeholder small { display: block; font-size: 11px; color: #afc6d3; margin-top: 2px; }
+.admin-nav nav a[aria-current=page] { box-shadow: inset 3px 0 #71c8bb; font-weight: 600; }
 .admin-nav nav a { color: #e8f1f4; padding: 10px 12px; text-decoration: none; border-radius: 4px; }
 .admin-nav nav a:hover, .admin-nav nav a[aria-current=page] { background: #2a4b60; color: white; }
-.signed-in { display: grid; gap: 6px; margin-top: auto; padding: 16px 10px 0; border-top: 1px solid #526875; overflow-wrap: anywhere; }
-.signed-in span { font-size: 13px; color: #d3e0e6; }
-.signed-in a { color: #d3e0e6; margin-top: 10px; }
+.account-footer { flex-shrink: 0; padding-top: 16px; border-top: 1px solid #526875; }
+.account-app .account-trigger { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 10px; text-align: left; background: transparent; color: white; border-color: transparent; }
+.account-app button.account-trigger:hover:not(:disabled), .account-app .account-trigger[aria-expanded=true] { background: #2a4b60; border-color: #526875; }
+.account-app .admin-nav :focus-visible { outline-color: #71c8bb; }
+.account-app .account-popover :focus-visible { outline-color: #006b67; }
+.account-trigger span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-person { width: 24px; height: 24px; flex-shrink: 0; }
+.account-chevron { width: 18px; height: 18px; flex-shrink: 0; }
+.account-popover { position: fixed; z-index: 100; box-sizing: border-box; overflow-y: auto; padding: 8px; color: #183348; background: #fff; border: 1px solid #cfdbdf; border-radius: 8px; box-shadow: 0 12px 36px #18334830; }
+.account-popover-identity { display: grid; gap: 3px; padding: 12px; margin-bottom: 6px; border-bottom: 1px solid #cfdbdf; overflow-wrap: anywhere; }
+.account-popover-identity span { font-size: 13px; color: #526875; }
+.account-app .account-popover > a, .account-app .account-popover > button { display: block; width: 100%; padding: 10px 12px; border: 0; border-radius: 4px; text-align: left; text-decoration: none; }
+.account-app .account-popover > a:hover { background: #edf2f8; }
+.account-popover .form-message { margin: 8px 0 0; font-size: 14px; }
 .admin-content { min-width: 0; padding: 34px; }
-.admin-content > main { padding: 0; max-width: 1300px; }
-.admin-content > main > header { display: none; }
 .account-panel { background: #fff; padding: 28px; border: 1px solid #cfdbdf; border-radius: 5px; max-width: 680px; }
 .account-panel > p { color: #526875; }
 .account-form { display: grid; gap: 18px; }
@@ -37,22 +67,34 @@
 .account-actions, .row-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 .row-actions { margin: 0; }
 .settings-stack { display: grid; gap: 24px; }
+.account-overview { max-width: 960px; }
+.account-overview > .account-heading { margin-bottom: 28px; flex-wrap: wrap; }
+.account-overview .account-panel { max-width: none; }
+.account-overview h2 { margin: 0 0 16px; }
+.account-overview .button { padding: 8px 14px; background: #fff; border: 1px solid #a6b3c3; border-radius: 4px; text-decoration: none; }
+.account-overview .button:hover { background: #edf2f8; }
+.account-facts { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 24px; margin: 0; }
+.account-facts dt { font-size: 13px; color: #526875; }
+.account-facts dd { margin: 4px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+.account-api-row { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-top: 20px; }
+.account-api-row label { flex: 1 1 240px; min-width: 0; }
+.account-api-row button { margin-bottom: 3px; }
+.api-key-controls { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; }
+.account-app .key-visibility { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; flex: 0 0 42px; padding: 8px; }
+.key-visibility svg { width: 22px; height: 22px; }
+.key-visibility .hidden-eye { display: none; }
+.password-page > .breadcrumb { display: inline-block; margin-bottom: 22px; }
 .secret-value { font-family: Consolas, monospace; font-size: 13px !important; }
 .account-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-.users-page { max-width: 1400px; margin: 0 auto; }
-.users-layout { display: grid; grid-template-columns: minmax(0,1fr) 330px; align-items: start; gap: 24px; margin-top: 24px; }
-.user-table-wrap { min-width: 0; overflow-x: auto; }
-.user-table { border-collapse: collapse; width: 100%; background: #fff; font-size: 14px; }
-.user-table th, .user-table td { text-align: left; padding: 16px; border-bottom: 1px solid #cfdbdf; vertical-align: top; }
-.user-table thead th { color: #526875; background: #e4ecef; font-weight: 600; }
-.user-table tbody th { overflow-wrap: anywhere; }
-.user-table button { font-size: 13px; }
-.account-app .text-danger { color: #a12c39; }
-.account-app .danger { background: #a12c39; border-color: #a12c39; color: white; }
-.account-app .danger:hover:not(:disabled) { background: #7c2230; }
-.confirmation { margin: 24px 0; border: 1px solid #a12c39; border-left-width: 5px; padding: 24px; background: white; }
+.account-app .text-danger { color: var(--color-danger); }
+.account-app .danger { background: var(--color-danger); border-color: var(--color-danger); color: white; }
+.account-app .danger:hover:not(:disabled) { background: var(--color-danger); border-color: var(--color-danger); filter: brightness(.85); }
+.confirmation { margin: 24px 0; border: 1px solid var(--color-danger); border-left-width: 5px; padding: 24px; background: white; }
 .confirmation button + button { margin-left: 8px; }
 .impersonation { display: flex; gap: 20px; align-items: center; justify-content: space-between; margin: -10px 0 26px; padding: 16px 20px; background: #fff1ce; border: 1px solid #9a731c; color: #513d0e; }
 .cancel-link { display: inline-block; margin-left: 18px; }
-@media (max-width: 1100px) { .users-layout { grid-template-columns: 1fr; } .user-edit { max-width: none; } }
-@media (max-width: 700px) { .admin-shell { grid-template-columns: 1fr; } .admin-nav { position: static; height: auto; overflow-y: visible; padding: 16px; gap: 14px; } .admin-nav nav { display: flex; flex-wrap: wrap; } .signed-in { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 8px 0; } .signed-in a { margin: 0 0 0 auto; } .admin-content { padding: 20px 16px; } .account-panel { padding: 22px; } .impersonation { align-items: start; flex-direction: column; gap: 12px; } .login-screen { padding-top: 6vh; } }
+@media (max-width: 700px) { .admin-shell { grid-template-columns: 1fr; } .admin-nav { position: static; height: auto; overflow: visible; padding: 16px; gap: 14px; } .admin-nav nav { display: flex; flex-wrap: wrap; overflow: visible; } .admin-content { padding: 20px 16px; } .account-panel { padding: 22px; } .impersonation { align-items: start; flex-direction: column; gap: 12px; } .login-screen { padding-top: 6vh; } }
+
+.account-app .text-danger:hover:not(:disabled) { color: var(--color-danger); border-color: var(--color-danger); }
+.account-app .form-message.error { color: var(--color-danger); border-left-color: var(--color-danger); }
+.account-app .content-editor [role=alert] { color: var(--color-danger); }

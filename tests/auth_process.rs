@@ -65,6 +65,300 @@ fn setup(client: &Client, base: &str) -> Value {
 fn admin_key() -> &'static str {
     "synthetic-bootstrap-token"
 }
+
+#[test]
+fn dedicated_user_pages_preserve_browser_crud_and_reject_unauthorized_access() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = endpoint(&mut process);
+    let admin = browser();
+    let anonymous = browser();
+    let session = setup(&admin, &base);
+    for path in ["/users", "/users/new", "/users/1/edit"] {
+        let denied = anonymous.get(format!("{base}{path}")).send().unwrap();
+        assert_eq!(denied.status(), 307);
+        assert_eq!(denied.headers()["location"], format!("/login?next={path}"));
+        assert_eq!(
+            admin.get(format!("{base}{path}")).send().unwrap().status(),
+            200
+        );
+    }
+    let count =
+        || database(directory.path(), "SELECT count(*) AS n FROM users")[0].get::<i64, _>("n");
+    assert_eq!(count(), 1, "Opening forms must not create accounts");
+    let send = |method, path: &str, body: &Value, csrf: &str| {
+        admin
+            .request(method, format!("{base}{path}"))
+            .header("x-ruphish-client", "browser")
+            .header("origin", &base)
+            .header("x-csrf-token", csrf)
+            .json(body)
+            .send()
+            .unwrap()
+    };
+    let csrf = session["csrf_token"].as_str().unwrap();
+    let mut draft = json!({"username":"new-user","password":"new-user-password","role":"user","password_change_required":true,"account_locked":false});
+    assert_eq!(
+        send(reqwest::Method::POST, "/api/users/", &draft, "invalid").status(),
+        403
+    );
+    draft["password"] = json!("");
+    assert_eq!(
+        send(reqwest::Method::POST, "/api/users/", &draft, csrf).status(),
+        400
+    );
+    assert_eq!(count(), 1);
+    draft["password"] = json!("new-user-password");
+    let created = send(reqwest::Method::POST, "/api/users/", &draft, csrf);
+    assert_eq!(created.status(), 200);
+    let created: Value = created.json().unwrap();
+    let id = created["id"].as_i64().unwrap();
+    assert_eq!(created["password_change_required"], true);
+    assert_eq!(count(), 2);
+    assert_eq!(
+        send(reqwest::Method::POST, "/api/users/", &draft, csrf).status(),
+        400
+    );
+    assert_eq!(
+        count(),
+        2,
+        "Duplicate creation must not write another account"
+    );
+    let member = browser();
+    assert_eq!(
+        sign_in(&member, &base, "new-user", "new-user-password").status(),
+        200
+    );
+    assert_eq!(
+        member
+            .get(format!("{base}/users/new"))
+            .send()
+            .unwrap()
+            .headers()["location"],
+        "/reset_password?next=%2Fusers%2Fnew"
+    );
+    let api_path = format!("/api/users/{id}");
+    draft["password"] = json!("");
+    draft["password_change_required"] = json!(false);
+    draft["username"] = json!("renamed-user");
+    assert_eq!(
+        send(reqwest::Method::PUT, &api_path, &draft, csrf).status(),
+        200
+    );
+    let stored: Value = admin
+        .get(format!("{base}{api_path}"))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(stored["username"], "renamed-user");
+    assert_eq!(stored["password_change_required"], false);
+    assert_eq!(
+        admin
+            .get(format!("{base}/users/{id}/edit"))
+            .send()
+            .unwrap()
+            .status(),
+        200
+    );
+    assert_eq!(
+        sign_in(&member, &base, "renamed-user", "new-user-password").status(),
+        200,
+        "Blank update password must retain the existing credential"
+    );
+    for path in [
+        "/users".to_owned(),
+        "/users/new".to_owned(),
+        format!("/users/{id}/edit"),
+    ] {
+        assert_eq!(
+            member.get(format!("{base}{path}")).send().unwrap().status(),
+            403
+        );
+    }
+    assert_eq!(
+        admin
+            .get(format!("{base}/api/users/999999"))
+            .send()
+            .unwrap()
+            .status(),
+        404
+    );
+    assert_eq!(
+        send(reqwest::Method::PUT, "/api/users/999999", &draft, csrf).status(),
+        404
+    );
+    assert_eq!(count(), 2, "Missing edit targets must not become creates");
+    assert_eq!(
+        post(
+            &admin,
+            &base,
+            "/impersonate",
+            &[("username", "renamed-user")]
+        )
+        .status(),
+        200
+    );
+    assert_eq!(
+        admin
+            .get(format!("{base}/users/new"))
+            .send()
+            .unwrap()
+            .status(),
+        403
+    );
+    assert_eq!(
+        admin
+            .get(format!("{base}/users/{id}/edit"))
+            .send()
+            .unwrap()
+            .status(),
+        403
+    );
+    process.stop();
+}
+
+#[test]
+fn account_password_deep_link_preserves_setup_and_legacy_password_contract() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = endpoint(&mut process);
+    let client = browser();
+    let password_page = || {
+        client
+            .get(format!("{base}/settings/password"))
+            .send()
+            .unwrap()
+    };
+    let anonymous = password_page();
+    assert_eq!(anonymous.status(), 307);
+    assert_eq!(
+        anonymous.headers()["location"],
+        "/login?next=/settings/password"
+    );
+    assert_eq!(
+        sign_in(&client, &base, "admin", "synthetic-bootstrap-password").status(),
+        200
+    );
+    let forced = password_page();
+    assert_eq!(forced.status(), 307);
+    assert_eq!(
+        forced.headers()["location"],
+        "/reset_password?next=%2Fsettings%2Fpassword"
+    );
+    assert_eq!(
+        post(
+            &client,
+            &base,
+            "/reset_password",
+            &[
+                ("password", "established-admin-password"),
+                ("confirm_password", "established-admin-password")
+            ]
+        )
+        .status(),
+        200
+    );
+    assert_eq!(password_page().status(), 200);
+    let change = |current: &str| {
+        post(
+            &client,
+            &base,
+            "/settings",
+            &[
+                ("current_password", current),
+                ("new_password", "replacement-admin-password"),
+                ("confirm_new_password", "replacement-admin-password"),
+            ],
+        )
+    };
+    assert_eq!(change("incorrect-current-password").status(), 400);
+    assert_eq!(bootstrap(&client, &base)["user"]["username"], "admin");
+    assert_eq!(change("established-admin-password").status(), 200);
+    // Browser route refresh works after changing credentials; it is not a new mutation API.
+    assert_eq!(password_page().status(), 200);
+    assert_eq!(
+        client
+            .post(format!("{base}/settings/password"))
+            .send()
+            .unwrap()
+            .status(),
+        405
+    );
+    assert_eq!(post(&client, &base, "/logout", &[]).status(), 200);
+    assert_eq!(password_page().status(), 307);
+    assert_eq!(
+        sign_in(&client, &base, "admin", "established-admin-password").status(),
+        401
+    );
+    assert_eq!(
+        sign_in(&client, &base, "admin", "replacement-admin-password").status(),
+        200
+    );
+    process.stop();
+}
+
+#[test]
+fn browser_resource_create_read_edit_and_reload_routes_preserve_saved_data() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = endpoint(&mut process);
+    let anonymous = browser();
+    let admin = browser();
+    let session = setup(&admin, &base);
+    for family in ["groups", "templates", "pages", "smtp"] {
+        for suffix in ["new", "1", "1/edit"] {
+            let path = format!("/{family}/{suffix}");
+            let denied = anonymous.get(format!("{base}{path}")).send().unwrap();
+            assert_eq!(denied.status(), 307, "{path}");
+            assert!(
+                denied.headers()["location"]
+                    .to_str()
+                    .unwrap()
+                    .starts_with("/login")
+            );
+            let loaded = admin.get(format!("{base}{path}")).send().unwrap();
+            assert_eq!(loaded.status(), 200, "{path}");
+            assert!(loaded.text().unwrap().contains("Ruphish"));
+        }
+    }
+    let send = |method, path: &str, value: &Value| {
+        admin
+            .request(method, format!("{base}{path}"))
+            .header("x-ruphish-client", "browser")
+            .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
+            .header("origin", &base)
+            .json(value)
+            .send()
+            .unwrap()
+    };
+    let group =
+        json!({"name":"Équipe","targets":[{"email":"alice@example.test","first_name":"Alice"}]});
+    let created = send(reqwest::Method::POST, "/api/groups/", &group);
+    assert_eq!(created.status(), 201);
+    let created: Value = created.json().unwrap();
+    let path = format!("/api/groups/{}", created["id"]);
+    let read = || {
+        admin
+            .get(format!("{base}{path}"))
+            .header("x-ruphish-client", "browser")
+            .send()
+            .unwrap()
+    };
+    let fetched = read();
+    assert_eq!(fetched.status(), 200);
+    assert_eq!(fetched.json::<Value>().unwrap(), created);
+    let mut edited = created.clone();
+    edited["name"] = json!("");
+    assert_eq!(send(reqwest::Method::PUT, &path, &edited).status(), 400);
+    assert_eq!(read().json::<Value>().unwrap(), created);
+    edited["name"] = json!("Renamed group");
+    let saved = send(reqwest::Method::PUT, &path, &edited);
+    assert_eq!(saved.status(), 200);
+    let saved: Value = saved.json().unwrap();
+    assert_eq!(read().json::<Value>().unwrap(), saved);
+    process.stop();
+}
 fn create(client: &Client, base: &str, name: &str, role: &str) -> Value {
     let response = client
         .post(format!("{base}/api/users/"))
@@ -694,6 +988,7 @@ fn malformed_credentials_rate_limits_and_storage_failures_fail_closed() {
         "CREATE TRIGGER reject_session_delete BEFORE DELETE ON ruphish_sessions BEGIN SELECT RAISE(ABORT,'synthetic storage failure'); END;",
     );
     assert_eq!(post(&browser, &base, "/logout", &[]).status(), 500);
+    assert_eq!(bootstrap(&browser, &base)["user"]["username"], "admin");
     database(directory.path(), "DROP TRIGGER reject_session_delete;");
     assert_eq!(post(&browser, &base, "/logout", &[]).status(), 200);
     assert!(bootstrap(&browser, &base)["user"].is_null());
@@ -1367,5 +1662,93 @@ fn browser_origin_checks_support_http1_and_http2_over_verified_tls() {
         assert_eq!(post(&browser, &base, "/logout", &[]).status(), 200);
         assert!(bootstrap(&browser, &base)["user"].is_null());
     }
+    process.stop();
+}
+
+#[test]
+fn browser_import_review_has_no_resource_writes_until_explicit_valid_create() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = endpoint(&mut process);
+    let admin = browser();
+    let session = setup(&admin, &base);
+    let send = |path: &str, value: &Value| {
+        admin
+            .post(format!("{base}{path}"))
+            .header("x-ruphish-client", "browser")
+            .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
+            .header("origin", &base)
+            .json(value)
+            .send()
+            .unwrap()
+    };
+    let existing = send(
+        "/api/groups/",
+        &json!({"name":"Existing","targets":[{"email":"alice@example.test","first_name":"Original"}]}),
+    );
+    assert_eq!(existing.status(), 201);
+    let existing: Value = existing.json().unwrap();
+    let groups = || {
+        admin
+            .get(format!("{base}/api/groups/"))
+            .header("x-ruphish-client", "browser")
+            .send()
+            .unwrap()
+            .json::<Value>()
+            .unwrap()
+    };
+    let before = groups();
+    let csv = json!({"content":"Email,First Name,Last Name,Position\nalice@example.test,Imported,Example,Analyst\nnot-an-email,Invalid,Row,Rejected\n"});
+    let reviewed = send("/api/import/group/review", &csv);
+    assert_eq!(reviewed.status(), 200);
+    let report: Value = reviewed.json().unwrap();
+    assert_eq!(report["targets"].as_array().unwrap().len(), 1);
+    assert_eq!(report["errors"].as_array().unwrap().len(), 1);
+    assert_eq!(report["targets"][0]["first_name"], "Imported");
+    assert_eq!(
+        groups(),
+        before,
+        "review must not save or alter an existing recipient"
+    );
+    let invalid = send(
+        "/api/groups/",
+        &json!({"name":"","targets":report["targets"]}),
+    );
+    assert_eq!(invalid.status(), 400);
+    let error: Value = invalid.json().unwrap();
+    assert_eq!(error["success"], false);
+    assert!(error["message"].as_str().is_some_and(|s| !s.is_empty()));
+    assert_eq!(groups(), before, "failed Create must not partially save");
+    let created = send(
+        "/api/groups/",
+        &json!({"name":"Reviewed import","targets":report["targets"]}),
+    );
+    assert_eq!(created.status(), 201);
+    let created: Value = created.json().unwrap();
+    assert_ne!(created["id"], existing["id"]);
+    let all = groups();
+    assert_eq!(all.as_array().unwrap().len(), 2);
+    assert_eq!(
+        all.as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["id"] == existing["id"])
+            .unwrap(),
+        &existing
+    );
+    assert_eq!(
+        send("/api/import/group/review", &json!({"content":42})).status(),
+        400
+    );
+    let denied = admin
+        .post(format!("{base}/api/import/group/review"))
+        .header("x-ruphish-client", "browser")
+        .header("x-csrf-token", "invalid")
+        .header("origin", &base)
+        .json(&csv)
+        .send()
+        .unwrap();
+    assert_eq!(denied.status(), 403);
+    assert_eq!(groups(), all);
     process.stop();
 }

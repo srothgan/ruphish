@@ -9,7 +9,7 @@ export function visualFrameDocument(script, css) {
       p{margin:0 0 12px}button,select,input{font:inherit;padding:7px 10px;color:inherit;border:1px solid #8191a6;border-radius:4px;background:#fff}
       button{cursor:pointer}button:disabled,select:disabled{cursor:default;opacity:.55}button.primary{color:#fff;background:#2459ad;border-color:#2459ad}
       label{display:block;font-weight:600}label input,label select{display:block;width:100%;margin-top:4px}
-      [hidden]{display:none!important}fieldset{padding:0;margin:0;border:0;min-width:0}#status[data-error]{color:#9b2222;background:#fff0f0;padding:12px;border-left:3px solid #9b2222}
+      [hidden]{display:none!important}fieldset{padding:0;margin:0;border:0;min-width:0}#status[data-error]{color:var(--color-danger);background:#fff;padding:12px;border-left:3px solid var(--color-danger)}
       #variable{min-width:180px}#variable-label{margin:12px 0;max-width:360px}.actions{display:flex;gap:8px;margin-top:16px}
       details{margin-top:20px;border-top:1px solid #d9e0ea;padding-top:12px}summary{cursor:pointer;font-weight:600}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}
       :focus-visible{outline:3px solid #2459ad;outline-offset:2px}

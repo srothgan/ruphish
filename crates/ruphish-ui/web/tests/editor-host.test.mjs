@@ -20,7 +20,8 @@ test('source is mounted initially; failed visual startup can be cancelled; only 
     const host = window.document.querySelector('#host');
     const source = '<p>Bonjour José</p><script>window.authoredProbe=true</script>';
     const changes = [];
-    editor = mountEditor(host, source, value => changes.push(value), '["FirstName","URL"]');
+    const visualStates = [];
+    editor = mountEditor(host, source, value => changes.push(value), '["FirstName","URL"]', value => visualStates.push(value));
     const sourcePane = host.querySelector('.source');
     const view = EditorView.findFromDOM(sourcePane.firstElementChild);
     assert.equal(sourcePane.hidden, false);
@@ -40,11 +41,13 @@ test('source is mounted initially; failed visual startup can be cancelled; only 
       return {frame, sent, token: sent[0].token};
     };
     const first = start();
+    assert.equal(visualStates.at(-1), true);
     assert.equal(sourcePane.hidden, true);
     assert.equal(cancel.hidden, false);
     receive(first.frame, {type: 'failed', token: first.token});
     assert.match(host.querySelector('.editor-help').textContent, /could not start.*source is unchanged/);
     cancel.click();
+    assert.equal(visualStates.at(-1), false);
     assert.equal(sourcePane.hidden, false);
     assert.equal(view.state.sliceDoc(), source);
     assert.equal(host.querySelector('iframe'), null);
@@ -52,9 +55,11 @@ test('source is mounted initially; failed visual startup can be cancelled; only 
     const second = start();
     receive(second.frame, {type: 'opened', token: second.token});
     receive(second.frame, {type: 'apply', token: first.token, source: 'wrong session'});
+    assert.equal(visualStates.at(-1), true);
     assert.equal(view.state.sliceDoc(), source);
     const edited = '<p><strong>Bonjour José</strong> {{.FirstName}}</p>';
     receive(second.frame, {type: 'apply', token: second.token, source: edited});
+    assert.equal(visualStates.at(-1), false);
     assert.equal(sourcePane.hidden, false);
     assert.equal(view.state.sliceDoc(), edited);
     assert.equal(changes.at(-1), edited);
@@ -62,9 +67,20 @@ test('source is mounted initially; failed visual startup can be cancelled; only 
     assert.equal(view.state.sliceDoc(), source);
     start();
     editor.replace('<p>Newly imported template</p>');
+    assert.equal(visualStates.at(-1), false);
     assert.equal(host.querySelector('iframe'), null);
     assert.equal(sourcePane.hidden, false);
     assert.equal(view.state.sliceDoc(), '<p>Newly imported template</p>');
+    editor.destroy();
+    editor = mountEditor(host, source, value => changes.push(value), '["FirstName","URL"]', () => {}, true);
+    const readOnlyView = EditorView.findFromDOM(host.querySelector('.source').firstElementChild);
+    assert.equal(readOnlyView.contentDOM.getAttribute('contenteditable'), 'false');
+    editor.insert('FirstName');
+    editor.openVisual();
+    assert.equal(host.querySelector('iframe'), null);
+    assert.equal(readOnlyView.state.sliceDoc(), source);
+    editor.replace('<p>New server content</p>');
+    assert.equal(readOnlyView.contentDOM.getAttribute('contenteditable'), 'false');
   } finally {
     editor?.destroy(); window.close();
     for (const [name, descriptor] of descriptors) {

@@ -40,6 +40,8 @@ npm ci --prefix crates/ruphish-ui/web
 node --check crates/ruphish-ui/web/build.mjs
 node --check crates/ruphish-ui/web/state.mjs
 node --check crates/ruphish-ui/web/editor.mjs
+node --check crates/ruphish-ui/web/navigation.mjs
+node --check crates/ruphish-ui/web/account-menu.mjs
 node --check crates/ruphish-ui/web/template-html.mjs
 node --check crates/ruphish-ui/web/visual-session.mjs
 node --check crates/ruphish-ui/web/visual-frame.mjs
@@ -47,14 +49,18 @@ node --check crates/ruphish-ui/web/visual-shell.mjs
 node --check crates/ruphish-ui/web/visual-controller.mjs
 node --test crates/ruphish-ui/web/tests/*.test.mjs
 cargo test -p ruphish-ui --lib --locked
+cargo test -p ruphish-ui --test browser_requests --target wasm32-unknown-unknown --locked
 cargo clippy -p ruphish-ui --lib --locked -- -D warnings
 node crates/ruphish-ui/web/build.mjs
 cargo check -p ruphish-ui --target wasm32-unknown-unknown --locked
 cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --locked -- -D warnings
+cargo clippy -p ruphish-ui --test browser_requests --target wasm32-unknown-unknown --locked -- -D warnings
 trunk build --release --locked
 ```
 
 Trunk 0.21.14 expects NO_COLOR to be a boolean. If the invoking environment has NO_COLOR=1, set the process value to true before direct Trunk commands: `$env:NO_COLOR = 'true'` in PowerShell, or `NO_COLOR=true trunk build --release --locked` in a POSIX shell. Do not change persistent user/system environment settings.
+
+The WASM request tests execute the production Fetch request builder in Node using wasm-bindgen-test-runner. Install the matching runner with cargo install wasm-bindgen-cli --version 0.2.129 --locked; keep its version aligned with the locked wasm-bindgen crate. The target runner in .cargo/config.toml is the Cargo test runtime, not a check wrapper. These tests require Node with native Fetch support and do not launch or automate a browser.
 
 For dependency changes and the full workspace acceptance pass, run:
 
@@ -71,6 +77,8 @@ CodeMirror, Jodit and their browser dependencies are pinned in crates/ruphish-ui
 Browser output is generated in dist/admin. Do not hand-edit or check in target/ or dist/, and rebuild after UI changes.
 
 Shared lints must be inherited by every member. Native and browser dependency graphs are checked separately. Dependency policy allows reviewed permissive licenses and crates.io sources, rejects unknown Git/registry sources and advisories/yanked packages, and reports duplicate versions for review. Do not silence a finding with broad exemptions; record narrow, reasoned exceptions only where necessary.
+
+The UI build workspace and the server asset root must remain separate. Trunk owns `dist/` and stages under `dist/.stage/`; the post-build hook arranges completed assets under `admin/`, producing the server distribution at `dist/admin/`. Never configure Trunk to stage inside the served directory or teach the server to ignore build artifacts. The server continues to reject hidden/unexpected paths and mismatched manifests.
 
 ## Data and side effects
 

@@ -3,3 +3,4 @@
 //! This boundary has no HTTP, persistence, runtime, or browser dependencies.
 pub mod account;
 pub mod password;
+pub mod resources;

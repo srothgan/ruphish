@@ -30,8 +30,10 @@ use tower_sessions::{
 };
 
 #[derive(Clone)]
-struct AuthState {
+pub(crate) struct AuthState {
     service: Service,
+    resources: ruphish_application::resources::Service,
+    delivery: ruphish_application::delivery::Service,
     csrf: CsrfConfig,
     index: Arc<String>,
     secure: bool,
@@ -47,7 +49,7 @@ impl FromRef<AuthState> for CsrfConfig {
 /// Compose validated assets and account routes with persistent, signed browser sessions.
 pub fn router<S: SessionStore + Clone>(
     assets: super::server::AdminAssets,
-    service: Service,
+    services: Services,
     store: S,
     key: &[u8; 64],
     secure: bool,
@@ -55,7 +57,9 @@ pub fn router<S: SessionStore + Clone>(
     csrf_key: String,
 ) -> Router {
     let state = AuthState {
-        service,
+        service: services.accounts,
+        resources: services.resources,
+        delivery: services.delivery,
         index: Arc::new(assets.index),
         secure,
         trusted_origins: Arc::new(trusted_origins),
@@ -91,7 +95,22 @@ pub fn router<S: SessionStore + Clone>(
         .route("/logout", get(page).post(logout))
         .route("/reset_password", get(page).post(password))
         .route("/settings", get(page).post(password))
+        .route("/settings/password", get(page))
         .route("/users", get(page))
+        .route("/users/new", get(page))
+        .route("/users/{id}/edit", get(page))
+        .route("/groups", get(page))
+        .route("/groups/{id}", get(page))
+        .route("/groups/{id}/edit", get(page))
+        .route("/templates", get(page))
+        .route("/templates/{id}", get(page))
+        .route("/templates/{id}/edit", get(page))
+        .route("/pages", get(page))
+        .route("/pages/{id}", get(page))
+        .route("/pages/{id}/edit", get(page))
+        .route("/smtp", get(page))
+        .route("/smtp/{id}", get(page))
+        .route("/smtp/{id}/edit", get(page))
         .route("/auth/session", get(bootstrap))
         .route("/impersonate", post(impersonate))
         .route("/impersonate/exit", post(exit_impersonation))
@@ -100,6 +119,7 @@ pub fn router<S: SessionStore + Clone>(
         .route("/api/users/{id}", get(user).put(update).delete(delete))
         .route("/api/reset", post(reset_key))
         .layer(DefaultBodyLimit::max(16 * 1024))
+        .merge(super::resources::routes())
         .layer(middleware::from_fn(security_headers))
         .with_state(state)
         .layer(session);
@@ -135,12 +155,12 @@ struct Login {
     expires: i64,
 }
 
-struct Context {
+pub(crate) struct Context {
     state: AuthState,
     session: Session,
     csrf: CsrfToken,
-    headers: HeaderMap,
-    uri: Uri,
+    pub(crate) headers: HeaderMap,
+    pub(crate) uri: Uri,
     method: Method,
     peer: IpAddr,
 }
@@ -176,6 +196,12 @@ impl FromRequestParts<AuthState> for Context {
     }
 }
 impl Context {
+    pub(crate) fn delivery(&self) -> &ruphish_application::delivery::Service {
+        &self.state.delivery
+    }
+    pub(crate) fn resources(&self) -> &ruphish_application::resources::Service {
+        &self.state.resources
+    }
     async fn identity(&self) -> Result<(Account, Option<Account>), Rejection> {
         let login: Login = self
             .session
@@ -288,7 +314,7 @@ impl Context {
         }
         Ok(())
     }
-    async fn api(&self, form_key: Option<&str>) -> Result<Account, Rejection> {
+    pub(crate) async fn api(&self, form_key: Option<&str>) -> Result<Account, Rejection> {
         let query: HashMap<String, String> =
             serde_urlencoded::from_str(self.uri.query().unwrap_or("")).unwrap_or_default();
         let key = form_key.or_else(|| query.get("api_key").map(String::as_str));
@@ -340,7 +366,9 @@ impl Context {
                 error
             }
         })?;
-        if actor.is_some() {
+        if actor.is_some()
+            && (self.uri.path().starts_with("/api/users") || self.uri.path() == "/api/reset")
+        {
             return Err(failure(
                 StatusCode::FORBIDDEN,
                 "Exit impersonation before managing accounts",
@@ -397,6 +425,16 @@ impl Context {
     }
 }
 
+/// Application services composed by the executable, sharing the same identity boundary.
+pub struct Services {
+    /// Account and session authorization.
+    pub accounts: Service,
+    /// Resource persistence and format operations.
+    pub resources: ruphish_application::resources::Service,
+    /// Synchronous test-email and preview use cases.
+    pub delivery: ruphish_application::delivery::Service,
+}
+
 async fn page(context: Context) -> Response {
     let path = context.uri.path();
     if path != "/login" {
@@ -412,7 +450,9 @@ async fn page(context: Context) -> Response {
                 if path == "/reset_password" && !user.password_change_required {
                     return redirect(StatusCode::TEMPORARY_REDIRECT, "/settings");
                 }
-                if path == "/users" && !user.permits("modify_system") {
+                if (path == "/users" || path.starts_with("/users/"))
+                    && !user.permits("modify_system")
+                {
                     return failure(StatusCode::FORBIDDEN, "Forbidden").into_response();
                 }
             }
@@ -842,7 +882,7 @@ fn redirect(status: StatusCode, target: &str) -> Response {
 fn unauthorized() -> Rejection {
     failure(StatusCode::UNAUTHORIZED, "Authentication required")
 }
-struct Rejection {
+pub(crate) struct Rejection {
     status: StatusCode,
     message: String,
 }
@@ -870,7 +910,7 @@ impl IntoResponse for Rejection {
         response
     }
 }
-fn failure(status: StatusCode, message: &str) -> Rejection {
+pub(crate) fn failure(status: StatusCode, message: &str) -> Rejection {
     Rejection {
         status,
         message: message.into(),

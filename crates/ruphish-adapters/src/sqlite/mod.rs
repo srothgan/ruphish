@@ -3,6 +3,8 @@
 pub mod accounts;
 mod auth_schema;
 mod migrations;
+pub mod previews;
+pub mod resources;
 pub mod sessions;
 mod startup;
 

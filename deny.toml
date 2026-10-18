@@ -32,7 +32,7 @@ allow = ["BSD-3-Clause"]
 crate = "subtle@=2.6.1"
 allow = ["BSD-3-Clause"]
 
-# Dev-only reqwest platform verifier's trust data; reviewed bundled LICENSE.
+# Reqwest platform verifier trust data; reviewed bundled LICENSE.
 # Sharing this data requires retaining the agreement; no copyleft on code/results.
 [[licenses.exceptions]]
 crate = "webpki-root-certs@=1.0.9"
@@ -47,3 +47,30 @@ allow-wildcard-paths = true
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+
+# Resource parser and MIME/TLS dependencies, reviewed at these exact releases.
+# Unmodified MPL parser dependencies retain their upstream notices and source links.
+[[licenses.exceptions]]
+crate = "cssparser@=0.36.0"
+allow = ["MPL-2.0"]
+[[licenses.exceptions]]
+crate = "cssparser-macros@=0.6.1"
+allow = ["MPL-2.0"]
+[[licenses.exceptions]]
+crate = "dtoa-short@=0.3.5"
+allow = ["MPL-2.0"]
+[[licenses.exceptions]]
+crate = "selectors@=0.37.0"
+allow = ["MPL-2.0"]
+[[licenses.exceptions]]
+crate = "lol_html@=3.0.1"
+allow = ["BSD-3-Clause"]
+[[licenses.exceptions]]
+crate = "encoding_rs@=0.8.42"
+allow = ["BSD-3-Clause"]
+[[licenses.exceptions]]
+crate = "quoted_printable@=0.5.2"
+allow = ["0BSD"]
+[[licenses.exceptions]]
+crate = "webpki-roots@=1.0.8"
+allow = ["CDLA-Permissive-2.0"]

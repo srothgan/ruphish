@@ -57,9 +57,10 @@ source_receiver = ""
 source_body_sha256 = "aa204810c52377f671c74f9ee71dba7bf91c2373fb70e77eb34c771f396e7212"
 guarantee = "Import an HTML document and insert the source base href into the returned HTML."
 strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve all original table cases."
-target_crate = "ruphish-http"
-target_path = "crates/ruphish-http/tests/legacy_api.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "legacy_site_import_allow_deny_and_base_href_cases_use_controlled_servers"
 source_subtests = []
 
 [[tests]]
@@ -71,9 +72,10 @@ source_receiver = ""
 source_body_sha256 = "6d4e9b3afde5da82265a0b013164abd918058ef5ec3f39b76080d391fba69ecb"
 guarantee = "Block site import to default-denied destinations."
 strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve all original table cases."
-target_crate = "ruphish-http"
-target_path = "crates/ruphish-http/tests/legacy_import.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "legacy_site_import_allow_deny_and_base_href_cases_use_controlled_servers"
 source_subtests = []
 
 [[tests]]
@@ -85,9 +87,10 @@ source_receiver = ""
 source_body_sha256 = "6eff7701fbb91f83c88e5e8d1131c8a4851c6df2aa181e6aaf2a2129484b566e"
 guarantee = "Permit default-allowed local fixture site imports."
 strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve all original table cases."
-target_crate = "ruphish-http"
-target_path = "crates/ruphish-http/tests/legacy_import.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "legacy_site_import_allow_deny_and_base_href_cases_use_controlled_servers"
 source_subtests = []
 
 [[tests]]
@@ -99,9 +102,10 @@ source_receiver = ""
 source_body_sha256 = "da1a8e9b23c071fdefad1104223a74e15245d400ff9adab8e901b08c2a5d4666"
 guarantee = "Apply configured outbound restrictions to imported sites."
 strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve all original table cases."
-target_crate = "ruphish-http"
-target_path = "crates/ruphish-http/tests/legacy_import.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "legacy_site_import_allow_deny_and_base_href_cases_use_controlled_servers"
 source_subtests = []
 
 [[tests]]
@@ -316,9 +320,10 @@ source_receiver = ""
 source_body_sha256 = "35d6f3da25a07008335908ee58856d530eba36254c5911b894d2e269d4e75301"
 guarantee = "Unknown preview IDs are rejected."
 strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve all original table cases."
-target_crate = "ruphish-http"
-target_path = "crates/ruphish-http/tests/legacy_phish.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "actual_test_delivery_composes_mime_persists_preview_and_never_records_campaign_events"
 source_subtests = []
 
 [[tests]]
@@ -330,9 +335,10 @@ source_receiver = ""
 source_body_sha256 = "248f66e2303f96203ea9c4946bfba4019946efb1cdfba25169cbc61ed1a84956"
 guarantee = "Preview tracking returns the pixel without campaign-result side effects."
 strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve all original table cases."
-target_crate = "ruphish-http"
-target_path = "crates/ruphish-http/tests/legacy_phish.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "actual_test_delivery_composes_mime_persists_preview_and_never_records_campaign_events"
 source_subtests = []
 
 [[tests]]
@@ -344,9 +350,10 @@ source_receiver = ""
 source_body_sha256 = "0f796ca82ff01b9f9791ca0c468abcbf6358684d7831cbed1ec901a3906f5df3"
 guarantee = "Preview links render the preview landing content."
 strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve all original table cases."
-target_crate = "ruphish-http"
-target_path = "crates/ruphish-http/tests/legacy_phish.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "actual_test_delivery_composes_mime_persists_preview_and_never_records_campaign_events"
 source_subtests = []
 
 [[tests]]
@@ -476,8 +483,9 @@ source_body_sha256 = "00bc6b139cd5bb594f39ab0ede10d80141c3bf303c713786c3ef8f93f1
 guarantee = "The default dial policy rejects its designated denied destinations."
 strategy = "Translate the existing scenario and independent expected values; use real boundary effects where the original only mocked internals. Preserve all original table cases."
 target_crate = "ruphish-adapters"
-target_path = "crates/ruphish-adapters/tests/legacy_dialer.rs"
-status = "not_implemented"
+target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
+status = "implemented"
+target_test = "destination_policy_cannot_be_bypassed_with_mapped_ipv4"
 source_subtests = []
 
 [[tests]]
@@ -490,8 +498,9 @@ source_body_sha256 = "a2fbd8f15443fa29b05b5abd013068acb8b1676b0ab842df58de050a58
 guarantee = "The default dial policy permits designated allowed destinations."
 strategy = "Translate the existing scenario and independent expected values; use real boundary effects where the original only mocked internals. Preserve all original table cases."
 target_crate = "ruphish-adapters"
-target_path = "crates/ruphish-adapters/tests/legacy_dialer.rs"
-status = "not_implemented"
+target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
+status = "implemented"
+target_test = "destination_policy_cannot_be_bypassed_with_mapped_ipv4"
 source_subtests = []
 
 [[tests]]
@@ -504,8 +513,9 @@ source_body_sha256 = "89c5e9f086d7855fd692a27a92b3ef3bea64ba9f46163b339393814738
 guarantee = "Configured network allow entries permit matching destinations."
 strategy = "Translate the existing scenario and independent expected values; use real boundary effects where the original only mocked internals. Preserve all original table cases."
 target_crate = "ruphish-adapters"
-target_path = "crates/ruphish-adapters/tests/legacy_dialer.rs"
-status = "not_implemented"
+target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
+status = "implemented"
+target_test = "destination_policy_cannot_be_bypassed_with_mapped_ipv4"
 source_subtests = []
 
 [[tests]]
@@ -518,8 +528,9 @@ source_body_sha256 = "e50d6936a811bafd11554cf22886c644be58b8764d893c06f0e549efef
 guarantee = "Configured policy rejects non-allowed internal destinations."
 strategy = "Translate the existing scenario and independent expected values; use real boundary effects where the original only mocked internals. Preserve all original table cases."
 target_crate = "ruphish-adapters"
-target_path = "crates/ruphish-adapters/tests/legacy_dialer.rs"
-status = "not_implemented"
+target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
+status = "implemented"
+target_test = "destination_policy_cannot_be_bypassed_with_mapped_ipv4"
 source_subtests = []
 
 [[tests]]
@@ -532,8 +543,9 @@ source_body_sha256 = "45b3037d0fd5285dbfe84d1fe0ab452e6fbf1715a4d2ed7d24260357c4
 guarantee = "A single configured address is interpreted with the correct host mask."
 strategy = "Translate the existing scenario and independent expected values; use real boundary effects where the original only mocked internals. Preserve all original table cases."
 target_crate = "ruphish-adapters"
-target_path = "crates/ruphish-adapters/tests/legacy_dialer.rs"
-status = "not_implemented"
+target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
+status = "implemented"
+target_test = "destination_policy_cannot_be_bypassed_with_mapped_ipv4"
 source_subtests = []
 
 [[tests]]
@@ -780,9 +792,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "c04bd70b8e38855f88f3c6110d18ba44b7f71178652e3c72914677dac2ad8810"
 guarantee = "Validate and decode the attachment cases in the original fixture table."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_attachment.rs"
-status = "not_implemented"
+target_crate = "ruphish-adapters"
+target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
+status = "implemented"
+target_test = "original_go_attachment_files_match_independent_expected_content"
 source_subtests = []
 
 [[tests]]
@@ -878,9 +891,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "d49f3b9fadb4b78f005f59eafb20e016df6079e77beca12f60b99d799f13998c"
 guarantee = "Reject test-email requests without a recipient email."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_email_request.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "legacy_resource_validation_and_page_policy_survive_round_trip_and_restart"
 source_subtests = []
 
 [[tests]]
@@ -892,9 +906,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "d113e88942003b08507971c535f68d7152e0f99171d338ac738e096c7c9bfd00"
 guarantee = "A test-email temporary failure is returned synchronously through its result channel."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_email_request.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "smtp_rejections_and_read_only_permissions_do_not_claim_success_or_queue_retries"
 source_subtests = []
 
 [[tests]]
@@ -906,9 +921,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "38cb856ed2fc43e2184f1869d2d1579d0bbe4267ef38c2e55253419a604e209d"
 guarantee = "A test-email permanent error is returned through its result channel."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_email_request.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "smtp_rejections_and_read_only_permissions_do_not_claim_success_or_queue_retries"
 source_subtests = []
 
 [[tests]]
@@ -920,9 +936,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "da7923fe85b20f804768c6db80df927b839e551e357389a4ba7d1d1289b585db"
 guarantee = "Successful test-email processing returns success through its result channel."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_email_request.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "actual_test_delivery_composes_mime_persists_preview_and_never_records_campaign_events"
 source_subtests = []
 
 [[tests]]
@@ -934,9 +951,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "93be12feb84f200684438fc3d49d7de5fd3bb13d0a137531d8bd6efa7159a002"
 guarantee = "Render the expected test-email message content from recipient/template context."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_email_request.rs"
-status = "not_implemented"
+target_crate = "ruphish-adapters"
+target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
+status = "implemented"
+target_test = "inherited_email_generation_cases_decode_to_the_expected_mime_and_envelope"
 source_subtests = []
 
 [[tests]]
@@ -948,9 +966,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "2c634f663e5c57c01653cdd42e6ffa20983e5594c428e1a14ad63e454262799b"
 guarantee = "Select the correct SMTP envelope sender for the original test-email cases."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_email_request.rs"
-status = "not_implemented"
+target_crate = "ruphish-adapters"
+target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
+status = "implemented"
+target_test = "inherited_email_generation_cases_decode_to_the_expected_mime_and_envelope"
 source_subtests = []
 
 [[tests]]
@@ -962,9 +981,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "3234e9133f51b0989128de7c8ed74104c12a40cb03cb0ddf35c091c8c51d9907"
 guarantee = "Render test-email URL recipient variables and tracking context correctly."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_email_request.rs"
-status = "not_implemented"
+target_crate = "ruphish-adapters"
+target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
+status = "implemented"
+target_test = "inherited_email_generation_cases_decode_to_the_expected_mime_and_envelope"
 source_subtests = []
 
 [[tests]]
@@ -976,9 +996,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "1176f7ba7b8f5e116cf968a26e3c3d8369dd021bfae210be41e8565695799208"
 guarantee = "Generate a test email with the supported empty-subject behavior."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_email_request.rs"
-status = "not_implemented"
+target_crate = "ruphish-adapters"
+target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
+status = "implemented"
+target_test = "inherited_email_generation_cases_decode_to_the_expected_mime_and_envelope"
 source_subtests = []
 
 [[tests]]
@@ -990,9 +1011,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "d9e75570172c06045fad3b039f99edf0cc832946056aff2e04f01054d97eff6f"
 guarantee = "Persist and retrieve preview/test-email context correctly."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_email_request.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "actual_test_delivery_composes_mime_persists_preview_and_never_records_campaign_events"
 source_subtests = []
 
 [[tests]]
@@ -1004,9 +1026,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "a8ec041986d21b7647ed17a64ee41977ac243bc5fcbd4080f4be01384b13d262"
 guarantee = "Persist a valid group and its recipients."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_group.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "groups_round_trip_isolate_recipients_clear_fields_and_survive_restart"
 source_subtests = []
 
 [[tests]]
@@ -1018,9 +1041,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "9b40e7760ce5e8f9068e565e22522562ae2827fa6dc675e9fd4f787768fd87be"
 guarantee = "Reject a group without a name."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_group.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "independent_go_resource_observations_run_against_the_executable"
 source_subtests = []
 
 [[tests]]
@@ -1032,9 +1056,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "627a92caa65afd7e8c972e2f89bef51df3a2bf92d1a5aa26f13a106f3e6351c9"
 guarantee = "Reject a group without recipients."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_group.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "independent_go_resource_observations_run_against_the_executable"
 source_subtests = []
 
 [[tests]]
@@ -1046,9 +1071,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "2d93befc62865899dc22e34852b16d9ca4f802176652d85a1f00a4512143525f"
 guarantee = "List groups owned by the requested user with their recipients."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_group.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "groups_round_trip_isolate_recipients_clear_fields_and_survive_restart"
 source_subtests = []
 
 [[tests]]
@@ -1060,9 +1086,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "9e8679b5fd08da0216fb54bac9b2da9ecf7794d53775c4e40c73c0b4942f9653"
 guarantee = "Preserve the empty-group-list representation."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_group.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "independent_go_resource_observations_run_against_the_executable"
 source_subtests = []
 
 [[tests]]
@@ -1074,9 +1101,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "295d910ec8ce6365631b3c5e4f52e880920228fc7756db3c9e808e0f0946de4a"
 guarantee = "Retrieve an owned group and its associated recipients."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_group.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "groups_round_trip_isolate_recipients_clear_fields_and_survive_restart"
 source_subtests = []
 
 [[tests]]
@@ -1088,9 +1116,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "02da2359f6ad1ad62eae0113efc9653ac02c7be7150d3b3530091056af4a719d"
 guarantee = "Return the expected error for an unknown group ID."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_group.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "groups_round_trip_isolate_recipients_clear_fields_and_survive_restart"
 source_subtests = []
 
 [[tests]]
@@ -1102,9 +1131,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "d52bcc3bfbc8913f47e6cd1ace7d34c76332283fb8b5f6dee1730d80523777f8"
 guarantee = "Retrieve the owned group with the requested name."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_group.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "groups_round_trip_isolate_recipients_clear_fields_and_survive_restart"
 source_subtests = []
 
 [[tests]]
@@ -1116,9 +1146,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "c70c0fc1cdab579b766154cae1152da28365da71716a2d0e2bce8bb6f85e0937"
 guarantee = "Return the expected error for an unknown group name."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_group.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "groups_round_trip_isolate_recipients_clear_fields_and_survive_restart"
 source_subtests = []
 
 [[tests]]
@@ -1130,9 +1161,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "70efb5ebd3bf0c26315d8f6c055bfe2c1300e006f9425b2b2007a34684ce09d4"
 guarantee = "Update group metadata and recipient associations."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_group.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "groups_reject_invalid_replacements_and_stale_revisions_without_losing_data"
 source_subtests = []
 
 [[tests]]
@@ -1144,9 +1176,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "49531bf6a20905948cc03daee05293dd2d2e47bc19a85e32fa3a6acc7b434249"
 guarantee = "Persist intended empty recipient attributes on group update instead of retaining stale values."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_group.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "groups_round_trip_isolate_recipients_clear_fields_and_survive_restart"
 source_subtests = []
 
 [[tests]]
@@ -1352,11 +1385,12 @@ source_line = 10
 source_test = "TestPostPage"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "1b9fab94b9dca4acf5884cc471cfb99447de643c349f85386d72545d933ce19d"
-guarantee = "Persist and transform landing-page HTML according to capture flags in all original cases."
+guarantee = "Persist all original capture-flag transitions and redirect clearing, retaining authored HTML under DEC-024; resource_formats.rs independently checks the derived form representation."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_page.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "legacy_resource_validation_and_page_policy_survive_round_trip_and_restart"
 source_subtests = []
 
 [[tests]]
@@ -1368,9 +1402,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "c6677c333ce58118b0947463030bd94ca4b78309d4c07bf334d8ec10311dea0b"
 guarantee = "Validate page name, template syntax, and capture-flag relationships."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_page.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "legacy_resource_validation_and_page_policy_survive_round_trip_and_restart"
 source_subtests = []
 
 [[tests]]
@@ -1496,9 +1531,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "2d3add88fde268f26daa3d7f09b8d06acf3d6e3c089920b008440a1cf77de764"
 guarantee = "Persist a valid user-owned sending profile."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_smtp.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "independent_go_resource_observations_run_against_the_executable"
 source_subtests = []
 
 [[tests]]
@@ -1510,9 +1546,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "dee518891dca417571107e2559409a9825d7bb4f3cadaf55e1fc2ce8dd38300e"
 guarantee = "Reject a sending profile without a host."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_smtp.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "legacy_resource_validation_and_page_policy_survive_round_trip_and_restart"
 source_subtests = []
 
 [[tests]]
@@ -1524,9 +1561,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "84832c65247981e111c9725988956317292620bca631b2222f09ae3c278dd0c6"
 guarantee = "Reject a sending profile without a From address."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_smtp.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "legacy_resource_validation_and_page_policy_survive_round_trip_and_restart"
 source_subtests = []
 
 [[tests]]
@@ -1536,11 +1574,12 @@ source_line = 45
 source_test = "TestPostInvalidFrom"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "b35061842b6aae2f798251d5cfd58387718cbb97c880c2b5802681f22433b749"
-guarantee = "Reject malformed SMTP From mailbox syntax."
+guarantee = "Accept the original display-name sender vector under approved DEC-023; malformed mailbox syntax remains rejected."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_smtp.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "legacy_resource_validation_and_page_policy_survive_round_trip_and_restart"
 source_subtests = []
 
 [[tests]]
@@ -1552,9 +1591,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "5e1124c320d137c2d1a1e88b14eada89d99d263da7a28e99a2ff56cdacbf8dd9"
 guarantee = "Reject invalid SMTP From email address values."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_smtp.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "legacy_resource_validation_and_page_policy_survive_round_trip_and_restart"
 source_subtests = []
 
 [[tests]]
@@ -1566,9 +1606,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "acba5c013739c07122ca53bc9a10c9862d864257afe045a7ac7481668ac1c2f7"
 guarantee = "Persist and render valid custom-header settings."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_smtp.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "actual_test_delivery_composes_mime_persists_preview_and_never_records_campaign_events"
 source_subtests = []
 
 [[tests]]
@@ -1580,9 +1621,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "5923350301937144a3ef745c8ba0f5f058c69282e53d3289fc1d0afc3bd4fd78"
 guarantee = "Produce dialer settings matching the saved host, credentials, and TLS flags."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_smtp.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "smtp_starttls_verifies_certificates_before_authentication_and_reports_rejection"
 source_subtests = []
 
 [[tests]]
@@ -1594,9 +1636,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "54be5e242da58849d5cf58fbcc7a32cdedca7375d7d7fe879668363281638d94"
 guarantee = "Return the expected error for a missing sending profile."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_smtp.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "legacy_resource_validation_and_page_policy_survive_round_trip_and_restart"
 source_subtests = []
 
 [[tests]]
@@ -1608,9 +1651,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "84e26a2416d86b4d7e0ff2eb2ed2b8b35823df58e517601334c2b2213f996880"
 guarantee = "SMTP dialing honors the default outbound-denied destinations."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_smtp.rs"
-status = "not_implemented"
+target_crate = "ruphish"
+target_path = "tests/resource_process.rs"
+status = "implemented"
+target_test = "legacy_resource_validation_and_page_policy_survive_round_trip_and_restart"
 source_subtests = []
 
 [[tests]]
@@ -1622,9 +1666,10 @@ source_receiver = "*ModelsSuite"
 source_body_sha256 = "b4ce5ea6414761778ef9e90d2e57138b554a5ff2b4b1eda7d23377c9789b89f4"
 guarantee = "Construct From, URL, BaseURL, tracking URL/HTML, rid, and recipient context exactly."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
-target_crate = "ruphish-application"
-target_path = "crates/ruphish-application/tests/legacy_template_context.rs"
-status = "not_implemented"
+target_crate = "ruphish-adapters"
+target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
+status = "implemented"
+target_test = "original_template_context_preserves_pathless_urls_and_query_order"
 source_subtests = []
 
 [[tests]]
@@ -1772,8 +1817,9 @@ source_body_sha256 = "359094e4590b80587fe92f42288dfd499c7d1b32e44e4e98a4209e05dc
 guarantee = "Normalize a bracketed CSV mailbox into the expected recipient address."
 strategy = "Translate the existing scenario and independent expected values; use real boundary effects where the original only mocked internals. Preserve all original table cases."
 target_crate = "ruphish-adapters"
-target_path = "crates/ruphish-adapters/tests/legacy_util.rs"
-status = "not_implemented"
+target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
+status = "implemented"
+target_test = "csv_reports_short_and_invalid_rows_without_inheriting_previous_values"
 source_subtests = []
 
 [[tests]]

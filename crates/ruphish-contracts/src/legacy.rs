@@ -318,6 +318,26 @@ pub struct EmailTemplate {
     pub attachments: Option<Vec<Attachment>>,
 }
 
+/// Persisted landing-page wire contract, with original capture flags.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct LandingPage {
+    /// Public identifier.
+    pub id: i64,
+    /// Owner-scoped display name.
+    pub name: String,
+    /// Authored document source.
+    pub html: String,
+    /// Record submitted fields.
+    pub capture_credentials: bool,
+    /// Include passwords; implies capture_credentials.
+    pub capture_passwords: bool,
+    /// Templated destination after submission.
+    pub redirect_url: String,
+    /// Last persisted change.
+    pub modified_date: Timestamp,
+}
+
 /// Serialize JSON using Go's HTML/line-separator escaping convention.
 pub fn json<T: Serialize>(value: &T) -> Result<Vec<u8>, serde_json::Error> {
     let value = serde_json::to_string_pretty(value)?;

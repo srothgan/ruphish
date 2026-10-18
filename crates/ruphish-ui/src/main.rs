@@ -8,9 +8,19 @@ compile_error!(
 #[cfg(target_arch = "wasm32")]
 mod account;
 #[cfg(target_arch = "wasm32")]
+mod components;
+#[cfg(target_arch = "wasm32")]
 mod editor;
+#[cfg(target_arch = "wasm32")]
+mod feedback;
+#[cfg(target_arch = "wasm32")]
+mod navigation;
+#[cfg(target_arch = "wasm32")]
+mod resources;
 
 #[cfg(target_arch = "wasm32")]
 fn main() {
-    leptos::mount::mount_to_body(account::app);
+    use leptos::prelude::*;
+    use leptos_router::components::Router;
+    leptos::mount::mount_to_body(|| view! {<Router>{account::app}</Router>});
 }

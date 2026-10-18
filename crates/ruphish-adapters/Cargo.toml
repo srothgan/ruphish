@@ -9,11 +9,18 @@ publish.workspace = true
 [dependencies]
 argon2 = "0.6.0"
 async-trait = "0.1.92"
+base64 = "0.23"
 bcrypt = "0.19.3"
+csv = { version = "1", default-features = false }
 getrandom = "0.4.3"
 gtmpl-ng = "1.0.0"
 hex = "0.4.3"
+ipnet = "2"
+lettre = { version = "0.11.23", default-features = false, features = ["builder", "ring", "smtp-transport", "tokio1-rustls-tls", "webpki-roots"] }
+lol_html = "3"
+mail-parser = "0.11"
 rcgen = "0.14.10"
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "stream"] }
 ruphish-application = { version = "0.1.0-dev", path = "../ruphish-application" }
 ruphish-domain = { version = "0.1.0-dev", path = "../ruphish-domain" }
 serde = { version = "1.0.229", features = ["derive"] }
@@ -24,6 +31,8 @@ thiserror = "2.0.21"
 time = { version = "0.3.55", features = ["formatting", "parsing"] }
 tokio = { version = "1.53.3", features = ["rt", "time", "sync"] }
 tower-sessions-core = "0.15.0"
+url = "2"
+zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [lints]
 workspace = true

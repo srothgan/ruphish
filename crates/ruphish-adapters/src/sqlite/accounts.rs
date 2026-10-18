@@ -26,7 +26,7 @@ fn storage(error: sqlx::Error) -> Error {
     }
 }
 
-async fn account(connection: &mut SqliteConnection, id: i64) -> Result<Account, Error> {
+pub(super) async fn account(connection: &mut SqliteConnection, id: i64) -> Result<Account, Error> {
     let row = sqlx::query("SELECT u.*,COALESCE(a.epoch,0) AS epoch FROM users u LEFT JOIN ruphish_auth_state a ON a.user_id=u.id WHERE u.id=?")
         .bind(id).fetch_optional(&mut *connection).await.map_err(storage)?.ok_or(Error::NotFound)?;
     let role_id: i64 = row.try_get("role_id").map_err(storage)?;

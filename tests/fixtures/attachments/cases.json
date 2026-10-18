@@ -1,0 +1,56 @@
+[
+  {
+    "source": "calendar-file-with-vars.ics",
+    "expected": "calendar-file-with-vars.templated.ics",
+    "attachment_name": "calendar-file-with-vars.ics",
+    "base64": false
+  },
+  {
+    "source": "excel-with-vars.xlsx.b64",
+    "expected": "excel-with-vars.xlsx.templated.b64",
+    "attachment_name": "excel-with-vars.xlsx",
+    "base64": true
+  },
+  {
+    "source": "html-file-with-vars.html",
+    "expected": "html-file-with-vars.templated.html",
+    "attachment_name": "html-file-with-vars.html",
+    "base64": false
+  },
+  {
+    "source": "html-file-without-vars.html",
+    "expected": "html-file-without-vars.templated.html",
+    "attachment_name": "html-file-without-vars.html",
+    "base64": false
+  },
+  {
+    "source": "powerpoint-with-vars.pptx.b64",
+    "expected": "powerpoint-with-vars.pptx.templated.b64",
+    "attachment_name": "powerpoint-with-vars.pptx",
+    "base64": true
+  },
+  {
+    "source": "text-file-with-vars.txt",
+    "expected": "text-file-with-vars.templated.txt",
+    "attachment_name": "text-file-with-vars.txt",
+    "base64": false
+  },
+  {
+    "source": "text-file-without-vars.txt",
+    "expected": "text-file-without-vars.templated.txt",
+    "attachment_name": "text-file-without-vars.txt",
+    "base64": false
+  },
+  {
+    "source": "word-file-with-vars.docm.b64",
+    "expected": "word-file-with-vars.docm.templated.b64",
+    "attachment_name": "word-file-with-vars.docm",
+    "base64": true
+  },
+  {
+    "source": "word-file-without-vars.docx.b64",
+    "expected": "word-file-without-vars.docx.templated.b64",
+    "attachment_name": "word-file-without-vars.docx",
+    "base64": true
+  }
+]

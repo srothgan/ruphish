@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "reference_commit": "95618469799295e2c0fec980805a2dfbb818816b",
+  "source": "gophish/models/testdata and models/attachment_test.go",
+  "files": {
+    "calendar-file-with-vars.ics": "16dc33a77bc1c60ba4d2dc5a42a12464296610e4ba7b0727db6700d56eea5014",
+    "calendar-file-with-vars.templated.ics": "091126d5763149d88fa64687aac1ffb224ea47c7fa71865c0300aeb665af320c",
+    "cases.json": "080eb16b130d05a0d7ac09e47fff8def4b230e50cf7b27c539e4308630f86b15",
+    "excel-with-vars.xlsx.b64": "c0f30a344745739348ee41d1a27634dd9966c30ed914a1a53023cd547e51e221",
+    "excel-with-vars.xlsx.templated.b64": "311c2553f56c767beffa370272f2984771a5f255971e078cd88740aba66b50f3",
+    "GOPHISH-LICENSE.txt": "cc58d92ca666e6174cc3bd8c78f73d2d7b2e7b765651189e3d5f8afd5a7970f5",
+    "html-file-with-vars.html": "b9e2633b58f710a8e14393c2d811076ab4c877a40e6f3a76715315fff3c7cf53",
+    "html-file-with-vars.templated.html": "330bf514180b94f288f65983a0332d18cce416245d5d6a550f7960427208d1e5",
+    "html-file-without-vars.html": "36b46c1277fcef0dfd6ff37460600164a934c6c99dcc609a8852e2df0411c9de",
+    "html-file-without-vars.templated.html": "36b46c1277fcef0dfd6ff37460600164a934c6c99dcc609a8852e2df0411c9de",
+    "powerpoint-with-vars.pptx.b64": "849a7ae46e5c20288adf983577d50dbaf10cd3631d46943ebbd467b7d4704379",
+    "powerpoint-with-vars.pptx.templated.b64": "01257d5283628519999d15f60902de9eaf6eb623793b773c7110f06e65577f4b",
+    "text-file-with-vars.templated.txt": "ff6b918474b17c872ea702e56bd097fe341f49942864de62ae108e6ed3ba8657",
+    "text-file-with-vars.txt": "5748a247dc814566d0dd3f0f6882f864ba2436954aacb3b0ff046f55efd5a62d",
+    "text-file-without-vars.templated.txt": "79fe30456a0badd235a3a8e58066212dbd0c4d81af29bbf351e9bf367ea29e36",
+    "text-file-without-vars.txt": "79fe30456a0badd235a3a8e58066212dbd0c4d81af29bbf351e9bf367ea29e36",
+    "word-file-with-vars.docm.b64": "6b3eac0056f8ef7e69cc1400097eb3fdec161540256bc868ec8415f73025e7b3",
+    "word-file-with-vars.docm.templated.b64": "0e8467d7075f066e0a47a0d1285d7e5bc5f106205c7daf2ec6c1f261b2ea6638",
+    "word-file-without-vars.docx.b64": "c122fdf7d63908cd749a83f7435e866c1841fd758f593783945396cb8cdc0cd2",
+    "word-file-without-vars.docx.templated.b64": "1c4f05cf3932e6999818e143893be175f3e983627011418e90e77f7040bc0fd7"
+  }
+}

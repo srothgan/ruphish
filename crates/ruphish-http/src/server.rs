@@ -86,6 +86,31 @@ pub fn public_router() -> Router {
         .layer(middleware::from_fn(access_log))
 }
 
+/// Preview-only public rendering; no campaign events or form submissions are recorded.
+pub fn preview_router(
+    previews: std::sync::Arc<dyn ruphish_application::delivery::Previews>,
+) -> Router {
+    Router::new().fallback(move |request: Request<Body>| {
+        let previews=previews.clone();
+        async move {
+            use axum::{http::{Method,header},response::IntoResponse};
+            let query:std::collections::HashMap<String,String>=serde_urlencoded::from_str(request.uri().query().unwrap_or("")).unwrap_or_default();
+            if request.method()!=Method::GET {return super::response::not_found().into_response();}
+            let Some(rid)=query.get("rid").filter(|rid|rid.starts_with("preview-")) else{return super::response::not_found().into_response();};
+            if request.uri().path().ends_with("/track") || request.uri().path().ends_with("/report") {
+                if !previews.contains(rid).await.unwrap_or(false) {return super::response::not_found().into_response();}
+                if request.uri().path().ends_with("/report") {return axum::http::StatusCode::NO_CONTENT.into_response();}
+                // Original Gophish MIT-licensed transparent pixel; previews record no events.
+                return ([(header::CONTENT_TYPE,"image/png"),(header::CACHE_CONTROL,"no-store")],include_bytes!("../assets/preview-pixel.png").as_slice()).into_response();
+            }
+            match previews.render(rid).await {
+                Ok(html)=>([(header::CONTENT_TYPE,"text/html; charset=utf-8"),(header::CACHE_CONTROL,"no-store"),(header::CONTENT_SECURITY_POLICY,"sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'"),(header::REFERRER_POLICY,"no-referrer")],html).into_response(),
+                Err(_)=>super::response::not_found().into_response()
+            }
+        }
+    }).layer(middleware::from_fn(access_log))
+}
+
 async fn access_log(request: Request<Body>, next: middleware::Next) -> axum::response::Response {
     // Query strings can contain legacy API keys and recipient identifiers.
     let method = request.method().clone();
@@ -124,7 +149,7 @@ fn collect(
         {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "Admin assets contain an unsupported path",
+                format!("Admin assets contain an unsupported path: {name:?}; rebuild with Trunk"),
             ));
         }
         if metadata.is_dir() {
