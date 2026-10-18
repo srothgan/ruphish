@@ -1,0 +1,62 @@
+[
+  {
+    "expected_error_kind": "execution",
+    "expected_output": "prefix ",
+    "text": "prefix {{.Missing}} suffix"
+  },
+  {
+    "expected_error_kind": "",
+    "expected_output": "Hello Ada",
+    "text": "{{define \"greet\"}}Hello {{.FirstName}}{{end}}{{template \"greet\" .}}"
+  },
+  {
+    "expected_error_kind": "execution",
+    "expected_output": "",
+    "text": "{{range $i,$v := .FirstName}}{{$i}}:{{$v}}{{else}}empty{{end}}"
+  },
+  {
+    "expected_error_kind": "",
+    "expected_output": "Ada/Example/Engineer",
+    "text": "{{$name := .FirstName}}{{with .LastName}}{{$name}}/{{.}}/{{$.Position}}{{end}}"
+  },
+  {
+    "expected_error_kind": "",
+    "expected_output": "\"ada@example.test\"",
+    "text": "{{if and .FirstName (eq .Position \"Engineer\")}}{{printf \"%q\" .Email}}{{end}}"
+  },
+  {
+    "expected_error_kind": "",
+    "expected_output": "65/da",
+    "text": "{{index .FirstName 0}}/{{slice .FirstName 1}}"
+  },
+  {
+    "expected_error_kind": "",
+    "expected_output": "2",
+    "text": "{{len \"é\"}}"
+  },
+  {
+    "expected_error_kind": "execution",
+    "expected_output": "",
+    "text": "{{.email}}"
+  },
+  {
+    "expected_error_kind": "",
+    "expected_output": "[Ada]",
+    "text": "{{/* comment */}}{{printf \"%s\" .FirstName | printf \"[%s]\"}}"
+  },
+  {
+    "expected_error_kind": "",
+    "expected_output": "ok",
+    "text": "{{if false}}{{.Missing}}{{else}}ok{{end}}"
+  },
+  {
+    "expected_error_kind": "execution",
+    "expected_output": "",
+    "text": "{{template \"absent\" .}}"
+  },
+  {
+    "expected_error_kind": "parse",
+    "expected_output": "",
+    "text": "{{printf \"x\"}}{{unknown .FirstName}}"
+  }
+]

@@ -12,6 +12,7 @@ Native libraries are scaffolds until functionality is implemented with its tests
 - Each invariant, transition, relationship, and derived value has one authoritative owner. Avoid duplicated state, redundant validation, and alternative stale implementations.
 - Use `cargo new`, `cargo add`, `cargo remove`, `cargo update`, `cargo install`, and `rustup` commands for crate creation, dependency/tool installation and changes; let the CLI write dependency version entries and lockfiles rather than adding dependencies by manually typing versions into manifests. Editing workspace metadata, profiles, feature configuration, and lint policy is normal configuration work.
 - Preserve external wire/data/template contracts and meaningful negative guarantees. Record an intentional compatibility difference and its tests explicitly before adopting it.
+- Match user-visible capabilities and outcomes; cleaner implementations and UI arrangements are allowed. Legacy components, markup structure, and harmless serialization formatting are not compatibility requirements. Define tests by what users can do and what their content does, preserving exact bytes only where they are part of a real contract.
 - Prefer typed errors at library boundaries and contextual startup errors. Production code forbids unsafe code and accidental unwrap/expect/panic/exit/todo/unimplemented/dbg usage; tests have narrow Clippy exemptions for assertions and setup.
 - Add tests for actual domain/functionality guarantees, persisted state, protocols, and real failure boundaries. Do not add mirror tests for trivial code or claim scaffold checks establish feature parity.
 - The user performs manual visual/UI interaction tests. Compile and build WASM; do not add browser/screenshot automation by default.
@@ -19,7 +20,7 @@ Native libraries are scaffolds until functionality is implemented with its tests
 
 ## Toolchain and verification
 
-`rust-toolchain.toml` pins Rust 1.95.0, rustfmt, Clippy, and wasm32-unknown-unknown. Manifests inherit edition 2024 and supported Rust 1.95. Lower compiler versions have not been validated. Keep the application Cargo.lock and use locked checks. Native default members exclude the browser binary deliberately; native success is not WASM verification.
+`rust-toolchain.toml` pins Rust 1.99.1, rustfmt, Clippy, and wasm32-unknown-unknown. Manifests inherit edition 2024 and supported Rust 1.99. Lower compiler versions have not been validated. Keep the application Cargo.lock and use locked checks. Native default members exclude the browser binary deliberately; native success is not WASM verification.
 
 Run checks directly from this directory. Do not add a task runner, check script, Cargo alias layer, or npm wrapper around these commands. Keep the actual commands visible here and report their individual results.
 
@@ -32,9 +33,22 @@ cargo test --workspace --exclude ruphish-ui --locked
 cargo build --workspace --exclude ruphish-ui --locked
 ```
 
-After browser/contract changes, separately check, lint, and build the browser target:
+After browser/contract changes, install browser dependencies, run functional tests, generate the editor module, then separately check, lint, and build the browser target. Run each command directly from the product root:
 
 ```sh
+npm ci --prefix crates/ruphish-ui/web
+node --check crates/ruphish-ui/web/state.mjs
+node --check crates/ruphish-ui/web/editor.mjs
+node --check crates/ruphish-ui/web/template-html.mjs
+node --check crates/ruphish-ui/web/visual-session.mjs
+node --check crates/ruphish-ui/web/visual-frame.mjs
+node --check crates/ruphish-ui/web/visual-shell.mjs
+node --check crates/ruphish-ui/web/visual-controller.mjs
+node --test crates/ruphish-ui/web/tests/*.test.mjs
+cargo test -p ruphish-ui --lib --locked
+cargo clippy -p ruphish-ui --lib --locked -- -D warnings
+npx --no-install --prefix crates/ruphish-ui/web esbuild crates/ruphish-ui/web/editor.mjs --bundle --minify --format=esm --target=es2022 --outfile=crates/ruphish-ui/web/generated/editor.js --legal-comments=linked
+npx --no-install --prefix crates/ruphish-ui/web esbuild crates/ruphish-ui/web/visual-frame.mjs --bundle --minify --format=iife --target=es2022 --loader:.svg=text --loader:.less=empty --outfile=crates/ruphish-ui/web/generated/visual-frame.js --legal-comments=linked
 cargo check -p ruphish-ui --target wasm32-unknown-unknown --locked
 cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --locked -- -D warnings
 trunk build --release --locked
@@ -45,11 +59,14 @@ Trunk 0.21.14 expects NO_COLOR to be a boolean. If the invoking environment has 
 For dependency changes and the full workspace acceptance pass, run:
 
 ```sh
+npm audit --prefix crates/ruphish-ui/web
 cargo deny --version
 cargo deny check bans licenses sources advisories
 ```
 
 The required cargo-deny version is recorded in Cargo.toml workspace metadata; Trunk enforces its own exact version from Trunk.toml. Do not silently skip unavailable tools or failed checks. No application feature flags exist yet; document and check supported combinations as features are introduced.
+
+CodeMirror, Jodit and their browser dependencies are pinned in crates/ruphish-ui/web/package-lock.json. Node/npm are build/test tools, not server dependencies. Generate the ignored web/generated/editor.js, visual-frame.js/CSS and legal-comment assets before WASM checks or Trunk builds; no hidden build hook regenerates it. Review npm package licenses and preserve runtime notices in web/THIRD-PARTY-NOTICES.txt when dependencies change; cargo-deny only checks Rust dependencies.
 
 Browser output is generated in dist/admin. Do not hand-edit or check in target/ or dist/, and rebuild after UI changes.
 

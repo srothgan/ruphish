@@ -7,7 +7,10 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+base64 = "0.23.1"
 ruphish-contracts = { version = "0.1.0-dev", path = "../ruphish-contracts" }
+serde = "1.0.229"
+serde_json = "1.0.154"
 
 [[bin]]
 name = "ruphish-ui"
@@ -19,4 +22,8 @@ bench = false
 workspace = true
 
 [target.wasm32-unknown-unknown.dependencies]
+js-sys = "0.3.106"
 leptos = { version = "0.8.22", default-features = false, features = ["csr"] }
+wasm-bindgen = "0.2.129"
+wasm-bindgen-futures = "0.4.79"
+web-sys = { version = "0.3.106", features = ["HtmlTextAreaElement", "HtmlElement", "HtmlInputElement", "File", "FileList", "Blob", "Window", "Document", "HtmlIFrameElement", "Url", "BlobPropertyBag", "HtmlSelectElement", "console"] }

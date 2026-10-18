@@ -1,0 +1,109 @@
+[
+  {
+    "expected_bytes": "{\n  \"id\": 0,\n  \"name\": \"\",\n  \"modified_date\": \"0001-01-01T00:00:00Z\",\n  \"targets\": null\n}",
+    "expected_json": {
+      "id": 0,
+      "name": "",
+      "modified_date": "0001-01-01T00:00:00Z",
+      "targets": null
+    },
+    "id": "nil-targets",
+    "kind": "group"
+  },
+  {
+    "expected_bytes": "{\n  \"id\": 9007199254740993,\n  \"name\": \"Ada \\u0026 \\u003cTeam\\u003e\",\n  \"modified_date\": \"2020-01-02T03:04:05.1234Z\",\n  \"targets\": []\n}",
+    "expected_json": {
+      "id": 9007199254740993,
+      "name": "Ada \u0026 \u003cTeam\u003e",
+      "modified_date": "2020-01-02T03:04:05.1234Z",
+      "targets": []
+    },
+    "id": "empty-targets",
+    "kind": "group"
+  },
+  {
+    "expected_bytes": "{\n  \"id\": 0,\n  \"interface_type\": \"\",\n  \"name\": \"\",\n  \"host\": \"\",\n  \"from_address\": \"\",\n  \"ignore_cert_errors\": false,\n  \"headers\": null,\n  \"modified_date\": \"0001-01-01T00:00:00Z\"\n}",
+    "expected_json": {
+      "id": 0,
+      "interface_type": "",
+      "name": "",
+      "host": "",
+      "from_address": "",
+      "ignore_cert_errors": false,
+      "headers": null,
+      "modified_date": "0001-01-01T00:00:00Z"
+    },
+    "id": "smtp-omitted-credentials",
+    "kind": "smtp"
+  },
+  {
+    "expected_bytes": "{\n  \"id\": 7,\n  \"interface_type\": \"\",\n  \"name\": \"\",\n  \"host\": \"\",\n  \"username\": \"synthetic-user\",\n  \"password\": \"synthetic-password\",\n  \"from_address\": \"\",\n  \"ignore_cert_errors\": false,\n  \"headers\": [\n    {\n      \"key\": \"X-Test\",\n      \"value\": \"{{.FirstName}}\"\n    }\n  ],\n  \"modified_date\": \"0001-01-01T00:00:00Z\"\n}",
+    "expected_json": {
+      "id": 7,
+      "interface_type": "",
+      "name": "",
+      "host": "",
+      "username": "synthetic-user",
+      "password": "synthetic-password",
+      "from_address": "",
+      "ignore_cert_errors": false,
+      "headers": [
+        {
+          "key": "X-Test",
+          "value": "{{.FirstName}}"
+        }
+      ],
+      "modified_date": "0001-01-01T00:00:00Z"
+    },
+    "id": "smtp-headers-and-credentials",
+    "kind": "smtp"
+  },
+  {
+    "expected_bytes": "{\n  \"enabled\": false,\n  \"host\": \"\",\n  \"username\": \"\",\n  \"password\": \"\",\n  \"tls\": false,\n  \"ignore_cert_errors\": false,\n  \"folder\": \"\",\n  \"restrict_domain\": \"\",\n  \"delete_reported_campaign_email\": false,\n  \"last_login\": \"0001-01-01T00:00:00Z\",\n  \"modified_date\": \"0001-01-01T00:00:00Z\"\n}",
+    "expected_json": {
+      "enabled": false,
+      "host": "",
+      "username": "",
+      "password": "",
+      "tls": false,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z"
+    },
+    "id": "imap-zero",
+    "kind": "imap"
+  },
+  {
+    "expected_bytes": "{\n  \"enabled\": false,\n  \"host\": \"\",\n  \"port\": \"993\",\n  \"username\": \"\",\n  \"password\": \"\",\n  \"tls\": true,\n  \"ignore_cert_errors\": false,\n  \"folder\": \"INBOX\",\n  \"restrict_domain\": \"\",\n  \"delete_reported_campaign_email\": false,\n  \"last_login\": \"0001-01-01T00:00:00Z\",\n  \"modified_date\": \"0001-01-01T00:00:00Z\",\n  \"imap_freq\": \"60\"\n}",
+    "expected_json": {
+      "enabled": false,
+      "host": "",
+      "port": "993",
+      "username": "",
+      "password": "",
+      "tls": true,
+      "ignore_cert_errors": false,
+      "folder": "INBOX",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z",
+      "imap_freq": "60"
+    },
+    "id": "imap-quoted-numbers",
+    "kind": "imap"
+  },
+  {
+    "expected_bytes": "{\n  \"message\": \"\\u003ctag\\u003e \\u0026 \\u2028\\u2029\",\n  \"success\": false,\n  \"data\": null\n}",
+    "expected_json": {
+      "message": "\u003ctag\u003e \u0026 \u2028\u2029",
+      "success": false,
+      "data": null
+    },
+    "id": "escaped-envelope",
+    "kind": "envelope"
+  }
+]

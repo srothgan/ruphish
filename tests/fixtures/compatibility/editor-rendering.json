@@ -1,0 +1,137 @@
+{
+  "cases": [
+    {
+      "edited_rendered": "\u003chtml dir=\"\" lang=\"en\"\u003e\u003chead\u003e\u003ctitle\u003e\u003c/title\u003e\u003c/head\u003e\u003cbody style=\"min-height: 198px;\" spellcheck=\"false\"\u003e\u003cp\u003eHello Ada\u003c/p\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "edited_source": "\u003chtml dir=\"\" lang=\"en\"\u003e\u003chead\u003e\u003ctitle\u003e\u003c/title\u003e\u003c/head\u003e\u003cbody style=\"min-height: 198px;\" spellcheck=\"false\"\u003e\u003cp\u003eHello {{.FirstName}}\u003c/p\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": "simple-template",
+      "original_rendered": "\u003cp\u003eHello Ada\u003c/p\u003e",
+      "original_source": "\u003cp\u003eHello {{.FirstName}}\u003c/p\u003e"
+    },
+    {
+      "edited_rendered": "\u003chtml dir=\"\" lang=\"en\"\u003e\u003chead\u003e\u003ctitle\u003e\u003c/title\u003e\u003c/head\u003e\u003cbody style=\"min-height: 198px;\" spellcheck=\"false\"\u003e\u003ch2\u003eInvitation\u003c/h2\u003e\u003cp\u003eHello \u003cstrong\u003eAda\u003c/strong\u003e, \u003cem\u003ewelcome\u003c/em\u003e.\u003c/p\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "edited_source": "\u003chtml dir=\"\" lang=\"en\"\u003e\u003chead\u003e\u003ctitle\u003e\u003c/title\u003e\u003c/head\u003e\u003cbody style=\"min-height: 198px;\" spellcheck=\"false\"\u003e\u003ch2\u003eInvitation\u003c/h2\u003e\u003cp\u003eHello \u003cstrong\u003e{{.FirstName}}\u003c/strong\u003e, \u003cem\u003ewelcome\u003c/em\u003e.\u003c/p\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": "formatted-template",
+      "original_rendered": "\u003ch2\u003eInvitation\u003c/h2\u003e\u003cp\u003eHello \u003cstrong\u003eAda\u003c/strong\u003e, \u003cem\u003ewelcome\u003c/em\u003e.\u003c/p\u003e",
+      "original_source": "\u003ch2\u003eInvitation\u003c/h2\u003e\u003cp\u003eHello \u003cstrong\u003e{{.FirstName}}\u003c/strong\u003e, \u003cem\u003ewelcome\u003c/em\u003e.\u003c/p\u003e"
+    },
+    {
+      "edited_rendered": "\u003chtml dir=\"\" lang=\"en\"\u003e\u003chead\u003e\u003ctitle\u003e\u003c/title\u003e\u003c/head\u003e\u003cbody style=\"min-height: 198px;\" spellcheck=\"false\"\u003e\u003cp\u003e\u003ca href=\"https://training.example.test/path?rid=fixture-rid\" title=\"Continue\"\u003eOpen\u003c/a\u003e\u003cimg src=\"cid:logo.png\" alt=\"Logo\" title=\"Logo\"\u003e\u003c/p\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "edited_source": "\u003chtml dir=\"\" lang=\"en\"\u003e\u003chead\u003e\u003ctitle\u003e\u003c/title\u003e\u003c/head\u003e\u003cbody style=\"min-height: 198px;\" spellcheck=\"false\"\u003e\u003cp\u003e\u003ca href=\"{{.URL}}\" title=\"Continue\"\u003eOpen\u003c/a\u003e\u003cimg src=\"cid:logo.png\" alt=\"Logo\" title=\"Logo\"\u003e\u003c/p\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": "link-and-image",
+      "original_rendered": "\u003cp\u003e\u003ca href=\"https://training.example.test/path?rid=fixture-rid\" title=\"Continue\"\u003eOpen\u003c/a\u003e\u003cimg src=\"cid:logo.png\" alt=\"Logo\" title=\"Logo\"\u003e\u003c/p\u003e",
+      "original_source": "\u003cp\u003e\u003ca href=\"{{.URL}}\" title=\"Continue\"\u003eOpen\u003c/a\u003e\u003cimg src=\"cid:logo.png\" alt=\"Logo\" title=\"Logo\"\u003e\u003c/p\u003e"
+    },
+    {
+      "edited_rendered": "\u003chtml dir=\"\" lang=\"en\"\u003e\u003chead\u003e\u003ctitle\u003e\u003c/title\u003e\u003c/head\u003e\u003cbody style=\"min-height: 198px;\" spellcheck=\"false\"\u003e\u003ctable\u003e\u003ctbody\u003e\u003ctr\u003e\u003ctd colspan=\"2\"\u003e\u003cp\u003eAda\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003ctd\u003e\u003cp\u003eLeft\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003eRight\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "edited_source": "\u003chtml dir=\"\" lang=\"en\"\u003e\u003chead\u003e\u003ctitle\u003e\u003c/title\u003e\u003c/head\u003e\u003cbody style=\"min-height: 198px;\" spellcheck=\"false\"\u003e\u003ctable\u003e\u003ctbody\u003e\u003ctr\u003e\u003ctd colspan=\"2\"\u003e\u003cp\u003e{{.FirstName}}\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003ctd\u003e\u003cp\u003eLeft\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003eRight\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": "table-with-spans",
+      "original_rendered": "\u003ctable\u003e\u003ctbody\u003e\u003ctr\u003e\u003ctd colspan=\"2\"\u003e\u003cp\u003eAda\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003ctd\u003e\u003cp\u003eLeft\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003eRight\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e",
+      "original_source": "\u003ctable\u003e\u003ctbody\u003e\u003ctr\u003e\u003ctd colspan=\"2\"\u003e\u003cp\u003e{{.FirstName}}\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003ctr\u003e\u003ctd\u003e\u003cp\u003eLeft\u003c/p\u003e\u003c/td\u003e\u003ctd\u003e\u003cp\u003eRight\u003c/p\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e"
+    },
+    {
+      "edited_rendered": "\u003c!DOCTYPE html\u003e\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cp class=\"brand\"\u003eHello Ada\u003c/p\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "edited_source": "\u003c!DOCTYPE html\u003e\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cp class=\"brand\"\u003eHello {{.FirstName}}\u003c/p\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": "full-document",
+      "original_rendered": "\u003c!doctype html\u003e\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody\u003e\u003cp class=\"brand\"\u003eHello Ada\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "original_source": "\u003c!doctype html\u003e\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody\u003e\u003cp class=\"brand\"\u003eHello {{.FirstName}}\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e"
+    },
+    {
+      "edited_rendered": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cform method=\"post\" action=\"https://training.example.test/path?rid=fixture-rid\" data-capture=\"credentials\"\u003e\u003cp\u003e\u003clabel for=\"login\"\u003eEmail\u003c/label\u003e\u003cinput id=\"login\" type=\"email\" name=\"email\" autocomplete=\"off\"\u003e\u003c/p\u003e\u003cp\u003e\u003cinput name=\"password\" type=\"password\"\u003e\u003cbutton type=\"submit\"\u003eContinue\u003c/button\u003e\u003c/p\u003e\u003c/form\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "edited_source": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cform method=\"post\" action=\"{{.URL}}\" data-capture=\"credentials\"\u003e\u003cp\u003e\u003clabel for=\"login\"\u003eEmail\u003c/label\u003e\u003cinput id=\"login\" type=\"email\" name=\"email\" autocomplete=\"off\"\u003e\u003c/p\u003e\u003cp\u003e\u003cinput name=\"password\" type=\"password\"\u003e\u003cbutton type=\"submit\"\u003eContinue\u003c/button\u003e\u003c/p\u003e\u003c/form\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": "landing-form",
+      "original_rendered": "\u003cform method=\"post\" action=\"https://training.example.test/path?rid=fixture-rid\" data-capture=\"credentials\"\u003e\u003cp\u003e\u003clabel for=\"login\"\u003eEmail\u003c/label\u003e\u003cinput id=\"login\" type=\"email\" name=\"email\" autocomplete=\"off\"\u003e\u003c/p\u003e\u003cp\u003e\u003cinput name=\"password\" type=\"password\"\u003e\u003cbutton type=\"submit\"\u003eContinue\u003c/button\u003e\u003c/p\u003e\u003c/form\u003e",
+      "original_source": "\u003cform method=\"post\" action=\"{{.URL}}\" data-capture=\"credentials\"\u003e\u003cp\u003e\u003clabel for=\"login\"\u003eEmail\u003c/label\u003e\u003cinput id=\"login\" type=\"email\" name=\"email\" autocomplete=\"off\"\u003e\u003c/p\u003e\u003cp\u003e\u003cinput name=\"password\" type=\"password\"\u003e\u003cbutton type=\"submit\"\u003eContinue\u003c/button\u003e\u003c/p\u003e\u003c/form\u003e"
+    },
+    {
+      "edited_rendered": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003ctable role=\"presentation\" width=\"600\" cellpadding=\"0\" style=\"border-collapse:collapse\"\u003e\u003ctbody\u003e\u003ctr\u003e\u003ctd style=\"padding:20px\"\u003e\u003cp\u003eAda\u003c/p\u003e\u003cimg src=\"https://training.example.test/track?rid=fixture-rid\" width=\"1\" height=\"1\" style=\"display:none\" alt=\"\"\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "edited_source": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003ctable role=\"presentation\" width=\"600\" cellpadding=\"0\" style=\"border-collapse:collapse\"\u003e\u003ctbody\u003e\u003ctr\u003e\u003ctd style=\"padding:20px\"\u003e\u003cp\u003e{{.FirstName}}\u003c/p\u003e\u003cimg src=\"{{.TrackingURL}}\" width=\"1\" height=\"1\" style=\"display:none\" alt=\"\"\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": "email-layout-and-tracker",
+      "original_rendered": "\u003ctable role=\"presentation\" width=\"600\" cellpadding=\"0\" style=\"border-collapse:collapse\"\u003e\u003ctr\u003e\u003ctd style=\"padding:20px\"\u003e\u003cp\u003eAda\u003c/p\u003e\u003cimg src=\"https://training.example.test/track?rid=fixture-rid\" width=\"1\" height=\"1\" style=\"display:none\" alt=\"\"\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/table\u003e",
+      "original_source": "\u003ctable role=\"presentation\" width=\"600\" cellpadding=\"0\" style=\"border-collapse:collapse\"\u003e\u003ctr\u003e\u003ctd style=\"padding:20px\"\u003e\u003cp\u003e{{.FirstName}}\u003c/p\u003e\u003cimg src=\"{{.TrackingURL}}\" width=\"1\" height=\"1\" style=\"display:none\" alt=\"\"\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/table\u003e"
+    },
+    {
+      "edited_rendered": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cp\u003e\u003c/p\u003e\u003cp\u003eHello Ada\u003c/p\u003e\u003cp\u003e\n\u003cimg src='https://training.example.test/track?rid=fixture-rid'/\u003e\u003c/p\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "edited_source": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cp\u003e{{if .FirstName}}\u003c/p\u003e\u003cp\u003eHello {{.FirstName}}\u003c/p\u003e\u003cp\u003e{{else}}\u003c/p\u003e\u003cp\u003eHello friend\u003c/p\u003e\u003cp\u003e{{end}}\n{{.Tracker}}\u003c/p\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": "go-control-flow",
+      "original_rendered": "\u003cp\u003eHello Ada\u003c/p\u003e\n\u003cimg src='https://training.example.test/track?rid=fixture-rid'/\u003e",
+      "original_source": "{{if .FirstName}}\u003cp\u003eHello {{.FirstName}}\u003c/p\u003e{{else}}\u003cp\u003eHello friend\u003c/p\u003e{{end}}\n{{.Tracker}}"
+    },
+    {
+      "edited_rendered": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cp\u003e\u003ca href=\"https://training.example.test/path?rid=fixture-rid?source=email\"\u003eOpen Ada\u003c/a\u003e\u003c/p\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "edited_source": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cp\u003e\u003ca href=\"{{printf \"%s?source=email\" .URL}}\"\u003eOpen {{.FirstName}}\u003c/a\u003e\u003c/p\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": "template-expression-in-attribute",
+      "original_rendered": "\u003cp\u003e\u003ca href='https://training.example.test/path?rid=fixture-rid?source=email'\u003eOpen Ada\u003c/a\u003e\u003c/p\u003e",
+      "original_source": "\u003cp\u003e\u003ca href='{{printf \"%s?source=email\" .URL}}'\u003eOpen {{.FirstName}}\u003c/a\u003e\u003c/p\u003e"
+    },
+    {
+      "edited_rendered": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003c!--[if mso]\u003e\u003ctable role=\"presentation\"\u003e\u003ctr\u003e\u003ctd\u003e\u003c![endif]--\u003e\u003cp\u003eHello Ada\u003c/p\u003e\u003c!--[if mso]\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/table\u003e\u003c![endif]--\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "edited_source": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003c!--[if mso]\u003e\u003ctable role=\"presentation\"\u003e\u003ctr\u003e\u003ctd\u003e\u003c![endif]--\u003e\u003cp\u003eHello {{.FirstName}}\u003c/p\u003e\u003c!--[if mso]\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/table\u003e\u003c![endif]--\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": "outlook-conditional-comment",
+      "original_rendered": "\u003c!--[if mso]\u003e\u003ctable role=\"presentation\"\u003e\u003ctr\u003e\u003ctd\u003e\u003c![endif]--\u003e\u003cp\u003eHello Ada\u003c/p\u003e\u003c!--[if mso]\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/table\u003e\u003c![endif]--\u003e",
+      "original_source": "\u003c!--[if mso]\u003e\u003ctable role=\"presentation\"\u003e\u003ctr\u003e\u003ctd\u003e\u003c![endif]--\u003e\u003cp\u003eHello {{.FirstName}}\u003c/p\u003e\u003c!--[if mso]\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/table\u003e\u003c![endif]--\u003e"
+    },
+    {
+      "edited_rendered": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cp\u003e\u003ctraining-banner data-theme=\"ocean\" aria-label=\"Training\"\u003e\u003cp class=\"notice\" data-id=\"42\"\u003eHello Ada\u003c/p\u003e\u003c/training-banner\u003e\u003c/p\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "edited_source": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cp\u003e\u003ctraining-banner data-theme=\"ocean\" aria-label=\"Training\"\u003e\u003cp class=\"notice\" data-id=\"42\"\u003eHello {{.FirstName}}\u003c/p\u003e\u003c/training-banner\u003e\u003c/p\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": "custom-element-and-attributes",
+      "original_rendered": "\u003ctraining-banner data-theme=\"ocean\" aria-label=\"Training\"\u003e\u003cp class=\"notice\" data-id=\"42\"\u003eHello Ada\u003c/p\u003e\u003c/training-banner\u003e",
+      "original_source": "\u003ctraining-banner data-theme=\"ocean\" aria-label=\"Training\"\u003e\u003cp class=\"notice\" data-id=\"42\"\u003eHello {{.FirstName}}\u003c/p\u003e\u003c/training-banner\u003e"
+    },
+    {
+      "edited_rendered": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cp\u003eGrüße 👩‍💻 Ada\u003c/p\u003e\n\u003cp\u003e日本語 \u0026amp; café\u003c/p\u003e\n\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "edited_source": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cp\u003eGrüße 👩‍💻 {{.FirstName}}\u003c/p\u003e\n\u003cp\u003e日本語 \u0026amp; café\u003c/p\u003e\n\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": "crlf-and-unicode",
+      "original_rendered": "\u003cp\u003eGrüße 👩‍💻 Ada\u003c/p\u003e\r\n\u003cp\u003e日本語 \u0026amp; café\u003c/p\u003e\r\n",
+      "original_source": "\u003cp\u003eGrüße 👩‍💻 {{.FirstName}}\u003c/p\u003e\r\n\u003cp\u003e日本語 \u0026amp; café\u003c/p\u003e\r\n"
+    },
+    {
+      "edited_rendered": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003ctable\u003e\u003ctbody\u003e\u003ctr\u003e\u003ctd\u003e\u003cp\u003eAda\u003c/p\u003e\u003cdiv data-keep=\"yes\"\u003eUnclosed\u003c/div\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "edited_source": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003ctable\u003e\u003ctbody\u003e\u003ctr\u003e\u003ctd\u003e\u003cp\u003e{{.FirstName}}\u003c/p\u003e\u003cdiv data-keep=\"yes\"\u003eUnclosed\u003c/div\u003e\u003c/td\u003e\u003c/tr\u003e\u003c/tbody\u003e\u003c/table\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": "malformed-import",
+      "original_rendered": "\u003ctable\u003e\u003ctr\u003e\u003ctd\u003e\u003cp\u003eAda\u003cdiv data-keep=\"yes\"\u003eUnclosed",
+      "original_source": "\u003ctable\u003e\u003ctr\u003e\u003ctd\u003e\u003cp\u003e{{.FirstName}}\u003cdiv data-keep=\"yes\"\u003eUnclosed"
+    },
+    {
+      "edited_rendered": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cp\u003eHello Ada \u003ca href=\"javascript:alert(1)\"\u003eOpen\u003c/a\u003e\u003cimg src=\"https://example.invalid/tracker\" onerror=\"alert(2)\" alt=\"\"\u003e\u003c/p\u003e\u003cscript\u003ealert(3)\u003c/script\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "edited_source": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cp\u003eHello {{.FirstName}} \u003ca href=\"javascript:alert(1)\"\u003eOpen\u003c/a\u003e\u003cimg src=\"https://example.invalid/tracker\" onerror=\"alert(2)\" alt=\"\"\u003e\u003c/p\u003e\u003cscript\u003ealert(3)\u003c/script\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": "hostile-markup",
+      "original_rendered": "\u003cp\u003eHello Ada \u003ca href=\"javascript:alert(1)\"\u003eOpen\u003c/a\u003e\u003cimg src=\"https://example.invalid/tracker\" onerror=\"alert(2)\" alt=\"\"\u003e\u003c/p\u003e\u003cscript\u003ealert(3)\u003c/script\u003e",
+      "original_source": "\u003cp\u003eHello {{.FirstName}} \u003ca href=\"javascript:alert(1)\"\u003eOpen\u003c/a\u003e\u003cimg src=\"https://example.invalid/tracker\" onerror=\"alert(2)\" alt=\"\"\u003e\u003c/p\u003e\u003cscript\u003ealert(3)\u003c/script\u003e"
+    },
+    {
+      "edited_rendered": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cp\u003e\u003ca href=\"javascript:alert(1)\"\u003eHello Ada\u003c/a\u003e\u003c/p\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "edited_source": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cp\u003e\u003ca href=\"javascript:alert(1)\"\u003eHello {{.FirstName}}\u003c/a\u003e\u003c/p\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": "javascript-link",
+      "original_rendered": "\u003cp\u003e\u003ca href=\"javascript:alert(1)\"\u003eHello Ada\u003c/a\u003e\u003c/p\u003e",
+      "original_source": "\u003cp\u003e\u003ca href=\"javascript:alert(1)\"\u003eHello {{.FirstName}}\u003c/a\u003e\u003c/p\u003e"
+    },
+    {
+      "edited_rendered": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cp\u003e©\u0026nbsp;café Ada\u003c/p\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "edited_source": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cp\u003e©\u0026nbsp;café {{.FirstName}}\u003c/p\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": "named-html-entities",
+      "original_rendered": "\u003cp\u003e\u0026copy;\u0026nbsp;caf\u0026eacute; Ada\u003c/p\u003e",
+      "original_source": "\u003cp\u003e\u0026copy;\u0026nbsp;caf\u0026eacute; {{.FirstName}}\u003c/p\u003e"
+    },
+    {
+      "edited_rendered": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "edited_source": "\u003chtml lang=\"en\"\u003e\u003chead\u003e\u003cmeta charset=\"utf-8\"\u003e\u003ctitle\u003eTraining\u003c/title\u003e\u003cstyle\u003e.brand{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody spellcheck=\"false\"\u003e\u003cp\u003eVisual edit\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": "empty-source",
+      "original_rendered": "",
+      "original_source": ""
+    }
+  ],
+  "context": {
+    "From": "Sender",
+    "URL": "https://training.example.test/path?rid=fixture-rid",
+    "Tracker": "\u003cimg src='https://training.example.test/track?rid=fixture-rid'/\u003e",
+    "TrackingURL": "https://training.example.test/track?rid=fixture-rid",
+    "RId": "fixture-rid",
+    "BaseURL": "https://training.example.test",
+    "email": "ada@example.test",
+    "first_name": "Ada",
+    "last_name": "Example",
+    "position": "Engineer"
+  },
+  "reference_commit": "95618469799295e2c0fec980805a2dfbb818816b",
+  "scope": "Actual product VisualSession output rendered through unchanged Go models.ExecuteTemplate; no browser rendering/interaction claim"
+}

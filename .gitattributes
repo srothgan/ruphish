@@ -1,0 +1,3 @@
+# Preserve the exact bytes used by fixture manifests and copied SQL provenance.
+tests/fixtures/** -text
+crates/ruphish-adapters/migrations/gophish/** -text

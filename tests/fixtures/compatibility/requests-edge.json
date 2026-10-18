@@ -1,0 +1,285 @@
+[
+  {
+    "accepted": true,
+    "body": "{\"HOST\":\"case.example.test\",\"TLS\":true,\"PoRt\":\"993\"}",
+    "expected_json": {
+      "enabled": false,
+      "host": "case.example.test",
+      "port": "993",
+      "username": "",
+      "password": "",
+      "tls": true,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{\"host\":null,\"tls\":null,\"imap_freq\":null,\"modified_date\":null}",
+    "expected_json": {
+      "enabled": false,
+      "host": "",
+      "username": "",
+      "password": "",
+      "tls": false,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{\"host\":\"first\",\"host\":null,\"tls\":true,\"tls\":null,\"port\":\"993\",\"port\":null}",
+    "expected_json": {
+      "enabled": false,
+      "host": "first",
+      "port": "993",
+      "username": "",
+      "password": "",
+      "tls": true,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{\"host\":\"first\",\"HOST\":\"second\",\"host\":\"last\"}",
+    "expected_json": {
+      "enabled": false,
+      "host": "last",
+      "username": "",
+      "password": "",
+      "tls": false,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "accepted": false,
+    "body": "{\"host\":\"first\",\"host\":12,\"host\":\"last\"}"
+  },
+  {
+    "accepted": true,
+    "body": "{\"port\":\"000993\",\"imap_freq\":\"00060\"}",
+    "expected_json": {
+      "enabled": false,
+      "host": "",
+      "port": "993",
+      "username": "",
+      "password": "",
+      "tls": false,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z",
+      "imap_freq": "60"
+    }
+  },
+  {
+    "accepted": false,
+    "body": "{\"port\":\"+993\"}"
+  },
+  {
+    "accepted": false,
+    "body": "{\"port\":\" 993\"}"
+  },
+  {
+    "accepted": false,
+    "body": "{\"port\":\"993.0\"}"
+  },
+  {
+    "accepted": false,
+    "body": "{\"port\":\"1e2\"}"
+  },
+  {
+    "accepted": true,
+    "body": "{\"port\":\"null\"}",
+    "expected_json": {
+      "enabled": false,
+      "host": "",
+      "username": "",
+      "password": "",
+      "tls": false,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "accepted": false,
+    "body": "{\"port\":\"\"}"
+  },
+  {
+    "accepted": false,
+    "body": "{\"port\":true}"
+  },
+  {
+    "accepted": false,
+    "body": "{\"port\":[]}"
+  },
+  {
+    "accepted": true,
+    "body": "{\"port\":\"993\",\"port\":\"null\"}",
+    "expected_json": {
+      "enabled": false,
+      "host": "",
+      "port": "993",
+      "username": "",
+      "password": "",
+      "tls": false,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{\"imap_freq\":\"60\",\"imap_freq\":\"null\"}",
+    "expected_json": {
+      "enabled": false,
+      "host": "",
+      "username": "",
+      "password": "",
+      "tls": false,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z",
+      "imap_freq": "60"
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{\"host\":\"ok\",\"user_id\":99,\"UserId\":88,\"unknown\":{\"x\":1}}",
+    "expected_json": {
+      "enabled": false,
+      "host": "ok",
+      "username": "",
+      "password": "",
+      "tls": false,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{\"hoſt\":\"folded.example.test\"}",
+    "expected_json": {
+      "enabled": false,
+      "host": "folded.example.test",
+      "username": "",
+      "password": "",
+      "tls": false,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{\"host\":\"before\",\"hoſt\":null}",
+    "expected_json": {
+      "enabled": false,
+      "host": "before",
+      "username": "",
+      "password": "",
+      "tls": false,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{\"enabled\":true} {\"enabled\":false}",
+    "expected_json": {
+      "enabled": true,
+      "host": "",
+      "username": "",
+      "password": "",
+      "tls": false,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "accepted": false,
+    "body": "true"
+  },
+  {
+    "accepted": false,
+    "body": "\"object\""
+  },
+  {
+    "accepted": false,
+    "body": "0"
+  },
+  {
+    "accepted": false,
+    "body": ""
+  },
+  {
+    "accepted": true,
+    "body": "{\"modified_date\":\"2020-01-02T03:04:05.123400000Z\"}",
+    "expected_json": {
+      "enabled": false,
+      "host": "",
+      "username": "",
+      "password": "",
+      "tls": false,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "2020-01-02T03:04:05.1234Z"
+    }
+  },
+  {
+    "accepted": false,
+    "body": "{\"modified_date\":\"invalid\"}"
+  },
+  {
+    "accepted": false,
+    "body": "{\"modified_date\":false}"
+  }
+]

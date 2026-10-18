@@ -3,3 +3,5 @@
 /data/
 /.env
 /PERSONAL.md
+**/node_modules/
+/crates/ruphish-ui/web/generated/

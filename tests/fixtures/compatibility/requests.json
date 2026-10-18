@@ -1,0 +1,117 @@
+[
+  {
+    "accepted": true,
+    "body": "null",
+    "expected_json": {
+      "enabled": false,
+      "host": "",
+      "username": "",
+      "password": "",
+      "tls": false,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "accepted": false,
+    "body": "[]"
+  },
+  {
+    "accepted": true,
+    "body": "{}",
+    "expected_json": {
+      "enabled": false,
+      "host": "",
+      "username": "",
+      "password": "",
+      "tls": false,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{\"port\":\"993\",\"imap_freq\":\"60\",\"tls\":true}",
+    "expected_json": {
+      "enabled": false,
+      "host": "",
+      "port": "993",
+      "username": "",
+      "password": "",
+      "tls": true,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z",
+      "imap_freq": "60"
+    }
+  },
+  {
+    "accepted": false,
+    "body": "{\"port\":993}"
+  },
+  {
+    "accepted": false,
+    "body": "{\"port\":\"65536\"}"
+  },
+  {
+    "accepted": false,
+    "body": "{\"port\":\"-1\"}"
+  },
+  {
+    "accepted": false,
+    "body": "{\"imap_freq\":\"4294967296\"}"
+  },
+  {
+    "accepted": false,
+    "body": "{\"tls\":\"true\"}"
+  },
+  {
+    "accepted": false,
+    "body": "{\"port\":\"993\""
+  },
+  {
+    "accepted": true,
+    "body": "{\"port\":null}",
+    "expected_json": {
+      "enabled": false,
+      "host": "",
+      "username": "",
+      "password": "",
+      "tls": false,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "accepted": true,
+    "body": "{} trailing bytes",
+    "expected_json": {
+      "enabled": false,
+      "host": "",
+      "username": "",
+      "password": "",
+      "tls": false,
+      "ignore_cert_errors": false,
+      "folder": "",
+      "restrict_domain": "",
+      "delete_reported_campaign_email": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "modified_date": "0001-01-01T00:00:00Z"
+    }
+  }
+]

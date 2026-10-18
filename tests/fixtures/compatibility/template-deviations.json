@@ -1,0 +1,10 @@
+[
+  {
+    "text": "{{index \"é\" 0}}/{{len \"é\"}}/{{slice \"é\" 1}}",
+    "decision": "DEC-009",
+    "status": "approved",
+    "rust_error_kind": "execution",
+    "rust_partial_output": "195/2/",
+    "reason": "User approved rejecting slices that produce invalid UTF-8 instead of preserving Go's arbitrary-byte-string behavior. Valid Unicode and boundary-aligned slices remain supported."
+  }
+]

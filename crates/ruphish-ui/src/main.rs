@@ -6,14 +6,9 @@ compile_error!(
 );
 
 #[cfg(target_arch = "wasm32")]
-fn main() {
-    use leptos::prelude::*;
+mod editor;
 
-    leptos::mount::mount_to_body(|| {
-        view! {
-            <main>
-                <h1>"Ruphish"</h1>
-            </main>
-        }
-    });
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    leptos::mount::mount_to_body(editor::editor_workbench);
 }

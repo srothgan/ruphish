@@ -1,4 +1,4 @@
-# Existing Go scenarios; targets are planned, not implemented Rust tests.
+# Existing Go scenarios; status and target_test distinguish implemented equivalents from planned work.
 schema_version = 1
 reference_commit = "95618469799295e2c0fec980805a2dfbb818816b"
 reference_source = "Gophish Community Edition 0.12.1"
@@ -14,7 +14,8 @@ guarantee = "Reject empty/too-short passwords and accept the policy cases in the
 strategy = "Translate the existing scenario and independent expected values; use real boundary effects where the original only mocked internals. Preserve all original table cases."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/legacy_auth.rs"
-status = "not_implemented"
+status = "implemented"
+target_test = "password_policy_preserves_original_cases_and_captured_byte_lengths"
 source_subtests = []
 
 [[tests]]
@@ -28,7 +29,8 @@ guarantee = "Reject invalid policy, mismatched confirmation, and reused password
 strategy = "Translate the existing scenario and independent expected values; use real boundary effects where the original only mocked internals. Preserve all original table cases."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/legacy_auth.rs"
-status = "not_implemented"
+status = "implemented"
+target_test = "password_change_preserves_original_rejections_and_verifies_the_new_hash"
 source_subtests = []
 
 [[tests]]

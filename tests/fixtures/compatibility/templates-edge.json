@@ -1,0 +1,102 @@
+[
+  {
+    "expected_error_kind": "",
+    "expected_output": "false/true",
+    "text": "{{and false .Missing}}/{{or true .Missing}}"
+  },
+  {
+    "expected_error_kind": "",
+    "expected_output": "}}/ok",
+    "text": "{{printf \"%s\" \"}}\"}}/{{/* }} inside a comment */}}ok"
+  },
+  {
+    "expected_error_kind": "",
+    "expected_output": "leftAdaright",
+    "text": "left \n {{- .FirstName -}} \n right"
+  },
+  {
+    "expected_error_kind": "",
+    "expected_output": "\u0026lt;tag\u0026gt;\u0026amp;\u0026#34;/a+b%26c/\\u003Ctag\\u003E\\u000A\\\"",
+    "text": "{{html \"\u003ctag\u003e\u0026\\\"\"}}/{{urlquery \"a b\u0026c\"}}/{{js \"\u003ctag\u003e\\n\\\"\"}}"
+  },
+  {
+    "expected_error_kind": "",
+    "expected_output": "A/ff/1.25",
+    "text": "{{printf \"%c/%x/%.2f\" 65 255 1.25}}"
+  },
+  {
+    "expected_error_kind": "",
+    "expected_output": "9007199254740993",
+    "text": "{{printf \"%d\" 9007199254740993}}"
+  },
+  {
+    "expected_error_kind": "",
+    "expected_output": "195/2/\ufffd",
+    "text": "{{index \"é\" 0}}/{{len \"é\"}}/{{slice \"é\" 1}}"
+  },
+  {
+    "expected_error_kind": "",
+    "expected_output": "empty",
+    "text": "{{with \"\"}}hidden{{else}}empty{{end}}"
+  },
+  {
+    "expected_error_kind": "",
+    "expected_output": "012",
+    "text": "{{range 3}}{{.}}{{end}}"
+  },
+  {
+    "expected_error_kind": "",
+    "expected_output": "02",
+    "text": "{{range 4}}{{if eq . 1}}{{continue}}{{end}}{{if eq . 3}}{{break}}{{end}}{{.}}{{end}}"
+  },
+  {
+    "expected_error_kind": "",
+    "expected_output": "Hello Ada",
+    "text": "{{block \"greet\" .}}Hello {{.FirstName}}{{end}}"
+  },
+  {
+    "expected_error_kind": "",
+    "expected_output": "Ada",
+    "text": "{{$x := \"old\"}}{{$x = .FirstName}}{{$x}}"
+  },
+  {
+    "expected_error_kind": "execution",
+    "expected_output": "before",
+    "text": "before{{index .FirstName 99}}after"
+  },
+  {
+    "expected_error_kind": "execution",
+    "expected_output": "before",
+    "text": "before{{slice .FirstName -1}}after"
+  },
+  {
+    "expected_error_kind": "execution",
+    "expected_output": "before",
+    "text": "before{{call .FirstName}}after"
+  },
+  {
+    "expected_error_kind": "execution",
+    "expected_output": "",
+    "text": "{{template \"absent\" .}}"
+  },
+  {
+    "expected_error_kind": "execution",
+    "expected_output": "",
+    "text": "{{.Email.Length}}"
+  },
+  {
+    "expected_error_kind": "parse",
+    "expected_output": "",
+    "text": "{{if true}}unclosed"
+  },
+  {
+    "expected_error_kind": "parse",
+    "expected_output": "",
+    "text": "{{env \"HOME\"}}"
+  },
+  {
+    "expected_error_kind": "parse",
+    "expected_output": "",
+    "text": "{{readFile \"fixture\"}}"
+  }
+]

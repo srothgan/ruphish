@@ -1,0 +1,16 @@
+{
+  "id": 41,
+  "name": "Compatibility template",
+  "envelope_sender": "sender@example.test",
+  "subject": "Hello {{.FirstName}}",
+  "text": "Hello {{.FirstName}}",
+  "html": "\u003c!doctype html\u003e\u003chtml\u003e\u003chead\u003e\u003cstyle\u003ep{color:#135780}\u003c/style\u003e\u003c/head\u003e\u003cbody\u003e\u003cp\u003eHello {{.FirstName}}\u003c/p\u003e\u003cform method=\"post\" action=\"{{.URL}}\"\u003e\u003cinput name=\"email\"\u003e\u003c/form\u003e\u003c/body\u003e\u003c/html\u003e",
+  "modified_date": "0001-01-01T00:00:00Z",
+  "attachments": [
+    {
+      "content": "AAEC/w==",
+      "type": "application/octet-stream",
+      "name": "fixture.bin"
+    }
+  ]
+}
