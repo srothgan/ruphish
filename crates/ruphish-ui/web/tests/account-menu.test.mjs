@@ -9,13 +9,18 @@ function fixture() {
   const win = dom.window;
   const trigger = win.document.querySelector('#trigger');
   const panel = win.document.querySelector('#panel');
+  const dialog = win.document.createElement('dialog');
+  dialog.innerHTML = '<button data-discard="cancel">Keep editing</button><button data-discard="confirm">Discard and continue</button>';
+  win.document.body.append(dialog);
+  dialog.showModal = () => { dialog.open = true; dialog.querySelector('button').focus(); };
+  dialog.close = () => { dialog.open = false; dialog.dispatchEvent(new win.Event('close')); };
   let rect = {left: 18, top: 710, bottom: 758};
   trigger.getBoundingClientRect = () => rect;
   Object.defineProperty(panel, 'scrollHeight', {value: 180});
   win.innerWidth = 1024;
   win.innerHeight = 800;
   const remove = bindAccountMenu(trigger, panel, win);
-  return {win, trigger, panel, rect: value => { rect = value; }, remove, close: () => { remove(); win.close(); }};
+  return {win, trigger, panel, dialog, rect: value => { rect = value; }, remove, close: () => { remove(); win.close(); }};
 }
 
 test('account menu focuses its first action, Escape restores focus, outside interaction dismisses without stealing focus', () => {
@@ -65,12 +70,11 @@ test('account menu stays inside desktop, narrow and zoomed viewports and moves b
   } finally { f.close(); }
 });
 
-test('canceling dirty navigation keeps the account menu and draft; accepting reaches the router, cleanup leaves no toggle handlers', () => {
+test('canceling dirty navigation keeps the account menu and draft; accepting reaches the router, cleanup leaves no toggle handlers', async () => {
   const f = fixture();
-  let accepted = false;
   let navigations = 0;
-  f.win.confirm = () => accepted;
-  const guard = installNavigationGuard(() => true, f.win);
+  f.win.confirm = () => { throw new Error('Native prompt must not be used'); };
+  const guard = installNavigationGuard(() => true, f.dialog, f.win);
   f.win.addEventListener('click', event => {
     if (event.target.closest('a') && !event.defaultPrevented) navigations++;
     event.preventDefault();
@@ -80,8 +84,14 @@ test('canceling dirty navigation keeps the account menu and draft; accepting rea
     f.panel.querySelector('a').click();
     assert.equal(navigations, 0);
     assert.equal(f.panel.hidden, false);
-    accepted = true;
+    f.win.dispatchEvent(new f.win.KeyboardEvent('keydown', {key: 'Escape'}));
+    assert.equal(f.panel.hidden, false, 'Escape belongs to the modal while it is open');
+    f.dialog.dispatchEvent(new f.win.Event('cancel', {cancelable: true}));
+    await Promise.resolve(); await Promise.resolve();
+    assert.equal(f.win.document.activeElement, f.panel.querySelector('a'));
     f.panel.querySelector('a').click();
+    f.dialog.querySelector('[data-discard="confirm"]').click();
+    await Promise.resolve(); await Promise.resolve();
     assert.equal(navigations, 1);
     assert.equal(f.panel.hidden, true);
     f.remove();
@@ -91,14 +101,17 @@ test('canceling dirty navigation keeps the account menu and draft; accepting rea
   } finally { guard(); f.close(); }
 });
 
-test('direct sign-out only proceeds without a draft or after accepting discard', () => {
-  let prompts = 0;
-  let accepted = false;
-  const win = {confirm: () => { prompts++; return accepted; }};
-  assert.equal(confirmDiscard(false, win), true);
-  assert.equal(prompts, 0);
-  assert.equal(confirmDiscard(true, win), false);
-  accepted = true;
-  assert.equal(confirmDiscard(true, win), true);
-  assert.equal(prompts, 2);
+test('direct sign-out only proceeds without a draft or after accepting the shared modal', async () => {
+  const f = fixture();
+  const guard = installNavigationGuard(() => true, f.dialog, f.win);
+  try {
+    assert.equal(await confirmDiscard(false, f.win), true);
+    assert.equal(f.dialog.open, false);
+    const canceled = confirmDiscard(true, f.win);
+    f.dialog.querySelector('[data-discard="cancel"]').click();
+    assert.equal(await canceled, false);
+    const accepted = confirmDiscard(true, f.win);
+    f.dialog.querySelector('[data-discard="confirm"]').click();
+    assert.equal(await accepted, true);
+  } finally { guard(); f.close(); }
 });

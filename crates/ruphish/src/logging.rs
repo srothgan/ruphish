@@ -38,7 +38,9 @@ pub(crate) fn setup(
         (BoxMakeWriter::new(std::io::stderr.and(writer)), Some(guard))
     };
     let targets = tracing_subscriber::filter::Targets::new()
-        .with_default(filter.min(LevelFilter::WARN))
+        // Dependencies can emit protocol bodies or peer diagnostics even at WARN.
+        // Operational failures are translated at our typed application boundaries.
+        .with_default(LevelFilter::OFF)
         .with_target("ruphish", filter);
     tracing_subscriber::registry()
         .with(

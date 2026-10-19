@@ -318,10 +318,10 @@ fn shield(source: &str) -> Result<(String, Vec<(String, String)>), Error> {
     Ok((result, tokens))
 }
 
-/// Derive the served form policy without modifying the author's stored source.
+/// Remove native field serialization without modifying the author's stored source.
+/// Served previews additionally use a sandbox CSP. This is not a script sanitizer;
+/// public interaction rendering must supply its own controlled collector boundary.
 pub fn landing_html(page: &Page) -> Result<String, Error> {
-    let credentials = page.capture_credentials || page.capture_passwords;
-    let passwords = page.capture_passwords;
     rewrite(
         &page.html,
         vec![
@@ -329,15 +329,10 @@ pub fn landing_html(page: &Page) -> Result<String, Error> {
                 el.set_attribute("action", "")?;
                 Ok(())
             }),
-            element!("form input", move |el| {
-                let password = el
-                    .get_attribute("type")
-                    .is_some_and(|t| t.eq_ignore_ascii_case("password"));
-                if !credentials || (password && !passwords) {
-                    el.remove_attribute("name");
-                } else if password {
-                    el.set_attribute("name", "password")?;
-                }
+            element!("input, textarea, select, button, object", |el| {
+                el.remove_attribute("name");
+                el.remove_attribute("dirname");
+                el.remove_attribute("formaction");
                 Ok(())
             }),
         ],

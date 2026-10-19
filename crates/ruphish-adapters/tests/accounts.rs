@@ -248,7 +248,7 @@ async fn deletion_rolls_back_owned_records_then_preserves_other_owners_and_share
 #[tokio::test]
 async fn unsupported_auth_history_and_partial_schemas_are_refused_without_reinitializing() {
     for sql in [
-        "UPDATE ruphish_schema SET version=999",
+        "UPDATE ruphish_schema SET version=999 WHERE version=(SELECT max(version) FROM ruphish_schema)",
         "DROP TABLE ruphish_auth_state",
         "ALTER TABLE ruphish_sessions ADD COLUMN unsupported TEXT",
     ] {

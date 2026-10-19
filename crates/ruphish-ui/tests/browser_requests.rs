@@ -189,3 +189,33 @@ fn import_draft_capacity_and_expired_session_fail_without_overwriting_retained_w
     owner.cleanup();
     assert_eq!(insert().unwrap_err(), ImportError::DraftUnavailable);
 }
+
+#[wasm_bindgen_test]
+async fn campaign_launch_retry_preserves_reviewed_body_key_and_browser_auth_boundary() {
+    let body = json!({"name":"Reviewed campaign","selection":{"template":{"id":9,"revision":"review-v1"}}});
+    for _ in 0..2 {
+        let request = ruphish_ui::browser_http::launch_request(
+            "https://admin.example.test/api/campaigns/",
+            "csrf-canary",
+            "same-launch-key",
+            &body,
+        )
+        .unwrap();
+        assert_eq!(
+            request.headers().get("idempotency-key").as_deref(),
+            Some("same-launch-key")
+        );
+        assert_eq!(
+            request.headers().get("x-ruphish-client").as_deref(),
+            Some("browser")
+        );
+        assert_eq!(
+            request.headers().get("x-csrf-token").as_deref(),
+            Some("csrf-canary")
+        );
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&request.text().await.unwrap()).unwrap(),
+            body
+        );
+    }
+}

@@ -4,6 +4,7 @@
 //! concrete adapters. No application routes have been implemented yet.
 
 pub mod auth;
+mod campaigns;
 mod rate;
 mod resources;
 pub mod response;

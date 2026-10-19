@@ -12,6 +12,12 @@ use std::{
 pub struct Policy {
     allowed: Vec<IpNet>,
 }
+/// Closed resolution outcomes: never retain resolver messages or requested hosts.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum ResolveFailure {
+    Unavailable,
+    Denied,
+}
 impl Policy {
     /// Reject invalid configured CIDRs rather than silently dropping policy entries.
     pub fn new(values: &[String]) -> Result<Self, Error> {
@@ -60,24 +66,36 @@ impl Policy {
     }
     /// Resolve once with a deadline and return only addresses authorized for connection.
     pub async fn resolve(&self, host: &str, port: u16) -> Result<Vec<SocketAddr>, Error> {
+        self.resolve_checked(host, port).await.map_err(|error| {
+            invalid(match error {
+                ResolveFailure::Unavailable => "DNS lookup failed or returned no addresses",
+                ResolveFailure::Denied => "Upstream connection denied to internal host",
+            })
+        })
+    }
+    pub(crate) async fn resolve_checked(
+        &self,
+        host: &str,
+        port: u16,
+    ) -> Result<Vec<SocketAddr>, ResolveFailure> {
         let addresses = tokio::time::timeout(
             Duration::from_secs(10),
             tokio::net::lookup_host((host, port)),
         )
         .await
-        .map_err(|_| invalid("DNS lookup timed out"))?
-        .map_err(|_| invalid("DNS lookup failed"))?;
+        .map_err(|_| ResolveFailure::Unavailable)?
+        .map_err(|_| ResolveFailure::Unavailable)?;
         let mut checked = Vec::new();
         for addr in addresses {
             if !self.permits(addr.ip()) {
-                return Err(invalid("Upstream connection denied to internal host"));
+                return Err(ResolveFailure::Denied);
             }
             if !checked.contains(&addr) {
                 checked.push(addr);
             }
         }
         if checked.is_empty() {
-            return Err(invalid("Host resolved to no addresses"));
+            return Err(ResolveFailure::Unavailable);
         }
         Ok(checked)
     }

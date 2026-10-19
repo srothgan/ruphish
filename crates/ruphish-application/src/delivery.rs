@@ -5,6 +5,25 @@ use crate::{
 };
 use std::sync::Arc;
 
+/// Connected and negotiated SMTP transaction that has not transmitted content.
+/// Dropping it cancels safely. Durable callers must commit their submission marker
+/// before calling `submit`; uncertain outcomes must never be retried automatically.
+#[async_trait::async_trait]
+pub trait Submission: Send {
+    /// Transmit content once and return only confirmed acceptance or typed failure.
+    async fn submit(self: Box<Self>) -> Result<(), ruphish_domain::campaign::DeliveryFailure>;
+}
+/// Protocol preparation and the externally visible submission boundary.
+#[async_trait::async_trait]
+pub trait Transport: Send + Sync {
+    /// Negotiate connection, authentication, envelope and DATA without sending content.
+    async fn prepare(
+        &self,
+        profile: &Profile,
+        mail: PreparedMail,
+    ) -> Result<Box<dyn Submission>, ruphish_domain::campaign::DeliveryFailure>;
+}
+
 /// A user-requested test, using saved names or a complete inline sending profile.
 pub struct TestRequest {
     /// Recipient and sample personalisation fields.
@@ -22,7 +41,9 @@ pub struct TestRequest {
 }
 /// Fully selected input for MIME composition and persistence.
 #[derive(Clone)]
-pub struct TestMessage {
+pub struct MessageInput {
+    /// Optional durable attempt Message-ID; test messages let Lettre generate one.
+    pub message_id: Option<String>,
     /// Recipient and sample personalisation fields.
     pub recipient: Recipient,
     /// Selected saved message content.
@@ -47,11 +68,26 @@ pub struct PreparedMail {
     /// Fully composed MIME bytes, ready for one submission.
     pub bytes: Vec<u8>,
 }
+/// Rendered review content; contains no transport credentials or participant input.
+pub struct ReviewMail {
+    /// Rendered subject.
+    pub subject: String,
+    /// Rendered HTML, to be displayed in a restricted preview frame.
+    pub html: String,
+    /// Rendered plain-text alternative.
+    pub text: String,
+    /// Actual SMTP envelope sender.
+    pub transport_sender: String,
+    /// Configured visible From header.
+    pub visible_sender: String,
+}
 /// Bounded SMTP transport; it never retries ambiguous submissions automatically.
 #[async_trait::async_trait]
 pub trait Sender: Send + Sync {
+    /// Decode the composed message for review without sending or persisting it.
+    fn review(&self, request: &MessageInput) -> Result<ReviewMail, Error>;
     /// Complete template expansion and MIME construction before network submission.
-    fn compose(&self, request: &TestMessage) -> Result<PreparedMail, Error>;
+    fn compose(&self, request: &MessageInput) -> Result<PreparedMail, Error>;
     /// Submit one composed message without automatically retrying ambiguity.
     async fn send(&self, profile: &Profile, mail: PreparedMail) -> Result<(), Error>;
     /// Verify connectivity and authentication without sending an email.
@@ -65,7 +101,7 @@ pub trait Previews: Send + Sync {
     /// Recognize a persisted test identifier without producing campaign events.
     async fn contains(&self, rid: &str) -> Result<bool, Error>;
     /// Persist preview state with current owner authorization.
-    async fn store(&self, caller: Identity, message: &TestMessage) -> Result<(), Error>;
+    async fn store(&self, caller: Identity, message: &MessageInput) -> Result<(), Error>;
     /// Resolve and render a stored preview without recording campaign events.
     async fn render(&self, rid: &str) -> Result<String, Error>;
 }
@@ -78,6 +114,66 @@ pub struct Service {
     previews: Arc<dyn Previews>,
 }
 impl Service {
+    fn campaign_message(
+        &self,
+        prepared: crate::campaign::Prepared,
+        recipient: Recipient,
+        url: String,
+    ) -> Result<MessageInput, Error> {
+        let Content::Template(template) = prepared.template.content else {
+            return Err(Error::Internal);
+        };
+        let Content::Profile(profile) = prepared.profile.content else {
+            return Err(Error::Internal);
+        };
+        Ok(MessageInput {
+            message_id: None,
+            recipient,
+            template,
+            template_id: prepared.template.id,
+            page_id: prepared.page.id,
+            profile,
+            url,
+            rid: self.previews.id()?,
+        })
+    }
+    /// Review a coherently resolved campaign without creating public preview state.
+    pub fn review_campaign(
+        &self,
+        prepared: crate::campaign::Prepared,
+        url: String,
+    ) -> Result<ReviewMail, Error> {
+        let recipient = prepared
+            .recipients
+            .first()
+            .cloned()
+            .ok_or_else(|| Error::Invalid("Campaign audience is empty".into()))?;
+        self.sender
+            .review(&self.campaign_message(prepared, recipient, url)?)
+    }
+    /// Explicitly send one test from owned, revision-checked campaign selections.
+    pub async fn test_campaign(
+        &self,
+        caller: Identity,
+        prepared: crate::campaign::Prepared,
+        recipient: Recipient,
+        url: String,
+    ) -> Result<(), Error> {
+        self.authorize(caller).await?;
+        let message = self.campaign_message(prepared, recipient, url)?;
+        self.submit_test(caller, message).await
+    }
+    async fn submit_test(&self, caller: Identity, message: MessageInput) -> Result<(), Error> {
+        let mail = self.sender.compose(&message)?;
+        if message.template_id != 0 {
+            self.previews.store(caller, &message).await?;
+        }
+        self.authorize(caller).await?;
+        self.sender
+            .send(&message.profile, mail)
+            .await
+            .map_err(|error| Error::Delivery(error.to_string()))
+    }
     /// Compose the concrete dependencies for this boundary.
     pub fn new(
         accounts: Accounts,
@@ -170,7 +266,8 @@ impl Service {
         if request.recipient.email.is_empty() {
             return Err(Error::Invalid("No email address specified".into()));
         }
-        let message = TestMessage {
+        let message = MessageInput {
+            message_id: None,
             recipient: request.recipient,
             template,
             template_id,
@@ -183,15 +280,7 @@ impl Service {
                 self.previews.id()?
             },
         };
-        let mail = self.sender.compose(&message)?;
-        if template_id != 0 {
-            self.previews.store(caller, &message).await?;
-        }
-        self.authorize(caller).await?;
-        self.sender
-            .send(&message.profile, mail)
-            .await
-            .map_err(|error| Error::Delivery(error.to_string()))
+        self.submit_test(caller, message).await
     }
     /// Public preview lookup is authorized by an unpredictable preview identifier.
     pub async fn preview(&self, rid: &str) -> Result<String, Error> {

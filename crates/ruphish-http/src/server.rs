@@ -112,9 +112,23 @@ pub fn preview_router(
 }
 
 async fn access_log(request: Request<Body>, next: middleware::Next) -> axum::response::Response {
-    // Query strings can contain legacy API keys and recipient identifiers.
-    let method = request.method().clone();
-    let path = request.uri().path().to_owned();
+    // Only router-owned patterns are safe. Attackers can put credentials in a
+    // path, query, header, body, or even an extension HTTP method.
+    let method = match request.method().as_str() {
+        "GET" => "GET",
+        "HEAD" => "HEAD",
+        "POST" => "POST",
+        "PUT" => "PUT",
+        "DELETE" => "DELETE",
+        "PATCH" => "PATCH",
+        "OPTIONS" => "OPTIONS",
+        _ => "OTHER",
+    };
+    let path = request
+        .extensions()
+        .get::<axum::extract::MatchedPath>()
+        .map(|path| path.as_str().to_owned())
+        .unwrap_or_else(|| "<unmatched>".into());
     let response = next.run(request).await;
     tracing::info!(%method, %path, status = response.status().as_u16(), "http_request");
     response

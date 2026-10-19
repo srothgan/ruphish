@@ -25,7 +25,11 @@ fn table(kind: Kind) -> &'static str {
         Kind::Profile => "smtp",
     }
 }
-async fn authorize(c: &mut SqliteConnection, caller: Identity, write: bool) -> Result<(), Error> {
+pub(super) async fn authorize(
+    c: &mut SqliteConnection,
+    caller: Identity,
+    write: bool,
+) -> Result<(), Error> {
     let user = super::accounts::account(c, caller.id)
         .await
         .map_err(|e| match e {

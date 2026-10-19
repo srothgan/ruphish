@@ -258,7 +258,7 @@ fn kind(context: &Context) -> Result<Kind, Rejection> {
         _ => Err(failure(StatusCode::NOT_FOUND, "Resource not found")),
     }
 }
-fn error(error: app::Error) -> Rejection {
+pub(crate) fn error(error: app::Error) -> Rejection {
     let status = match &error {
         app::Error::NotFound(_) => StatusCode::NOT_FOUND,
         app::Error::Conflict(_) | app::Error::InUse => StatusCode::CONFLICT,
@@ -294,7 +294,7 @@ fn expected(context: &Context) -> Result<Option<String>, Rejection> {
         })
         .transpose()
 }
-fn response(
+pub(crate) fn response(
     status: StatusCode,
     value: &Value,
     revision: Option<&str>,

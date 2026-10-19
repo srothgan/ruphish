@@ -2,6 +2,18 @@
 use gloo_net::http::Request;
 use serde_json::Value;
 
+/// Launch retries retain the reviewed body and owner-scoped idempotency key.
+pub fn launch_request(
+    path: &str,
+    token: &str,
+    key: &str,
+    value: &Value,
+) -> Result<Request, String> {
+    let request = resource_request("POST", path, token, Some(value), None)?;
+    request.headers().set("idempotency-key", key);
+    Ok(request)
+}
+
 /// A missing payload means no body, including for GET/HEAD where Fetch forbids one.
 pub fn resource_request(
     method: &str,

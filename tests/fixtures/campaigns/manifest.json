@@ -1,0 +1,10 @@
+{
+  "reference_commit": "95618469799295e2c0fec980805a2dfbb818816b",
+  "tool": "tools/campaign_capture/main.go",
+  "tool_sha256": "3cde44716e6adc4ede209391c2c37aa011329ba4da90c5dba85952a5043d874e",
+  "files": {
+    "http.json": "c36aea7417883387afa16dff5a9c6452fbcba853fcf0c51fc9844032ec2f7caa",
+    "queued.sqlite3": "7640e49d2d087cc688f3d362c80e3b58fd78603dedb1e0dc28c7aa031c0b25f7"
+  },
+  "normalization": "creation/modification/event times and nonzero completion -> <time>; string result IDs -> <rid>; schedule retained"
+}

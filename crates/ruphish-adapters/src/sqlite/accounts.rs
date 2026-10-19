@@ -229,6 +229,13 @@ impl Repository for Accounts {
                 // All owned records, including legacy queue state, are removed in this transaction.
                 // Shared target rows and system-level webhooks have no exclusive account ownership.
                 for statement in [
+                    "DELETE FROM ruphish_delivery_attempt WHERE result_id IN (SELECT id FROM results WHERE user_id=?)",
+                    "DELETE FROM ruphish_delivery WHERE campaign_id IN (SELECT id FROM campaigns WHERE user_id=?)",
+                    "DELETE FROM ruphish_campaign_policy WHERE campaign_id IN (SELECT id FROM campaigns WHERE user_id=?)",
+                    "DELETE FROM ruphish_campaign_groups WHERE campaign_id IN (SELECT id FROM campaigns WHERE user_id=?)",
+                    "DELETE FROM ruphish_campaign_launch WHERE owner_id=?",
+                    "DELETE FROM ruphish_profile_cooldown WHERE profile_id IN (SELECT id FROM smtp WHERE user_id=?)",
+                    "DELETE FROM ruphish_legacy_queue_issues WHERE mail_log_id IN (SELECT id FROM mail_logs WHERE user_id=?)",
                     "DELETE FROM events WHERE campaign_id IN (SELECT id FROM campaigns WHERE user_id=?)",
                     "DELETE FROM results WHERE user_id=?",
                     "DELETE FROM mail_logs WHERE user_id=?",

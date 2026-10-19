@@ -939,7 +939,7 @@ fn legacy_resource_validation_and_page_policy_survive_round_trip_and_restart() {
             .text()
             .unwrap()
             .to_lowercase()
-            .contains("upstream connection denied")
+            .contains("smtp configuration")
     );
     let html = "<html><head></head><body><form action='example.com'><input name='username'><input name='password' type='password'></form></body></html>";
     let mut page: Value = client.post(format!("{base}/api/pages/")).bearer_auth("synthetic-bootstrap-token").json(&json!({"name":"Reversible settings","html":html,"capture_passwords":true,"redirect_url":"http://example.com"})).send().unwrap().error_for_status().unwrap().json().unwrap();

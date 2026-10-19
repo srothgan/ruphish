@@ -8,6 +8,10 @@ compile_error!(
 #[cfg(target_arch = "wasm32")]
 mod account;
 #[cfg(target_arch = "wasm32")]
+mod campaign_delivery;
+#[cfg(target_arch = "wasm32")]
+mod campaigns;
+#[cfg(target_arch = "wasm32")]
 mod components;
 #[cfg(target_arch = "wasm32")]
 mod editor;

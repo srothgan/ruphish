@@ -9,6 +9,7 @@ use serde_json::Value;
 
 #[path = "account_menu.rs"]
 mod account_menu;
+pub(super) use account_menu::copy_text;
 #[path = "users.rs"]
 mod users;
 
@@ -20,6 +21,24 @@ pub(super) struct Api {
     monitor: RwSignal<SessionMonitor>,
 }
 impl Api {
+    pub(super) async fn launch(
+        self,
+        token: &str,
+        key: &str,
+        value: &Value,
+    ) -> Result<Value, (u16, String)> {
+        if !self.active() {
+            return Err((401, "Your session ended.".into()));
+        }
+        let request =
+            ruphish_ui::browser_http::launch_request("/api/campaigns/", token, key, value)
+                .map_err(|e| (0, e))?;
+        let response=request.send().await.map_err(|_|(0,"Launch outcome is not known. Retry uses the same launch key; do not create another campaign.".into()))?;
+        let status = response.status();
+        self.response("/api/campaigns/", response)
+            .await
+            .map_err(|e| (status, e))
+    }
     pub(super) async fn resource(
         self,
         method: &str,
@@ -181,7 +200,7 @@ pub(super) fn app() -> impl IntoView {
         }
         session.set(Some(loaded));
     });
-    crate::navigation::install_guard(move || api.active());
+    let navigation_guard = crate::navigation::install_guard(move || api.active());
     let checking = RwSignal::new(false);
     let owner = StoredValue::new(Owner::current());
     let revalidate = move || {
@@ -253,7 +272,7 @@ pub(super) fn app() -> impl IntoView {
             }
         }
     });
-    view! { <div class="account-app">{move || if action.get() != SessionAction::Continue {
+    view! { <div class="account-app">{navigation_guard}{move || if action.get() != SessionAction::Continue {
         view! { <main class="login-screen"><p role="status">"Refreshing your session..."</p><a rel="external" href="/login">"Sign in again"</a></main> }.into_any()
     } else { match session.get() {
         None => view! { <main class="login-screen"><p role="status">"Opening Ruphish..."</p></main> }.into_any(),
@@ -352,10 +371,10 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
     let username_banner = username.clone();
     let can_leave = crate::navigation::confirm_leave_action();
     let action = move |path: &'static str| {
-        if !can_leave() {
-            return;
-        }
         spawn_local(async move {
+            if !can_leave().await || !api.active() {
+                return;
+            }
             match api.form(path, &token.get_value(), &[]).await {
                 Ok(_) if path == "/logout" => api.monitor.update(|m| m.signed_out()),
                 Ok(value) => navigate(value["data"].as_str().unwrap_or("/login")),
@@ -405,6 +424,15 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
             }
         }
     };
+    let campaign_page = move |list: bool| {
+        if required {
+            password_form(api, token.get_value(), true).into_any()
+        } else if list {
+            crate::campaigns::list(api).into_any()
+        } else {
+            crate::campaigns::detail(api, token.get_value()).into_any()
+        }
+    };
     let content = view! {<Routes fallback=||view!{<p>"This page is not available."</p>}>
     <Route path=path!("/logout") view=move||view! { <section class="account-panel"><h1>"Sign out?"</h1><p>"Your saved work will remain available the next time you sign in."</p><button class="primary" on:click=move |_| action("/logout")>"Sign out"</button><a class="cancel-link text-danger" href="/">"Stay signed in"</a></section> }/>
     <Route path=path!("/settings") view=move||account_page(None,false)/>
@@ -412,7 +440,9 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
     <Route path=path!("/users") view=move||account_page(Some(users::Screen::List),false)/>
     <Route path=path!("/users/new") view=move||account_page(Some(users::Screen::New),false)/>
     <Route path=path!("/users/:id/edit") view=move||account_page(Some(users::Screen::Edit),false)/>
-    <Route path=path!("/") view=move||resource_page(Family::Groups,Screen::List)/>
+    <Route path=path!("/") view=move||campaign_page(true)/>
+    <Route path=path!("/campaigns") view=move||campaign_page(true)/>
+    <Route path=path!("/campaigns/:id") view=move||campaign_page(false)/>
     <Route path=path!("/groups") view=move||resource_page(Family::Groups,Screen::List)/>
     <Route path=path!("/groups/:id") view=move||resource_page(Family::Groups,Screen::View)/>
     <Route path=path!("/groups/:id/edit") view=move||resource_page(Family::Groups,Screen::Edit)/>

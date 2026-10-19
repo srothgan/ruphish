@@ -1,5 +1,6 @@
 //! Native application composition and process lifecycle.
 
+mod campaign_worker;
 mod cli;
 mod config;
 mod logging;
@@ -12,7 +13,11 @@ pub fn entry() -> std::process::ExitCode {
         Ok(Some(arguments)) => arguments,
         Ok(None) => return ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("{error}");
+            // Clap's Display echoes untrusted argument values, which may be secrets.
+            eprintln!(
+                "Invalid command line ({:?}); use --help for supported options",
+                error.kind()
+            );
             return ExitCode::FAILURE;
         }
     };
@@ -29,7 +34,26 @@ pub fn entry() -> std::process::ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("Ruphish startup/runtime error: {error}");
+            // Runtime errors can contain database trigger text or peer diagnostics.
+            // Only configuration errors have an audited, input-free display contract.
+            if let Some(config::ConfigError::Json { line, column }) =
+                error.downcast_ref::<config::ConfigError>()
+            {
+                eprintln!("Invalid configuration JSON at line {line}, column {column}");
+            } else if matches!(
+                error.downcast_ref::<config::ConfigError>(),
+                Some(config::ConfigError::Io(_))
+            ) {
+                eprintln!("Could not read configuration; check its path and permissions");
+            } else if let Some(config::ConfigError::Invalid(message)) =
+                error.downcast_ref::<config::ConfigError>()
+            {
+                eprintln!("Invalid configuration: {message}");
+            } else {
+                eprintln!(
+                    "Ruphish startup/runtime failed; check configuration, asset integrity, TLS files and database availability. Untrusted error details are suppressed."
+                );
+            }
             ExitCode::FAILURE
         }
     }

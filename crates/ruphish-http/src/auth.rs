@@ -34,6 +34,8 @@ pub(crate) struct AuthState {
     service: Service,
     resources: ruphish_application::resources::Service,
     delivery: ruphish_application::delivery::Service,
+    campaigns: Arc<dyn ruphish_application::campaign::Repository>,
+    mailer_enabled: bool,
     csrf: CsrfConfig,
     index: Arc<String>,
     secure: bool,
@@ -60,6 +62,8 @@ pub fn router<S: SessionStore + Clone>(
         service: services.accounts,
         resources: services.resources,
         delivery: services.delivery,
+        campaigns: services.campaigns,
+        mailer_enabled: services.mailer_enabled,
         index: Arc::new(assets.index),
         secure,
         trusted_origins: Arc::new(trusted_origins),
@@ -99,6 +103,8 @@ pub fn router<S: SessionStore + Clone>(
         .route("/users", get(page))
         .route("/users/new", get(page))
         .route("/users/{id}/edit", get(page))
+        .route("/campaigns", get(page))
+        .route("/campaigns/{id}", get(page))
         .route("/groups", get(page))
         .route("/groups/{id}", get(page))
         .route("/groups/{id}/edit", get(page))
@@ -120,6 +126,7 @@ pub fn router<S: SessionStore + Clone>(
         .route("/api/reset", post(reset_key))
         .layer(DefaultBodyLimit::max(16 * 1024))
         .merge(super::resources::routes())
+        .merge(super::campaigns::routes())
         .layer(middleware::from_fn(security_headers))
         .with_state(state)
         .layer(session);
@@ -196,6 +203,19 @@ impl FromRequestParts<AuthState> for Context {
     }
 }
 impl Context {
+    pub(crate) fn campaigns(&self) -> &dyn ruphish_application::campaign::Repository {
+        self.state.campaigns.as_ref()
+    }
+    pub(crate) fn mailer_enabled(&self) -> bool {
+        self.state.mailer_enabled
+    }
+    pub(crate) fn explicit_api_key(&self) -> bool {
+        self.headers.contains_key(header::AUTHORIZATION)
+            || self.uri.query().is_some_and(|q| {
+                serde_urlencoded::from_str::<HashMap<String, String>>(q)
+                    .is_ok_and(|q| q.contains_key("api_key"))
+            })
+    }
     pub(crate) fn delivery(&self) -> &ruphish_application::delivery::Service {
         &self.state.delivery
     }
@@ -433,6 +453,10 @@ pub struct Services {
     pub resources: ruphish_application::resources::Service,
     /// Synchronous test-email and preview use cases.
     pub delivery: ruphish_application::delivery::Service,
+    /// Owner-scoped campaign operations and durable delivery metadata.
+    pub campaigns: Arc<dyn ruphish_application::campaign::Repository>,
+    /// Whether this process runs campaign delivery workers.
+    pub mailer_enabled: bool,
 }
 
 async fn page(context: Context) -> Response {

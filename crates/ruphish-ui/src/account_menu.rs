@@ -8,7 +8,7 @@ extern "C" {
     #[wasm_bindgen(js_name = bindAccountMenu)]
     fn bind_menu(trigger: &web_sys::HtmlElement, panel: &web_sys::HtmlElement) -> js_sys::Function;
     #[wasm_bindgen(catch, js_name = copyAccountText)]
-    pub(super) async fn copy_text(text: &str) -> Result<(), JsValue>;
+    pub(crate) async fn copy_text(text: &str) -> Result<(), JsValue>;
 }
 
 pub(super) fn menu(api: Api, token: String, username: String, role: String) -> impl IntoView {
@@ -33,12 +33,16 @@ pub(super) fn menu(api: Api, token: String, username: String, role: String) -> i
     let busy = RwSignal::new(false);
     let can_leave = crate::navigation::confirm_leave_action();
     let logout = move |_| {
-        if busy.get_untracked() || !can_leave() {
+        if busy.get_untracked() {
             return;
         }
         busy.set(true);
         message.clear();
         spawn_local(async move {
+            if !can_leave().await || !api.active() {
+                busy.set(false);
+                return;
+            }
             match api.form("/logout", &token.get_value(), &[]).await {
                 Ok(_) => api.monitor.update(|m| m.signed_out()),
                 Err(error) => {

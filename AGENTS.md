@@ -16,6 +16,7 @@ Native libraries are scaffolds until functionality is implemented with its tests
 - Prefer typed errors at library boundaries and contextual startup errors. Production code forbids unsafe code and accidental unwrap/expect/panic/exit/todo/unimplemented/dbg usage; tests have narrow Clippy exemptions for assertions and setup.
 - Add tests for actual domain/functionality guarantees, persisted state, protocols, and real failure boundaries. Do not add mirror tests for trivial code or claim scaffold checks establish feature parity.
 - The user performs manual visual/UI interaction tests. Compile and build WASM; do not add browser/screenshot automation by default.
+- Review frontend alignment deliberately: labeled fields and adjacent buttons align on the actual control row with matching heights; headings, actions and wrapped rows need their own appropriate alignment. Fix the shared layout owner instead of adding pixel nudges. Do not default every flex/grid container to center alignment; keep centering where it serves the content, such as within icon buttons.
 - Never manually hard-wrap Markdown paragraphs or list items. Use one source line per paragraph or list item.
 
 ## Toolchain and verification
@@ -42,6 +43,7 @@ node --check crates/ruphish-ui/web/state.mjs
 node --check crates/ruphish-ui/web/editor.mjs
 node --check crates/ruphish-ui/web/navigation.mjs
 node --check crates/ruphish-ui/web/account-menu.mjs
+node --check crates/ruphish-ui/web/anchored-panel.mjs
 node --check crates/ruphish-ui/web/template-html.mjs
 node --check crates/ruphish-ui/web/visual-session.mjs
 node --check crates/ruphish-ui/web/visual-frame.mjs
@@ -81,6 +83,8 @@ Shared lints must be inherited by every member. Native and browser dependency gr
 The UI build workspace and the server asset root must remain separate. Trunk owns `dist/` and stages under `dist/.stage/`; the post-build hook arranges completed assets under `admin/`, producing the server distribution at `dist/admin/`. Never configure Trunk to stage inside the served directory or teach the server to ignore build artifacts. The server continues to reject hidden/unexpected paths and mismatched manifests.
 
 ## Data and side effects
+
+Participant interaction tracking must never collect or retain entered login information or arbitrary submitted field values. Allow only explicit event metadata and optional presence booleans; prohibit password hashes, lengths, samples, and other value derivatives. No setting or legacy API flag may enable value capture. Use a controlled browser submission path, restricted authored content, and a closed server event schema; do not rely on HTML field-name removal. Apply the same boundary to logs, errors, database records, exports, webhooks, and legacy-data reads. Administrator authentication and configured service credentials are separate. Prove the guarantee with functional and adversarial tests before claiming it is implemented.
 
 SQLite is the initial complete target; MySQL follows later. Database upgrades must preserve a recoverable original and be tested against independent legacy data. Fixtures contain synthetic credentials and must be copied before mutation. Product tests must not contact real recipients or external integration endpoints.
 

@@ -72,9 +72,9 @@ pub struct Template {
 pub struct Page {
     /// Authoritative authored HTML source.
     pub html: String,
-    /// Whether submitted non-password fields may be recorded.
+    /// Legacy flag: record submission events, never entered values.
     pub capture_credentials: bool,
-    /// Whether passwords may be recorded; implies credential capture.
+    /// Legacy flag: record password presence only; implies submission tracking.
     pub capture_passwords: bool,
     /// Templated destination after submission.
     pub redirect_url: String,

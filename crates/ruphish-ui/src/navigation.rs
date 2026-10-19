@@ -5,28 +5,31 @@ use wasm_bindgen::{JsCast, closure::Closure, prelude::*};
 #[wasm_bindgen(module = "/web/navigation.mjs")]
 extern "C" {
     #[wasm_bindgen(js_name = installNavigationGuard)]
-    fn install_navigation_guard(dirty: &js_sys::Function) -> js_sys::Function;
+    fn install_navigation_guard(
+        dirty: &js_sys::Function,
+        dialog: &web_sys::HtmlDialogElement,
+    ) -> js_sys::Function;
     #[wasm_bindgen(catch, js_name = confirmDiscard)]
-    fn confirm_discard(dirty: bool) -> Result<bool, JsValue>;
+    async fn confirm_discard(dirty: bool) -> Result<bool, JsValue>;
 }
 
 #[derive(Clone, Copy)]
 struct DraftGuard(RwSignal<Option<Memo<bool>>>);
 
 /// Capture the shared guard while mounted, for actions such as direct sign-out.
-pub(super) fn confirm_leave_action() -> impl Fn() -> bool + Copy {
+pub(super) fn confirm_leave_action() -> impl AsyncFn() -> bool + Copy {
     let guard = use_context::<DraftGuard>();
-    move || {
+    async move || {
         let dirty = guard
             .and_then(|g| g.0.get_untracked())
             .is_some_and(|d| d.get_untracked());
-        confirm_discard(dirty).unwrap_or(false)
+        confirm_discard(dirty).await.unwrap_or(false)
     }
 }
 
 /// One browser adapter guards links, history traversal and document unloads.
 /// A terminal session invalidation bypasses it so stale authenticated content clears.
-pub(super) fn install_guard(active: impl Fn() -> bool + 'static) {
+pub(super) fn install_guard(active: impl Fn() -> bool + 'static) -> impl IntoView {
     let guard = DraftGuard(RwSignal::new(None));
     provide_context(guard);
     let dirty = Closure::<dyn Fn() -> bool>::new(move || {
@@ -36,13 +39,33 @@ pub(super) fn install_guard(active: impl Fn() -> bool + 'static) {
                 .get_untracked()
                 .is_some_and(|dirty| dirty.get_untracked())
     });
-    let remove = install_navigation_guard(dirty.as_ref().unchecked_ref());
-    let callbacks = StoredValue::new_local((dirty, remove));
+    let dialog = NodeRef::<leptos::html::Dialog>::new();
+    let callbacks = StoredValue::new_local((dirty, None::<js_sys::Function>));
+    Effect::new(move |_| {
+        if let Some(dialog) = dialog.get() {
+            callbacks.update_value(|(dirty, remove)| {
+                *remove = Some(install_navigation_guard(
+                    dirty.as_ref().unchecked_ref(),
+                    &dialog,
+                ));
+            });
+        }
+    });
     on_cleanup(move || {
         callbacks.with_value(|(_, remove)| {
-            let _ = remove.call0(&JsValue::NULL);
+            if let Some(remove) = remove {
+                let _ = remove.call0(&JsValue::NULL);
+            }
         })
     });
+    view! { <dialog node_ref=dialog class="management-dialog discard-confirmation" aria-labelledby="discard-heading" aria-describedby="discard-description">
+        <h2 id="discard-heading">"Discard unsaved changes?"</h2>
+        <p id="discard-description">"Your changes have not been saved. Leaving this page will discard them."</p>
+        <div class="confirmation-actions">
+            <button type="button" data-discard="cancel" autofocus>"Keep editing"</button>
+            <button type="button" class="danger" data-discard="confirm">"Discard and continue"</button>
+        </div>
+    </dialog> }
 }
 
 pub(super) fn protect_draft(dirty: impl Fn() -> bool + Send + Sync + 'static) {
@@ -74,14 +97,14 @@ fn link(
             || path
                 .strip_prefix(href)
                 .is_some_and(|tail| tail.starts_with('/'))
-            || (path == "/" && href == "/groups")
+            || (path == "/" && href == "/campaigns")
     };
     view! { <a href=href aria-current=move || active().then_some("page")>{icon(drawing)}<span>{label}</span></a> }
 }
 pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<> {
     view! {
         <section class="nav-section" aria-labelledby="nav-campaigns"><h2 id="nav-campaigns">"Campaigns"</h2>
-        <span class="nav-placeholder" aria-disabled="true">{icon("M4 21V3 M4 4c5-4 10 4 16 0v10c-6 4-11-4-16 0")}<span>"Campaigns"<small>"Coming later"</small></span></span>
+        {link(path,"/campaigns","Campaigns","M4 21V3 M4 4c5-4 10 4 16 0v10c-6 4-11-4-16 0")}
         <span class="nav-placeholder" aria-disabled="true">{icon("M3 3v18h18 M7 17v-5 M12 17V7 M17 17v-9")}<span>"Analysis"<small>"Coming later"</small></span></span>
         </section>
         <section class="nav-section" aria-labelledby="nav-resources"><h2 id="nav-resources">"Resources"</h2>

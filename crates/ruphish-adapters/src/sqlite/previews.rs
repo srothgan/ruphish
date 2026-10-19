@@ -6,7 +6,7 @@ use crate::{
 };
 use ruphish_application::{
     auth::Identity,
-    delivery::{Previews, TestMessage},
+    delivery::{MessageInput, Previews},
     resources::*,
 };
 use sqlx::{Row, SqlitePool};
@@ -38,7 +38,7 @@ impl Previews for PreviewStore {
         getrandom::fill(&mut bytes).map_err(|_| Error::Internal)?;
         Ok(format!("preview-{}", hex::encode(bytes)))
     }
-    async fn store(&self, caller: Identity, m: &TestMessage) -> Result<(), Error> {
+    async fn store(&self, caller: Identity, m: &MessageInput) -> Result<(), Error> {
         let mut tx = self
             .pool
             .begin_with("BEGIN IMMEDIATE")
@@ -83,10 +83,11 @@ impl Previews for PreviewStore {
         let owner = row.try_get("user_id").map_err(|_| Error::Internal)?;
         let id = row.try_get("page_id").map_err(|_| Error::Internal)?;
         let resource = super::resources::load(&mut tx, owner, Kind::Page, id).await?;
-        let Content::Page(page) = resource.content else {
+        let Content::Page(mut page) = resource.content else {
             return Err(Error::Internal);
         };
-        let message = TestMessage {
+        let message = MessageInput {
+            message_id: None,
             recipient: Recipient {
                 email: text("email")?,
                 first_name: text("first_name")?,
@@ -103,8 +104,9 @@ impl Previews for PreviewStore {
             url: text("url")?,
             rid: rid.to_owned(),
         };
-        let result = render(&landing_html(&page)?, &context(&message)?)
+        page.html = render(&page.html, &context(&message)?)
             .map_err(|_| invalid("Preview could not be rendered"))?;
+        let result = landing_html(&page)?;
         tx.commit().await.map_err(|_| Error::Internal)?;
         Ok(result)
     }

@@ -270,7 +270,6 @@ fn edit(
         replace_url,
     };
     let test_open = RwSignal::new(false);
-    let preview = RwSignal::new(None::<String>);
     spawn_local(async move {
         if is_imported {
             loading.set(false);
@@ -332,13 +331,12 @@ fn edit(
     };
     let content = match family {
         Family::Groups => group_fields(editor).into_any(),
-        Family::Templates | Family::Pages => content_fields(editor, family).into_any(),
+        Family::Templates | Family::Pages => content_fields(api, token, editor, family).into_any(),
         Family::Profiles => profile_fields(editor).into_any(),
     };
     view! {<ManagementPage><a class="breadcrumb" href=format!("/{}",family.route())>{format!("Back to {}",family.title().to_lowercase())}</a>
     <PageHeader title=Signal::derive(move||{let name=editor.text("name");if name.is_empty(){format!("New {}",family.singular())}else{name}})
         status=true subtitle=Signal::derive(move||if editor.busy.get(){"Saving or checking..."}else if loading.get(){"Loading resource..."}else if load_failed.get(){"Resource could not be loaded"}else if editor.readonly{"Read-only access"}else if editor.visual_pending.get(){"Apply or cancel visual edits before saving"}else if editor.draft.with(ResourceDraft::dirty){"Unsaved changes"}else if editor.draft.with(|d|d.value()["id"].as_i64().unwrap_or(0)==0){"Not saved yet"}else{"No unsaved changes"}.to_owned())>
-    {(family==Family::Templates||family==Family::Pages).then(||view!{<button disabled=move||loading.get()||load_failed.get()||editor.readonly||editor.busy.get()||editor.visual_pending.get() on:click=move |_|{spawn_local(async move{let value=json!({"html":editor.text("html"),"recipient":{"email":"alice@example.test","first_name":"Alice","last_name":"Example","position":"Analyst"}});match api.resource("POST","/api/util/preview",&token.get_value(),Some(&value),None).await{Ok((v,_))=>preview.set(v["html"].as_str().map(str::to_owned)),Err(e)=>editor.message.error(e)}})}>"Preview"</button>})}
     {(family==Family::Templates||family==Family::Profiles).then(||view!{<button disabled=move||loading.get()||load_failed.get()||editor.readonly||editor.busy.get()||editor.visual_pending.get() on:click=move |_|test_open.set(true)>"Send test"</button>})}
     <SaveButton disabled=Signal::derive(move||loading.get()||load_failed.get()||editor.readonly||editor.busy.get()||editor.visual_pending.get()||editor.import_review.is_some_and(|r|!r.with(ImportReview::ready))) on_click=Callback::new(save) label=Signal::derive(move||if editor.draft.with(|d|d.value()["id"].as_i64().unwrap_or(0)==0){format!("Create {}",family.singular())}else{"Save changes".into()})/>
     </PageHeader>
@@ -347,7 +345,6 @@ fn edit(
     {editor.message.view()}<Show when=move||loading.get()><p>"Loading resource..."</p></Show>
     <FormFields disabled=Signal::derive(move||load_failed.get()||editor.readonly||loading.get()||editor.busy.get())>{editor.field("name","Name","text")}{content}</FormFields>
     <FormFooter><button class="text-danger" disabled=move||loading.get()||load_failed.get()||editor.busy.get() on:click=move |_|{editor.draft.update(ResourceDraft::cancel);editor.epoch.update(|v|*v+=1);let id=editor.draft.with_untracked(|d|d.value()["id"].as_i64().unwrap_or(0)); editor.replace_url.run(if id>0{format!("/{}/{id}",family.route())}else{format!("/{}",family.route())});}>"Cancel changes"</button></FormFooter>
-    {move||preview.get().map(|html|view!{<section class="resource-preview"><div class="management-heading"><h2>"Preview with sample recipient"</h2><button on:click=move |_|preview.set(None)>"Close preview"</button></div><p>"Scripts, external resources and submissions are disabled in this preview."</p><iframe title="Isolated content preview" sandbox="" referrerpolicy="no-referrer" srcdoc=preview_document(&html)></iframe></section>})}
     {move||test_open.get().then(||test_panel(api,token.get_value(),family,editor,test_open))}
     </ManagementPage>}
 }
@@ -414,7 +411,97 @@ fn group_fields(editor: Editor) -> impl IntoView {
     <For each=move||0..editor.draft.with(|d|d.value()["targets"].as_array().map_or(0,Vec::len)) key=|i|*i children=move|index|view!{<tr>{["email","first_name","last_name","position"].into_iter().map(move|key|view!{<td><input aria-label=format!("Recipient {} {key}",index+1) prop:value=move||editor.draft.with(|d|d.value()["targets"][index][key].as_str().unwrap_or("").to_owned()) on:input=move|e|editor.draft.update(|d|d.edit(|v|v["targets"][index][key]=json!(event_target_value(&e))))/></td>}).collect_view()}<td><button type="button" on:click=move |_|editor.draft.update(|d|d.edit(|v|{if let Some(rows)=v["targets"].as_array_mut() && index<rows.len(){rows.remove(index);}}))>"Remove"</button></td></tr>}/>
     </DataTable></section>}
 }
-fn content_fields(editor: Editor, family: Family) -> impl IntoView {
+fn content_workspace(
+    api: Api,
+    token: StoredValue<String>,
+    editor: Editor,
+    family: Family,
+) -> impl IntoView {
+    use ruphish_ui::preview_state::ContentPreview;
+    let showing_preview = RwSignal::new(false);
+    let preview = RwSignal::new(ContentPreview::default());
+    let html_source = Memo::new(move |_| editor.text("html"));
+    let retry = RwSignal::new(0u64);
+    let edit_tab = NodeRef::<html::Button>::new();
+    let preview_tab = NodeRef::<html::Button>::new();
+    Effect::new(move |_| {
+        let visible = showing_preview.get();
+        let source = html_source.get();
+        retry.get();
+        if !visible {
+            preview.update(ContentPreview::clear);
+            return;
+        }
+        let Some(generation) = preview.try_update(|p| p.begin(source.clone())) else {
+            return;
+        };
+        spawn_local(async move {
+            let body = json!({"html":source,"recipient":{"email":"alice@example.test","first_name":"Alice","last_name":"Example","position":"Analyst"}});
+            let result = api
+                .resource(
+                    "POST",
+                    "/api/util/preview",
+                    &token.get_value(),
+                    Some(&body),
+                    None,
+                )
+                .await
+                .and_then(|(value, _)| {
+                    value["html"]
+                        .as_str()
+                        .map(str::to_owned)
+                        .ok_or_else(|| "The preview response did not contain HTML.".into())
+                });
+            if showing_preview.get_untracked() && html_source.get_untracked() == source {
+                preview.update(|p| p.finish(generation, &source, result));
+            }
+        });
+    });
+    let keyboard = move |event: web_sys::KeyboardEvent| {
+        let next = match event.key().as_str() {
+            "ArrowLeft" | "ArrowRight" => !showing_preview.get_untracked(),
+            "Home" => false,
+            "End" => true,
+            _ => return,
+        };
+        event.prevent_default();
+        if next && editor.visual_pending.get_untracked() {
+            return;
+        }
+        showing_preview.set(next);
+        let node = if next {
+            preview_tab.get()
+        } else {
+            edit_tab.get()
+        };
+        if let Some(node) = node {
+            let _ = node.focus();
+        }
+    };
+    view! {<section class="content-workspace">
+        <div class="content-heading"><h2>{if family==Family::Templates {"Email HTML"} else {"Landing-page HTML"}}</h2>
+        <div class="content-tabs" role="tablist" aria-label="HTML editing and preview" on:keydown=keyboard>
+            <button node_ref=edit_tab id="content-edit-tab" type="button" role="tab" aria-controls="content-edit-panel" aria-selected=move||(!showing_preview.get()).to_string() tabindex=move||if showing_preview.get(){-1}else{0} on:click=move |_|showing_preview.set(false)>"Edit"</button>
+            <button node_ref=preview_tab id="content-preview-tab" type="button" role="tab" aria-controls="content-preview-panel" aria-selected=move||showing_preview.get().to_string() tabindex=move||if showing_preview.get(){0}else{-1} disabled=move||editor.visual_pending.get() on:click=move |_|showing_preview.set(true)>"Preview"</button>
+        </div></div>
+        <p class="content-tab-help" hidden=move||!editor.visual_pending.get()>"Apply or cancel visual edits before previewing."</p>
+        <div id="content-edit-panel" role="tabpanel" aria-labelledby="content-edit-tab" hidden=move||showing_preview.get()>
+            {crate::editor::content_editor(Signal::derive(move||editor.text("html")),Callback::new(move|value|editor.set("html",json!(value))),editor.epoch,editor.message,editor.visual_pending,editor.readonly)}
+        </div>
+        <div id="content-preview-panel" class="content-preview-panel" role="tabpanel" aria-labelledby="content-preview-tab" hidden=move||!showing_preview.get() aria-busy=move||preview.with(|p|p.loading).to_string()>
+            <p class="content-tab-help">"Current draft with sample recipient Alice Example. Scripts, external resources and submissions are blocked."{(family==Family::Templates).then_some(" Email clients may render it differently.")}</p>
+            <Show when=move||preview.with(|p|p.loading)><p role="status">"Rendering preview..."</p></Show>
+            {move||preview.get().error.map(|error|view!{<p class="form-message error" role="alert">{error}</p><button type="button" on:click=move |_|retry.update(|v|*v+=1)>"Retry preview"</button>})}
+            {move||preview.get().html.map(|html|view!{<iframe title="Current HTML draft preview" sandbox="" referrerpolicy="no-referrer" srcdoc=preview_document(&html)></iframe>})}
+        </div>
+    </section>}
+}
+fn content_fields(
+    api: Api,
+    token: StoredValue<String>,
+    editor: Editor,
+    family: Family,
+) -> impl IntoView {
     let files = NodeRef::<html::Input>::new();
     let add = move |event| {
         let input = event_target::<web_sys::HtmlInputElement>(&event);
@@ -453,9 +540,9 @@ fn content_fields(editor: Editor, family: Family) -> impl IntoView {
     };
     view! {<section class="resource-section">
     {(family==Family::Templates).then(||view!{<div class="resource-columns">{editor.field("subject","Subject","text")}{editor.field("envelope_sender","Visible From (blank uses sending profile)","text")}</div>})}
-    <h2>"Content"</h2>{crate::editor::content_editor(Signal::derive(move||editor.text("html")),Callback::new(move|value|editor.set("html",json!(value))),editor.epoch,editor.message,editor.visual_pending,editor.readonly)}
+    {content_workspace(api,token,editor,family)}
     {(family==Family::Templates).then(||view!{<label class="text-alternative">"Plain-text alternative"<textarea rows="6" prop:value=move||editor.text("text") on:input=move|e|editor.set("text",json!(event_target_value(&e)))></textarea></label><div class="resource-section"><h2>"Attachments"</h2><input node_ref=files hidden type="file" multiple on:change=add/><button type="button" on:click=move |_|{if let Some(node)=files.get(){node.click();}}>"Add attachments"</button><ul>{move||editor.draft.with(|d|d.value()["attachments"].as_array().cloned().unwrap_or_default()).into_iter().enumerate().map(|(i,a)|view!{<li>{a["name"].as_str().unwrap_or("").to_owned()}<button type="button" on:click=move |_|editor.draft.update(|d|{d.remove_attachment(i);})>"Remove"</button></li>}).collect_view()}</ul></div>})}
-    {(family==Family::Pages).then(||view!{<section class="resource-section"><h2>"Optional campaign defaults"</h2><p>"Suggested submission settings for campaigns using this page. Leave capture off and the redirect blank if no defaults are needed."</p>{editor.flag("capture_credentials","Capture submitted fields")}{editor.flag("capture_passwords","Include password fields")}{editor.field("redirect_url","Redirect URL after submission (optional)","text")}<p>"Enabling password capture also enables field capture. These settings do not remove names from your authored document."</p></section>})}
+    {(family==Family::Pages).then(||view!{<section class="resource-section"><h2>"Optional campaign defaults"</h2><p>"Suggested submission settings for campaigns using this page. Leave tracking off and the redirect blank if no defaults are needed."</p>{editor.flag("capture_credentials","Record form submission")}{editor.flag("capture_passwords","Record password presence")}{editor.field("redirect_url","Redirect URL after submission (optional)","text")}<p>"Track only whether fields were filled and submitted. Entered usernames, passwords and other field values are never collected."</p></section>})}
     </section>}
 }
 fn profile_fields(editor: Editor) -> impl IntoView {

@@ -16,6 +16,8 @@ use std::{
 
 #[path = "auth_process.rs"]
 mod auth_process;
+#[path = "campaign_process.rs"]
+mod campaign_process;
 #[path = "resource_process.rs"]
 mod resource_process;
 
@@ -148,6 +150,9 @@ impl Process {
         let deadline = Instant::now() + Duration::from_secs(15);
         loop {
             if let Some(status) = self.child.try_wait().unwrap() {
+                // Child exit can precede ConPTY's final output. Close the terminal
+                // and join its reader before inspecting diagnostics or returning.
+                self.drain_output();
                 assert_eq!(
                     status.success(),
                     success,
@@ -174,6 +179,14 @@ impl Process {
     fn stop(&mut self) {
         self.interrupt();
         self.wait(true);
+    }
+
+    fn drain_output(&mut self) {
+        self.writer.take();
+        self.master.take();
+        if let Some(reader) = self.reader.take() {
+            reader.join().unwrap();
+        }
     }
 
     fn interrupt(&mut self) {
@@ -726,20 +739,10 @@ fn failed_bootstrap_rolls_back_then_forced_process_death_allows_clean_restart() 
     let mut generated = Process::with_credentials(directory.path(), "phish", None, None);
     generated.ready();
     let output = generated.output();
-    let password = output
-        .split("Temporary password: ")
-        .nth(1)
-        .unwrap()
-        .lines()
-        .next()
-        .unwrap()
-        .trim_end_matches('\r')
-        .to_owned();
+    assert!(!output.contains("Temporary password:"));
+    assert!(output.contains("GOPHISH_INITIAL_ADMIN_PASSWORD"));
     let row = database(directory.path(), "SELECT hash,api_key FROM users");
-    assert!(ruphish_adapters::password_worker::verify(
-        &password,
-        &row[0].get::<String, _>("hash")
-    ));
+    assert!(row[0].get::<String, _>("hash").starts_with("$argon2id$"));
     assert_eq!(row[0].get::<String, _>("api_key").len(), 64);
     database(
         directory.path(),
@@ -760,7 +763,7 @@ fn failed_bootstrap_rolls_back_then_forced_process_death_allows_clean_restart() 
     assert!(
         !std::fs::read_to_string(directory.path().join("server.log"))
             .unwrap()
-            .contains(&password)
+            .contains("Temporary password:")
     );
 }
 

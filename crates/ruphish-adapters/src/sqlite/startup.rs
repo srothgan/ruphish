@@ -212,7 +212,10 @@ async fn prepare(
     // appear between the recoverable backup and the migration transaction.
     let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
     let count = inspect(&mut transaction, false).await?;
-    if count == MIGRATIONS.len() && super::auth_schema::validate_version(&mut transaction).await? {
+    if count == MIGRATIONS.len()
+        && super::auth_schema::validate_version(&mut transaction).await?
+        && super::auth_schema::version(&mut transaction).await? == 3
+    {
         transaction.rollback().await?;
         return Ok(None);
     }

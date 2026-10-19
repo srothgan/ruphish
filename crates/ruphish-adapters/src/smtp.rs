@@ -1,27 +1,23 @@
-//! MIME composition and one-shot SMTP submission with checked destination sockets.
+//! Shared MIME composition and checked SMTP submission.
+mod transport;
 use crate::{
     outbound::Policy,
-    resources::{attachment, invalid, mailbox, render, smtp_address},
+    resources::{attachment, invalid, mailbox, render},
     template::Context,
 };
 use lettre::{
     Message,
-    address::Envelope,
     message::{
         Attachment as MailAttachment, MultiPart, SinglePart,
         header::{ContentType, HeaderName, HeaderValue},
     },
-    transport::smtp::{
-        authentication::{Credentials, Mechanism},
-        client::{AsyncSmtpConnection, TlsParameters},
-        extension::ClientId,
-    },
 };
 use ruphish_application::{
-    delivery::{PreparedMail, Sender, TestMessage},
+    delivery::{MessageInput, PreparedMail, Sender},
     resources::*,
 };
 use std::time::Duration;
+use transport::public_failure;
 
 /// Bounded delivery worker; credentials and server diagnostics never enter public errors.
 pub struct Smtp {
@@ -29,7 +25,7 @@ pub struct Smtp {
     pub policy: Policy,
     /// Configured transparency contact header.
     pub contact: String,
-    slots: tokio::sync::Semaphore,
+    slots: std::sync::Arc<tokio::sync::Semaphore>,
 }
 impl Smtp {
     /// Compose the concrete dependencies for this boundary.
@@ -37,51 +33,12 @@ impl Smtp {
         Self {
             policy,
             contact,
-            slots: tokio::sync::Semaphore::new(4),
+            slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
         }
-    }
-    async fn connection(&self, profile: &Profile) -> Result<AsyncSmtpConnection, Error> {
-        let (host, port) = smtp_address(&profile.host)?;
-        let addresses = self.policy.resolve(&host, port).await?;
-        let tls = TlsParameters::builder(host)
-            .dangerous_accept_invalid_certs(profile.ignore_cert_errors)
-            .build()
-            .map_err(|_| invalid("Cannot configure SMTP TLS"))?;
-        let hello = ClientId::Domain("ruphish.local".into());
-        let mut connection = AsyncSmtpConnection::connect_tokio1(
-            addresses.as_slice(),
-            Some(Duration::from_secs(10)),
-            &hello,
-            if port == 465 { Some(tls.clone()) } else { None },
-            None,
-        )
-        .await
-        .map_err(|_| invalid("SMTP connection failed; check host, port and TLS certificate"))?;
-        if connection.can_starttls() {
-            connection
-                .starttls(tls, &hello)
-                .await
-                .map_err(|_| invalid("SMTP TLS negotiation failed"))?;
-        }
-        if !profile.username.is_empty() {
-            if !connection.is_encrypted() && !addresses.iter().all(|a| a.ip().is_loopback()) {
-                return Err(invalid(
-                    "SMTP authentication requires TLS except on loopback",
-                ));
-            }
-            connection
-                .auth(
-                    &[Mechanism::Plain, Mechanism::Login],
-                    &Credentials::new(profile.username.clone(), profile.password.clone()),
-                )
-                .await
-                .map_err(|_| invalid("SMTP authentication failed"))?;
-        }
-        Ok(connection)
     }
 }
 /// Derive recipient variables and preview links with the same sender distinction as Go.
-pub fn context(message: &TestMessage) -> Result<Context, Error> {
+pub fn context(message: &MessageInput) -> Result<Context, Error> {
     let visible = if message.template.envelope_sender.is_empty() {
         &message.profile.from_address
     } else {
@@ -103,7 +60,10 @@ pub fn context(message: &TestMessage) -> Result<Context, Error> {
         ctx.tracking_url = format!("/track?rid={}", message.rid);
     } else {
         let mut url = url::Url::parse(&address).map_err(|_| invalid("Invalid test URL"))?;
-        if !matches!(url.scheme(), "http" | "https") {
+        if !matches!(url.scheme(), "http" | "https")
+            || !url.username().is_empty()
+            || url.password().is_some()
+        {
             return Err(invalid("Test URL must use HTTP or HTTPS"));
         }
         let mut pairs: Vec<(String, String)> = url
@@ -146,7 +106,23 @@ pub fn context(message: &TestMessage) -> Result<Context, Error> {
 }
 #[async_trait::async_trait]
 impl Sender for Smtp {
-    fn compose(&self, request: &TestMessage) -> Result<PreparedMail, Error> {
+    fn review(
+        &self,
+        request: &MessageInput,
+    ) -> Result<ruphish_application::delivery::ReviewMail, Error> {
+        let mail = self.compose(request)?;
+        let parsed = mail_parser::MessageParser::default()
+            .parse(&mail.bytes)
+            .ok_or(Error::Internal)?;
+        Ok(ruphish_application::delivery::ReviewMail {
+            subject: parsed.subject().unwrap_or_default().into(),
+            html: parsed.body_html(0).unwrap_or_default().into_owned(),
+            text: parsed.body_text(0).unwrap_or_default().into_owned(),
+            transport_sender: mail.from,
+            visible_sender: parsed.header_raw("From").unwrap_or_default().trim().into(),
+        })
+    }
+    fn compose(&self, request: &MessageInput) -> Result<PreparedMail, Error> {
         let ctx = context(request)?;
         let from = mailbox(&request.profile.from_address)?;
         let mut to = mailbox(&request.recipient.email)?;
@@ -192,6 +168,9 @@ impl Sender for Smtp {
                 .map_err(|_| invalid("Invalid rendered header name"))?;
             builder = builder.raw_header(HeaderValue::new(name, value));
         }
+        if let Some(id) = &request.message_id {
+            builder = builder.message_id(Some(id.clone()));
+        }
         let subject = render(&request.template.subject, &ctx)?;
         if subject.contains(['\r', '\n', '\0']) {
             return Err(invalid("Invalid rendered subject"));
@@ -228,8 +207,13 @@ impl Sender for Smtp {
             .parse::<ContentType>()
             .map_err(|_| invalid("Invalid attachment MIME type"))?;
             let part = if matches!(
-                a.name.rsplit('.').next().unwrap_or(""),
-                "png" | "jpg" | "jpeg" | "gif" | "bmp"
+                a.name
+                    .rsplit_once('.')
+                    .map(|(_, extension)| extension)
+                    .unwrap_or("")
+                    .to_ascii_lowercase()
+                    .as_str(),
+                "png" | "jpg" | "jpeg" | "gif"
             ) {
                 MailAttachment::new_inline(a.name.clone()).body(bytes, mime)
             } else {
@@ -252,7 +236,7 @@ impl Sender for Smtp {
             .try_acquire()
             .map_err(|_| invalid("Test-email service is busy; try again shortly"))?;
         tokio::time::timeout(Duration::from_secs(30), async {
-            let mut c = self.connection(profile).await?;
+            let mut c = self.connection(profile).await.map_err(public_failure)?;
             if !c.test_connected().await {
                 return Err(invalid("SMTP connection check failed"));
             }
@@ -263,37 +247,13 @@ impl Sender for Smtp {
         .map_err(|_| invalid("SMTP connection check timed out"))?
     }
     async fn send(&self, profile: &Profile, mail: PreparedMail) -> Result<(), Error> {
-        let _slot = self
-            .slots
-            .try_acquire()
-            .map_err(|_| invalid("Test-email service is busy; try again shortly"))?;
-        let mut c = tokio::time::timeout(Duration::from_secs(30), self.connection(profile))
+        use ruphish_application::delivery::Transport;
+        let pending = tokio::time::timeout(Duration::from_secs(30), self.prepare(profile, mail))
             .await
-            .map_err(|_| invalid("SMTP connection timed out before submission"))??;
-        let envelope = Envelope::new(
-            Some(
-                mail.from
-                    .parse()
-                    .map_err(|_| invalid("Invalid envelope sender"))?,
-            ),
-            vec![mail.to.parse().map_err(|_| invalid("Invalid recipient"))?],
-        )
-        .map_err(|_| invalid("Invalid SMTP envelope"))?;
-        let result =
-            tokio::time::timeout(Duration::from_secs(30), c.send(&envelope, &mail.bytes)).await;
-        match result {
-            Ok(Ok(_)) => {}
-            Ok(Err(e)) if e.is_permanent() || e.is_transient() => {
-                return Err(invalid("SMTP server rejected the test email"));
-            }
-            _ => {
-                return Err(invalid(
-                    "Delivery outcome is unknown after connection loss or timeout. Check the mail server before sending again.",
-                ));
-            }
-        }
-        // QUIT failure cannot undo a confirmed DATA acceptance.
-        let _ = tokio::time::timeout(Duration::from_secs(2), c.quit()).await;
-        Ok(())
+            .map_err(|_| invalid("SMTP connection timed out before submission"))?
+            .map_err(public_failure)?;
+        tokio::time::timeout(Duration::from_secs(30), pending.submit()).await
+            .map_err(|_| invalid("Delivery outcome is unknown after connection loss or timeout. Check the mail server before sending again."))?
+            .map_err(public_failure)
     }
 }

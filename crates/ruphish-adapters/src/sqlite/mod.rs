@@ -2,7 +2,10 @@
 
 pub mod accounts;
 mod auth_schema;
+mod campaign_schema;
+pub mod campaigns;
 mod migrations;
+mod participant_privacy;
 pub mod previews;
 pub mod resources;
 pub mod sessions;
@@ -253,6 +256,11 @@ async fn validate_schema(
         sqlx::raw_sql(auth_schema::SCHEMA)
             .execute(&mut expected)
             .await?;
+        if auth_schema::version(connection).await? >= 2 {
+            sqlx::raw_sql(campaign_schema::SCHEMA)
+                .execute(&mut expected)
+                .await?;
+        }
     }
     if schema(connection).await? != schema(&mut expected).await? {
         return Err(UpgradeError::Unrecognized(

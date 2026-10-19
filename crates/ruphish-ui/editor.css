@@ -1,8 +1,10 @@
 /* Content-editor rules never style application headers, forms or unrelated frames. */
-.content-editor .editor-mode { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; border-top: 1px solid #d6e1e5; padding-top: 18px; }
-.content-editor .editor-mode strong { margin-right: auto; }
-.content-editor .editor-mode label { font-weight: 400; }
-.content-editor .editor-mode select, .content-editor .editor-mode button { font-size: 14px; }
+.content-editor .editor-mode { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; border-top: 1px solid #d6e1e5; padding-top: 18px; }
+.content-editor .editor-mode strong { margin-right: auto; padding-block: 8px; }
+.content-editor .editor-mode label { display: grid; gap: 6px; max-width: 100%; margin: 0; font-weight: 400; }
+.content-editor .editor-mode select, .content-editor .editor-mode button { min-height: 40px; margin: 0; padding: 8px 12px; font-size: 14px; line-height: 1.5; }
+.content-editor .editor-mode select { width: 100%; max-width: 100%; }
+@media(max-width:600px) { .content-editor .editor-mode strong { flex-basis: 100%; margin-right: 0; padding: 0; } }
 .content-editor .editor-help { color: #526875; font-size: 14px; margin: 12px 0 16px; }
 .content-editor .source { border: 1px solid #a6b3c3; background: white; width: 100%; height: 480px; }
 .content-editor .cm-editor { height: 100%; font: 14px/1.7 Consolas, monospace; }

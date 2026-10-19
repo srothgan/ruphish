@@ -1,0 +1,636 @@
+[
+  {
+    "id": "empty",
+    "method": "GET",
+    "path": "/api/campaigns/",
+    "body": "",
+    "status": 200,
+    "json": []
+  },
+  {
+    "id": "missing",
+    "method": "GET",
+    "path": "/api/campaigns/999",
+    "body": "",
+    "status": 404,
+    "json": {
+      "data": null,
+      "message": "Campaign not found",
+      "success": false
+    }
+  },
+  {
+    "id": "invalid-json",
+    "method": "POST",
+    "path": "/api/campaigns/",
+    "body": "{",
+    "status": 400,
+    "json": {
+      "data": null,
+      "message": "Invalid JSON structure",
+      "success": false
+    }
+  },
+  {
+    "id": "missing-name",
+    "method": "POST",
+    "path": "/api/campaigns/",
+    "body": "{}",
+    "status": 400,
+    "json": {
+      "data": null,
+      "message": "Campaign name not specified",
+      "success": false
+    }
+  },
+  {
+    "id": "missing-groups",
+    "method": "POST",
+    "path": "/api/campaigns/",
+    "body": "{\"name\":\"Training\"}",
+    "status": 400,
+    "json": {
+      "data": null,
+      "message": "No groups specified",
+      "success": false
+    }
+  },
+  {
+    "id": "missing-template",
+    "method": "POST",
+    "path": "/api/campaigns/",
+    "body": "{\"name\":\"Training\",\"groups\":[{\"name\":\"Audience\"}]}",
+    "status": 400,
+    "json": {
+      "data": null,
+      "message": "No email template specified",
+      "success": false
+    }
+  },
+  {
+    "id": "missing-page",
+    "method": "POST",
+    "path": "/api/campaigns/",
+    "body": "{\"name\":\"Training\",\"groups\":[{\"name\":\"Audience\"}],\"template\":{\"name\":\"Mail\"}}",
+    "status": 400,
+    "json": {
+      "data": null,
+      "message": "No landing page specified",
+      "success": false
+    }
+  },
+  {
+    "id": "missing-profile",
+    "method": "POST",
+    "path": "/api/campaigns/",
+    "body": "{\"name\":\"Training\",\"groups\":[{\"name\":\"Audience\"}],\"template\":{\"name\":\"Mail\"},\"page\":{\"name\":\"Page\"}}",
+    "status": 400,
+    "json": {
+      "data": null,
+      "message": "No sending profile specified",
+      "success": false
+    }
+  },
+  {
+    "id": "group-create",
+    "method": "POST",
+    "path": "/api/groups/",
+    "body": "{\"name\":\"Audience\",\"targets\":[{\"email\":\"alice@example.test\",\"first_name\":\"Alice\",\"last_name\":\"Example\"},{\"email\":\"bob@example.test\",\"first_name\":\"Bob\"}]}",
+    "status": 201,
+    "json": {
+      "id": 1,
+      "modified_date": "\u003ctime\u003e",
+      "name": "Audience",
+      "targets": [
+        {
+          "email": "alice@example.test",
+          "first_name": "Alice",
+          "last_name": "Example",
+          "position": ""
+        },
+        {
+          "email": "bob@example.test",
+          "first_name": "Bob",
+          "last_name": "",
+          "position": ""
+        }
+      ]
+    }
+  },
+  {
+    "id": "overlap-create",
+    "method": "POST",
+    "path": "/api/groups/",
+    "body": "{\"name\":\"Overlap\",\"targets\":[{\"email\":\"alice@example.test\",\"first_name\":\"Alice\",\"last_name\":\"Example\"}]}",
+    "status": 201,
+    "json": {
+      "id": 2,
+      "modified_date": "\u003ctime\u003e",
+      "name": "Overlap",
+      "targets": [
+        {
+          "email": "alice@example.test",
+          "first_name": "Alice",
+          "last_name": "Example",
+          "position": ""
+        }
+      ]
+    }
+  },
+  {
+    "id": "template-create",
+    "method": "POST",
+    "path": "/api/templates/",
+    "body": "{\"name\":\"Mail\",\"text\":\"Hello {{.FirstName}} {{.URL}}\"}",
+    "status": 201,
+    "json": {
+      "attachments": null,
+      "envelope_sender": "",
+      "html": "",
+      "id": 1,
+      "modified_date": "\u003ctime\u003e",
+      "name": "Mail",
+      "subject": "",
+      "text": "Hello {{.FirstName}} {{.URL}}"
+    }
+  },
+  {
+    "id": "page-create",
+    "method": "POST",
+    "path": "/api/pages/",
+    "body": "{\"name\":\"Page\",\"html\":\"\u003cp\u003eTraining\u003c/p\u003e\",\"capture_credentials\":true}",
+    "status": 201,
+    "json": {
+      "capture_credentials": true,
+      "capture_passwords": false,
+      "html": "\u003chtml\u003e\u003chead\u003e\u003c/head\u003e\u003cbody\u003e\u003cp\u003eTraining\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+      "id": 1,
+      "modified_date": "\u003ctime\u003e",
+      "name": "Page",
+      "redirect_url": ""
+    }
+  },
+  {
+    "id": "profile-create",
+    "method": "POST",
+    "path": "/api/smtp/",
+    "body": "{\"name\":\"Local\",\"host\":\"localhost:2525\",\"from_address\":\"training@example.test\"}",
+    "status": 201,
+    "json": {
+      "from_address": "training@example.test",
+      "headers": null,
+      "host": "localhost:2525",
+      "id": 1,
+      "ignore_cert_errors": false,
+      "interface_type": "",
+      "modified_date": "\u003ctime\u003e",
+      "name": "Local"
+    }
+  },
+  {
+    "id": "date-order",
+    "method": "POST",
+    "path": "/api/campaigns/",
+    "body": "{\"name\":\"Training\",\"groups\":[{\"name\":\"Audience\"},{\"name\":\"Overlap\"}],\"template\":{\"name\":\"Mail\"},\"page\":{\"name\":\"Page\"},\"smtp\":{\"name\":\"Local\"},\"url\":\"https://training.example.test\",\"launch_date\":\"2035-01-01T12:00:00Z\",\"send_by_date\":\"2035-01-01T11:00:00Z\"}",
+    "status": 400,
+    "json": {
+      "data": null,
+      "message": "The launch date must be before the \"send emails by\" date",
+      "success": false
+    }
+  },
+  {
+    "id": "create",
+    "method": "POST",
+    "path": "/api/campaigns/",
+    "body": "{\"name\":\"Training\",\"groups\":[{\"name\":\"Audience\"},{\"name\":\"Overlap\"}],\"template\":{\"name\":\"Mail\"},\"page\":{\"name\":\"Page\"},\"smtp\":{\"name\":\"Local\"},\"url\":\"https://training.example.test\",\"launch_date\":\"2035-01-01T12:00:00Z\",\"send_by_date\":\"2035-01-01T12:10:00Z\"}",
+    "status": 201,
+    "json": {
+      "completed_date": "0001-01-01T00:00:00Z",
+      "created_date": "\u003ctime\u003e",
+      "groups": [
+        {
+          "id": 1,
+          "modified_date": "\u003ctime\u003e",
+          "name": "Audience",
+          "targets": [
+            {
+              "email": "alice@example.test",
+              "first_name": "Alice",
+              "last_name": "Example",
+              "position": ""
+            },
+            {
+              "email": "bob@example.test",
+              "first_name": "Bob",
+              "last_name": "",
+              "position": ""
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "modified_date": "\u003ctime\u003e",
+          "name": "Overlap",
+          "targets": [
+            {
+              "email": "alice@example.test",
+              "first_name": "Alice",
+              "last_name": "Example",
+              "position": ""
+            }
+          ]
+        }
+      ],
+      "id": 1,
+      "launch_date": "2035-01-01T12:00:00Z",
+      "name": "Training",
+      "page": {
+        "capture_credentials": true,
+        "capture_passwords": false,
+        "html": "\u003chtml\u003e\u003chead\u003e\u003c/head\u003e\u003cbody\u003e\u003cp\u003eTraining\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+        "id": 1,
+        "modified_date": "\u003ctime\u003e",
+        "name": "Page",
+        "redirect_url": ""
+      },
+      "results": [
+        {
+          "email": "alice@example.test",
+          "first_name": "Alice",
+          "id": "\u003crid\u003e",
+          "ip": "",
+          "last_name": "Example",
+          "latitude": 0,
+          "longitude": 0,
+          "modified_date": "\u003ctime\u003e",
+          "position": "",
+          "reported": false,
+          "send_date": "2035-01-01T12:00:00Z",
+          "status": "Scheduled"
+        },
+        {
+          "email": "bob@example.test",
+          "first_name": "Bob",
+          "id": "\u003crid\u003e",
+          "ip": "",
+          "last_name": "",
+          "latitude": 0,
+          "longitude": 0,
+          "modified_date": "\u003ctime\u003e",
+          "position": "",
+          "reported": false,
+          "send_date": "2035-01-01T12:03:00Z",
+          "status": "Scheduled"
+        }
+      ],
+      "send_by_date": "2035-01-01T12:10:00Z",
+      "smtp": {
+        "from_address": "training@example.test",
+        "headers": [],
+        "host": "localhost:2525",
+        "id": 1,
+        "ignore_cert_errors": false,
+        "interface_type": "",
+        "modified_date": "\u003ctime\u003e",
+        "name": "Local"
+      },
+      "status": "Queued",
+      "template": {
+        "attachments": [],
+        "envelope_sender": "",
+        "html": "",
+        "id": 1,
+        "modified_date": "\u003ctime\u003e",
+        "name": "Mail",
+        "subject": "",
+        "text": "Hello {{.FirstName}} {{.URL}}"
+      },
+      "url": "https://training.example.test"
+    }
+  },
+  {
+    "id": "read",
+    "method": "GET",
+    "path": "/api/campaigns/1",
+    "body": "",
+    "status": 200,
+    "json": {
+      "completed_date": "0001-01-01T00:00:00Z",
+      "created_date": "\u003ctime\u003e",
+      "id": 1,
+      "launch_date": "2035-01-01T12:00:00Z",
+      "name": "Training",
+      "page": {
+        "capture_credentials": true,
+        "capture_passwords": false,
+        "html": "\u003chtml\u003e\u003chead\u003e\u003c/head\u003e\u003cbody\u003e\u003cp\u003eTraining\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+        "id": 1,
+        "modified_date": "\u003ctime\u003e",
+        "name": "Page",
+        "redirect_url": ""
+      },
+      "results": [
+        {
+          "email": "alice@example.test",
+          "first_name": "Alice",
+          "id": "\u003crid\u003e",
+          "ip": "",
+          "last_name": "Example",
+          "latitude": 0,
+          "longitude": 0,
+          "modified_date": "\u003ctime\u003e",
+          "position": "",
+          "reported": false,
+          "send_date": "2035-01-01T12:00:00Z",
+          "status": "Scheduled"
+        },
+        {
+          "email": "bob@example.test",
+          "first_name": "Bob",
+          "id": "\u003crid\u003e",
+          "ip": "",
+          "last_name": "",
+          "latitude": 0,
+          "longitude": 0,
+          "modified_date": "\u003ctime\u003e",
+          "position": "",
+          "reported": false,
+          "send_date": "2035-01-01T12:03:00Z",
+          "status": "Scheduled"
+        }
+      ],
+      "send_by_date": "2035-01-01T12:10:00Z",
+      "smtp": {
+        "from_address": "training@example.test",
+        "headers": [],
+        "host": "localhost:2525",
+        "id": 1,
+        "ignore_cert_errors": false,
+        "interface_type": "",
+        "modified_date": "\u003ctime\u003e",
+        "name": "Local"
+      },
+      "status": "Queued",
+      "template": {
+        "attachments": [],
+        "envelope_sender": "",
+        "html": "",
+        "id": 1,
+        "modified_date": "\u003ctime\u003e",
+        "name": "Mail",
+        "subject": "",
+        "text": "Hello {{.FirstName}} {{.URL}}"
+      },
+      "timeline": [
+        {
+          "campaign_id": 1,
+          "details": "",
+          "email": "",
+          "message": "Campaign Created",
+          "time": "\u003ctime\u003e"
+        }
+      ],
+      "url": "https://training.example.test"
+    }
+  },
+  {
+    "id": "results",
+    "method": "GET",
+    "path": "/api/campaigns/1/results",
+    "body": "",
+    "status": 200,
+    "json": {
+      "id": 1,
+      "name": "Training",
+      "results": [
+        {
+          "email": "alice@example.test",
+          "first_name": "Alice",
+          "id": "\u003crid\u003e",
+          "ip": "",
+          "last_name": "Example",
+          "latitude": 0,
+          "longitude": 0,
+          "modified_date": "\u003ctime\u003e",
+          "position": "",
+          "reported": false,
+          "send_date": "2035-01-01T12:00:00Z",
+          "status": "Scheduled"
+        },
+        {
+          "email": "bob@example.test",
+          "first_name": "Bob",
+          "id": "\u003crid\u003e",
+          "ip": "",
+          "last_name": "",
+          "latitude": 0,
+          "longitude": 0,
+          "modified_date": "\u003ctime\u003e",
+          "position": "",
+          "reported": false,
+          "send_date": "2035-01-01T12:03:00Z",
+          "status": "Scheduled"
+        }
+      ],
+      "status": "Queued",
+      "timeline": [
+        {
+          "campaign_id": 1,
+          "details": "",
+          "email": "",
+          "message": "Campaign Created",
+          "time": "\u003ctime\u003e"
+        }
+      ]
+    }
+  },
+  {
+    "id": "summary",
+    "method": "GET",
+    "path": "/api/campaigns/1/summary",
+    "body": "",
+    "status": 200,
+    "json": {
+      "completed_date": "0001-01-01T00:00:00Z",
+      "created_date": "\u003ctime\u003e",
+      "id": 1,
+      "launch_date": "2035-01-01T12:00:00Z",
+      "name": "Training",
+      "send_by_date": "2035-01-01T12:10:00Z",
+      "stats": {
+        "clicked": 0,
+        "email_reported": 0,
+        "error": 0,
+        "opened": 0,
+        "sent": 0,
+        "submitted_data": 0,
+        "total": 2
+      },
+      "status": "Queued"
+    }
+  },
+  {
+    "id": "summaries",
+    "method": "GET",
+    "path": "/api/campaigns/summary",
+    "body": "",
+    "status": 200,
+    "json": {
+      "campaigns": [
+        {
+          "completed_date": "0001-01-01T00:00:00Z",
+          "created_date": "\u003ctime\u003e",
+          "id": 1,
+          "launch_date": "2035-01-01T12:00:00Z",
+          "name": "Training",
+          "send_by_date": "2035-01-01T12:10:00Z",
+          "stats": {
+            "clicked": 0,
+            "email_reported": 0,
+            "error": 0,
+            "opened": 0,
+            "sent": 0,
+            "submitted_data": 0,
+            "total": 2
+          },
+          "status": "Queued"
+        }
+      ],
+      "total": 1
+    }
+  },
+  {
+    "id": "complete",
+    "method": "GET",
+    "path": "/api/campaigns/1/complete",
+    "body": "",
+    "status": 200,
+    "json": {
+      "data": null,
+      "message": "Campaign completed successfully!",
+      "success": true
+    }
+  },
+  {
+    "id": "complete-again",
+    "method": "GET",
+    "path": "/api/campaigns/1/complete",
+    "body": "",
+    "status": 200,
+    "json": {
+      "data": null,
+      "message": "Campaign completed successfully!",
+      "success": true
+    }
+  },
+  {
+    "id": "completed-read",
+    "method": "GET",
+    "path": "/api/campaigns/1",
+    "body": "",
+    "status": 200,
+    "json": {
+      "completed_date": "\u003ctime\u003e",
+      "created_date": "\u003ctime\u003e",
+      "id": 1,
+      "launch_date": "2035-01-01T12:00:00Z",
+      "name": "Training",
+      "page": {
+        "capture_credentials": true,
+        "capture_passwords": false,
+        "html": "\u003chtml\u003e\u003chead\u003e\u003c/head\u003e\u003cbody\u003e\u003cp\u003eTraining\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+        "id": 1,
+        "modified_date": "\u003ctime\u003e",
+        "name": "Page",
+        "redirect_url": ""
+      },
+      "results": [
+        {
+          "email": "alice@example.test",
+          "first_name": "Alice",
+          "id": "\u003crid\u003e",
+          "ip": "",
+          "last_name": "Example",
+          "latitude": 0,
+          "longitude": 0,
+          "modified_date": "\u003ctime\u003e",
+          "position": "",
+          "reported": false,
+          "send_date": "2035-01-01T12:00:00Z",
+          "status": "Scheduled"
+        },
+        {
+          "email": "bob@example.test",
+          "first_name": "Bob",
+          "id": "\u003crid\u003e",
+          "ip": "",
+          "last_name": "",
+          "latitude": 0,
+          "longitude": 0,
+          "modified_date": "\u003ctime\u003e",
+          "position": "",
+          "reported": false,
+          "send_date": "2035-01-01T12:03:00Z",
+          "status": "Scheduled"
+        }
+      ],
+      "send_by_date": "2035-01-01T12:10:00Z",
+      "smtp": {
+        "from_address": "training@example.test",
+        "headers": [],
+        "host": "localhost:2525",
+        "id": 1,
+        "ignore_cert_errors": false,
+        "interface_type": "",
+        "modified_date": "\u003ctime\u003e",
+        "name": "Local"
+      },
+      "status": "Completed",
+      "template": {
+        "attachments": [],
+        "envelope_sender": "",
+        "html": "",
+        "id": 1,
+        "modified_date": "\u003ctime\u003e",
+        "name": "Mail",
+        "subject": "",
+        "text": "Hello {{.FirstName}} {{.URL}}"
+      },
+      "timeline": [
+        {
+          "campaign_id": 1,
+          "details": "",
+          "email": "",
+          "message": "Campaign Created",
+          "time": "\u003ctime\u003e"
+        }
+      ],
+      "url": "https://training.example.test"
+    }
+  },
+  {
+    "id": "delete",
+    "method": "DELETE",
+    "path": "/api/campaigns/1",
+    "body": "",
+    "status": 200,
+    "json": {
+      "data": null,
+      "message": "Campaign deleted successfully!",
+      "success": true
+    }
+  },
+  {
+    "id": "deleted",
+    "method": "GET",
+    "path": "/api/campaigns/1",
+    "body": "",
+    "status": 404,
+    "json": {
+      "data": null,
+      "message": "Campaign not found",
+      "success": false
+    }
+  }
+]

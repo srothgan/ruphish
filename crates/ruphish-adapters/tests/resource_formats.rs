@@ -75,12 +75,13 @@ fn original_go_attachment_files_match_independent_expected_content() {
 #[test]
 fn inherited_email_generation_cases_decode_to_the_expected_mime_and_envelope() {
     use ruphish_application::{
-        delivery::{Sender, TestMessage},
+        delivery::{MessageInput, Sender},
         resources::{Profile, Recipient, Template},
     };
     let sender = ruphish_adapters::smtp::Smtp::new(Policy::default(), "test@test.com".into());
     for variant in ["normal", "empty-subject", "url"] {
-        let message = TestMessage {
+        let message = MessageInput {
+            message_id: None,
             recipient: Recipient {
                 email: "firstlast@example.com".into(),
                 first_name: "First".into(),
@@ -163,10 +164,11 @@ fn inherited_email_generation_cases_decode_to_the_expected_mime_and_envelope() {
 #[test]
 fn original_template_context_preserves_pathless_urls_and_query_order() {
     use ruphish_application::{
-        delivery::TestMessage,
+        delivery::MessageInput,
         resources::{Profile, Recipient, Template},
     };
-    let mut message = TestMessage {
+    let mut message = MessageInput {
+        message_id: None,
         recipient: Recipient {
             first_name: "Foo".into(),
             last_name: "Bar".into(),
@@ -295,12 +297,34 @@ fn page_policy_is_reversible_on_the_authored_draft_and_shields_template_actions(
     assert!(disabled.contains("{{printf \"<b>%s</b>\" .FirstName}}"));
     page.capture_credentials = true;
     let ordinary = landing_html(&page).unwrap();
-    assert!(ordinary.contains("name='user'"));
+    assert!(!ordinary.contains("name="));
     assert!(!ordinary.contains("name='secret'"));
     page.capture_passwords = true;
     let passwords = landing_html(&page).unwrap();
-    assert!(passwords.contains("name=\"password\""));
+    assert!(!passwords.contains("name="));
     assert_eq!(page.html, html);
+}
+
+#[test]
+fn legacy_flags_cannot_enable_native_serialization_of_participant_fields() {
+    let source = "<form id='training' action='/outside'><input name='username'><input type='PaSsWoRd' name='password'><textarea name='secret' dirname='direction'></textarea><select name='answer'><option value='private'>Private</option></select><button name='button-value' formaction='https://outside.test'>Submit</button><input type='hidden' name='hidden'><input type='file' name='upload'></form><input form='training' name='associated'><object name='embedded'></object>";
+    for credentials in [false, true] {
+        for passwords in [false, true] {
+            let page = Page {
+                html: source.into(),
+                capture_credentials: credentials,
+                capture_passwords: passwords,
+                ..Page::default()
+            };
+            let html = landing_html(&page).unwrap();
+            assert!(!html.contains("name="));
+            assert!(!html.contains("dirname="));
+            assert!(!html.contains("formaction="));
+            assert!(html.contains("type='PaSsWoRd'"));
+            assert!(html.contains("<textarea"));
+            assert_eq!(page.html, source);
+        }
+    }
 }
 
 #[test]
@@ -429,4 +453,130 @@ fn destination_policy_cannot_be_bypassed_with_mapped_ipv4() {
     assert!(single.permits("127.0.0.1".parse().unwrap()));
     assert!(single.permits("::1".parse().unwrap()));
     assert!(!single.permits("192.168.1.2".parse().unwrap()));
+}
+
+#[test]
+fn campaign_mime_preserves_address_headers_and_inline_attachment_contracts() {
+    use mail_parser::MimeHeaders;
+    use ruphish_application::{
+        delivery::{MessageInput, Sender},
+        resources::{Header, Profile, Recipient, Template},
+    };
+    let sender =
+        ruphish_adapters::smtp::Smtp::new(Default::default(), "contact@example.test".into());
+    let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    archive
+        .start_file(
+            "word/document.xml",
+            zip::write::SimpleFileOptions::default(),
+        )
+        .unwrap();
+    archive.write_all(b"<p>Training</p>").unwrap();
+    let office = archive.finish().unwrap().into_inner();
+    for (name, inline) in [
+        (".png", true),
+        (".jpg", true),
+        (".jpeg", true),
+        (".gif", true),
+        (".docx", false),
+        (".txt", false),
+        (".jar", false),
+        (".exe", false),
+        ("", false),
+        ("png", false),
+        ("photo.PNG", true),
+    ] {
+        let payload = if name == ".docx" {
+            office.clone()
+        } else {
+            b"Training attachment".to_vec()
+        };
+        let mut request = MessageInput {
+            message_id: None,
+            recipient: Recipient {
+                email: "john@example.test".into(),
+                first_name: "John".into(),
+                last_name: "Doe".into(),
+                ..Default::default()
+            },
+            template: Template {
+                envelope_sender: "visible@example.test".into(),
+                subject: "{{.RId}} - Subject".into(),
+                text: "{{.RId}} - Text".into(),
+                html: "{{.RId}} - HTML".into(),
+                attachments: vec![Attachment {
+                    name: name.into(),
+                    mime_type: "application/octet-stream".into(),
+                    content: STANDARD.encode(&payload),
+                }],
+            },
+            template_id: 1,
+            page_id: 0,
+            profile: Profile {
+                from_address: "transport@example.test".into(),
+                ..Default::default()
+            },
+            url: "https://example.test".into(),
+            rid: "fixture-rid".into(),
+        };
+        for named in [true, false] {
+            if !named {
+                request.recipient.first_name.clear();
+                request.recipient.last_name.clear();
+                request.profile.headers = vec![
+                    Header {
+                        key: "X-Mailer".into(),
+                        value: String::new(),
+                    },
+                    Header {
+                        key: "X-Gophish-Contact".into(),
+                        value: String::new(),
+                    },
+                    Header {
+                        key: "From".into(),
+                        value: "Training <override@example.test>".into(),
+                    },
+                ];
+            }
+            let mail = sender.compose(&request).unwrap();
+            assert_eq!(mail.from, "transport@example.test");
+            assert_eq!(mail.to, "john@example.test");
+            let parsed = mail_parser::MessageParser::default()
+                .parse(&mail.bytes)
+                .unwrap();
+            assert!(parsed.header_raw("From").unwrap().contains(if named {
+                "visible@example.test"
+            } else {
+                "override@example.test"
+            }));
+            let review = sender.review(&request).unwrap();
+            assert_eq!(review.transport_sender, "transport@example.test");
+            assert!(review.visible_sender.contains(if named {
+                "visible@example.test"
+            } else {
+                "Training <override@example.test>"
+            }));
+            assert_eq!(parsed.subject().unwrap(), "fixture-rid - Subject");
+            assert_eq!(parsed.body_text(0).unwrap().trim(), "fixture-rid - Text");
+            assert_eq!(parsed.body_html(0).unwrap().trim(), "fixture-rid - HTML");
+            assert_eq!(parsed.header_raw("To").unwrap().contains("John Doe"), named);
+            assert_eq!(
+                parsed.header_raw("X-Mailer").unwrap().trim(),
+                if named { "gophish" } else { "" }
+            );
+            assert_eq!(
+                parsed.header_raw("X-Gophish-Contact").unwrap().trim(),
+                if named { "contact@example.test" } else { "" }
+            );
+            let part = parsed.attachments().next().unwrap();
+            assert_eq!(
+                part.content_disposition().unwrap().ctype(),
+                if inline { "inline" } else { "attachment" },
+                "{name}"
+            );
+            if name != ".docx" {
+                assert_eq!(part.contents(), payload);
+            }
+        }
+    }
 }
