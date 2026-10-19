@@ -1,5 +1,6 @@
 //! Editing state shared by the browser component and native workflow tests.
 
+pub mod analysis_state;
 pub mod campaign_state;
 pub mod domain_state;
 #[cfg(target_arch = "wasm32")]
@@ -9,6 +10,7 @@ pub mod pagination;
 pub mod preview_state;
 pub mod recipient_history;
 pub mod resource_state;
+pub mod select_options;
 pub mod session;
 
 #[cfg(target_arch = "wasm32")]

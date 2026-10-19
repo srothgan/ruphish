@@ -104,18 +104,20 @@ fn link(
 pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<> {
     view! {
         <section class="nav-section" aria-labelledby="nav-campaigns"><h2 id="nav-campaigns">"Campaigns"</h2>
+        {link(path,"/analysis","Analysis","M3 3v18h18 M7 17v-5 M12 17V7 M17 17v-9")}
         {link(path,"/campaigns","Campaigns","M4 21V3 M4 4c5-4 10 4 16 0v10c-6 4-11-4-16 0")}
-        <span class="nav-placeholder" aria-disabled="true">{icon("M3 3v18h18 M7 17v-5 M12 17V7 M17 17v-9")}<span>"Analysis"<small>"Coming later"</small></span></span>
         </section>
         <section class="nav-section" aria-labelledby="nav-resources"><h2 id="nav-resources">"Resources"</h2>
-        {link(path,"/groups","Recipient groups","M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75 M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0")}
+        {link(path,"/domains","Domains","M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M3 12h18 M12 3c5 5 5 13 0 18-5-5-5-13 0-18")}
         {link(path,"/templates","Email templates","M3 5h18v14H3z M3 5l9 7 9-7")}
         {link(path,"/pages","Landing pages","M3 3h18v18H3z M3 8h18 M7 5.5h.01 M11 5.5h.01 M7 12h10 M7 16h6")}
-        {link(path,"/domains","Domains","M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M3 12h18 M12 3c5 5 5 13 0 18-5-5-5-13 0-18")}
+        {link(path,"/groups","Recipient groups","M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75 M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0")}
+        {link(path,"/reporting-mailboxes","Reporting mailboxes","M3 5h18v14H3z M3 5l9 7 9-7 M9 16h6")}
         {link(path,"/smtp","Sending profiles","M22 2 9 15 M22 2l-7 20-4-9-9-4 20-7")}
         </section>
         {admin.then(||view!{<section class="nav-section" aria-labelledby="nav-admin"><h2 id="nav-admin">"Administration"</h2>
         {link(path,"/users","Users","M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7l-9-4 M9 12l2 2 4-4")}
+        {link(path,"/webhooks","Webhooks","M7 12a4 4 0 1 1 0-8 M17 12a4 4 0 1 1 0 8 M7 8l10 8 M7 16a4 4 0 1 1 0 4 M7 16h10")}
         </section>})}
     }
 }

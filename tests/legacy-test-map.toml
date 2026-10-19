@@ -1873,8 +1873,9 @@ source_body_sha256 = "3a1333850407c69a0f0a30d962163134fcd8b7c5db26250d89a1ab522a
 guarantee = "Legacy mock-only smoke test; replace with delivery-effect coverage rather than asserting a no-op mock returns nil."
 strategy = "Translate the existing scenario and independent expected values; use real boundary effects where the original only mocked internals. Preserve all original table cases."
 target_crate = "ruphish-adapters"
-target_path = "crates/ruphish-adapters/tests/legacy_webhook.rs"
-status = "not_implemented"
+target_path = "crates/ruphish-adapters/tests/reporting.rs"
+status = "implemented"
+target_test = "committed_events_retry_after_receiver_failure_and_rollback_never_sends"
 source_subtests = []
 
 [[tests]]
@@ -1887,8 +1888,9 @@ source_body_sha256 = "0f0253e4e9411f98fcfd5b7b470c1a20a8459127943b8668759a47b59c
 guarantee = "Send the exact JSON payload with the expected signature and content type to a local webhook receiver."
 strategy = "Translate the existing scenario and independent expected values; use real boundary effects where the original only mocked internals. Preserve all original table cases."
 target_crate = "ruphish-adapters"
-target_path = "crates/ruphish-adapters/tests/legacy_webhook.rs"
-status = "not_implemented"
+target_path = "crates/ruphish-adapters/src/webhook_delivery.rs"
+status = "implemented"
+target_test = "legacy_payload_signature_and_content_type_reach_receiver"
 source_subtests = []
 
 [[tests]]
@@ -1901,8 +1903,9 @@ source_body_sha256 = "2af9b03e4fd6a794523351ea98af7edea4bcdb35e822855c661d1a7b9e
 guarantee = "Compute the known HMAC-SHA256 webhook signature vector."
 strategy = "Translate the existing scenario and independent expected values; use real boundary effects where the original only mocked internals. Preserve all original table cases."
 target_crate = "ruphish-adapters"
-target_path = "crates/ruphish-adapters/tests/legacy_webhook.rs"
-status = "not_implemented"
+target_path = "crates/ruphish-adapters/src/webhook_delivery.rs"
+status = "implemented"
+target_test = "legacy_signature_vectors"
 source_subtests = []
 
 [[tests]]

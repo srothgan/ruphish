@@ -233,7 +233,7 @@ impl Public for Interactions {
                     .map_err(|_| Error::Internal)?
                     .format(&Rfc3339)
                     .map_err(|_| Error::Internal)?;
-                sqlx::query(
+                let inserted = sqlx::query(
                     "INSERT INTO events(campaign_id,email,time,message,details) VALUES(?,?,?,?,?)",
                 )
                 .bind(campaign_id)
@@ -244,6 +244,11 @@ impl Public for Interactions {
                 .execute(&mut *tx)
                 .await
                 .map_err(storage)?;
+                sqlx::query("UPDATE ruphish_event_sources SET source='public' WHERE event_id=?")
+                    .bind(inserted.last_insert_rowid())
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(storage)?;
                 sqlx::query("UPDATE results SET reported=CASE WHEN ?='Email Reported' THEN 1 ELSE reported END,status=CASE WHEN ?='Email Reported' THEN status WHEN status='Submitted Data' THEN status WHEN ?='Submitted Data' THEN ? WHEN status='Clicked Link' THEN status ELSE ? END,modified_date=? WHERE id=?").bind(message).bind(message).bind(message).bind(message).bind(message).bind(stamp).bind(result_id).execute(&mut *tx).await.map_err(storage)?;
             }
         }

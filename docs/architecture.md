@@ -20,4 +20,10 @@ The source of truth for permitted package edges is tests/workspace.rs. The manif
 
 The virtual workspace defaults to its six native members. ruphish-ui is deliberately excluded, and explicitly compiling it for a native target fails rather than providing a misleading no-op main. Run the separate WASM check/lint and Trunk build. UI-only Leptos dependencies are attached to wasm32-unknown-unknown; the native dependency graph does not pull in the browser framework.
 
+## Shared management UI
+
+`crates/ruphish-ui/src/shared/components/` owns reusable management presentation: `layout.rs` provides page headings, footers and empty surfaces; `lists.rs` provides tables, search/count toolbars, empty-result handling and pagination; `forms.rs` provides fields and fieldsets; `buttons.rs` provides action buttons/links, save and copy controls; `dialogs.rs` and `info.rs` provide confirmations and explanatory popovers. Their shared stylesheet is `styles.css` in the same directory.
+
+Resources, users, domains, webhooks and reporting mailboxes use the shared list toolbar and empty-result components. Campaign and analysis tables use the shared table and action components while retaining their own server pagination and filters. Feature modules supply their data, permission checks, draft handling and API operations. Specialized editor tabs and disclosure controls keep their own accessibility semantics. Sharing the presentation does not imply that every feature uses the same draft state model.
+
 The adapters implement SQLite upgrades/bootstrap, transactional account persistence, session storage, bounded bcrypt/Argon2 password work, Go-template compatibility and TLS material handling. Domain/application own account policy, authorization and use cases. HTTP integrates tower-sessions and axum_csrf with account routes, asset routing and transport helpers. The executable owns CLI/configuration, wiring, listeners and lifecycle. Leptos provides account administration and a functional template workbench. Resource APIs and campaign execution remain later work; no success-returning placeholders stand in for them.

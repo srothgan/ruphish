@@ -1,10 +1,10 @@
 //! Separate user list and form routes; account APIs remain the authorization boundary.
 use super::{Api, navigate};
-use crate::components::{
-    DataTable, DeleteConfirmation, EmptyState, Field, FormFields, FormFooter, ManagementPage,
-    PageHeader, SaveButton,
-};
 use crate::feedback::Message;
+use crate::shared::components::{
+    ActionButton, ActionLink, ButtonStyle, DataTable, DeleteConfirmation, Field, FormFields,
+    FormFooter, ListEmptyState, ListToolbar, ManagementPage, PageHeader, SaveButton,
+};
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use ruphish_contracts::auth::{User, UserEdit};
 
@@ -155,7 +155,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                 label=Signal::derive(move || if busy.get(){"Saving..."}else if id.is_some(){"Save changes"}else{"Create user"}.to_owned())/>
         </PageHeader>
         {message.view()}
-        <Show when=move||!loaded.get()&&!loading.get()><button on:click=move |_|reload.update(|n|*n+=1)>"Retry loading user"</button></Show>
+        <Show when=move||!loaded.get()&&!loading.get()><ActionButton on_click=move |_|reload.update(|n|*n+=1)>"Retry loading user"</ActionButton></Show>
         <form id="user-form" on:submit=submit>
             <FormFields disabled=Signal::derive(move || busy.get() || !loaded.get())>
                 <Field label="Username"><input autocomplete="off" required prop:value=move||username.get() on:input=move|e|username.set(event_target_value(&e))/></Field>
@@ -164,7 +164,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                 <Field label="Require password change" checkbox=true><input type="checkbox" prop:checked=move||reset.get() on:change=move|e|reset.set(event_target_checked(&e))/></Field>
                 <Field label="Lock account" checkbox=true><input type="checkbox" prop:checked=move||locked.get() on:change=move|e|locked.set(event_target_checked(&e))/></Field>
             </FormFields>
-            <FormFooter><button type="button" class="text-danger" disabled=move||busy.get() on:click=move |_|{password.set(String::new());loaded.set(false);cancel_navigation("/users",Default::default());}>"Cancel changes"</button></FormFooter>
+            <FormFooter><ActionButton kind="button" style=ButtonStyle::Cancel disabled=Signal::derive(move||busy.get()) on_click=move |_|{password.set(String::new());loaded.set(false);cancel_navigation("/users",Default::default());}>"Cancel changes"</ActionButton></FormFooter>
         </form>
     </ManagementPage>}
 }
@@ -250,20 +250,20 @@ fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
             .collect::<Vec<_>>()
     });
     view! { <ManagementPage>
-        <PageHeader title="Users".to_owned() subtitle="Manage access, roles and account status.".to_owned()><a class="button primary" href="/users/new">"Create user"</a></PageHeader>
+        <PageHeader title="Users".to_owned() subtitle="Manage access, roles and account status.".to_owned()><ActionLink style=ButtonStyle::Primary href="/users/new">"Create user"</ActionLink></PageHeader>
         {message.view()}
-        <div class="management-toolbar"><Field label="Search by username"><input type="search" prop:value=move||search.get() on:input=move|e|search.set(event_target_value(&e))/></Field><span>{move||format!("{} users",visible.with(Vec::len))}</span></div>
+        <ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) label="Search by username" noun="users"/>
         <Show when=move||!loaded.get()><p role="status">"Loading users..."</p></Show>
-        <Show when=move||loaded.get()&&failed.get()><button type="button" on:click=move |_|refresh()>"Retry loading users"</button></Show>
+        <Show when=move||loaded.get()&&failed.get()><ActionButton kind="button" on_click=move |_|refresh()>"Retry loading users"</ActionButton></Show>
         <DataTable label="Users" headers=vec!["User","Role","Status","Actions"]>
         {move || visible.get().into_iter().map(|user| { let id = user.id; let delete_name = user.username.clone(); let impersonate_name = user.username.clone(); let own_account = id == current_user; let can_impersonate = !user.account_locked && !user.password_change_required;
             view! { <tr><th scope="row"><a href=format!("/users/{id}/edit")>{user.username}</a></th><td>{user.role.name}</td><td>{if user.account_locked { "Locked" } else if user.password_change_required { "Password setup" } else { "Active" }}</td><td><div class="row-actions">
                 <a href=format!("/users/{id}/edit")>"Edit"</a>
-                <button disabled=move||!can_impersonate||busy.get() on:click=move |_| { if busy.get_untracked(){return;} busy.set(true); let name = impersonate_name.clone(); tasks.spawn(async move { match api.form("/impersonate", &token.get_value(), &[("username",name)]).await { Ok(_) => navigate("/"), Err(error) => message.error(error) } busy.set(false); }); }>"View as"</button>
-                <button class="text-danger" disabled=move||own_account||busy.get() title=if own_account { "You cannot delete your own account" } else { "Delete this user" } on:click=move |_| {message.clear();deleting.set(Some((id,delete_name.clone())))}>"Delete"</button></div></td></tr> }
+                <ActionButton disabled=Signal::derive(move||!can_impersonate||busy.get()) on_click=move |_| { if busy.get_untracked(){return;} busy.set(true); let name = impersonate_name.clone(); tasks.spawn(async move { match api.form("/impersonate", &token.get_value(), &[("username",name)]).await { Ok(_) => navigate("/"), Err(error) => message.error(error) } busy.set(false); }); }>"View as"</ActionButton>
+                <ActionButton style=ButtonStyle::Cancel disabled=Signal::derive(move||own_account||busy.get()) title=if own_account { "You cannot delete your own account" } else { "Delete this user" } on_click=move |_| {message.clear();deleting.set(Some((id,delete_name.clone())))}>"Delete"</ActionButton></div></td></tr> }
         }).collect_view()}
         </DataTable>
-        <Show when=move||loaded.get()&&!failed.get()&&visible.with(Vec::is_empty)><EmptyState title="No users found"><p>"Try another search or create a user."</p></EmptyState></Show>
+        <ListEmptyState ready=Signal::derive(move || loaded.get() && !failed.get()) count=Signal::derive(move || visible.with(Vec::len)) search=search title="No users found" guidance="Create a user to get started."/>
         {move || deleting.get().map(|(_,name)| view! { <DeleteConfirmation title=format!("Delete {name}?") description="This permanently removes the account and its owned campaigns, templates and other data." confirm_label="Delete user and data" busy=busy on_confirm=Callback::new(remove) on_cancel=Callback::new(move|()|deleting.set(None)) message=message/> })}
     </ManagementPage> }
 }

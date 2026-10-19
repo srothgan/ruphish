@@ -22,6 +22,8 @@ mod campaign_process;
 mod domain_network;
 #[path = "public_process.rs"]
 mod public_process;
+#[path = "reporting_process.rs"]
+mod reporting_process;
 #[path = "resource_process.rs"]
 mod resource_process;
 
@@ -83,6 +85,9 @@ impl Process {
             }
         }
         command.env("NO_COLOR", "true");
+        if directory.join("mailbox-ca.pem").is_file() {
+            command.env("SSL_CERT_FILE", directory.join("mailbox-ca.pem"));
+        }
         let child = pair.slave.spawn_command(command).unwrap();
         drop(pair.slave);
         let mut reader = pair.master.try_clone_reader().unwrap();

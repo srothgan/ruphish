@@ -80,6 +80,7 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
             }
         }
         if config.contact_address.is_empty() { tracing::warn!("No contact_address configured"); }
+        let integrations=std::sync::Arc::new(ruphish_adapters::sqlite::integrations::Integrations::new(database.pool(),ruphish_adapters::outbound::Policy::new(&config.admin.allowed_internal_hosts)?));
         let campaigns=std::sync::Arc::new(ruphish_adapters::sqlite::campaigns::Campaigns::new(database.pool()));
         let domains=std::sync::Arc::new(ruphish_adapters::sqlite::domains::Domains::new(database.pool()));
         let domain_worker=crate::domain_worker::Worker { domains:domains.clone(),verifier:std::sync::Arc::new(domain_verifier) };
@@ -99,9 +100,9 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
             let policy = ruphish_adapters::outbound::Policy::new(&config.admin.allowed_internal_hosts)?;
             let resources = ruphish_application::resources::Service::new(std::sync::Arc::new(ruphish_adapters::sqlite::resources::Resources::new(database.pool())), std::sync::Arc::new(ruphish_adapters::resources::Validate), std::sync::Arc::new(ruphish_adapters::imports::Tools {policy:policy.clone()}));
             let delivery = ruphish_application::delivery::Service::new(service.clone(),resources.clone(),smtp,previews);
-            Some(ruphish_http::auth::router(assets, ruphish_http::auth::Services {accounts:service,resources,delivery,campaigns,domains,mailer_enabled:!arguments.disable_mailer}, sessions, &key, config.admin.use_tls, config.admin.trusted_origins.clone(), config.admin.csrf_key.clone()))
+            Some(ruphish_http::auth::router(assets, ruphish_http::auth::Services {integrations:integrations.clone(),reporting:std::sync::Arc::new(ruphish_adapters::sqlite::reporting::Reports::new(database.pool())),accounts:service,resources,delivery,campaigns,domains,mailer_enabled:!arguments.disable_mailer}, sessions, &key, config.admin.use_tls, config.admin.trusted_origins.clone(), config.admin.csrf_key.clone()))
         } else { None };
-        supervise(arguments.mode, admin_listener, phish_listener, admin_tls, phish_tls, (admin_router,public_router,worker,domain_worker), termination).await
+        supervise(arguments.mode, admin_listener, phish_listener, admin_tls, phish_tls, (admin_router,public_router,worker,domain_worker,integrations), termination).await
     }.await;
     // Both normal and failing server lifecycles close the pool before returning.
     tokio::time::timeout(DRAIN_TIMEOUT, database.close())
@@ -198,6 +199,7 @@ async fn supervise(
         axum::Router,
         Option<crate::campaign_worker::Worker>,
         crate::domain_worker::Worker,
+        std::sync::Arc<ruphish_adapters::sqlite::integrations::Integrations>,
     ),
     mut termination: Termination,
 ) -> Result<(), Error> {
@@ -240,6 +242,29 @@ async fn supervise(
         tracing::info!("listeners_ready");
         if let Some(worker)=routers.2 {tasks.spawn(worker.run(cancellation.clone()));}
         tasks.spawn(routers.3.run(cancellation.clone()));
+        if mode.admin() {
+            for mailbox in [false, true] {
+                let stop = cancellation.clone();
+                let integrations = routers.4.clone();
+                tasks.spawn(async move {
+                    let mut interval = tokio::time::interval(Duration::from_secs(2));
+                    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                    loop {
+                        tokio::select! { biased; _ = stop.cancelled() => return Ok(()), _ = interval.tick() => {} }
+                        let work = async {
+                            if mailbox { integrations.poll_mailboxes().await } else { integrations.deliver_webhooks().await }
+                        };
+                        tokio::select! {
+                            biased;
+                            _ = stop.cancelled() => return Ok(()),
+                            outcome = work => {
+                                if outcome.is_err() { tracing::warn!(mailbox, "integration_batch_failed"); }
+                            }
+                        }
+                    }
+                });
+            }
+        }
         tokio::select! {
             signal = termination.wait() => signal.map_err(Error::from),
             exited = tasks.join_next() => Err(std::io::Error::other(format!("A required {mode:?} listener exited unexpectedly: {exited:?}")).into()),

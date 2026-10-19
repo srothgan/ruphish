@@ -10,7 +10,10 @@ extern "C" {
         request: web_sys::Request,
         milliseconds: u32,
         on_headers: &js_sys::Function,
+        download: bool,
     ) -> JsValue;
+    #[wasm_bindgen(js_name = saveDownload, catch)]
+    fn save_download(result: &JsValue, filename: &str) -> Result<(), JsValue>;
     #[wasm_bindgen(js_name = requestPromise)]
     fn request_promise(request: &JsValue) -> js_sys::Promise;
     #[wasm_bindgen(js_name = cancelRequest)]
@@ -46,6 +49,7 @@ pub async fn send(
         request.into(),
         if read { 15_000 } else { 60_000 },
         on_headers.as_ref().unchecked_ref(),
+        false,
     ));
     let value = wasm_bindgen_futures::JsFuture::from(request_promise(&pending.0)).await.map_err(|_| {
         if read {
@@ -111,4 +115,31 @@ pub fn resource_request(
         builder.build()
     };
     request.map_err(|_| format!("Cannot prepare {method} request"))
+}
+
+/// A bounded binary transfer; callers process session/error status before saving it.
+pub async fn download(
+    request: Request,
+    on_headers: impl FnMut(u16) + 'static,
+) -> Result<(Received, JsValue), String> {
+    let on_headers = Closure::wrap(Box::new(on_headers) as Box<dyn FnMut(u16)>);
+    let pending = Pending(start_request(
+        request.into(),
+        60_000,
+        on_headers.as_ref().unchecked_ref(),
+        true,
+    ));
+    let value = wasm_bindgen_futures::JsFuture::from(request_promise(&pending.0))
+        .await
+        .map_err(|_| "The export failed or timed out. Narrow the filters and try again.")?;
+    let serialized = js_sys::JSON::stringify(&value)
+        .ok()
+        .and_then(|v| v.as_string())
+        .ok_or("Invalid export response")?;
+    let received = serde_json::from_str(&serialized).map_err(|_| "Invalid export response")?;
+    Ok((received, value))
+}
+/// Save a completed successful transfer through the native browser download workflow.
+pub fn save_file(value: &JsValue, filename: &str) -> Result<(), String> {
+    save_download(value, filename).map_err(|_| "The browser could not save this export.".into())
 }

@@ -1,5 +1,6 @@
 //! Account workflows over the same HTTP boundary used by external clients.
 use crate::feedback::Message;
+use crate::shared::components::{ActionButton, ButtonStyle};
 use gloo_net::http::Request;
 use leptos::prelude::*;
 use leptos::task::spawn_local_scoped_with_cancellation as spawn_local;
@@ -57,6 +58,26 @@ impl Api {
         self.response(path, response)
             .await
             .map(|value| (value, etag))
+    }
+    pub(super) async fn download(self, path: &str, filename: &str) -> Result<(), String> {
+        if !self.active() {
+            return Err("Your session ended.".into());
+        }
+        let request = ruphish_ui::browser_http::resource_request("GET", path, "", None, None)?;
+        let observed_path = path.to_owned();
+        let (response, file) = ruphish_ui::browser_http::download(request, move |status| {
+            self.monitor
+                .update(|monitor| monitor.response(&observed_path, status));
+        })
+        .await?;
+        if !self.active() {
+            return Err("Your session ended.".into());
+        }
+        if !(200..300).contains(&response.status) {
+            self.response(path, response).await?;
+            return Err("The export could not be generated.".into());
+        }
+        ruphish_ui::browser_http::save_file(&file, filename)
     }
     fn active(self) -> bool {
         self.monitor
@@ -330,7 +351,7 @@ fn login(api: Api, token: String) -> impl IntoView {
     view! { <main class="login-screen"><div class="login-brand">"Ruphish"</div><section class="login-form"><h1>"Sign in"</h1><p>"Manage your security awareness workspace."</p>
     <form on:submit=submit><label>"Username"<input name="username" autocomplete="username" required prop:value=move || username.get() on:input=move |e| username.set(event_target_value(&e))/></label>
     <label>"Password"<input name="password" type="password" autocomplete="current-password" required prop:value=move || password.get() on:input=move |e| password.set(event_target_value(&e))/></label>
-    {message.view()}<button class="primary" type="submit" disabled=move || busy.get()>{move || if busy.get() { "Signing in..." } else { "Sign in" }}</button></form></section></main> }
+    {message.view()}<ActionButton style=ButtonStyle::Primary kind="submit" disabled=Signal::derive(move || busy.get())>{move || if busy.get() { "Signing in..." } else { "Sign in" }}</ActionButton></form></section></main> }
 }
 fn shell(api: Api, session: BrowserSession) -> impl IntoView {
     provide_context(ruphish_ui::import_drafts::ImportDrafts::default());
@@ -394,7 +415,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         if required {
             password_form(api, token.get_value(), true).into_any()
         } else if active {
-            view! { <section class="account-panel"><h1>"Account management"</h1><p>"Exit impersonation to manage accounts and credentials."</p><button disabled=move||action_busy.get() on:click=move |_| action("/impersonate/exit")>"Exit impersonation"</button></section> }.into_any()
+            view! { <section class="account-panel"><h1>"Account management"</h1><p>"Exit impersonation to manage accounts and credentials."</p><ActionButton disabled=Signal::derive(move||action_busy.get()) on_click=move |_| action("/impersonate/exit")>"Exit impersonation"</ActionButton></section> }.into_any()
         } else if let Some(screen) = users_page {
             if admin {
                 users::page(
@@ -433,14 +454,43 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
             crate::campaigns::detail(api, token.get_value()).into_any()
         }
     };
+    let integration_page = move |kind: crate::integrations::Kind, list: bool, editing: bool| {
+        if required {
+            password_form(api, token.get_value(), true).into_any()
+        } else if matches!(kind, crate::integrations::Kind::Webhook) && (!admin || active) {
+            view! { <p role="alert">"Webhooks require administrator access outside impersonation."</p> }.into_any()
+        } else if list {
+            crate::integrations::list(api, kind).into_any()
+        } else {
+            crate::integrations::page(api, token.get_value(), kind, editing).into_any()
+        }
+    };
+    let analysis_page = move |directory: bool| {
+        if required {
+            password_form(api, token.get_value(), true).into_any()
+        } else if directory {
+            crate::campaigns::analysis_directory(api).into_any()
+        } else {
+            crate::analysis::page(api).into_any()
+        }
+    };
     let content = view! {<Routes fallback=||view!{<p>"This page is not available."</p>}>
-    <Route path=path!("/logout") view=move||view! { <section class="account-panel"><h1>"Sign out?"</h1><p>"Your saved work will remain available the next time you sign in."</p><button class="primary" disabled=move||action_busy.get() on:click=move |_| action("/logout")>"Sign out"</button><a class="cancel-link text-danger" href="/">"Stay signed in"</a></section> }/>
+    <Route path=path!("/logout") view=move||view! { <section class="account-panel"><h1>"Sign out?"</h1><p>"Your saved work will remain available the next time you sign in."</p><ActionButton style=ButtonStyle::Primary disabled=Signal::derive(move||action_busy.get()) on_click=move |_| action("/logout")>"Sign out"</ActionButton><a class="cancel-link text-danger" href="/">"Stay signed in"</a></section> }/>
     <Route path=path!("/settings") view=move||account_page(None,false)/>
     <Route path=path!("/settings/password") view=move||account_page(None,true)/>
     <Route path=path!("/users") view=move||account_page(Some(users::Screen::List),false)/>
     <Route path=path!("/users/new") view=move||account_page(Some(users::Screen::New),false)/>
     <Route path=path!("/users/:id/edit") view=move||account_page(Some(users::Screen::Edit),false)/>
     <Route path=path!("/") view=move||campaign_page(true)/>
+    <Route path=path!("/analysis") view=move || analysis_page(true)/>
+    <Route path=path!("/analysis/:id") view=move || analysis_page(false)/>
+    <Route path=path!("/analysis/:id/recipients/:recipient") view=move || analysis_page(false)/>
+    <Route path=path!("/webhooks") view=move || integration_page(crate::integrations::Kind::Webhook, true, false)/>
+    <Route path=path!("/webhooks/:id") view=move || integration_page(crate::integrations::Kind::Webhook, false, false)/>
+    <Route path=path!("/webhooks/:id/edit") view=move || integration_page(crate::integrations::Kind::Webhook, false, true)/>
+    <Route path=path!("/reporting-mailboxes") view=move || integration_page(crate::integrations::Kind::Mailbox, true, false)/>
+    <Route path=path!("/reporting-mailboxes/:id") view=move || integration_page(crate::integrations::Kind::Mailbox, false, false)/>
+    <Route path=path!("/reporting-mailboxes/:id/edit") view=move || integration_page(crate::integrations::Kind::Mailbox, false, true)/>
     <Route path=path!("/campaigns") view=move||campaign_page(true)/>
     <Route path=path!("/campaigns/:id") view=move||campaign_page(false)/>
     <Route path=path!("/domains") view=move||if required{password_form(api,token.get_value(),true).into_any()}else{crate::domains::list(api).into_any()}/>
@@ -463,7 +513,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
     view! { <div class="admin-shell"><aside class="admin-nav"><a class="product-name" href="/">"Ruphish"</a><nav aria-label="Main navigation">
     {crate::navigation::sections(path,admin)}
     </nav>{account_menu::menu(api,token.get_value(),username,role_name)}</aside>
-    <div class="admin-content">{active.then(|| view! { <div class="impersonation" role="status"><span>"Viewing as "<strong>{username_banner}</strong>". Administrator: "{actor.unwrap_or_default()}</span><button disabled=move||action_busy.get() on:click=move |_| action("/impersonate/exit")>"Exit impersonation"</button></div> })}
+    <div class="admin-content">{active.then(|| view! { <div class="impersonation" role="status"><span>"Viewing as "<strong>{username_banner}</strong>". Administrator: "{actor.unwrap_or_default()}</span><ActionButton disabled=Signal::derive(move||action_busy.get()) on_click=move |_| action("/impersonate/exit")>"Exit impersonation"</ActionButton></div> })}
     {message.view()}{content}</div></div> }
 }
 fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
@@ -539,7 +589,7 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
     {(!required).then(|| view! { <label>"Current password"<input type="password" autocomplete="current-password" required prop:value=move || current.get() on:input=move |e| current.set(event_target_value(&e))/></label> })}
     <label>"New password"<input type="password" autocomplete="new-password" required prop:value=move || candidate.get() on:input=move |e| candidate.set(event_target_value(&e))/></label>
     <label>"Confirm new password"<input type="password" autocomplete="new-password" required prop:value=move || confirm.get() on:input=move |e| confirm.set(event_target_value(&e))/></label>
-    {message.view()}<button class="primary" type="submit" disabled=move || busy.get()>{move || if busy.get() { "Saving..." } else { "Save password" }}</button></form>{(!required).then(||view!{<div class="account-actions"><button class="text-danger" disabled=move||busy.get() on:click=move |_|{current.set(String::new());candidate.set(String::new());confirm.set(String::new());cancel_navigation("/settings",Default::default());}>"Cancel"</button></div>})}</section> }
+    {message.view()}<ActionButton style=ButtonStyle::Primary kind="submit" disabled=Signal::derive(move || busy.get())>{move || if busy.get() { "Saving..." } else { "Save password" }}</ActionButton></form>{(!required).then(||view!{<div class="account-actions"><ActionButton style=ButtonStyle::Cancel disabled=Signal::derive(move||busy.get()) on_click=move |_|{current.set(String::new());candidate.set(String::new());confirm.set(String::new());cancel_navigation("/settings",Default::default());}>"Cancel"</ActionButton></div>})}</section> }
 }
 fn settings(api: Api, session: BrowserSession) -> impl IntoView {
     let token = StoredValue::new(session.csrf_token.clone());
@@ -640,7 +690,7 @@ fn settings(api: Api, session: BrowserSession) -> impl IntoView {
     view! {<section class="account-overview"><div class="account-heading"><h1>"My account"</h1><a class="button" href="/settings/password">"Change password"</a></div>
     {message.view()}<div class="settings-stack"><section class="account-panel"><h2>"Account"</h2><dl class="account-facts"><div><dt>"Username"</dt><dd>{username}</dd></div><div><dt>"Role"</dt><dd>{role}</dd></div></dl></section>
     <section class="account-panel"><h2>"API access"</h2><p>"Use your API key for integrations. Treat it like a password."</p>
-    <div class="account-api-row"><label>"API base URL"<input readonly value=base.get_value() on:focus=move|e|{event_target::<web_sys::HtmlInputElement>(&e).select();}/></label><button disabled=move||busy.get() on:click=move |_|copy(false)>"Copy URL"</button></div>
+    <div class="account-api-row"><label>"API base URL"<input readonly value=base.get_value() on:focus=move|e|{event_target::<web_sys::HtmlInputElement>(&e).select();}/></label><ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|copy(false)>"Copy URL"</ActionButton></div>
     <div class="account-api-row"><label>"API key"<input id="account-api-key" class="secret-value" readonly prop:value=move||key.get().unwrap_or_else(||"\u{2022}".repeat(16)) on:focus=move|e|{if key.get_untracked().is_some(){event_target::<web_sys::HtmlInputElement>(&e).select();}}/></label>
         <div class="api-key-controls">
             <button type="button" class="key-visibility" disabled=move||busy.get() on:click=reveal aria-controls="account-api-key" aria-label="Show API key" aria-pressed=move||key.get().is_some().to_string() title=move||if key.get().is_some(){"Hide API key"}else{"Reveal API key"}>
@@ -650,11 +700,11 @@ fn settings(api: Api, session: BrowserSession) -> impl IntoView {
                     <path class:hidden-eye=move||key.get().is_some() d="m3 3 18 18"/>
                 </svg>
             </button>
-            <button type="button" disabled=move||busy.get() on:click=move |_|copy(true)>"Copy key"</button>
+            <ActionButton kind="button" disabled=Signal::derive(move||busy.get()) on_click=move |_|copy(true)>"Copy key"</ActionButton>
         </div>
     </div>
-    <div class="account-actions"><button disabled=move||busy.get() on:click=move |_|confirm.set(true)>"Replace API key..."</button></div>
-    {move||confirm.get().then(||view!{<div class="confirmation"><p>"The previous key will stop working immediately."</p><button class="danger" disabled=move||busy.get() on:click=rotate>"Replace key now"</button><button class="text-danger" disabled=move||busy.get() on:click=move |_|confirm.set(false)>"Cancel"</button></div>})}
+    <div class="account-actions"><ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|confirm.set(true)>"Replace API key..."</ActionButton></div>
+    {move||confirm.get().then(||view!{<div class="confirmation"><p>"The previous key will stop working immediately."</p><ActionButton style=ButtonStyle::Danger disabled=Signal::derive(move||busy.get()) on_click=rotate>"Replace key now"</ActionButton><ActionButton style=ButtonStyle::Cancel disabled=Signal::derive(move||busy.get()) on_click=move |_|confirm.set(false)>"Cancel"</ActionButton></div>})}
     </section></div></section>}
 }
 

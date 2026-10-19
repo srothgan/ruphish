@@ -1,5 +1,6 @@
 //! Account entry point anchored to the sidebar footer.
 use super::{Api, Message};
+use crate::shared::components::{ActionButton, ButtonStyle};
 use leptos::{html, prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use wasm_bindgen::{JsCast, prelude::*};
 
@@ -60,7 +61,7 @@ pub(super) fn menu(api: Api, token: String, username: String, role: String) -> i
         <div node_ref=panel id="account-popover" class="account-popover" role="dialog" aria-labelledby="account-popover-name" hidden>
             <div class="account-popover-identity"><strong id="account-popover-name">{username}</strong><span>{role}</span></div>
             <a href="/settings">"My account"</a>
-            <button class="text-danger" disabled=move||busy.get() on:click=logout>{move||if busy.get(){"Signing out..."}else{"Sign out"}}</button>
+            <ActionButton style=ButtonStyle::Cancel disabled=Signal::derive(move||busy.get()) on_click=logout>{move||if busy.get(){"Signing out..."}else{"Sign out"}}</ActionButton>
             {message.view()}
         </div>
     </div>}

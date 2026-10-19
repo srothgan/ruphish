@@ -1,5 +1,5 @@
 //! Domain management uses the shared resource shell, forms and confirmation dialog.
-use crate::{account::Api, components::*, feedback::Message, resources::ResourceAccess};
+use crate::{account::Api, feedback::Message, resources::ResourceAccess, shared::components::*};
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use ruphish_contracts::domains::{Domain, Edit};
 use serde_json::json;
@@ -97,14 +97,25 @@ pub(super) fn list(api: Api) -> impl IntoView {
             loading.set(false);
         });
     });
+    let visible = Signal::derive(move || {
+        let query = search.get().to_lowercase();
+        rows.get()
+            .into_iter()
+            .filter(|d| {
+                format!("{} {}", d.name, d.hostname)
+                    .to_lowercase()
+                    .contains(&query)
+            })
+            .collect::<Vec<_>>()
+    });
     view! {<ManagementPage><PageHeader title="Domains" subtitle="Verified destinations for campaign links and landing pages.">
-        <button disabled=move||loading.get() on:click=move |_|refresh.update(|v|*v+=1)>"Refresh"</button>
-        {can_edit.then(||view!{<a class="button primary" href="/domains/new">"Create domain"</a>})}
-    </PageHeader>{message.view()}<Field label="Find a domain"><input type="search" prop:value=move||search.get() on:input=move|e|search.set(event_target_value(&e))/></Field>
+        <ActionButton disabled=Signal::derive(move||loading.get()) on_click=move |_|refresh.update(|v|*v+=1)>"Refresh"</ActionButton>
+        {can_edit.then(||view!{<ActionLink style=ButtonStyle::Primary href="/domains/new">"Create domain"</ActionLink>})}
+    </PageHeader>{message.view()}<ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) label="Search by name or hostname" noun="domains"/>
     <Show when=move||loading.get()><p role="status">"Loading domains…"</p></Show>
     <DataTable label="Domains" headers=vec!["Name","Public origin","Status","Enabled","Campaigns","Actions"]>
-        <For each=move||{let query=search.get().to_lowercase();rows.get().into_iter().filter(|d|format!("{} {}",d.name,d.hostname).to_lowercase().contains(&query)).collect::<Vec<_>>()} key=|d| (d.id,d.revision,d.checked_at,d.eligible,d.checking,d.status.clone(),d.code.clone(),d.campaigns) children=move|d|{let id=d.id;view!{<tr><td><a href=format!("/domains/{id}")>{d.name.clone()}</a></td><td>{d.origin.clone()}</td><td>{state(&d)}</td><td>{if d.enabled{"Yes"}else{"No"}}</td><td>{d.campaigns}</td><td><a href=format!("/domains/{id}")>"View"</a>{can_edit.then(||view!{<a href=format!("/domains/{id}/edit")>"Edit"</a>})}</td></tr>}}/>
-    </DataTable><Show when=move||!loading.get()&&!failed.get()&&rows.with(Vec::is_empty)><EmptyState title="No domains yet"><p>"Add a hostname, prove DNS control and check routing and HTTPS before using it in a campaign."</p></EmptyState></Show></ManagementPage>}
+        <For each=move||visible.get() key=|d| (d.id,d.revision,d.checked_at,d.eligible,d.checking,d.status.clone(),d.code.clone(),d.campaigns) children=move|d|{let id=d.id;view!{<tr><td><a href=format!("/domains/{id}")>{d.name.clone()}</a></td><td>{d.origin.clone()}</td><td>{state(&d)}</td><td>{if d.enabled{"Yes"}else{"No"}}</td><td>{d.campaigns}</td><td><a href=format!("/domains/{id}")>"View"</a>{can_edit.then(||view!{<a href=format!("/domains/{id}/edit")>"Edit"</a>})}</td></tr>}}/>
+    </DataTable><ListEmptyState ready=Signal::derive(move || !loading.get() && !failed.get()) count=Signal::derive(move || visible.with(Vec::len)) search=search title="No domains found" guidance="Add a hostname, prove DNS control and check routing and HTTPS before using it in a campaign."/></ManagementPage>}
 }
 pub(super) fn detail(api: Api, token: String, editing: bool) -> impl IntoView {
     let params = leptos_router::hooks::use_params_map();
@@ -199,13 +210,13 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
         });
     };
     view! {<ManagementPage><a class="breadcrumb" href="/domains">"Back to domains"</a><PageHeader title=if id.is_some(){"Edit domain"}else{"Create domain"} subtitle=Signal::derive(move||if dirty.get(){"Unsaved changes"}else{"Verify domain control, routing and HTTPS before campaign use."}.to_owned())>
-    </PageHeader>{message.view()}<Show when=move||!loaded.get()&&!loading.get()><button on:click=move |_|reload.update(|n|*n+=1)>"Retry loading domain"</button></Show><form id="domain-form" on:submit=submit><FormFields disabled=Signal::derive(move||busy.get()||!loaded.get()||!can_edit)>
+    </PageHeader>{message.view()}<Show when=move||!loaded.get()&&!loading.get()><ActionButton on_click=move |_|reload.update(|n|*n+=1)>"Retry loading domain"</ActionButton></Show><form id="domain-form" on:submit=submit><FormFields disabled=Signal::derive(move||busy.get()||!loaded.get()||!can_edit)>
         <Field label="Name"><input required maxlength="200" prop:value=move||name.get() on:input=move|e|name.set(event_target_value(&e))/></Field>
         <Field label="Public HTTPS origin"><input type="url" required placeholder="https://training.example.com" readonly=id.is_some() prop:value=move||origin.get() on:input=move|e|origin.set(event_target_value(&e))/></Field>
         <p>"Use the hostname participants will visit. Paths belong to the campaign. A saved hostname cannot be changed."</p>
         <Field checkbox=true label="Enable this domain"><input type="checkbox" prop:checked=move||enabled.get() on:change=move|e|enabled.set(event_target_checked(&e))/></Field>
         <p>"Disabling stops new deliveries and public campaign handling for this domain. Existing campaign history is retained."</p>
-    </FormFields><FormFooter spread=true><button type="button" class="text-danger" disabled=move||busy.get() on:click=move |_|{loaded.set(false);cancel(&id.map(|id|format!("/domains/{id}")).unwrap_or_else(||"/domains".into()),Default::default());}>"Cancel changes"</button><SaveButton kind="submit" label=if id.is_some(){"Save changes"}else{"Create domain"} disabled=Signal::derive(move||busy.get()||!loaded.get()||!can_edit)/></FormFooter></form></ManagementPage>}
+    </FormFields><FormFooter spread=true><ActionButton kind="button" style=ButtonStyle::Cancel disabled=Signal::derive(move||busy.get()) on_click=move |_|{loaded.set(false);cancel(&id.map(|id|format!("/domains/{id}")).unwrap_or_else(||"/domains".into()),Default::default());}>"Cancel changes"</ActionButton><SaveButton kind="submit" label=if id.is_some(){"Save changes"}else{"Create domain"} disabled=Signal::derive(move||busy.get()||!loaded.get()||!can_edit)/></FormFooter></form></ManagementPage>}
 }
 fn show(api: Api, token: String, id: i64) -> impl IntoView {
     use ruphish_ui::domain_state::Details;
@@ -310,8 +321,8 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
     });
     view! {<ManagementPage><a class="breadcrumb" href="/domains">"Back to domains"</a>
         <PageHeader title=Signal::derive(move||domain.get().map(|d|d.name).unwrap_or_else(||"Domain".into())) subtitle=Signal::derive(move||domain.get().map(|d|d.origin).unwrap_or_else(||"Loading domain".into()))>
-            <button disabled=move||busy.get() aria-busy=move||detail.with(|s|s.reading.is_some()).to_string() on:click=move |_|refresh.update(|v|*v+=1)>{move||if detail.with(|s|s.reading.is_some()){"Refreshing..."}else{"Refresh status"}}</button>
-            {can_edit.then(||view!{<button class="primary" disabled=move||busy.get()||domain.with(|d|d.as_ref().is_none_or(|d|!d.enabled||d.active_check.is_some())) on:click=check>{move||if busy.get()&&!deleting.get(){"Requesting verification"}else{"Verify domain"}}</button><a class="button" href=format!("/domains/{id}/edit")>"Edit"</a><button class="danger" disabled=move||busy.get()||domain.with(|d|d.as_ref().is_none_or(|d|d.campaigns>0)) on:click=move |_|deleting.set(true)>"Delete"</button>})}
+            <ActionButton disabled=Signal::derive(move||busy.get()) busy=Signal::derive(move||detail.with(|s|s.reading.is_some()).to_string()) on_click=move |_|refresh.update(|v|*v+=1)>{move||if detail.with(|s|s.reading.is_some()){"Refreshing..."}else{"Refresh status"}}</ActionButton>
+            {can_edit.then(||view!{<ActionButton style=ButtonStyle::Primary disabled=Signal::derive(move||busy.get()||domain.with(|d|d.as_ref().is_none_or(|d|!d.enabled||d.active_check.is_some()))) on_click=check>{move||if busy.get()&&!deleting.get(){"Requesting verification"}else{"Verify domain"}}</ActionButton><ActionLink href=format!("/domains/{id}/edit")>"Edit"</ActionLink><ActionButton style=ButtonStyle::Danger disabled=Signal::derive(move||busy.get()||domain.with(|d|d.as_ref().is_none_or(|d|d.campaigns>0))) on_click=move |_|deleting.set(true)>"Delete"</ActionButton>})}
         </PageHeader>{message.view()}
         {move||detail.with(|s|s.error.clone()).map(|error|view!{<p class="form-message error" role="alert">{error}</p>})}
         {move||domain.get().and_then(|d|d.active_check).map(|run|{

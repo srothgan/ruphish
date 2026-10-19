@@ -1,3 +1,15 @@
+/* Shared controls and management surfaces. */
+.account-app button { font: inherit; padding: 7px 12px; color: inherit; background: white; border: 1px solid #a6b3c3; border-radius: 4px; cursor: pointer; }
+.account-app button:hover:not(:disabled) { background: #edf2f8; border-color: #526875; }
+.account-app button:disabled { cursor: default; opacity: .55; }
+.account-app button { min-height: 38px; }
+.account-app button.primary { background: #006b67; border-color: #006b67; color: white; }
+.account-app button.primary:hover:not(:disabled) { background: #00534f; }
+.account-app button.account-trigger:hover:not(:disabled), .account-app .account-trigger[aria-expanded=true] { background: #2a4b60; border-color: #526875; }
+.account-app .text-danger { color: var(--color-danger); }
+.account-app .danger { background: var(--color-danger); border-color: var(--color-danger); color: white; }
+.account-app .danger:hover:not(:disabled) { background: var(--color-danger); border-color: var(--color-danger); filter: brightness(.85); }
+.account-app .text-danger:hover:not(:disabled) { color: var(--color-danger); border-color: var(--color-danger); }
 .management-page .checkbox-label, .management-dialog .checkbox-label { display: flex; gap: 10px; align-items: center; font-weight: 500; margin: 16px 0; }
 .management-page .checkbox-label input, .management-dialog .checkbox-label input { width: 18px; height: 18px; margin: 0; accent-color: #006b67; }
 .management-dialog::backdrop { background: #18334899; }
@@ -65,3 +77,12 @@
 .domain-outcome-failed, .domain-outcome-timed_out { color: var(--color-danger); }
 @keyframes domain-spin { to { transform: rotate(360deg); } }
 @media(prefers-reduced-motion: reduce) { .domain-spinner { animation: none; } }
+.multi-select { position: relative; min-width: 0; }
+.multi-select-label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+.multi-select summary { font-size: 14px; line-height: 22px; cursor: pointer; height: 42px; padding: 9px 12px; border: 1px solid #a6b3c3; border-radius: 4px; background: white; white-space: nowrap; }
+.multi-select-panel { position: absolute; z-index: 30; top: 100%; left: 0; width: min(440px, calc(100vw - 64px)); padding: 16px; background: white; border: 1px solid #a6b3c3; border-radius: 4px; box-shadow: 0 6px 20px #18334826; }
+.multi-select-panel .form-field { margin: 0 0 12px; }
+.multi-select-toolbar, .multi-select-footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.multi-select-options { max-height: 260px; overflow-y: auto; margin-block: 12px; }
+.account-app .multi-select-option { display: flex; align-items: start; gap: 10px; padding: 8px 4px; font-weight: 400; overflow-wrap: anywhere; }
+.multi-select-option input { flex: 0 0 auto; width: 18px; height: 18px; margin: 3px 0 0; accent-color: #006b67; }

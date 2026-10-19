@@ -36,6 +36,8 @@ pub(crate) struct AuthState {
     delivery: ruphish_application::delivery::Service,
     campaigns: Arc<dyn ruphish_application::campaign::Repository>,
     domains: Arc<dyn ruphish_application::domains::Repository>,
+    reporting: Arc<dyn ruphish_application::reporting::Repository>,
+    integrations: Arc<dyn ruphish_application::integrations::Repository>,
     mailer_enabled: bool,
     csrf: CsrfConfig,
     index: Arc<String>,
@@ -65,6 +67,8 @@ pub fn router<S: SessionStore + Clone>(
         delivery: services.delivery,
         campaigns: services.campaigns,
         domains: services.domains,
+        reporting: services.reporting,
+        integrations: services.integrations,
         mailer_enabled: services.mailer_enabled,
         index: Arc::new(assets.index),
         secure,
@@ -106,6 +110,15 @@ pub fn router<S: SessionStore + Clone>(
         .route("/users/new", get(page))
         .route("/users/{id}/edit", get(page))
         .route("/campaigns", get(page))
+        .route("/analysis", get(page))
+        .route("/webhooks", get(page))
+        .route("/webhooks/{id}", get(page))
+        .route("/webhooks/{id}/edit", get(page))
+        .route("/reporting-mailboxes", get(page))
+        .route("/reporting-mailboxes/{id}", get(page))
+        .route("/reporting-mailboxes/{id}/edit", get(page))
+        .route("/analysis/{id}", get(page))
+        .route("/analysis/{id}/recipients/{recipient}", get(page))
         .route("/domains", get(page))
         .route("/domains/{id}", get(page))
         .route("/domains/{id}/edit", get(page))
@@ -133,6 +146,8 @@ pub fn router<S: SessionStore + Clone>(
         .merge(super::resources::routes())
         .merge(super::campaigns::routes())
         .merge(super::domains::routes())
+        .merge(super::reporting::routes())
+        .merge(super::integrations::routes())
         .layer(middleware::from_fn(security_headers))
         .with_state(state)
         .layer(session);
@@ -209,6 +224,12 @@ impl FromRequestParts<AuthState> for Context {
     }
 }
 impl Context {
+    pub(crate) fn integrations(&self) -> &dyn ruphish_application::integrations::Repository {
+        self.state.integrations.as_ref()
+    }
+    pub(crate) fn reporting(&self) -> &dyn ruphish_application::reporting::Repository {
+        self.state.reporting.as_ref()
+    }
     pub(crate) fn domains(&self) -> &dyn ruphish_application::domains::Repository {
         self.state.domains.as_ref()
     }
@@ -456,6 +477,10 @@ impl Context {
 
 /// Application services composed by the executable, sharing the same identity boundary.
 pub struct Services {
+    /// Webhooks and owner-scoped reporting mailboxes.
+    pub integrations: Arc<dyn ruphish_application::integrations::Repository>,
+    /// Consistent campaign analysis and exports.
+    pub reporting: Arc<dyn ruphish_application::reporting::Repository>,
     /// Domain configuration and verification queue.
     pub domains: Arc<dyn ruphish_application::domains::Repository>,
     /// Account and session authorization.

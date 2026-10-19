@@ -8,18 +8,13 @@ body { margin: 0; }
 .account-app label { display: block; font-size: 14px; font-weight: 600; }
 .account-app input:not([type=file]):not([type=checkbox]), .account-app textarea { display: block; width: 100%; margin-top: 6px; padding: 10px 12px; border: 1px solid #a6b3c3; border-radius: 4px; background: white; color: inherit; font: inherit; }
 .account-app textarea { font: 14px/1.6 Consolas, monospace; }
-.account-app button, .account-app select { font: inherit; padding: 7px 12px; color: inherit; background: white; border: 1px solid #a6b3c3; border-radius: 4px; cursor: pointer; }
-.account-app button:hover:not(:disabled) { background: #edf2f8; border-color: #526875; }
-.account-app button:disabled { cursor: default; opacity: .55; }
+.account-app select { font: inherit; padding: 7px 12px; color: inherit; background: white; border: 1px solid #a6b3c3; border-radius: 4px; cursor: pointer; }
 .account-app :focus-visible { outline: 3px solid #006b67; outline-offset: 3px; }
 /* Account UI: ink #183348, paper #ffffff, mist #eef3f5, teal #006b67, slate #526875, danger via --color-danger. */
 .account-app { min-height: 100vh; background: #eef3f5; color: #183348; font-family: "Segoe UI", "Helvetica Neue", sans-serif; }
 .account-app h1 { font-size: 30px; line-height: 1.2; font-weight: 650; color: #183348; }
 .account-app a { color: #006b67; text-underline-offset: 3px; }
 .account-app p { line-height: 1.6; }
-.account-app button { min-height: 38px; }
-.account-app button.primary { background: #006b67; border-color: #006b67; color: white; }
-.account-app button.primary:hover:not(:disabled) { background: #00534f; }
 .account-app :focus-visible { outline-color: #006b67; }
 .account-app .form-message:empty { display: none; }
 .account-app .form-message { padding: 12px 16px; background: #fff; border-left: 3px solid #006b67; overflow-wrap: anywhere; }
@@ -44,7 +39,6 @@ body { margin: 0; }
 .admin-nav nav a:hover, .admin-nav nav a[aria-current=page] { background: #2a4b60; color: white; }
 .account-footer { flex-shrink: 0; padding-top: 16px; border-top: 1px solid #526875; }
 .account-app .account-trigger { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 10px; text-align: left; background: transparent; color: white; border-color: transparent; }
-.account-app button.account-trigger:hover:not(:disabled), .account-app .account-trigger[aria-expanded=true] { background: #2a4b60; border-color: #526875; }
 .account-app .admin-nav :focus-visible { outline-color: #71c8bb; }
 .account-app .account-popover :focus-visible { outline-color: #006b67; }
 .account-trigger span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -86,15 +80,11 @@ body { margin: 0; }
 .password-page > .breadcrumb { display: inline-block; margin-bottom: 22px; }
 .secret-value { font-family: Consolas, monospace; font-size: 13px !important; }
 .account-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-.account-app .text-danger { color: var(--color-danger); }
-.account-app .danger { background: var(--color-danger); border-color: var(--color-danger); color: white; }
-.account-app .danger:hover:not(:disabled) { background: var(--color-danger); border-color: var(--color-danger); filter: brightness(.85); }
 .confirmation { margin: 24px 0; border: 1px solid var(--color-danger); border-left-width: 5px; padding: 24px; background: white; }
 .confirmation button + button { margin-left: 8px; }
 .impersonation { display: flex; gap: 20px; align-items: center; justify-content: space-between; margin: -10px 0 26px; padding: 16px 20px; background: #fff1ce; border: 1px solid #9a731c; color: #513d0e; }
 .cancel-link { display: inline-block; margin-left: 18px; }
 @media (max-width: 700px) { .admin-shell { grid-template-columns: 1fr; } .admin-nav { position: static; height: auto; overflow: visible; padding: 16px; gap: 14px; } .admin-nav nav { display: flex; flex-wrap: wrap; overflow: visible; } .admin-content { padding: 20px 16px; } .account-panel { padding: 22px; } .impersonation { align-items: start; flex-direction: column; gap: 12px; } .login-screen { padding-top: 6vh; } }
 
-.account-app .text-danger:hover:not(:disabled) { color: var(--color-danger); border-color: var(--color-danger); }
 .account-app .form-message.error { color: var(--color-danger); border-left-color: var(--color-danger); }
 .account-app .content-editor [role=alert] { color: var(--color-danger); }

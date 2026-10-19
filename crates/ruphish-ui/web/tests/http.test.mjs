@@ -78,3 +78,16 @@ test('authentication loss is reported at headers even if the response body stall
     timer.expire();
     await rejected;
 });
+
+test('binary exports preserve bytes and errors remain readable JSON', async t => {
+    clock(t);
+    const bytes = new Uint8Array([0x50, 0x4b, 0, 255, 128]);
+    t.mock.method(globalThis, 'fetch', async () => new Response(bytes));
+    const result = await startRequest(new Request('https://admin.test/export'), 60000, () => {}, true).promise;
+    assert.deepEqual(new Uint8Array(await result.file.arrayBuffer()), bytes);
+    assert.equal(result.body, '');
+    t.mock.method(globalThis, 'fetch', async () => new Response('{"message":"export_too_large"}', { status: 400 }));
+    const rejected = await startRequest(new Request('https://admin.test/export'), 60000, () => {}, true).promise;
+    assert.equal(rejected.file, null);
+    assert.equal(JSON.parse(rejected.body).message, 'export_too_large');
+});

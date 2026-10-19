@@ -256,15 +256,9 @@ async fn load(c: &mut SqliteConnection, owner: i64, id: i64) -> Result<Campaign,
                 position: text(&r, "position")?,
             },
             status: text(&r, "status")?,
-            ip: text(&r, "ip")?,
-            latitude: r
-                .try_get::<Option<f64>, _>("latitude")
-                .map_err(storage)?
-                .unwrap_or(0.0),
-            longitude: r
-                .try_get::<Option<f64>, _>("longitude")
-                .map_err(storage)?
-                .unwrap_or(0.0),
+            ip: String::new(),
+            latitude: 0.0,
+            longitude: 0.0,
             reported: r
                 .try_get::<Option<bool>, _>("reported")
                 .map_err(storage)?

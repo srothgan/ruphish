@@ -1,7 +1,9 @@
 //! Read-only resource pages, distinct from the create/edit draft lifecycle.
 use super::{Api, Family, ResourceAccess, download};
-use crate::components::{DataTable, ManagementPage, PageHeader};
 use crate::feedback::Message;
+use crate::shared::components::{
+    ActionButton, ActionLink, ButtonStyle, DataTable, ManagementPage, PageHeader,
+};
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use ruphish_ui::preview_document;
 use serde_json::Value;
@@ -38,7 +40,7 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
     view! {<ManagementPage>
         <a class="breadcrumb" href=format!("/{}",family.route())>{format!("Back to {}",family.title().to_lowercase())}</a>
         {message.view()}
-        <Show when=move||!loading.get()&&data.with(Option::is_none)><button on:click=move |_|reload.update(|n|*n+=1)>"Retry loading resource"</button></Show>
+        <Show when=move||!loading.get()&&data.with(Option::is_none)><ActionButton on_click=move |_|reload.update(|n|*n+=1)>"Retry loading resource"</ActionButton></Show>
         <Show when=move||loading.get()><p role="status">"Loading resource..."</p></Show>
         {move||data.get().map(|value| {
             let id=value["id"].as_i64().unwrap_or(0);
@@ -46,9 +48,9 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
             let export=value.clone();
             let export_name=name.clone();
             view! {<PageHeader title=name subtitle=format!("Last updated: {}",text(&value,"modified_date"))>
-                <a hidden=!can_edit class="button primary" href=format!("/{}/{id}/edit",family.route())>"Edit"</a>
-                <a hidden=!can_edit class="button" href=format!("/{}/new?duplicate={id}",family.route())>"Duplicate"</a>
-                <button on:click=move |_|download(&export,&export_name,message)>"Export JSON"</button>
+                <ActionLink hidden=!can_edit style=ButtonStyle::Primary href=format!("/{}/{id}/edit",family.route())>"Edit"</ActionLink>
+                <ActionLink hidden=!can_edit href=format!("/{}/new?duplicate={id}",family.route())>"Duplicate"</ActionLink>
+                <ActionButton on_click=move |_|download(&export,&export_name,message)>"Export JSON"</ActionButton>
             </PageHeader><div class="resource-read-panel">{body(value,family)}</div>}
         })}
     </ManagementPage>}

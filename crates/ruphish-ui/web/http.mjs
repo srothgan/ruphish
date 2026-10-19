@@ -1,5 +1,5 @@
 // One deadline covers connection, headers and body. Dropping the Rust future cancels Fetch.
-export function startRequest(request, milliseconds, onHeaders = () => {}) {
+export function startRequest(request, milliseconds, onHeaders = () => {}, download = false) {
     const controller = new AbortController();
     let timedOut = false;
     const timer = setTimeout(() => {
@@ -11,9 +11,10 @@ export function startRequest(request, milliseconds, onHeaders = () => {}) {
             const response = await fetch(request, { signal: controller.signal });
             if (controller.signal.aborted) throw new Error('aborted');
             onHeaders(response.status);
-            const body = await response.text();
+            const file = download && response.ok ? await response.blob() : null;
+            const body = file ? "" : await response.text();
             if (controller.signal.aborted) throw new Error('aborted');
-            return { status: response.status, etag: response.headers.get('etag'), body };
+            return { status: response.status, etag: response.headers.get('etag'), body, ...(download ? { file } : {}) };
         } catch {
             // Never propagate URLs, headers, response bodies or platform diagnostics.
             throw new Error(timedOut ? 'request_timeout' : 'request_unavailable');
@@ -25,3 +26,15 @@ export function startRequest(request, milliseconds, onHeaders = () => {}) {
 }
 export function requestPromise(request) { return request.promise; }
 export function cancelRequest(request) { request.cancel(); }
+
+export function saveDownload(result, filename) {
+    if (!(result.file instanceof Blob)) throw new Error('invalid_download');
+    const url = URL.createObjectURL(result.file);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

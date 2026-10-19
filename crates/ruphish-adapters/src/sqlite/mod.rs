@@ -6,13 +6,19 @@ mod campaign_schema;
 pub mod campaigns;
 mod domain_schema;
 pub mod domains;
+pub mod integrations;
 pub mod interactions;
+pub(crate) mod mailbox_worker;
 mod migrations;
 mod participant_privacy;
 pub mod previews;
+mod report_exports;
+pub mod reporting;
+mod reporting_schema;
 pub mod resources;
 pub mod sessions;
 mod startup;
+mod webhook_worker;
 
 pub use startup::{StartupDatabase, StartupError};
 
@@ -269,6 +275,9 @@ async fn validate_schema(
         }
         if auth_schema::version(connection).await? >= 5 {
             domain_schema::verification_history(&mut expected).await?;
+        }
+        if auth_schema::version(connection).await? >= 6 {
+            reporting_schema::migrate(&mut expected).await?;
         }
     }
     if schema(connection).await? != schema(&mut expected).await? {

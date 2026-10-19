@@ -1,10 +1,10 @@
 //! Resource lists and full-page editors using the preserved HTTP boundary.
 use crate::account::Api;
-use crate::components::{
-    DataTable, DeleteConfirmation, EmptyState, Field, FormFields, FormFooter, ManagementPage,
-    PageHeader, SaveButton, modal_node,
-};
 use crate::feedback::Message;
+use crate::shared::components::{
+    ActionButton, ActionLink, ButtonStyle, DataTable, DeleteConfirmation, Field, FormFields,
+    FormFooter, ListEmptyState, ListToolbar, ManagementPage, PageHeader, SaveButton, modal_node,
+};
 use leptos::{html, prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use ruphish_ui::{
     import_drafts::{ImportDrafts, ImportedDraft},
@@ -52,7 +52,7 @@ pub(super) fn detail(api: Api, token: String, family: Family, editing: bool) -> 
                 on_cleanup(move || { if let Some(store) = drafts { store.remove(&draft_id); } });
                 edit(api,token.clone(),family,id,None,replace_url,Some(imported)).into_any()
             } else {
-                view!{<ManagementPage><h1>"This draft is no longer available"</h1><p class="form-message error" role="alert">{ImportError::DraftUnavailable.to_string()}</p><p>"Imported drafts stay in this tab until saved or discarded. Refreshing, closing the tab or changing accounts clears them."</p><a class="button primary" href=format!("/{}?import=1",family.route())>"Import again"</a></ManagementPage>}.into_any()
+                view!{<ManagementPage><h1>"This draft is no longer available"</h1><p class="form-message error" role="alert">{ImportError::DraftUnavailable.to_string()}</p><p>"Imported drafts stay in this tab until saved or discarded. Refreshing, closing the tab or changing accounts clears them."</p><ActionLink style=ButtonStyle::Primary href=format!("/{}?import=1",family.route())>"Import again"</ActionLink></ManagementPage>}.into_any()
             }
         } else if editing || id == "new" { edit(api,token.clone(),family,id,duplicate,replace_url,None).into_any() }
         else { resource_view::show(api,token.clone(),family,id).into_any() }
@@ -205,20 +205,18 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
     });
     view! {<ManagementPage>
     <PageHeader title=family.title().to_owned() subtitle=match family{Family::Groups=>"Organize recipients and review imported data before saving.",Family::Templates=>"Compose messages, manage attachments and send a test.",Family::Pages=>"Prepare landing-page content and optional interaction defaults.",Family::Profiles=>"Configure mail connections and verify them before use."}.to_owned()>
-        <button hidden=!can_edit on:click=move |_|import_open.set(true)>"Import"</button><a hidden=!can_edit class="button primary" href=format!("/{}/new",family.route())>{format!("Create {}",family.singular())}</a>
+        <ActionButton hidden=!can_edit on_click=move |_|import_open.set(true)>"Import"</ActionButton><ActionLink hidden=!can_edit style=ButtonStyle::Primary href=format!("/{}/new",family.route())>{format!("Create {}",family.singular())}</ActionLink>
     </PageHeader>
     {move||(can_edit && import_open.get()).then(||import_panel(api,token.get_value(),family,import_open))}
     {message.view()}
     {move||deleting.get().map(|v|view!{<DeleteConfirmation title=format!("Delete {}?",v["name"].as_str().unwrap_or("resource")) description="This permanently removes the saved resource. Resources used by unfinished campaigns cannot be deleted." confirm_label="Delete resource" busy=busy on_confirm=Callback::new(remove) on_cancel=Callback::new(move|()|deleting.set(None)) message=message/>})}
-    <div class="management-toolbar"><Field label="Search by name"><input type="search" prop:value=move||search.get() on:input=move|e|search.set(event_target_value(&e))/></Field><span>{move||format!("{} resources",visible.with(Vec::len))}</span></div>
+    <ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len))/>
     <Show when=move||loading.get()><p role="status">"Loading resources..."</p></Show>
-    <Show when=move||!loading.get()&&failed.get()><button on:click=move |_|refresh.update(|v|*v+=1)>"Retry loading resources"</button></Show>
+    <Show when=move||!loading.get()&&failed.get()><ActionButton on_click=move |_|refresh.update(|v|*v+=1)>"Retry loading resources"</ActionButton></Show>
     <DataTable label=family.title() headers=vec!["Name",if family==Family::Groups{"Recipients"}else{"Active campaigns"},"Last modified","Actions"]>
-    {move||visible.get().into_iter().map(|v|{let id=v["id"].as_i64().unwrap_or(0);let name=v["name"].as_str().unwrap_or("Unnamed").to_owned();let delete_value=v.clone();view!{<tr><th scope="row"><a href=format!("/{}/{id}",family.route())>{name}</a></th><td>{v[if family==Family::Groups{"num_targets"}else{"active_campaigns"}].as_i64().unwrap_or(0)}</td><td>{v["modified_date"].as_str().unwrap_or("").to_owned()}</td><td><div class="row-actions"><a href=if can_edit{format!("/{}/{id}/edit",family.route())}else{format!("/{}/{id}",family.route())}>{if can_edit{"Edit"}else{"View"}}</a><a hidden=!can_edit href=format!("/{}/new?duplicate={id}",family.route())>"Duplicate"</a><button hidden=!can_edit class="text-danger" on:click=move |_|{message.clear();deleting.set(Some(delete_value.clone()))}>"Delete"</button></div></td></tr>}}).collect_view()}
+    {move||visible.get().into_iter().map(|v|{let id=v["id"].as_i64().unwrap_or(0);let name=v["name"].as_str().unwrap_or("Unnamed").to_owned();let delete_value=v.clone();view!{<tr><th scope="row"><a href=format!("/{}/{id}",family.route())>{name}</a></th><td>{v[if family==Family::Groups{"num_targets"}else{"active_campaigns"}].as_i64().unwrap_or(0)}</td><td>{v["modified_date"].as_str().unwrap_or("").to_owned()}</td><td><div class="row-actions"><a href=if can_edit{format!("/{}/{id}/edit",family.route())}else{format!("/{}/{id}",family.route())}>{if can_edit{"Edit"}else{"View"}}</a><a hidden=!can_edit href=format!("/{}/new?duplicate={id}",family.route())>"Duplicate"</a><ActionButton hidden=!can_edit style=ButtonStyle::Cancel on_click=move |_|{message.clear();deleting.set(Some(delete_value.clone()))}>"Delete"</ActionButton></div></td></tr>}}).collect_view()}
     </DataTable>
-    <Show when=move||!loading.get()&&!failed.get()&&visible.with(Vec::is_empty)>
-        <EmptyState title="No resources found"><p>{move||if search.get().is_empty(){"Create a resource or import a file to review in a new draft."}else{"Try another search."}}</p></EmptyState>
-    </Show>
+    <ListEmptyState ready=Signal::derive(move || !loading.get() && !failed.get()) count=Signal::derive(move || visible.with(Vec::len)) search=search guidance="Create a resource or import a file to review in a new draft."/>
     </ManagementPage>}
 }
 
@@ -357,14 +355,14 @@ fn edit(
     view! {<ManagementPage><a class="breadcrumb" href=format!("/{}",family.route())>{format!("Back to {}",family.title().to_lowercase())}</a>
     <PageHeader title=Signal::derive(move||{let name=editor.text("name");if name.is_empty(){format!("New {}",family.singular())}else{name}})
         status=true subtitle=Signal::derive(move||if editor.busy.get(){"Saving or checking..."}else if loading.get(){"Loading resource..."}else if load_failed.get(){"Resource could not be loaded"}else if editor.readonly{"Read-only access"}else if editor.visual_pending.get(){"Apply or cancel visual edits before saving"}else if editor.draft.with(ResourceDraft::dirty){"Unsaved changes"}else if editor.draft.with(|d|d.value()["id"].as_i64().unwrap_or(0)==0){"Not saved yet"}else{"No unsaved changes"}.to_owned())>
-    {(family==Family::Templates||family==Family::Profiles).then(||view!{<button disabled=move||loading.get()||load_failed.get()||editor.readonly||editor.busy.get()||editor.visual_pending.get() on:click=move |_|test_open.set(true)>"Send test"</button>})}
+    {(family==Family::Templates||family==Family::Profiles).then(||view!{<ActionButton disabled=Signal::derive(move||loading.get()||load_failed.get()||editor.readonly||editor.busy.get()||editor.visual_pending.get()) on_click=move |_|test_open.set(true)>"Send test"</ActionButton>})}
     <SaveButton disabled=Signal::derive(move||loading.get()||load_failed.get()||editor.readonly||editor.busy.get()||editor.visual_pending.get()||editor.import_review.is_some_and(|r|!r.with(ImportReview::ready))) on_click=Callback::new(save) label=Signal::derive(move||if editor.draft.with(|d|d.value()["id"].as_i64().unwrap_or(0)==0){format!("Create {}",family.singular())}else{"Save changes".into()})/>
     </PageHeader>
     {matches!(family,Family::Templates|Family::Pages|Family::Profiles).then(||view!{<p class="resource-usage">"Campaigns use the current saved version of this resource. Editing it can affect unfinished campaigns."</p>})}
     {editor.import_review.map(|review|import_review_panel(review,editor.message))}
-    {editor.message.view()}<Show when=move||!loading.get()&&load_failed.get()><button on:click=move |_|reload.update(|n|*n+=1)>"Retry loading resource"</button></Show><Show when=move||loading.get()><p>"Loading resource..."</p></Show>
+    {editor.message.view()}<Show when=move||!loading.get()&&load_failed.get()><ActionButton on_click=move |_|reload.update(|n|*n+=1)>"Retry loading resource"</ActionButton></Show><Show when=move||loading.get()><p>"Loading resource..."</p></Show>
     <FormFields disabled=Signal::derive(move||load_failed.get()||editor.readonly||loading.get()||editor.busy.get())>{editor.field("name","Name","text")}{content}</FormFields>
-    <FormFooter><button class="text-danger" disabled=move||loading.get()||load_failed.get()||editor.busy.get() on:click=move |_|{editor.draft.update(ResourceDraft::cancel);editor.epoch.update(|v|*v+=1);let id=editor.draft.with_untracked(|d|d.value()["id"].as_i64().unwrap_or(0)); editor.replace_url.run(if id>0{format!("/{}/{id}",family.route())}else{format!("/{}",family.route())});}>"Cancel changes"</button></FormFooter>
+    <FormFooter><ActionButton style=ButtonStyle::Cancel disabled=Signal::derive(move||loading.get()||load_failed.get()||editor.busy.get()) on_click=move |_|{editor.draft.update(ResourceDraft::cancel);editor.epoch.update(|v|*v+=1);let id=editor.draft.with_untracked(|d|d.value()["id"].as_i64().unwrap_or(0)); editor.replace_url.run(if id>0{format!("/{}/{id}",family.route())}else{format!("/{}",family.route())});}>"Cancel changes"</ActionButton></FormFooter>
     {move||test_open.get().then(||test_panel(api,token.get_value(),family,editor,test_open))}
     </ManagementPage>}
 }
@@ -427,8 +425,8 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
     }
 }
 fn group_fields(editor: Editor) -> impl IntoView {
-    view! {<section class="resource-section"><div class="management-heading"><h2>"Recipients"</h2><button type="button" on:click=move |_|editor.draft.update(|d|d.edit(|v|{if let Some(rows)=v["targets"].as_array_mut(){rows.push(json!({"email":"","first_name":"","last_name":"","position":""}));}}))>"Add recipient"</button></div><DataTable label="Recipients" headers=vec!["Email","First name","Last name","Position","Action"] class="recipient-table">
-    <For each=move||0..editor.draft.with(|d|d.value()["targets"].as_array().map_or(0,Vec::len)) key=|i|*i children=move|index|view!{<tr>{["email","first_name","last_name","position"].into_iter().map(move|key|view!{<td><input aria-label=format!("Recipient {} {key}",index+1) prop:value=move||editor.draft.with(|d|d.value()["targets"][index][key].as_str().unwrap_or("").to_owned()) on:input=move|e|editor.draft.update(|d|d.edit(|v|v["targets"][index][key]=json!(event_target_value(&e))))/></td>}).collect_view()}<td><button type="button" on:click=move |_|editor.draft.update(|d|d.edit(|v|{if let Some(rows)=v["targets"].as_array_mut() && index<rows.len(){rows.remove(index);}}))>"Remove"</button></td></tr>}/>
+    view! {<section class="resource-section"><div class="management-heading"><h2>"Recipients"</h2><ActionButton kind="button" on_click=move |_|editor.draft.update(|d|d.edit(|v|{if let Some(rows)=v["targets"].as_array_mut(){rows.push(json!({"email":"","first_name":"","last_name":"","position":""}));}}))>"Add recipient"</ActionButton></div><DataTable label="Recipients" headers=vec!["Email","First name","Last name","Position","Action"] class="recipient-table">
+    <For each=move||0..editor.draft.with(|d|d.value()["targets"].as_array().map_or(0,Vec::len)) key=|i|*i children=move|index|view!{<tr>{["email","first_name","last_name","position"].into_iter().map(move|key|view!{<td><input aria-label=format!("Recipient {} {key}",index+1) prop:value=move||editor.draft.with(|d|d.value()["targets"][index][key].as_str().unwrap_or("").to_owned()) on:input=move|e|editor.draft.update(|d|d.edit(|v|v["targets"][index][key]=json!(event_target_value(&e))))/></td>}).collect_view()}<td><ActionButton kind="button" on_click=move |_|editor.draft.update(|d|d.edit(|v|{if let Some(rows)=v["targets"].as_array_mut() && index<rows.len(){rows.remove(index);}}))>"Remove"</ActionButton></td></tr>}/>
     </DataTable></section>}
 }
 fn content_workspace(
@@ -511,7 +509,7 @@ fn content_workspace(
         <div id="content-preview-panel" class="content-preview-panel" role="tabpanel" aria-labelledby="content-preview-tab" hidden=move||!showing_preview.get() aria-busy=move||preview.with(|p|p.loading).to_string()>
             <p class="content-tab-help">"Current draft with sample recipient Alice Example. Scripts, external resources and submissions are blocked."{(family==Family::Templates).then_some(" Email clients may render it differently.")}</p>
             <Show when=move||preview.with(|p|p.loading)><p role="status">"Rendering preview..."</p></Show>
-            {move||preview.get().error.map(|error|view!{<p class="form-message error" role="alert">{error}</p><button type="button" on:click=move |_|retry.update(|v|*v+=1)>"Retry preview"</button>})}
+            {move||preview.get().error.map(|error|view!{<p class="form-message error" role="alert">{error}</p><ActionButton kind="button" on_click=move |_|retry.update(|v|*v+=1)>"Retry preview"</ActionButton>})}
             {move||preview.get().html.map(|html|view!{<iframe title="Current HTML draft preview" sandbox="" referrerpolicy="no-referrer" srcdoc=preview_document(&html)></iframe>})}
         </div>
     </section>}
@@ -561,12 +559,12 @@ fn content_fields(
     view! {<section class="resource-section">
     {(family==Family::Templates).then(||view!{<div class="resource-columns">{editor.field("subject","Subject","text")}{editor.field("envelope_sender","Visible From (blank uses sending profile)","text")}</div>})}
     {content_workspace(api,token,editor,family)}
-    {(family==Family::Templates).then(||view!{<label class="text-alternative">"Plain-text alternative"<textarea rows="6" prop:value=move||editor.text("text") on:input=move|e|editor.set("text",json!(event_target_value(&e)))></textarea></label><div class="resource-section"><h2>"Attachments"</h2><input node_ref=files hidden type="file" multiple on:change=add/><button type="button" on:click=move |_|{if let Some(node)=files.get(){node.click();}}>"Add attachments"</button><ul>{move||editor.draft.with(|d|d.value()["attachments"].as_array().cloned().unwrap_or_default()).into_iter().enumerate().map(|(i,a)|view!{<li>{a["name"].as_str().unwrap_or("").to_owned()}<button type="button" on:click=move |_|editor.draft.update(|d|{d.remove_attachment(i);})>"Remove"</button></li>}).collect_view()}</ul></div>})}
+    {(family==Family::Templates).then(||view!{<label class="text-alternative">"Plain-text alternative"<textarea rows="6" prop:value=move||editor.text("text") on:input=move|e|editor.set("text",json!(event_target_value(&e)))></textarea></label><div class="resource-section"><h2>"Attachments"</h2><input node_ref=files hidden type="file" multiple on:change=add/><ActionButton kind="button" on_click=move |_|{if let Some(node)=files.get(){node.click();}}>"Add attachments"</ActionButton><ul>{move||editor.draft.with(|d|d.value()["attachments"].as_array().cloned().unwrap_or_default()).into_iter().enumerate().map(|(i,a)|view!{<li>{a["name"].as_str().unwrap_or("").to_owned()}<ActionButton kind="button" on_click=move |_|editor.draft.update(|d|{d.remove_attachment(i);})>"Remove"</ActionButton></li>}).collect_view()}</ul></div>})}
     {(family==Family::Pages).then(||view!{<section class="resource-section"><h2>"Optional campaign defaults"</h2><p>"Public pages preserve field names and styling, but block authored scripts, embedded frames and external resources. Use embedded PNG, JPEG or GIF images. Preview the final page before launch; form submissions send only event metadata and optional password presence."</p><p>"Suggested submission settings for campaigns using this page. Leave tracking off and the redirect blank if no defaults are needed."</p>{editor.flag("capture_credentials","Record form submission")}{editor.flag("capture_passwords","Record password presence")}{editor.field("redirect_url","Redirect URL after submission (optional)","text")}<p>"Track only whether fields were filled and submitted. Entered usernames, passwords and other field values are never collected."</p></section>})}
     </section>}
 }
 fn profile_fields(editor: Editor) -> impl IntoView {
-    view! {<section class="resource-section"><h2>"Connection"</h2><div class="resource-columns">{editor.field("host","SMTP host and port","text")}{editor.field("from_address","Sender address","text")}{editor.field("username","Username (optional)","text")}{editor.field("password","Password","password")}</div><p>"Port defaults to 25. Port 465 uses implicit TLS; STARTTLS is used when advertised. Passwords are masked, never replaced with a placeholder."</p>{editor.flag("ignore_cert_errors","Ignore SMTP certificate errors")}</section><section class="resource-section"><div class="management-heading"><h2>"Additional headers"</h2><button type="button" on:click=move |_|editor.draft.update(|d|d.edit(|v|{if let Some(rows)=v["headers"].as_array_mut(){rows.push(json!({"key":"","value":""}));}}))>"Add header"</button></div><For each=move||0..editor.draft.with(|d|d.value()["headers"].as_array().map_or(0,Vec::len)) key=|i|*i children=move|index|view!{<div class="header-row">{["key","value"].into_iter().map(move|key|view!{<label>{if key=="key"{"Header name"}else{"Value"}}<input prop:value=move||editor.draft.with(|d|d.value()["headers"][index][key].as_str().unwrap_or("").to_owned()) on:input=move|e|editor.draft.update(|d|d.edit(|v|v["headers"][index][key]=json!(event_target_value(&e))))/></label>}).collect_view()}<button type="button" on:click=move |_|editor.draft.update(|d|d.edit(|v|{if let Some(rows)=v["headers"].as_array_mut() && index<rows.len(){rows.remove(index);}}))>"Remove"</button></div>}/></section>}
+    view! {<section class="resource-section"><h2>"Connection"</h2><div class="resource-columns">{editor.field("host","SMTP host and port","text")}{editor.field("from_address","Sender address","text")}{editor.field("username","Username (optional)","text")}{editor.field("password","Password","password")}</div><p>"Port defaults to 25. Port 465 uses implicit TLS; STARTTLS is used when advertised. Passwords are masked, never replaced with a placeholder."</p>{editor.flag("ignore_cert_errors","Ignore SMTP certificate errors")}</section><section class="resource-section"><div class="management-heading"><h2>"Additional headers"</h2><ActionButton kind="button" on_click=move |_|editor.draft.update(|d|d.edit(|v|{if let Some(rows)=v["headers"].as_array_mut(){rows.push(json!({"key":"","value":""}));}}))>"Add header"</ActionButton></div><For each=move||0..editor.draft.with(|d|d.value()["headers"].as_array().map_or(0,Vec::len)) key=|i|*i children=move|index|view!{<div class="header-row">{["key","value"].into_iter().map(move|key|view!{<label>{if key=="key"{"Header name"}else{"Value"}}<input prop:value=move||editor.draft.with(|d|d.value()["headers"][index][key].as_str().unwrap_or("").to_owned()) on:input=move|e|editor.draft.update(|d|d.edit(|v|v["headers"][index][key]=json!(event_target_value(&e))))/></label>}).collect_view()}<ActionButton kind="button" on_click=move |_|editor.draft.update(|d|d.edit(|v|{if let Some(rows)=v["headers"].as_array_mut() && index<rows.len(){rows.remove(index);}}))>"Remove"</ActionButton></div>}/></section>}
 }
 
 fn import_panel(api: Api, token: String, family: Family, open: RwSignal<bool>) -> impl IntoView {
@@ -696,7 +694,7 @@ fn import_panel(api: Api, token: String, family: Family, open: RwSignal<bool>) -
         <p>"Load content into a new Create form to review and finish. Nothing is saved yet."</p>
         <fieldset disabled=move||busy.get() class="import-fields">
         <input hidden node_ref=file type="file" accept=match family{Family::Groups=>".json,.csv",Family::Templates=>".json,.eml,.html,.htm",Family::Pages=>".json,.html,.htm",Family::Profiles=>".json"} on:change=read/>
-        <button on:click=move |_|{if let Some(file)=file.get(){file.click();}}>"Choose file"</button>
+        <ActionButton on_click=move |_|{if let Some(file)=file.get(){file.click();}}>"Choose file"</ActionButton>
         <label>"Import format"<select prop:value=move||mode.get() on:change=move|e|{mode.set(event_target_value(&e));content.set(String::new());message.clear();}>
         <option value="json">"Resource JSON"</option>
         {(family==Family::Groups).then(||view!{<option value="csv">"Recipients CSV"</option>})}
@@ -708,14 +706,14 @@ fn import_panel(api: Api, token: String, family: Family, open: RwSignal<bool>) -
         <Show when=move||mode.get()=="csv"><div class="resource-columns">{["Email column","First-name column","Last-name column","Position column"].into_iter().enumerate().map(|(i,label)|view!{<label>{label}<input prop:value=move||columns.get()[i].clone() on:input=move|e|columns.update(|v|v[i]=event_target_value(&e))/></label>}).collect_view()}</div></Show>
         <Show when=move||mode.get()=="email"><label class="checkbox-label"><input type="checkbox" prop:checked=move||convert.get() on:change=move|e|convert.set(event_target_checked(&e))/>"Replace links with the recipient URL"</label></Show>
         </fieldset>{message.view()}
-        <div class="import-actions"><button class="text-danger" on:click=move |_|open.set(false)>"Cancel import"</button><button class="primary" disabled=move||busy.get()||content.get().trim().is_empty() on:click=review>{move||if busy.get(){"Reading import..."}else{"Continue to create"}}</button></div>
+        <div class="import-actions"><ActionButton style=ButtonStyle::Cancel on_click=move |_|open.set(false)>"Cancel import"</ActionButton><ActionButton style=ButtonStyle::Primary disabled=Signal::derive(move||busy.get()||content.get().trim().is_empty()) on_click=review>{move||if busy.get(){"Reading import..."}else{"Continue to create"}}</ActionButton></div>
     </dialog>}
 }
 
 fn import_review_panel(review: RwSignal<ImportReview>, message: Message) -> impl IntoView {
     view! {<section class="import-summary" aria-labelledby="import-summary-heading"><h2 id="import-summary-heading">"Review imported content"</h2>
     <ul>{review.with_untracked(|r|r.notes.clone()).into_iter().map(|note|view!{<li>{note}</li>}).collect_view()}</ul>
-    {review.with_untracked(|r|!r.rejected_rows.is_empty()).then(||view!{<details><summary class="text-danger">"Rejected CSV rows"</summary><ul class="text-danger">{review.with_untracked(|r|r.rejected_rows.iter().take(20).cloned().collect::<Vec<_>>()).into_iter().map(|error|view!{<li>{format!("Row {}: {}",error["row"],error["message"].as_str().unwrap_or("Invalid row"))}</li>}).collect_view()}</ul><p>"Showing up to 20 rows. Download the report for all rejected rows."</p><button on:click=move |_|download(&json!(review.with_untracked(|r|r.rejected_rows.clone())),"import-errors",message)>"Download error report"</button></details>})}
+    {review.with_untracked(|r|!r.rejected_rows.is_empty()).then(||view!{<details><summary class="text-danger">"Rejected CSV rows"</summary><ul class="text-danger">{review.with_untracked(|r|r.rejected_rows.iter().take(20).cloned().collect::<Vec<_>>()).into_iter().map(|error|view!{<li>{format!("Row {}: {}",error["row"],error["message"].as_str().unwrap_or("Invalid row"))}</li>}).collect_view()}</ul><p>"Showing up to 20 rows. Download the report for all rejected rows."</p><ActionButton on_click=move |_|download(&json!(review.with_untracked(|r|r.rejected_rows.clone())),"import-errors",message)>"Download error report"</ActionButton></details>})}
     {review.with_untracked(|r|r.requires_acknowledgement).then(||view!{<label class="checkbox-label"><input type="checkbox" prop:checked=move||review.with(|r|r.acknowledged) on:change=move|e|review.update(|r|r.acknowledged=event_target_checked(&e))/>"I reviewed the rejected or duplicate rows and accept these omissions."</label>})}
     <p>"This draft is kept only in this tab. Refreshing or closing it clears unsaved content."</p>
     </section>}
@@ -801,11 +799,11 @@ fn test_panel(
             busy.set(false);
         });
     };
-    view! {<dialog node_ref=dialog class="management-dialog" aria-labelledby="test-heading" on:cancel=move|e: web_sys::Event|{e.prevent_default();if !busy.get_untracked(){close();}}><div class="management-heading"><h2 id="test-heading">"Send a test email"</h2><button disabled=move||busy.get() on:click=move |_|close()>"Close"</button></div><p>"Test the selected saved content with one recipient. Saving and delivery are separate outcomes."</p>
+    view! {<dialog node_ref=dialog class="management-dialog" aria-labelledby="test-heading" on:cancel=move|e: web_sys::Event|{e.prevent_default();if !busy.get_untracked(){close();}}><div class="management-heading"><h2 id="test-heading">"Send a test email"</h2><ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|close()>"Close"</ActionButton></div><p>"Test the selected saved content with one recipient. Saving and delivery are separate outcomes."</p>
     {(family==Family::Templates).then(||view!{<label>"Sending profile"<select prop:value=move||selected.get() on:change=move|e|selected.set(event_target_value(&e))><option value="">"Choose a profile"</option>{move||profiles.get().into_iter().map(|v|{let name=v["name"].as_str().unwrap_or("").to_owned();{let label=name.clone();view!{<option value=name>{label}</option>}}}).collect_view()}</select></label>})}
-    <button disabled=move||busy.get() on:click=move |_|send(true)>"Test connection only"</button><div class="resource-columns">
+    <ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|send(true)>"Test connection only"</ActionButton><div class="resource-columns">
     {[ (recipient,"Recipient email"),(first,"First name"),(last,"Last name"),(position,"Position"),(url,"Public test URL (optional)") ].into_iter().map(|(signal,label)|view!{<label>{label}<input prop:value=move||signal.get() on:input=move|e|signal.set(event_target_value(&e))/></label>}).collect_view()}
     <label>"Preview landing page"<select prop:value=move||page.get() on:change=move|e|page.set(event_target_value(&e))><option value="">"No landing page"</option>{move||pages.get().into_iter().map(|v|{let name=v["name"].as_str().unwrap_or("").to_owned();{let label=name.clone();view!{<option value=name>{label}</option>}}}).collect_view()}</select></label></div>
-    {message.view()}<button class="primary" disabled=move||busy.get()||recipient.get().is_empty() on:click=move |_|send(false)>{move||if busy.get(){"Working..."}else if editor.draft.with(ResourceDraft::dirty)||editor.draft.with(|d|d.value()["id"].as_i64().unwrap_or(0)==0){"Save and send test"}else{"Send test email"}}</button>
+    {message.view()}<ActionButton style=ButtonStyle::Primary disabled=Signal::derive(move||busy.get()||recipient.get().is_empty()) on_click=move |_|send(false)>{move||if busy.get(){"Working..."}else if editor.draft.with(ResourceDraft::dirty)||editor.draft.with(|d|d.value()["id"].as_i64().unwrap_or(0)==0){"Save and send test"}else{"Send test email"}}</ActionButton>
     </dialog>}
 }

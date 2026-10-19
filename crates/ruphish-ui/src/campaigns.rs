@@ -1,5 +1,5 @@
 //! Campaign preparation and operational delivery views within the shared shell.
-use crate::{account::Api, components::*, feedback::Message, resources::ResourceAccess};
+use crate::{account::Api, feedback::Message, resources::ResourceAccess, shared::components::*};
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use leptos_router::hooks::{use_navigate, use_params_map, use_query_map};
 use ruphish_ui::campaign_state::Draft;
@@ -29,6 +29,12 @@ fn editable() -> bool {
 }
 
 pub(super) fn list(api: Api) -> impl IntoView {
+    list_mode(api, false)
+}
+pub(super) fn analysis_directory(api: Api) -> impl IntoView {
+    list_mode(api, true)
+}
+fn list_mode(api: Api, analysis: bool) -> impl IntoView {
     let rows = RwSignal::new(Vec::<Value>::new());
     let pages = RwSignal::new(CursorPages::default());
     let after = Memo::new(move |_| pages.with(CursorPages::after));
@@ -65,12 +71,12 @@ pub(super) fn list(api: Api) -> impl IntoView {
             busy.set(false);
         });
     });
-    view! {<ManagementPage><PageHeader title="Campaigns" subtitle="Prepare a simulation and follow its delivery progress.">
-        <button disabled=move||busy.get() on:click=move |_|refresh.update(|v|*v+=1)>"Refresh"</button>
-        <a class="button primary" hidden=!can_edit href="/campaigns/new">"Create campaign"</a>
+    view! {<ManagementPage><PageHeader title=if analysis { "Campaign analysis" } else { "Campaigns" } subtitle=if analysis { "Select a campaign to inspect its recorded events and recipient outcomes." } else { "Prepare a simulation and follow its delivery progress." }>
+        <ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|refresh.update(|v|*v+=1)>"Refresh"</ActionButton>
+        <ActionLink style=ButtonStyle::Primary hidden={ !can_edit || analysis } href="/campaigns/new">"Create campaign"</ActionLink>
     </PageHeader>{message.view()}<Show when=move||busy.get()><p role="status">"Loading campaigns…"</p></Show>
     <DataTable label="Campaigns" headers=vec!["Campaign","Lifecycle","Recipients","Launch"]>
-        {move||rows.get().into_iter().filter(|_|pages.with(CursorPages::loaded)).map(|r|view!{<tr><th scope="row"><a href=format!("/campaigns/{}",r["id"])>{text(&r,"name")}</a></th><td>{text(&r,"status")}</td><td>{r["total"].to_string()}</td><td>{text(&r,"launch_date")}</td></tr>}).collect_view()}
+        {move||rows.get().into_iter().filter(|_|pages.with(CursorPages::loaded)).map(|r|view!{<tr><th scope="row"><a href=format!("/{}/{}",if analysis { "analysis" } else { "campaigns" },r["id"])>{text(&r,"name")}</a></th><td>{text(&r,"status")}</td><td>{r["total"].to_string()}</td><td>{text(&r,"launch_date")}</td></tr>}).collect_view()}
     </DataTable><Show when=move||!busy.get()&&!failed.get()&&rows.get().is_empty()><EmptyState title="No campaigns on this page"><p>"Create a campaign to select an audience, review content and choose a schedule."</p></EmptyState></Show>
     <PageControls pages=pages disabled=Signal::derive(move||busy.get())/>
     </ManagementPage>}
@@ -338,7 +344,7 @@ fn create(api: Api, token: String, initial: Option<Value>) -> impl IntoView {
             busy.set(false);
         });
     };
-    view! {<ManagementPage><a class="breadcrumb" href="/campaigns">"Back to campaigns"</a><PageHeader title="Create campaign" subtitle="Review the audience, content and schedule before launching."><span>"Unsaved draft"</span><button disabled=move||busy.get()||loading.get()||draft.with(|d|d.launch.is_some()) on:click=move |_|reload.update(|v|*v+=1)>"Refresh resources"</button></PageHeader>
+    view! {<ManagementPage><a class="breadcrumb" href="/campaigns">"Back to campaigns"</a><PageHeader title="Create campaign" subtitle="Review the audience, content and schedule before launching."><span>"Unsaved draft"</span><ActionButton disabled=Signal::derive(move||busy.get()||loading.get()||draft.with(|d|d.launch.is_some())) on_click=move |_|reload.update(|v|*v+=1)>"Refresh resources"</ActionButton></PageHeader>
         {message.view()}<Show when=move||loading.get()><p role="status">"Loading resources…"</p></Show>
         <ol class="campaign-steps">{["Audience","Content and destination","Schedule","Review and launch"].into_iter().enumerate().map(|(index,label)|view!{<li aria-current=move||(step.get()==index).then_some("step")>{label}</li>}).collect_view()}</ol>
         <FormFields disabled=Signal::derive(move||busy.get()||loading.get()||!can_edit||draft.with(|d|d.launch.is_some()))>
@@ -349,23 +355,23 @@ fn create(api: Api, token: String, initial: Option<Value>) -> impl IntoView {
         <section hidden=move||step.get()!=1><h2>"Content and destination"</h2><div class="resource-columns">{selector(draft,resources,"template","Email template")}{selector(draft,resources,"smtp","Sending profile")}{page_selector(tasks,api,draft,resources,message)}{domain_selector(draft,resources)}</div>
         <ul class="campaign-resource-links" aria-label="Create resources in a new tab"><li><a href="/templates/new" target="_blank" rel="noopener">"Create template"</a></li><li><a href="/pages/new" target="_blank" rel="noopener">"Create landing page"</a></li><li><a href="/smtp/new" target="_blank" rel="noopener">"Create sending profile"</a></li></ul><p class="resource-usage">"Changes to saved templates or sending profiles can affect scheduled emails and retries in existing campaigns."</p>
         <section class="resource-section"><h2>"Event tracking and redirect (optional)"</h2><p>"Selecting a landing page fills these fields with its defaults. Edit them for this campaign; choosing another page replaces them with that page's defaults."</p><p>"Track submission and password presence only. Entered usernames, passwords and other form values are never collected."</p>
-        <Show when=move||draft.with(|d|d.page_request.is_some())><p role="status">"Loading landing-page defaults..."</p></Show><Show when=move||draft.with(|d|d.page_request.is_none()&&!d.policy_ready())><button type="button" on:click=move |_|load_page_defaults(tasks,api,draft,draft.get_untracked().value["selection"]["page"]["id"].as_i64().unwrap_or(0),message)>"Retry loading defaults"</button></Show><FormFields disabled=Signal::derive(move||!draft.with(Draft::policy_ready))>{flag(draft,"capture_credentials","Record form submission")}{flag(draft,"capture_passwords","Record password presence")}
+        <Show when=move||draft.with(|d|d.page_request.is_some())><p role="status">"Loading landing-page defaults..."</p></Show><Show when=move||draft.with(|d|d.page_request.is_none()&&!d.policy_ready())><ActionButton kind="button" on_click=move |_|load_page_defaults(tasks,api,draft,draft.get_untracked().value["selection"]["page"]["id"].as_i64().unwrap_or(0),message)>"Retry loading defaults"</ActionButton></Show><FormFields disabled=Signal::derive(move||!draft.with(Draft::policy_ready))>{flag(draft,"capture_credentials","Record form submission")}{flag(draft,"capture_passwords","Record password presence")}
         <Field label="Redirect URL (optional; leave empty for no redirect)"><input prop:value=move||text(&draft.get().value["policy"],"redirect_url") on:input=move|e|draft.update(|d|d.edit(|v|v["policy"]["redirect_url"]=json!(event_target_value(&e))))/></Field></FormFields></section></section>
         <section hidden=move||step.get()!=2>{schedule(draft,"launch_local","Launch time",zone)}{schedule(draft,"send_by_local","Initial distribution end (optional)",zone)}<p>"With no launch time, delivery starts after launch. The distribution end spaces initial attempts; retries may continue afterward. SMTP acceptance does not guarantee inbox delivery."</p></section>
         <section hidden=move||step.get()!=3 aria-busy=move||draft.with(|d|d.review_request.is_some()).to_string()><h2>"Review"</h2><p>"Check the validated audience, content and schedule before launching."</p>
         <Show when=move||draft.with(|d|d.review_request.is_some())><p role="status">"Validating campaign and preparing preview..."</p></Show>
         <Show when=move||!loading.get()&&!draft.with(Draft::policy_ready)><p role="status">"Landing-page defaults must finish loading before review. If loading failed, return to Content and destination to retry."</p></Show>
-        {move||draft.get().review_error.map(|error|view!{<div class="form-message error" role="alert"><p>{error}</p><p>"Go back to correct the campaign, or retry if the request failed."</p><button type="button" on:click=move |_|retry_review.update(|n|*n+=1)>"Retry validation"</button></div>})}
+        {move||draft.get().review_error.map(|error|view!{<div class="form-message error" role="alert"><p>{error}</p><p>"Go back to correct the campaign, or retry if the request failed."</p><ActionButton kind="button" on_click=move |_|retry_review.update(|n|*n+=1)>"Retry validation"</ActionButton></div>})}
         {move||draft.get().review.map(|r|view!{<div class="campaign-review"><h3>{format!("{} unique recipients",r["total"])}</h3><p>{format!("{} overlapping recipient entries removed",r["duplicate_count"])}</p>
         {(r["conflict_count"].as_u64().unwrap_or(0)>0).then(||view!{<details><summary>{format!("{} conflicting duplicate entries; first group wins",r["conflict_count"])}</summary><p>"Showing up to 100 conflicts. Review the retained and discarded recipient attributes."</p><ul>{array(&r,"conflicts").into_iter().map(|c|view!{<li>{format!("{}: retained {}; discarded {}",text(&c,"email"),c["kept"],c["discarded"])}</li>}).collect_view()}</ul></details>})}
         <dl class="resource-facts">{["template","page","smtp"].into_iter().map(|key|view!{<div><dt>{key}</dt><dd><a target="_blank" rel="noopener" href=format!("/{}/{}",match key{"template"=>"templates","page"=>"pages",_=>"smtp"},r["selection"][key]["id"])>{text(&r["selection"][key],"name")}</a></dd></div>}).collect_view()}
         <div><dt>"Launch"</dt><dd>{instant(&r["launch_date"])}</dd></div><div><dt>"Distribution end"</dt><dd>{instant(&r["send_by_date"])}</dd></div><div><dt>"Submission tracking"</dt><dd>{r["policy"]["capture_credentials"].to_string()}</dd></div><div><dt>"Password presence only"</dt><dd>{r["policy"]["capture_passwords"].to_string()}</dd></div><div><dt>"Redirect"</dt><dd>{text(&r["policy"],"redirect_url")}</dd></div></dl>
-        <section class="resource-section"><h3>"Rendered sample"</h3><p>"Uses the first recipient's details. Test emails use Sample Recipient. Preview links are inactive and no interaction events are generated."</p><dl class="resource-facts"><div><dt>"Visible From"</dt><dd>{text(&r["preview"],"visible_sender")}</dd></div><div><dt>"Transport sender"</dt><dd>{text(&r["preview"],"transport_sender")}</dd></div><div><dt>"Subject"</dt><dd>{text(&r["preview"],"subject")}</dd></div></dl><iframe class="saved-content-preview" title="Rendered email sample" sandbox="" referrerpolicy="no-referrer" srcdoc=ruphish_ui::preview_document(&text(&r["preview"],"html"))></iframe><details><summary>"Plain text"</summary><pre>{text(&r["preview"],"text")}</pre></details><Field label="Test recipient email"><input type="email" prop:value=move||recipient.get() on:input=move|e|recipient.set(event_target_value(&e))/></Field><button disabled=move||busy.get()||recipient.get().is_empty() on:click=send_test>"Send test email"</button></section>
+        <section class="resource-section"><h3>"Rendered sample"</h3><p>"Uses the first recipient's details. Test emails use Sample Recipient. Preview links are inactive and no interaction events are generated."</p><dl class="resource-facts"><div><dt>"Visible From"</dt><dd>{text(&r["preview"],"visible_sender")}</dd></div><div><dt>"Transport sender"</dt><dd>{text(&r["preview"],"transport_sender")}</dd></div><div><dt>"Subject"</dt><dd>{text(&r["preview"],"subject")}</dd></div></dl><iframe class="saved-content-preview" title="Rendered email sample" sandbox="" referrerpolicy="no-referrer" srcdoc=ruphish_ui::preview_document(&text(&r["preview"],"html"))></iframe><details><summary>"Plain text"</summary><pre>{text(&r["preview"],"text")}</pre></details><Field label="Test recipient email"><input type="email" prop:value=move||recipient.get() on:input=move|e|recipient.set(event_target_value(&e))/></Field><ActionButton disabled=Signal::derive(move||busy.get()||recipient.get().is_empty()) on_click=send_test>"Send test email"</ActionButton></section>
         {(!r["mailer_enabled"].as_bool().unwrap_or(false)).then(||view!{<p class="form-message error">"The mailer is disabled. This campaign will remain queued until an enabled admin process runs."</p>})}</div>})}</section>
         </FormFields>
-        <FormFooter><a class="text-danger" href="/campaigns">"Cancel"</a><button disabled=move||busy.get()||step.get()==0||draft.with(|d|d.launch.is_some()) on:click=move |_|step.update(|s|*s=s.saturating_sub(1))>"Back"</button>
-        <button class="primary" hidden=move||step.get()==3 disabled=move||busy.get()||loading.get()||!can_edit on:click=move |_|step.update(|s|*s=(*s+1).min(3))>"Continue"</button>
-        <button class="primary" hidden=move||step.get()!=3 disabled=move||busy.get()||loading.get()||!can_edit||draft.with(|d|d.review.is_none()||d.review_request.is_some()) on:click=launch>{move||if draft.with(|d|d.launch.is_some()){ "Retry same launch" }else{"Launch campaign"}}</button></FormFooter>
+        <FormFooter><a class="text-danger" href="/campaigns">"Cancel"</a><ActionButton disabled=Signal::derive(move||busy.get()||step.get()==0||draft.with(|d|d.launch.is_some())) on_click=move |_|step.update(|s|*s=s.saturating_sub(1))>"Back"</ActionButton>
+        <ActionButton style=ButtonStyle::Primary hidden=Signal::derive(move||step.get()==3) disabled=Signal::derive(move||busy.get()||loading.get()||!can_edit) on_click=move |_|step.update(|s|*s=(*s+1).min(3))>"Continue"</ActionButton>
+        <ActionButton style=ButtonStyle::Primary hidden=Signal::derive(move||step.get()!=3) disabled=Signal::derive(move||busy.get()||loading.get()||!can_edit||draft.with(|d|d.review.is_none()||d.review_request.is_some())) on_click=launch>{move||if draft.with(|d|d.launch.is_some()){ "Retry same launch" }else{"Launch campaign"}}</ActionButton></FormFooter>
     </ManagementPage>}
 }
 
@@ -531,7 +537,7 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
         });
     });
     view! {<ManagementPage><a class="breadcrumb" href="/campaigns">"Back to campaigns"</a><PageHeader title=Signal::derive(move||text(&data.get()["campaign"],"name")) subtitle=Signal::derive(move||format!("{} · Last refreshed {}",text(&data.get()["campaign"],"status"),updated.get()))>
-        <button disabled=move||busy.get() aria-busy=move||loading.get().to_string() on:click=move |_|refresh.update(|r|*r+=1)>{move||if loading.get(){"Refreshing..."}else{"Refresh"}}</button><button hidden=!can_edit disabled=move||busy.get() on:click=duplicate>"Duplicate"</button><button hidden=!can_edit disabled=move||busy.get()||data.get()["campaign"]["status"]=="Completed" on:click=move |_|action.set(Some(("complete".into(),Value::Null)))>"Complete campaign"</button><button class="text-danger" hidden=!can_edit disabled=move||busy.get() on:click=move |_|action.set(Some(("delete".into(),Value::Null)))>"Delete"</button>
+        <ActionLink href=format!("/analysis/{}",id.get_value())>"View analysis"</ActionLink><ActionButton disabled=Signal::derive(move||busy.get()) busy=Signal::derive(move||loading.get().to_string()) on_click=move |_|refresh.update(|r|*r+=1)>{move||if loading.get(){"Refreshing..."}else{"Refresh"}}</ActionButton><ActionButton hidden=!can_edit disabled=Signal::derive(move||busy.get()) on_click=duplicate>"Duplicate"</ActionButton><ActionButton hidden=!can_edit disabled=Signal::derive(move||busy.get()||data.get()["campaign"]["status"]=="Completed") on_click=move |_|action.set(Some(("complete".into(),Value::Null)))>"Complete campaign"</ActionButton><ActionButton style=ButtonStyle::Cancel hidden=!can_edit disabled=Signal::derive(move||busy.get()) on_click=move |_|action.set(Some(("delete".into(),Value::Null)))>"Delete"</ActionButton>
     </PageHeader>{message.view()}<Show when=move||data.get()["mailer_enabled"]==false><p class="form-message error">"Delivery processing is disabled in this process."</p></Show>
     <p>"Acceptance means the SMTP server accepted the message. Participant credentials are never collected."</p>
     {move||campaign_context(&data.get()["campaign"])}

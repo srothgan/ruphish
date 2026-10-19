@@ -17,6 +17,7 @@ Native libraries are scaffolds until functionality is implemented with its tests
 - Add tests for actual domain/functionality guarantees, persisted state, protocols, and real failure boundaries. Do not add mirror tests for trivial code or claim scaffold checks establish feature parity.
 - The user performs manual visual/UI interaction tests. Compile and build WASM; do not add browser/screenshot automation by default.
 - Review frontend alignment deliberately: labeled fields and adjacent buttons align on the actual control row with matching heights; headings, actions and wrapped rows need their own appropriate alignment. Fix the shared layout owner instead of adding pixel nudges. Do not default every flex/grid container to center alignment; keep centering where it serves the content, such as within icon buttons.
+- Reuse management UI from `crates/ruphish-ui/src/shared/components/`: page/table/form primitives, list search and empty states, action buttons/links and dialogs. Shared styles live beside those components. Feature modules own their fields, permissions, API calls and state; they must not recreate generic controls or inline replacement empty states. Specialized editor tabs, disclosure controls and JavaScript-bound controls retain their specific accessibility behavior.
 - Never manually hard-wrap Markdown paragraphs or list items. Use one source line per paragraph or list item.
 
 ## Toolchain and verification
@@ -45,6 +46,7 @@ node --check crates/ruphish-ui/web/http.mjs
 node --check crates/ruphish-ui/web/editor.mjs
 node --check crates/ruphish-ui/web/navigation.mjs
 node --check crates/ruphish-ui/web/account-menu.mjs
+node --check crates/ruphish-ui/web/analysis-time.mjs
 node --check crates/ruphish-ui/web/anchored-panel.mjs
 node --check crates/ruphish-ui/web/template-html.mjs
 node --check crates/ruphish-ui/web/visual-session.mjs

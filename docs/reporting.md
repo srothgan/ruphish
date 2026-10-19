@@ -1,0 +1,48 @@
+﻿# Campaign analysis and reporting integrations
+
+Open **Analysis** to select a campaign, or follow **View analysis** from its campaign page. Analysis is campaign-specific. Use the searchable recipient multiselect, event/source filters and inclusive-from/exclusive-until time range; input times use your browser's local timezone. Select up to 200 recipient identities, or leave the selection empty for everyone. The recipient table is always visible below the chart; its right-hand Details action opens that recipient's events and chart. Refresh retains the last successful result if a request fails.
+
+Counts describe observations: accepted means an SMTP acceptance event, opened means a tracking-image request, clicked means a landing-page visit, submitted means a presence-only form event, and reported means a report notification. These do not prove a human action. Clicks and submissions do not invent opens. Repeated events contribute to event totals but not additional unique recipients. Imported reported flags without a report event are labelled separately; no timestamp is invented. Ambiguous legacy records sharing the same campaign email remain in event exports without a guessed recipient assignment.
+
+**Recipients CSV** and **Events CSV** explicitly select the download content with the current filters. **Export Excel** downloads Summary, Recipients and Events sheets with the same filters. Exports include all matching rows, independent of the visible page. Each sheet is limited to 100,000 rows and snapshot input to 32 MiB; narrow the filters when an export exceeds a limit. CSV cells that could execute spreadsheet formulas are neutralized; Excel text is written as text. Neither format contains captured credentials, request IPs or location data.
+
+Recipient options show names before email addresses; search matches either. More matches load as you scroll without dropdown pagination buttons.
+
+The responsive line-and-dot chart uses whole-number count ticks. Time ticks adapt to the available width using 1/2/5/10/15/30-minute, 1/2/3/6/12-hour and 1/2/3/5/7/10/15/30-day intervals. Dates appear across day boundaries; year crossings and repeated daylight-saving hours are distinguishable. Minute precision is presentation only; exports retain recorded timestamps. The legend toggles series; hover, focus or click a time column to open its labelled Details tooltip with exact interval counts. Quiet intervals inside the observed range have zero counts.
+
+## Webhooks
+
+Administrators manage **Administration > Webhooks**. Create an HTTP(S) endpoint, a signing secret and its enabled state. The secret is write-only: leave it empty when editing to retain it. Validate connection sends `{"success":true}` without generating a campaign event. Configure HTTPS for production endpoints.
+
+Enabled endpoints receive newly committed campaign events across owners. The payload retains the legacy `campaign_id`, `email`, `time`, `message` and restricted `details` fields. `X-Gophish-Signature` is `sha256=` followed by lowercase HMAC-SHA256 over the exact request body. Validate the signature before processing. Deduplicate `X-Ruphish-Event-ID` within the sender installation: delivery is at least once, so an interrupted response may cause a repeat.
+
+Jobs and attempts persist in SQLite. At most four deliveries run concurrently. A request has a ten-second deadline; redirects are not followed. Only 2xx responses succeed. Network failures, 408, 429 and selected transient 5xx responses retry with bounded exponential delays and jitter, up to eight attempts. Other responses fail. Saving an endpoint cancels queued work for its previous configuration; deletion cancels retained jobs. Requests already sent cannot be recalled. Recent history shows the event ID, attempt number, HTTP status and a fixed outcome code; remote response bodies are discarded.
+
+## Reporting mailboxes
+
+Use **Resources > Reporting mailboxes** for owner-scoped IMAP accounts. Enter the IMAP hostname, port, service account username/password and folder. Implicit TLS is the default; disabling that option requires STARTTLS, never plaintext authentication. Certificate and hostname verification use public roots plus the platform trust store. `SSL_CERT_FILE`/`SSL_CERT_DIR`, as supported by rustls-native-certs, can supply a private trust bundle without disabling verification. Standard username/password IMAP is supported; OAuth provider onboarding is deferred.
+
+Saving does not validate credentials. **Validate connection** checks TLS, authentication and folder access without importing reports. Enable polling and use **Check mailbox now** to queue a check. The detail page refreshes every five seconds and shows the active check, last outcome, next check and recent history. The minimum configured interval is 30 seconds; failures back off to at most one hour. Webhook dispatch and mailbox polling have independent worker loops.
+
+The first successful poll checkpoints the folder and monitors new arrivals. Existing mail stays untouched. Forward a campaign message inline or as a `message/rfc822` attachment. A report must contain exactly one distinct campaign recipient ID and origin; repeated references to the same pair are accepted. The resource owner and original campaign origin must match. Completed campaigns can still receive mailbox reports. The optional sender-domain filter examines the From address and does not authenticate the reporter.
+
+Messages are correlated using stable UID/UIDVALIDITY identifiers. Reports are committed before marking a message seen. Interrupted acknowledgements retry after restart without another report event. Rejected/unmatched messages remain in the mailbox but do not block later arrivals. Bodies larger than 2 MiB are skipped before download; protocol parsing also bounds literals, line length, total bytes, MIME depth and part count. Raw message bodies, subjects and reporter addresses are never stored or logged.
+
+Optional deletion uses UID-scoped removal only when the server supports UIDPLUS. No mailbox-wide expunge is issued. If the server changes UIDVALIDITY, processing stops with a visible diagnostic. **Resume with new arrivals** explicitly establishes a new checkpoint and leaves existing messages untouched; saved campaign history remains.
+
+## APIs and compatibility
+
+- `GET /api/campaigns/{id}/analysis` and `GET /api/campaigns/{id}/export`: owner-scoped campaign data; filters `recipient`, `recipients` (comma-separated positive IDs, maximum 200, all belonging to this campaign), `search`, `event`, `source`, `from`, `until`, `offset`, `limit`; export also accepts `format=csv|xlsx` and `scope=events|recipients|all` (all requires XLSX).
+- `/api/webhooks/` and `/api/webhooks/{id}`: administrator CRUD; `POST /api/webhooks/{id}/validate` sends a signed validation payload.
+- `/api/reporting-mailboxes/` and `/api/reporting-mailboxes/{id}`: owner-scoped CRUD; POST actions `validate`, `check` and `resume`. Resume requires the current `revision`.
+- Legacy `/api/imap/` GET/POST and `/api/imap/validate` remain adapters for the owner's first mailbox. Port/frequency retain string-number encoding; passwords are not returned. Validation checks supplied settings without saving. Insecure certificate bypass is rejected.
+
+New UI edits use resource revisions. Stale changes return HTTP 412; optional `If-Match` protects deletions. Invalid request structures return sanitized errors without echoing supplied values. Existing legacy webhook clients can omit revision fields. Integration requests share authentication, live permissions and session/CSRF checks with other resources.
+
+Upgrading migrates legacy IMAP settings to mailbox resources, clears old credential rows from the working database and removes imported result IP/location fields. Startup preserves the original recovery backup; protect or retire that backup under your retention policy. Legacy campaign fields retain empty/zero location values.
+
+## Local verification
+
+Build the admin assets first using the direct commands in AGENTS.md. Focused native acceptance commands are `cargo test -p ruphish-adapters --test reporting --lib --locked` and `cargo test -p ruphish --test startup_process reporting_process --locked`. They use copied databases, synthetic data, loopback receivers and a verified TLS IMAP peer, including malformed input, denied access, failed acknowledgement, restart, UID changes and privacy assertions.
+
+Run Linux equivalents in the existing Docker fixture, without another environment or login: `docker compose -f tests/acceptance/compose.yaml --profile setup run --rm --entrypoint cargo prepare test -p ruphish --test startup_process reporting_process --locked`. This ephemeral test process uses isolated temporary data; it does not alter the running fixture's accounts or campaigns. These protocol tests do not replace manual visual/interaction acceptance or qualification against your chosen mailbox provider.
