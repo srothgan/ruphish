@@ -11,25 +11,34 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
     let message = Message::new(String::new());
     let loading = RwSignal::new(true);
     let can_edit = use_context::<ResourceAccess>().is_some_and(|access| access.0);
-    spawn_local(async move {
-        match api
-            .resource(
-                "GET",
-                &format!("/api/{}/{id}", family.route()),
-                &token,
-                None,
-                None,
-            )
-            .await
-        {
-            Ok((value, _)) => data.set(Some(value)),
-            Err(error) => message.error(error),
-        }
-        loading.set(false);
+    let reload = RwSignal::new(0u64);
+    Effect::new(move |_| {
+        reload.get();
+        loading.set(true);
+        message.clear();
+        let id = id.clone();
+        let token = token.clone();
+        spawn_local(async move {
+            match api
+                .resource(
+                    "GET",
+                    &format!("/api/{}/{id}", family.route()),
+                    &token,
+                    None,
+                    None,
+                )
+                .await
+            {
+                Ok((value, _)) => data.set(Some(value)),
+                Err(error) => message.error(error),
+            }
+            loading.set(false);
+        });
     });
     view! {<ManagementPage>
         <a class="breadcrumb" href=format!("/{}",family.route())>{format!("Back to {}",family.title().to_lowercase())}</a>
         {message.view()}
+        <Show when=move||!loading.get()&&data.with(Option::is_none)><button on:click=move |_|reload.update(|n|*n+=1)>"Retry loading resource"</button></Show>
         <Show when=move||loading.get()><p role="status">"Loading resource..."</p></Show>
         {move||data.get().map(|value| {
             let id=value["id"].as_i64().unwrap_or(0);

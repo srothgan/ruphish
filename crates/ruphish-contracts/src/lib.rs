@@ -5,4 +5,5 @@
 
 pub mod auth;
 pub mod campaign;
+pub mod domains;
 pub mod legacy;

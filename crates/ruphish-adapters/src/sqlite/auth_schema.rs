@@ -2,6 +2,8 @@
 use super::UpgradeError;
 use sqlx::SqliteConnection;
 
+pub(super) const LATEST_VERSION: i64 = 5;
+
 pub(super) const SCHEMA: &str = "
 CREATE TABLE ruphish_schema(version INTEGER PRIMARY KEY NOT NULL, name TEXT NOT NULL);
 INSERT INTO ruphish_schema VALUES(1,'authentication-v1');
@@ -33,6 +35,8 @@ pub(super) async fn validate_version(
         (1, "authentication-v1".to_owned()),
         (2, "campaign-execution-v1".to_owned()),
         (3, "participant-privacy-v1".to_owned()),
+        (4, "verified-domains-public-events-v1".to_owned()),
+        (5, "domain-verification-history-v1".to_owned()),
     ];
     if entries.is_empty() || !history.starts_with(&entries) {
         return Err(UpgradeError::Unrecognized(
@@ -62,6 +66,12 @@ pub(super) async fn migrate(connection: &mut SqliteConnection) -> Result<(), Upg
         // Remove all opaque legacy details; preserving them could retain login data.
         // The verified original remains in the explicitly reported recovery backup.
         sqlx::raw_sql("PRAGMA secure_delete=ON; UPDATE events SET details=''; INSERT INTO ruphish_schema VALUES(3,'participant-privacy-v1');").execute(&mut *connection).await?;
+    }
+    if version(connection).await? == 3 {
+        super::domain_schema::migrate(connection).await?;
+    }
+    if version(connection).await? == 4 {
+        super::domain_schema::verification_history(connection).await?;
     }
     Ok(())
 }

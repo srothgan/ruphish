@@ -35,6 +35,7 @@ pub(crate) struct AuthState {
     resources: ruphish_application::resources::Service,
     delivery: ruphish_application::delivery::Service,
     campaigns: Arc<dyn ruphish_application::campaign::Repository>,
+    domains: Arc<dyn ruphish_application::domains::Repository>,
     mailer_enabled: bool,
     csrf: CsrfConfig,
     index: Arc<String>,
@@ -63,6 +64,7 @@ pub fn router<S: SessionStore + Clone>(
         resources: services.resources,
         delivery: services.delivery,
         campaigns: services.campaigns,
+        domains: services.domains,
         mailer_enabled: services.mailer_enabled,
         index: Arc::new(assets.index),
         secure,
@@ -104,6 +106,9 @@ pub fn router<S: SessionStore + Clone>(
         .route("/users/new", get(page))
         .route("/users/{id}/edit", get(page))
         .route("/campaigns", get(page))
+        .route("/domains", get(page))
+        .route("/domains/{id}", get(page))
+        .route("/domains/{id}/edit", get(page))
         .route("/campaigns/{id}", get(page))
         .route("/groups", get(page))
         .route("/groups/{id}", get(page))
@@ -127,6 +132,7 @@ pub fn router<S: SessionStore + Clone>(
         .layer(DefaultBodyLimit::max(16 * 1024))
         .merge(super::resources::routes())
         .merge(super::campaigns::routes())
+        .merge(super::domains::routes())
         .layer(middleware::from_fn(security_headers))
         .with_state(state)
         .layer(session);
@@ -203,6 +209,9 @@ impl FromRequestParts<AuthState> for Context {
     }
 }
 impl Context {
+    pub(crate) fn domains(&self) -> &dyn ruphish_application::domains::Repository {
+        self.state.domains.as_ref()
+    }
     pub(crate) fn campaigns(&self) -> &dyn ruphish_application::campaign::Repository {
         self.state.campaigns.as_ref()
     }
@@ -447,6 +456,8 @@ impl Context {
 
 /// Application services composed by the executable, sharing the same identity boundary.
 pub struct Services {
+    /// Domain configuration and verification queue.
+    pub domains: Arc<dyn ruphish_application::domains::Repository>,
     /// Account and session authorization.
     pub accounts: Service,
     /// Resource persistence and format operations.

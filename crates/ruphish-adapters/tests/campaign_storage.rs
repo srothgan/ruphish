@@ -10,6 +10,59 @@ use ruphish_application::{
 };
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::path::Path;
+#[path = "../../../tests/support/domain_network.rs"]
+mod domain_network;
+
+// Delivery scenarios retain their independent logical clock. Actual DNS and HTTPS
+// verification runs before using their origin; no verified database flag is seeded.
+async fn verify_domain(db: &StartupDatabase, now: i64) {
+    use ruphish_application::domains::{Repository as _, Verifier as _};
+    let domains = ruphish_adapters::sqlite::domains::Domains::new(db.pool());
+    let existing = domains.list(caller()).await.unwrap().remove(0);
+    if ruphish_application::domains::eligibility(existing.enabled, existing.verified_until, now)
+        .is_ok()
+    {
+        return;
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let pool = db.pool();
+    let runtime = tokio::runtime::Handle::current();
+    let network = domain_network::Network::new(move |host, path| {
+        let challenge = path.strip_prefix("/.well-known/ruphish/")?;
+        runtime
+            .block_on(
+                ruphish_adapters::sqlite::domains::Domains::new(pool.clone())
+                    .routing_proof(host, challenge, now),
+            )
+            .unwrap()
+    });
+    let domain = domains
+        .request_check(caller(), existing.id, now)
+        .await
+        .unwrap();
+    network.publish(&domain.hostname, &domain.challenge);
+    let ca = directory.path().join("ca.pem");
+    std::fs::write(&ca, &network.certificate).unwrap();
+    let verifier = ruphish_adapters::domain_verification::DnsHttps::new(
+        ruphish_adapters::domain_verification::Config {
+            resolvers: vec![network.resolver],
+            allowed_networks: vec![network.address.ip().into()],
+            trusted_ca_path: Some(ca),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let check = domains.claim(now).await.unwrap().unwrap();
+    let observation = verifier.verify(&check).await;
+    assert_eq!(observation.code, "verified");
+    domains.finish(&check, observation, now).await.unwrap();
+}
+
+async fn prepared_database(path: &Path) -> StartupDatabase {
+    let db = StartupDatabase::open(path, "").await.unwrap();
+    verify_domain(&db, 1_900_000_000).await;
+    db
+}
 fn caller() -> Identity {
     Identity { id: 1, epoch: 0 }
 }
@@ -53,7 +106,7 @@ async fn participant_privacy_removes_legacy_payloads_and_never_exposes_injected_
         .await
         .unwrap();
     raw.close().await.unwrap();
-    let db = StartupDatabase::open(&path, "").await.unwrap();
+    let db = prepared_database(&path).await;
     let backup = db.backup_path().unwrap().to_path_buf();
     let mut original = SqliteConnection::connect_with(
         &SqliteConnectOptions::new().filename(backup).read_only(true),
@@ -108,7 +161,7 @@ async fn participant_privacy_removes_legacy_payloads_and_never_exposes_injected_
 #[tokio::test]
 async fn named_zone_schedule_uses_calendar_rules_for_folds_gaps_and_non_hour_changes() {
     let (_directory, path) = fixture();
-    let db = StartupDatabase::open(&path, "").await.unwrap();
+    let db = prepared_database(&path).await;
     let store = Campaigns::new(db.pool());
     // Independent expected UTC instants; do not derive them with the resolver.
     for (local, zone, expected) in [
@@ -202,9 +255,10 @@ async fn legacy_upgrade_preserves_unknown_work_and_effective_capture_policy() {
         .await
         .unwrap();
     raw.close().await.unwrap();
-    let db = StartupDatabase::open(&path, "").await.unwrap();
+    let db = prepared_database(&path).await;
     assert!(db.backup_path().is_some());
     let store = Campaigns::new(db.pool());
+    verify_domain(&db, 2_100_000_000).await;
     assert!(store.claim(2_100_000_000).await.unwrap().is_none());
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
@@ -231,7 +285,7 @@ async fn legacy_upgrade_preserves_unknown_work_and_effective_capture_policy() {
             .capture_credentials
     );
     db.close().await;
-    let db = StartupDatabase::open(&path, "").await.unwrap();
+    let db = prepared_database(&path).await;
     assert!(db.backup_path().is_none());
     assert!(
         Campaigns::new(db.pool())
@@ -245,7 +299,7 @@ async fn legacy_upgrade_preserves_unknown_work_and_effective_capture_policy() {
 #[tokio::test]
 async fn creation_is_atomic_deduplicated_and_idempotent_with_stable_policy() {
     let (_directory, path) = fixture();
-    let db = StartupDatabase::open(&path, "").await.unwrap();
+    let db = prepared_database(&path).await;
     let store = Campaigns::new(db.pool());
     let mut request = input();
     request.send_by = Some(1_900_000_600);
@@ -322,8 +376,8 @@ async fn creation_is_atomic_deduplicated_and_idempotent_with_stable_policy() {
 #[tokio::test]
 async fn competing_claims_recover_preparation_but_never_resend_expired_submission() {
     let (_directory, path) = fixture();
-    let db = StartupDatabase::open(&path, "").await.unwrap();
-    let second = StartupDatabase::open(&path, "").await.unwrap();
+    let db = prepared_database(&path).await;
+    let second = prepared_database(&path).await;
     let a = Campaigns::new(db.pool());
     let b = Campaigns::new(second.pool());
     let campaign = a.create(caller(), input(), 1_900_000_000).await.unwrap();
@@ -366,12 +420,13 @@ async fn competing_claims_recover_preparation_but_never_resend_expired_submissio
 #[tokio::test]
 async fn retries_use_failure_time_and_failed_outcome_commit_never_changes_queue_partially() {
     let (_directory, path) = fixture();
-    let db = StartupDatabase::open(&path, "").await.unwrap();
+    let db = prepared_database(&path).await;
     let store = Campaigns::new(db.pool());
     store
         .create(caller(), input(), 1_900_000_000)
         .await
         .unwrap();
+    verify_domain(&db, 1_900_010_000).await;
     let claim = store.claim(1_900_010_000).await.unwrap().unwrap();
     assert!(store.arm(&claim, 1_900_010_000).await.unwrap());
     let failure = DeliveryFailure::new(FailureKind::Retryable, Stage::Acceptance, Some(451));
@@ -425,7 +480,7 @@ async fn retries_use_failure_time_and_failed_outcome_commit_never_changes_queue_
 #[tokio::test]
 async fn schedule_and_result_snapshots_cover_immediate_future_mixed_and_overlap_cases() {
     let (_directory, path) = fixture();
-    let db = StartupDatabase::open(&path, "").await.unwrap();
+    let db = prepared_database(&path).await;
     let store = Campaigns::new(db.pool());
     let now = 1_900_000_000;
     for (launch, end, expected) in [
@@ -485,7 +540,7 @@ async fn schedule_and_result_snapshots_cover_immediate_future_mixed_and_overlap_
 #[tokio::test]
 async fn every_creation_write_boundary_rolls_back_the_whole_launch() {
     let (_directory, path) = fixture();
-    let db = StartupDatabase::open(&path, "").await.unwrap();
+    let db = prepared_database(&path).await;
     let store = Campaigns::new(db.pool());
     for table in [
         "campaigns",
@@ -547,7 +602,7 @@ async fn every_creation_write_boundary_rolls_back_the_whole_launch() {
 #[tokio::test]
 async fn persisted_retry_budget_exhausts_and_cannot_resurrect_after_restart() {
     let (_directory, path) = fixture();
-    let db = StartupDatabase::open(&path, "").await.unwrap();
+    let db = prepared_database(&path).await;
     let store = Campaigns::new(db.pool());
     let created = store
         .create(caller(), input(), 1_900_000_000)
@@ -556,6 +611,7 @@ async fn persisted_retry_budget_exhausts_and_cannot_resurrect_after_restart() {
     sqlx::query("UPDATE ruphish_delivery SET state='cancelled' WHERE campaign_id=? AND result_id!=(SELECT min(result_id) FROM ruphish_delivery WHERE campaign_id=?)").bind(created.id).bind(created.id).execute(&db.pool()).await.unwrap();
     let mut now = 1_900_000_000;
     for attempt in 0..=8u32 {
+        verify_domain(&db, now).await;
         let claim = store.claim(now).await.unwrap().unwrap();
         assert_eq!(claim.campaign_id, created.id);
         store
@@ -590,7 +646,7 @@ async fn persisted_retry_budget_exhausts_and_cannot_resurrect_after_restart() {
         }
     }
     db.close().await;
-    let db = StartupDatabase::open(&path, "").await.unwrap();
+    let db = prepared_database(&path).await;
     assert!(
         Campaigns::new(db.pool())
             .claim(now + 10_000)
@@ -603,7 +659,7 @@ async fn persisted_retry_budget_exhausts_and_cannot_resurrect_after_restart() {
 #[tokio::test]
 async fn resource_changes_owner_lock_and_completion_fence_unsubmitted_work() {
     let (_directory, path) = fixture();
-    let db = StartupDatabase::open(&path, "").await.unwrap();
+    let db = prepared_database(&path).await;
     let store = Campaigns::new(db.pool());
     let campaign = store
         .create(caller(), input(), 1_900_000_000)
@@ -666,7 +722,7 @@ async fn migration_quarantines_global_rid_collisions_instead_of_choosing_an_owne
         .unwrap();
     sqlx::raw_sql("INSERT INTO results(campaign_id,user_id,r_id,email,status) SELECT campaign_id,999,r_id,'other@example.test','Scheduled' FROM results LIMIT 1").execute(&mut raw).await.unwrap();
     raw.close().await.unwrap();
-    let db = StartupDatabase::open(&path, "").await.unwrap();
+    let db = prepared_database(&path).await;
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM ruphish_legacy_queue_issues")
             .fetch_one(&db.pool())
@@ -688,7 +744,7 @@ async fn migration_quarantines_global_rid_collisions_instead_of_choosing_an_owne
 async fn ten_campaigns_keep_resources_and_credentials_isolated_under_bounded_fair_claims() {
     use ruphish_application::delivery::Sender;
     let (_directory, path) = fixture();
-    let db = StartupDatabase::open(&path, "").await.unwrap();
+    let db = prepared_database(&path).await;
     let store = Campaigns::new(db.pool());
     let sender =
         ruphish_adapters::smtp::Smtp::new(Default::default(), "contact@example.test".into());
@@ -774,7 +830,7 @@ async fn ten_campaigns_keep_resources_and_credentials_isolated_under_bounded_fai
 #[tokio::test]
 async fn outcome_projection_preserves_engagement_and_deleted_campaigns_cannot_be_recreated() {
     let (_directory, path) = fixture();
-    let db = StartupDatabase::open(&path, "").await.unwrap();
+    let db = prepared_database(&path).await;
     let store = Campaigns::new(db.pool());
     let c = store
         .create(caller(), input(), 1_900_000_000)
@@ -823,7 +879,7 @@ async fn measure_launch_read_claim_and_compose_at_legacy_audience_sizes() {
     use ruphish_application::delivery::Sender;
     for size in [100, 1_000, 5_000, 10_000] {
         let (_directory, path) = fixture();
-        let db = StartupDatabase::open(&path, "").await.unwrap();
+        let db = prepared_database(&path).await;
         let store = Campaigns::new(db.pool());
         sqlx::raw_sql("DELETE FROM group_targets WHERE group_id=1; WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<10000) INSERT INTO targets(first_name,last_name,email,position) SELECT 'Sample',printf('Recipient %d',x),printf('performance-%d@example.test',x),'' FROM n;").execute(&db.pool()).await.unwrap();
         sqlx::query("INSERT INTO group_targets(group_id,target_id) SELECT 1,id FROM targets WHERE email LIKE 'performance-%' ORDER BY id LIMIT ?").bind(size).execute(&db.pool()).await.unwrap();
@@ -876,7 +932,7 @@ async fn measure_launch_read_claim_and_compose_at_legacy_audience_sizes() {
 #[tokio::test]
 async fn duplicate_attributes_are_reviewable_and_first_recipient_wins_within_a_group() {
     let (_directory, path) = fixture();
-    let db = StartupDatabase::open(&path, "").await.unwrap();
+    let db = prepared_database(&path).await;
     let store = Campaigns::new(db.pool());
     sqlx::raw_sql("INSERT INTO targets(id,email,first_name,last_name,position) VALUES(999,'alice@example.test','Duplicate','Discarded','Different'); INSERT INTO group_targets VALUES(1,999);").execute(&db.pool()).await.unwrap();
     let request = input();

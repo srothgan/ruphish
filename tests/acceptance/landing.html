@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Local privacy exercise</title></head>
+<body>
+<h1>Hello {{.FirstName}}</h1>
+<p>This is a local test. Use invented values only. The application records submission and password presence, never your entered values.</p>
+<form id="exercise" action="https://blocked.invalid/collect" method="post">
+  <p><label>Practice username <input name="username" autocomplete="username"></label></p>
+  <p><label>Practice password <input type="password" name="password" autocomplete="current-password"></label></p>
+  <button type="submit">Submit practice form</button>
+</form>
+<p><label>External password control <input form="exercise" type="password" name="external_password" autocomplete="off"></label></p>
+<p>The external control also belongs to the form. Try a submission with only that control filled.</p>
+<script>document.body.dataset.authoredScriptExecuted = 'yes';</script>
+</body>
+</html>

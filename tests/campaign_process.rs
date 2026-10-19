@@ -1,5 +1,7 @@
 //! Executable campaign contracts, real SMTP effects, crash recovery and privacy.
 use super::*;
+#[path = "proxy_process.rs"]
+mod proxy_process;
 use std::{
     io::{BufRead, BufReader},
     net::TcpListener,
@@ -22,6 +24,28 @@ fn sql(directory: &Path, query: &str) {
     });
 }
 fn start(directory: &Path, options: &[&str]) -> (Process, String) {
+    // Use real DNS/TLS proofs for the delivery suite's existing fixed URL fixtures.
+    let upstream = Arc::new(Mutex::new(None::<String>));
+    let destination = upstream.clone();
+    let network = domain_network::Network::new(move |host, path| {
+        let address = destination.lock().unwrap().clone()?;
+        let response = client()
+            .get(format!("http://{address}{path}"))
+            .header("x-forwarded-host", host)
+            .header("x-forwarded-proto", "https")
+            .send()
+            .ok()?;
+        response
+            .status()
+            .is_success()
+            .then(|| response.text().ok())
+            .flatten()
+    });
+    std::fs::write(directory.join("verification-ca.pem"), &network.certificate).unwrap();
+    let mut config: Value =
+        serde_json::from_slice(&std::fs::read(directory.join("config.json")).unwrap()).unwrap();
+    config["domain_verification"] = json!({"resolvers":[network.resolver.to_string()],"allowed_networks":[format!("{}/32",network.address.ip())],"trusted_ca_path":"verification-ca.pem","trusted_proxies":["127.0.0.1/32"]});
+    write_config(directory, &config);
     let mut process = Process::with_options(
         directory,
         "all",
@@ -29,8 +53,50 @@ fn start(directory: &Path, options: &[&str]) -> (Process, String) {
         Some("synthetic-bootstrap-token"),
         options,
     );
-    let base = format!("http://{}", process.ready()["admin"].as_str().unwrap());
+    let ready = process.ready();
+    let base = format!("http://{}", ready["admin"].as_str().unwrap());
+    *upstream.lock().unwrap() = Some(ready["phish"].as_str().unwrap().into());
     sql(directory, "UPDATE users SET password_change_required=0");
+    for host in ["training.example.test", "example.test"] {
+        let items = read(&base, "/api/domains/");
+        let existing = items
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|d| d["hostname"] == host)
+            .cloned();
+        let domain=existing.unwrap_or_else(||post(&base,"/api/domains/",&json!({"name":host,"origin":format!("https://{host}"),"enabled":true,"revision":null})));
+        network.publish(
+            host,
+            domain["txt_value"]
+                .as_str()
+                .unwrap()
+                .strip_prefix("ruphish-verification=")
+                .unwrap(),
+        );
+        let id = domain["id"].as_i64().unwrap();
+        post(&base, &format!("/api/domains/{id}/verify"), &json!({}));
+        let deadline = Instant::now() + Duration::from_secs(90);
+        loop {
+            let current = read(&base, &format!("/api/domains/{id}"));
+            if current["eligible"] == true {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "Domain verification failed: {current}"
+            );
+            let guard = process.output.0.lock().unwrap();
+            drop(
+                process
+                    .output
+                    .1
+                    .wait_timeout(guard, Duration::from_millis(50))
+                    .unwrap(),
+            );
+        }
+    }
+    process.domain_network = Some(network);
     (process, base)
 }
 fn post(base: &str, path: &str, body: &Value) -> Value {
@@ -103,7 +169,7 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
         );
         let mut actual: Value = response.json().unwrap();
         let mut expected = case["json"].clone();
-        // DEC-024 retains authored HTML. Go's wrapper insertion is incidental formatting.
+        // Landing pages retain authored HTML. Go's wrapper insertion is incidental formatting.
         fn exceptions(v: &mut Value) {
             match v {
                 Value::Array(rows) => rows.iter_mut().for_each(exceptions),

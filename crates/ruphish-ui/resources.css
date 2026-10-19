@@ -48,7 +48,8 @@
 .management-form select { display: block; width: 100%; margin-top: 6px; }
 
 /* Recipient identity remains in the summary row; chronology spans the table below. */
-.campaign-context { margin-bottom: 28px; }
+.campaign-context, .domain-context { margin-bottom: 28px; }
+.domain-context .resource-facts { margin-bottom: 0; }
 .campaign-context .resource-facts { margin-bottom: 18px; }
 .delivery-progress { margin-bottom: 28px; }
 .delivery-progress h2 { margin-bottom: 20px; }

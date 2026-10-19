@@ -1,6 +1,7 @@
 //! Editing state shared by the browser component and native workflow tests.
 
 pub mod campaign_state;
+pub mod domain_state;
 #[cfg(target_arch = "wasm32")]
 pub mod import_drafts;
 pub mod import_state;
@@ -12,6 +13,9 @@ pub mod session;
 
 #[cfg(target_arch = "wasm32")]
 pub mod browser_http;
+
+#[cfg(target_arch = "wasm32")]
+pub mod view_tasks;
 
 /// Exported Go template fields offered by the editor.
 pub const VARIABLES: &[&str] = &[

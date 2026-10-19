@@ -5,7 +5,7 @@ reference_source = "Gophish Community Edition 0.12.1"
 
 [[tests]]
 id = "auth.auth.TestPasswordPolicy"
-source = "gophish/auth/auth_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/auth/auth_test.go"
 source_line = 7
 source_test = "TestPasswordPolicy"
 source_receiver = ""
@@ -20,12 +20,12 @@ source_subtests = []
 
 [[tests]]
 id = "auth.auth.TestValidatePasswordChange"
-source = "gophish/auth/auth_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/auth/auth_test.go"
 source_line = 21
 source_test = "TestValidatePasswordChange"
 source_receiver = ""
 source_body_sha256 = "8ed72b08437a972419c6c2c5650258c8577e9e126153c0c74c4f6f61c48ed8be"
-guarantee = "Reject invalid policy, mismatched confirmation, and reused password; accept valid changes and verify the new Argon2id hash (approved DEC-015), retaining legacy bcrypt verification."
+guarantee = "Reject invalid policy, mismatched confirmation, and reused password; accept valid changes and verify the new Argon2id hash, retaining legacy bcrypt verification."
 strategy = "Translate the existing scenario and independent expected values; use real boundary effects where the original only mocked internals. Preserve all original table cases."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/legacy_auth.rs"
@@ -35,7 +35,7 @@ source_subtests = []
 
 [[tests]]
 id = "config.config.TestLoadConfig"
-source = "gophish/config/config_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/config/config_test.go"
 source_line = 47
 source_test = "TestLoadConfig"
 source_receiver = ""
@@ -50,7 +50,7 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.api.api.TestSiteImportBaseHref"
-source = "gophish/controllers/api/api_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/api/api_test.go"
 source_line = 88
 source_test = "TestSiteImportBaseHref"
 source_receiver = ""
@@ -65,7 +65,7 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.api.import.TestDefaultDeniedImport"
-source = "gophish/controllers/api/import_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/api/import_test.go"
 source_line = 32
 source_test = "TestDefaultDeniedImport"
 source_receiver = ""
@@ -80,7 +80,7 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.api.import.TestDefaultAllowedImport"
-source = "gophish/controllers/api/import_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/api/import_test.go"
 source_line = 50
 source_test = "TestDefaultAllowedImport"
 source_receiver = ""
@@ -95,7 +95,7 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.api.import.TestCustomDeniedImport"
-source = "gophish/controllers/api/import_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/api/import_test.go"
 source_line = 64
 source_test = "TestCustomDeniedImport"
 source_receiver = ""
@@ -110,13 +110,13 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.api.user.TestGetUsers"
-source = "gophish/controllers/api/user_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/api/user_test.go"
 source_line = 36
 source_test = "TestGetUsers"
 source_receiver = ""
 source_body_sha256 = "91efb4c9521d7396e238e9287df97c7acb6d7ace7363091395293e4fc1059a49"
 guarantee = "Administrators can list registered users with expected wire fields."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -125,13 +125,13 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.api.user.TestCreateUser"
-source = "gophish/controllers/api/user_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/api/user_test.go"
 source_line = 65
 source_test = "TestCreateUser"
 source_receiver = ""
 source_body_sha256 = "0ab893b76c08f1bfe838e2fb5bd98c63f7a0c3cbd421a77dba6e23b09e9767f6"
 guarantee = "Create users through the API with validated credentials/roles and persisted state."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -140,13 +140,13 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.api.user.TestModifyUser"
-source = "gophish/controllers/api/user_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/api/user_test.go"
 source_line = 103
 source_test = "TestModifyUser"
 source_receiver = ""
 source_body_sha256 = "bd42673f2a21168f612e6066d75e89f5f9cb15851870aa52c0011971c0c2f94f"
 guarantee = "Update user settings through the API and persist the intended fields."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -155,13 +155,13 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.api.user.TestUnauthorizedListUsers"
-source = "gophish/controllers/api/user_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/api/user_test.go"
 source_line = 151
 source_test = "TestUnauthorizedListUsers"
 source_receiver = ""
 source_body_sha256 = "b2ef22c476de69e87e885a8b62cec5e53e3e8b609513cbb1ccde2572a3fe01f8"
 guarantee = "Non-administrators cannot list all users."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -170,13 +170,13 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.api.user.TestUnauthorizedGetUser"
-source = "gophish/controllers/api/user_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/api/user_test.go"
 source_line = 173
 source_test = "TestUnauthorizedGetUser"
 source_receiver = ""
 source_body_sha256 = "3d292544a0d7954dc122a4b2f198f217fb45dca0f9efc4bca24106bd734c3ae7"
 guarantee = "Non-administrators cannot retrieve another user account."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -185,13 +185,13 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.api.user.TestUnauthorizedSetRole"
-source = "gophish/controllers/api/user_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/api/user_test.go"
 source_line = 193
 source_test = "TestUnauthorizedSetRole"
 source_receiver = ""
 source_body_sha256 = "2fac6de6487f85b2840657305e1d467ab8f1243879ab7221e2dfff4722993bea"
 guarantee = "Non-administrators cannot elevate their role through user update."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -200,13 +200,13 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.api.user.TestModifyWithExistingUsername"
-source = "gophish/controllers/api/user_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/api/user_test.go"
 source_line = 226
 source_test = "TestModifyWithExistingUsername"
 source_receiver = ""
 source_body_sha256 = "451e32edd6c04716e864cfa69f4c641f64efa2c3089b4cda4b0931463a785ab3"
 guarantee = "Reject updates to an already-used username."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -215,105 +215,112 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.phish.TestOpenedPhishingEmail"
-source = "gophish/controllers/phish_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/phish_test.go"
 source_line = 155
 source_test = "TestOpenedPhishingEmail"
 source_receiver = ""
 source_body_sha256 = "14f455d05d3bf9d2dd3ad61a7703ee454bfd2400977bd5261b3c97f210ceb6f7"
 guarantee = "Tracking a valid recipient records an open and updates result state."
-strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve all original table cases."
-target_crate = "ruphish-http"
-target_path = "crates/ruphish-http/tests/legacy_phish.rs"
-status = "not_implemented"
+strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve original handler cases; Presence-only interaction tracking replaces form-value POST/302 with a closed presence event and collector navigation, and verified HTTPS origins replace arbitrary HTTP campaign hosts."
+target_crate = "ruphish"
+target_path = "tests/public_process.rs"
+status = "implemented"
+target_test = "verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_bypasses"
 source_subtests = []
 
 [[tests]]
 id = "controllers.phish.TestReportedPhishingEmail"
-source = "gophish/controllers/phish_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/phish_test.go"
 source_line = 180
 source_test = "TestReportedPhishingEmail"
 source_receiver = ""
 source_body_sha256 = "bc14b8a4f9fcfddc994520571416ec7bf69676cdee14a56f3b4d734b4abe9613"
 guarantee = "Reporting records the report event and reported flag."
-strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve all original table cases."
-target_crate = "ruphish-http"
-target_path = "crates/ruphish-http/tests/legacy_phish.rs"
-status = "not_implemented"
+strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve original handler cases; Presence-only interaction tracking replaces form-value POST/302 with a closed presence event and collector navigation, and verified HTTPS origins replace arbitrary HTTP campaign hosts."
+target_crate = "ruphish"
+target_path = "tests/public_process.rs"
+status = "implemented"
+target_test = "verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_bypasses"
 source_subtests = []
 
 [[tests]]
 id = "controllers.phish.TestClickedPhishingLinkAfterOpen"
-source = "gophish/controllers/phish_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/phish_test.go"
 source_line = 206
 source_test = "TestClickedPhishingLinkAfterOpen"
 source_receiver = ""
 source_body_sha256 = "f8806113e5bcd39eb4ea6acd459290f1e7dedbcd830aaf0b05f1d389ff5acb45"
 guarantee = "Clicking after an open advances the result and records the click."
-strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve all original table cases."
-target_crate = "ruphish-http"
-target_path = "crates/ruphish-http/tests/legacy_phish.rs"
-status = "not_implemented"
+strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve original handler cases; Presence-only interaction tracking replaces form-value POST/302 with a closed presence event and collector navigation, and verified HTTPS origins replace arbitrary HTTP campaign hosts."
+target_crate = "ruphish"
+target_path = "tests/public_process.rs"
+status = "implemented"
+target_test = "verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_bypasses"
 source_subtests = []
 
 [[tests]]
 id = "controllers.phish.TestNoRecipientID"
-source = "gophish/controllers/phish_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/phish_test.go"
 source_line = 232
 source_test = "TestNoRecipientID"
 source_receiver = ""
 source_body_sha256 = "33014fe7272532c14cdba5a1f6c6ab841680ed6d8fa01929ea7bcc7e604406e5"
 guarantee = "Requests without a recipient ID have the original rejection behavior."
-strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve all original table cases."
-target_crate = "ruphish-http"
-target_path = "crates/ruphish-http/tests/legacy_phish.rs"
-status = "not_implemented"
+strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve original handler cases; Presence-only interaction tracking replaces form-value POST/302 with a closed presence event and collector navigation, and verified HTTPS origins replace arbitrary HTTP campaign hosts."
+target_crate = "ruphish"
+target_path = "tests/public_process.rs"
+status = "implemented"
+target_test = "verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_bypasses"
 source_subtests = []
 
 [[tests]]
 id = "controllers.phish.TestInvalidRecipientID"
-source = "gophish/controllers/phish_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/phish_test.go"
 source_line = 255
 source_test = "TestInvalidRecipientID"
 source_receiver = ""
 source_body_sha256 = "1fb10cd7cb86a2450032b37adbeb99b16d6004d44629da2f64f4898027137489"
 guarantee = "Unknown recipient IDs are rejected without modifying campaign results."
-strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve all original table cases."
-target_crate = "ruphish-http"
-target_path = "crates/ruphish-http/tests/legacy_phish.rs"
-status = "not_implemented"
+strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve original handler cases; Presence-only interaction tracking replaces form-value POST/302 with a closed presence event and collector navigation, and verified HTTPS origins replace arbitrary HTTP campaign hosts."
+target_crate = "ruphish"
+target_path = "tests/public_process.rs"
+status = "implemented"
+target_test = "verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_bypasses"
 source_subtests = []
 
 [[tests]]
 id = "controllers.phish.TestCompletedCampaignClick"
-source = "gophish/controllers/phish_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/phish_test.go"
 source_line = 264
 source_test = "TestCompletedCampaignClick"
 source_receiver = ""
 source_body_sha256 = "05f1c7ce576704d2da07eb849f76e5414a63b5b791d856c8a6f553cb5563cfe3"
 guarantee = "Completed campaigns reject further interaction."
-strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve all original table cases."
-target_crate = "ruphish-http"
-target_path = "crates/ruphish-http/tests/legacy_phish.rs"
-status = "not_implemented"
+strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve original handler cases; Presence-only interaction tracking replaces form-value POST/302 with a closed presence event and collector navigation, and verified HTTPS origins replace arbitrary HTTP campaign hosts."
+target_crate = "ruphish"
+target_path = "tests/public_process.rs"
+status = "implemented"
+target_test = "verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_bypasses"
 source_subtests = []
 
 [[tests]]
 id = "controllers.phish.TestRobotsHandler"
-source = "gophish/controllers/phish_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/phish_test.go"
 source_line = 292
 source_test = "TestRobotsHandler"
 source_receiver = ""
 source_body_sha256 = "6efdc823a604ff73a587effd6ff747356177873148311350e0c219bf289fc13b"
 guarantee = "Serve the expected robots exclusion response."
-strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve all original table cases."
-target_crate = "ruphish-http"
-target_path = "crates/ruphish-http/tests/legacy_phish.rs"
-status = "not_implemented"
+strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve original handler cases; Presence-only interaction tracking replaces form-value POST/302 with a closed presence event and collector navigation, and verified HTTPS origins replace arbitrary HTTP campaign hosts."
+target_crate = "ruphish"
+target_path = "tests/public_process.rs"
+status = "implemented"
+target_test = "verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_bypasses"
 source_subtests = []
 
 [[tests]]
 id = "controllers.phish.TestInvalidPreviewID"
-source = "gophish/controllers/phish_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/phish_test.go"
 source_line = 315
 source_test = "TestInvalidPreviewID"
 source_receiver = ""
@@ -328,7 +335,7 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.phish.TestPreviewTrack"
-source = "gophish/controllers/phish_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/phish_test.go"
 source_line = 324
 source_test = "TestPreviewTrack"
 source_receiver = ""
@@ -343,7 +350,7 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.phish.TestPreviewClick"
-source = "gophish/controllers/phish_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/phish_test.go"
 source_line = 331
 source_test = "TestPreviewClick"
 source_receiver = ""
@@ -358,55 +365,58 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.phish.TestInvalidTransparencyRequest"
-source = "gophish/controllers/phish_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/phish_test.go"
 source_line = 338
 source_test = "TestInvalidTransparencyRequest"
 source_receiver = ""
 source_body_sha256 = "a08c8ef1e3c4648691a70d7746dab0dd095ca666b3d226bf54ce97bfb0029e71"
 guarantee = "Reject transparency requests without valid recipient context."
-strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve all original table cases."
-target_crate = "ruphish-http"
-target_path = "crates/ruphish-http/tests/legacy_phish.rs"
-status = "not_implemented"
+strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve original handler cases; Presence-only interaction tracking replaces form-value POST/302 with a closed presence event and collector navigation, and verified HTTPS origins replace arbitrary HTTP campaign hosts."
+target_crate = "ruphish"
+target_path = "tests/public_process.rs"
+status = "implemented"
+target_test = "verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_bypasses"
 source_subtests = []
 
 [[tests]]
 id = "controllers.phish.TestTransparencyRequest"
-source = "gophish/controllers/phish_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/phish_test.go"
 source_line = 347
 source_test = "TestTransparencyRequest"
 source_receiver = ""
 source_body_sha256 = "c1dba2513178ae17873e224dc9689fab1b8d8601f5c8deaef6d7091365a16bb1"
 guarantee = "Return the expected transparency response for a valid suffixed recipient ID."
-strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve all original table cases."
-target_crate = "ruphish-http"
-target_path = "crates/ruphish-http/tests/legacy_phish.rs"
-status = "not_implemented"
+strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve original handler cases; Presence-only interaction tracking replaces form-value POST/302 with a closed presence event and collector navigation, and verified HTTPS origins replace arbitrary HTTP campaign hosts."
+target_crate = "ruphish"
+target_path = "tests/public_process.rs"
+status = "implemented"
+target_test = "verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_bypasses"
 source_subtests = []
 
 [[tests]]
 id = "controllers.phish.TestRedirectTemplating"
-source = "gophish/controllers/phish_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/phish_test.go"
 source_line = 364
 source_test = "TestRedirectTemplating"
 source_receiver = ""
 source_body_sha256 = "74b8b6d7c24bc443a3c4fbead279887a3d27429d147791827ef6a9a3d3989c91"
 guarantee = "Render recipient variables in the landing redirect URL."
-strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve all original table cases."
-target_crate = "ruphish-http"
-target_path = "crates/ruphish-http/tests/legacy_phish.rs"
-status = "not_implemented"
+strategy = "Adapt HTTP request/assertion scenarios to Rust; seed equivalent isolated state and exercise routing/middleware. Preserve original handler cases; Presence-only interaction tracking replaces form-value POST/302 with a closed presence event and collector navigation, and verified HTTPS origins replace arbitrary HTTP campaign hosts."
+target_crate = "ruphish"
+target_path = "tests/public_process.rs"
+status = "implemented"
+target_test = "verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_bypasses"
 source_subtests = []
 
 [[tests]]
 id = "controllers.route.TestLoginCSRF"
-source = "gophish/controllers/route_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/route_test.go"
 source_line = 56
 source_test = "TestLoginCSRF"
 source_receiver = ""
 source_body_sha256 = "342e0e6fc993ea5b2fd5291dcf289a7a64b9b47b192a833ddc885b1e7be1bbc6"
 guarantee = "Enforce CSRF validation on the browser login flow."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -415,13 +425,13 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.route.TestInvalidCredentials"
-source = "gophish/controllers/route_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/route_test.go"
 source_line = 76
 source_test = "TestInvalidCredentials"
 source_receiver = ""
 source_body_sha256 = "7bcdba31d230c77238f834bd8530a2d546a12f5ec60f0fc39cc88b76e01fc3db"
 guarantee = "Invalid credentials do not establish an authenticated session."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -430,13 +440,13 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.route.TestSuccessfulLogin"
-source = "gophish/controllers/route_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/route_test.go"
 source_line = 87
 source_test = "TestSuccessfulLogin"
 source_receiver = ""
 source_body_sha256 = "9e195799e5babd936ba0b3d2bec16e5e7c6c5fe6ee6d36827543166cbeddffc1"
 guarantee = "Valid credentials establish login and the expected redirect."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -445,13 +455,13 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.route.TestSuccessfulRedirect"
-source = "gophish/controllers/route_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/route_test.go"
 source_line = 98
 source_test = "TestSuccessfulRedirect"
 source_receiver = ""
 source_body_sha256 = "18cce49e7bf0033f011f15f972d202e70fadef54104f98512a5e1e398e3edad8"
 guarantee = "Honor the supported post-login next path without allowing an external redirect."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -460,13 +470,13 @@ source_subtests = []
 
 [[tests]]
 id = "controllers.route.TestAccountLocked"
-source = "gophish/controllers/route_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/controllers/route_test.go"
 source_line = 121
 source_test = "TestAccountLocked"
 source_receiver = ""
 source_body_sha256 = "303ff0da08a832e7fd7c34a89071acea51c8668759419ab3c057d0d885971f0f"
 guarantee = "A locked account cannot log in with otherwise valid credentials."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -475,7 +485,7 @@ source_subtests = []
 
 [[tests]]
 id = "dialer.dialer.TestDefaultDeny"
-source = "gophish/dialer/dialer_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/dialer/dialer_test.go"
 source_line = 11
 source_test = "TestDefaultDeny"
 source_receiver = ""
@@ -490,7 +500,7 @@ source_subtests = []
 
 [[tests]]
 id = "dialer.dialer.TestDefaultAllow"
-source = "gophish/dialer/dialer_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/dialer/dialer_test.go"
 source_line = 22
 source_test = "TestDefaultAllow"
 source_receiver = ""
@@ -505,7 +515,7 @@ source_subtests = []
 
 [[tests]]
 id = "dialer.dialer.TestCustomAllow"
-source = "gophish/dialer/dialer_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/dialer/dialer_test.go"
 source_line = 32
 source_test = "TestCustomAllow"
 source_receiver = ""
@@ -520,7 +530,7 @@ source_subtests = []
 
 [[tests]]
 id = "dialer.dialer.TestCustomDeny"
-source = "gophish/dialer/dialer_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/dialer/dialer_test.go"
 source_line = 44
 source_test = "TestCustomDeny"
 source_receiver = ""
@@ -535,7 +545,7 @@ source_subtests = []
 
 [[tests]]
 id = "dialer.dialer.TestSingleIP"
-source = "gophish/dialer/dialer_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/dialer/dialer_test.go"
 source_line = 57
 source_test = "TestSingleIP"
 source_receiver = ""
@@ -550,7 +560,7 @@ source_subtests = []
 
 [[tests]]
 id = "logger.logger.TestLogLevel"
-source = "gophish/logger/logger_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/logger/logger_test.go"
 source_line = 7
 source_test = "TestLogLevel"
 source_receiver = ""
@@ -565,13 +575,13 @@ source_subtests = []
 
 [[tests]]
 id = "mailer.mailer.TestDialHost"
-source = "gophish/mailer/mailer_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/mailer/mailer_test.go"
 source_line = 44
 source_test = "TestDialHost"
 source_receiver = ""
 source_body_sha256 = "1794ce34a806f260af64a3676721bfd34d4ab104120108cd1d4e4b901a292e7c"
 guarantee = "Dial attempts honor success/error behavior at the mail transport boundary."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/campaign_transport.rs"
 status = "implemented"
@@ -580,13 +590,13 @@ source_subtests = []
 
 [[tests]]
 id = "mailer.mailer.TestMailWorkerStart"
-source = "gophish/mailer/mailer_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/mailer/mailer_test.go"
 source_line = 67
 source_test = "TestMailWorkerStart"
 source_receiver = ""
 source_body_sha256 = "5a9c096f037b7318a530491776dd6cf7e9cb6bfa9d1006812e709dfc5b13630d"
 guarantee = "Starting a mail worker processes queued mail and reports successful delivery."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish"
 target_path = "tests/campaign_process.rs"
 status = "implemented"
@@ -595,13 +605,13 @@ source_subtests = []
 
 [[tests]]
 id = "mailer.mailer.TestBackoff"
-source = "gophish/mailer/mailer_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/mailer/mailer_test.go"
 source_line = 103
 source_test = "TestBackoff"
 source_receiver = ""
 source_body_sha256 = "190ee4657265285ea0a220457aaf0ad2da90fc9198495e16267c4ccc0816111c"
 guarantee = "Temporary SMTP errors back off affected messages without treating them as permanent failures."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish"
 target_path = "tests/campaign_process.rs"
 status = "implemented"
@@ -610,13 +620,13 @@ source_subtests = []
 
 [[tests]]
 id = "mailer.mailer.TestPermError"
-source = "gophish/mailer/mailer_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/mailer/mailer_test.go"
 source_line = 157
 source_test = "TestPermError"
 source_receiver = ""
 source_body_sha256 = "9432742435f385a2e47ec6e0275fe21cc3d4282772c3e196d4dcc2d1cd9541a2"
 guarantee = "Permanent SMTP errors fail affected messages and allow subsequent work to proceed."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish"
 target_path = "tests/campaign_process.rs"
 status = "implemented"
@@ -625,13 +635,13 @@ source_subtests = []
 
 [[tests]]
 id = "mailer.mailer.TestUnknownError"
-source = "gophish/mailer/mailer_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/mailer/mailer_test.go"
 source_line = 219
 source_test = "TestUnknownError"
 source_receiver = ""
 source_body_sha256 = "2f382e486d55b2cdf2f37583e184abe467b603552556816c464d11ba9b58b6d3"
 guarantee = "Unknown transport failures follow reconnect/backoff handling and report remaining failures."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish"
 target_path = "tests/campaign_process.rs"
 status = "implemented"
@@ -640,13 +650,13 @@ source_subtests = []
 
 [[tests]]
 id = "middleware.middleware.TestEnforceViewOnly"
-source = "gophish/middleware/middleware_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/middleware/middleware_test.go"
 source_line = 48
 source_test = "TestEnforceViewOnly"
 source_receiver = ""
 source_body_sha256 = "8a8f6af956f75747f43c75423ab42892ab1315fa7d58d21abb9ab4c95b83c05d"
 guarantee = "Read-only permissions permit reads and reject write methods."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -655,13 +665,13 @@ source_subtests = []
 
 [[tests]]
 id = "middleware.middleware.TestRequirePermission"
-source = "gophish/middleware/middleware_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/middleware/middleware_test.go"
 source_line = 92
 source_test = "TestRequirePermission"
 source_receiver = ""
 source_body_sha256 = "8e507eae0962bd2b7622ee58cc03b2d34493d0801a5f2614bc7ba4e3781e280b"
 guarantee = "Permission middleware permits required permissions and rejects missing ones."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -670,13 +680,13 @@ source_subtests = []
 
 [[tests]]
 id = "middleware.middleware.TestRequireAPIKey"
-source = "gophish/middleware/middleware_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/middleware/middleware_test.go"
 source_line = 122
 source_test = "TestRequireAPIKey"
 source_receiver = ""
 source_body_sha256 = "81d827e0a5929deb420689e3a3791279ab2a84fa311e1956b638cd28565e3a7b"
 guarantee = "A request without an API key returns the expected unauthorized JSON."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -685,13 +695,13 @@ source_subtests = []
 
 [[tests]]
 id = "middleware.middleware.TestCORSHeaders"
-source = "gophish/middleware/middleware_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/middleware/middleware_test.go"
 source_line = 136
 source_test = "TestCORSHeaders"
 source_receiver = ""
 source_body_sha256 = "e6db883b7eba90cb6b5cb1594a720a21299a62a62fa5090b31437d2449938c64"
 guarantee = "API preflight returns the expected legacy CORS headers."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -700,13 +710,13 @@ source_subtests = []
 
 [[tests]]
 id = "middleware.middleware.TestInvalidAPIKey"
-source = "gophish/middleware/middleware_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/middleware/middleware_test.go"
 source_line = 148
 source_test = "TestInvalidAPIKey"
 source_receiver = ""
 source_body_sha256 = "2fee6d2f72f5f57f68db4bd53ddab2a4ed4f63adf04de4e88467bab66b11319f"
 guarantee = "An unknown API key returns the expected unauthorized JSON."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -715,13 +725,13 @@ source_subtests = []
 
 [[tests]]
 id = "middleware.middleware.TestBearerToken"
-source = "gophish/middleware/middleware_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/middleware/middleware_test.go"
 source_line = 164
 source_test = "TestBearerToken"
 source_receiver = ""
 source_body_sha256 = "a552af8a4833528c6aa25baca370afa6d91a07f9f28b4d65a06202dfb386cb4d"
 guarantee = "Bearer authentication sets the correct user context."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -730,13 +740,13 @@ source_subtests = []
 
 [[tests]]
 id = "middleware.middleware.TestPasswordResetRequired"
-source = "gophish/middleware/middleware_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/middleware/middleware_test.go"
 source_line = 178
 source_test = "TestPasswordResetRequired"
 source_receiver = ""
 source_body_sha256 = "b3322489cc1f65457cce10ba21150aeaa5712b1c0bc1a6026089ca3c3ecddac1"
 guarantee = "A logged-in account requiring password change is redirected to reset."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -745,13 +755,13 @@ source_subtests = []
 
 [[tests]]
 id = "middleware.middleware.TestApplySecurityHeaders"
-source = "gophish/middleware/middleware_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/middleware/middleware_test.go"
 source_line = 197
 source_test = "TestApplySecurityHeaders"
 source_receiver = ""
 source_body_sha256 = "65e2fe3258105ae5db8cc611e3f5bcaaeb762dc76fcb6426ce4b87511ebc7abf"
 guarantee = "Administrative responses contain the required anti-framing headers."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -760,13 +770,13 @@ source_subtests = []
 
 [[tests]]
 id = "middleware.ratelimit.ratelimit.TestRateLimitEnforcement"
-source = "gophish/middleware/ratelimit/ratelimit_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/middleware/ratelimit/ratelimit_test.go"
 source_line = 34
 source_test = "TestRateLimitEnforcement"
 source_receiver = ""
 source_body_sha256 = "6d43b5bd6fc3970276a734d17479e9062180a7fbd4b6ba591f9a5f496a57453d"
 guarantee = "Enforce the configured POST rate limit while preserving permitted requests."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -775,13 +785,13 @@ source_subtests = []
 
 [[tests]]
 id = "middleware.ratelimit.ratelimit.TestRateLimitCleanup"
-source = "gophish/middleware/ratelimit/ratelimit_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/middleware/ratelimit/ratelimit_test.go"
 source_line = 41
 source_test = "TestRateLimitCleanup"
 source_receiver = ""
 source_body_sha256 = "9c7b41dee1129b8308fdc724ff57d85f736d7109042da0d11bdce2d3f7da1d0c"
 guarantee = "Expire inactive rate-limit state after its configured retention interval."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish-http"
 target_path = "crates/ruphish-http/src/rate.rs"
 status = "implemented"
@@ -790,7 +800,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.attachment.TestAttachment"
-source = "gophish/models/attachment_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/attachment_test.go"
 source_line = 16
 source_test = "TestAttachment"
 source_receiver = "*ModelsSuite"
@@ -805,13 +815,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.campaign.TestGenerateSendDate"
-source = "gophish/models/campaign_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/campaign_test.go"
 source_line = 11
 source_test = "TestGenerateSendDate"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "6d700f2765ff9eab1f8c5d6511a99874a72982e8c81b55d3a7d465646c274ca0"
 guarantee = "Distribute recipient send dates across the supported launch/send-by boundaries."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/campaign_storage.rs"
 status = "implemented"
@@ -820,13 +830,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.campaign.TestCampaignDateValidation"
-source = "gophish/models/campaign_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/campaign_test.go"
 source_line = 65
 source_test = "TestCampaignDateValidation"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "6e5252fc8095a378e5f2a4d99e17056b2dbe8ccdf4e5e6aa8be52349fa0da20f"
 guarantee = "Validate campaign dates, including invalid scheduling order."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/campaign_storage.rs"
 status = "implemented"
@@ -835,13 +845,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.campaign.TestLaunchCampaignMaillogStatus"
-source = "gophish/models/campaign_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/campaign_test.go"
 source_line = 94
 source_test = "TestLaunchCampaignMaillogStatus"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "461d8d7472df99a10cfd7b7e61811cbb9478aa21905abab0f3b201233782f9d4"
 guarantee = "Campaign creation assigns expected queued/in-progress mail-log/result state."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/campaign_storage.rs"
 status = "implemented"
@@ -850,13 +860,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.campaign.TestDeleteCampaignAlsoDeletesMailLogs"
-source = "gophish/models/campaign_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/campaign_test.go"
 source_line = 120
 source_test = "TestDeleteCampaignAlsoDeletesMailLogs"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "0721c3b6809c23b8f277c293f745b3e39682649dbba63d4296dd381cec0b0463"
 guarantee = "Deleting a campaign removes its pending mail logs."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/campaign_storage.rs"
 status = "implemented"
@@ -865,13 +875,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.campaign.TestCompleteCampaignAlsoDeletesMailLogs"
-source = "gophish/models/campaign_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/campaign_test.go"
 source_line = 134
 source_test = "TestCompleteCampaignAlsoDeletesMailLogs"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "0192d8e0be83675ed19c27e1fcdd610c7e67138abcd9dee38290dcf258ed177c"
 guarantee = "Completing a campaign removes its pending mail logs."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/campaign_storage.rs"
 status = "implemented"
@@ -880,13 +890,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.campaign.TestCampaignGetResults"
-source = "gophish/models/campaign_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/campaign_test.go"
 source_line = 148
 source_test = "TestCampaignGetResults"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "2a81af2cfba452748487fd8b118f58700917ac5e6a1f3b991945581b4af0d14d"
 guarantee = "Retrieve the campaign's recipient results and event history with expected associations."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish"
 target_path = "tests/campaign_process.rs"
 status = "implemented"
@@ -895,7 +905,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.email_request.TestEmailNotPresent"
-source = "gophish/models/email_request_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/email_request_test.go"
 source_line = 14
 source_test = "TestEmailNotPresent"
 source_receiver = "*ModelsSuite"
@@ -910,7 +920,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.email_request.TestEmailRequestBackoff"
-source = "gophish/models/email_request_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/email_request_test.go"
 source_line = 23
 source_test = "TestEmailRequestBackoff"
 source_receiver = "*ModelsSuite"
@@ -925,7 +935,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.email_request.TestEmailRequestError"
-source = "gophish/models/email_request_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/email_request_test.go"
 source_line = 35
 source_test = "TestEmailRequestError"
 source_receiver = "*ModelsSuite"
@@ -940,7 +950,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.email_request.TestEmailRequestSuccess"
-source = "gophish/models/email_request_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/email_request_test.go"
 source_line = 47
 source_test = "TestEmailRequestSuccess"
 source_receiver = "*ModelsSuite"
@@ -955,7 +965,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.email_request.TestEmailRequestGenerate"
-source = "gophish/models/email_request_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/email_request_test.go"
 source_line = 58
 source_test = "TestEmailRequestGenerate"
 source_receiver = "*ModelsSuite"
@@ -970,7 +980,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.email_request.TestGetSmtpFrom"
-source = "gophish/models/email_request_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/email_request_test.go"
 source_line = 109
 source_test = "TestGetSmtpFrom"
 source_receiver = "*ModelsSuite"
@@ -985,7 +995,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.email_request.TestEmailRequestURLTemplating"
-source = "gophish/models/email_request_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/email_request_test.go"
 source_line = 140
 source_test = "TestEmailRequestURLTemplating"
 source_receiver = "*ModelsSuite"
@@ -1000,7 +1010,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.email_request.TestEmailRequestGenerateEmptySubject"
-source = "gophish/models/email_request_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/email_request_test.go"
 source_line = 179
 source_test = "TestEmailRequestGenerateEmptySubject"
 source_receiver = "*ModelsSuite"
@@ -1015,7 +1025,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.email_request.TestPostSendTestEmailRequest"
-source = "gophish/models/email_request_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/email_request_test.go"
 source_line = 219
 source_test = "TestPostSendTestEmailRequest"
 source_receiver = "*ModelsSuite"
@@ -1030,7 +1040,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.group.TestPostGroup"
-source = "gophish/models/group_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/group_test.go"
 source_line = 11
 source_test = "TestPostGroup"
 source_receiver = "*ModelsSuite"
@@ -1045,7 +1055,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.group.TestPostGroupNoName"
-source = "gophish/models/group_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/group_test.go"
 source_line = 21
 source_test = "TestPostGroupNoName"
 source_receiver = "*ModelsSuite"
@@ -1060,7 +1070,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.group.TestPostGroupNoTargets"
-source = "gophish/models/group_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/group_test.go"
 source_line = 29
 source_test = "TestPostGroupNoTargets"
 source_receiver = "*ModelsSuite"
@@ -1075,7 +1085,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.group.TestGetGroups"
-source = "gophish/models/group_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/group_test.go"
 source_line = 37
 source_test = "TestGetGroups"
 source_receiver = "*ModelsSuite"
@@ -1090,7 +1100,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.group.TestGetGroupsNoGroups"
-source = "gophish/models/group_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/group_test.go"
 source_line = 70
 source_test = "TestGetGroupsNoGroups"
 source_receiver = "*ModelsSuite"
@@ -1105,7 +1115,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.group.TestGetGroup"
-source = "gophish/models/group_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/group_test.go"
 source_line = 76
 source_test = "TestGetGroup"
 source_receiver = "*ModelsSuite"
@@ -1120,7 +1130,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.group.TestGetGroupNoGroups"
-source = "gophish/models/group_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/group_test.go"
 source_line = 97
 source_test = "TestGetGroupNoGroups"
 source_receiver = "*ModelsSuite"
@@ -1135,7 +1145,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.group.TestGetGroupByName"
-source = "gophish/models/group_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/group_test.go"
 source_line = 102
 source_test = "TestGetGroupByName"
 source_receiver = "*ModelsSuite"
@@ -1150,7 +1160,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.group.TestGetGroupByNameNoGroups"
-source = "gophish/models/group_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/group_test.go"
 source_line = 122
 source_test = "TestGetGroupByNameNoGroups"
 source_receiver = "*ModelsSuite"
@@ -1165,7 +1175,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.group.TestPutGroup"
-source = "gophish/models/group_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/group_test.go"
 source_line = 127
 source_test = "TestPutGroup"
 source_receiver = "*ModelsSuite"
@@ -1180,7 +1190,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.group.TestPutGroupEmptyAttribute"
-source = "gophish/models/group_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/group_test.go"
 source_line = 152
 source_test = "TestPutGroupEmptyAttribute"
 source_receiver = "*ModelsSuite"
@@ -1195,13 +1205,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.maillog.TestGetQueuedMailLogs"
-source = "gophish/models/maillog_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/maillog_test.go"
 source_line = 39
 source_test = "TestGetQueuedMailLogs"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "16ec4fd39bf805b640dfd2de729fb6a3ef431bb2c2abf9c561536bfbc35216f4"
 guarantee = "Select mail logs due at the supplied time while respecting processing state."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/campaign_storage.rs"
 status = "implemented"
@@ -1210,13 +1220,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.maillog.TestMailLogBackoff"
-source = "gophish/models/maillog_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/maillog_test.go"
 source_line = 66
 source_test = "TestMailLogBackoff"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "818518c3ca9e4df145e5f81b1196f2f051a4ff619ea7308184efc2b29f1cdee7"
 guarantee = "Persist exponential retry dates/attempts and related result/error state through retry exhaustion."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/campaign_storage.rs"
 status = "implemented"
@@ -1225,13 +1235,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.maillog.TestMailLogError"
-source = "gophish/models/maillog_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/maillog_test.go"
 source_line = 108
 source_test = "TestMailLogError"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "79fdaa16a255c33acd5254f258e2b3dba083eb548c3fb1b36330130545e697ff"
 guarantee = "A permanent mail-log error records result failure and removes pending work."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish"
 target_path = "tests/campaign_process.rs"
 status = "implemented"
@@ -1240,13 +1250,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.maillog.TestMailLogSuccess"
-source = "gophish/models/maillog_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/maillog_test.go"
 source_line = 154
 source_test = "TestMailLogSuccess"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "91a8e45688dce3148776619ebafc2f19e6932b3ea643333b92984a17457bdc49"
 guarantee = "A successful mail log records the sent event/result and removes pending work."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/campaign_storage.rs"
 status = "implemented"
@@ -1255,13 +1265,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.maillog.TestGenerateMailLog"
-source = "gophish/models/maillog_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/maillog_test.go"
 source_line = 194
 source_test = "TestGenerateMailLog"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "bc405acfd5604e278ba34a051a588a293f2ef2b1b6594dce5e1db5a41bd66a40"
 guarantee = "Persist a mail log tied to the intended campaign, recipient, user, and send date."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/campaign_storage.rs"
 status = "implemented"
@@ -1270,13 +1280,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.maillog.TestMailLogGetSmtpFrom"
-source = "gophish/models/maillog_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/maillog_test.go"
 source_line = 216
 source_test = "TestMailLogGetSmtpFrom"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "337b7b1c4cc79f4b34707267ace3c00aa20072797869b98dcef8b21a65e3a667"
 guarantee = "Choose the expected campaign envelope sender from the original cases."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
 status = "implemented"
@@ -1285,13 +1295,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.maillog.TestMailLogGenerate"
-source = "gophish/models/maillog_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/maillog_test.go"
 source_line = 250
 source_test = "TestMailLogGenerate"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "45ef4794b2308a06bc923345b23fa6267f8197995188b4fa4d65cfc6f72d9302"
 guarantee = "Render campaign mail with the required recipient/template fields."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
 status = "implemented"
@@ -1300,13 +1310,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.maillog.TestMailLogGenerateTransparencyHeaders"
-source = "gophish/models/maillog_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/maillog_test.go"
 source_line = 266
 source_test = "TestMailLogGenerateTransparencyHeaders"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "30cb5eb9b6468717e1d56d5f7c6a407c02326cde71cf0fbcac4fb082a17dad15"
 guarantee = "Include the default transparency headers in generated mail."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
 status = "implemented"
@@ -1315,13 +1325,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.maillog.TestMailLogGenerateOverrideTransparencyHeaders"
-source = "gophish/models/maillog_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/maillog_test.go"
 source_line = 279
 source_test = "TestMailLogGenerateOverrideTransparencyHeaders"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "47b8b07b41c985da32a5e9f2da461b3b0414b6457c155bff0fe828865fdb642d"
 guarantee = "Allow explicit custom-header behavior for transparency header overrides."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
 status = "implemented"
@@ -1330,13 +1340,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.maillog.TestUnlockAllMailLogs"
-source = "gophish/models/maillog_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/maillog_test.go"
 source_line = 305
 source_test = "TestUnlockAllMailLogs"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "67a57a0cfc6f317836b58e4604f87b698ccdba436cf6536ef15dfb56aa5b7238"
 guarantee = "Startup recovery clears processing flags on persisted mail logs."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/campaign_storage.rs"
 status = "implemented"
@@ -1345,13 +1355,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.maillog.TestURLTemplateRendering"
-source = "gophish/models/maillog_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/maillog_test.go"
 source_line = 321
 source_test = "TestURLTemplateRendering"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "69c576b7d8c857909a87a233ba287a04f697043a3ba671fbd21453d3ef01a847"
 guarantee = "Render campaign URL variables while preserving tracking/recipient context."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
 status = "implemented"
@@ -1360,13 +1370,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.maillog.TestMailLogGenerateEmptySubject"
-source = "gophish/models/maillog_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/maillog_test.go"
 source_line = 344
 source_test = "TestMailLogGenerateEmptySubject"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "c9d849e67a8700d4d6f55cf036be94b127ad158992d1da403813aa8a86a6b05e"
 guarantee = "Support campaign mail with the original empty-subject behavior."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
 status = "implemented"
@@ -1375,13 +1385,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.maillog.TestShouldEmbedAttachment"
-source = "gophish/models/maillog_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/maillog_test.go"
 source_line = 363
 source_test = "TestShouldEmbedAttachment"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "b22b2a43194e5c1dcda2477696f1684af64d203f7360fc6b99917ad829fbb497"
 guarantee = "Classify the supported inline-attachment extensions as in the original table."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
 status = "implemented"
@@ -1390,13 +1400,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.maillog.TestEmbedAttachment"
-source = "gophish/models/maillog_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/maillog_test.go"
 source_line = 382
 source_test = "TestEmbedAttachment"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "f21b7f6dad82c264097571234cad77d6e5f640a4df1d0f9d51bd2f79a0cf6cb0"
 guarantee = "Emit inline attachments with the expected MIME relationship/content identifiers."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
 status = "implemented"
@@ -1405,12 +1415,12 @@ source_subtests = []
 
 [[tests]]
 id = "models.page.TestPostPage"
-source = "gophish/models/page_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/page_test.go"
 source_line = 10
 source_test = "TestPostPage"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "1b9fab94b9dca4acf5884cc471cfb99447de643c349f85386d72545d933ce19d"
-guarantee = "Persist all original capture-flag transitions and redirect clearing, retaining authored HTML under DEC-024; resource_formats.rs independently checks the derived form representation."
+guarantee = "Persist all original capture-flag transitions and redirect clearing, retaining authored HTML without destructive save-time transformations; resource_formats.rs independently checks the derived form representation."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
 target_crate = "ruphish"
 target_path = "tests/resource_process.rs"
@@ -1420,7 +1430,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.page.TestPageValidation"
-source = "gophish/models/page_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/page_test.go"
 source_line = 103
 source_test = "TestPageValidation"
 source_receiver = "*ModelsSuite"
@@ -1435,13 +1445,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.rbac.TestHasPermission"
-source = "gophish/models/rbac_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/rbac_test.go"
 source_line = 11
 source_test = "TestHasPermission"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "4a5c1524c5ad0770bf2d555d1de873d804a3648ae8551db5dc47ab0c5d19dfb4"
 guarantee = "Resolve role permissions and deny permissions absent from the role."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/accounts.rs"
 status = "implemented"
@@ -1450,13 +1460,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.rbac.TestGetRoleBySlug"
-source = "gophish/models/rbac_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/rbac_test.go"
 source_line = 48
 source_test = "TestGetRoleBySlug"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "a141b638c3f7e507631f23e83ab7d9816f130b4696331e61a156ce3e63c41475"
 guarantee = "Look up valid roles and return expected errors for unknown slugs."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/accounts.rs"
 status = "implemented"
@@ -1465,13 +1475,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.result.TestGenerateResultId"
-source = "gophish/models/result_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/result_test.go"
 source_line = 11
 source_test = "TestGenerateResultId"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "d6467167162e7240f4d7a053ba90b6e9e6ff4016c7096a67e909e9aefc126137"
 guarantee = "Generate nonempty recipient identifiers satisfying the original validity assertions."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/campaign_storage.rs"
 status = "implemented"
@@ -1480,13 +1490,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.result.TestFormatAddress"
-source = "gophish/models/result_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/result_test.go"
 source_line = 19
 source_test = "TestFormatAddress"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "b7871bc0ee49d9444acaf5acd6de166b9adc8d412348b1f939909ec696b05f45"
 guarantee = "Format recipient mailbox display names according to the original address cases."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
 status = "implemented"
@@ -1495,13 +1505,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.result.TestResultSendingStatus"
-source = "gophish/models/result_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/result_test.go"
 source_line = 39
 source_test = "TestResultSendingStatus"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "e4e88e16f5c3d0449a3d50e3438933f2b63c95808eb0425391edf550da71a0fa"
 guarantee = "Initialize immediate-send recipient results with the expected status."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/campaign_storage.rs"
 status = "implemented"
@@ -1510,13 +1520,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.result.TestResultScheduledStatus"
-source = "gophish/models/result_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/result_test.go"
 source_line = 49
 source_test = "TestResultScheduledStatus"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "0baf8e337e281d0fc0beeca88e4716bc71df8a7c183978cc9d14b020ce54afb9"
 guarantee = "Initialize future-send recipient results with the expected scheduled status."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/campaign_storage.rs"
 status = "implemented"
@@ -1525,13 +1535,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.result.TestResultVariableStatus"
-source = "gophish/models/result_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/result_test.go"
 source_line = 61
 source_test = "TestResultVariableStatus"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "e74516a680a2070f7cff6fc880841ea8ab01a44931699209da31c8fb8de62571"
 guarantee = "Assign recipient statuses correctly across variable campaign scheduling."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/campaign_storage.rs"
 status = "implemented"
@@ -1540,13 +1550,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.result.TestDuplicateResults"
-source = "gophish/models/result_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/result_test.go"
 source_line = 78
 source_test = "TestDuplicateResults"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "5c718bfdac5a57b721c4f7f8c4b9dbe49fe80318c799340309a887de6ac25c69"
 guarantee = "Deduplicate overlapping campaign recipients according to the original identity rules."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/campaign_storage.rs"
 status = "implemented"
@@ -1555,7 +1565,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.smtp.TestPostSMTP"
-source = "gophish/models/smtp_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/smtp_test.go"
 source_line = 11
 source_test = "TestPostSMTP"
 source_receiver = "*ModelsSuite"
@@ -1570,7 +1580,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.smtp.TestPostSMTPNoHost"
-source = "gophish/models/smtp_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/smtp_test.go"
 source_line = 25
 source_test = "TestPostSMTPNoHost"
 source_receiver = "*ModelsSuite"
@@ -1585,7 +1595,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.smtp.TestPostSMTPNoFrom"
-source = "gophish/models/smtp_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/smtp_test.go"
 source_line = 35
 source_test = "TestPostSMTPNoFrom"
 source_receiver = "*ModelsSuite"
@@ -1600,12 +1610,12 @@ source_subtests = []
 
 [[tests]]
 id = "models.smtp.TestPostInvalidFrom"
-source = "gophish/models/smtp_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/smtp_test.go"
 source_line = 45
 source_test = "TestPostInvalidFrom"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "b35061842b6aae2f798251d5cfd58387718cbb97c880c2b5802681f22433b749"
-guarantee = "Accept the original display-name sender vector under approved DEC-023; malformed mailbox syntax remains rejected."
+guarantee = "Accept the original display-name sender vector as an intentional compatibility improvement; malformed mailbox syntax remains rejected."
 strategy = "Translate Go-internal cases into Rust use-case/database tests protecting the same guarantee and all original table cases."
 target_crate = "ruphish"
 target_path = "tests/resource_process.rs"
@@ -1615,7 +1625,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.smtp.TestPostInvalidFromEmail"
-source = "gophish/models/smtp_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/smtp_test.go"
 source_line = 56
 source_test = "TestPostInvalidFromEmail"
 source_receiver = "*ModelsSuite"
@@ -1630,7 +1640,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.smtp.TestPostSMTPValidHeader"
-source = "gophish/models/smtp_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/smtp_test.go"
 source_line = 67
 source_test = "TestPostSMTPValidHeader"
 source_receiver = "*ModelsSuite"
@@ -1645,7 +1655,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.smtp.TestSMTPGetDialer"
-source = "gophish/models/smtp_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/smtp_test.go"
 source_line = 85
 source_test = "TestSMTPGetDialer"
 source_receiver = "*ModelsSuite"
@@ -1660,7 +1670,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.smtp.TestGetInvalidSMTP"
-source = "gophish/models/smtp_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/smtp_test.go"
 source_line = 102
 source_test = "TestGetInvalidSMTP"
 source_receiver = "*ModelsSuite"
@@ -1675,7 +1685,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.smtp.TestDefaultDeniedDial"
-source = "gophish/models/smtp_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/smtp_test.go"
 source_line = 107
 source_test = "TestDefaultDeniedDial"
 source_receiver = "*ModelsSuite"
@@ -1690,7 +1700,7 @@ source_subtests = []
 
 [[tests]]
 id = "models.template_context.TestNewTemplateContext"
-source = "gophish/models/template_context_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/template_context_test.go"
 source_line = 22
 source_test = "TestNewTemplateContext"
 source_receiver = "*ModelsSuite"
@@ -1705,13 +1715,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.user.TestGetUserExists"
-source = "gophish/models/user_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/user_test.go"
 source_line = 8
 source_test = "TestGetUserExists"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "6616ab0c8950eb16506260b926dc65ce5aaab0fd665fa136feab26d0525ea4d7"
 guarantee = "Retrieve an existing user by ID."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/accounts.rs"
 status = "implemented"
@@ -1720,13 +1730,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.user.TestGetUserByUsernameWithExistingUser"
-source = "gophish/models/user_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/user_test.go"
 source_line = 14
 source_test = "TestGetUserByUsernameWithExistingUser"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "6f51fe2f59a984c5b50b5864b7f1b079d466fa7e6a1ee775ccf884e434b8250e"
 guarantee = "Retrieve an existing user by username."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/accounts.rs"
 status = "implemented"
@@ -1735,13 +1745,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.user.TestGetUserDoesNotExist"
-source = "gophish/models/user_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/user_test.go"
 source_line = 20
 source_test = "TestGetUserDoesNotExist"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "36702713e5b0b5531ef5381803a6c1dd84e10b7a2bcf8e04fb65830601354d1e"
 guarantee = "Return the expected error for an unknown user ID."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/accounts.rs"
 status = "implemented"
@@ -1750,13 +1760,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.user.TestGetUserByAPIKeyWithExistingAPIKey"
-source = "gophish/models/user_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/user_test.go"
 source_line = 26
 source_test = "TestGetUserByAPIKeyWithExistingAPIKey"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "de1876af5cda056b1c4c83bad59ee55c5d62e34c4889391e0853ab21d11a2b13"
 guarantee = "Resolve the user owning a valid API key."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/accounts.rs"
 status = "implemented"
@@ -1765,13 +1775,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.user.TestGetUserByAPIKeyWithNotExistingAPIKey"
-source = "gophish/models/user_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/user_test.go"
 source_line = 35
 source_test = "TestGetUserByAPIKeyWithNotExistingAPIKey"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "32b543a43335b6eb5d39985e8b9d48111d049cad11e0c0f8e366797a06851e8e"
 guarantee = "Reject unknown API keys."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/accounts.rs"
 status = "implemented"
@@ -1780,13 +1790,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.user.TestGetUserByUsernameWithNotExistingUser"
-source = "gophish/models/user_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/user_test.go"
 source_line = 44
 source_test = "TestGetUserByUsernameWithNotExistingUser"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "0d55f5b05b78a736b8b6c026bc4c69c25c1ddef4a43ccded0e114cc108c049b3"
 guarantee = "Return the expected error for an unknown username."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/accounts.rs"
 status = "implemented"
@@ -1795,13 +1805,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.user.TestPutUser"
-source = "gophish/models/user_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/user_test.go"
 source_line = 50
 source_test = "TestPutUser"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "5cc4e1db23e7a0db7df79848d6dda62c9a3d84824ad1b9171d1365b7414a1cbb"
 guarantee = "Persist updates to the intended user account."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -1810,13 +1820,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.user.TestGeneratedAPIKey"
-source = "gophish/models/user_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/user_test.go"
 source_line = 60
 source_test = "TestGeneratedAPIKey"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "a3192dab8f6989ee6478b14baf827254cf386d0cbdcdef87bbba0083dffd4773"
 guarantee = "Bootstrap a correctly formed random API key."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/startup_process.rs"
 status = "implemented"
@@ -1825,13 +1835,13 @@ source_subtests = []
 
 [[tests]]
 id = "models.user.TestDeleteLastAdmin"
-source = "gophish/models/user_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/user_test.go"
 source_line = 73
 source_test = "TestDeleteLastAdmin"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "3f80cbe0d355f22803c9fc98bd7420a4ec132b80c05ec5b30a7aa8e76e919a23"
 guarantee = "Prevent deletion of the last administrator."
-strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; approved authentication improvements are recorded in DEC-015 through DEC-019."
+strategy = "Exercise the inherited observable guarantee through real HTTP/process or SQLite integration, with independent Go expectations where applicable; authentication differences and guarantees are documented in docs/authentication.md."
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
@@ -1840,7 +1850,7 @@ source_subtests = []
 
 [[tests]]
 id = "util.util.TestParseCSVEmail"
-source = "gophish/util/util_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/util/util_test.go"
 source_line = 36
 source_test = "TestParseCSVEmail"
 source_receiver = ""
@@ -1855,7 +1865,7 @@ source_subtests = []
 
 [[tests]]
 id = "webhook.webhook.TestSendMocked"
-source = "gophish/webhook/webhook_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/webhook/webhook_test.go"
 source_line = 30
 source_test = "TestSendMocked"
 source_receiver = ""
@@ -1869,7 +1879,7 @@ source_subtests = []
 
 [[tests]]
 id = "webhook.webhook.TestSendReal"
-source = "gophish/webhook/webhook_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/webhook/webhook_test.go"
 source_line = 44
 source_test = "TestSendReal"
 source_receiver = ""
@@ -1883,7 +1893,7 @@ source_subtests = []
 
 [[tests]]
 id = "webhook.webhook.TestSignature"
-source = "gophish/webhook/webhook_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/webhook/webhook_test.go"
 source_line = 92
 source_test = "TestSignature"
 source_receiver = ""
@@ -1897,13 +1907,13 @@ source_subtests = []
 
 [[tests]]
 id = "worker.worker.TestMailLogGrouping"
-source = "gophish/worker/worker_test.go"
+source = "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/worker/worker_test.go"
 source_line = 117
 source_test = "TestMailLogGrouping"
 source_receiver = ""
 source_body_sha256 = "eea868a136dc9e00436e5e66e81cd064ca3021b506d5f2aea6a497d370aa6d5b"
 guarantee = "Group queued mail by campaign while preserving recipient work and expected sender reuse boundaries."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. DEC-026/027 replace processing flags, immediate dial loops and unsafe unknown resend with durable fenced claims/retry state; DEC-030 strengthens new RIDs; DEC-031 replaces raw error text with safe codes. See docs/campaigns/package-7.md for additional cross-cutting evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/campaign_storage.rs"
 status = "implemented"

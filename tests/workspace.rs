@@ -60,7 +60,7 @@ fn metadata() -> Result<Value, Box<dyn std::error::Error>> {
 
 #[test]
 fn workspace_dependencies_follow_boundaries_and_stay_inside_product() {
-    let metadata = metadata().expect("metadata must work without parent tools");
+    let metadata = metadata().expect("workspace metadata must load");
     let root = product_root().expect("product root exists");
     let policy: BTreeMap<_, _> = BOUNDARIES.iter().copied().collect();
     let packages = metadata["packages"].as_array().expect("workspace packages");
@@ -141,7 +141,7 @@ fn workspace_dependencies_follow_boundaries_and_stay_inside_product() {
 
 #[test]
 fn member_manifests_inherit_supported_toolchain_and_production_lints() {
-    let metadata = metadata().expect("metadata must work without parent tools");
+    let metadata = metadata().expect("workspace metadata must load");
     let root = product_root().expect("product root exists");
     let toolchain: toml::Value = toml::from_str(
         &fs::read_to_string(root.join("rust-toolchain.toml")).expect("toolchain file"),

@@ -56,7 +56,7 @@ pub(crate) fn PageHeader(
     #[prop(into)] title: Signal<String>,
     #[prop(into, optional)] subtitle: Signal<String>,
     #[prop(default = false)] status: bool,
-    children: Children,
+    #[prop(optional)] children: Option<Children>,
 ) -> impl IntoView {
     view! {
         <div class="management-heading">
@@ -65,7 +65,7 @@ pub(crate) fn PageHeader(
                     <p class:save-state=status role=if status {Some("status")} else {None}>{move || subtitle.get()}</p>
                 </Show>
             </div>
-            <div class="management-actions">{children()}</div>
+            {children.map(|children|view!{<div class="management-actions">{children()}</div>})}
         </div>
     }
 }
@@ -114,6 +114,42 @@ pub(crate) fn Field(
     view! { <label class="form-field" class:checkbox-label=checkbox>{label}{children()}</label> }
 }
 
+/// Copy a value without placing long verification tokens into the page layout.
+#[component]
+pub(crate) fn CopyButton(label: &'static str, value: String, message: Message) -> impl IntoView {
+    use leptos::leptos_dom::helpers::{TimeoutHandle, set_timeout_with_handle};
+    let copied = RwSignal::new(false);
+    let copying = RwSignal::new(false);
+    let reset = StoredValue::new(None::<TimeoutHandle>);
+    on_cleanup(move || {
+        reset.update_value(|timer| {
+            if let Some(timer) = timer.take() {
+                timer.clear();
+            }
+        });
+    });
+    view! {
+        <button type="button" class="copy-button" title=format!("Copy {label}") disabled=move||copying.get() on:click=move |_|{
+            if copying.get_untracked() { return; }
+            reset.update_value(|timer| {
+                if let Some(timer) = timer.take() { timer.clear(); }
+            });
+            copied.set(false);
+            copying.set(true);
+            let value=value.clone();
+            leptos::task::spawn_local_scoped_with_cancellation(async move {
+                if crate::account::copy_text(&value).await.is_ok() {
+                    copied.set(true);
+                    reset.set_value(set_timeout_with_handle(move||copied.set(false), std::time::Duration::from_secs(2)).ok());
+                } else {message.error(format!("Could not copy {label}."))}
+                copying.set(false);
+            });
+        }><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M15 8V4H4v11h4"/></svg>
+            <span class="copy-button-label"><span class="copy-button-size" aria-hidden="true">{format!("Copy {label}")}</span><span role="status">{move||if copying.get(){"Copying…".to_owned()}else if copied.get(){"Copied".to_owned()}else{format!("Copy {label}")}}</span></span>
+        </button>
+    }
+}
+
 #[component]
 pub(crate) fn SaveButton(
     #[prop(into)] label: Signal<String>,
@@ -127,8 +163,11 @@ pub(crate) fn SaveButton(
 }
 
 #[component]
-pub(crate) fn FormFooter(children: Children) -> impl IntoView {
-    view! { <div class="management-footer">{children()}</div> }
+pub(crate) fn FormFooter(
+    children: Children,
+    #[prop(default = false)] spread: bool,
+) -> impl IntoView {
+    view! { <div class="management-footer" class:management-footer-spread=spread>{children()}</div> }
 }
 
 #[component]

@@ -14,6 +14,8 @@ mod campaigns;
 #[cfg(target_arch = "wasm32")]
 mod components;
 #[cfg(target_arch = "wasm32")]
+mod domains;
+#[cfg(target_arch = "wasm32")]
 mod editor;
 #[cfg(target_arch = "wasm32")]
 mod feedback;

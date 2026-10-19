@@ -5,4 +5,6 @@
 pub mod auth;
 pub mod campaign;
 pub mod delivery;
+pub mod domains;
+pub mod interactions;
 pub mod resources;

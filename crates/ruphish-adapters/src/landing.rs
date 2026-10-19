@@ -1,0 +1,191 @@
+//! Final rendered HTML policy and the sole participant submission implementation.
+use ruphish_application::resources::Error;
+
+/// Safe document plus its matching response policy. Nonces are response-specific.
+pub struct Document {
+    /// Final HTML, after template expansion and policy enforcement.
+    pub html: String,
+    /// Policy that must accompany this document on every serving path.
+    pub csp: String,
+}
+
+/// Preserve form semantics while removing executable authored content and network resources.
+/// Input is the already-rendered document, never an unexpanded template.
+pub fn render(source: &str, endpoint: Option<&str>) -> Result<Document, Error> {
+    if source.len() > crate::resources::MAX_DOCUMENT {
+        return Err(Error::Invalid("landing_document_too_large".into()));
+    }
+    let mut cleaner = ammonia::Builder::default();
+    cleaner
+        .add_url_schemes(&["data"])
+        .rm_clean_content_tags(&["style"])
+        .add_tags(&[
+            "style", "form", "input", "textarea", "select", "option", "optgroup", "button",
+            "label", "fieldset", "legend", "datalist",
+        ])
+        .add_generic_attributes(&[
+            "id",
+            "class",
+            "style",
+            "title",
+            "lang",
+            "dir",
+            "role",
+            "aria-label",
+            "aria-describedby",
+            "aria-labelledby",
+        ])
+        .add_tag_attributes("form", &["id", "name", "autocomplete"])
+        .add_tag_attributes(
+            "input",
+            &[
+                "name",
+                "id",
+                "type",
+                "value",
+                "placeholder",
+                "required",
+                "disabled",
+                "readonly",
+                "checked",
+                "autocomplete",
+                "min",
+                "max",
+                "minlength",
+                "maxlength",
+                "pattern",
+                "step",
+                "form",
+                "list",
+            ],
+        )
+        .add_tag_attributes(
+            "textarea",
+            &[
+                "name",
+                "id",
+                "placeholder",
+                "required",
+                "disabled",
+                "readonly",
+                "autocomplete",
+                "rows",
+                "cols",
+                "maxlength",
+                "form",
+            ],
+        )
+        .add_tag_attributes(
+            "select",
+            &["name", "id", "required", "disabled", "multiple", "form"],
+        )
+        .add_tag_attributes("option", &["value", "selected", "disabled"])
+        .add_tag_attributes("optgroup", &["label", "disabled"])
+        .add_tag_attributes("button", &["type", "name", "value", "disabled", "form"])
+        .add_tag_attributes("label", &["for"])
+        .add_tag_attributes("fieldset", &["disabled", "name", "form"])
+        .attribute_filter(|element, attribute, value| {
+            if value.trim_start().to_ascii_lowercase().starts_with("data:")
+                && !(element == "img" && attribute == "src")
+            {
+                return None;
+            }
+            // Network-loaded resources are excluded from this initial policy. Data images
+            // are independent documents; they cannot execute in the parent document.
+            if element == "img" && matches!(attribute, "src" | "srcset") {
+                return (attribute == "src"
+                    && [
+                        "data:image/png;base64,",
+                        "data:image/jpeg;base64,",
+                        "data:image/gif;base64,",
+                    ]
+                    .iter()
+                    .any(|prefix| value.starts_with(prefix)))
+                .then(|| value.into());
+            }
+            Some(value.into())
+        });
+    let body = cleaner.clean(source).to_string();
+    let [html_attributes, body_attributes] = root_attributes(source)?;
+    let mut bytes = [0; 24];
+    getrandom::fill(&mut bytes).map_err(|_| Error::Internal)?;
+    let nonce = hex::encode(bytes);
+    let mut html = format!(
+        "<!doctype html><html{html_attributes}><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head><body{body_attributes}>{body}"
+    );
+    if let Some(endpoint) = endpoint {
+        let config = serde_json::to_string(endpoint)
+            .map_err(|_| Error::Internal)?
+            .replace('<', "\\u003c");
+        html.push_str(&format!(
+            "<script nonce=\"{nonce}\">(()=>{{const endpoint={config};{} }})();</script>",
+            include_str!("landing-collector.js")
+        ));
+    }
+    html.push_str("</body></html>");
+    Ok(Document {
+        html,
+        csp: format!(
+            "default-src 'none'; script-src 'nonce-{nonce}'; script-src-attr 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'"
+        ),
+    })
+}
+
+// Ammonia sanitizes a fragment, so document-root presentation attributes must
+// be carried separately. Only non-navigation attributes can survive this path.
+fn root_attributes(source: &str) -> Result<[String; 2], Error> {
+    let roots = std::cell::RefCell::new([None::<String>, None]);
+    let handler = lol_html::element!("html, body", |element| {
+        let index = usize::from(element.tag_name() == "body");
+        if roots.borrow()[index].is_some() {
+            return Ok(());
+        }
+        let mut attributes = String::new();
+        for name in ["id", "class", "style", "lang", "dir"] {
+            if let Some(value) = element.get_attribute(name) {
+                let value = value
+                    .replace('&', "&amp;")
+                    .replace('"', "&quot;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;");
+                attributes.push_str(&format!(" {name}=\"{value}\""));
+            }
+        }
+        roots.borrow_mut()[index] = Some(attributes);
+        Ok(())
+    });
+    let settings = lol_html::Settings::new()
+        .with_memory_settings(
+            lol_html::MemorySettings::new()
+                .with_max_allowed_memory_usage(crate::resources::MAX_DOCUMENT),
+        )
+        .append_element_content_handler(handler);
+    let mut parser = lol_html::HtmlRewriter::new(settings, |_: &[u8]| {});
+    parser
+        .write(source.as_bytes())
+        .map_err(|_| Error::Invalid("landing_document_invalid".into()))?;
+    parser
+        .end()
+        .map_err(|_| Error::Invalid("landing_document_invalid".into()))?;
+    Ok(roots.into_inner().map(Option::unwrap_or_default))
+}
+
+/// Redirects may be relative or HTTP(S), preserving legacy educational destinations.
+pub fn redirect(source: &str, base: &str) -> Result<Option<String>, Error> {
+    if source.is_empty() {
+        return Ok(None);
+    }
+    if source.bytes().any(|b| b.is_ascii_control()) || source.contains('\\') {
+        return Err(Error::Invalid("landing_redirect_invalid".into()));
+    }
+    let url = url::Url::parse(base)
+        .and_then(|base| base.join(source))
+        .map_err(|_| Error::Invalid("landing_redirect_invalid".into()))?;
+    if !matches!(url.scheme(), "http" | "https")
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return Err(Error::Invalid("landing_redirect_invalid".into()));
+    }
+    Ok(Some(url.to_string()))
+}

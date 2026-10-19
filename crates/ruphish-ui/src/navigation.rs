@@ -111,6 +111,7 @@ pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<>
         {link(path,"/groups","Recipient groups","M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75 M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0")}
         {link(path,"/templates","Email templates","M3 5h18v14H3z M3 5l9 7 9-7")}
         {link(path,"/pages","Landing pages","M3 3h18v18H3z M3 8h18 M7 5.5h.01 M11 5.5h.01 M7 12h10 M7 16h6")}
+        {link(path,"/domains","Domains","M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M3 12h18 M12 3c5 5 5 13 0 18-5-5-5-13 0-18")}
         {link(path,"/smtp","Sending profiles","M22 2 9 15 M22 2l-7 20-4-9-9-4 20-7")}
         </section>
         {admin.then(||view!{<section class="nav-section" aria-labelledby="nav-admin"><h2 id="nav-admin">"Administration"</h2>

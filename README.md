@@ -2,7 +2,7 @@
 
 Ruphish is a Rust backend and Rust/WASM admin application being built to preserve Gophish's supported external contracts while modernizing its implementation and interface.
 
-The native application loads legacy configuration, prepares SQLite with recoverable upgrades, bootstraps the administrator, serves the Rust/WASM admin UI over HTTP/TLS, and shuts down on native signals. Authentication includes browser sessions, forced password changes, account administration, permissions, API keys and explicit impersonation. [Resource management](docs/resources.md) now includes groups, templates, landing pages, sending profiles, imports, attachments, previews and test email. The CodeMirror/Jodit editor is integrated into resource drafts. Campaign preparation, scheduling, durable delivery and reconciliation are implemented locally. Public participant interactions and analysis remain later work; campaign UI acceptance is user-owned. See [authentication](docs/authentication.md) and [startup](docs/startup.md).
+The native application loads legacy configuration, prepares SQLite with recoverable upgrades, bootstraps the administrator, serves the Rust/WASM admin UI over HTTP/TLS, and shuts down on native signals. Authentication includes browser sessions, forced password changes, account administration, permissions, API keys and explicit impersonation. [Resource management](docs/resources.md) includes groups, templates, landing pages, sending profiles, imports, attachments, previews and test email. The CodeMirror/Jodit editor is integrated into resource drafts. Campaign preparation, scheduling, durable delivery and reconciliation are implemented locally. [Verified domains and public interactions](docs/domains-and-interactions.md) add host-bound pages, interaction events and presence-only submissions. Analysis is not yet implemented. Browser layout and interaction checks are performed manually. See [authentication](docs/authentication.md) and [startup](docs/startup.md).
 
 ## Getting started
 
@@ -20,7 +20,7 @@ cargo test --workspace --exclude ruphish-ui --locked
 cargo run -p ruphish --locked -- --help
 ```
 
-Windows native compilation requires the Visual Studio C++ build tools/Windows SDK; other hosts require their normal Rust native linker. Dependencies are resolved in Cargo.lock. The declared supported compiler is Rust 1.99; older versions have not been verified. Node and npm are required to install, test and bundle the CodeMirror browser component. Go and Python are only needed for the separate rewrite evidence tools.
+Windows native compilation requires the Visual Studio C++ build tools and the Windows SDK; other hosts require their normal Rust native linker. Dependencies are resolved in Cargo.lock. The declared supported compiler is Rust 1.99; older versions have not been verified. Node and npm are required to install, test and bundle the CodeMirror browser component.
 
 Run the direct commands listed in [AGENTS.md](AGENTS.md) for formatting, Clippy, tests, native/WASM builds, and dependency checks. No PowerShell/Node task runner or Cargo alias layer is required. Copy config.example.json to config.json before starting listeners; see [startup and database recovery](docs/startup.md). See [development](docs/development.md) for details and [architecture](docs/architecture.md) for boundaries. If your environment exports NO_COLOR=1, set its process value to true before invoking Trunk, as documented there.
 

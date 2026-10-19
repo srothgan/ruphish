@@ -1,3 +1,5 @@
 # Preserve the exact bytes used by fixture manifests and copied SQL provenance.
 tests/fixtures/** -text
 crates/ruphish-adapters/migrations/gophish/** -text
+# Container entrypoints must retain POSIX line endings on Windows checkouts.
+tests/acceptance/*.sh text eol=lf

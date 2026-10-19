@@ -1,15 +1,7 @@
 {
   "schema_version": 1,
   "reference_commit": "95618469799295e2c0fec980805a2dfbb818816b",
-  "capture_tools": [
-    "tools/compatibility_capture/main.go",
-    "tools/wire_capture/main.go",
-    "tools/request_capture/main.go",
-    "tools/editor_template_capture/main.go",
-    "tools/compatibility_edges/main.go",
-    "tools/editor-evaluation/go-render-visual/main.go"
-  ],
-  "scope": "Synthetic Go-captured populated snapshots, passwords/templates, requests/wire/editor-render observations, plus explicitly approved deviation metadata in template-deviations.json. No browser acceptance is implied.",
+  "scope": "Synthetic Go-captured populated snapshots, passwords/templates, requests/wire/editor-render observations, plus intentional compatibility differences described in template-deviations.json. No browser acceptance is implied.",
   "files": {
     "20160118194630.sqlite3": "e5125444c23648133f19cfe4e6608a2ea1eacb54361c526a16158fb4e9da4601",
     "20160131153104.sqlite3": "58887c89eb4802ac81e7834eb5b72de2b6b7ed830001725618a11361a22e2cc9",
@@ -41,7 +33,7 @@
     "passwords.json": "553ceae2a43be4d8e7905ec49de957f2b2b88e2870729ddefc6db4881fc5f7a2",
     "requests-edge.json": "2b8c8b47aafdbf9349f2b954eedc80c34ec1c5fdd054261273f5910d87096abd",
     "requests.json": "7fc3f89fabd98b056ad771442d646d2a2dec20d41c9c00399e40088b8bae978e",
-    "template-deviations.json": "bca7bee38dced78a30f3e442c3739a27bc396f4cc314749ff55323f22cdb8d19",
+    "template-deviations.json": "aba3ff3c7e23cf16bb79259ec54666239d0dc7acabbfeae3140f94785e7bdf8b",
     "templates-edge.json": "4c32a73f6df12670bc3c667e79230fbe9391c2facb5e8523a454d84e059c501c",
     "templates.json": "3a4562d00fcc8354003b99448610cd37f6e17660752cfc15f2c83dbe0a79248e",
     "versions.json": "ab93aa3fd8f47d4a9fc7d6f3f0ff23c3d0b5eb4a2d1fd4377c85d3800d4713cc",

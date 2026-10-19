@@ -11,6 +11,7 @@ axum = { version = "0.8.9", default-features = false, features = ["form", "http1
 axum_csrf = "0.11.0"
 governor = "0.10.4"
 hex = "0.4.3"
+ipnet = "2"
 ruphish-application = { version = "0.1.0-dev", path = "../ruphish-application" }
 ruphish-contracts = { version = "0.1.0-dev", path = "../ruphish-contracts" }
 serde = "1.0.229"

@@ -25,6 +25,7 @@ pub(crate) struct Logging {
 
 #[derive(Clone, Default)]
 pub(crate) struct Config {
+    pub(crate) domain_verification: ruphish_adapters::domain_verification::Config,
     pub(crate) admin: Server,
     pub(crate) phish: Server,
     pub(crate) db_name: String,
@@ -59,7 +60,7 @@ impl Config {
     pub(crate) fn validate(&self, mode: Mode) -> Result<(), ConfigError> {
         if self.db_name != "sqlite3" {
             return Err(ConfigError::Invalid(
-                "Unsupported database backend; this milestone supports db_name=sqlite3".into(),
+                "Unsupported database backend; only db_name=sqlite3 is supported".into(),
             ));
         }
         if self.db_path.as_os_str().is_empty() {
@@ -138,6 +139,7 @@ fn scalar<T: DeserializeOwned>(target: &mut T, value: &RawValue) -> Result<(), s
 impl Apply for Config {
     fn apply(&mut self, name: &str, value: &RawValue) -> Result<(), serde_json::Error> {
         match name {
+            "domain_verification" => scalar(&mut self.domain_verification, value),
             "admin_server" => merge(&mut self.admin, value.get().as_bytes()),
             "phish_server" => merge(&mut Public(&mut self.phish), value.get().as_bytes()),
             "db_name" => scalar(&mut self.db_name, value),

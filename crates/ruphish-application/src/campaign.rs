@@ -169,6 +169,10 @@ pub struct CampaignOverview {
 }
 /// Metadata for campaign navigation, separate from the full legacy representation.
 pub struct CampaignHeader {
+    /// Bound domain resource, absent for an unsupported legacy origin.
+    pub domain_id: Option<i64>,
+    /// Current delivery eligibility failure; absent when evidence is current.
+    pub domain_block: Option<String>,
     /// Persistent identifier.
     pub id: i64,
     /// Display name.

@@ -285,46 +285,45 @@ fn mime_decodes_alternatives_and_link_conversion_preserves_expressions() {
     );
 }
 #[test]
-fn page_policy_is_reversible_on_the_authored_draft_and_shields_template_actions() {
-    let html = "<form action='/outside'><input name='user'><input type='PASSWORD' name='secret'><p>{{printf \"<b>%s</b>\" .FirstName}}</p></form>";
-    let mut page = Page {
-        html: html.into(),
-        ..Page::default()
-    };
-    let disabled = landing_html(&page).unwrap();
-    assert!(!disabled.contains("name="));
-    assert!(disabled.contains("action=\"\""));
-    assert!(disabled.contains("{{printf \"<b>%s</b>\" .FirstName}}"));
-    page.capture_credentials = true;
-    let ordinary = landing_html(&page).unwrap();
-    assert!(!ordinary.contains("name="));
-    assert!(!ordinary.contains("name='secret'"));
-    page.capture_passwords = true;
-    let passwords = landing_html(&page).unwrap();
-    assert!(!passwords.contains("name="));
-    assert_eq!(page.html, html);
-}
-
-#[test]
-fn legacy_flags_cannot_enable_native_serialization_of_participant_fields() {
-    let source = "<form id='training' action='/outside'><input name='username'><input type='PaSsWoRd' name='password'><textarea name='secret' dirname='direction'></textarea><select name='answer'><option value='private'>Private</option></select><button name='button-value' formaction='https://outside.test'>Submit</button><input type='hidden' name='hidden'><input type='file' name='upload'></form><input form='training' name='associated'><object name='embedded'></object>";
+fn final_page_policy_preserves_names_and_rendered_expressions_without_changing_authored_source() {
+    let authored = "<form action='/outside'><input name='user'><input type='password' name='secret'><p>{{printf \"<b>%s</b>\" .FirstName}}</p></form>";
+    let source =
+        ruphish_adapters::resources::render(authored, &ruphish_adapters::resources::sample())
+            .unwrap();
     for credentials in [false, true] {
         for passwords in [false, true] {
             let page = Page {
-                html: source.into(),
+                html: source.clone(),
                 capture_credentials: credentials,
                 capture_passwords: passwords,
-                ..Page::default()
+                ..Default::default()
             };
             let html = landing_html(&page).unwrap();
-            assert!(!html.contains("name="));
-            assert!(!html.contains("dirname="));
-            assert!(!html.contains("formaction="));
-            assert!(html.contains("type='PaSsWoRd'"));
-            assert!(html.contains("<textarea"));
+            assert!(html.contains("name=\"user\""));
+            assert!(html.contains("name=\"secret\""));
+            assert!(html.contains("<b>Alice</b>"));
+            assert!(!html.contains("action="));
             assert_eq!(page.html, source);
         }
     }
+}
+
+#[test]
+fn legacy_capture_flags_do_not_restore_form_actions_or_executable_authored_content() {
+    let source = "<form id='training' action='/outside'><input name='username'><input type='password' name='password'><textarea name='secret' dirname='direction'></textarea><button formaction='https://outside.test'>Submit</button></form><input form='training' name='associated'><object name='embedded'></object>";
+    let page = Page {
+        html: source.into(),
+        capture_credentials: true,
+        capture_passwords: true,
+        ..Default::default()
+    };
+    let html = landing_html(&page).unwrap();
+    assert!(html.contains("name=\"associated\""));
+    assert!(html.contains("form=\"training\""));
+    assert!(!html.contains("dirname="));
+    assert!(!html.contains("formaction="));
+    assert!(!html.contains("<object"));
+    assert_eq!(page.html, source);
 }
 
 #[test]

@@ -74,3 +74,8 @@ allow = ["0BSD"]
 [[licenses.exceptions]]
 crate = "webpki-roots@=1.0.8"
 allow = ["CDLA-Permissive-2.0"]
+
+# Ammonia final-document sanitizer; unchanged upstream CSS parser and retained notice.
+[[licenses.exceptions]]
+crate = "cssparser@=0.38.0"
+allow = ["MPL-2.0"]

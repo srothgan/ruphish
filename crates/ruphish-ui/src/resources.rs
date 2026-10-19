@@ -130,13 +130,21 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let refresh = RwSignal::new(0u64);
     let deleting = RwSignal::new(None::<Value>);
+    let tasks = ruphish_ui::view_tasks::ViewTasks::default();
     let busy = RwSignal::new(false);
+    let generation = StoredValue::new(0u64);
     Effect::new(move |_| {
         refresh.get();
+        generation.update_value(|n| *n += 1);
+        let ticket = generation.get_value();
         loading.set(true);
         failed.set(false);
         spawn_local(async move {
-            match api.get(&format!("/api/{}/summary", family.route())).await {
+            let result = api.get(&format!("/api/{}/summary", family.route())).await;
+            if generation.get_value() != ticket {
+                return;
+            }
+            match result {
                 Ok(v) => rows.set(
                     v[if family == Family::Groups {
                         "groups"
@@ -162,14 +170,17 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
         let Some(value) = deleting.get_untracked() else {
             return;
         };
+        generation.update_value(|n| *n += 1);
+        loading.set(false);
         busy.set(true);
-        spawn_local(async move {
+        tasks.spawn(async move {
             let path = format!("/api/{}/{}", family.route(), value["id"]);
             match api
                 .resource("DELETE", &path, &token.get_value(), None, None)
                 .await
             {
                 Ok(_) => {
+                    rows.update(|rows| rows.retain(|row| row["id"] != value["id"]));
                     deleting.set(None);
                     refresh.update(|v| *v += 1);
                     message.status("Resource deleted.".into());
@@ -193,7 +204,7 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
             .collect::<Vec<_>>()
     });
     view! {<ManagementPage>
-    <PageHeader title=family.title().to_owned() subtitle=match family{Family::Groups=>"Organize recipients and review imported data before saving.",Family::Templates=>"Compose messages, manage attachments and send a test.",Family::Pages=>"Prepare landing-page content and review capture settings.",Family::Profiles=>"Configure mail connections and verify them before use."}.to_owned()>
+    <PageHeader title=family.title().to_owned() subtitle=match family{Family::Groups=>"Organize recipients and review imported data before saving.",Family::Templates=>"Compose messages, manage attachments and send a test.",Family::Pages=>"Prepare landing-page content and optional interaction defaults.",Family::Profiles=>"Configure mail connections and verify them before use."}.to_owned()>
         <button hidden=!can_edit on:click=move |_|import_open.set(true)>"Import"</button><a hidden=!can_edit class="button primary" href=format!("/{}/new",family.route())>{format!("Create {}",family.singular())}</a>
     </PageHeader>
     {move||(can_edit && import_open.get()).then(||import_panel(api,token.get_value(),family,import_open))}
@@ -201,6 +212,7 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
     {move||deleting.get().map(|v|view!{<DeleteConfirmation title=format!("Delete {}?",v["name"].as_str().unwrap_or("resource")) description="This permanently removes the saved resource. Resources used by unfinished campaigns cannot be deleted." confirm_label="Delete resource" busy=busy on_confirm=Callback::new(remove) on_cancel=Callback::new(move|()|deleting.set(None)) message=message/>})}
     <div class="management-toolbar"><Field label="Search by name"><input type="search" prop:value=move||search.get() on:input=move|e|search.set(event_target_value(&e))/></Field><span>{move||format!("{} resources",visible.with(Vec::len))}</span></div>
     <Show when=move||loading.get()><p role="status">"Loading resources..."</p></Show>
+    <Show when=move||!loading.get()&&failed.get()><button on:click=move |_|refresh.update(|v|*v+=1)>"Retry loading resources"</button></Show>
     <DataTable label=family.title() headers=vec!["Name",if family==Family::Groups{"Recipients"}else{"Active campaigns"},"Last modified","Actions"]>
     {move||visible.get().into_iter().map(|v|{let id=v["id"].as_i64().unwrap_or(0);let name=v["name"].as_str().unwrap_or("Unnamed").to_owned();let delete_value=v.clone();view!{<tr><th scope="row"><a href=format!("/{}/{id}",family.route())>{name}</a></th><td>{v[if family==Family::Groups{"num_targets"}else{"active_campaigns"}].as_i64().unwrap_or(0)}</td><td>{v["modified_date"].as_str().unwrap_or("").to_owned()}</td><td><div class="row-actions"><a href=if can_edit{format!("/{}/{id}/edit",family.route())}else{format!("/{}/{id}",family.route())}>{if can_edit{"Edit"}else{"View"}}</a><a hidden=!can_edit href=format!("/{}/new?duplicate={id}",family.route())>"Duplicate"</a><button hidden=!can_edit class="text-danger" on:click=move |_|{message.clear();deleting.set(Some(delete_value.clone()))}>"Delete"</button></div></td></tr>}}).collect_view()}
     </DataTable>
@@ -270,54 +282,62 @@ fn edit(
         replace_url,
     };
     let test_open = RwSignal::new(false);
-    spawn_local(async move {
-        if is_imported {
-            loading.set(false);
-            return;
-        }
-        let id = requested.get_value();
-        let target = if id == "new" {
-            duplicate.clone()
-        } else {
-            Some(id)
-        };
-        if let Some(target) = target {
-            match api
-                .resource(
-                    "GET",
-                    &format!("/api/{}/{target}", family.route()),
-                    &token.get_value(),
-                    None,
-                    None,
-                )
-                .await
-            {
-                Ok((mut value, revision)) => {
-                    if duplicate.is_some() {
-                        value["id"] = json!(0);
-                        value["name"] = json!(format!(
-                            "{} copy",
-                            value["name"].as_str().unwrap_or("Resource")
-                        ));
-                        value.as_object_mut().map(|v| v.remove("modified_date"));
+    let reload = RwSignal::new(0u64);
+    Effect::new(move |_| {
+        reload.get();
+        loading.set(true);
+        load_failed.set(false);
+        editor.message.clear();
+        let duplicate = duplicate.clone();
+        spawn_local(async move {
+            if is_imported {
+                loading.set(false);
+                return;
+            }
+            let id = requested.get_value();
+            let target = if id == "new" {
+                duplicate.clone()
+            } else {
+                Some(id)
+            };
+            if let Some(target) = target {
+                match api
+                    .resource(
+                        "GET",
+                        &format!("/api/{}/{target}", family.route()),
+                        &token.get_value(),
+                        None,
+                        None,
+                    )
+                    .await
+                {
+                    Ok((mut value, revision)) => {
+                        if duplicate.is_some() {
+                            value["id"] = json!(0);
+                            value["name"] = json!(format!(
+                                "{} copy",
+                                value["name"].as_str().unwrap_or("Resource")
+                            ));
+                            value.as_object_mut().map(|v| v.remove("modified_date"));
+                        }
+                        let loaded = if duplicate.is_some() {
+                            let mut draft = ResourceDraft::new(family.empty(), None);
+                            draft.edit(|draft| *draft = value);
+                            draft
+                        } else {
+                            ResourceDraft::new(value, revision)
+                        };
+                        editor.draft.set(loaded);
+                        editor.epoch.update(|v| *v += 1);
                     }
-                    let loaded = if duplicate.is_some() {
-                        let mut draft = ResourceDraft::new(family.empty(), None);
-                        draft.edit(|draft| *draft = value);
-                        draft
-                    } else {
-                        ResourceDraft::new(value, revision)
-                    };
-                    editor.draft.set(loaded);
-                    editor.epoch.update(|v| *v += 1);
-                }
-                Err(e) => {
-                    editor.message.error(e);
-                    load_failed.set(true);
+                    Err(e) => {
+                        editor.message.error(e);
+                        load_failed.set(true);
+                    }
                 }
             }
-        }
-        loading.set(false);
+            loading.set(false);
+        });
     });
     crate::navigation::protect_draft(move || {
         editor.draft.with(ResourceDraft::dirty) || editor.visual_pending.get() || editor.busy.get()
@@ -342,7 +362,7 @@ fn edit(
     </PageHeader>
     {matches!(family,Family::Templates|Family::Pages|Family::Profiles).then(||view!{<p class="resource-usage">"Campaigns use the current saved version of this resource. Editing it can affect unfinished campaigns."</p>})}
     {editor.import_review.map(|review|import_review_panel(review,editor.message))}
-    {editor.message.view()}<Show when=move||loading.get()><p>"Loading resource..."</p></Show>
+    {editor.message.view()}<Show when=move||!loading.get()&&load_failed.get()><button on:click=move |_|reload.update(|n|*n+=1)>"Retry loading resource"</button></Show><Show when=move||loading.get()><p>"Loading resource..."</p></Show>
     <FormFields disabled=Signal::derive(move||load_failed.get()||editor.readonly||loading.get()||editor.busy.get())>{editor.field("name","Name","text")}{content}</FormFields>
     <FormFooter><button class="text-danger" disabled=move||loading.get()||load_failed.get()||editor.busy.get() on:click=move |_|{editor.draft.update(ResourceDraft::cancel);editor.epoch.update(|v|*v+=1);let id=editor.draft.with_untracked(|d|d.value()["id"].as_i64().unwrap_or(0)); editor.replace_url.run(if id>0{format!("/{}/{id}",family.route())}else{format!("/{}",family.route())});}>"Cancel changes"</button></FormFooter>
     {move||test_open.get().then(||test_panel(api,token.get_value(),family,editor,test_open))}
@@ -542,7 +562,7 @@ fn content_fields(
     {(family==Family::Templates).then(||view!{<div class="resource-columns">{editor.field("subject","Subject","text")}{editor.field("envelope_sender","Visible From (blank uses sending profile)","text")}</div>})}
     {content_workspace(api,token,editor,family)}
     {(family==Family::Templates).then(||view!{<label class="text-alternative">"Plain-text alternative"<textarea rows="6" prop:value=move||editor.text("text") on:input=move|e|editor.set("text",json!(event_target_value(&e)))></textarea></label><div class="resource-section"><h2>"Attachments"</h2><input node_ref=files hidden type="file" multiple on:change=add/><button type="button" on:click=move |_|{if let Some(node)=files.get(){node.click();}}>"Add attachments"</button><ul>{move||editor.draft.with(|d|d.value()["attachments"].as_array().cloned().unwrap_or_default()).into_iter().enumerate().map(|(i,a)|view!{<li>{a["name"].as_str().unwrap_or("").to_owned()}<button type="button" on:click=move |_|editor.draft.update(|d|{d.remove_attachment(i);})>"Remove"</button></li>}).collect_view()}</ul></div>})}
-    {(family==Family::Pages).then(||view!{<section class="resource-section"><h2>"Optional campaign defaults"</h2><p>"Suggested submission settings for campaigns using this page. Leave tracking off and the redirect blank if no defaults are needed."</p>{editor.flag("capture_credentials","Record form submission")}{editor.flag("capture_passwords","Record password presence")}{editor.field("redirect_url","Redirect URL after submission (optional)","text")}<p>"Track only whether fields were filled and submitted. Entered usernames, passwords and other field values are never collected."</p></section>})}
+    {(family==Family::Pages).then(||view!{<section class="resource-section"><h2>"Optional campaign defaults"</h2><p>"Public pages preserve field names and styling, but block authored scripts, embedded frames and external resources. Use embedded PNG, JPEG or GIF images. Preview the final page before launch; form submissions send only event metadata and optional password presence."</p><p>"Suggested submission settings for campaigns using this page. Leave tracking off and the redirect blank if no defaults are needed."</p>{editor.flag("capture_credentials","Record form submission")}{editor.flag("capture_passwords","Record password presence")}{editor.field("redirect_url","Redirect URL after submission (optional)","text")}<p>"Track only whether fields were filled and submitted. Entered usernames, passwords and other field values are never collected."</p></section>})}
     </section>}
 }
 fn profile_fields(editor: Editor) -> impl IntoView {

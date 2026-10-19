@@ -318,23 +318,8 @@ fn shield(source: &str) -> Result<(String, Vec<(String, String)>), Error> {
     Ok((result, tokens))
 }
 
-/// Remove native field serialization without modifying the author's stored source.
-/// Served previews additionally use a sandbox CSP. This is not a script sanitizer;
-/// public interaction rendering must supply its own controlled collector boundary.
+/// Apply the shared landing policy to an already rendered preview.
+/// The response must also carry the preview CSP; authored source is never modified.
 pub fn landing_html(page: &Page) -> Result<String, Error> {
-    rewrite(
-        &page.html,
-        vec![
-            element!("form", |el| {
-                el.set_attribute("action", "")?;
-                Ok(())
-            }),
-            element!("input, textarea, select, button, object", |el| {
-                el.remove_attribute("name");
-                el.remove_attribute("dirname");
-                el.remove_attribute("formaction");
-                Ok(())
-            }),
-        ],
-    )
+    Ok(crate::landing::render(&page.html, None)?.html)
 }

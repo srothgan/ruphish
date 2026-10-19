@@ -35,6 +35,15 @@
 .form-field select { display: block; width: 100%; margin-top: 6px; }
 .form-field.checkbox-label input { order: -1; }
 .management-footer { padding: 24px 0; }
+.management-footer-spread { justify-content: space-between; }
+.management-footer-spread > .primary { margin-inline-start: auto; }
+.management-page .copy-button { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; }
+.copy-button svg { flex: 0 0 auto; }
+.copy-button-label { display: grid; }
+.copy-button-label > span { grid-area: 1 / 1; }
+.copy-button-size { visibility: hidden; }
+.domain-verification th:last-child, .domain-verification td:last-child { text-align: end; width: 1%; white-space: nowrap; }
+.domain-copy-actions { display: flex; justify-content: flex-end; gap: 12px; }
 .delete-confirmation, .discard-confirmation { width: min(560px,calc(100% - 32px)); }
 .delete-confirmation h2, .discard-confirmation h2 { margin-top: 0; }
 .confirmation-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-top: 24px; }
@@ -45,3 +54,14 @@
 .info-popover-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .info-popover p { margin: 10px 0 0; line-height: 1.5; }
 @media(max-width:900px) { .management-heading { align-items: start; flex-direction: column; gap: 16px; } .management-form, .management-dialog { padding: 20px; } }
+
+.domain-verification-progress { padding: 18px 22px; margin-bottom: 24px; border: 1px solid #9fc8c6; border-inline-start: 4px solid #006b67; border-radius: 5px; background: #f0f8f7; }
+.domain-progress-title { display: flex; align-items: center; gap: 10px; }
+.domain-verification-progress p { margin: 8px 0 0; }
+.domain-spinner { width: 18px; height: 18px; box-sizing: border-box; border: 2px solid #9fc8c6; border-top-color: #006b67; border-radius: 50%; animation: domain-spin .8s linear infinite; flex: none; }
+.domain-history { margin-top: 28px; }
+.domain-outcome { font-weight: 600; }
+.domain-outcome-passed { color: #006b67; }
+.domain-outcome-failed, .domain-outcome-timed_out { color: var(--color-danger); }
+@keyframes domain-spin { to { transform: rotate(360deg); } }
+@media(prefers-reduced-motion: reduce) { .domain-spinner { animation: none; } }

@@ -35,6 +35,11 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
     } else {
         None
     };
+    let public_assets = if arguments.mode.phish() {
+        ruphish_http::public_assets::Assets::load(Path::new("static/endpoint"))?
+    } else {
+        Default::default()
+    };
     let admin_listener = if arguments.mode.admin() {
         Some(bind(&config.admin.listen_url).await?)
     } else {
@@ -56,6 +61,8 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
     } else {
         None
     };
+    let domain_verifier =
+        ruphish_adapters::domain_verification::DnsHttps::new(config.domain_verification.clone())?;
     let database = StartupDatabase::open(&config.db_path, &config.migrations_prefix).await?;
     if database.backup_path().is_some() {
         tracing::info!(
@@ -74,11 +81,13 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
         }
         if config.contact_address.is_empty() { tracing::warn!("No contact_address configured"); }
         let campaigns=std::sync::Arc::new(ruphish_adapters::sqlite::campaigns::Campaigns::new(database.pool()));
+        let domains=std::sync::Arc::new(ruphish_adapters::sqlite::domains::Domains::new(database.pool()));
+        let domain_worker=crate::domain_worker::Worker { domains:domains.clone(),verifier:std::sync::Arc::new(domain_verifier) };
         let smtp=std::sync::Arc::new(ruphish_adapters::smtp::Smtp::new(ruphish_adapters::outbound::Policy::new(&config.admin.allowed_internal_hosts)?,config.contact_address.clone()));
         let worker=if arguments.mode.admin() && !arguments.disable_mailer {Some(crate::campaign_worker::Worker {queue:campaigns.clone(),smtp:smtp.clone()})} else {None};
         tracing::info!(mailer_requested = worker.is_some(), "campaign_worker_configured");
         let previews: std::sync::Arc<dyn ruphish_application::delivery::Previews> = std::sync::Arc::new(ruphish_adapters::sqlite::previews::PreviewStore::new(database.pool()));
-        let public_router = ruphish_http::server::preview_router(previews.clone());
+        let public_router = ruphish_http::interactions::router(ruphish_http::interactions::Services{assets:public_assets,domains:domains.clone(),interactions:std::sync::Arc::new(ruphish_adapters::sqlite::interactions::Interactions::new(database.pool())),previews:previews.clone(),tls:config.phish.use_tls,trusted_proxies:config.domain_verification.trusted_proxies.clone(),contact:config.contact_address.clone()});
         let admin_router = if let Some(assets) = admin_router {
             let sessions = ruphish_adapters::sqlite::sessions::Sessions::new(database.pool());
             sessions.cleanup().await?;
@@ -90,9 +99,9 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
             let policy = ruphish_adapters::outbound::Policy::new(&config.admin.allowed_internal_hosts)?;
             let resources = ruphish_application::resources::Service::new(std::sync::Arc::new(ruphish_adapters::sqlite::resources::Resources::new(database.pool())), std::sync::Arc::new(ruphish_adapters::resources::Validate), std::sync::Arc::new(ruphish_adapters::imports::Tools {policy:policy.clone()}));
             let delivery = ruphish_application::delivery::Service::new(service.clone(),resources.clone(),smtp,previews);
-            Some(ruphish_http::auth::router(assets, ruphish_http::auth::Services {accounts:service,resources,delivery,campaigns,mailer_enabled:!arguments.disable_mailer}, sessions, &key, config.admin.use_tls, config.admin.trusted_origins.clone(), config.admin.csrf_key.clone()))
+            Some(ruphish_http::auth::router(assets, ruphish_http::auth::Services {accounts:service,resources,delivery,campaigns,domains,mailer_enabled:!arguments.disable_mailer}, sessions, &key, config.admin.use_tls, config.admin.trusted_origins.clone(), config.admin.csrf_key.clone()))
         } else { None };
-        supervise(arguments.mode, admin_listener, phish_listener, admin_tls, phish_tls, (admin_router,public_router,worker), termination).await
+        supervise(arguments.mode, admin_listener, phish_listener, admin_tls, phish_tls, (admin_router,public_router,worker,domain_worker), termination).await
     }.await;
     // Both normal and failing server lifecycles close the pool before returning.
     tokio::time::timeout(DRAIN_TIMEOUT, database.close())
@@ -188,6 +197,7 @@ async fn supervise(
         Option<axum::Router>,
         axum::Router,
         Option<crate::campaign_worker::Worker>,
+        crate::domain_worker::Worker,
     ),
     mut termination: Termination,
 ) -> Result<(), Error> {
@@ -229,6 +239,7 @@ async fn supervise(
         eprintln!("RUPHISH_READY {readiness}");
         tracing::info!("listeners_ready");
         if let Some(worker)=routers.2 {tasks.spawn(worker.run(cancellation.clone()));}
+        tasks.spawn(routers.3.run(cancellation.clone()));
         tokio::select! {
             signal = termination.wait() => signal.map_err(Error::from),
             exited = tasks.join_next() => Err(std::io::Error::other(format!("A required {mode:?} listener exited unexpectedly: {exited:?}")).into()),

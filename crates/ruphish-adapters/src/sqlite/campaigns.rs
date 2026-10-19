@@ -170,17 +170,15 @@ async fn prepare(
     // checked before every individual submission.
     let sample = crate::resources::sample();
     let url = crate::resources::render(&input.url, &sample)?;
-    if !url.is_empty() {
-        let u = url::Url::parse(&url).map_err(|_| Error::Invalid("Invalid campaign URL".into()))?;
-        if !matches!(u.scheme(), "http" | "https")
-            || !u.username().is_empty()
-            || u.password().is_some()
-        {
-            return Err(Error::Invalid(
-                "Campaign URL must use HTTP or HTTPS without credentials".into(),
-            ));
-        }
+    // Check the original authority as well: recipient expressions cannot select hosts.
+    let configured = ruphish_domain::domains::origin(&input.url, true)
+        .map_err(|code| Error::Invalid(code.into()))?;
+    let rendered =
+        ruphish_domain::domains::origin(&url, true).map_err(|code| Error::Invalid(code.into()))?;
+    if configured != rendered {
+        return Err(Error::Invalid("domain_dynamic_hostname".into()));
     }
+    super::domains::eligible(c, caller.id, &url, now).await?;
     crate::resources::render(&policy.redirect_url, &sample)?;
     Ok(Prepared {
         conflicts,
@@ -335,9 +333,23 @@ async fn load(c: &mut SqliteConnection, owner: i64, id: i64) -> Result<Campaign,
     })
 }
 async fn header(c: &mut SqliteConnection, owner: i64, id: i64) -> Result<CampaignHeader, Error> {
-    let row=sqlx::query("SELECT c.id,c.name,c.status,c.launch_date,c.send_by_date,c.url,c.template_id,c.page_id,c.smtp_id,t.name AS template_name,t.subject,t.envelope_sender,s.name AS profile_name,s.from_address,l.name AS page_name,(SELECT count(*) FROM results r WHERE r.campaign_id=c.id) AS total,p.capture_credentials,p.capture_passwords,p.redirect_url FROM campaigns c LEFT JOIN ruphish_campaign_policy p ON p.campaign_id=c.id LEFT JOIN templates t ON t.id=c.template_id AND t.user_id=c.user_id LEFT JOIN pages l ON l.id=c.page_id AND l.user_id=c.user_id LEFT JOIN smtp s ON s.id=c.smtp_id AND s.user_id=c.user_id WHERE c.id=? AND c.user_id=?").bind(id).bind(owner).fetch_optional(c).await.map_err(storage)?.ok_or(Error::NotFound("Campaign"))?;
+    let row=sqlx::query("SELECT c.id,c.name,c.status,c.launch_date,c.send_by_date,c.url,c.template_id,c.page_id,c.smtp_id,t.name AS template_name,t.subject,t.envelope_sender,s.name AS profile_name,s.from_address,l.name AS page_name,(SELECT count(*) FROM results r WHERE r.campaign_id=c.id) AS total,p.capture_credentials,p.capture_passwords,p.redirect_url FROM campaigns c LEFT JOIN ruphish_campaign_policy p ON p.campaign_id=c.id LEFT JOIN templates t ON t.id=c.template_id AND t.user_id=c.user_id LEFT JOIN pages l ON l.id=c.page_id AND l.user_id=c.user_id LEFT JOIN smtp s ON s.id=c.smtp_id AND s.user_id=c.user_id WHERE c.id=? AND c.user_id=?").bind(id).bind(owner).fetch_optional(&mut *c).await.map_err(storage)?.ok_or(Error::NotFound("Campaign"))?;
     let credentials: Option<bool> = row.try_get("capture_credentials").map_err(storage)?;
+    let domain: Option<(i64,bool,i64)> = sqlx::query_as("SELECT d.id,d.enabled,d.verified_until FROM ruphish_campaign_domains cd JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=? WHERE cd.campaign_id=?").bind(owner).bind(id).fetch_optional(&mut *c).await.map_err(storage)?;
+    let domain_id = domain.map(|d| d.0);
+    let domain_block = domain
+        .map_or(Err("domain_not_verified"), |(_, enabled, until)| {
+            ruphish_domain::domains::eligibility(
+                enabled,
+                until,
+                time::OffsetDateTime::now_utc().unix_timestamp(),
+            )
+        })
+        .err()
+        .map(str::to_owned);
     Ok(CampaignHeader {
+        domain_id,
+        domain_block,
         id,
         name: text(&row, "name")?,
         status: text(&row, "status")?,
@@ -469,6 +481,13 @@ impl Repository for Campaigns {
             "Queued"
         };
         let id=sqlx::query("INSERT INTO campaigns(user_id,name,created_date,launch_date,send_by_date,completed_date,template_id,page_id,status,smtp_id,url) VALUES(?,?,?,?,?,?,?,?,?,?,?)").bind(caller.id).bind(&input.name).bind(&created).bind(&launch).bind(end).bind(ZERO).bind(p.template.id).bind(p.page.id).bind(status).bind(p.profile.id).bind(&input.url).execute(&mut *tx).await.map_err(storage)?.last_insert_rowid();
+        let domain_id = super::domains::eligible(&mut tx, caller.id, &input.url, now).await?;
+        sqlx::query("INSERT INTO ruphish_campaign_domains VALUES(?,?)")
+            .bind(id)
+            .bind(domain_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
         sqlx::query("INSERT INTO ruphish_campaign_policy VALUES(?,?,?,?)")
             .bind(id)
             .bind(p.policy.capture_credentials)
@@ -586,6 +605,8 @@ impl Repository for Campaigns {
             "DELETE FROM ruphish_legacy_queue_issues WHERE mail_log_id IN (SELECT id FROM mail_logs WHERE campaign_id=?)",
             "DELETE FROM ruphish_delivery_attempt WHERE result_id IN (SELECT id FROM results WHERE campaign_id=?)",
             "DELETE FROM ruphish_delivery WHERE campaign_id=?",
+            "DELETE FROM ruphish_submission_ids WHERE result_id IN (SELECT id FROM results WHERE campaign_id=?)",
+            "DELETE FROM ruphish_campaign_domains WHERE campaign_id=?",
             "DELETE FROM ruphish_campaign_policy WHERE campaign_id=?",
             "DELETE FROM ruphish_campaign_groups WHERE campaign_id=?",
             "DELETE FROM events WHERE campaign_id=?",

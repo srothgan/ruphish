@@ -1,0 +1,6 @@
+ruphish.test:53 {
+    errors
+    file /lab/data/ruphish.test.zone ruphish.test {
+        reload 1s
+    }
+}

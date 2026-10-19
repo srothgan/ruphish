@@ -3,6 +3,7 @@
 mod campaign_worker;
 mod cli;
 mod config;
+mod domain_worker;
 mod logging;
 mod runtime;
 

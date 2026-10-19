@@ -15,5 +15,11 @@
   "db_path": "ruphish.db",
   "migrations_prefix": "db/db_",
   "contact_address": "",
+  "domain_verification": {
+    "trusted_proxies": [],
+    "resolvers": [],
+    "allowed_networks": [],
+    "trusted_ca_path": null
+  },
   "logging": { "filename": "ruphish.log", "level": "info" }
 }

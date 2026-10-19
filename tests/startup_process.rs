@@ -18,10 +18,15 @@ use std::{
 mod auth_process;
 #[path = "campaign_process.rs"]
 mod campaign_process;
+#[path = "support/domain_network.rs"]
+mod domain_network;
+#[path = "public_process.rs"]
+mod public_process;
 #[path = "resource_process.rs"]
 mod resource_process;
 
 struct Process {
+    domain_network: Option<domain_network::Network>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
     writer: Option<Box<dyn Write + Send>>,
     master: Option<Box<dyn portable_pty::MasterPty + Send>>,
@@ -110,6 +115,7 @@ impl Process {
             }
         });
         Self {
+            domain_network: None,
             child,
             writer: Some(writer),
             master: Some(pair.master),
@@ -858,6 +864,8 @@ fn preflight_failures_never_publish_readiness_or_create_a_database_and_release_r
         "logging",
         "mysql",
         "custom-migrations",
+        "domain-ca",
+        "public-asset-size",
     ] {
         let directory = workspace();
         let mut config = configuration();
@@ -877,6 +885,17 @@ fn preflight_failures_never_publish_readiness_or_create_a_database_and_release_r
             "logging" => config["logging"]["filename"] = json!("dist"),
             "mysql" => config["db_name"] = json!("mysql"),
             "custom-migrations" => config["migrations_prefix"] = json!("missing-custom-"),
+            "domain-ca" => {
+                config["domain_verification"] = json!({"trusted_ca_path":"missing-domain-ca.pem"})
+            }
+            "public-asset-size" => {
+                let root = directory.path().join("static/endpoint");
+                std::fs::create_dir_all(&root).unwrap();
+                std::fs::File::create(root.join("large.bin"))
+                    .unwrap()
+                    .set_len(8 * 1024 * 1024 + 1)
+                    .unwrap();
+            }
             _ => unreachable!(),
         }
         write_config(directory.path(), &config);

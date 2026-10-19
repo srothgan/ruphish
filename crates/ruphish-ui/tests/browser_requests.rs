@@ -219,3 +219,6 @@ async fn campaign_launch_retry_preserves_reviewed_body_key_and_browser_auth_boun
         );
     }
 }
+
+#[path = "support/request_lifecycle.rs"]
+mod request_lifecycle;

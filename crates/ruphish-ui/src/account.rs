@@ -33,8 +33,8 @@ impl Api {
         let request =
             ruphish_ui::browser_http::launch_request("/api/campaigns/", token, key, value)
                 .map_err(|e| (0, e))?;
-        let response=request.send().await.map_err(|_|(0,"Launch outcome is not known. Retry uses the same launch key; do not create another campaign.".into()))?;
-        let status = response.status();
+        let response=self.send_request("/api/campaigns/", request).await.map_err(|_|(0,"Launch outcome is not known. Retry uses the same launch key; do not create another campaign.".into()))?;
+        let status = response.status;
         self.response("/api/campaigns/", response)
             .await
             .map_err(|e| (status, e))
@@ -52,11 +52,8 @@ impl Api {
         }
         let request =
             ruphish_ui::browser_http::resource_request(method, path, token, value, revision)?;
-        let response = request
-            .send()
-            .await
-            .map_err(|_| "Cannot reach the server. Your draft is unchanged.".to_owned())?;
-        let etag = response.headers().get("etag");
+        let response = self.send_request(path, request).await?;
+        let etag = response.etag.clone();
         self.response(path, response)
             .await
             .map(|value| (value, etag))
@@ -78,30 +75,39 @@ fn navigate(path: &str) {
     }
 }
 impl Api {
-    pub(super) async fn response(
+    async fn send_request(
         self,
         path: &str,
-        response: gloo_net::http::Response,
+        request: Request,
+    ) -> Result<ruphish_ui::browser_http::Received, String> {
+        let path = path.to_owned();
+        ruphish_ui::browser_http::send(request, move |status| {
+            self.monitor.update(|m| m.response(&path, status))
+        })
+        .await
+    }
+    pub(super) async fn response(
+        self,
+        _path: &str,
+        response: ruphish_ui::browser_http::Received,
     ) -> Result<Value, String> {
-        let status = response.status();
-        self.monitor.update(|m| m.response(path, status));
+        let status = response.status;
         if !self.active() {
             return Err("Your session ended. Sign in again to continue.".into());
         }
-        let text = response
-            .text()
-            .await
-            .map_err(|_| "Could not read the server response".to_owned())?;
-        if !self.active() {
-            return Err("Your session ended. Sign in again to continue.".into());
-        }
-        let value: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+        let text = response.body;
+        let decoded = ruphish_ui::browser_http::decode(status, &text);
+        let value = if (200..300).contains(&status) {
+            decoded?
+        } else {
+            decoded.unwrap_or(Value::Null)
+        };
         if !(200..300).contains(&status) {
             return Err(value["message"].as_str().map(str::to_owned).unwrap_or_else(
                 || match status {
                     401 => "Your session ended. Sign in again to continue.".into(),
-                    429 => "Too many sign-in attempts. Wait a moment and try again.".into(),
-                    503 => "Authentication is busy. Try again shortly.".into(),
+                    429 => "Too many requests. Wait a moment and try again.".into(),
+                    503 => "The server is temporarily unavailable. Try again shortly.".into(),
                     _ => format!("The request failed ({status}). Try again."),
                 },
             ));
@@ -112,17 +118,15 @@ impl Api {
         if !self.active() {
             return Err("Your session ended. Sign in again to continue.".into());
         }
-        self.response(
-            path,
-            Request::get(path)
-                .header("x-ruphish-client", "browser")
-                .header("accept", "application/json")
-                .send()
-                .await
-                .map_err(|_| "Cannot reach the server".to_owned())?,
-        )
-        .await
+        let request = Request::get(path)
+            .header("x-ruphish-client", "browser")
+            .header("accept", "application/json")
+            .build()
+            .map_err(|_| "Cannot prepare request".to_owned())?;
+        self.response(path, self.send_request(path, request).await?)
+            .await
     }
+
     async fn form(
         self,
         path: &str,
@@ -141,14 +145,8 @@ impl Api {
             .header("x-csrf-token", token)
             .body(body)
             .map_err(|_| "Cannot prepare the request".to_owned())?;
-        self.response(
-            path,
-            request
-                .send()
-                .await
-                .map_err(|_| "Cannot reach the server".to_owned())?,
-        )
-        .await
+        self.response(path, self.send_request(path, request).await?)
+            .await
     }
     async fn json(
         self,
@@ -174,14 +172,8 @@ impl Api {
             builder.build()
         }
         .map_err(|_| "Cannot prepare the request".to_owned())?;
-        self.response(
-            path,
-            request
-                .send()
-                .await
-                .map_err(|_| "Cannot reach the server".to_owned())?,
-        )
-        .await
+        self.response(path, self.send_request(path, request).await?)
+            .await
     }
 }
 
@@ -370,9 +362,16 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
     let active = actor.is_some();
     let username_banner = username.clone();
     let can_leave = crate::navigation::confirm_leave_action();
+    let action_busy = RwSignal::new(false);
+    let action_tasks = ruphish_ui::view_tasks::ViewTasks::default();
     let action = move |path: &'static str| {
-        spawn_local(async move {
+        if action_busy.get_untracked() {
+            return;
+        }
+        action_busy.set(true);
+        action_tasks.spawn(async move {
             if !can_leave().await || !api.active() {
+                action_busy.set(false);
                 return;
             }
             match api.form(path, &token.get_value(), &[]).await {
@@ -380,6 +379,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
                 Ok(value) => navigate(value["data"].as_str().unwrap_or("/login")),
                 Err(error) => message.error(error),
             }
+            action_busy.set(false);
         });
     };
     use crate::resources::{self, Family, Screen};
@@ -394,7 +394,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         if required {
             password_form(api, token.get_value(), true).into_any()
         } else if active {
-            view! { <section class="account-panel"><h1>"Account management"</h1><p>"Exit impersonation to manage accounts and credentials."</p><button on:click=move |_| action("/impersonate/exit")>"Exit impersonation"</button></section> }.into_any()
+            view! { <section class="account-panel"><h1>"Account management"</h1><p>"Exit impersonation to manage accounts and credentials."</p><button disabled=move||action_busy.get() on:click=move |_| action("/impersonate/exit")>"Exit impersonation"</button></section> }.into_any()
         } else if let Some(screen) = users_page {
             if admin {
                 users::page(
@@ -434,7 +434,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         }
     };
     let content = view! {<Routes fallback=||view!{<p>"This page is not available."</p>}>
-    <Route path=path!("/logout") view=move||view! { <section class="account-panel"><h1>"Sign out?"</h1><p>"Your saved work will remain available the next time you sign in."</p><button class="primary" on:click=move |_| action("/logout")>"Sign out"</button><a class="cancel-link text-danger" href="/">"Stay signed in"</a></section> }/>
+    <Route path=path!("/logout") view=move||view! { <section class="account-panel"><h1>"Sign out?"</h1><p>"Your saved work will remain available the next time you sign in."</p><button class="primary" disabled=move||action_busy.get() on:click=move |_| action("/logout")>"Sign out"</button><a class="cancel-link text-danger" href="/">"Stay signed in"</a></section> }/>
     <Route path=path!("/settings") view=move||account_page(None,false)/>
     <Route path=path!("/settings/password") view=move||account_page(None,true)/>
     <Route path=path!("/users") view=move||account_page(Some(users::Screen::List),false)/>
@@ -443,6 +443,9 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
     <Route path=path!("/") view=move||campaign_page(true)/>
     <Route path=path!("/campaigns") view=move||campaign_page(true)/>
     <Route path=path!("/campaigns/:id") view=move||campaign_page(false)/>
+    <Route path=path!("/domains") view=move||if required{password_form(api,token.get_value(),true).into_any()}else{crate::domains::list(api).into_any()}/>
+    <Route path=path!("/domains/:id") view=move||if required{password_form(api,token.get_value(),true).into_any()}else{crate::domains::detail(api,token.get_value(),false).into_any()}/>
+    <Route path=path!("/domains/:id/edit") view=move||if required{password_form(api,token.get_value(),true).into_any()}else{crate::domains::detail(api,token.get_value(),true).into_any()}/>
     <Route path=path!("/groups") view=move||resource_page(Family::Groups,Screen::List)/>
     <Route path=path!("/groups/:id") view=move||resource_page(Family::Groups,Screen::View)/>
     <Route path=path!("/groups/:id/edit") view=move||resource_page(Family::Groups,Screen::Edit)/>
@@ -460,7 +463,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
     view! { <div class="admin-shell"><aside class="admin-nav"><a class="product-name" href="/">"Ruphish"</a><nav aria-label="Main navigation">
     {crate::navigation::sections(path,admin)}
     </nav>{account_menu::menu(api,token.get_value(),username,role_name)}</aside>
-    <div class="admin-content">{active.then(|| view! { <div class="impersonation" role="status"><span>"Viewing as "<strong>{username_banner}</strong>". Administrator: "{actor.unwrap_or_default()}</span><button on:click=move |_| action("/impersonate/exit")>"Exit impersonation"</button></div> })}
+    <div class="admin-content">{active.then(|| view! { <div class="impersonation" role="status"><span>"Viewing as "<strong>{username_banner}</strong>". Administrator: "{actor.unwrap_or_default()}</span><button disabled=move||action_busy.get() on:click=move |_| action("/impersonate/exit")>"Exit impersonation"</button></div> })}
     {message.view()}{content}</div></div> }
 }
 fn password_form(api: Api, token: String, required: bool) -> impl IntoView {

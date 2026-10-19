@@ -1,10 +1,6 @@
 {
   "schema_version": 1,
   "reference_commit": "95618469799295e2c0fec980805a2dfbb818816b",
-  "capture_tools": [
-    "tools/startup_capture/main.go",
-    "tools/capture_cli.py --extended"
-  ],
   "scope": "Go-observed configuration and synthetic EC SEC1/RSA PKCS1 TLS material; see README.md.",
   "files": {
     "cli.json": "f94a9d3585ef6a32dab3e6ad4010f5232834a86ab7edb66faf00ce81fa9c8f31",
@@ -13,6 +9,6 @@
     "go-admin.key": "026526b41d6fe7fcc6b39838b99b345edd8898012351ba8f666661f47673dc10",
     "go-rsa.crt": "b878662ebf7a30d7af83b4155f95bf25cd3f40dc2d878f61255dbb00a9b10e8e",
     "go-rsa.key": "27ef92874a4e7d2eb86c299ae45093b6a05353a61d4c759f3a2e137efc2ca297",
-    "README.md": "8b13f0a30aa42883c2c25460a22268546f508640250304275e056de61888e4f8"
+    "README.md": "b8b98fdb3c7667c5cd6d24281baea5ecfcc5c091e75ac72de1c2e6b50336056b"
   }
 }

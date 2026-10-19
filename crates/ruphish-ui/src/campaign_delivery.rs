@@ -15,6 +15,7 @@ pub(super) struct Controls {
 }
 
 fn fetch(
+    tasks: ruphish_ui::view_tasks::ViewTasks,
     api: Api,
     campaign: StoredValue<String>,
     result: i64,
@@ -26,7 +27,7 @@ fn fetch(
     let Some((request, query)) = request else {
         return;
     };
-    spawn_local(async move {
+    tasks.spawn(async move {
         let response = api
             .get(&format!(
                 "/api/campaigns/{}/delivery/{result}/history{query}",
@@ -50,6 +51,7 @@ pub(super) fn recipient_row(
             .find(|r| r["id"] == result)
             .unwrap_or(Value::Null)
     });
+    let tasks = ruphish_ui::view_tasks::ViewTasks::default();
     let history = RwSignal::new(History::default());
     let open = Memo::new(move |_| history.with(|h| h.open));
     let entries = Memo::new(move |_| history.with(timeline));
@@ -58,7 +60,7 @@ pub(super) fn recipient_row(
     Effect::new(move |_| {
         data.track();
         if open.get() && history.with_untracked(|h| h.error.is_none()) {
-            fetch(api, campaign, result, history, false);
+            fetch(tasks, api, campaign, result, history, false);
         }
     });
     let panel_id = format!("recipient-history-{result}");
@@ -84,7 +86,7 @@ pub(super) fn recipient_row(
             <section id=panel_id aria-labelledby=button_id class="recipient-history" aria-busy=move||history.with(History::loading).to_string()>
                 <div class="recipient-history-heading"><h3>"Recipient history"</h3><span>"Times shown in your browser's time zone"</span></div>
                 <Show when=move||history.with(History::loading)><p role="status">"Loading history..."</p></Show>
-                {move||history.get().error.map(|error|view!{<div class="form-message error" role="alert"><p>{error}</p><button type="button" on:click=move |_|fetch(api,campaign,result,history,history.get_untracked().retry_older)>"Retry history"</button></div>})}
+                {move||history.get().error.map(|error|view!{<div class="form-message error" role="alert"><p>{error}</p><button type="button" on:click=move |_|fetch(tasks,api,campaign,result,history,history.get_untracked().retry_older)>"Retry history"</button></div>})}
                 <div class="recipient-history-columns">
                     <section class="recipient-timeline"><h4>"Timeline"</h4><ol class="delivery-timeline">
                         {move||entries.get().into_iter().map(|entry|view!{<li class=format!("timeline-event {}",entry.tone)><span class="timeline-marker" aria-hidden="true"></span><div><strong>{entry.title}</strong><time>{entry.at.map(|at|instant(&Value::from(at))).unwrap_or_else(||"Time not recorded".into())}</time></div></li>}).collect_view()}
@@ -95,7 +97,7 @@ pub(super) fn recipient_row(
                         <p class="copy-status" role="status">{move||copy_message.get()}</p>
                     </section>
                 </div>
-                <Show when=move||history.with(|h|h.next_attempt.is_some()||h.next_event.is_some())><button type="button" disabled=move||history.with(History::loading) on:click=move |_|fetch(api,campaign,result,history,true)>"Load earlier history"</button></Show>
+                <Show when=move||history.with(|h|h.next_attempt.is_some()||h.next_event.is_some())><button type="button" disabled=move||history.with(History::loading) on:click=move |_|fetch(tasks,api,campaign,result,history,true)>"Load earlier history"</button></Show>
             </section>
         </td></tr>
     }

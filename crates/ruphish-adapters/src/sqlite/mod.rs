@@ -4,6 +4,9 @@ pub mod accounts;
 mod auth_schema;
 mod campaign_schema;
 pub mod campaigns;
+mod domain_schema;
+pub mod domains;
+pub mod interactions;
 mod migrations;
 mod participant_privacy;
 pub mod previews;
@@ -260,6 +263,12 @@ async fn validate_schema(
             sqlx::raw_sql(campaign_schema::SCHEMA)
                 .execute(&mut expected)
                 .await?;
+        }
+        if auth_schema::version(connection).await? >= 4 {
+            domain_schema::migrate(&mut expected).await?;
+        }
+        if auth_schema::version(connection).await? >= 5 {
+            domain_schema::verification_history(&mut expected).await?;
         }
     }
     if schema(connection).await? != schema(&mut expected).await? {

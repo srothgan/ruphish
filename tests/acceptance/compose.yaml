@@ -1,0 +1,56 @@
+name: ruphish-acceptance
+services:
+  prepare:
+    image: rust:1.99.1-bookworm
+    profiles: [setup]
+    working_dir: /workspace
+    environment:
+      CARGO_TARGET_DIR: /target
+    volumes:
+      - ../..:/workspace:ro
+      - .:/lab
+      - target:/target
+      - registry:/usr/local/cargo/registry
+    entrypoint: [sh, /lab/prepare.sh]
+  dns:
+    image: coredns/coredns:1.14.7
+    command: [-conf, /lab/Corefile]
+    volumes:
+      - .:/lab:ro
+    networks:
+      lab:
+        ipv4_address: 172.30.53.53
+  inbox:
+    image: axllent/mailpit@sha256:23fe39e81bde596a918000b3135c0f85dc8bb4c9ea6be274b051143f3e300387
+    ports:
+      - "127.0.0.1:8026:8025"
+    networks:
+      lab:
+        ipv4_address: 172.30.53.20
+  app:
+    image: rust:1.99.1-bookworm
+    working_dir: /workspace
+    entrypoint: [/lab/data/ruphish]
+    command: [--config, /lab/data/config.json]
+    env_file: ./data/bootstrap.env
+    volumes:
+      - ../..:/workspace:ro
+      - ./data:/lab/data
+    ports:
+      - "127.0.0.1:3334:3333"
+      - "127.0.0.1:8443:8443"
+    networks:
+      lab:
+        ipv4_address: 172.30.53.10
+    depends_on: [dns, inbox]
+    stop_grace_period: 15s
+networks:
+  lab:
+    ipam:
+      config:
+        - subnet: 172.30.53.0/24
+volumes:
+  target:
+    name: ${RUPHISH_ACCEPTANCE_TARGET_VOLUME:-ruphish-acceptance-target}
+  registry:
+    name: ${RUPHISH_ACCEPTANCE_REGISTRY_VOLUME:-ruphish-acceptance-registry}

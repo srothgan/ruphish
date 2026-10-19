@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "reference_commit": "95618469799295e2c0fec980805a2dfbb818816b",
-  "source": "gophish/models/testdata and models/attachment_test.go",
+  "source": "https://github.com/gophish/gophish/blob/95618469799295e2c0fec980805a2dfbb818816b/models/attachment_test.go",
   "files": {
     "calendar-file-with-vars.ics": "16dc33a77bc1c60ba4d2dc5a42a12464296610e4ba7b0727db6700d56eea5014",
     "calendar-file-with-vars.templated.ics": "091126d5763149d88fa64687aac1ffb224ea47c7fa71865c0300aeb665af320c",

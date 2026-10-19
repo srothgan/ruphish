@@ -38,8 +38,10 @@ After browser/contract changes, install browser dependencies, run functional tes
 
 ```sh
 npm ci --prefix crates/ruphish-ui/web
+node --check crates/ruphish-adapters/src/landing-collector.js
 node --check crates/ruphish-ui/web/build.mjs
 node --check crates/ruphish-ui/web/state.mjs
+node --check crates/ruphish-ui/web/http.mjs
 node --check crates/ruphish-ui/web/editor.mjs
 node --check crates/ruphish-ui/web/navigation.mjs
 node --check crates/ruphish-ui/web/account-menu.mjs
@@ -81,6 +83,10 @@ Browser output is generated in dist/admin. Do not hand-edit or check in target/ 
 Shared lints must be inherited by every member. Native and browser dependency graphs are checked separately. Dependency policy allows reviewed permissive licenses and crates.io sources, rejects unknown Git/registry sources and advisories/yanked packages, and reports duplicate versions for review. Do not silence a finding with broad exemptions; record narrow, reasoned exceptions only where necessary.
 
 The UI build workspace and the server asset root must remain separate. Trunk owns `dist/` and stages under `dist/.stage/`; the post-build hook arranges completed assets under `admin/`, producing the server distribution at `dist/admin/`. Never configure Trunk to stage inside the served directory or teach the server to ignore build artifacts. The server continues to reject hidden/unexpected paths and mismatched manifests.
+
+Public transport/proxy changes also require the executable `startup_process` tests. For actual DNS/TLS/SMTP acceptance, use the independent Compose fixture and direct commands in [docs/public-acceptance.md](docs/public-acceptance.md), including `node --test tests/acceptance/public.test.mjs`. This opt-in fixture is separate from ordinary Cargo checks and manual browser acceptance. Its generated keys, credentials, database and mailbox contents are local test state, never committed artifacts.
+
+Maintain one canonical Docker test fixture under `tests/acceptance/`. Extend its services and scenarios in place; adding tests does not justify another persistent lab, alternate login, port set or duplicated setup tooling. Preserve local state during fixture changes. Future CI uses the same fixture with disposable per-job state; production configuration and secrets remain separate from test infrastructure.
 
 ## Data and side effects
 

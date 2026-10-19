@@ -1,6 +1,7 @@
 /target/
 /dist/
 /data/
+/tests/acceptance/data/
 /.env
 /PERSONAL.md
 **/node_modules/

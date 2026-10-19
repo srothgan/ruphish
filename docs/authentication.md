@@ -1,6 +1,6 @@
 # Authentication and account administration
 
-The admin listener serves login, required password change, settings, API-key rotation, user management and explicit administrator impersonation. The Leptos UI uses cookies and the preserved HTTP API. Resource management is documented in [resources.md](resources.md); campaign execution remains a subsequent work package.
+The admin listener serves login, required password change, settings, API-key rotation, user management and explicit administrator impersonation. The Leptos UI uses cookies and the preserved HTTP API. Resource management is documented in [resources.md](resources.md).
 
 ## Passwords and migration
 
@@ -60,4 +60,4 @@ Automated executable tests cover malformed requests, forged/expired/replayed coo
 
 ## Deferred UI issue
 
-Manual acceptance found that a deleted user could remain visible in the Users table until a full page reload. The user requested deferring the fix to the later UI refinement pass. Mutation/list refresh and reactive rendering need investigation; the root cause is not established. Acceptance requires successful deletion to remove the row without reloading, failed deletion to preserve the row, and late responses not to restore deleted users. Existing backend deletion tests do not establish that browser-state behavior.
+Manual acceptance found that a deleted user could remain visible in the Users table until a full page reload. This remains an open UI refinement. Mutation/list refresh and reactive rendering need investigation; the root cause is not established. Acceptance requires successful deletion to remove the row without reloading, failed deletion to preserve the row, and late responses not to restore deleted users. Existing backend deletion tests do not establish that browser-state behavior.

@@ -359,7 +359,7 @@ struct Page {
 }
 fn encode_header(c: &app::CampaignHeader) -> Value {
     let resource = |r: &app::CampaignResource| json!({"id":r.id,"name":r.name});
-    json!({"id":c.id,"name":c.name,"status":c.status,"launch_date":date(&c.launch),"send_by_date":date(&c.send_by),"url":c.url,"template":resource(&c.template),"page":resource(&c.page),"smtp":resource(&c.profile),"subject":c.subject,"profile_sender":c.profile_sender,"template_sender":c.template_sender,"total":c.total,"policy":c.policy.as_ref().map(policy)})
+    json!({"id":c.id,"name":c.name,"status":c.status,"launch_date":date(&c.launch),"send_by_date":date(&c.send_by),"url":c.url,"template":resource(&c.template),"page":resource(&c.page),"smtp":resource(&c.profile),"subject":c.subject,"profile_sender":c.profile_sender,"template_sender":c.template_sender,"total":c.total,"policy":c.policy.as_ref().map(policy),"domain_id":c.domain_id,"domain_block":c.domain_block})
 }
 async fn overview(context: Context, Query(page): Query<Page>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;

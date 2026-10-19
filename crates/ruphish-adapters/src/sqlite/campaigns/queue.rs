@@ -46,7 +46,7 @@ impl Queue for Campaigns {
             tx.commit().await.map_err(storage)?;
             return Ok(None);
         }
-        let row=sqlx::query("WITH fairness AS MATERIALIZED (SELECT campaign_id,max(last_claim) AS last_claim FROM ruphish_delivery GROUP BY campaign_id) SELECT d.*,c.user_id,c.template_id,c.page_id,c.smtp_id,c.url,r.r_id,r.email,r.first_name,r.last_name,r.position FROM ruphish_delivery d JOIN fairness f ON f.campaign_id=d.campaign_id JOIN campaigns c ON c.id=d.campaign_id JOIN results r ON r.id=d.result_id WHERE d.state IN ('ready','retry') AND d.due<=? AND c.status!='Completed' AND NOT EXISTS(SELECT 1 FROM ruphish_delivery busy JOIN campaigns bc ON bc.id=busy.campaign_id WHERE busy.state IN ('preparing','submitting') AND bc.smtp_id=c.smtp_id) AND NOT EXISTS(SELECT 1 FROM ruphish_profile_cooldown cool JOIN smtp p ON p.id=cool.profile_id WHERE cool.profile_id=c.smtp_id AND cool.revision=p.modified_date AND (cool.blocked=1 OR cool.until_time>?)) ORDER BY f.last_claim,d.due,d.result_id LIMIT 1").bind(now).bind(now).fetch_optional(&mut *tx).await.map_err(storage)?;
+        let row=sqlx::query("WITH fairness AS MATERIALIZED (SELECT campaign_id,max(last_claim) AS last_claim FROM ruphish_delivery GROUP BY campaign_id) SELECT d.*,c.user_id,c.template_id,c.page_id,c.smtp_id,c.url,r.r_id,r.email,r.first_name,r.last_name,r.position FROM ruphish_delivery d JOIN fairness f ON f.campaign_id=d.campaign_id JOIN campaigns c ON c.id=d.campaign_id JOIN results r ON r.id=d.result_id WHERE d.state IN ('ready','retry') AND d.due<=? AND c.status!='Completed' AND EXISTS(SELECT 1 FROM ruphish_campaign_domains cd JOIN ruphish_domains domain ON domain.id=cd.domain_id AND domain.owner_id=c.user_id WHERE cd.campaign_id=c.id AND domain.enabled=1 AND domain.verified_until>?) AND NOT EXISTS(SELECT 1 FROM ruphish_delivery busy JOIN campaigns bc ON bc.id=busy.campaign_id WHERE busy.state IN ('preparing','submitting') AND bc.smtp_id=c.smtp_id) AND NOT EXISTS(SELECT 1 FROM ruphish_profile_cooldown cool JOIN smtp p ON p.id=cool.profile_id WHERE cool.profile_id=c.smtp_id AND cool.revision=p.modified_date AND (cool.blocked=1 OR cool.until_time>?)) ORDER BY f.last_claim,d.due,d.result_id LIMIT 1").bind(now).bind(now).bind(now).fetch_optional(&mut *tx).await.map_err(storage)?;
         let Some(row) = row else {
             tx.commit().await.map_err(storage)?;
             return Ok(None);
@@ -133,6 +133,11 @@ impl Queue for Campaigns {
                 .await
                 .map_err(storage)?;
         let Some(owner) = owner else { return Ok(false) };
+        let domain_ready:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ruphish_campaign_domains cd JOIN ruphish_domains d ON d.id=cd.domain_id WHERE cd.campaign_id=? AND d.owner_id=? AND d.enabled=1 AND d.verified_until>?)").bind(claim.campaign_id).bind(owner).bind(now).fetch_one(&mut *tx).await.map_err(storage)?;
+        if !domain_ready {
+            return Ok(false);
+        }
+
         if !owner_enabled(&mut tx, owner).await? {
             return Ok(false);
         }

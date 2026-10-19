@@ -214,7 +214,8 @@ async fn prepare(
     let count = inspect(&mut transaction, false).await?;
     if count == MIGRATIONS.len()
         && super::auth_schema::validate_version(&mut transaction).await?
-        && super::auth_schema::version(&mut transaction).await? == 3
+        && super::auth_schema::version(&mut transaction).await?
+            == super::auth_schema::LATEST_VERSION
     {
         transaction.rollback().await?;
         return Ok(None);

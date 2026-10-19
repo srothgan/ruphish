@@ -55,31 +55,37 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                 || baseline.get() != (username.get(), role.get(), locked.get(), reset.get()))
     });
     crate::navigation::protect_draft(move || busy.get() || dirty.get());
+    let reload = RwSignal::new(0u64);
     if let Some(id) = id {
-        spawn_local(async move {
-            match api
-                .get(&format!("/api/users/{id}"))
-                .await
-                .and_then(|value| {
-                    serde_json::from_value::<User>(value)
-                        .map_err(|_| "Invalid user response".to_owned())
-                }) {
-                Ok(user) => {
-                    baseline.set((
-                        user.username.clone(),
-                        user.role.slug.clone(),
-                        user.account_locked,
-                        user.password_change_required,
-                    ));
-                    username.set(user.username);
-                    role.set(user.role.slug);
-                    locked.set(user.account_locked);
-                    reset.set(user.password_change_required);
-                    loaded.set(true);
+        Effect::new(move |_| {
+            reload.get();
+            loading.set(true);
+            message.clear();
+            spawn_local(async move {
+                match api
+                    .get(&format!("/api/users/{id}"))
+                    .await
+                    .and_then(|value| {
+                        serde_json::from_value::<User>(value)
+                            .map_err(|_| "Invalid user response".to_owned())
+                    }) {
+                    Ok(user) => {
+                        baseline.set((
+                            user.username.clone(),
+                            user.role.slug.clone(),
+                            user.account_locked,
+                            user.password_change_required,
+                        ));
+                        username.set(user.username);
+                        role.set(user.role.slug);
+                        locked.set(user.account_locked);
+                        reset.set(user.password_change_required);
+                        loaded.set(true);
+                    }
+                    Err(error) => message.error(error),
                 }
-                Err(error) => message.error(error),
-            }
-            loading.set(false);
+                loading.set(false);
+            });
         });
     }
     let submit = move |event: leptos::ev::SubmitEvent| {
@@ -149,6 +155,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                 label=Signal::derive(move || if busy.get(){"Saving..."}else if id.is_some(){"Save changes"}else{"Create user"}.to_owned())/>
         </PageHeader>
         {message.view()}
+        <Show when=move||!loaded.get()&&!loading.get()><button on:click=move |_|reload.update(|n|*n+=1)>"Retry loading user"</button></Show>
         <form id="user-form" on:submit=submit>
             <FormFields disabled=Signal::derive(move || busy.get() || !loaded.get())>
                 <Field label="Username"><input autocomplete="off" required prop:value=move||username.get() on:input=move|e|username.set(event_target_value(&e))/></Field>
@@ -164,6 +171,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
 
 fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
     let token = StoredValue::new(token);
+    let tasks = ruphish_ui::view_tasks::ViewTasks::default();
     let list = RwSignal::new(Vec::<User>::new());
     let search = RwSignal::new(String::new());
     let failed = RwSignal::new(false);
@@ -178,13 +186,20 @@ fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
     let busy = RwSignal::new(false);
     let loaded = RwSignal::new(false);
     let deleting = RwSignal::new(None::<(i64, String)>);
+    let generation = StoredValue::new(0u64);
     let refresh = move || {
+        generation.update_value(|n| *n += 1);
+        let ticket = generation.get_value();
         loaded.set(false);
         failed.set(false);
-        spawn_local(async move {
-            match api.get("/api/users/").await.and_then(|v| {
+        tasks.spawn(async move {
+            let result = api.get("/api/users/").await.and_then(|v| {
                 serde_json::from_value::<Vec<User>>(v).map_err(|_| "Invalid user response".into())
-            }) {
+            });
+            if generation.get_value() != ticket {
+                return;
+            }
+            match result {
                 Ok(users) => {
                     list.set(users);
                 }
@@ -202,8 +217,10 @@ fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
             return;
         }
         if let Some((id, _)) = deleting.get_untracked() {
+            generation.update_value(|n| *n += 1);
+            loaded.set(true);
             busy.set(true);
-            spawn_local(async move {
+            tasks.spawn(async move {
                 match api
                     .json(
                         "DELETE",
@@ -214,6 +231,7 @@ fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
                     .await
                 {
                     Ok(_) => {
+                        list.update(|rows| rows.retain(|user| user.id != id));
                         deleting.set(None);
                         refresh();
                         message.status("User and owned data deleted.".into());
@@ -236,12 +254,13 @@ fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
         {message.view()}
         <div class="management-toolbar"><Field label="Search by username"><input type="search" prop:value=move||search.get() on:input=move|e|search.set(event_target_value(&e))/></Field><span>{move||format!("{} users",visible.with(Vec::len))}</span></div>
         <Show when=move||!loaded.get()><p role="status">"Loading users..."</p></Show>
+        <Show when=move||loaded.get()&&failed.get()><button type="button" on:click=move |_|refresh()>"Retry loading users"</button></Show>
         <DataTable label="Users" headers=vec!["User","Role","Status","Actions"]>
         {move || visible.get().into_iter().map(|user| { let id = user.id; let delete_name = user.username.clone(); let impersonate_name = user.username.clone(); let own_account = id == current_user; let can_impersonate = !user.account_locked && !user.password_change_required;
             view! { <tr><th scope="row"><a href=format!("/users/{id}/edit")>{user.username}</a></th><td>{user.role.name}</td><td>{if user.account_locked { "Locked" } else if user.password_change_required { "Password setup" } else { "Active" }}</td><td><div class="row-actions">
                 <a href=format!("/users/{id}/edit")>"Edit"</a>
-                <button disabled=!can_impersonate on:click=move |_| { let name = impersonate_name.clone(); spawn_local(async move { match api.form("/impersonate", &token.get_value(), &[("username",name)]).await { Ok(_) => navigate("/"), Err(error) => message.error(error) } }); }>"View as"</button>
-                <button class="text-danger" disabled=own_account title=if own_account { "You cannot delete your own account" } else { "Delete this user" } on:click=move |_| {message.clear();deleting.set(Some((id,delete_name.clone())))}>"Delete"</button></div></td></tr> }
+                <button disabled=move||!can_impersonate||busy.get() on:click=move |_| { if busy.get_untracked(){return;} busy.set(true); let name = impersonate_name.clone(); tasks.spawn(async move { match api.form("/impersonate", &token.get_value(), &[("username",name)]).await { Ok(_) => navigate("/"), Err(error) => message.error(error) } busy.set(false); }); }>"View as"</button>
+                <button class="text-danger" disabled=move||own_account||busy.get() title=if own_account { "You cannot delete your own account" } else { "Delete this user" } on:click=move |_| {message.clear();deleting.set(Some((id,delete_name.clone())))}>"Delete"</button></div></td></tr> }
         }).collect_view()}
         </DataTable>
         <Show when=move||loaded.get()&&!failed.get()&&visible.with(Vec::is_empty)><EmptyState title="No users found"><p>"Try another search or create a user."</p></EmptyState></Show>

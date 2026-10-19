@@ -1031,7 +1031,7 @@ fn go_account_observations_match_except_approved_self_deletion_policy() {
             assert_eq!(user_key.len(), 64);
         }
         normalize_key(&mut value);
-        // DEC-019 deliberately rejects all self-deletion, including the last admin.
+        // Account policy rejects all self-deletion, including the last admin.
         // Preserve and verify the independent Go observation rather than rewriting it.
         if case["id"] == "delete-last-admin" {
             assert_eq!(case["status"], 500);

@@ -35,9 +35,13 @@ pub(super) fn list(api: Api) -> impl IntoView {
     let busy = RwSignal::new(false);
     let message = Message::new(String::new());
     let can_edit = editable();
+    let refresh = RwSignal::new(0u64);
+    let failed = RwSignal::new(false);
     Effect::new(move |_| {
+        refresh.get();
         let cursor = after.get();
         busy.set(true);
+        failed.set(false);
         spawn_local(async move {
             let result = api
                 .get(&format!("/api/campaigns/overview?after={cursor}"))
@@ -53,17 +57,21 @@ pub(super) fn list(api: Api) -> impl IntoView {
                     });
                     message.clear();
                 }
-                Err(e) => message.error(e),
+                Err(e) => {
+                    failed.set(true);
+                    message.error(e);
+                }
             }
             busy.set(false);
         });
     });
     view! {<ManagementPage><PageHeader title="Campaigns" subtitle="Prepare a simulation and follow its delivery progress.">
+        <button disabled=move||busy.get() on:click=move |_|refresh.update(|v|*v+=1)>"Refresh"</button>
         <a class="button primary" hidden=!can_edit href="/campaigns/new">"Create campaign"</a>
     </PageHeader>{message.view()}<Show when=move||busy.get()><p role="status">"Loading campaigns…"</p></Show>
     <DataTable label="Campaigns" headers=vec!["Campaign","Lifecycle","Recipients","Launch"]>
         {move||rows.get().into_iter().filter(|_|pages.with(CursorPages::loaded)).map(|r|view!{<tr><th scope="row"><a href=format!("/campaigns/{}",r["id"])>{text(&r,"name")}</a></th><td>{text(&r,"status")}</td><td>{r["total"].to_string()}</td><td>{text(&r,"launch_date")}</td></tr>}).collect_view()}
-    </DataTable><Show when=move||!busy.get()&&rows.get().is_empty()><EmptyState title="No campaigns on this page"><p>"Create a campaign to select an audience, review content and choose a schedule."</p></EmptyState></Show>
+    </DataTable><Show when=move||!busy.get()&&!failed.get()&&rows.get().is_empty()><EmptyState title="No campaigns on this page"><p>"Create a campaign to select an audience, review content and choose a schedule."</p></EmptyState></Show>
     <PageControls pages=pages disabled=Signal::derive(move||busy.get())/>
     </ManagementPage>}
 }
@@ -94,12 +102,47 @@ fn selector(
         <option value="0">"Choose a resource"</option>{move||array(&resources.get(),kind).into_iter().map(|r|view!{<option value=r["id"].to_string()>{text(&r,"name")}</option>}).collect_view()}
     </select></Field>}
 }
-fn load_page_defaults(api: Api, draft: RwSignal<Draft>, id: i64, message: Message) {
+fn domain_selector(draft: RwSignal<Draft>, resources: RwSignal<Value>) -> impl IntoView {
+    let selected = move || {
+        let value = text(&draft.get().value, "url");
+        url::Url::parse(&value)
+            .ok()
+            .map(|u| u.origin().ascii_serialization())
+            .unwrap_or_default()
+    };
+    let path = move || {
+        let value = text(&draft.get().value, "url");
+        // Preserve authored Go expressions and escaping; URL::path() percent-encodes
+        // template delimiters and must not become the editor's source of truth.
+        let suffix = value
+            .strip_prefix("https://")
+            .or_else(|| value.strip_prefix("http://"))
+            .map(|rest| rest.find(['/', '?']).map(|at| &rest[at..]).unwrap_or(""))
+            .unwrap_or(value.as_str());
+        if suffix.starts_with('/') {
+            suffix.to_owned()
+        } else {
+            format!("/{suffix}")
+        }
+    };
+    view! {<div><Field label="Verified domain"><select prop:value=selected on:change=move|e|{
+        let origin=event_target_value(&e);let path=path();draft.update(|d|d.edit(|v|v["url"]=json!(format!("{origin}{path}"))));
+    }><option value="">"Choose a verified domain"</option>{move||array(&resources.get(),"domains").into_iter().map(|d|view!{<option value=text(&d,"origin")>{format!("{} ({})",text(&d,"name"),text(&d,"hostname"))}</option>}).collect_view()}</select></Field>
+    <Field label="Landing path (optional)"><input prop:value=path on:input=move|e|{let path=event_target_value(&e);let origin=selected();let path=if path.starts_with('/'){path}else{format!("/{path}")};draft.update(|d|d.edit(|v|v["url"]=json!(format!("{origin}{path}"))));}/></Field>
+    <p>{move||text(&draft.get().value,"url")}</p><a href="/domains" target="_blank" rel="noopener">"Manage and verify domains"</a></div>}
+}
+fn load_page_defaults(
+    tasks: ruphish_ui::view_tasks::ViewTasks,
+    api: Api,
+    draft: RwSignal<Draft>,
+    id: i64,
+    message: Message,
+) {
     message.clear();
     let Some(request) = draft.try_update(|d| d.select_page(id)).flatten() else {
         return;
     };
-    spawn_local(async move {
+    tasks.spawn(async move {
         let result = api.get(&format!("/api/pages/{id}")).await;
         let accepted = draft
             .try_update(|d| d.page_loaded(request, result.as_ref().ok()))
@@ -117,12 +160,13 @@ fn load_page_defaults(api: Api, draft: RwSignal<Draft>, id: i64, message: Messag
     });
 }
 fn page_selector(
+    tasks: ruphish_ui::view_tasks::ViewTasks,
     api: Api,
     draft: RwSignal<Draft>,
     resources: RwSignal<Value>,
     message: Message,
 ) -> impl IntoView {
-    view! {<Field label="Landing page"><select prop:value=move||draft.get().value["selection"]["page"]["id"].to_string() on:change=move|e|load_page_defaults(api,draft,event_target_value(&e).parse::<i64>().unwrap_or(0),message)>
+    view! {<Field label="Landing page"><select prop:value=move||draft.get().value["selection"]["page"]["id"].to_string() on:change=move|e|load_page_defaults(tasks,api,draft,event_target_value(&e).parse::<i64>().unwrap_or(0),message)>
         <option value="0">"Choose a resource"</option>{move||array(&resources.get(),"page").into_iter().map(|r|view!{<option value=r["id"].to_string()>{text(&r,"name")}</option>}).collect_view()}
     </select></Field>}
 }
@@ -144,6 +188,7 @@ fn schedule(
     </section>}
 }
 fn create(api: Api, token: String, initial: Option<Value>) -> impl IntoView {
+    let tasks = ruphish_ui::view_tasks::ViewTasks::default();
     let token = StoredValue::new(token);
     let navigate = use_navigate();
     let zone = StoredValue::new(local_zone());
@@ -185,6 +230,10 @@ fn create(api: Api, token: String, initial: Option<Value>) -> impl IntoView {
                     }),
                     Err(e) => message.error(e),
                 }
+            }
+            match api.get("/api/domains/validated/").await {
+                Ok(v) => resources.update(|r| r["domains"] = v),
+                Err(e) => message.error(e),
             }
             loading.set(false);
         });
@@ -239,7 +288,7 @@ fn create(api: Api, token: String, initial: Option<Value>) -> impl IntoView {
         campaign["selection"] = review["selection"].clone();
         campaign["policy"] = review["policy"].clone();
         busy.set(true);
-        spawn_local(async move {
+        tasks.spawn(async move {
             match api
                 .resource(
                     "POST",
@@ -272,7 +321,7 @@ fn create(api: Api, token: String, initial: Option<Value>) -> impl IntoView {
         };
         busy.set(true);
         let navigate = navigate.clone();
-        spawn_local(async move {
+        tasks.spawn(async move {
             match api.launch(&token.get_value(), &key, &body).await {
                 Ok(v) => {
                     draft.update(|d| d.generation = 0);
@@ -297,10 +346,10 @@ fn create(api: Api, token: String, initial: Option<Value>) -> impl IntoView {
         <p>"Choose recipient groups. Overlaps are counted once by exact email address; the first selected group supplies recipient details."</p>
         {move||array(&resources.get(),"groups").into_iter().map(|r|{let id=r["id"].as_i64().unwrap_or(0);view!{<Field checkbox=true label=format!("{} ({} recipients)",text(&r,"name"),r["num_targets"])><input type="checkbox" prop:checked=move||draft.with(|d|array(&d.value["selection"],"groups").iter().any(|r|r["id"]==id)) on:change=move|e|{let checked=event_target_checked(&e);draft.update(|d|d.edit(|v|{let mut groups=array(&v["selection"],"groups");groups.retain(|r|r["id"]!=id);if checked{groups.push(json!({"id":id}));}v["selection"]["groups"]=json!(groups);}));}/></Field>}}).collect_view()}
         <a href="/groups/new" target="_blank" rel="noopener">"Create a group in a new tab"</a></section>
-        <section hidden=move||step.get()!=1><h2>"Content and destination"</h2><div class="resource-columns">{selector(draft,resources,"template","Email template")}{selector(draft,resources,"smtp","Sending profile")}{page_selector(api,draft,resources,message)}{input(draft,"url","Public campaign URL")}</div>
+        <section hidden=move||step.get()!=1><h2>"Content and destination"</h2><div class="resource-columns">{selector(draft,resources,"template","Email template")}{selector(draft,resources,"smtp","Sending profile")}{page_selector(tasks,api,draft,resources,message)}{domain_selector(draft,resources)}</div>
         <ul class="campaign-resource-links" aria-label="Create resources in a new tab"><li><a href="/templates/new" target="_blank" rel="noopener">"Create template"</a></li><li><a href="/pages/new" target="_blank" rel="noopener">"Create landing page"</a></li><li><a href="/smtp/new" target="_blank" rel="noopener">"Create sending profile"</a></li></ul><p class="resource-usage">"Changes to saved templates or sending profiles can affect scheduled emails and retries in existing campaigns."</p>
-        <section class="resource-section"><h2>"Event tracking and redirect (optional)"</h2><p>"Selecting a landing page fills these fields with its defaults. Edit them for this campaign; choosing another page replaces them with that page's defaults."</p><p>"Track submission and password presence only. Entered usernames, passwords and other form values are never collected. Public interaction tracking is not available in this build."</p>
-        <Show when=move||draft.with(|d|d.page_request.is_some())><p role="status">"Loading landing-page defaults..."</p></Show><Show when=move||draft.with(|d|d.page_request.is_none()&&!d.policy_ready())><button type="button" on:click=move |_|load_page_defaults(api,draft,draft.get_untracked().value["selection"]["page"]["id"].as_i64().unwrap_or(0),message)>"Retry loading defaults"</button></Show><FormFields disabled=Signal::derive(move||!draft.with(Draft::policy_ready))>{flag(draft,"capture_credentials","Record form submission")}{flag(draft,"capture_passwords","Record password presence")}
+        <section class="resource-section"><h2>"Event tracking and redirect (optional)"</h2><p>"Selecting a landing page fills these fields with its defaults. Edit them for this campaign; choosing another page replaces them with that page's defaults."</p><p>"Track submission and password presence only. Entered usernames, passwords and other form values are never collected."</p>
+        <Show when=move||draft.with(|d|d.page_request.is_some())><p role="status">"Loading landing-page defaults..."</p></Show><Show when=move||draft.with(|d|d.page_request.is_none()&&!d.policy_ready())><button type="button" on:click=move |_|load_page_defaults(tasks,api,draft,draft.get_untracked().value["selection"]["page"]["id"].as_i64().unwrap_or(0),message)>"Retry loading defaults"</button></Show><FormFields disabled=Signal::derive(move||!draft.with(Draft::policy_ready))>{flag(draft,"capture_credentials","Record form submission")}{flag(draft,"capture_passwords","Record password presence")}
         <Field label="Redirect URL (optional; leave empty for no redirect)"><input prop:value=move||text(&draft.get().value["policy"],"redirect_url") on:input=move|e|draft.update(|d|d.edit(|v|v["policy"]["redirect_url"]=json!(event_target_value(&e))))/></Field></FormFields></section></section>
         <section hidden=move||step.get()!=2>{schedule(draft,"launch_local","Launch time",zone)}{schedule(draft,"send_by_local","Initial distribution end (optional)",zone)}<p>"With no launch time, delivery starts after launch. The distribution end spaces initial attempts; retries may continue afterward. SMTP acceptance does not guarantee inbox delivery."</p></section>
         <section hidden=move||step.get()!=3 aria-busy=move||draft.with(|d|d.review_request.is_some()).to_string()><h2>"Review"</h2><p>"Check the validated audience, content and schedule before launching."</p>
@@ -331,6 +380,7 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
     let pages = RwSignal::new(CursorPages::default());
     let after = Memo::new(move |_| pages.with(CursorPages::after));
     let refresh = RwSignal::new(0u64);
+    let tasks = ruphish_ui::view_tasks::ViewTasks::default();
     let loading = RwSignal::new(false);
     let busy = RwSignal::new(false);
     let message = Message::new(String::new());
@@ -345,7 +395,7 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
             return;
         }
         loading.set(true);
-        spawn_local(async move {
+        tasks.spawn(async move {
             let result = api
                 .get(&format!(
                     "/api/campaigns/{}/delivery?after={cursor}",
@@ -400,9 +450,12 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
         on_cleanup(move || timer.clear());
     }
     let duplicate = move |_| {
+        if busy.get_untracked() {
+            return;
+        }
         let navigate = duplicate_navigate.clone();
         busy.set(true);
-        spawn_local(async move {
+        tasks.spawn(async move {
             match api
                 .get(&format!("/api/campaigns/{}/draft", id.get_value()))
                 .await
@@ -445,7 +498,7 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
         }
         busy.set(true);
         let navigate = navigate.clone();
-        spawn_local(async move {
+        tasks.spawn(async move {
             let (method, path, body) = match kind.as_str() {
                 "delete" => ("DELETE", format!("/api/campaigns/{}", id.get_value()), None),
                 "complete" => (
@@ -478,9 +531,9 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
         });
     });
     view! {<ManagementPage><a class="breadcrumb" href="/campaigns">"Back to campaigns"</a><PageHeader title=Signal::derive(move||text(&data.get()["campaign"],"name")) subtitle=Signal::derive(move||format!("{} · Last refreshed {}",text(&data.get()["campaign"],"status"),updated.get()))>
-        <button disabled=move||loading.get()||busy.get() on:click=move |_|refresh.update(|r|*r+=1)>"Refresh"</button><button hidden=!can_edit disabled=move||busy.get() on:click=duplicate>"Duplicate"</button><button hidden=!can_edit disabled=move||busy.get()||data.get()["campaign"]["status"]=="Completed" on:click=move |_|action.set(Some(("complete".into(),Value::Null)))>"Complete campaign"</button><button class="text-danger" hidden=!can_edit disabled=move||busy.get() on:click=move |_|action.set(Some(("delete".into(),Value::Null)))>"Delete"</button>
+        <button disabled=move||busy.get() aria-busy=move||loading.get().to_string() on:click=move |_|refresh.update(|r|*r+=1)>{move||if loading.get(){"Refreshing..."}else{"Refresh"}}</button><button hidden=!can_edit disabled=move||busy.get() on:click=duplicate>"Duplicate"</button><button hidden=!can_edit disabled=move||busy.get()||data.get()["campaign"]["status"]=="Completed" on:click=move |_|action.set(Some(("complete".into(),Value::Null)))>"Complete campaign"</button><button class="text-danger" hidden=!can_edit disabled=move||busy.get() on:click=move |_|action.set(Some(("delete".into(),Value::Null)))>"Delete"</button>
     </PageHeader>{message.view()}<Show when=move||data.get()["mailer_enabled"]==false><p class="form-message error">"Delivery processing is disabled in this process."</p></Show>
-    <p>"Acceptance means the SMTP server accepted the message. Public interaction tracking is not available in this build. Participant credentials are never collected."</p>
+    <p>"Acceptance means the SMTP server accepted the message. Participant credentials are never collected."</p>
     {move||campaign_context(&data.get()["campaign"])}
     {delivery_progress(data)}
     <DataTable label="Campaign delivery" headers=vec!["History", "Recipient", "Delivery", "Next/last due", "Attempts and actions"]>
@@ -574,6 +627,7 @@ fn campaign_context(c: &Value) -> impl IntoView + use<> {
     };
     let template_sender = text(c, "template_sender");
     view! {<section class="resource-read-panel campaign-context" aria-label="Campaign details"><h2>"Campaign details"</h2>
+        {(c["domain_block"].is_string() && c["status"]!="Completed").then(||view!{<p role="status" class="form-message">"Delivery is waiting for domain verification. Queued recipients are retained; sending resumes after the domain passes its checks." <a href=c["domain_id"].as_i64().map(|id|format!("/domains/{id}")).unwrap_or_else(||"/domains".into())>"Review domain"</a></p>})}
         <dl class="resource-facts">
             {resource("template","Email template","templates")}{resource("page","Landing page","pages")}{resource("smtp","Sending profile","smtp")}
             <div><dt>"Email subject template"</dt><dd>{c["subject"].as_str().map(|s|if s.is_empty(){"No subject"}else{s}).unwrap_or("Unavailable").to_owned()}</dd></div>

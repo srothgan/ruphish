@@ -1,11 +1,10 @@
 {
   "reference_commit": "95618469799295e2c0fec980805a2dfbb818816b",
-  "capture_tool": "tools/auth_capture/main.go",
   "captured_utc": "2026-10-18",
   "normalization": "Generated user API keys replaced with <generated-api-key>; later requests resolve <created-user-key> from the actual create response. Statuses, messages, roles, IDs and timestamps are unchanged Go observations.",
   "files": {
     "http.json": "bea58d9a79154d9e55e24642a6e566ca366e05818003de710f7bf7669e9678e2",
     "legacy-accounts.sqlite3": "6b4a7805c089c81dd3ad947b6758e9b016f9a6041f9c4394788410c1047a6647",
-    "README.md": "af34e9b60d24ef2a6f5dfe6c022f0159f56e3d51b82dab108152fb4c65cddef5"
+    "README.md": "3c1d9c0630cbec5d0f1a8a078d4799c79980540f7bec358d19b53ff6854d2b78"
   }
 }
