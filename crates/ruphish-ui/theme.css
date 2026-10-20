@@ -1,1 +1,45 @@
-:root { --color-danger: #a12c39; }
+/* Shared palette only: no typography, element or layout rules enter the visual iframe. */
+@layer tokens {
+  :root {
+    /* Neutrals — teal-tinted, not a cool-grey SaaS base. */
+    --ink: #13302c;
+    --canvas: #f4f7f6;
+    --paper: #ffffff;
+    --muted: #5b716e;
+    --line: #dde5e3;
+    --line-strong: #c3d0cd;
+    --hover: #eef4f2;
+
+    /* Teal — the only accent. */
+    --teal-50: #e9f5f3;
+    --teal-100: #cfe9e5;
+    --teal-600: #0b6b63;
+    --teal-700: #0a534d;
+    --teal-ink: #0c2f2b;
+
+    /* Signal states. */
+    --amber: #b4791f;
+    --amber-soft: #fbf3e1;
+    --danger: #a4303c;
+    --info: #23609a;
+
+    /* Sidebar chrome (reads on --teal-ink). */
+    --nav-bg: #0c2f2b;
+    --nav-fg: #cfe0dc;
+    --nav-fg-strong: #ffffff;
+    --nav-muted: #7fa39d;
+    --nav-active-bg: #15564f;
+    --nav-hover-bg: #103f39;
+    --nav-ring: #5cc8bb;
+
+    --danger-soft: #fcf0f1;
+    --warning-ink: #513d0e;
+    --backdrop: #0c2f2bb0;
+    --chart-hover: #0c2f2b0a;
+    --chart-accepted: #28629b;
+    --chart-opened: #007d77;
+    --chart-clicked: #8962ad;
+    --chart-submitted: #aa6420;
+    --chart-reported: #465465;
+  }
+}

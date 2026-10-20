@@ -1,4 +1,5 @@
 //! Shared navigation with stable sections, visible labels and decorative inline SVGs.
+use crate::shared::components::Dialog;
 use leptos::prelude::*;
 use wasm_bindgen::{JsCast, closure::Closure, prelude::*};
 
@@ -58,14 +59,14 @@ pub(super) fn install_guard(active: impl Fn() -> bool + 'static) -> impl IntoVie
             }
         })
     });
-    view! { <dialog node_ref=dialog class="management-dialog discard-confirmation" aria-labelledby="discard-heading" aria-describedby="discard-description">
+    view! { <Dialog node=dialog title="Discard unsaved changes?" compact=true open_on_mount=false>
         <h2 id="discard-heading">"Discard unsaved changes?"</h2>
         <p id="discard-description">"Your changes have not been saved. Leaving this page will discard them."</p>
         <div class="confirmation-actions">
             <button type="button" data-discard="cancel" autofocus>"Keep editing"</button>
             <button type="button" class="danger" data-discard="confirm">"Discard and continue"</button>
         </div>
-    </dialog> }
+    </Dialog> }
 }
 
 pub(super) fn protect_draft(dirty: impl Fn() -> bool + Send + Sync + 'static) {

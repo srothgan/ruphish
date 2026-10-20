@@ -5,7 +5,13 @@ use ruphish_ui::analysis_state::{count_axis, time_axis};
 use wasm_bindgen::prelude::*;
 
 pub(super) const LABELS: [&str; 5] = ["Accepted", "Opened", "Clicked", "Submitted", "Reported"];
-const COLOURS: [&str; 5] = ["#28629b", "#007d77", "#8962ad", "#aa6420", "#465465"];
+const SERIES: [&str; 5] = [
+    "series-accepted",
+    "series-opened",
+    "series-clicked",
+    "series-submitted",
+    "series-reported",
+];
 
 #[wasm_bindgen(module = "/web/analysis-time.mjs")]
 extern "C" {
@@ -72,7 +78,7 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
         (first, last.max(first + 60), count_axis(maximum))
     });
     view! {
-        <section class="analysis-chart" aria-label="Recorded events over time">
+        <Card class="analysis-chart" label="Recorded events over time">
             <div class="analysis-section-heading"><h2>"Activity over time"</h2>
                 <span>{move || format!("Events per {} minute{} · {}", interval.get()/60, if interval.get()==60 {""} else {"s"}, zone())}</span>
             </div>
@@ -81,19 +87,19 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
                     <svg class="analysis-plot-svg" width="100%" height="260" role="img" aria-label="Event counts over time; use the interval buttons below for exact values">
                         {move || { let (_,_,(top,step)) = bounds.get(); (0..=top/step).map(|n| {
                             let y=format!("{}%", 100.0 - n as f64*step as f64/top as f64*100.0);
-                            view! { <line x1="0" x2="100%" y1=y.clone() y2=y stroke="#dce5e9" stroke-width="1"/> }
+                            view! { <line x1="0" x2="100%" y1=y.clone() y2=y class="analysis-grid" stroke-width="1"/> }
                         }).collect_view() }}
                         {move || { let (first,last,(top,_))=bounds.get(); let span=(last-first) as f64; let enabled=visible.get();
                             let rows = data.get();
                             (0..5).filter(move |i| enabled[*i]).map(move |i| {
                                 let x = |time: i64| format!("{}%",(time-first) as f64/span*100.0);
                                 let y = |count: i64| format!("{}%",100.0-count as f64/top as f64*100.0);
-                                view! { <g stroke=COLOURS[i] fill=COLOURS[i]>
+                                view! { <g class=SERIES[i]>
                                     {rows.windows(2).map(|pair| view! {
                                         <line x1=x(pair[0].time) y1=y(pair[0].counts[i]) x2=x(pair[1].time) y2=y(pair[1].counts[i]) stroke-width="2"/>
                                     }).collect_view()}
                                     {rows.iter().map(|bucket| view! {
-                                        <circle cx=x(bucket.time) cy=y(bucket.counts[i]) r="4" stroke="white" stroke-width="1.5">
+                                        <circle cx=x(bucket.time) cy=y(bucket.counts[i]) r="4" class="analysis-point" stroke-width="1.5">
                                             <title>{format!("{}: {} {}",time(bucket.time),bucket.counts[i],LABELS[i])}</title>
                                         </circle>
                                     }).collect_view()}
@@ -127,7 +133,7 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
                                     <strong>"Details"</strong>
                                     <span>{format!("{} to {}",time(bucket.time),time(bucket.time+interval.get()))}</span>
                                     <dl>{(0..5).map(|i|view!{
-                                        <div><dt><i class="analysis-swatch" style:background=COLOURS[i]></i>{LABELS[i]}</dt><dd>{bucket.counts[i]}</dd></div>
+                                        <div><dt><i class=format!("analysis-swatch {}", SERIES[i])></i>{LABELS[i]}</dt><dd>{bucket.counts[i]}</dd></div>
                                     }).collect_view()}</dl>
                                 </div>
                             }
@@ -147,11 +153,11 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
                 <div class="analysis-legend" aria-label="Visible event types">
                     {LABELS.into_iter().enumerate().map(|(i,label)| view! {
                         <ActionButton pressed=Signal::derive(move || visible.get()[i].to_string()) on_click=move |_| visible.update(|values| values[i] = !values[i])>
-                            <span class="analysis-swatch" style:background=COLOURS[i]></span>{label}
+                            <span class=format!("analysis-swatch {}", SERIES[i])></span>{label}
                         </ActionButton>
                     }).collect_view()}
                 </div>
             </Show>
-        </section>
+        </Card>
     }
 }

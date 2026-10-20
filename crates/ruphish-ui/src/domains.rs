@@ -15,6 +15,14 @@ fn state(d: &Domain) -> &'static str {
         _ => "Not verified",
     }
 }
+fn status_tone(status: &str) -> StatusTone {
+    match status {
+        "verified" | "passed" => StatusTone::Positive,
+        "failed" => StatusTone::Negative,
+        "expired" | "timed_out" => StatusTone::Warning,
+        _ => StatusTone::Neutral,
+    }
+}
 fn instant(seconds: i64) -> String {
     if seconds == 0 {
         "Not recorded".into()
@@ -113,8 +121,8 @@ pub(super) fn list(api: Api) -> impl IntoView {
         {can_edit.then(||view!{<ActionLink style=ButtonStyle::Primary href="/domains/new">"Create domain"</ActionLink>})}
     </PageHeader>{message.view()}<ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) label="Search by name or hostname" noun="domains"/>
     <Show when=move||loading.get()><p role="status">"Loading domains…"</p></Show>
-    <DataTable label="Domains" headers=vec!["Name","Public origin","Status","Enabled","Campaigns","Actions"]>
-        <For each=move||visible.get() key=|d| (d.id,d.revision,d.checked_at,d.eligible,d.checking,d.status.clone(),d.code.clone(),d.campaigns) children=move|d|{let id=d.id;view!{<tr><td><a href=format!("/domains/{id}")>{d.name.clone()}</a></td><td>{d.origin.clone()}</td><td>{state(&d)}</td><td>{if d.enabled{"Yes"}else{"No"}}</td><td>{d.campaigns}</td><td><a href=format!("/domains/{id}")>"View"</a>{can_edit.then(||view!{<a href=format!("/domains/{id}/edit")>"Edit"</a>})}</td></tr>}}/>
+    <DataTable label="Domains" empty=Signal::derive(move || visible.with(Vec::is_empty)) headers=vec!["Name","Public origin","Status","Enabled","Campaigns","Actions"]>
+        <For each=move||visible.get() key=|d| (d.id,d.revision,d.checked_at,d.eligible,d.checking,d.status.clone(),d.code.clone(),d.campaigns) children=move|d|{let id=d.id;let label=state(&d);view!{<tr><td><a href=format!("/domains/{id}")>{d.name.clone()}</a></td><td>{d.origin.clone()}</td><td><StatusBadge tone=status_tone(&d.status)>{label}</StatusBadge></td><td>{if d.enabled{"Yes"}else{"No"}}</td><td>{d.campaigns}</td><td><a href=format!("/domains/{id}")>"View"</a>{can_edit.then(||view!{<a href=format!("/domains/{id}/edit")>"Edit"</a>})}</td></tr>}}/>
     </DataTable><ListEmptyState ready=Signal::derive(move || !loading.get() && !failed.get()) count=Signal::derive(move || visible.with(Vec::len)) search=search title="No domains found" guidance="Add a hostname, prove DNS control and check routing and HTTPS before using it in a campaign."/></ManagementPage>}
 }
 pub(super) fn detail(api: Api, token: String, editing: bool) -> impl IntoView {
@@ -209,14 +217,14 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
             }
         });
     };
-    view! {<ManagementPage><a class="breadcrumb" href="/domains">"Back to domains"</a><PageHeader title=if id.is_some(){"Edit domain"}else{"Create domain"} subtitle=Signal::derive(move||if dirty.get(){"Unsaved changes"}else{"Verify domain control, routing and HTTPS before campaign use."}.to_owned())>
+    view! {<ManagementPage><BackLink href="/domains">"Back to domains"</BackLink><PageHeader title=if id.is_some(){"Edit domain"}else{"Create domain"} subtitle=Signal::derive(move||if dirty.get(){"Unsaved changes"}else{"Verify domain control, routing and HTTPS before campaign use."}.to_owned())>
     </PageHeader>{message.view()}<Show when=move||!loaded.get()&&!loading.get()><ActionButton on_click=move |_|reload.update(|n|*n+=1)>"Retry loading domain"</ActionButton></Show><form id="domain-form" on:submit=submit><FormFields disabled=Signal::derive(move||busy.get()||!loaded.get()||!can_edit)>
-        <Field label="Name"><input required maxlength="200" prop:value=move||name.get() on:input=move|e|name.set(event_target_value(&e))/></Field>
-        <Field label="Public HTTPS origin"><input type="url" required placeholder="https://training.example.com" readonly=id.is_some() prop:value=move||origin.get() on:input=move|e|origin.set(event_target_value(&e))/></Field>
+        <Field label="Name"><TextInput required=true maxlength=200 value=Signal::derive(move||name.get()) on_input=move|e|name.set(event_target_value(&e))/></Field>
+        <Field label="Public HTTPS origin"><TextInput input_type="url" required=true placeholder="https://training.example.com" readonly=id.is_some() value=Signal::derive(move||origin.get()) on_input=move|e|origin.set(event_target_value(&e))/></Field>
         <p>"Use the hostname participants will visit. Paths belong to the campaign. A saved hostname cannot be changed."</p>
-        <Field checkbox=true label="Enable this domain"><input type="checkbox" prop:checked=move||enabled.get() on:change=move|e|enabled.set(event_target_checked(&e))/></Field>
+        <Checkbox label="Enable this domain" checked=enabled on_toggle=Callback::new(move|v|enabled.set(v))/>
         <p>"Disabling stops new deliveries and public campaign handling for this domain. Existing campaign history is retained."</p>
-    </FormFields><FormFooter spread=true><ActionButton kind="button" style=ButtonStyle::Cancel disabled=Signal::derive(move||busy.get()) on_click=move |_|{loaded.set(false);cancel(&id.map(|id|format!("/domains/{id}")).unwrap_or_else(||"/domains".into()),Default::default());}>"Cancel changes"</ActionButton><SaveButton kind="submit" label=if id.is_some(){"Save changes"}else{"Create domain"} disabled=Signal::derive(move||busy.get()||!loaded.get()||!can_edit)/></FormFooter></form></ManagementPage>}
+    </FormFields><FormFooter spread=true><ActionButton kind="button" style=ButtonStyle::Ghost disabled=Signal::derive(move||busy.get()) on_click=move |_|{loaded.set(false);cancel(&id.map(|id|format!("/domains/{id}")).unwrap_or_else(||"/domains".into()),Default::default());}>"Cancel changes"</ActionButton><SaveButton kind="submit" label=if id.is_some(){"Save changes"}else{"Create domain"} disabled=Signal::derive(move||busy.get()||!loaded.get()||!can_edit)/></FormFooter></form></ManagementPage>}
 }
 fn show(api: Api, token: String, id: i64) -> impl IntoView {
     use ruphish_ui::domain_state::Details;
@@ -319,9 +327,9 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
             }
         });
     });
-    view! {<ManagementPage><a class="breadcrumb" href="/domains">"Back to domains"</a>
+    view! {<ManagementPage><BackLink href="/domains">"Back to domains"</BackLink>
         <PageHeader title=Signal::derive(move||domain.get().map(|d|d.name).unwrap_or_else(||"Domain".into())) subtitle=Signal::derive(move||domain.get().map(|d|d.origin).unwrap_or_else(||"Loading domain".into()))>
-            <ActionButton disabled=Signal::derive(move||busy.get()) busy=Signal::derive(move||detail.with(|s|s.reading.is_some()).to_string()) on_click=move |_|refresh.update(|v|*v+=1)>{move||if detail.with(|s|s.reading.is_some()){"Refreshing..."}else{"Refresh status"}}</ActionButton>
+            <ActionButton disabled=Signal::derive(move||busy.get()) busy=Signal::derive(move||detail.with(|s|s.reading.is_some()).to_string()) on_click=move |_|refresh.update(|v|*v+=1)>{move||if detail.with(|s|s.reading.is_some()){"Refreshing…"}else{"Refresh status"}}</ActionButton>
             {can_edit.then(||view!{<ActionButton style=ButtonStyle::Primary disabled=Signal::derive(move||busy.get()||domain.with(|d|d.as_ref().is_none_or(|d|!d.enabled||d.active_check.is_some()))) on_click=check>{move||if busy.get()&&!deleting.get(){"Requesting verification"}else{"Verify domain"}}</ActionButton><ActionLink href=format!("/domains/{id}/edit")>"Edit"</ActionLink><ActionButton style=ButtonStyle::Danger disabled=Signal::derive(move||busy.get()||domain.with(|d|d.as_ref().is_none_or(|d|d.campaigns>0))) on_click=move |_|deleting.set(true)>"Delete"</ActionButton>})}
         </PageHeader>{message.view()}
         {move||detail.with(|s|s.error.clone()).map(|error|view!{<p class="form-message error" role="alert">{error}</p>})}
@@ -336,14 +344,17 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
         })}
         {move||domain.get().map(|d|{
             let has_result=d.checked_at>0;
+            let domain_state=state(&d);
+            let domain_tone=status_tone(&d.status);
+            let checking=d.active_check.is_some();
             let control_result=check_result(&d,"control",d.control);
             let check_rows=[("DNS",d.dns,"Resolve to permitted destinations."),("Instance routing",d.routing,"Reach this Ruphish instance."),("HTTPS",d.tls,"Present a trusted certificate for this hostname.")].map(|(name,passed,help)|(name,check_result(&d,name,passed),help));
-            view!{<section class="resource-read-panel domain-context" aria-label="Domain status"><h2>"Domain status"</h2>
+            view!{<Card class="resource-read-panel domain-context" label="Domain status"><h2>"Domain status"</h2>
                 <p>{if !d.enabled {"Disabled: unavailable for campaigns."}else if d.eligible{"Available for campaigns."}else{"Unavailable for campaigns until verification passes."}}</p>
-                <dl class="resource-facts"><div><dt>"Status"</dt><dd>{state(&d)}</dd></div><div><dt>"Enabled"</dt><dd>{if d.enabled{"Yes"}else{"No"}}</dd></div><div><dt>"Last completed check"</dt><dd>{instant(d.checked_at)}</dd></div><div><dt>"Verified until"</dt><dd>{if d.verified_until>0{instant(d.verified_until)}else{"Not verified".into()}}</dd></div><div><dt>"Next automatic check"</dt><dd>{if !d.enabled{"Disabled".into()}else if d.active_check.is_some(){"After the active check finishes".into()}else{instant(d.next_check_at)}}</dd></div></dl>
-            </section><section class="resource-section"><h2>"Verification requirements"</h2>
+                <dl class="resource-facts"><div><dt>"Status"</dt><dd><StatusBadge tone=domain_tone>{domain_state}</StatusBadge></dd></div><div><dt>"Enabled"</dt><dd>{if d.enabled{"Yes"}else{"No"}}</dd></div><div><dt>"Last completed check"</dt><dd class="data-value">{instant(d.checked_at)}</dd></div><div><dt>"Verified until"</dt><dd>{if d.verified_until>0{instant(d.verified_until)}else{"Not verified".into()}}</dd></div><div><dt>"Next automatic check"</dt><dd>{if !d.enabled{"Disabled".into()}else if checking{"After the active check finishes".into()}else{instant(d.next_check_at)}}</dd></div></dl>
+            </Card><section class="resource-section"><h2>"Verification requirements"</h2>
                 <p>{format!("Used by {} campaigns. Verification checks DNS control, permitted destinations, instance routing and HTTPS.",d.campaigns)}</p>
-                {d.active_check.is_some().then(||view!{<p>"The table shows the previous completed result while verification is in progress."</p>})}
+                {checking.then(||view!{<p>"The table shows the previous completed result while verification is in progress."</p>})}
                 <DataTable label="Domain verification" class="domain-verification" headers=vec!["Check","Latest result","Requirement","DNS record"]>
                     <tr><th scope="row">"Domain control"</th><td>{control_result}</td><td>"Publish this TXT record at your DNS provider and keep it for periodic checks."</td><td><div class="domain-copy-actions"><CopyButton label="record name" value=d.txt_name.clone() message=message/><CopyButton label="TXT value" value=d.txt_value.clone() message=message/></div></td></tr>
                     {check_rows.into_iter().map(|(name,result,help)|view!{<tr><th scope="row">{name}</th><td>{result}</td><td>{help}</td><td></td></tr>}).collect_view()}
@@ -352,7 +363,7 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
             </section>
             <section class="resource-section domain-history"><h2>"Verification history"</h2><p>"Latest ten completed checks. A failed or timed-out check immediately makes the domain unavailable for campaigns."</p>
                 <DataTable label="Verification history" headers=vec!["Finished","Outcome","Duration","Details"]>
-                    {d.history.into_iter().map(|r|view!{<tr><td>{r.finished_at.map(instant).unwrap_or_else(||"Not recorded".into())}</td><td><span class=format!("domain-outcome domain-outcome-{}",r.state)>{outcome(&r.state)}</span></td><td>{match(r.started_at,r.finished_at){(Some(start),Some(end))=>format!("{} seconds",(end-start).max(0)),_=>"Not recorded".into()}}</td><td>{check_explanation(&r.code)}</td></tr>}).collect_view()}
+                    {d.history.into_iter().map(|r|view!{<tr><td class="data-value">{r.finished_at.map(instant).unwrap_or_else(||"Not recorded".into())}</td><td><StatusBadge tone=status_tone(&r.state)>{outcome(&r.state)}</StatusBadge></td><td>{match(r.started_at,r.finished_at){(Some(start),Some(end))=>format!("{} seconds",(end-start).max(0)),_=>"Not recorded".into()}}</td><td>{check_explanation(&r.code)}</td></tr>}).collect_view()}
                 </DataTable>
                 {(!has_result).then(||view!{<p>"No completed checks yet."</p>})}
             </section>}

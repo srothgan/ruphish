@@ -1,3 +1,4 @@
+use super::TextInput;
 use super::{ActionButton, EmptyState, Field, FormFooter};
 use leptos::prelude::*;
 
@@ -11,8 +12,8 @@ pub(crate) fn ListToolbar(
 ) -> impl IntoView {
     view! {
         <div class="management-toolbar">
-            <Field label=label><input type="search" prop:value=move || search.get()
-                on:input=move |event| search.set(event_target_value(&event))/></Field>
+            <Field label=label><TextInput input_type="search" value=Signal::derive(move || search.get())
+                on_input=move |event| search.set(event_target_value(&event))/></Field>
             <span>{move || format!("{} {noun}", count.get())}</span>
         </div>
     }
@@ -40,8 +41,12 @@ pub(crate) fn DataTable(
     headers: Vec<&'static str>,
     children: Children,
     #[prop(default = "")] class: &'static str,
+    /// Hide the column headers when there are no rows, so their full-width rule
+    /// does not overhang a rounded empty-state card rendered below.
+    #[prop(into, optional)]
+    empty: Signal<bool>,
 ) -> impl IntoView {
-    view! { <div class="management-table-wrap"><table class=format!("management-table {class}") aria-label=label>
+    view! { <div class="management-table-wrap"><table class=format!("management-table {class}") class:is-empty=move || empty.get() aria-label=label>
         <thead><tr>{headers.into_iter().map(|name| view!{<th scope="col">{name}</th>}).collect_view()}</tr></thead>
         <tbody>{children()}</tbody>
     </table></div> }

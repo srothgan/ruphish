@@ -1,5 +1,5 @@
 //! Stable recipient rows with an independently loaded, expandable history panel.
-use crate::shared::components::{ActionButton, ButtonStyle};
+use crate::shared::components::{ActionButton, ButtonStyle, StatusBadge, StatusTone};
 use crate::{
     account::{Api, copy_text},
     campaigns::{array, instant, text},
@@ -74,19 +74,19 @@ pub(super) fn recipient_row(
                 <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m7 4 6 6-6 6"/></svg>
             </button></td>
             <th scope="row">{move||text(&row.get(),"email")}</th>
-            <td><span class=move||format!("delivery-status {}",tone(&text(&row.get(),"state")))>{move||outcome(&text(&row.get(),"state"))}</span><small class="delivery-code">{move||text(&row.get(),"code")}</small></td>
+            <td><StatusBadge tone=Signal::derive(move||status_tone(&text(&row.get(),"state")))>{move||outcome(&text(&row.get(),"state"))}</StatusBadge><small class="delivery-code">{move||text(&row.get(),"code")}</small></td>
             <td>{move||instant(&row.get()["due"])}</td>
             <td><span>{move||{let count=row.get()["attempt_count"].as_u64().unwrap_or(0);format!("{count} recorded {}",if count==1{"attempt"}else{"attempts"})}}</span>
                 <div class="recipient-actions">
                 <Show when=move||controls.can_edit&&matches!(text(&row.get(),"state").as_str(),"failed"|"blocked")><ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|action.set(Some(("retry".into(),row.get_untracked())))>"Retry after correction"</ActionButton></Show>
-                <Show when=move||controls.can_edit&&text(&row.get(),"state")=="unknown"><ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|action.set(Some(("confirm_accepted".into(),row.get_untracked())))>"Confirm accepted"</ActionButton><ActionButton style=ButtonStyle::Cancel disabled=Signal::derive(move||busy.get()) on_click=move |_|action.set(Some(("resend_unknown".into(),row.get_untracked())))>"Resend despite uncertainty"</ActionButton></Show>
+                <Show when=move||controls.can_edit&&text(&row.get(),"state")=="unknown"><ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|action.set(Some(("confirm_accepted".into(),row.get_untracked())))>"Confirm accepted"</ActionButton><ActionButton style=ButtonStyle::Ghost disabled=Signal::derive(move||busy.get()) on_click=move |_|action.set(Some(("resend_unknown".into(),row.get_untracked())))>"Resend despite uncertainty"</ActionButton></Show>
                 </div>
             </td>
         </tr>
         <tr class="recipient-history-row" hidden=move||!open.get()><td colspan="5">
             <section id=panel_id aria-labelledby=button_id class="recipient-history" aria-busy=move||history.with(History::loading).to_string()>
                 <div class="recipient-history-heading"><h3>"Recipient history"</h3><span>"Times shown in your browser's time zone"</span></div>
-                <Show when=move||history.with(History::loading)><p role="status">"Loading history..."</p></Show>
+                <Show when=move||history.with(History::loading)><p role="status">"Loading history…"</p></Show>
                 {move||history.get().error.map(|error|view!{<div class="form-message error" role="alert"><p>{error}</p><ActionButton kind="button" on_click=move |_|fetch(tasks,api,campaign,result,history,history.get_untracked().retry_older)>"Retry history"</ActionButton></div>})}
                 <div class="recipient-history-columns">
                     <section class="recipient-timeline"><h4>"Timeline"</h4><ol class="delivery-timeline">
@@ -110,12 +110,22 @@ fn attempt_details(a: Value, copied: RwSignal<String>) -> impl IntoView {
     let state = text(&a, "state");
     let stage = text(&a, "stage");
     view! {<article class="delivery-attempt"><h5>{format!("Attempt {}",a["generation"])}</h5>
-        <span class=format!("delivery-status {}",tone(&state))>{outcome(&state)}</span>
-        <dl class="attempt-facts"><div><dt>"Started"</dt><dd>{instant(&a["started"])}</dd></div>
-            {a["finished"].as_i64().map(|at|view!{<div><dt>"Finished"</dt><dd>{instant(&Value::from(at))}</dd></div>})}
+        <StatusBadge tone=status_tone(&state)>{outcome(&state)}</StatusBadge>
+        <dl class="attempt-facts"><div><dt>"Started"</dt><dd class="data-value">{instant(&a["started"])}</dd></div>
+            {a["finished"].as_i64().map(|at|view!{<div><dt>"Finished"</dt><dd class="data-value">{instant(&Value::from(at))}</dd></div>})}
             {(!stage.is_empty()).then(||view!{<div><dt>"Protocol stage"</dt><dd>{stage}</dd></div>})}
             {a["smtp_code"].as_u64().map(|code|view!{<div><dt>"SMTP response"</dt><dd>{code}</dd></div>})}
             {(!message_id.is_empty()).then(||view!{<div class="attempt-message-id"><dt>"Message-ID"</dt><dd><code>{message_id}</code><ActionButton kind="button" on_click=move |_|{let value=copy_id.clone();spawn_local(async move {copied.set(match copy_text(&value).await {Ok(())=>"Message-ID copied.".into(),Err(_)=>"Copy unavailable. Select the Message-ID and copy it manually.".into()});});}>"Copy"</ActionButton></dd></div>})}
         </dl>
     </article>}
+}
+
+fn status_tone(state: &str) -> StatusTone {
+    match tone(state) {
+        "success" => StatusTone::Positive,
+        "failure" => StatusTone::Negative,
+        "warning" => StatusTone::Warning,
+        "active" => StatusTone::Active,
+        _ => StatusTone::Neutral,
+    }
 }

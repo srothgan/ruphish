@@ -1,10 +1,7 @@
 //! Separate user list and form routes; account APIs remain the authorization boundary.
 use super::{Api, navigate};
 use crate::feedback::Message;
-use crate::shared::components::{
-    ActionButton, ActionLink, ButtonStyle, DataTable, DeleteConfirmation, Field, FormFields,
-    FormFooter, ListEmptyState, ListToolbar, ManagementPage, PageHeader, SaveButton,
-};
+use crate::shared::components::*;
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use ruphish_contracts::auth::{User, UserEdit};
 
@@ -148,23 +145,23 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
         });
     };
     view! {<ManagementPage>
-        <a class="breadcrumb" href="/users">"Back to users"</a>
+        <BackLink href="/users">"Back to users"</BackLink>
         <PageHeader title=if id.is_some(){"Edit user".to_owned()}else{"New user".to_owned()}
-            status=true subtitle=Signal::derive(move || if busy.get(){"Saving..."}else if loading.get(){"Loading user..."}else if !loaded.get(){"User could not be loaded"}else if dirty.get(){"Unsaved changes"}else if id.is_none(){"Not saved yet"}else{"No unsaved changes"}.to_owned())>
+            status=true subtitle=Signal::derive(move || if busy.get(){"Saving…"}else if loading.get(){"Loading user…"}else if !loaded.get(){"User could not be loaded"}else if dirty.get(){"Unsaved changes"}else if id.is_none(){"Not saved yet"}else{"No unsaved changes"}.to_owned())>
             <SaveButton kind="submit" form="user-form" disabled=Signal::derive(move || busy.get() || !loaded.get())
-                label=Signal::derive(move || if busy.get(){"Saving..."}else if id.is_some(){"Save changes"}else{"Create user"}.to_owned())/>
+                label=Signal::derive(move || if busy.get(){"Saving…"}else if id.is_some(){"Save changes"}else{"Create user"}.to_owned())/>
         </PageHeader>
         {message.view()}
         <Show when=move||!loaded.get()&&!loading.get()><ActionButton on_click=move |_|reload.update(|n|*n+=1)>"Retry loading user"</ActionButton></Show>
         <form id="user-form" on:submit=submit>
             <FormFields disabled=Signal::derive(move || busy.get() || !loaded.get())>
-                <Field label="Username"><input autocomplete="off" required prop:value=move||username.get() on:input=move|e|username.set(event_target_value(&e))/></Field>
-                <Field label=if id.is_some(){"New password (leave empty to keep current)"}else{"Temporary password"}><input type="password" autocomplete="new-password" required=id.is_none() prop:value=move||password.get() on:input=move|e|password.set(event_target_value(&e))/></Field>
-                <Field label="Role"><select prop:value=move||role.get() on:change=move|e|role.set(event_target_value(&e))><option value="user">"User"</option><option value="admin">"Administrator"</option>{move||{let slug=role.get();(!matches!(slug.as_str(),"user"|"admin")).then(||view!{<option value=slug.clone()>{slug.clone()}</option>})}}</select></Field>
-                <Field label="Require password change" checkbox=true><input type="checkbox" prop:checked=move||reset.get() on:change=move|e|reset.set(event_target_checked(&e))/></Field>
-                <Field label="Lock account" checkbox=true><input type="checkbox" prop:checked=move||locked.get() on:change=move|e|locked.set(event_target_checked(&e))/></Field>
+                <Field label="Username"><TextInput autocomplete="off" required=true value=Signal::derive(move||username.get()) on_input=move|e|username.set(event_target_value(&e))/></Field>
+                <Field label=if id.is_some(){"New password (leave empty to keep current)"}else{"Temporary password"}><TextInput input_type="password" autocomplete="new-password" required=id.is_none() value=Signal::derive(move||password.get()) on_input=move|e|password.set(event_target_value(&e))/></Field>
+                <Select label="Role" value=role on_change=Callback::new(move|v|role.set(v))><option value="user">"User"</option><option value="admin">"Administrator"</option>{move||{let slug=role.get();(!matches!(slug.as_str(),"user"|"admin")).then(||view!{<option value=slug.clone()>{slug.clone()}</option>})}}</Select>
+                <Checkbox label="Require password change" checked=reset on_toggle=Callback::new(move|v|reset.set(v))/>
+                <Checkbox label="Lock account" checked=locked on_toggle=Callback::new(move|v|locked.set(v))/>
             </FormFields>
-            <FormFooter><ActionButton kind="button" style=ButtonStyle::Cancel disabled=Signal::derive(move||busy.get()) on_click=move |_|{password.set(String::new());loaded.set(false);cancel_navigation("/users",Default::default());}>"Cancel changes"</ActionButton></FormFooter>
+            <FormFooter><ActionButton kind="button" style=ButtonStyle::Ghost disabled=Signal::derive(move||busy.get()) on_click=move |_|{password.set(String::new());loaded.set(false);cancel_navigation("/users",Default::default());}>"Cancel changes"</ActionButton></FormFooter>
         </form>
     </ManagementPage>}
 }
@@ -253,14 +250,14 @@ fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
         <PageHeader title="Users".to_owned() subtitle="Manage access, roles and account status.".to_owned()><ActionLink style=ButtonStyle::Primary href="/users/new">"Create user"</ActionLink></PageHeader>
         {message.view()}
         <ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) label="Search by username" noun="users"/>
-        <Show when=move||!loaded.get()><p role="status">"Loading users..."</p></Show>
+        <Show when=move||!loaded.get()><p role="status">"Loading users…"</p></Show>
         <Show when=move||loaded.get()&&failed.get()><ActionButton kind="button" on_click=move |_|refresh()>"Retry loading users"</ActionButton></Show>
-        <DataTable label="Users" headers=vec!["User","Role","Status","Actions"]>
+        <DataTable label="Users" empty=Signal::derive(move || visible.with(Vec::is_empty)) headers=vec!["User","Role","Status","Actions"]>
         {move || visible.get().into_iter().map(|user| { let id = user.id; let delete_name = user.username.clone(); let impersonate_name = user.username.clone(); let own_account = id == current_user; let can_impersonate = !user.account_locked && !user.password_change_required;
             view! { <tr><th scope="row"><a href=format!("/users/{id}/edit")>{user.username}</a></th><td>{user.role.name}</td><td>{if user.account_locked { "Locked" } else if user.password_change_required { "Password setup" } else { "Active" }}</td><td><div class="row-actions">
                 <a href=format!("/users/{id}/edit")>"Edit"</a>
                 <ActionButton disabled=Signal::derive(move||!can_impersonate||busy.get()) on_click=move |_| { if busy.get_untracked(){return;} busy.set(true); let name = impersonate_name.clone(); tasks.spawn(async move { match api.form("/impersonate", &token.get_value(), &[("username",name)]).await { Ok(_) => navigate("/"), Err(error) => message.error(error) } busy.set(false); }); }>"View as"</ActionButton>
-                <ActionButton style=ButtonStyle::Cancel disabled=Signal::derive(move||own_account||busy.get()) title=if own_account { "You cannot delete your own account" } else { "Delete this user" } on_click=move |_| {message.clear();deleting.set(Some((id,delete_name.clone())))}>"Delete"</ActionButton></div></td></tr> }
+                <ActionButton style=ButtonStyle::Ghost size=ControlSize::Small disabled=Signal::derive(move||own_account||busy.get()) title=if own_account { "You cannot delete your own account" } else { "Delete this user" } on_click=move |_| {message.clear();deleting.set(Some((id,delete_name.clone())))}>"Delete"</ActionButton></div></td></tr> }
         }).collect_view()}
         </DataTable>
         <ListEmptyState ready=Signal::derive(move || loaded.get() && !failed.get()) count=Signal::derive(move || visible.with(Vec::len)) search=search title="No users found" guidance="Create a user to get started."/>

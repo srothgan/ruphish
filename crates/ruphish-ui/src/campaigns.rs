@@ -75,7 +75,7 @@ fn list_mode(api: Api, analysis: bool) -> impl IntoView {
         <ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|refresh.update(|v|*v+=1)>"Refresh"</ActionButton>
         <ActionLink style=ButtonStyle::Primary hidden={ !can_edit || analysis } href="/campaigns/new">"Create campaign"</ActionLink>
     </PageHeader>{message.view()}<Show when=move||busy.get()><p role="status">"Loading campaigns…"</p></Show>
-    <DataTable label="Campaigns" headers=vec!["Campaign","Lifecycle","Recipients","Launch"]>
+    <DataTable label="Campaigns" empty=Signal::derive(move||rows.get().is_empty()) headers=vec!["Campaign","Lifecycle","Recipients","Launch"]>
         {move||rows.get().into_iter().filter(|_|pages.with(CursorPages::loaded)).map(|r|view!{<tr><th scope="row"><a href=format!("/{}/{}",if analysis { "analysis" } else { "campaigns" },r["id"])>{text(&r,"name")}</a></th><td>{text(&r,"status")}</td><td>{r["total"].to_string()}</td><td>{text(&r,"launch_date")}</td></tr>}).collect_view()}
     </DataTable><Show when=move||!busy.get()&&!failed.get()&&rows.get().is_empty()><EmptyState title="No campaigns on this page"><p>"Create a campaign to select an audience, review content and choose a schedule."</p></EmptyState></Show>
     <PageControls pages=pages disabled=Signal::derive(move||busy.get())/>
@@ -96,7 +96,7 @@ pub(super) fn detail(api: Api, token: String) -> impl IntoView {
     }/>}
 }
 fn input(draft: RwSignal<Draft>, key: &'static str, label: &'static str) -> impl IntoView {
-    view! {<Field label=label><input prop:value=move||text(&draft.get().value,key) on:input=move|e|draft.update(|d|d.edit(|v|v[key]=json!(event_target_value(&e))))/></Field>}
+    view! {<Field label=label><TextInput value=Signal::derive(move||text(&draft.get().value,key)) on_input=move|e|draft.update(|d|d.edit(|v|v[key]=json!(event_target_value(&e))))/></Field>}
 }
 fn selector(
     draft: RwSignal<Draft>,
@@ -104,9 +104,9 @@ fn selector(
     kind: &'static str,
     label: &'static str,
 ) -> impl IntoView {
-    view! {<Field label=label><select prop:value=move||draft.get().value["selection"][kind]["id"].to_string() on:change=move|e|{let id=event_target_value(&e).parse::<i64>().unwrap_or(0);draft.update(|d|d.edit(|v|v["selection"][kind]=json!({"id":id})));}>
+    view! {<Select label=label value=Signal::derive(move||draft.get().value["selection"][kind]["id"].to_string()) on_change=Callback::new(move|v:String|{let id=v.parse::<i64>().unwrap_or(0);draft.update(|d|d.edit(|node|node["selection"][kind]=json!({"id":id})));})>
         <option value="0">"Choose a resource"</option>{move||array(&resources.get(),kind).into_iter().map(|r|view!{<option value=r["id"].to_string()>{text(&r,"name")}</option>}).collect_view()}
-    </select></Field>}
+    </Select>}
 }
 fn domain_selector(draft: RwSignal<Draft>, resources: RwSignal<Value>) -> impl IntoView {
     let selected = move || {
@@ -131,10 +131,8 @@ fn domain_selector(draft: RwSignal<Draft>, resources: RwSignal<Value>) -> impl I
             format!("/{suffix}")
         }
     };
-    view! {<div><Field label="Verified domain"><select prop:value=selected on:change=move|e|{
-        let origin=event_target_value(&e);let path=path();draft.update(|d|d.edit(|v|v["url"]=json!(format!("{origin}{path}"))));
-    }><option value="">"Choose a verified domain"</option>{move||array(&resources.get(),"domains").into_iter().map(|d|view!{<option value=text(&d,"origin")>{format!("{} ({})",text(&d,"name"),text(&d,"hostname"))}</option>}).collect_view()}</select></Field>
-    <Field label="Landing path (optional)"><input prop:value=path on:input=move|e|{let path=event_target_value(&e);let origin=selected();let path=if path.starts_with('/'){path}else{format!("/{path}")};draft.update(|d|d.edit(|v|v["url"]=json!(format!("{origin}{path}"))));}/></Field>
+    view! {<div><Select label="Verified domain" value=Signal::derive(selected) on_change=Callback::new(move|origin:String|{let path=path();draft.update(|d|d.edit(|node|node["url"]=json!(format!("{origin}{path}"))));})><option value="">"Choose a verified domain"</option>{move||array(&resources.get(),"domains").into_iter().map(|d|view!{<option value=text(&d,"origin")>{format!("{} ({})",text(&d,"name"),text(&d,"hostname"))}</option>}).collect_view()}</Select>
+    <Field label="Landing path (optional)"><TextInput value=path on_input=move|e|{let path=event_target_value(&e);let origin=selected();let path=if path.starts_with('/'){path}else{format!("/{path}")};draft.update(|d|d.edit(|v|v["url"]=json!(format!("{origin}{path}"))));}/></Field>
     <p>{move||text(&draft.get().value,"url")}</p><a href="/domains" target="_blank" rel="noopener">"Manage and verify domains"</a></div>}
 }
 fn load_page_defaults(
@@ -172,15 +170,14 @@ fn page_selector(
     resources: RwSignal<Value>,
     message: Message,
 ) -> impl IntoView {
-    view! {<Field label="Landing page"><select prop:value=move||draft.get().value["selection"]["page"]["id"].to_string() on:change=move|e|load_page_defaults(tasks,api,draft,event_target_value(&e).parse::<i64>().unwrap_or(0),message)>
+    view! {<Select label="Landing page" value=Signal::derive(move||draft.get().value["selection"]["page"]["id"].to_string()) on_change=Callback::new(move|v:String|load_page_defaults(tasks,api,draft,v.parse::<i64>().unwrap_or(0),message))>
         <option value="0">"Choose a resource"</option>{move||array(&resources.get(),"page").into_iter().map(|r|view!{<option value=r["id"].to_string()>{text(&r,"name")}</option>}).collect_view()}
-    </select></Field>}
+    </Select>}
 }
 fn flag(draft: RwSignal<Draft>, key: &'static str, label: &'static str) -> impl IntoView {
-    view! {<Field checkbox=true label=label><input type="checkbox" prop:checked=move||draft.get().value["policy"][key].as_bool().unwrap_or(false) on:change=move|e|{
-        let checked=event_target_checked(&e);
-        draft.update(|d|d.set_tracking(key=="capture_passwords",checked));
-    }/></Field>}
+    view! {<Checkbox label=label
+    checked=Signal::derive(move||draft.get().value["policy"][key].as_bool().unwrap_or(false))
+    on_toggle=Callback::new(move|checked|draft.update(|d|d.set_tracking(key=="capture_passwords",checked)))/>}
 }
 fn schedule(
     draft: RwSignal<Draft>,
@@ -189,8 +186,8 @@ fn schedule(
     zone: StoredValue<String>,
 ) -> impl IntoView {
     view! {<section class="resource-section"><h2>{label}</h2><p>"Leave blank for no explicit time. Daylight-saving changes are handled automatically; review shows the scheduled instant."</p>
-        <div class="resource-columns"><Field label="Local date and time"><input type="datetime-local" prop:value=move||text(&draft.get().value[key],"local") on:input=move|e|{let local=event_target_value(&e);draft.update(|d|d.edit(|v|{if local.is_empty(){if let Some(v)=v.as_object_mut(){v.remove(key);}}else{let selected_zone=v[key]["time_zone"].as_str().unwrap_or(&zone.get_value()).to_owned();v[key]=json!({"local":local,"time_zone":selected_zone});}}));}/></Field>
-        <Field label="Time zone"><input disabled=move||draft.get().value[key].is_null() placeholder=zone.get_value() prop:value=move||text(&draft.get().value[key],"time_zone") on:input=move|e|draft.update(|d|d.edit(|v|v[key]["time_zone"]=json!(event_target_value(&e))))/></Field></div>
+        <div class="resource-columns"><Field label="Local date and time"><TextInput input_type="datetime-local" value=Signal::derive(move||text(&draft.get().value[key],"local")) on_input=move|e|{let local=event_target_value(&e);draft.update(|d|d.edit(|v|{if local.is_empty(){if let Some(v)=v.as_object_mut(){v.remove(key);}}else{let selected_zone=v[key]["time_zone"].as_str().unwrap_or(&zone.get_value()).to_owned();v[key]=json!({"local":local,"time_zone":selected_zone});}}));}/></Field>
+        <Field label="Time zone"><TextInput disabled=Signal::derive(move||draft.get().value[key].is_null()) placeholder=zone.get_value() value=Signal::derive(move||text(&draft.get().value[key],"time_zone")) on_input=move|e|draft.update(|d|d.edit(|v|v[key]["time_zone"]=json!(event_target_value(&e))))/></Field></div>
     </section>}
 }
 fn create(api: Api, token: String, initial: Option<Value>) -> impl IntoView {
@@ -344,32 +341,32 @@ fn create(api: Api, token: String, initial: Option<Value>) -> impl IntoView {
             busy.set(false);
         });
     };
-    view! {<ManagementPage><a class="breadcrumb" href="/campaigns">"Back to campaigns"</a><PageHeader title="Create campaign" subtitle="Review the audience, content and schedule before launching."><span>"Unsaved draft"</span><ActionButton disabled=Signal::derive(move||busy.get()||loading.get()||draft.with(|d|d.launch.is_some())) on_click=move |_|reload.update(|v|*v+=1)>"Refresh resources"</ActionButton></PageHeader>
+    view! {<ManagementPage><BackLink href="/campaigns">"Back to campaigns"</BackLink><PageHeader title="Create campaign" subtitle="Review the audience, content and schedule before launching."><span>"Unsaved draft"</span><ActionButton disabled=Signal::derive(move||busy.get()||loading.get()||draft.with(|d|d.launch.is_some())) on_click=move |_|reload.update(|v|*v+=1)>"Refresh resources"</ActionButton></PageHeader>
         {message.view()}<Show when=move||loading.get()><p role="status">"Loading resources…"</p></Show>
         <ol class="campaign-steps">{["Audience","Content and destination","Schedule","Review and launch"].into_iter().enumerate().map(|(index,label)|view!{<li aria-current=move||(step.get()==index).then_some("step")>{label}</li>}).collect_view()}</ol>
         <FormFields disabled=Signal::derive(move||busy.get()||loading.get()||!can_edit||draft.with(|d|d.launch.is_some()))>
         <section hidden=move||step.get()!=0><h2>"Audience"</h2>{input(draft,"name","Campaign name")}
         <p>"Choose recipient groups. Overlaps are counted once by exact email address; the first selected group supplies recipient details."</p>
-        {move||array(&resources.get(),"groups").into_iter().map(|r|{let id=r["id"].as_i64().unwrap_or(0);view!{<Field checkbox=true label=format!("{} ({} recipients)",text(&r,"name"),r["num_targets"])><input type="checkbox" prop:checked=move||draft.with(|d|array(&d.value["selection"],"groups").iter().any(|r|r["id"]==id)) on:change=move|e|{let checked=event_target_checked(&e);draft.update(|d|d.edit(|v|{let mut groups=array(&v["selection"],"groups");groups.retain(|r|r["id"]!=id);if checked{groups.push(json!({"id":id}));}v["selection"]["groups"]=json!(groups);}));}/></Field>}}).collect_view()}
+        {move||array(&resources.get(),"groups").into_iter().map(|r|{let id=r["id"].as_i64().unwrap_or(0);view!{<Checkbox label=format!("{} ({} recipients)",text(&r,"name"),r["num_targets"]) checked=Signal::derive(move||draft.with(|d|array(&d.value["selection"],"groups").iter().any(|r|r["id"]==id))) on_toggle=Callback::new(move|checked|draft.update(|d|d.edit(|v|{let mut groups=array(&v["selection"],"groups");groups.retain(|r|r["id"]!=id);if checked{groups.push(json!({"id":id}));}v["selection"]["groups"]=json!(groups);})))/>}}).collect_view()}
         <a href="/groups/new" target="_blank" rel="noopener">"Create a group in a new tab"</a></section>
         <section hidden=move||step.get()!=1><h2>"Content and destination"</h2><div class="resource-columns">{selector(draft,resources,"template","Email template")}{selector(draft,resources,"smtp","Sending profile")}{page_selector(tasks,api,draft,resources,message)}{domain_selector(draft,resources)}</div>
         <ul class="campaign-resource-links" aria-label="Create resources in a new tab"><li><a href="/templates/new" target="_blank" rel="noopener">"Create template"</a></li><li><a href="/pages/new" target="_blank" rel="noopener">"Create landing page"</a></li><li><a href="/smtp/new" target="_blank" rel="noopener">"Create sending profile"</a></li></ul><p class="resource-usage">"Changes to saved templates or sending profiles can affect scheduled emails and retries in existing campaigns."</p>
         <section class="resource-section"><h2>"Event tracking and redirect (optional)"</h2><p>"Selecting a landing page fills these fields with its defaults. Edit them for this campaign; choosing another page replaces them with that page's defaults."</p><p>"Track submission and password presence only. Entered usernames, passwords and other form values are never collected."</p>
-        <Show when=move||draft.with(|d|d.page_request.is_some())><p role="status">"Loading landing-page defaults..."</p></Show><Show when=move||draft.with(|d|d.page_request.is_none()&&!d.policy_ready())><ActionButton kind="button" on_click=move |_|load_page_defaults(tasks,api,draft,draft.get_untracked().value["selection"]["page"]["id"].as_i64().unwrap_or(0),message)>"Retry loading defaults"</ActionButton></Show><FormFields disabled=Signal::derive(move||!draft.with(Draft::policy_ready))>{flag(draft,"capture_credentials","Record form submission")}{flag(draft,"capture_passwords","Record password presence")}
-        <Field label="Redirect URL (optional; leave empty for no redirect)"><input prop:value=move||text(&draft.get().value["policy"],"redirect_url") on:input=move|e|draft.update(|d|d.edit(|v|v["policy"]["redirect_url"]=json!(event_target_value(&e))))/></Field></FormFields></section></section>
+        <Show when=move||draft.with(|d|d.page_request.is_some())><p role="status">"Loading landing-page defaults…"</p></Show><Show when=move||draft.with(|d|d.page_request.is_none()&&!d.policy_ready())><ActionButton kind="button" on_click=move |_|load_page_defaults(tasks,api,draft,draft.get_untracked().value["selection"]["page"]["id"].as_i64().unwrap_or(0),message)>"Retry loading defaults"</ActionButton></Show><FormFields disabled=Signal::derive(move||!draft.with(Draft::policy_ready))>{flag(draft,"capture_credentials","Record form submission")}{flag(draft,"capture_passwords","Record password presence")}
+        <Field label="Redirect URL (optional; leave empty for no redirect)"><TextInput value=Signal::derive(move||text(&draft.get().value["policy"],"redirect_url")) on_input=move|e|draft.update(|d|d.edit(|v|v["policy"]["redirect_url"]=json!(event_target_value(&e))))/></Field></FormFields></section></section>
         <section hidden=move||step.get()!=2>{schedule(draft,"launch_local","Launch time",zone)}{schedule(draft,"send_by_local","Initial distribution end (optional)",zone)}<p>"With no launch time, delivery starts after launch. The distribution end spaces initial attempts; retries may continue afterward. SMTP acceptance does not guarantee inbox delivery."</p></section>
         <section hidden=move||step.get()!=3 aria-busy=move||draft.with(|d|d.review_request.is_some()).to_string()><h2>"Review"</h2><p>"Check the validated audience, content and schedule before launching."</p>
-        <Show when=move||draft.with(|d|d.review_request.is_some())><p role="status">"Validating campaign and preparing preview..."</p></Show>
+        <Show when=move||draft.with(|d|d.review_request.is_some())><p role="status">"Validating campaign and preparing preview…"</p></Show>
         <Show when=move||!loading.get()&&!draft.with(Draft::policy_ready)><p role="status">"Landing-page defaults must finish loading before review. If loading failed, return to Content and destination to retry."</p></Show>
         {move||draft.get().review_error.map(|error|view!{<div class="form-message error" role="alert"><p>{error}</p><p>"Go back to correct the campaign, or retry if the request failed."</p><ActionButton kind="button" on_click=move |_|retry_review.update(|n|*n+=1)>"Retry validation"</ActionButton></div>})}
         {move||draft.get().review.map(|r|view!{<div class="campaign-review"><h3>{format!("{} unique recipients",r["total"])}</h3><p>{format!("{} overlapping recipient entries removed",r["duplicate_count"])}</p>
         {(r["conflict_count"].as_u64().unwrap_or(0)>0).then(||view!{<details><summary>{format!("{} conflicting duplicate entries; first group wins",r["conflict_count"])}</summary><p>"Showing up to 100 conflicts. Review the retained and discarded recipient attributes."</p><ul>{array(&r,"conflicts").into_iter().map(|c|view!{<li>{format!("{}: retained {}; discarded {}",text(&c,"email"),c["kept"],c["discarded"])}</li>}).collect_view()}</ul></details>})}
         <dl class="resource-facts">{["template","page","smtp"].into_iter().map(|key|view!{<div><dt>{key}</dt><dd><a target="_blank" rel="noopener" href=format!("/{}/{}",match key{"template"=>"templates","page"=>"pages",_=>"smtp"},r["selection"][key]["id"])>{text(&r["selection"][key],"name")}</a></dd></div>}).collect_view()}
-        <div><dt>"Launch"</dt><dd>{instant(&r["launch_date"])}</dd></div><div><dt>"Distribution end"</dt><dd>{instant(&r["send_by_date"])}</dd></div><div><dt>"Submission tracking"</dt><dd>{r["policy"]["capture_credentials"].to_string()}</dd></div><div><dt>"Password presence only"</dt><dd>{r["policy"]["capture_passwords"].to_string()}</dd></div><div><dt>"Redirect"</dt><dd>{text(&r["policy"],"redirect_url")}</dd></div></dl>
-        <section class="resource-section"><h3>"Rendered sample"</h3><p>"Uses the first recipient's details. Test emails use Sample Recipient. Preview links are inactive and no interaction events are generated."</p><dl class="resource-facts"><div><dt>"Visible From"</dt><dd>{text(&r["preview"],"visible_sender")}</dd></div><div><dt>"Transport sender"</dt><dd>{text(&r["preview"],"transport_sender")}</dd></div><div><dt>"Subject"</dt><dd>{text(&r["preview"],"subject")}</dd></div></dl><iframe class="saved-content-preview" title="Rendered email sample" sandbox="" referrerpolicy="no-referrer" srcdoc=ruphish_ui::preview_document(&text(&r["preview"],"html"))></iframe><details><summary>"Plain text"</summary><pre>{text(&r["preview"],"text")}</pre></details><Field label="Test recipient email"><input type="email" prop:value=move||recipient.get() on:input=move|e|recipient.set(event_target_value(&e))/></Field><ActionButton disabled=Signal::derive(move||busy.get()||recipient.get().is_empty()) on_click=send_test>"Send test email"</ActionButton></section>
+        <div><dt>"Launch"</dt><dd class="data-value">{instant(&r["launch_date"])}</dd></div><div><dt>"Distribution end"</dt><dd class="data-value">{instant(&r["send_by_date"])}</dd></div><div><dt>"Submission tracking"</dt><dd>{r["policy"]["capture_credentials"].to_string()}</dd></div><div><dt>"Password presence only"</dt><dd>{r["policy"]["capture_passwords"].to_string()}</dd></div><div><dt>"Redirect"</dt><dd>{text(&r["policy"],"redirect_url")}</dd></div></dl>
+        <section class="resource-section"><h3>"Rendered sample"</h3><p>"Uses the first recipient's details. Test emails use Sample Recipient. Preview links are inactive and no interaction events are generated."</p><dl class="resource-facts"><div><dt>"Visible From"</dt><dd>{text(&r["preview"],"visible_sender")}</dd></div><div><dt>"Transport sender"</dt><dd>{text(&r["preview"],"transport_sender")}</dd></div><div><dt>"Subject"</dt><dd>{text(&r["preview"],"subject")}</dd></div></dl><iframe class="saved-content-preview" title="Rendered email sample" sandbox="" referrerpolicy="no-referrer" srcdoc=ruphish_ui::preview_document(&text(&r["preview"],"html"))></iframe><details><summary>"Plain text"</summary><pre>{text(&r["preview"],"text")}</pre></details><Field label="Test recipient email"><TextInput input_type="email" value=Signal::derive(move||recipient.get()) on_input=move|e|recipient.set(event_target_value(&e))/></Field><ActionButton disabled=Signal::derive(move||busy.get()||recipient.get().is_empty()) on_click=send_test>"Send test email"</ActionButton></section>
         {(!r["mailer_enabled"].as_bool().unwrap_or(false)).then(||view!{<p class="form-message error">"The mailer is disabled. This campaign will remain queued until an enabled admin process runs."</p>})}</div>})}</section>
         </FormFields>
-        <FormFooter><a class="text-danger" href="/campaigns">"Cancel"</a><ActionButton disabled=Signal::derive(move||busy.get()||step.get()==0||draft.with(|d|d.launch.is_some())) on_click=move |_|step.update(|s|*s=s.saturating_sub(1))>"Back"</ActionButton>
+        <FormFooter><ActionLink href="/campaigns" style=ButtonStyle::Ghost>"Cancel"</ActionLink><ActionButton disabled=Signal::derive(move||busy.get()||step.get()==0||draft.with(|d|d.launch.is_some())) on_click=move |_|step.update(|s|*s=s.saturating_sub(1))>"Back"</ActionButton>
         <ActionButton style=ButtonStyle::Primary hidden=Signal::derive(move||step.get()==3) disabled=Signal::derive(move||busy.get()||loading.get()||!can_edit) on_click=move |_|step.update(|s|*s=(*s+1).min(3))>"Continue"</ActionButton>
         <ActionButton style=ButtonStyle::Primary hidden=Signal::derive(move||step.get()!=3) disabled=Signal::derive(move||busy.get()||loading.get()||!can_edit||draft.with(|d|d.review.is_none()||d.review_request.is_some())) on_click=launch>{move||if draft.with(|d|d.launch.is_some()){ "Retry same launch" }else{"Launch campaign"}}</ActionButton></FormFooter>
     </ManagementPage>}
@@ -536,8 +533,8 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
             busy.set(false);
         });
     });
-    view! {<ManagementPage><a class="breadcrumb" href="/campaigns">"Back to campaigns"</a><PageHeader title=Signal::derive(move||text(&data.get()["campaign"],"name")) subtitle=Signal::derive(move||format!("{} · Last refreshed {}",text(&data.get()["campaign"],"status"),updated.get()))>
-        <ActionLink href=format!("/analysis/{}",id.get_value())>"View analysis"</ActionLink><ActionButton disabled=Signal::derive(move||busy.get()) busy=Signal::derive(move||loading.get().to_string()) on_click=move |_|refresh.update(|r|*r+=1)>{move||if loading.get(){"Refreshing..."}else{"Refresh"}}</ActionButton><ActionButton hidden=!can_edit disabled=Signal::derive(move||busy.get()) on_click=duplicate>"Duplicate"</ActionButton><ActionButton hidden=!can_edit disabled=Signal::derive(move||busy.get()||data.get()["campaign"]["status"]=="Completed") on_click=move |_|action.set(Some(("complete".into(),Value::Null)))>"Complete campaign"</ActionButton><ActionButton style=ButtonStyle::Cancel hidden=!can_edit disabled=Signal::derive(move||busy.get()) on_click=move |_|action.set(Some(("delete".into(),Value::Null)))>"Delete"</ActionButton>
+    view! {<ManagementPage><BackLink href="/campaigns">"Back to campaigns"</BackLink><PageHeader title=Signal::derive(move||text(&data.get()["campaign"],"name")) subtitle=Signal::derive(move||format!("{} · Last refreshed {}",text(&data.get()["campaign"],"status"),updated.get()))>
+        <ActionLink href=format!("/analysis/{}",id.get_value())>"View analysis"</ActionLink><ActionButton disabled=Signal::derive(move||busy.get()) busy=Signal::derive(move||loading.get().to_string()) on_click=move |_|refresh.update(|r|*r+=1)>{move||if loading.get(){"Refreshing…"}else{"Refresh"}}</ActionButton><ActionButton hidden=!can_edit disabled=Signal::derive(move||busy.get()) on_click=duplicate>"Duplicate"</ActionButton><ActionButton hidden=!can_edit disabled=Signal::derive(move||busy.get()||data.get()["campaign"]["status"]=="Completed") on_click=move |_|action.set(Some(("complete".into(),Value::Null)))>"Complete campaign"</ActionButton><ActionButton style=ButtonStyle::Ghost hidden=!can_edit disabled=Signal::derive(move||busy.get()) on_click=move |_|action.set(Some(("delete".into(),Value::Null)))>"Delete"</ActionButton>
     </PageHeader>{message.view()}<Show when=move||data.get()["mailer_enabled"]==false><p class="form-message error">"Delivery processing is disabled in this process."</p></Show>
     <p>"Acceptance means the SMTP server accepted the message. Participant credentials are never collected."</p>
     {move||campaign_context(&data.get()["campaign"])}
@@ -611,7 +608,7 @@ fn delivery_progress(data: RwSignal<Value>) -> impl IntoView {
             "Pending work was cancelled. Messages already submitted cannot be recalled.",
         ),
     ];
-    view! {<section class="resource-read-panel delivery-progress" aria-label="Delivery progress">
+    view! {<Card class="resource-read-panel delivery-progress" label="Delivery progress">
         <h2>"Delivery progress"</h2>
         <dl class="delivery-metrics">{states.into_iter().map(|(state,label,tone,explanation)|view!{
             <div class=format!("delivery-metric {tone}") class:has-count={move||data.get()["counts"][state].as_i64().unwrap_or(0)>0}>
@@ -619,7 +616,7 @@ fn delivery_progress(data: RwSignal<Value>) -> impl IntoView {
                 <dd>{move||data.get()["counts"][state].as_i64().unwrap_or(0)}</dd>
             </div>
         }).collect_view()}</dl>
-    </section>}
+    </Card>}
 }
 
 fn campaign_context(c: &Value) -> impl IntoView + use<> {
@@ -631,18 +628,20 @@ fn campaign_context(c: &Value) -> impl IntoView + use<> {
             None=>view!{<span>{if id==0 {"Not selected".into()} else {format!("Unavailable (ID {id})")}}</span>}.into_any()
         }}</dd></div>}
     };
-    let template_sender = text(c, "template_sender");
-    view! {<section class="resource-read-panel campaign-context" aria-label="Campaign details"><h2>"Campaign details"</h2>
+    let resources = view! {{resource("template","Email template","templates")}{resource("page","Landing page","pages")}{resource("smtp","Sending profile","smtp")}};
+    let c = c.clone();
+    let template_sender = text(&c, "template_sender");
+    view! {<Card class="resource-read-panel campaign-context" label="Campaign details"><h2>"Campaign details"</h2>
         {(c["domain_block"].is_string() && c["status"]!="Completed").then(||view!{<p role="status" class="form-message">"Delivery is waiting for domain verification. Queued recipients are retained; sending resumes after the domain passes its checks." <a href=c["domain_id"].as_i64().map(|id|format!("/domains/{id}")).unwrap_or_else(||"/domains".into())>"Review domain"</a></p>})}
         <dl class="resource-facts">
-            {resource("template","Email template","templates")}{resource("page","Landing page","pages")}{resource("smtp","Sending profile","smtp")}
+            {resources}
             <div><dt>"Email subject template"</dt><dd>{c["subject"].as_str().map(|s|if s.is_empty(){"No subject"}else{s}).unwrap_or("Unavailable").to_owned()}</dd></div>
             <div><dt>"Sending-profile From address"</dt><dd>{c["profile_sender"].as_str().unwrap_or("Unavailable").to_owned()}</dd></div>
             <div><dt>"Template From override"</dt><dd>{if template_sender.is_empty(){"Use sending-profile address".into()}else{template_sender}}</dd></div>
-            <div><dt>"Scheduled launch"</dt><dd>{instant(&c["launch_date"])}</dd></div>
-            <div><dt>"Initial distribution end"</dt><dd>{if text(c,"send_by_date").starts_with("0001-"){"No distribution window".into()}else{instant(&c["send_by_date"])}}</dd></div>
-            <div><dt>"Public campaign URL"</dt><dd>{text(c,"url")}</dd></div>
+            <div><dt>"Scheduled launch"</dt><dd class="data-value">{instant(&c["launch_date"])}</dd></div>
+            <div><dt>"Initial distribution end"</dt><dd>{if text(&c,"send_by_date").starts_with("0001-"){"No distribution window".into()}else{instant(&c["send_by_date"])}}</dd></div>
+            <div><dt>"Public campaign URL"</dt><dd>{text(&c,"url")}</dd></div>
         </dl>
         <p class="resource-usage">{format!("Times shown in {}. Template and sending-profile details reflect the current saved resources; recipient delivery history records actual attempts.",local_zone())}</p>
-    </section>}
+    </Card>}
 }

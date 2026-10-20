@@ -17,7 +17,7 @@ Native libraries are scaffolds until functionality is implemented with its tests
 - Add tests for actual domain/functionality guarantees, persisted state, protocols, and real failure boundaries. Do not add mirror tests for trivial code or claim scaffold checks establish feature parity.
 - The user performs manual visual/UI interaction tests. Compile and build WASM; do not add browser/screenshot automation by default.
 - Review frontend alignment deliberately: labeled fields and adjacent buttons align on the actual control row with matching heights; headings, actions and wrapped rows need their own appropriate alignment. Fix the shared layout owner instead of adding pixel nudges. Do not default every flex/grid container to center alignment; keep centering where it serves the content, such as within icon buttons.
-- Reuse management UI from `crates/ruphish-ui/src/shared/components/`: page/table/form primitives, list search and empty states, action buttons/links and dialogs. Shared styles live beside those components. Feature modules own their fields, permissions, API calls and state; they must not recreate generic controls or inline replacement empty states. Specialized editor tabs, disclosure controls and JavaScript-bound controls retain their specific accessibility behavior.
+- Reuse management UI from `crates/ruphish-ui/src/shared/components/`: page/table/form primitives, list search and empty states, action buttons/links and dialogs. Shared styles live in `crates/ruphish-ui/ruphish.css`; the palette lives in `crates/ruphish-ui/theme.css` and is shared with the isolated visual editor. Feature modules own their fields, permissions, API calls and state; they must not recreate generic controls or inline replacement empty states. Specialized editor tabs, disclosure controls and JavaScript-bound controls retain their specific accessibility behavior.
 - Never manually hard-wrap Markdown paragraphs or list items. Use one source line per paragraph or list item.
 
 ## Toolchain and verification
@@ -35,7 +35,7 @@ cargo test --workspace --exclude ruphish-ui --locked
 cargo build --workspace --exclude ruphish-ui --locked
 ```
 
-After browser/contract changes, install browser dependencies, run functional tests, generate the editor module, then separately check, lint, and build the browser target. Run each command directly from the product root:
+After browser/contract changes, install browser dependencies, run functional tests, generate the editor modules and admin stylesheet, then separately check, lint, and build the browser target. Run each command directly from the product root:
 
 ```sh
 npm ci --prefix crates/ruphish-ui/web
@@ -78,7 +78,7 @@ cargo deny check bans licenses sources advisories
 
 The required cargo-deny version is recorded in Cargo.toml workspace metadata; Trunk enforces its own exact version from Trunk.toml. Do not silently skip unavailable tools or failed checks. No application feature flags exist yet; document and check supported combinations as features are introduced.
 
-CodeMirror, Jodit and their browser dependencies are pinned in crates/ruphish-ui/web/package-lock.json. Node/npm are build/test tools, not server dependencies. Run node crates/ruphish-ui/web/build.mjs before direct WASM checks. Trunk.toml explicitly runs that build-only generator before each Trunk build and writes a SHA-256 distribution manifest afterward; the server rejects mismatched assets. This generator builds assets only; all checks remain separate direct commands. Review npm package licenses and preserve runtime notices in web/THIRD-PARTY-NOTICES.txt when dependencies change; cargo-deny only checks Rust dependencies.
+CodeMirror, Jodit and their browser dependencies are pinned in crates/ruphish-ui/web/package-lock.json. Node/npm are build/test tools, not server dependencies. Run node crates/ruphish-ui/web/build.mjs before direct WASM checks. Trunk.toml explicitly runs that build-only generator before each Trunk build and writes a SHA-256 distribution manifest afterward; the server rejects mismatched assets. This generator bundles the admin stylesheet (including its shared palette), editor modules and isolated visual-editor styles; it builds assets only; all checks remain separate direct commands. Review npm package licenses and preserve runtime notices in web/THIRD-PARTY-NOTICES.txt when dependencies change; cargo-deny only checks Rust dependencies.
 
 Browser output is generated in dist/admin. Do not hand-edit or check in target/ or dist/, and rebuild after UI changes.
 

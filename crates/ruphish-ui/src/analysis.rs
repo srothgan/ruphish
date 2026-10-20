@@ -251,15 +251,17 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
     });
     view! {
         <ManagementPage>
-            <a class="breadcrumb" href=move || {
+            <BackLink href=Signal::derive(move || {
                 if recipient.is_some(){let mut f=filters.get();f.recipient=None;f.offset=0;address(&format!("/analysis/{id}"),&f,false)}else{format!("/campaigns/{id}")}
-            }>{if recipient.is_some(){"Back to campaign analysis"}else{"Back to campaign"}}</a>
+            })>{if recipient.is_some(){"Back to campaign analysis"}else{"Back to campaign"}}</BackLink>
             <PageHeader title=Signal::derive(move || {let name=text(&data.get(),"name");if name.is_empty(){"Campaign".into()}else{name}})
-                subtitle=Signal::derive(move || if loaded.get(){format!("Updated {}",minute(&data.get()["as_of"]))}else if loading.get(){"Loading analysis...".into()}else{"Refresh failed. Retry to load current results.".into()})>
+                subtitle=Signal::derive(move || if loaded.get(){format!("Updated {}",minute(&data.get()["as_of"]))}else if loading.get(){"Loading analysis…".into()}else{"Refresh failed. Retry to load current results.".into()})>
                 <ActionButton busy=Signal::derive(move ||loading.get().to_string()) on_click=move |_|refresh.update(|r|*r+=1)>{move ||if loading.get(){"Refreshing…"}else{"Refresh"}}</ActionButton>
-                <ActionButton disabled=Signal::derive(move ||downloading.get()||!loaded.get()) on_click=move |_|export("csv","recipients")>"Recipients CSV"</ActionButton>
-                <ActionButton disabled=Signal::derive(move ||downloading.get()||!loaded.get()) on_click=move |_|export("csv","events")>"Events CSV"</ActionButton>
-                <ActionButton disabled=Signal::derive(move ||downloading.get()||!loaded.get()) on_click=move |_|export("xlsx","all")>"Export Excel"</ActionButton>
+                <ActionMenu label="Export" style=ButtonStyle::Primary disabled=Signal::derive(move ||downloading.get()||!loaded.get())>
+                    <ActionButton disabled=Signal::derive(move ||downloading.get()||!loaded.get()) on_click=move |_|export("csv","recipients")>"Recipients CSV"</ActionButton>
+                    <ActionButton disabled=Signal::derive(move ||downloading.get()||!loaded.get()) on_click=move |_|export("csv","events")>"Events CSV"</ActionButton>
+                    <ActionButton disabled=Signal::derive(move ||downloading.get()||!loaded.get()) on_click=move |_|export("xlsx","all")>"Excel workbook"</ActionButton>
+                </ActionMenu>
             </PageHeader>
             {message.view()}
             <form class="analysis-filters" on:submit=apply>
@@ -272,14 +274,14 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                             on_more=Callback::new(move |()|more_options(false)) on_retry=Callback::new(move |()|more_options(true))/>
 
                     })}
-                    <Field label="Event"><select prop:value=move ||selected_event.get() on:change=move |e|selected_event.set(event_target_value(&e))>
+                    <Select label="Event" value=selected_event on_change=Callback::new(move |v|selected_event.set(v))>
                         <option value="">"All events"</option>{EVENTS.into_iter().map(|e|view!{<option value=e>{e}</option>}).collect_view()}
-                    </select></Field>
-                    <Field label="Source"><select prop:value=move ||source.get() on:change=move |e|source.set(event_target_value(&e))>
+                    </Select>
+                    <Select label="Source" value=source on_change=Callback::new(move |v|source.set(v))>
                         <option value="">"All sources"</option><option value="public">"Public tracking"</option><option value="mailbox">"Reporting mailbox"</option><option value="application">"Application"</option><option value="legacy">"Legacy history"</option>
-                    </select></Field>
-                    <Field label="From"><input type="datetime-local" step="60" prop:value=move ||from.get() on:input=move |e|from.set(event_target_value(&e))/></Field>
-                    <Field label="Until"><input type="datetime-local" step="60" prop:value=move ||until.get() on:input=move |e|until.set(event_target_value(&e))/></Field>
+                    </Select>
+                    <Field label="From"><TextInput input_type="datetime-local" step="60" value=Signal::derive(move ||from.get()) on_input=move |e|from.set(event_target_value(&e))/></Field>
+                    <Field label="Until"><TextInput input_type="datetime-local" step="60" value=Signal::derive(move ||until.get()) on_input=move |e|until.set(event_target_value(&e))/></Field>
                 </div>
                 <div class="analysis-filter-footer"><span>"Local time. From is inclusive; until is exclusive."</span><div class="management-actions">
                     <ActionButton on_click=move |_|go(Filter{recipient,..Default::default()})>"Clear filters"</ActionButton>
@@ -291,9 +293,9 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                 {recipient.map(|_|view!{<h2 class="analysis-recipient-title">{move ||array(&data.get(),"recipients").first().map(|r|text(r,"email")).unwrap_or_else(||"Recipient details".into())}</h2>})}
                 <div class="analysis-summary">
                     {LABELS.into_iter().enumerate().map(|(i,label)|view!{
-                        <div class="analysis-metric"><span>{label}</span><strong>{move ||data.get()["unique"][i].as_i64().unwrap_or(0)}</strong>
+                        <Card class="analysis-metric"><span>{label}</span><strong>{move ||data.get()["unique"][i].as_i64().unwrap_or(0)}</strong>
                             <small>{move ||format!("{} recorded events",data.get()["totals"][i].as_i64().unwrap_or(0))}</small>
-                        </div>
+                        </Card>
                     }).collect_view()}
                 </div>
                 <p class="analysis-context">{move ||format!("Unique recipients per event type, within the selected filters. Campaign audience: {}.",data.get()["audience"])}</p>

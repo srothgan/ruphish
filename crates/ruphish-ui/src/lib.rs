@@ -46,3 +46,5 @@ pub fn preview_document(source: &str) -> String {
 #[cfg(test)]
 #[path = "../../../tests/editor_workflow.rs"]
 mod editor_workflow;
+
+pub mod tabs;

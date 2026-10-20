@@ -10,7 +10,8 @@ export function bindAnchoredPanel(trigger, panel, win = window) {
     const top = viewport?.offsetTop ?? 0;
     const margin = 12;
     const rect = trigger.getBoundingClientRect();
-    const panelWidth = Math.max(0, Math.min(304, width - 2 * margin));
+    const preferredWidth = Number(panel.dataset.panelWidth) || 304;
+    const panelWidth = Math.max(0, Math.min(preferredWidth, width - 2 * margin));
     panel.style.width = `${panelWidth}px`;
     const above = Math.max(0, Math.min(height - 2 * margin, rect.top - top - margin - 8));
     const below = Math.max(0, Math.min(height - 2 * margin, top + height - margin - rect.bottom - 8));
@@ -29,11 +30,12 @@ export function bindAnchoredPanel(trigger, panel, win = window) {
     if (restoreFocus && trigger.isConnected) trigger.focus();
   };
   const toggle = () => {
+    if (trigger.disabled) return;
     if (!panel.hidden) { close(); return; }
     panel.hidden = false;
     trigger.setAttribute('aria-expanded', 'true');
     position();
-    panel.querySelector('a[href],button:not(:disabled)')?.focus();
+    panel.querySelector('input:not(:disabled),a[href],button:not(:disabled)')?.focus();
   };
   const outside = event => {
     if (event.target.closest?.('dialog[open]')) return;
@@ -48,8 +50,12 @@ export function bindAnchoredPanel(trigger, panel, win = window) {
     if (!panel.contains(event.target) && !trigger.contains(event.target)) close(false);
   };
   const link = event => {
-    if (event.target.closest('a[href], [data-panel-close]') && !event.defaultPrevented) close();
+    const action = event.target.closest?.('a[href],button,[data-panel-close]');
+    if (!action || action.disabled || event.defaultPrevented) return;
+    if (action.matches('a[href], [data-panel-close]') || panel.hasAttribute('data-close-after-action')) close();
   };
+  const disabledObserver = new win.MutationObserver(() => { if (trigger.disabled) close(false); });
+  disabledObserver.observe(trigger, {attributes: true, attributeFilter: ['disabled']});
   trigger.addEventListener('click', toggle);
   panel.addEventListener('click', link);
   win.addEventListener('pointerdown', outside);
@@ -76,5 +82,6 @@ export function bindAnchoredPanel(trigger, panel, win = window) {
     win.visualViewport?.removeEventListener('resize', position);
     win.visualViewport?.removeEventListener('scroll', position);
     observer?.disconnect();
+    disabledObserver.disconnect();
   };
 }

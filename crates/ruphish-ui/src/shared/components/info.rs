@@ -14,6 +14,22 @@ pub(crate) fn InfoPopover(
     label: &'static str,
     explanation: &'static str,
 ) -> impl IntoView {
+    let (trigger, panel) = anchored_nodes();
+    let heading_id = format!("{id}-heading");
+    view! {
+        <button node_ref=trigger type="button" class="info-trigger" aria-label=format!("About {label}") aria-haspopup="dialog" aria-expanded="false" aria-controls=id.clone()>
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5"/><circle cx="10" cy="6" r=".7" fill="currentColor" stroke="none"/></svg>
+        </button>
+        <div node_ref=panel id=id class="info-popover" role="dialog" aria-labelledby=heading_id.clone() hidden>
+            <div class="info-popover-heading"><strong id=heading_id.clone()>{label}</strong><button type="button" data-panel-close aria-label="Close explanation"><svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button></div>
+            <p>{explanation}</p>
+        </div>
+    }
+}
+
+/// Shared lifecycle, viewport placement, dismissal and focus restoration for
+/// informational panels, action disclosures and searchable selections.
+pub(super) fn anchored_nodes() -> (NodeRef<html::Button>, NodeRef<html::Div>) {
     let trigger = NodeRef::<html::Button>::new();
     let panel = NodeRef::<html::Div>::new();
     let remove = StoredValue::new_local(None::<js_sys::Function>);
@@ -32,14 +48,5 @@ pub(crate) fn InfoPopover(
             }
         });
     });
-    let heading_id = format!("{id}-heading");
-    view! {
-        <button node_ref=trigger type="button" class="info-trigger" aria-label=format!("About {label}") aria-haspopup="dialog" aria-expanded="false" aria-controls=id.clone()>
-            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5"/><circle cx="10" cy="6" r=".7" fill="currentColor" stroke="none"/></svg>
-        </button>
-        <div node_ref=panel id=id class="info-popover" role="dialog" aria-labelledby=heading_id.clone() hidden>
-            <div class="info-popover-heading"><strong id=heading_id.clone()>{label}</strong><button type="button" data-panel-close aria-label="Close explanation"><svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button></div>
-            <p>{explanation}</p>
-        </div>
-    }
+    (trigger, panel)
 }

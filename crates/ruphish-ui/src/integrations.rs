@@ -35,6 +35,26 @@ impl Kind {
             Self::Mailbox => "reporting mailbox",
         }
     }
+    fn plural(self) -> &'static str {
+        match self {
+            Self::Webhook => "webhooks",
+            Self::Mailbox => "reporting mailboxes",
+        }
+    }
+    fn empty_title(self) -> &'static str {
+        match self {
+            Self::Webhook => "No webhooks yet",
+            Self::Mailbox => "No reporting mailboxes yet",
+        }
+    }
+    fn empty_guidance(self) -> &'static str {
+        match self {
+            Self::Webhook => "Add a webhook endpoint to receive campaign events as they happen.",
+            Self::Mailbox => {
+                "Connect a reporting mailbox to correlate the messages recipients report."
+            }
+        }
+    }
     fn api(self) -> String {
         format!("/api{}", self.path())
     }
@@ -93,9 +113,9 @@ pub(super) fn list(api: Api, kind: Kind) -> impl IntoView {
                 {can_edit.then(|| view! { <ActionLink style=ButtonStyle::Primary href=format!("{}/new", kind.path())>{format!("Create {}", kind.singular())}</ActionLink> })}
             </PageHeader>
             {message.view()}
-            <ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len))/>
-            <Show when=move || loading.get()><p role="status">"Loading resources..."</p></Show>
-            <DataTable label=kind.title() headers=vec!["Name", "Destination", "Enabled", "Status", "Actions"]>
+            <ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) noun=kind.plural()/>
+            <Show when=move || loading.get()><p role="status">{format!("Loading {}…", kind.plural())}</p></Show>
+            <DataTable label=kind.title() empty=Signal::derive(move || visible.with(Vec::is_empty)) headers=vec!["Name", "Destination", "Enabled", "Status", "Actions"]>
                 {move || visible.get().into_iter().map(|row| {
                     let href = format!("{}/{}", kind.path(), row["id"]);
                     view! {
@@ -108,7 +128,7 @@ pub(super) fn list(api: Api, kind: Kind) -> impl IntoView {
                     }
                 }).collect_view()}
             </DataTable>
-            <ListEmptyState ready=Signal::derive(move || loaded.get() && !loading.get() && !failed.get()) count=Signal::derive(move || visible.with(Vec::len)) search=search/>
+            <ListEmptyState ready=Signal::derive(move || loaded.get() && !loading.get() && !failed.get()) count=Signal::derive(move || visible.with(Vec::len)) search=search title=kind.empty_title() guidance=kind.empty_guidance()/>
         </ManagementPage>
     }
 }
@@ -134,9 +154,9 @@ fn field(
     input_type: &'static str,
 ) -> impl IntoView {
     view! {
-        <Field label=label><input type=input_type prop:value=move || {
+        <Field label=label><TextInput input_type=input_type value=Signal::derive(move || {
             let value = draft.get(); value[key].as_str().map(str::to_owned).unwrap_or_else(|| value[key].as_u64().map(|n| n.to_string()).unwrap_or_default())
-        } on:input=move |event| {
+        }) on_input=move |event| {
             let value = event_target_value(&event);
             draft.update(|draft| draft[key] = if input_type == "number" { value.parse::<u32>().map_or(Value::Null, |n| json!(n)) } else { json!(value) });
         }/></Field>
@@ -145,8 +165,8 @@ fn field(
 
 fn checkbox(draft: RwSignal<Value>, key: &'static str, label: &'static str) -> impl IntoView {
     view! {
-        <Field label=label checkbox=true><input type="checkbox" prop:checked=move || draft.get()[key].as_bool().unwrap_or(false)
-            on:change=move |event| draft.update(|draft| draft[key] = json!(event_target_checked(&event)))/></Field>
+        <Checkbox label=label checked=Signal::derive(move || draft.get()[key].as_bool().unwrap_or(false))
+            on_toggle=Callback::new(move |value| draft.update(|draft| draft[key] = json!(value)))/>
     }
 }
 
@@ -300,7 +320,7 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                         }.into_any()
                     }}
                 </FormFields>
-                <FormFooter><ActionLink style=ButtonStyle::Cancel href=id.map_or_else(|| kind.path().into(), |id| format!("{}/{id}", kind.path()))>"Cancel"</ActionLink><ActionButton kind="submit" style=ButtonStyle::Primary disabled=Signal::derive(move || busy.get())>{move || if busy.get() { "Saving…" } else { "Save" }}</ActionButton></FormFooter>
+                <FormFooter><ActionLink style=ButtonStyle::Ghost href=id.map_or_else(|| kind.path().into(), |id| format!("{}/{id}", kind.path()))>"Cancel"</ActionLink><ActionButton kind="submit" style=ButtonStyle::Primary disabled=Signal::derive(move || busy.get())>{move || if busy.get() { "Saving…" } else { "Save" }}</ActionButton></FormFooter>
             </fieldset></form>
         </ManagementPage>
     }
@@ -401,17 +421,17 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
         });
     };
     view! {
-        <ManagementPage><a class="breadcrumb" href=kind.path()>{format!("Back to {}", kind.title().to_lowercase())}</a>
+        <ManagementPage><BackLink href=kind.path()>{format!("Back to {}", kind.title().to_lowercase())}</BackLink>
             <PageHeader title=Signal::derive(move || text(&value.get(), "name"))>
                 <ActionButton on_click=move |_| refresh.update(|r| *r += 1) busy=Signal::derive(move || loading.get().to_string())>"Refresh"</ActionButton>
                 {editable.then(|| view! {
                     <ActionButton disabled=Signal::derive(move || busy.get()) on_click=move |_| action("validate")>{move || if busy.get() { "Working…" } else { "Validate connection" }}</ActionButton>
                     {(!kind.webhook()).then(|| view! { <ActionButton disabled=Signal::derive(move || busy.get() || value.get()["running"] == true || value.get()["enabled"] != true) on_click=move |_| action("check")>"Check mailbox now"</ActionButton> })}
                     <ActionLink href=format!("{}/{id}/edit", kind.path())>"Edit"</ActionLink>
-                    <ActionButton style=ButtonStyle::Cancel disabled=Signal::derive(move || busy.get()) on_click=move |_| deleting.set(true)>"Delete"</ActionButton>
+                    <ActionButton style=ButtonStyle::Ghost disabled=Signal::derive(move || busy.get()) on_click=move |_| deleting.set(true)>"Delete"</ActionButton>
                 })}
             </PageHeader>{message.view()}
-            <section class="integration-status">
+            <Card class="integration-status">
                 <dl><dt>"Destination"</dt><dd>{move || text(&value.get(), if kind.webhook() { "url" } else { "host" })}</dd>
                     <dt>"Enabled"</dt><dd>{move || if value.get()[if kind.webhook() { "is_active" } else { "enabled" }] == true { "Yes" } else { "No" }}</dd>
                     <dt>"Credential configured"</dt><dd>{move || if value.get()[if kind.webhook() { "has_secret" } else { "has_password" }] == true { "Yes" } else { "No" }}</dd>
@@ -426,7 +446,7 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                     })}
                 </dl>
                 <Show when=move || value.get()["running"] == true><p role="status" aria-busy="true">"Checking reporting mailbox…"</p></Show>
-            </section>
+            </Card>
             <Show when=move || !kind.webhook() && value.get()["code"] == "mailbox_uidvalidity_changed">
                 <p role="alert">"The mail server changed its message identifiers. Processing is paused to protect existing report history."</p>
                 {editable.then(|| view! { <ActionButton disabled=Signal::derive(move || busy.get()) on_click=move |_| resuming.set(true)>"Resume with new arrivals"</ActionButton> })}
@@ -437,7 +457,7 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
             <h2>{if kind.webhook() { "Recent delivery attempts" } else { "Recent mailbox checks" }}</h2>
             <DataTable label="Integration history" headers=if kind.webhook() { vec!["Started", "Finished", "Outcome", "HTTP status", "Event", "Attempt"] } else { vec!["Started", "Finished", "Outcome", "Matched", "Rejected"] }>
                 {move || array(&value.get(), "history").into_iter().map(|run| view! {
-                    <tr><td>{instant(&run["started"])}</td><td>{if run["finished"].is_null() { "Running".into() } else { instant(&run["finished"]) }}</td>
+                    <tr><td class="data-value">{instant(&run["started"])}</td><td>{if run["finished"].is_null() { "Running".into() } else { instant(&run["finished"]) }}</td>
                         <td>{text(&run, "code")}</td>{if kind.webhook() { view! { <td>{run["status"].as_i64().map(|s| s.to_string()).unwrap_or_default()}</td><td>{run["event_id"].as_i64().map(|s| s.to_string()).unwrap_or_default()}</td><td>{run["attempt"].as_i64().map(|s| s.to_string()).unwrap_or_default()}</td> }.into_any() } else { view! { <td>{run["matched"].as_i64().unwrap_or(0)}</td><td>{run["rejected"].as_i64().unwrap_or(0)}</td> }.into_any() }}
                     </tr>
                 }).collect_view()}

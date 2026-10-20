@@ -3,19 +3,39 @@ use leptos::prelude::*;
 
 #[derive(Clone, Copy, Default)]
 pub(crate) enum ButtonStyle {
+    /// Neutral action: the common default.
     #[default]
     Secondary,
+    /// The one primary action in a view (save, create, confirm).
     Primary,
+    /// Destructive confirmation (delete, replace) — the only red button.
     Danger,
-    Cancel,
+    /// Quiet dismiss (cancel, close, sign out). Reads as a ghost, not a warning.
+    Ghost,
 }
 impl ButtonStyle {
-    fn class(self) -> &'static str {
+    pub(super) fn class(self) -> &'static str {
         match self {
             Self::Secondary => "",
             Self::Primary => "primary",
             Self::Danger => "danger",
-            Self::Cancel => "text-danger",
+            Self::Ghost => "ghost",
+        }
+    }
+}
+
+/// Control sizing shared by buttons so in-row actions stay compact without ad hoc padding.
+#[derive(Clone, Copy, Default)]
+pub(crate) enum ControlSize {
+    #[default]
+    Medium,
+    Small,
+}
+impl ControlSize {
+    fn class(self) -> &'static str {
+        match self {
+            Self::Medium => "",
+            Self::Small => "control-sm",
         }
     }
 }
@@ -24,6 +44,7 @@ impl ButtonStyle {
 pub(crate) fn ActionButton(
     children: Children,
     #[prop(default = ButtonStyle::Secondary)] style: ButtonStyle,
+    #[prop(default = ControlSize::Medium)] size: ControlSize,
     #[prop(default = "button")] kind: &'static str,
     #[prop(into, optional)] disabled: Signal<bool>,
     #[prop(into, optional)] hidden: Signal<bool>,
@@ -31,11 +52,13 @@ pub(crate) fn ActionButton(
     #[prop(into, optional)] busy: Signal<String>,
     #[prop(into, optional)] pressed: Signal<String>,
     #[prop(default = false)] autofocus: bool,
+    #[prop(default = false)] close_panel: bool,
     #[prop(optional_no_strip)] form: Option<&'static str>,
     #[prop(into, optional)] on_click: Option<Callback<leptos::ev::MouseEvent>>,
 ) -> impl IntoView {
     view! {
-        <button type=kind class=style.class() form=form autofocus=autofocus
+        <button type=kind class=format!("{} {}", style.class(), size.class()) form=form autofocus=autofocus
+            data-panel-close=close_panel.then_some("")
             disabled=move || disabled.get() hidden=move || hidden.get()
             title=move || title.get()
             aria-busy=move || (!busy.get().is_empty()).then(|| busy.get())
@@ -51,9 +74,10 @@ pub(crate) fn ActionLink(
     children: Children,
     #[prop(into)] href: String,
     #[prop(default = ButtonStyle::Secondary)] style: ButtonStyle,
+    #[prop(default = ControlSize::Medium)] size: ControlSize,
     #[prop(into, optional)] hidden: Signal<bool>,
 ) -> impl IntoView {
-    view! { <a class=format!("button {}", style.class()) href=href hidden=move || hidden.get()>{children()}</a> }
+    view! { <a class=format!("button {} {}", style.class(), size.class()) href=href hidden=move || hidden.get()>{children()}</a> }
 }
 
 /// Copy a value without placing long verification tokens into the page layout.
