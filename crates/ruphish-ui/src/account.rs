@@ -481,7 +481,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
     <Route path=path!("/users") view=move||account_page(Some(users::Screen::List),false)/>
     <Route path=path!("/users/new") view=move||account_page(Some(users::Screen::New),false)/>
     <Route path=path!("/users/:id/edit") view=move||account_page(Some(users::Screen::Edit),false)/>
-    <Route path=path!("/") view=move||campaign_page(true)/>
+    <Route path=path!("/") view=move||if required{password_form(api,token.get_value(),true).into_any()}else{crate::overview::page(api).into_any()}/>
     <Route path=path!("/analysis") view=move || analysis_page(true)/>
     <Route path=path!("/analysis/:id") view=move || analysis_page(false)/>
     <Route path=path!("/analysis/:id/recipients/:recipient") view=move || analysis_page(false)/>

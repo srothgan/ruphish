@@ -30,6 +30,7 @@ The theme combines a deep teal navigation area, pale teal-tinted application bac
 | Primary hover | `--teal-700` | `#0a534d` | Hover on primary actions |
 | Positive or selected surface | `--teal-50`, `--teal-100` | `#e9f5f3`, `#cfe9e5` | Positive feedback and selected controls |
 | Navigation foundation | `--teal-ink` | `#0c2f2b` | Dark sidebar surface |
+| Improving outcome | `--success` | `#187344` | Favorable metric changes; pair with direction and text |
 | Error or destructive action | `--danger`, `--danger-soft` | `#a4303c`, `#fcf0f1` | Errors, destructive confirmations and their supporting surfaces |
 | Warning | `--amber`, `--amber-soft`, `--warning-ink` | `#b4791f`, `#fbf3e1`, `#513d0e` | Caution, warning surfaces and readable warning text |
 | Information | `--info` | `#23609a` | Informational or active states |

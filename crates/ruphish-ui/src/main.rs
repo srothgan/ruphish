@@ -26,6 +26,8 @@ mod integrations;
 #[cfg(target_arch = "wasm32")]
 mod navigation;
 #[cfg(target_arch = "wasm32")]
+mod overview;
+#[cfg(target_arch = "wasm32")]
 mod resources;
 #[cfg(target_arch = "wasm32")]
 mod shared;

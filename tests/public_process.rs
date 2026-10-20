@@ -571,6 +571,35 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
             .count(),
         1
     );
+    // Actual public requests above must feed the dashboard, without inflating
+    // unique counts on repeated opens/clicks/submissions. The disabled mailer
+    // means these observations initially have no accepted-email cohort.
+    let unsent = get(&admin, "/api/overview/posture?window=7d");
+    for field in [
+        "delivered",
+        "opened",
+        "clicked",
+        "reported",
+        "credentials_entered",
+    ] {
+        assert_eq!(unsent[field], 0);
+    }
+    // Supply the independent SMTP acceptance fixture at the delivery boundary.
+    database(
+        directory.path(),
+        "INSERT INTO events(campaign_id,email,message,time,details) SELECT r.campaign_id,r.email,'Email Sent',datetime('now','-1 minute'),'' FROM results r JOIN campaigns c ON c.id=r.campaign_id WHERE c.name='Private campaign' AND c.user_id=1",
+    );
+    let observed = get(&admin, "/api/overview/posture?window=7d");
+    for field in [
+        "delivered",
+        "opened",
+        "clicked",
+        "reported",
+        "credentials_entered",
+    ] {
+        assert_eq!(observed[field], 1, "{field}: {observed}");
+    }
+    assert!(!observed.to_string().contains(canary));
     assert!(!current.to_string().contains(canary));
     assert!(!process.output().contains(canary));
     assert!(

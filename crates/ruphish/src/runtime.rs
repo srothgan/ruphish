@@ -100,7 +100,7 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
             let policy = ruphish_adapters::outbound::Policy::new(&config.admin.allowed_internal_hosts)?;
             let resources = ruphish_application::resources::Service::new(std::sync::Arc::new(ruphish_adapters::sqlite::resources::Resources::new(database.pool())), std::sync::Arc::new(ruphish_adapters::resources::Validate), std::sync::Arc::new(ruphish_adapters::imports::Tools {policy:policy.clone()}));
             let delivery = ruphish_application::delivery::Service::new(service.clone(),resources.clone(),smtp,previews);
-            Some(ruphish_http::auth::router(assets, ruphish_http::auth::Services {integrations:integrations.clone(),reporting:std::sync::Arc::new(ruphish_adapters::sqlite::reporting::Reports::new(database.pool())),accounts:service,resources,delivery,campaigns,domains,mailer_enabled:!arguments.disable_mailer}, sessions, &key, config.admin.use_tls, config.admin.trusted_origins.clone(), config.admin.csrf_key.clone()))
+            Some(ruphish_http::auth::router(assets, ruphish_http::auth::Services {integrations:integrations.clone(),reporting:std::sync::Arc::new(ruphish_adapters::sqlite::reporting::Reports::new(database.pool())),overview:std::sync::Arc::new(ruphish_adapters::sqlite::overview::Overview::new(database.pool())),accounts:service,resources,delivery,campaigns,domains,mailer_enabled:!arguments.disable_mailer}, sessions, &key, config.admin.use_tls, config.admin.trusted_origins.clone(), config.admin.csrf_key.clone()))
         } else { None };
         supervise(arguments.mode, admin_listener, phish_listener, admin_tls, phish_tls, (admin_router,public_router,worker,domain_worker,integrations), termination).await
     }.await;

@@ -20,6 +20,8 @@ mod auth_process;
 mod campaign_process;
 #[path = "support/domain_network.rs"]
 mod domain_network;
+#[path = "overview_process.rs"]
+mod overview_process;
 #[path = "public_process.rs"]
 mod public_process;
 #[path = "reporting_process.rs"]

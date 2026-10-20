@@ -8,6 +8,7 @@ mod campaigns;
 mod domains;
 mod integrations;
 pub mod interactions;
+mod overview;
 pub mod public_assets;
 mod rate;
 mod reporting;

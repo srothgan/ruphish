@@ -10,6 +10,7 @@ pub mod integrations;
 pub mod interactions;
 pub(crate) mod mailbox_worker;
 mod migrations;
+pub mod overview;
 mod participant_privacy;
 pub mod previews;
 mod report_exports;

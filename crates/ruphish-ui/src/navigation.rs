@@ -98,12 +98,12 @@ fn link(
             || path
                 .strip_prefix(href)
                 .is_some_and(|tail| tail.starts_with('/'))
-            || (path == "/" && href == "/campaigns")
     };
     view! { <a href=href aria-current=move || active().then_some("page")>{icon(drawing)}<span>{label}</span></a> }
 }
 pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<> {
     view! {
+        {link(path,"/","Dashboard","M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z")}
         <section class="nav-section" aria-labelledby="nav-campaigns"><h2 id="nav-campaigns">"Campaigns"</h2>
         {link(path,"/analysis","Analysis","M3 3v18h18 M7 17v-5 M12 17V7 M17 17v-9")}
         {link(path,"/campaigns","Campaigns","M4 21V3 M4 4c5-4 10 4 16 0v10c-6 4-11-4-16 0")}

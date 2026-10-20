@@ -8,5 +8,6 @@ pub mod delivery;
 pub mod domains;
 pub mod integrations;
 pub mod interactions;
+pub mod overview;
 pub mod reporting;
 pub mod resources;

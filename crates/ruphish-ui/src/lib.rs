@@ -48,3 +48,5 @@ pub fn preview_document(source: &str) -> String {
 mod editor_workflow;
 
 pub mod tabs;
+
+pub mod overview_state;

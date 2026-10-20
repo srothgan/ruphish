@@ -37,6 +37,7 @@ pub(crate) struct AuthState {
     campaigns: Arc<dyn ruphish_application::campaign::Repository>,
     domains: Arc<dyn ruphish_application::domains::Repository>,
     reporting: Arc<dyn ruphish_application::reporting::Repository>,
+    overview: Arc<dyn ruphish_application::overview::Repository>,
     integrations: Arc<dyn ruphish_application::integrations::Repository>,
     mailer_enabled: bool,
     csrf: CsrfConfig,
@@ -68,6 +69,7 @@ pub fn router<S: SessionStore + Clone>(
         campaigns: services.campaigns,
         domains: services.domains,
         reporting: services.reporting,
+        overview: services.overview,
         integrations: services.integrations,
         mailer_enabled: services.mailer_enabled,
         index: Arc::new(assets.index),
@@ -147,6 +149,7 @@ pub fn router<S: SessionStore + Clone>(
         .merge(super::campaigns::routes())
         .merge(super::domains::routes())
         .merge(super::reporting::routes())
+        .merge(super::overview::routes())
         .merge(super::integrations::routes())
         .layer(middleware::from_fn(security_headers))
         .with_state(state)
@@ -229,6 +232,9 @@ impl Context {
     }
     pub(crate) fn reporting(&self) -> &dyn ruphish_application::reporting::Repository {
         self.state.reporting.as_ref()
+    }
+    pub(crate) fn overview(&self) -> &dyn ruphish_application::overview::Repository {
+        self.state.overview.as_ref()
     }
     pub(crate) fn domains(&self) -> &dyn ruphish_application::domains::Repository {
         self.state.domains.as_ref()
@@ -481,6 +487,8 @@ pub struct Services {
     pub integrations: Arc<dyn ruphish_application::integrations::Repository>,
     /// Consistent campaign analysis and exports.
     pub reporting: Arc<dyn ruphish_application::reporting::Repository>,
+    /// Owner-scoped dashboard aggregation.
+    pub overview: Arc<dyn ruphish_application::overview::Repository>,
     /// Domain configuration and verification queue.
     pub domains: Arc<dyn ruphish_application::domains::Repository>,
     /// Account and session authorization.

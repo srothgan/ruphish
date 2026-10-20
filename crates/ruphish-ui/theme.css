@@ -18,6 +18,7 @@
     --teal-ink: #0c2f2b;
 
     /* Signal states. */
+    --success: #187344;
     --amber: #b4791f;
     --amber-soft: #fbf3e1;
     --danger: #a4303c;
