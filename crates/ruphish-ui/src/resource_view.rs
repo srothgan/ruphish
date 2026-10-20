@@ -12,12 +12,18 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
     let loading = RwSignal::new(true);
     let can_edit = use_context::<ResourceAccess>().is_some_and(|access| access.0);
     let reload = RwSignal::new(0u64);
+    let deletion = ResourceDeletion::new();
+    let revision = RwSignal::new(None::<String>);
+    let token = StoredValue::new(token);
+    let navigate = leptos_router::hooks::use_navigate();
+    let deleted =
+        Callback::new(move |_| navigate(&format!("/{}", family.route()), Default::default()));
     Effect::new(move |_| {
         reload.get();
         loading.set(true);
         message.clear();
         let id = id.clone();
-        let token = token.clone();
+        let token = token.get_value();
         spawn_local(async move {
             match api
                 .resource(
@@ -29,7 +35,10 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
                 )
                 .await
             {
-                Ok((value, _)) => data.set(Some(value)),
+                Ok((value, etag)) => {
+                    revision.set(etag);
+                    data.set(Some(value));
+                }
                 Err(error) => message.error(error),
             }
             loading.set(false);
@@ -38,6 +47,7 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
     view! {<ManagementPage>
         <BackLink href=format!("/{}",family.route())>{format!("Back to {}",family.title().to_lowercase())}</BackLink>
         {message.view()}
+        <ResourceDeleteDialog deletion=deletion api=api token=token.get_value() on_deleted=deleted/>
         <Show when=move||!loading.get()&&data.with(Option::is_none)><ActionButton on_click=move |_|reload.update(|n|*n+=1)>"Retry loading resource"</ActionButton></Show>
         <Show when=move||loading.get()><p role="status">"Loading resource…"</p></Show>
         {move||data.get().map(|value| {
@@ -45,10 +55,12 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
             let name=text(&value,"name");
             let export=value.clone();
             let export_name=name.clone();
+            let delete_name=name.clone();
             view! {<PageHeader title=name subtitle=format!("Last updated: {}",text(&value,"modified_date"))>
-                <ActionLink hidden=!can_edit style=ButtonStyle::Primary href=format!("/{}/{id}/edit",family.route())>"Edit"</ActionLink>
-                <ActionLink hidden=!can_edit href=format!("/{}/new?duplicate={id}",family.route())>"Duplicate"</ActionLink>
-                <ActionButton on_click=move |_|download(&export,&export_name,message)>"Export JSON"</ActionButton>
+                <ResourceActions edit_href=format!("/{}/{id}/edit",family.route()) can_edit=can_edit disabled=deletion.busy on_delete=Callback::new(move |()| deletion.select(DeleteTarget {id,name:delete_name.clone(),path:format!("/api/{}/{id}",family.route()),revision:revision.get_untracked(),description:"This permanently removes the saved resource. Resources used by unfinished campaigns cannot be deleted."}))>
+                    <ActionLink hidden=!can_edit disabled=deletion.busy href=format!("/{}/new?duplicate={id}",family.route())>"Duplicate"</ActionLink>
+                    <ActionButton on_click=move |_|download(&export,&export_name,message)>"Export JSON"</ActionButton>
+                </ResourceActions>
             </PageHeader><Card class="resource-read-panel">{body(value,family)}</Card>}
         })}
     </ManagementPage>}

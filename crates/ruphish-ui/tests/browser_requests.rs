@@ -60,20 +60,34 @@ async fn create_edit_and_delete_preserve_payload_csrf_and_revision() {
             draft
         );
     }
-    let delete = resource_request(
-        "DELETE",
-        "https://admin.example.test/api/groups/1",
-        "synthetic-csrf",
-        None,
-        Some("\"revision-1\""),
-    )
-    .unwrap();
-    assert!(delete.body().is_none());
-    assert_eq!(delete.method().as_str(), "DELETE");
-    assert_eq!(
-        delete.headers().get("if-match").as_deref(),
-        Some("\"revision-1\"")
-    );
+    for family in [
+        "groups",
+        "templates",
+        "pages",
+        "smtp",
+        "domains",
+        "reporting-mailboxes",
+        "webhooks",
+    ] {
+        let delete = resource_request(
+            "DELETE",
+            &format!("https://admin.example.test/api/{family}/1"),
+            "synthetic-csrf",
+            None,
+            Some("\"revision-1\""),
+        )
+        .unwrap();
+        assert!(delete.body().is_none());
+        assert_eq!(delete.method().as_str(), "DELETE");
+        assert_eq!(
+            delete.headers().get("x-csrf-token").as_deref(),
+            Some("synthetic-csrf")
+        );
+        assert_eq!(
+            delete.headers().get("if-match").as_deref(),
+            Some("\"revision-1\"")
+        );
+    }
     assert!(
         resource_request(
             "GET",

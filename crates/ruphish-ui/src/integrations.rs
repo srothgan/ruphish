@@ -63,7 +63,7 @@ impl Kind {
     }
 }
 
-pub(super) fn list(api: Api, kind: Kind) -> impl IntoView {
+pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
     let rows = RwSignal::new(Vec::<Value>::new());
     let loading = RwSignal::new(false);
     let loaded = RwSignal::new(false);
@@ -72,12 +72,27 @@ pub(super) fn list(api: Api, kind: Kind) -> impl IntoView {
     let refresh = RwSignal::new(0u64);
     let message = Message::new(String::new());
     let can_edit = use_context::<ResourceAccess>().is_some_and(|access| access.0);
+    let deletion = ResourceDeletion::new();
+    let generation = StoredValue::new(0u64);
+    let deleted = Callback::new(move |id| {
+        generation.update_value(|n| *n += 1);
+        loading.set(false);
+        failed.set(false);
+        rows.update(|rows| rows.retain(|row| row["id"].as_i64() != Some(id)));
+        message.status("Resource deleted.".into());
+    });
     Effect::new(move |_| {
         refresh.get();
+        generation.update_value(|n| *n += 1);
+        let ticket = generation.get_value();
         loading.set(true);
         failed.set(false);
         spawn_local(async move {
-            match api.get(&format!("{}/", kind.api())).await {
+            let result = api.get(&format!("{}/", kind.api())).await;
+            if generation.get_value() != ticket {
+                return;
+            }
+            match result {
                 Ok(value) => {
                     if let Some(values) = value.as_array() {
                         rows.set(values.clone());
@@ -113,17 +128,19 @@ pub(super) fn list(api: Api, kind: Kind) -> impl IntoView {
                 {can_edit.then(|| view! { <ActionLink style=ButtonStyle::Primary href=format!("{}/new", kind.path())>{format!("Create {}", kind.singular())}</ActionLink> })}
             </PageHeader>
             {message.view()}
+            <ResourceDeleteDialog deletion=deletion api=api token=token on_deleted=deleted/>
             <ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) noun=kind.plural()/>
             <Show when=move || loading.get()><p role="status">{format!("Loading {}…", kind.plural())}</p></Show>
             <DataTable label=kind.title() empty=Signal::derive(move || visible.with(Vec::is_empty)) headers=vec!["Name", "Destination", "Enabled", "Status", "Actions"]>
                 {move || visible.get().into_iter().map(|row| {
                     let href = format!("{}/{}", kind.path(), row["id"]);
+                    let target = DeleteTarget {id:row["id"].as_i64().unwrap_or(0),name:text(&row,"name"),path:format!("{}/{}",kind.api(),row["id"]),revision:row["revision"].as_i64().map(|v|v.to_string()),description:"This removes the configuration and its processing history. Already dispatched requests cannot be recalled."};
                     view! {
                         <tr><th scope="row"><a href=href.clone()>{text(&row, "name")}</a></th>
                             <td>{text(&row, if kind.webhook() { "url" } else { "host" })}</td>
                             <td>{if row[if kind.webhook() { "is_active" } else { "enabled" }].as_bool().unwrap_or(false) { "Yes" } else { "No" }}</td>
                             <td>{if row["running"] == true { "Checking".into() } else { text(&row, "code") }}</td>
-                            <td><div class="row-actions"><a href=href.clone()>"View"</a>{can_edit.then(|| view! { <a href=format!("{href}/edit")>"Edit"</a> })}</div></td>
+                            <td><ResourceActions view_href=href.clone() edit_href=format!("{href}/edit") can_edit=can_edit size=ControlSize::Small disabled=deletion.busy on_delete=Callback::new(move |()|deletion.select(target.clone()))/></td>
                         </tr>
                     }
                 }).collect_view()}
@@ -285,7 +302,7 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
         });
     };
     view! {
-        <ManagementPage><PageHeader title=format!("{} {}", if id.is_some() { "Edit" } else { "Create" }, kind.singular())/>
+        <ManagementPage><BackLink href=kind.path()>{format!("Back to {}",kind.title().to_lowercase())}</BackLink><PageHeader title=format!("{} {}", if id.is_some() { "Edit" } else { "Create" }, kind.singular())/>
             {message.view()}
             <Show when=move || !loaded.get()><ActionButton on_click=move |_| refresh.update(|r| *r += 1)>"Retry loading"</ActionButton></Show>
             <form on:submit=save><fieldset disabled=move || busy.get() || !loaded.get() || !editable>
@@ -320,7 +337,7 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                         }.into_any()
                     }}
                 </FormFields>
-                <FormFooter><ActionLink style=ButtonStyle::Ghost href=id.map_or_else(|| kind.path().into(), |id| format!("{}/{id}", kind.path()))>"Cancel"</ActionLink><ActionButton kind="submit" style=ButtonStyle::Primary disabled=Signal::derive(move || busy.get())>{move || if busy.get() { "Saving…" } else { "Save" }}</ActionButton></FormFooter>
+                <FormFooter spread=true><ActionLink style=ButtonStyle::Ghost disabled=busy href=id.map_or_else(|| kind.path().into(), |id| format!("{}/{id}", kind.path()))>"Cancel changes"</ActionLink><SaveButton kind="submit" disabled=Signal::derive(move || busy.get() || !loaded.get() || !editable) label=Signal::derive(move || if busy.get() { "Saving\u{2026}".to_owned() } else if id.is_some() { "Save changes".to_owned() } else { format!("Create {}",kind.singular()) })/></FormFooter>
             </fieldset></form>
         </ManagementPage>
     }
@@ -331,15 +348,30 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
     let refresh = RwSignal::new(0u64);
     let loading = RwSignal::new(false);
     let busy = RwSignal::new(false);
-    let deleting = RwSignal::new(false);
+    let deletion = ResourceDeletion::new();
+    let unavailable =
+        Signal::derive(move || busy.get() || deletion.busy.get() || !value.with(Value::is_object));
     let resuming = RwSignal::new(false);
     let message = Message::new(String::new());
     let tasks = ViewTasks::default();
     let token = StoredValue::new(token);
     let navigate = StoredValue::new(use_navigate());
+    let deleted = Callback::new(move |_| {
+        navigate.with_value(|navigate| navigate(kind.path(), Default::default()))
+    });
+    let select_delete = Callback::new(move |()| {
+        if unavailable.get_untracked() {
+            return;
+        }
+        let data = value.get_untracked();
+        deletion.select(DeleteTarget {id,name:text(&data,"name"),path:format!("{}/{id}",kind.api()),revision:data["revision"].as_i64().map(|v|v.to_string()),description:"This removes the configuration and its processing history. Already dispatched requests cannot be recalled."});
+    });
     let editable = use_context::<ResourceAccess>().is_some_and(|access| access.0);
     Effect::new(move |_| {
         refresh.get();
+        if deletion.busy.get_untracked() {
+            return;
+        }
         loading.set(true);
         spawn_local(async move {
             match api.get(&format!("{}/{id}", kind.api())).await {
@@ -351,7 +383,7 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
     });
     let interval = set_interval_with_handle(
         move || {
-            if !loading.get_untracked() && !busy.get_untracked() {
+            if !loading.get_untracked() && !busy.get_untracked() && !deletion.busy.get_untracked() {
                 refresh.update(|r| *r += 1);
             }
         },
@@ -364,60 +396,34 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
         }
     });
     let action = move |operation: &'static str| {
-        if busy.get_untracked() {
+        if unavailable.get_untracked() || !editable {
             return;
         }
         busy.set(true);
         message.clear();
         tasks.spawn(async move {
-            let path = if operation == "delete" {
-                format!("{}/{id}", kind.api())
-            } else {
-                format!("{}/{id}/{operation}", kind.api())
-            };
-            let expected = value.get_untracked()["revision"]
-                .as_i64()
-                .map(|v| v.to_string());
+            let path = format!("{}/{id}/{operation}", kind.api());
             let body = (operation == "resume")
                 .then(|| json!({"revision":value.get_untracked()["revision"]}));
             match api
-                .resource(
-                    if operation == "delete" {
-                        "DELETE"
-                    } else {
-                        "POST"
-                    },
-                    &path,
-                    &token.get_value(),
-                    body.as_ref(),
-                    if operation == "delete" {
-                        expected.as_deref()
-                    } else {
-                        None
-                    },
-                )
+                .resource("POST", &path, &token.get_value(), body.as_ref(), None)
                 .await
             {
                 Ok(_) => {
-                    if operation == "delete" {
-                        navigate.with_value(|navigate| navigate(kind.path(), Default::default()));
-                    } else {
-                        message.status(
-                            if operation == "validate" {
-                                "Connection validated successfully."
-                            } else {
-                                "Check queued. Results refresh automatically every five seconds."
-                            }
-                            .into(),
-                        );
-                        refresh.update(|r| *r += 1);
-                    }
+                    message.status(
+                        if operation == "validate" {
+                            "Connection validated successfully."
+                        } else {
+                            "Check queued. Results refresh automatically every five seconds."
+                        }
+                        .into(),
+                    );
+                    refresh.update(|r| *r += 1);
+                    resuming.set(false);
                 }
                 Err(error) => message.error(error),
             }
             busy.set(false);
-            deleting.set(false);
-            resuming.set(false);
         });
     };
     view! {
@@ -425,10 +431,9 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
             <PageHeader title=Signal::derive(move || text(&value.get(), "name"))>
                 <ActionButton on_click=move |_| refresh.update(|r| *r += 1) busy=Signal::derive(move || loading.get().to_string())>"Refresh"</ActionButton>
                 {editable.then(|| view! {
-                    <ActionButton disabled=Signal::derive(move || busy.get()) on_click=move |_| action("validate")>{move || if busy.get() { "Working…" } else { "Validate connection" }}</ActionButton>
-                    {(!kind.webhook()).then(|| view! { <ActionButton disabled=Signal::derive(move || busy.get() || value.get()["running"] == true || value.get()["enabled"] != true) on_click=move |_| action("check")>"Check mailbox now"</ActionButton> })}
-                    <ActionLink href=format!("{}/{id}/edit", kind.path())>"Edit"</ActionLink>
-                    <ActionButton style=ButtonStyle::Ghost disabled=Signal::derive(move || busy.get()) on_click=move |_| deleting.set(true)>"Delete"</ActionButton>
+                    <ActionButton disabled=unavailable on_click=move |_| action("validate")>{move || if busy.get() { "Working…" } else { "Validate connection" }}</ActionButton>
+                    {(!kind.webhook()).then(|| view! { <ActionButton disabled=Signal::derive(move || unavailable.get() || value.get()["running"] == true || value.get()["enabled"] != true) on_click=move |_| action("check")>"Check mailbox now"</ActionButton> })}
+                    <ResourceActions edit_href=format!("{}/{id}/edit",kind.path()) can_edit=editable disabled=unavailable on_delete=select_delete/>
                 })}
             </PageHeader>{message.view()}
             <Card class="integration-status">
@@ -449,7 +454,7 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
             </Card>
             <Show when=move || !kind.webhook() && value.get()["code"] == "mailbox_uidvalidity_changed">
                 <p role="alert">"The mail server changed its message identifiers. Processing is paused to protect existing report history."</p>
-                {editable.then(|| view! { <ActionButton disabled=Signal::derive(move || busy.get()) on_click=move |_| resuming.set(true)>"Resume with new arrivals"</ActionButton> })}
+                {editable.then(|| view! { <ActionButton disabled=unavailable on_click=move |_| resuming.set(true)>"Resume with new arrivals"</ActionButton> })}
             </Show>
             <Show when=move || resuming.get()>
                 <DeleteConfirmation title="Resume with new arrivals?".to_owned() description="Existing messages in the changed folder will be left untouched. Monitoring starts at the next successful check; saved campaign reports remain intact." confirm_label="Resume monitoring" busy=Signal::derive(move || busy.get()) on_confirm=Callback::new(move |()| action("resume")) on_cancel=Callback::new(move |()| resuming.set(false)) message=message/>
@@ -462,10 +467,7 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                     </tr>
                 }).collect_view()}
             </DataTable>
-            <Show when=move || deleting.get()>
-                <DeleteConfirmation title=format!("Delete {}?", kind.singular()) description="This removes the configuration and its processing history. Already dispatched requests cannot be recalled." confirm_label="Delete"
-                    busy=Signal::derive(move || busy.get()) on_confirm=Callback::new(move |()| action("delete")) on_cancel=Callback::new(move |()| deleting.set(false)) message=message/>
-            </Show>
+            <ResourceDeleteDialog deletion=deletion api=api token=token.get_value() on_deleted=deleted/>
         </ManagementPage>
     }
 }

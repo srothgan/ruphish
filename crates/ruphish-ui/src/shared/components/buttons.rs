@@ -76,8 +76,13 @@ pub(crate) fn ActionLink(
     #[prop(default = ButtonStyle::Secondary)] style: ButtonStyle,
     #[prop(default = ControlSize::Medium)] size: ControlSize,
     #[prop(into, optional)] hidden: Signal<bool>,
+    #[prop(into, optional)] disabled: Signal<bool>,
 ) -> impl IntoView {
-    view! { <a class=format!("button {} {}", style.class(), size.class()) href=href hidden=move || hidden.get()>{children()}</a> }
+    view! { <a class=format!("button {} {}", style.class(), size.class())
+    href=move || (!disabled.get()).then(|| href.clone())
+    aria-disabled=move || disabled.get().then_some("true")
+    tabindex=move || disabled.get().then_some("-1")
+    hidden=move || hidden.get()>{children()}</a> }
 }
 
 /// Copy a value without placing long verification tokens into the page layout.

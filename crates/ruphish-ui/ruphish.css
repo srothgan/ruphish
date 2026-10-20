@@ -160,20 +160,20 @@
     text-decoration: none; white-space: nowrap;
   }
   .account-app button:hover:not(:disabled),
-  .account-app .button:hover { background: var(--hover); border-color: var(--muted); }
-  .account-app button:disabled { opacity: .55; }
+  .account-app .button:hover:not([aria-disabled="true"]) { background: var(--hover); border-color: var(--muted); }
+  .account-app button:disabled, .account-app .button[aria-disabled="true"] { opacity: .55; }
 
   .account-app button.primary,
   .account-app .button.primary { background: var(--teal-600); border-color: var(--teal-600); color: var(--paper); }
   .account-app button.primary:hover:not(:disabled),
-  .account-app .button.primary:hover { background: var(--teal-700); border-color: var(--teal-700); }
+  .account-app .button.primary:hover:not([aria-disabled="true"]) { background: var(--teal-700); border-color: var(--teal-700); }
 
   .account-app .danger { background: var(--danger); border-color: var(--danger); color: var(--paper); }
   .account-app .danger:hover:not(:disabled) { filter: brightness(.9); }
 
   /* Quiet dismiss/cancel: a ghost, never red. */
   .account-app .ghost { color: var(--muted); background: transparent; border-color: transparent; }
-  .account-app .ghost:hover:not(:disabled) { color: var(--ink); background: var(--hover); border-color: transparent; }
+  .account-app .ghost:hover:not(:disabled):not([aria-disabled="true"]) { color: var(--ink); background: var(--hover); border-color: transparent; }
 
   /* Compact in-row control size. */
   .account-app button.control-sm, .account-app .button.control-sm { min-height: var(--control-h-sm); padding: 0 var(--s3); font-size: var(--fs-sm); }

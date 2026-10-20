@@ -2,6 +2,7 @@
 
 pub mod analysis_state;
 pub mod campaign_state;
+pub mod deletion_state;
 pub mod domain_state;
 #[cfg(target_arch = "wasm32")]
 pub mod import_drafts;

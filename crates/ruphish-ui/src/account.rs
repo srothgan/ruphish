@@ -460,7 +460,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         } else if matches!(kind, crate::integrations::Kind::Webhook) && (!admin || active) {
             view! { <p role="alert">"Webhooks require administrator access outside impersonation."</p> }.into_any()
         } else if list {
-            crate::integrations::list(api, kind).into_any()
+            crate::integrations::list(api, token.get_value(), kind).into_any()
         } else {
             crate::integrations::page(api, token.get_value(), kind, editing).into_any()
         }
@@ -493,7 +493,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
     <Route path=path!("/reporting-mailboxes/:id/edit") view=move || integration_page(crate::integrations::Kind::Mailbox, false, true)/>
     <Route path=path!("/campaigns") view=move||campaign_page(true)/>
     <Route path=path!("/campaigns/:id") view=move||campaign_page(false)/>
-    <Route path=path!("/domains") view=move||if required{password_form(api,token.get_value(),true).into_any()}else{crate::domains::list(api).into_any()}/>
+    <Route path=path!("/domains") view=move||if required{password_form(api,token.get_value(),true).into_any()}else{crate::domains::list(api, token.get_value()).into_any()}/>
     <Route path=path!("/domains/:id") view=move||if required{password_form(api,token.get_value(),true).into_any()}else{crate::domains::detail(api,token.get_value(),false).into_any()}/>
     <Route path=path!("/domains/:id/edit") view=move||if required{password_form(api,token.get_value(),true).into_any()}else{crate::domains::detail(api,token.get_value(),true).into_any()}/>
     <Route path=path!("/groups") view=move||resource_page(Family::Groups,Screen::List)/>

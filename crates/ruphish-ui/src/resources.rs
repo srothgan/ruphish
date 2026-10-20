@@ -150,9 +150,7 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
     let failed = RwSignal::new(false);
     let search = RwSignal::new(String::new());
     let refresh = RwSignal::new(0u64);
-    let deleting = RwSignal::new(None::<Value>);
-    let tasks = ruphish_ui::view_tasks::ViewTasks::default();
-    let busy = RwSignal::new(false);
+    let deletion = ResourceDeletion::new();
     let generation = StoredValue::new(0u64);
     Effect::new(move |_| {
         refresh.get();
@@ -184,33 +182,13 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
             loading.set(false);
         });
     });
-    let remove = move |_| {
-        if busy.get_untracked() {
-            return;
-        }
-        let Some(value) = deleting.get_untracked() else {
-            return;
-        };
+    let deleted = Callback::new(move |id| {
         generation.update_value(|n| *n += 1);
         loading.set(false);
-        busy.set(true);
-        tasks.spawn(async move {
-            let path = format!("/api/{}/{}", family.route(), value["id"]);
-            match api
-                .resource("DELETE", &path, &token.get_value(), None, None)
-                .await
-            {
-                Ok(_) => {
-                    rows.update(|rows| rows.retain(|row| row["id"] != value["id"]));
-                    deleting.set(None);
-                    refresh.update(|v| *v += 1);
-                    message.status("Resource deleted.".into());
-                }
-                Err(e) => message.error(e),
-            }
-            busy.set(false);
-        });
-    };
+        failed.set(false);
+        rows.update(|rows| rows.retain(|row| row["id"].as_i64() != Some(id)));
+        message.status("Resource deleted.".into());
+    });
     let visible = Signal::derive(move || {
         let needle = search.get().to_lowercase();
         rows.get()
@@ -230,12 +208,12 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
     </PageHeader>
     {move||(can_edit && import_open.get()).then(||import_panel(api,token.get_value(),family,import_open))}
     {message.view()}
-    {move||deleting.get().map(|v|view!{<DeleteConfirmation title=format!("Delete {}?",v["name"].as_str().unwrap_or("resource")) description="This permanently removes the saved resource. Resources used by unfinished campaigns cannot be deleted." confirm_label="Delete resource" busy=busy on_confirm=Callback::new(remove) on_cancel=Callback::new(move|()|deleting.set(None)) message=message/>})}
+    <ResourceDeleteDialog deletion=deletion api=api token=token.get_value() on_deleted=deleted/>
     <ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) noun=family.plural()/>
     <Show when=move||loading.get()><p role="status">{format!("Loading {}…", family.plural())}</p></Show>
     <Show when=move||!loading.get()&&failed.get()><ActionButton on_click=move |_|refresh.update(|v|*v+=1)>{format!("Retry loading {}", family.plural())}</ActionButton></Show>
     <DataTable label=family.title() empty=Signal::derive(move || visible.with(Vec::is_empty)) headers=vec!["Name",if family==Family::Groups{"Recipients"}else{"Active campaigns"},"Last modified","Actions"]>
-    {move||visible.get().into_iter().map(|v|{let id=v["id"].as_i64().unwrap_or(0);let name=v["name"].as_str().unwrap_or("Unnamed").to_owned();let delete_value=v.clone();view!{<tr><th scope="row"><a href=format!("/{}/{id}",family.route())>{name}</a></th><td>{v[if family==Family::Groups{"num_targets"}else{"active_campaigns"}].as_i64().unwrap_or(0)}</td><td>{v["modified_date"].as_str().unwrap_or("").to_owned()}</td><td><div class="row-actions"><a href=if can_edit{format!("/{}/{id}/edit",family.route())}else{format!("/{}/{id}",family.route())}>{if can_edit{"Edit"}else{"View"}}</a><a hidden=!can_edit href=format!("/{}/new?duplicate={id}",family.route())>"Duplicate"</a><ActionButton hidden=!can_edit style=ButtonStyle::Ghost size=ControlSize::Small on_click=move |_|{message.clear();deleting.set(Some(delete_value.clone()))}>"Delete"</ActionButton></div></td></tr>}}).collect_view()}
+    {move||visible.get().into_iter().map(|v|{let id=v["id"].as_i64().unwrap_or(0);let name=v["name"].as_str().unwrap_or("Unnamed").to_owned();let delete_value=v.clone();view!{<tr><th scope="row"><a href=format!("/{}/{id}",family.route())>{name}</a></th><td>{v[if family==Family::Groups{"num_targets"}else{"active_campaigns"}].as_i64().unwrap_or(0)}</td><td>{v["modified_date"].as_str().unwrap_or("").to_owned()}</td><td><ResourceActions view_href=format!("/{}/{id}",family.route()) edit_href=format!("/{}/{id}/edit",family.route()) can_edit=can_edit size=ControlSize::Small disabled=deletion.busy on_delete=Callback::new(move |()| deletion.select(DeleteTarget { id, name:delete_value["name"].as_str().unwrap_or("resource").to_owned(), path:format!("/api/{}/{id}",family.route()), revision:None, description:"This permanently removes the saved resource. Resources used by unfinished campaigns cannot be deleted." }))><ActionLink hidden=!can_edit size=ControlSize::Small disabled=deletion.busy href=format!("/{}/new?duplicate={id}",family.route())>"Duplicate"</ActionLink></ResourceActions></td></tr>}}).collect_view()}
     </DataTable>
     <ListEmptyState ready=Signal::derive(move || !loading.get() && !failed.get()) count=Signal::derive(move || visible.with(Vec::len)) search=search title=family.empty_title() guidance=family.empty_guidance()/>
     </ManagementPage>}
@@ -377,13 +355,13 @@ fn edit(
     <PageHeader title=Signal::derive(move||{let name=editor.text("name");if name.is_empty(){format!("New {}",family.singular())}else{name}})
         status=true subtitle=Signal::derive(move||if editor.busy.get(){"Saving or checking…"}else if loading.get(){"Loading resource…"}else if load_failed.get(){"Resource could not be loaded"}else if editor.readonly{"Read-only access"}else if editor.visual_pending.get(){"Apply or cancel visual edits before saving"}else if editor.draft.with(ResourceDraft::dirty){"Unsaved changes"}else if editor.draft.with(|d|d.value()["id"].as_i64().unwrap_or(0)==0){"Not saved yet"}else{"No unsaved changes"}.to_owned())>
     {(family==Family::Templates||family==Family::Profiles).then(||view!{<ActionButton disabled=Signal::derive(move||loading.get()||load_failed.get()||editor.readonly||editor.busy.get()||editor.visual_pending.get()) on_click=move |_|test_open.set(true)>"Send test"</ActionButton>})}
-    <SaveButton disabled=Signal::derive(move||loading.get()||load_failed.get()||editor.readonly||editor.busy.get()||editor.visual_pending.get()||editor.import_review.is_some_and(|r|!r.with(ImportReview::ready))) on_click=Callback::new(save) label=Signal::derive(move||if editor.draft.with(|d|d.value()["id"].as_i64().unwrap_or(0)==0){format!("Create {}",family.singular())}else{"Save changes".into()})/>
+
     </PageHeader>
     {matches!(family,Family::Templates|Family::Pages|Family::Profiles).then(||view!{<p class="resource-usage">"Campaigns use the current saved version of this resource. Editing it can affect unfinished campaigns."</p>})}
     {editor.import_review.map(|review|import_review_panel(review,editor.message))}
     {editor.message.view()}<Show when=move||!loading.get()&&load_failed.get()><ActionButton on_click=move |_|reload.update(|n|*n+=1)>"Retry loading resource"</ActionButton></Show><Show when=move||loading.get()><p>"Loading resource…"</p></Show>
     <FormFields disabled=Signal::derive(move||load_failed.get()||editor.readonly||loading.get()||editor.busy.get())>{editor.field("name","Name","text")}{content}</FormFields>
-    <FormFooter><ActionButton style=ButtonStyle::Ghost disabled=Signal::derive(move||loading.get()||load_failed.get()||editor.busy.get()) on_click=move |_|{editor.draft.update(ResourceDraft::cancel);editor.epoch.update(|v|*v+=1);let id=editor.draft.with_untracked(|d|d.value()["id"].as_i64().unwrap_or(0)); editor.replace_url.run(if id>0{format!("/{}/{id}",family.route())}else{format!("/{}",family.route())});}>"Cancel changes"</ActionButton></FormFooter>
+    <FormFooter spread=true><ActionButton style=ButtonStyle::Ghost disabled=Signal::derive(move||loading.get()||load_failed.get()||editor.busy.get()) on_click=move |_|{editor.draft.update(ResourceDraft::cancel);editor.epoch.update(|v|*v+=1);let id=editor.draft.with_untracked(|d|d.value()["id"].as_i64().unwrap_or(0)); editor.replace_url.run(if id>0{format!("/{}/{id}",family.route())}else{format!("/{}",family.route())});}>"Cancel changes"</ActionButton><SaveButton disabled=Signal::derive(move||loading.get()||load_failed.get()||editor.readonly||editor.busy.get()||editor.visual_pending.get()||editor.import_review.is_some_and(|r|!r.with(ImportReview::ready))) on_click=Callback::new(save) label=Signal::derive(move||if editor.draft.with(|d|d.value()["id"].as_i64().unwrap_or(0)==0){format!("Create {}",family.singular())}else{"Save changes".into()})/></FormFooter>
     {move||test_open.get().then(||test_panel(api,token.get_value(),family,editor,test_open))}
     </ManagementPage>}
 }

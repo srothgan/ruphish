@@ -75,7 +75,7 @@ fn check_result(d: &Domain, kind: &str, passed: bool) -> &'static str {
 fn decode(value: serde_json::Value) -> Result<Domain, String> {
     serde_json::from_value(value).map_err(|_| "Invalid domain response".into())
 }
-pub(super) fn list(api: Api) -> impl IntoView {
+pub(super) fn list(api: Api, token: String) -> impl IntoView {
     let rows = RwSignal::new(Vec::<Domain>::new());
     let failed = RwSignal::new(false);
     let loading = RwSignal::new(false);
@@ -83,16 +83,30 @@ pub(super) fn list(api: Api) -> impl IntoView {
     let refresh = RwSignal::new(0u64);
     let message = Message::new(String::new());
     let can_edit = editable();
+    let deletion = ResourceDeletion::new();
+    let generation = StoredValue::new(0u64);
+    let deleted = Callback::new(move |id| {
+        generation.update_value(|n| *n += 1);
+        loading.set(false);
+        failed.set(false);
+        rows.update(|rows| rows.retain(|row| row.id != id));
+        message.status("Domain deleted.".into());
+    });
     Effect::new(move |_| {
         refresh.get();
+        generation.update_value(|n| *n += 1);
+        let ticket = generation.get_value();
         loading.set(true);
         failed.set(false);
         spawn_local(async move {
-            match api
+            let result = api
                 .get("/api/domains/")
                 .await
-                .and_then(|v| serde_json::from_value(v).map_err(|_| "Invalid domain list".into()))
-            {
+                .and_then(|v| serde_json::from_value(v).map_err(|_| "Invalid domain list".into()));
+            if generation.get_value() != ticket {
+                return;
+            }
+            match result {
                 Ok(v) => {
                     rows.set(v);
                     message.clear();
@@ -119,10 +133,10 @@ pub(super) fn list(api: Api) -> impl IntoView {
     view! {<ManagementPage><PageHeader title="Domains" subtitle="Verified destinations for campaign links and landing pages.">
         <ActionButton disabled=Signal::derive(move||loading.get()) on_click=move |_|refresh.update(|v|*v+=1)>"Refresh"</ActionButton>
         {can_edit.then(||view!{<ActionLink style=ButtonStyle::Primary href="/domains/new">"Create domain"</ActionLink>})}
-    </PageHeader>{message.view()}<ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) label="Search by name or hostname" noun="domains"/>
+    </PageHeader>{message.view()}<ResourceDeleteDialog deletion=deletion api=api token=token on_deleted=deleted/><ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) label="Search by name or hostname" noun="domains"/>
     <Show when=move||loading.get()><p role="status">"Loading domains…"</p></Show>
     <DataTable label="Domains" empty=Signal::derive(move || visible.with(Vec::is_empty)) headers=vec!["Name","Public origin","Status","Enabled","Campaigns","Actions"]>
-        <For each=move||visible.get() key=|d| (d.id,d.revision,d.checked_at,d.eligible,d.checking,d.status.clone(),d.code.clone(),d.campaigns) children=move|d|{let id=d.id;let label=state(&d);view!{<tr><td><a href=format!("/domains/{id}")>{d.name.clone()}</a></td><td>{d.origin.clone()}</td><td><StatusBadge tone=status_tone(&d.status)>{label}</StatusBadge></td><td>{if d.enabled{"Yes"}else{"No"}}</td><td>{d.campaigns}</td><td><a href=format!("/domains/{id}")>"View"</a>{can_edit.then(||view!{<a href=format!("/domains/{id}/edit")>"Edit"</a>})}</td></tr>}}/>
+        <For each=move||visible.get() key=|d| (d.id,d.revision,d.checked_at,d.eligible,d.checking,d.status.clone(),d.code.clone(),d.campaigns) children=move|d|{let id=d.id;let label=state(&d);view!{<tr><td><a href=format!("/domains/{id}")>{d.name.clone()}</a></td><td>{d.origin.clone()}</td><td><StatusBadge tone=status_tone(&d.status)>{label}</StatusBadge></td><td>{if d.enabled{"Yes"}else{"No"}}</td><td>{d.campaigns}</td><td><ResourceActions view_href=format!("/domains/{id}") edit_href=format!("/domains/{id}/edit") can_edit=can_edit size=ControlSize::Small disabled=deletion.busy delete_disabled={d.campaigns>0} delete_reason="Domains used by campaigns cannot be deleted." on_delete=Callback::new(move |()| deletion.select(DeleteTarget {id,name:d.name.clone(),path:format!("/api/domains/{id}"),revision:Some(format!("\"{}\"",d.revision)),description:"Only unused domains can be deleted. This removes the domain configuration and its verification history."}))/></td></tr>}}/>
     </DataTable><ListEmptyState ready=Signal::derive(move || !loading.get() && !failed.get()) count=Signal::derive(move || visible.with(Vec::len)) search=search title="No domains found" guidance="Add a hostname, prove DNS control and check routing and HTTPS before using it in a campaign."/></ManagementPage>}
 }
 pub(super) fn detail(api: Api, token: String, editing: bool) -> impl IntoView {
@@ -231,8 +245,8 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
     let tasks = ruphish_ui::view_tasks::ViewTasks::default();
     let detail = RwSignal::new(Details::default());
     let domain = Memo::new(move |_| detail.with(|s| s.domain.clone()));
-    let busy = Signal::derive(move || detail.with(|s| s.mutation.is_some()));
-    let deleting = RwSignal::new(false);
+    let deletion = ResourceDeletion::new();
+    let busy = Signal::derive(move || deletion.busy.get() || detail.with(|s| s.mutation.is_some()));
     let token = StoredValue::new(token);
     let message = Message::new(String::new());
     let refresh = RwSignal::new(0u64);
@@ -240,6 +254,9 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
     let can_edit = editable();
     Effect::new(move |_| {
         refresh.get();
+        if deletion.busy.get_untracked() {
+            return;
+        }
         let Some(ticket) = detail.try_update(Details::refresh).flatten() else {
             return;
         };
@@ -274,6 +291,9 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
     let focus = window_event_listener(leptos::ev::focus, move |_| refresh.update(|v| *v += 1));
     on_cleanup(move || focus.remove());
     let check = move |_| {
+        if busy.get_untracked() || !can_edit {
+            return;
+        }
         let Some(ticket) = detail.try_update(Details::verify).flatten() else {
             return;
         };
@@ -293,44 +313,19 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
         });
     };
     let navigate = leptos_router::hooks::use_navigate();
-    let remove = Callback::new(move |()| {
-        let Some(d) = domain.get_untracked() else {
-            return;
-        };
-        if detail
-            .try_update(Details::begin_mutation)
-            .flatten()
-            .is_none()
-        {
+    let deleted = Callback::new(move |_| navigate("/domains", Default::default()));
+    let select_delete = Callback::new(move |()| {
+        if busy.get_untracked() || !can_edit {
             return;
         }
-        let navigate = navigate.clone();
-        tasks.spawn(async move {
-            match api
-                .resource(
-                    "DELETE",
-                    &format!("/api/domains/{id}"),
-                    &token.get_value(),
-                    None,
-                    Some(&format!("\"{}\"", d.revision)),
-                )
-                .await
-            {
-                Ok(_) => {
-                    deleting.set(false);
-                    navigate("/domains", Default::default());
-                }
-                Err(e) => {
-                    message.error(e);
-                    detail.update(|s| s.mutation = None);
-                }
-            }
-        });
+        if let Some(d) = domain.get_untracked().filter(|d| d.campaigns == 0) {
+            deletion.select(DeleteTarget { id, name:d.name, path:format!("/api/domains/{id}"), revision:Some(format!("\"{}\"",d.revision)),description:"Only unused domains can be deleted. This removes the domain configuration and its verification history." });
+        }
     });
     view! {<ManagementPage><BackLink href="/domains">"Back to domains"</BackLink>
         <PageHeader title=Signal::derive(move||domain.get().map(|d|d.name).unwrap_or_else(||"Domain".into())) subtitle=Signal::derive(move||domain.get().map(|d|d.origin).unwrap_or_else(||"Loading domain".into()))>
             <ActionButton disabled=Signal::derive(move||busy.get()) busy=Signal::derive(move||detail.with(|s|s.reading.is_some()).to_string()) on_click=move |_|refresh.update(|v|*v+=1)>{move||if detail.with(|s|s.reading.is_some()){"Refreshing…"}else{"Refresh status"}}</ActionButton>
-            {can_edit.then(||view!{<ActionButton style=ButtonStyle::Primary disabled=Signal::derive(move||busy.get()||domain.with(|d|d.as_ref().is_none_or(|d|!d.enabled||d.active_check.is_some()))) on_click=check>{move||if busy.get()&&!deleting.get(){"Requesting verification"}else{"Verify domain"}}</ActionButton><ActionLink href=format!("/domains/{id}/edit")>"Edit"</ActionLink><ActionButton style=ButtonStyle::Danger disabled=Signal::derive(move||busy.get()||domain.with(|d|d.as_ref().is_none_or(|d|d.campaigns>0))) on_click=move |_|deleting.set(true)>"Delete"</ActionButton>})}
+            {can_edit.then(||view!{<ActionButton style=ButtonStyle::Primary disabled=Signal::derive(move||busy.get()||domain.with(|d|d.as_ref().is_none_or(|d|!d.enabled||d.active_check.is_some()))) on_click=check>{move||if detail.with(|s|s.mutation.is_some()){"Requesting verification"}else{"Verify domain"}}</ActionButton><ResourceActions edit_href=format!("/domains/{id}/edit") can_edit=can_edit disabled=Signal::derive(move||busy.get()||domain.with(Option::is_none)) delete_disabled=Signal::derive(move||domain.with(|d|d.as_ref().is_none_or(|d|d.campaigns>0))) delete_reason="Domains used by campaigns cannot be deleted." on_delete=select_delete/>})}
         </PageHeader>{message.view()}
         {move||detail.with(|s|s.error.clone()).map(|error|view!{<p class="form-message error" role="alert">{error}</p>})}
         {move||domain.get().and_then(|d|d.active_check).map(|run|{
@@ -368,7 +363,7 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                 {(!has_result).then(||view!{<p>"No completed checks yet."</p>})}
             </section>}
         })}
-        {move||deleting.get().then(||view!{<DeleteConfirmation title="Delete domain?".to_owned() description="Only unused domains can be deleted. This removes the domain configuration and its verification history." confirm_label="Delete domain" busy=busy on_confirm=remove on_cancel=Callback::new(move|()|deleting.set(false)) message=message/>})}
+        <ResourceDeleteDialog deletion=deletion api=api token=token.get_value() on_deleted=deleted/>
     </ManagementPage>}
 }
 

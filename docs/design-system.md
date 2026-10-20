@@ -100,6 +100,8 @@ Use shared components for common tasks. Extend their shared presentation and beh
 
 Make the main action visually distinct without giving every button equal emphasis. An action menu groups closely related choices, such as export formats. Its trigger follows the same visual hierarchy as other buttons.
 
+Use `ResourceActions` for resource lists and detail headers: lists offer View, Edit and Delete; detail pages offer Edit and Delete. Add supported actions such as Duplicate and Export as explicit children. Use compact controls in table rows and standard controls in headers. Read-only roles retain View and Export; mutation actions require editing permission. The Delete opener is quiet; `ResourceDeleteDialog` owns the red confirmation, pending request and recoverable error. Keep resource-specific restrictions and explanations with the feature.
+
 Use concrete action labels. Copy controls show confirmation at the control itself. Loading and success labels should not cause avoidable width changes or move nearby controls. Use recognizable icons with consistent stroke weight and optical size; icon-only buttons need an accessible name.
 
 ### Fields and selection
