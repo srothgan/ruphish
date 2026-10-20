@@ -252,8 +252,8 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
     view! {
         <ManagementPage>
             <BackLink href=Signal::derive(move || {
-                if recipient.is_some(){let mut f=filters.get();f.recipient=None;f.offset=0;address(&format!("/analysis/{id}"),&f,false)}else{format!("/campaigns/{id}")}
-            })>{if recipient.is_some(){"Back to campaign analysis"}else{"Back to campaign"}}</BackLink>
+                if recipient.is_some(){let mut f=filters.get();f.recipient=None;f.offset=0;address(&format!("/analysis/{id}"),&f,false)}else{"/analysis".into()}
+            })>{if recipient.is_some(){"Back to campaign analysis"}else{"Back to analysis"}}</BackLink>
             <PageHeader title=Signal::derive(move || {let name=text(&data.get(),"name");if name.is_empty(){"Campaign".into()}else{name}})
                 subtitle=Signal::derive(move || if loaded.get(){format!("Updated {}",minute(&data.get()["as_of"]))}else if loading.get(){"Loading analysis…".into()}else{"Refresh failed. Retry to load current results.".into()})>
                 <ActionButton busy=Signal::derive(move ||loading.get().to_string()) on_click=move |_|refresh.update(|r|*r+=1)>{move ||if loading.get(){"Refreshing…"}else{"Refresh"}}</ActionButton>
@@ -262,6 +262,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                     <ActionButton disabled=Signal::derive(move ||downloading.get()||!loaded.get()) on_click=move |_|export("csv","events")>"Events CSV"</ActionButton>
                     <ActionButton disabled=Signal::derive(move ||downloading.get()||!loaded.get()) on_click=move |_|export("xlsx","all")>"Excel workbook"</ActionButton>
                 </ActionMenu>
+                <ActionLink href=format!("/campaigns/{id}")>"Back to campaign"</ActionLink>
             </PageHeader>
             {message.view()}
             <form class="analysis-filters" on:submit=apply>
@@ -293,14 +294,14 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                 {recipient.map(|_|view!{<h2 class="analysis-recipient-title">{move ||array(&data.get(),"recipients").first().map(|r|text(r,"email")).unwrap_or_else(||"Recipient details".into())}</h2>})}
                 <div class="analysis-summary">
                     {LABELS.into_iter().enumerate().map(|(i,label)|view!{
-                        <Card class="analysis-metric"><span>{label}</span><strong>{move ||data.get()["unique"][i].as_i64().unwrap_or(0)}</strong>
+                        <Card class="analysis-metric"><span>{label}</span><strong>{move ||data.get()["progression"][i].as_i64().unwrap_or(0)}</strong>
                             <small>{move ||format!("{} recorded events",data.get()["totals"][i].as_i64().unwrap_or(0))}</small>
                         </Card>
                     }).collect_view()}
                 </div>
-                <p class="analysis-context">{move ||format!("Unique recipients per event type, within the selected filters. Campaign audience: {}.",data.get()["audience"])}</p>
+                <p class="analysis-context">{move ||format!("Recipient progression within the selected filters. Opens include clicks and submissions; clicks include submissions. Campaign audience: {}.",data.get()["audience"])}</p>
                 <ActivityChart data=chart interval=Signal::derive(move ||data.get()["bucket_seconds"].as_i64().unwrap_or(60).max(60))/>
-                <details class="analysis-explanation"><summary>"What these observations mean"</summary><p>"Opens are image fetches; clicks are page visits. Neither proves a human action. Submissions record the action and optional password presence, never entered values. Reports identify the campaign message, not a verified reporter."</p></details>
+                <details class="analysis-explanation"><summary>"What these observations mean"</summary><p>"The chart, recipient table and exports show recorded events only: opens are image fetches; clicks are page visits. Neither proves a human action. Submissions record the action and optional password presence, never entered values. Reports identify the campaign message, not a verified reporter."</p></details>
                 <h2>{if recipient.is_some(){"Recipient events"}else{"Recipients"}}</h2>
                 {if recipient.is_none(){view!{
                     <DataTable label="Recipient observations" headers=vec!["Recipient","Delivery","Accepted","Opened","Clicked","Submitted","Reported","Details"]>

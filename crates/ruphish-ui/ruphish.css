@@ -339,7 +339,7 @@
   .account-popover-identity span { font-size: var(--fs-sm); color: var(--muted); }
   .account-app .account-popover > a, .account-app .account-popover > button { display: block; width: 100%; min-height: auto; justify-content: flex-start; padding: var(--s2) var(--s3); border: 0; border-radius: var(--r-sm); text-align: left; text-decoration: none; background: transparent; }
   .account-app .account-popover > a:hover, .account-app .account-popover > button:hover:not(:disabled) { background: var(--teal-50); }
-  .account-popover .form-message { margin: var(--s2) 0 0; font-size: var(--fs-sm); }
+  .account-popover .form-message.has-content { margin: var(--s2) 0 0; font-size: var(--fs-sm); }
 
   /* Content area + account panels. */
   .admin-content { min-width: 0; padding: var(--s6); }

@@ -134,6 +134,31 @@ pub struct Campaign {
     /// Effective immutable capture defaults/overrides.
     pub policy: Option<CapturePolicy>,
 }
+impl Campaign {
+    /// Derive summary counts from recorded events, never the lossy latest status.
+    /// Ambiguous historical addresses remain unassigned, as in analysis.
+    pub fn progression(&self) -> [i64; 5] {
+        use ruphish_domain::reporting::{Observations, Progression};
+        let mut recipients = std::collections::HashMap::new();
+        for result in &self.results {
+            recipients
+                .entry(result.recipient.email.as_str())
+                .and_modify(|entry| *entry = None)
+                .or_insert(Some(Observations::default()));
+        }
+        for event in &self.events {
+            if let Some(Some(evidence)) = recipients.get_mut(event.email.as_str()) {
+                // This legacy response has no password-presence metric.
+                evidence.record(&event.message, false);
+            }
+        }
+        let mut summary = Progression::default();
+        for evidence in recipients.into_values().flatten() {
+            summary.include(evidence, 1);
+        }
+        summary.counts
+    }
+}
 /// One current queue owner, invalidated by generation change or cancellation.
 pub struct Claim {
     /// Persistent result ID, never the opaque external RID.

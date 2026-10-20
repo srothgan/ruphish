@@ -99,6 +99,7 @@ async fn read(
             "as_of": a.as_of,
             "audience": a.audience,
             "unique": a.unique,
+            "progression": a.progression,
             "totals": a.totals,
             "recipient_total": a.recipient_total,
             "event_total": a.event_total,

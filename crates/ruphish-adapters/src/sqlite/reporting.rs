@@ -1,4 +1,4 @@
-//! Consistent observed-event analysis; no inferred opens or location data.
+//! Observed-event analysis with a separate cumulative progression summary.
 use ruphish_application::{auth::Identity, reporting::*, resources::Error};
 use sqlx::{Row, SqlitePool};
 use std::sync::Arc;
@@ -127,6 +127,15 @@ impl Reports {
                 totals[i] = r.try_get("total").map_err(storage)?;
             }
         }
+        let flags = super::engagement::FLAGS;
+        let groups = super::engagement::GROUPS;
+        let evidence = query!(format!(
+            ", outcomes AS (SELECT e.recipient_id,{flags} FROM observed e WHERE e.recipient_id IS NOT NULL GROUP BY e.recipient_id) {groups}"
+        ))
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(storage)?;
+        let progression = super::engagement::summarize(evidence).map_err(storage)?;
         let counts = query!(
             r#"
                 SELECT (SELECT count(*)
@@ -275,6 +284,7 @@ impl Reports {
             as_of: time::OffsetDateTime::now_utc().unix_timestamp(),
             audience,
             unique,
+            progression: progression.counts,
             totals,
             event_total,
             recipient_total,

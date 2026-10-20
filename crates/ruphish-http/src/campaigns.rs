@@ -106,37 +106,8 @@ fn encode_campaign(c: &app::Campaign) -> Value {
 }
 fn encode_summary(c: &app::Campaign) -> Value {
     let mut v = base(c);
-    let mut sent = 0;
-    let mut opened = 0;
-    let mut clicked = 0;
-    let mut submitted = 0;
-    let mut reported = 0;
-    let mut failed = 0;
-    for r in &c.results {
-        match r.status.as_str() {
-            "Submitted Data" => {
-                submitted += 1;
-                clicked += 1;
-                opened += 1;
-                sent += 1
-            }
-            "Clicked Link" => {
-                clicked += 1;
-                opened += 1;
-                sent += 1
-            }
-            "Email Opened" => {
-                opened += 1;
-                sent += 1
-            }
-            "Email Sent" => sent += 1,
-            "Error" => failed += 1,
-            _ => {}
-        };
-        if r.reported {
-            reported += 1;
-        }
-    }
+    let [sent, opened, clicked, submitted, reported] = c.progression();
+    let failed = c.results.iter().filter(|r| r.status == "Error").count();
     v["stats"] = json!({"total":c.results.len(),"sent":sent,"opened":opened,"clicked":clicked,"submitted_data":submitted,"email_reported":reported,"error":failed});
     v
 }

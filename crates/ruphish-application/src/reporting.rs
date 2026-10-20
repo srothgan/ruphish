@@ -78,6 +78,9 @@ pub struct Analysis {
     pub audience: i64,
     /// Distinct recipients for each observed event type in this filter.
     pub unique: [i64; 5],
+    /// Cumulative distinct-recipient progression from matching observations.
+    /// Separate from raw unique counts, totals, chart buckets and exports.
+    pub progression: [i64; 5],
     /// Recorded event totals for each observed event type.
     pub totals: [i64; 5],
     /// Matching recipients, before pagination.

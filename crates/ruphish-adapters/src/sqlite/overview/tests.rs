@@ -91,16 +91,16 @@ async fn acceptance_cohorts_deduplicate_isolate_owners_and_reject_untrusted_pres
     event(&pool, 2, "today", "Email Sent", NOW, "").await;
     event(&pool, 2, "today", "Email Opened", NOW, "").await;
     for (window, sent, opened) in [
-        (Window::All, 5, 3),
-        (Window::Last30Days, 4, 2),
-        (Window::Last7Days, 3, 1),
+        (Window::All, 5, 5),
+        (Window::Last30Days, 4, 4),
+        (Window::Last7Days, 3, 3),
     ] {
         assert_eq!(
             repo.posture(OWNER, window, NOW).await.unwrap().counts,
             Posture {
                 delivered: sent,
                 opened,
-                clicked: 1,
+                clicked: sent,
                 reported: 1,
                 credentials_entered: 2
             }
@@ -245,7 +245,7 @@ async fn empty_data_revoked_identities_and_missing_permissions_are_not_fake_zero
 }
 
 #[tokio::test]
-async fn the_same_address_in_two_campaigns_is_two_recipients_and_observations_are_not_inferred() {
+async fn the_same_address_in_two_campaigns_counts_separately_without_fabricated_events() {
     let (_dir, pool, repo) = setup().await;
     sqlx::query(
         "INSERT INTO campaigns(id,user_id,name,status) VALUES(3,1,'Second campaign','In progress')",
@@ -267,7 +267,7 @@ async fn the_same_address_in_two_campaigns_is_two_recipients_and_observations_ar
         .await;
     }
     // A link can be fetched while the SMTP acceptance result is being persisted.
-    // The observation still belongs to this sent recipient; no open is inferred.
+    // The observation still belongs to this sent recipient; summary progression does not create an open event.
     event(&pool, 1, "same@example.test", "Email Reported", NOW - 1, "").await;
     assert_eq!(
         repo.posture(OWNER, Window::Last7Days, NOW)
@@ -276,6 +276,7 @@ async fn the_same_address_in_two_campaigns_is_two_recipients_and_observations_ar
             .counts,
         Posture {
             delivered: 2,
+            opened: 2,
             clicked: 2,
             reported: 1,
             ..Default::default()

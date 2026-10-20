@@ -7,7 +7,7 @@ use ruphish_ui::{
     view_tasks::ViewTasks,
 };
 
-const METRICS_HELP: &str = "The period selects recipients whose first recorded email send falls within that period. Each count includes each recipient once per campaign, even after repeated interactions. Percentages divide these counts by emails sent. Changes compare totals with the preceding equal-length period (7, 30 or 365 days), counting each period's observations up to its own end. An increase is more recipients, not a percentage change. All time has no preceding period to compare. A dash means no emails were sent for a percentage to be calculated.";
+const METRICS_HELP: &str = "The period selects recipients whose first recorded email send falls within that period. Each count includes each recipient once per campaign, even after repeated interactions. Opens include clicks and submissions; clicks include submissions. These are cumulative recipient counts, not additional recorded events. Percentages divide these counts by emails sent. Changes compare totals with the preceding equal-length period (7, 30 or 365 days), counting each period's observations up to its own end. An increase is more recipients, not a percentage change. All time has no preceding period to compare. A dash means no emails were sent for a percentage to be calculated.";
 
 fn read<T: serde::de::DeserializeOwned + Clone + Send + Sync + 'static>(
     api: Api,
@@ -73,7 +73,7 @@ pub(super) fn page(api: Api) -> impl IntoView {
         );
     });
     view! {<ManagementPage>
-        <PageHeader title="Dashboard" subtitle="Campaign activity, observed outcomes and the resources behind them.">
+        <PageHeader title="Dashboard" subtitle="Campaign activity, recipient outcomes and the resources behind them.">
             <ActionButton disabled=Signal::derive(move||snapshot.with(|s|s.loading)||posture.with(|s|s.loading)) on_click=move |_| {snapshot_refresh.update(|v|*v+=1);posture_refresh.update(|v|*v+=1);}>
                 {move||if snapshot.with(|s|s.loading)||posture.with(|s|s.loading){"Refreshing..."}else{"Refresh"}}
             </ActionButton>

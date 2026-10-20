@@ -6,6 +6,7 @@ mod campaign_schema;
 pub mod campaigns;
 mod domain_schema;
 pub mod domains;
+mod engagement;
 pub mod integrations;
 pub mod interactions;
 pub(crate) mod mailbox_worker;

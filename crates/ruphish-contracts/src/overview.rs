@@ -1,14 +1,15 @@
 //! Dashboard response contracts. Counts contain no participant identities or submitted values.
 /// Engagement of uniquely identified campaign recipients first accepted within
 /// the selected window, observed through the server snapshot time. Repeated
-/// events count once. Credentials entered counts only explicit boolean presence.
+/// events count once; opens include clicks/submissions and clicks include
+/// submissions. Credentials entered counts only explicit boolean presence.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Posture {
     /// Recipients a message was recorded as sent to.
     pub delivered: i64,
-    /// Recipients who opened a message.
+    /// Recipients with an observed open, click or submission.
     pub opened: i64,
-    /// Recipients who followed a link.
+    /// Recipients with an observed click or submission.
     pub clicked: i64,
     /// Recipients who reported a message.
     pub reported: i64,
@@ -42,7 +43,7 @@ pub struct RecentCampaign {
     pub launch: String,
     /// Audience size.
     pub recipients: i64,
-    /// SMTP-accepted recipients and observed interactions for this campaign.
+    /// SMTP-accepted recipients and cumulative progression for this campaign.
     pub outcomes: Posture,
 }
 

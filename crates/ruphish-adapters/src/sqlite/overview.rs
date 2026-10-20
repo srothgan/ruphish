@@ -191,8 +191,8 @@ impl Repository for Overview {
 }
 
 /// Group by real campaign-recipient identity, excluding ambiguous historical
-/// addresses exactly as per-campaign analysis does. Never infer an open from a
-/// click or a password from arbitrary legacy payloads.
+/// addresses exactly as per-campaign analysis does. Shared domain rules derive
+/// progression from evidence without changing the recorded history.
 async fn aggregate(
     connection: &mut sqlx::SqliteConnection,
     owner: i64,
@@ -200,7 +200,9 @@ async fn aggregate(
     now: i64,
     campaign: Option<i64>,
 ) -> Result<Posture, Error> {
-    let row = sqlx::query(
+    let flags = super::engagement::FLAGS;
+    let groups = super::engagement::GROUPS;
+    let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
         r#"
         WITH identities AS (
             SELECT r.campaign_id,r.email,min(r.id) AS id
@@ -215,36 +217,29 @@ async fn aggregate(
         ), cohort AS (
             SELECT * FROM accepted WHERE (?2 IS NULL OR first_sent>=?2)
         ), outcomes AS (
-            SELECT c.id,
-                max(CASE WHEN e.message='Email Opened' THEN 1 ELSE 0 END) AS opened,
-                max(CASE WHEN e.message='Clicked Link' THEN 1 ELSE 0 END) AS clicked,
-                max(CASE WHEN e.message='Email Reported' THEN 1 ELSE 0 END) AS reported,
-                max(CASE WHEN e.message='Submitted Data' THEN
-                    CASE WHEN json_valid(e.details) THEN
-                        CASE WHEN json_type(e.details,'$.password_present')='true' THEN 1 ELSE 0 END
-                    ELSE 0 END ELSE 0 END) AS credentials
+            SELECT c.id, {flags}
             FROM cohort c LEFT JOIN events e ON e.campaign_id=c.campaign_id AND e.email=c.email
                 AND unixepoch(e.time)<=?3
             GROUP BY c.id
         )
-        SELECT count(*) AS delivered,COALESCE(sum(opened),0) AS opened,
-            COALESCE(sum(clicked),0) AS clicked,COALESCE(sum(reported),0) AS reported,
-            COALESCE(sum(credentials),0) AS credentials FROM outcomes
+        {groups}
     "#,
-    )
+    )))
     .bind(owner)
     .bind(since)
     .bind(now)
     .bind(campaign)
-    .fetch_one(connection)
+    .fetch_all(connection)
     .await
     .map_err(storage)?;
+    let summary = super::engagement::summarize(rows).map_err(storage)?;
+    let [delivered, opened, clicked, _, reported] = summary.counts;
     Ok(Posture {
-        delivered: row.try_get("delivered").map_err(storage)?,
-        opened: row.try_get("opened").map_err(storage)?,
-        clicked: row.try_get("clicked").map_err(storage)?,
-        reported: row.try_get("reported").map_err(storage)?,
-        credentials_entered: row.try_get("credentials").map_err(storage)?,
+        delivered,
+        opened,
+        clicked,
+        reported,
+        credentials_entered: summary.credentials_entered,
     })
 }
 

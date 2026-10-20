@@ -80,6 +80,7 @@ async fn observations_filters_and_exports_preserve_evidence_without_credentials_
         [0, 0, 1, 1, 1],
         "clicks and submissions must not invent opens or SMTP acceptance"
     );
+    assert_eq!(result.progression, [0, 1, 1, 1, 1]);
     assert_eq!(result.totals, [0, 0, 1, 1, 2]);
     assert_eq!(result.events.len(), 4);
     assert!(
@@ -109,6 +110,7 @@ async fn observations_filters_and_exports_preserve_evidence_without_credentials_
         .analysis(caller(), campaign, selected)
         .await
         .unwrap();
+    assert_eq!(selected.progression, [0, 0, 0, 0, 1]);
     assert_eq!(selected.event_total, 2);
     assert_eq!(selected.recipient_total, 1);
     let mut invalid = filter();

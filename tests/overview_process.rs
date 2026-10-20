@@ -205,3 +205,168 @@ fn dashboard_supports_authenticated_browser_and_api_reads_restart_and_revocation
         assert!(!process.output().contains(secret));
     }
 }
+
+#[test]
+fn progression_is_shared_across_summaries_without_inventing_recorded_events() {
+    use sqlx::Row;
+    let dir = workspace();
+    let mut process = Process::with_options(
+        dir.path(),
+        "admin",
+        Some("synthetic-bootstrap-password"),
+        Some("synthetic-bootstrap-token"),
+        &["--disable-mailer"],
+    );
+    process.ready();
+    let key = Some("synthetic-bootstrap-token");
+    database(dir.path(), "UPDATE users SET password_change_required=0;
+        INSERT INTO campaigns(id,user_id,name,status) VALUES(1,1,'Progression','Completed'),(2,1,'No acceptance','Completed'),(3,2,'Other owner','Completed');
+        INSERT INTO users(id,username,api_key,role_id,password_change_required,account_locked) VALUES(2,'other','other-key',2,0,0); INSERT INTO ruphish_auth_state VALUES(2,0);");
+    // Repeated observations precede the later acceptance. Neither insertion
+    // order nor duplicates may change unique progression or create timestamps.
+    database(
+        dir.path(),
+        r#"
+        INSERT INTO results(id,campaign_id,user_id,r_id,email,status) VALUES
+        (1,1,1,'rid-1','sent@test','Email Sent'),
+        (2,1,1,'rid-2','open@test','Email Sent'),
+        (3,1,1,'rid-3','click@test','Email Sent'),
+        (4,1,1,'rid-4','submit@test','Email Sent'),
+        (5,1,1,'rid-5','presence@test','Email Sent'),
+        (6,1,1,'rid-6','report@test','Email Sent');
+        WITH fixture(email,kind,details) AS (VALUES
+            ('open@test','Email Opened',''),
+            ('click@test','Clicked Link',''),
+            ('submit@test','Submitted Data','{"password_present":false}'),
+            ('presence@test','Submitted Data','{"password_present":true}'),
+            ('report@test','Email Reported','')
+        ) INSERT INTO events(campaign_id,email,message,time,details)
+          SELECT 1,email,kind,datetime('now','-2 hours'),details FROM fixture CROSS JOIN (SELECT 1 UNION ALL SELECT 2);
+        INSERT INTO events(campaign_id,email,message,time,details)
+          SELECT 1,email,'Email Sent',datetime('now','-1 hour'),'' FROM results CROSS JOIN (SELECT 1 UNION ALL SELECT 2);
+    "#,
+    );
+    database(
+        dir.path(),
+        r#"
+        INSERT INTO results(id,campaign_id,user_id,r_id,email,status,reported) VALUES
+        (7,1,1,'ambiguous-a','ambiguous@test','Submitted Data',1),
+        (8,1,1,'ambiguous-b','ambiguous@test','Submitted Data',1),
+        (9,1,1,'state-only','state@test','Submitted Data',1),
+        (10,2,1,'unsent','presence@test','Submitted Data',0),
+        (11,3,2,'other','presence@test','Submitted Data',0);
+        INSERT INTO events(campaign_id,email,message,time,details) VALUES
+        (1,'ambiguous@test','Email Sent',datetime('now','-1 hour'),''),
+        (1,'ambiguous@test','Submitted Data',datetime('now','-1 hour'),'{"password_present":true}'),
+        (1,'orphan@test','Email Sent',datetime('now','-1 hour'),''),
+        (1,'orphan@test','Clicked Link',datetime('now','-1 hour'),''),
+        (2,'presence@test','Submitted Data',datetime('now','-1 hour'),'{"password_present":true}'),
+        (3,'presence@test','Email Sent',datetime('now','-1 hour'),''),
+        (3,'presence@test','Submitted Data',datetime('now','-1 hour'),'{"password_present":true}');
+    "#,
+    );
+    for pass in 0..2 {
+        let base = format!("http://{}", process.ready()["admin"].as_str().unwrap());
+        let fetch = |path: &str| -> Value {
+            let response = read(&base, path, key);
+            assert_eq!(
+                response.status(),
+                200,
+                "{path}: {}",
+                response.text().unwrap()
+            );
+            response.json().unwrap()
+        };
+        let p = fetch("/api/overview/posture?window=all");
+        for (field, count) in [
+            ("delivered", 6),
+            ("opened", 4),
+            ("clicked", 3),
+            ("reported", 1),
+            ("credentials_entered", 1),
+        ] {
+            assert_eq!(p[field], count, "{field}");
+        }
+        let a = fetch("/api/campaigns/1/analysis");
+        assert_eq!(a["progression"], json!([6, 4, 3, 2, 1]));
+        assert_eq!(a["unique"], json!([6, 1, 1, 2, 1]));
+        // Unassigned observations still appear in raw history and exports.
+        assert_eq!(a["totals"], json!([14, 2, 3, 5, 2]));
+        assert_eq!(a["event_total"], 26);
+        let chart_opens: i64 = a["buckets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| b["counts"][1].as_i64().unwrap())
+            .sum();
+        assert_eq!(chart_opens, 2);
+        let s = fetch("/api/campaigns/1/summary");
+        assert_eq!(
+            s["stats"],
+            json!({"total":9,"sent":6,"opened":4,"clicked":3,"submitted_data":2,"email_reported":1,"error":0})
+        );
+        let summaries = fetch("/api/campaigns/summary");
+        assert_eq!(
+            summaries["campaigns"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|c| c["id"] == 1)
+                .unwrap()["stats"],
+            s["stats"]
+        );
+        let snapshot = fetch("/api/overview");
+        let recent = snapshot["recent"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["id"] == 1)
+            .unwrap();
+        assert_eq!(recent["outcomes"]["opened"], 4);
+        assert_eq!(recent["outcomes"]["clicked"], 3);
+        let filtered = fetch("/api/campaigns/1/analysis?event=Submitted%20Data&limit=1");
+        assert_eq!(filtered["progression"], json!([0, 2, 2, 2, 0]));
+        assert_eq!(filtered["unique"], json!([0, 0, 0, 2, 0]));
+        let recipient = fetch("/api/campaigns/1/analysis?recipient=5");
+        assert_eq!(recipient["progression"], json!([1, 1, 1, 1, 0]));
+        assert_eq!(recipient["recipients"][0]["counts"], json!([2, 0, 0, 2, 0]));
+        let unsent = fetch("/api/campaigns/2/summary");
+        assert_eq!(unsent["stats"]["sent"], 0);
+        assert_eq!(unsent["stats"]["opened"], 1);
+        assert_eq!(unsent["stats"]["clicked"], 1);
+        let other = read(&base, "/api/campaigns/1/analysis", Some("other-key"));
+        assert_eq!(other.status(), 404);
+        let csv = read(
+            &base,
+            "/api/campaigns/1/export?format=csv&scope=events",
+            key,
+        )
+        .text()
+        .unwrap();
+        // This controlled fixture has no multiline values; inspect exported
+        // rows independently of the production CSV writer.
+        let records = csv.lines().skip(1).collect::<Vec<_>>();
+        assert_eq!(records.len(), 26);
+        assert_eq!(
+            records
+                .iter()
+                .filter(|r| r.contains(",Email Opened,"))
+                .count(),
+            2
+        );
+        assert_eq!(
+            database(dir.path(), "SELECT count(*) AS n FROM events")[0].get::<i64, _>("n"),
+            29
+        );
+        process.stop();
+        if pass == 0 {
+            process = Process::with_options(
+                dir.path(),
+                "admin",
+                Some("synthetic-bootstrap-password"),
+                Some("synthetic-bootstrap-token"),
+                &["--disable-mailer"],
+            );
+        }
+    }
+}
