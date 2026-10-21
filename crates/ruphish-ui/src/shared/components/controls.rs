@@ -16,10 +16,13 @@ pub(crate) fn Select(
     view! {
         <Field label=label>
             <span class="select-control">
-            <select prop:value=move || value.get() disabled=move || disabled.get()
-                on:change=move |event| on_change.run(event_target_value(&event))>
-                {children()}
-            </select>
+                <select
+                    prop:value=move || value.get()
+                    disabled=move || disabled.get()
+                    on:change=move |event| on_change.run(event_target_value(&event))
+                >
+                    {children()}
+                </select>
             </span>
         </Field>
     }
@@ -38,11 +41,39 @@ pub(crate) fn ActionMenu(
     let (trigger, panel) = super::info::anchored_nodes();
     view! {
         <div class="action-menu">
-            <button node_ref=trigger type="button" class=style.class() disabled=move || disabled.get() aria-expanded="false">
+            <button
+                node_ref=trigger
+                type="button"
+                class=style.class()
+                disabled=move || disabled.get()
+                aria-expanded="false"
+            >
                 <span>{move || label.get()}</span>
-                <svg class="action-menu-chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                <svg
+                    class="action-menu-chevron"
+                    viewBox="0 0 24 24"
+                    width="16"
+                    height="16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                >
+                    <path d="M6 9l6 6 6-6" />
+                </svg>
             </button>
-            <div node_ref=panel class="action-menu-panel" role="group" aria-label=move || label.get() data-close-after-action hidden>{children()}</div>
+            <div
+                node_ref=panel
+                class="action-menu-panel"
+                role="group"
+                aria-label=move || label.get()
+                data-close-after-action
+                hidden
+            >
+                {children()}
+            </div>
         </div>
     }
 }
@@ -58,8 +89,12 @@ pub(crate) fn Checkbox(
 ) -> impl IntoView {
     view! {
         <label class="checkbox-label" class:compact=compact>
-            <input type="checkbox" prop:checked=move || checked.get() disabled=move || disabled.get()
-                on:change=move |event| on_toggle.run(event_target_checked(&event))/>
+            <input
+                type="checkbox"
+                prop:checked=move || checked.get()
+                disabled=move || disabled.get()
+                on:change=move |event| on_toggle.run(event_target_checked(&event))
+            />
             <span>{move || label.get()}</span>
         </label>
     }

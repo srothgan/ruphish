@@ -21,16 +21,25 @@ pub(crate) fn Dialog(
         }
     });
     view! {
-        <dialog node_ref=node class="management-dialog" class:compact=compact aria-label=move || title.get()
+        <dialog
+            node_ref=node
+            class="management-dialog"
+            class:compact=compact
+            aria-label=move || title.get()
             on:cancel=move |event: leptos::ev::Event| {
                 if let Some(cancel) = on_cancel {
                     event.prevent_default();
                     if !busy.get_untracked() {
-                        if let Some(dialog) = node.get_untracked() { dialog.close(); }
+                        if let Some(dialog) = node.get_untracked() {
+                            dialog.close();
+                        }
                         cancel.run(());
                     }
                 }
-            }>{children()}</dialog>
+            }
+        >
+            {children()}
+        </dialog>
     }
 }
 
@@ -54,11 +63,34 @@ pub(crate) fn DeleteConfirmation(
             on_cancel.run(());
         }
     };
-    view! { <Dialog node=dialog title=accessible_title compact=true busy=busy on_cancel=Callback::new(move |_|cancel())>
-        <h2>{move || title.get()}</h2><p>{move || description.get()}</p>{message.view()}
-        <div class="confirmation-actions">
-            <ActionButton style=ButtonStyle::Ghost autofocus=true disabled=busy on_click=move |_|cancel()>{tr!(ui.cancel)}</ActionButton>
-            <ActionButton style=ButtonStyle::Danger disabled=busy on_click=move |_|on_confirm.run(())>{move || confirm_label.get()}</ActionButton>
-        </div>
-    </Dialog> }
+    view! {
+        <Dialog
+            node=dialog
+            title=accessible_title
+            compact=true
+            busy=busy
+            on_cancel=Callback::new(move |_| cancel())
+        >
+            <h2>{move || title.get()}</h2>
+            <p>{move || description.get()}</p>
+            {message.view()}
+            <div class="confirmation-actions">
+                <ActionButton
+                    style=ButtonStyle::Ghost
+                    autofocus=true
+                    disabled=busy
+                    on_click=move |_| cancel()
+                >
+                    {tr!(ui.cancel)}
+                </ActionButton>
+                <ActionButton
+                    style=ButtonStyle::Danger
+                    disabled=busy
+                    on_click=move |_| on_confirm.run(())
+                >
+                    {move || confirm_label.get()}
+                </ActionButton>
+            </div>
+        </Dialog>
+    }
 }

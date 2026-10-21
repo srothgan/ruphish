@@ -28,12 +28,27 @@ const EVENTS: [&str; 8] = [
 
 pub(super) fn page(api: Api) -> impl IntoView {
     let params = use_params_map();
-    view! { <For each=move || vec![(params.with(|p|p.get("id")).unwrap_or_default(),params.with(|p|p.get("recipient")))] key=|key|key.clone() children=move |(id,recipient)| {
-        match id.parse::<i64>() {
-            Ok(id) => detail(api,id,recipient.and_then(|r|r.parse().ok())).into_any(),
-            Err(_) => view!{<p role="alert">{tr!(ui.invalid_campaign_address)}</p>}.into_any(),
-        }
-    }/> }
+    view! {
+        <For
+            each=move || {
+                vec![
+                    (
+                        params.with(|p| p.get("id")).unwrap_or_default(),
+                        params.with(|p| p.get("recipient")),
+                    ),
+                ]
+            }
+            key=|key| key.clone()
+            children=move |(id, recipient)| {
+                match id.parse::<i64>() {
+                    Ok(id) => detail(api, id, recipient.and_then(|r| r.parse().ok())).into_any(),
+                    Err(_) => {
+                        view! { <p role="alert">{tr!(ui.invalid_campaign_address)}</p> }.into_any()
+                    }
+                }
+            }
+        />
+    }
 }
 
 fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
@@ -221,83 +236,412 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
     view! {
         <ManagementPage>
             <BackLink href=Signal::derive(move || {
-                if recipient.is_some(){let mut f=filters.get();f.recipient=None;f.offset=0;address(&format!("/analysis/{id}"),&f,false)}else{"/analysis".into()}
-            })>{move || if recipient.is_some(){leptos_i18n::t_string!(i18n, ui.back_to_campaign_analysis)}else{leptos_i18n::t_string!(i18n, ui.back_to_analysis)}}</BackLink>
-            <PageHeader title=Signal::derive(move || {let name=text(&data.get(),"name");if name.is_empty(){leptos_i18n::t_string!(i18n, ui.campaign).into()}else{name}})
-                subtitle=Signal::derive(move || if loaded.get(){leptos_i18n::t_string!(i18n, messages.updated_arg0, arg0 = (minute(&data.get()["as_of"])).to_string())}else if loading.get(){leptos_i18n::t_string!(i18n, ui.loading_analysis).into()}else{leptos_i18n::t_string!(i18n, ui.refresh_failed_retry_to_load_current_results).into()})>
-                <ActionButton busy=Signal::derive(move ||loading.get().to_string()) on_click=move |_|read.refresh.run(())>{move ||if loading.get(){leptos_i18n::t_string!(i18n, ui.refreshing)}else{leptos_i18n::t_string!(i18n, ui.refresh)}}</ActionButton>
-                <ActionMenu label=trs!(ui.export) style=ButtonStyle::Primary disabled=Signal::derive(move ||downloading.get()||!loaded.get())>
-                    <ActionButton disabled=Signal::derive(move ||downloading.get()||!loaded.get()) on_click=move |_|export("csv","recipients")>{tr!(ui.recipients_csv)}</ActionButton>
-                    <ActionButton disabled=Signal::derive(move ||downloading.get()||!loaded.get()) on_click=move |_|export("csv","events")>{tr!(ui.events_csv)}</ActionButton>
-                    <ActionButton disabled=Signal::derive(move ||downloading.get()||!loaded.get()) on_click=move |_|export("xlsx","all")>{tr!(ui.excel_workbook)}</ActionButton>
+                if recipient.is_some() {
+                    let mut f = filters.get();
+                    f.recipient = None;
+                    f.offset = 0;
+                    address(&format!("/analysis/{id}"), &f, false)
+                } else {
+                    "/analysis".into()
+                }
+            })>
+                {move || {
+                    if recipient.is_some() {
+                        leptos_i18n::t_string!(i18n, ui.back_to_campaign_analysis)
+                    } else {
+                        leptos_i18n::t_string!(i18n, ui.back_to_analysis)
+                    }
+                }}
+            </BackLink>
+            <PageHeader
+                title=Signal::derive(move || {
+                    let name = text(&data.get(), "name");
+                    if name.is_empty() {
+                        leptos_i18n::t_string!(i18n, ui.campaign).into()
+                    } else {
+                        name
+                    }
+                })
+                subtitle=Signal::derive(move || {
+                    if loaded.get() {
+                        leptos_i18n::t_string!(
+                            i18n, messages.updated_arg0, arg0 = (minute(&data.get()["as_of"])).to_string()
+                        )
+                    } else if loading.get() {
+                        leptos_i18n::t_string!(i18n, ui.loading_analysis).into()
+                    } else {
+                        leptos_i18n::t_string!(
+                            i18n, ui.refresh_failed_retry_to_load_current_results
+                        )
+                            .into()
+                    }
+                })
+            >
+                <ActionButton
+                    busy=Signal::derive(move || loading.get().to_string())
+                    on_click=move |_| read.refresh.run(())
+                >
+                    {move || {
+                        if loading.get() {
+                            leptos_i18n::t_string!(i18n, ui.refreshing)
+                        } else {
+                            leptos_i18n::t_string!(i18n, ui.refresh)
+                        }
+                    }}
+                </ActionButton>
+                <ActionMenu
+                    label=trs!(ui.export)
+                    style=ButtonStyle::Primary
+                    disabled=Signal::derive(move || downloading.get() || !loaded.get())
+                >
+                    <ActionButton
+                        disabled=Signal::derive(move || downloading.get() || !loaded.get())
+                        on_click=move |_| export("csv", "recipients")
+                    >
+                        {tr!(ui.recipients_csv)}
+                    </ActionButton>
+                    <ActionButton
+                        disabled=Signal::derive(move || downloading.get() || !loaded.get())
+                        on_click=move |_| export("csv", "events")
+                    >
+                        {tr!(ui.events_csv)}
+                    </ActionButton>
+                    <ActionButton
+                        disabled=Signal::derive(move || downloading.get() || !loaded.get())
+                        on_click=move |_| export("xlsx", "all")
+                    >
+                        {tr!(ui.excel_workbook)}
+                    </ActionButton>
                 </ActionMenu>
                 <ActionLink href=format!("/campaigns/{id}")>{tr!(ui.back_to_campaign)}</ActionLink>
             </PageHeader>
             {message.view()}
-            <QueryStatus fetching=loading has_data=loaded error=read.error noun=trs!(ui.campaign_analysis) refresh=read.refresh/>
+            <QueryStatus
+                fetching=loading
+                has_data=loaded
+                error=read.error
+                noun=trs!(ui.campaign_analysis)
+                refresh=read.refresh
+            />
             <form class="analysis-filters" on:submit=apply>
                 <div class="analysis-filter-fields">
-                    {recipient.is_none().then(||view!{
-                        <MultiSelect label=trs!(ui.recipients) selected=selected search=option_search
-                            options=Signal::derive(move ||option_state.get().rows)
-                            loading=Signal::derive(move ||option_state.get().loading) error=Signal::derive(move ||option_state.get().error)
-                            has_more=Signal::derive(move ||option_state.with(ruphish_ui::select_options::Options::has_more))
-                            on_more=Callback::new(move |()|more_options(false)) on_retry=Callback::new(move |()|more_options(true))/>
-
-                    })}
-                    <Select label=trs!(ui.event) value=selected_event on_change=Callback::new(move |v|selected_event.set(v))>
-                        <option value="">{tr!(ui.all_events)}</option>{EVENTS.into_iter().map(|e|view!{<option value=e>{move || ruphish_ui::localization::event_label(i18n,e)}</option>}).collect_view()}
+                    {recipient
+                        .is_none()
+                        .then(|| {
+                            view! {
+                                <MultiSelect
+                                    label=trs!(ui.recipients)
+                                    selected=selected
+                                    search=option_search
+                                    options=Signal::derive(move || option_state.get().rows)
+                                    loading=Signal::derive(move || option_state.get().loading)
+                                    error=Signal::derive(move || option_state.get().error)
+                                    has_more=Signal::derive(move || {
+                                        option_state
+                                            .with(ruphish_ui::select_options::Options::has_more)
+                                    })
+                                    on_more=Callback::new(move |()| more_options(false))
+                                    on_retry=Callback::new(move |()| more_options(true))
+                                />
+                            }
+                        })}
+                    <Select
+                        label=trs!(ui.event)
+                        value=selected_event
+                        on_change=Callback::new(move |v| selected_event.set(v))
+                    >
+                        <option value="">{tr!(ui.all_events)}</option>
+                        {EVENTS
+                            .into_iter()
+                            .map(|e| {
+                                view! {
+                                    <option value=e>
+                                        {move || ruphish_ui::localization::event_label(i18n, e)}
+                                    </option>
+                                }
+                            })
+                            .collect_view()}
                     </Select>
-                    <Select label=trs!(ui.source) value=source on_change=Callback::new(move |v|source.set(v))>
-                        <option value="">{tr!(ui.all_sources)}</option><option value="public">{tr!(ui.public_tracking)}</option><option value="mailbox">{tr!(ui.reporting_mailbox)}</option><option value="application">{tr!(ui.application)}</option><option value="legacy">{tr!(ui.legacy_history)}</option>
-                    </Select>
-                    <Field label=trs!(ui.from)><TextInput input_type="datetime-local" step="60" value=Signal::derive(move ||from.get()) on_input=move |e|from.set(event_target_value(&e))/></Field>
-                    <Field label=trs!(ui.until)><TextInput input_type="datetime-local" step="60" value=Signal::derive(move ||until.get()) on_input=move |e|until.set(event_target_value(&e))/></Field>
+                    <Select
+                        label=trs!(ui.source)
+                        value=source
+                        on_change=Callback::new(move |v| source.set(v))
+                    >
+                        <option value="">{tr!(ui.all_sources)}</option>
+                        <option value="public">{tr!(ui.public_tracking)}</option>
+                        <option value="mailbox">{tr!(ui.reporting_mailbox)}</option>
+                        <option value="application">{tr!(ui.application)}</option>
+                        <option value="legacy">{tr!(ui.legacy_history)}</option>
+                    </Select> <Field label=trs!(ui.from)>
+                        <TextInput
+                            input_type="datetime-local"
+                            step="60"
+                            value=Signal::derive(move || from.get())
+                            on_input=move |e| from.set(event_target_value(&e))
+                        />
+                    </Field> <Field label=trs!(ui.until)>
+                        <TextInput
+                            input_type="datetime-local"
+                            step="60"
+                            value=Signal::derive(move || until.get())
+                            on_input=move |e| until.set(event_target_value(&e))
+                        />
+                    </Field>
                 </div>
-                <div class="analysis-filter-footer"><span>{move || leptos_i18n::t_string!(i18n, messages.arg0_from_is_inclusive_until_is_exclusive, arg0 = (crate::time_display::zone_name()).to_string())}</span><div class="management-actions">
-                    <ActionButton on_click=move |_|go(Filter{recipient,..Default::default()})>{tr!(ui.clear_filters)}</ActionButton>
-                    <ActionButton kind="submit" style=ButtonStyle::Primary>{tr!(ui.apply_filters)}</ActionButton>
-                </div></div>
-                <Show when=move ||!filters.get().search.is_empty()><p>{move ||leptos_i18n::t_string!(i18n, messages.saved_recipient_search_arg0, arg0 = (filters.get().search).to_string())}</p></Show>
-            </form>
-            <Show when=move ||loaded.get()>
-                {recipient.map(|_|view!{<h2 class="analysis-recipient-title">{move ||array(&data.get(),"recipients").first().map(|r|text(r,"email")).unwrap_or_else(||leptos_i18n::t_string!(i18n, ui.recipient_details).into())}</h2>})}
-                <div class="analysis-summary">
-                    {labels().into_iter().enumerate().map(|(i,label)|view!{
-                        <Card class="analysis-metric"><span>{move || label.get()}</span><strong>{move ||data.get()["progression"][i].as_i64().unwrap_or(0)}</strong>
-                            <small>{move ||leptos_i18n::t_string!(i18n, messages.arg0_recorded_events, arg0 = (data.get()["totals"][i].as_i64().unwrap_or(0)).to_string())}</small>
-                        </Card>
-                    }).collect_view()}
-                </div>
-                <p class="analysis-context">{move ||leptos_i18n::t_string!(i18n, messages.recipient_progression_within_the_selected_filters_opens_include_clicks_and_submi, arg0 = (data.get()["audience"]).to_string())}</p>
-                <ActivityChart data=chart interval=Signal::derive(move ||data.get()["bucket_seconds"].as_i64().unwrap_or(60).max(60))/>
-                <details class="analysis-explanation"><summary>{tr!(ui.what_these_observations_mean)}</summary><p>{tr!(ui.the_chart_recipient_table_and_exports_show_recorded_events_only_opens_are_image)}</p></details>
-                <h2>{move || if recipient.is_some(){leptos_i18n::t_string!(i18n, ui.recipient_events)}else{leptos_i18n::t_string!(i18n, ui.recipients)}}</h2>
-                {if recipient.is_none(){view!{
-                    <DataTable label=trs!(ui.recipient_observations) headers=vec![trs!(ui.recipient),trs!(ui.delivery),trs!(ui.accepted),trs!(ui.opened),trs!(ui.clicked),trs!(ui.submitted),trs!(ui.reported),trs!(ui.details)]>
-                        {move ||array(&data.get(),"recipients").into_iter().map(|row| {
-                            let mut filter=filters.get();filter.offset=0;
-                            let href=address(&format!("/analysis/{id}/recipients/{}",row["id"]),&filter,false);
-                            view!{<tr><td>{text(&row,"email")}<small>{text(&row,"name")}</small></td><td>{ruphish_ui::localization::delivery_label(i18n,&text(&row,"delivery"))}</td>
-                                {(0..5).map(|i|view!{<td>{row["counts"][i].as_i64().unwrap_or(0)}{(i==4&&row["historical_reported"]==true).then(||view!{<small>{tr!(ui.legacy_report_time_unknown)}</small>})}</td>}).collect_view()}
-                                <td><ActionLink href=href>{tr!(ui.details)}</ActionLink></td>
-                            </tr>}
-                        }).collect_view()}
-                    </DataTable>
-                }.into_any()}else{view!{
-                    <DataTable label=trs!(ui.recipient_events) headers=vec![trs!(ui.time),trs!(ui.event),trs!(ui.source),trs!(ui.details)]>
-                        {move ||array(&data.get(),"events").into_iter().map(|e|view!{<tr><td>{minute(&e["time"])}</td><td>{ruphish_ui::localization::event_label(i18n,&text(&e,"kind"))}</td><td>{text(&e,"source")}</td><td>{e["password_present"].as_bool().map(|v|if v{leptos_i18n::t_string!(i18n, ui.password_field_was_nonempty)}else{leptos_i18n::t_string!(i18n, ui.password_field_was_empty)})}</td></tr>}).collect_view()}
-                    </DataTable>
-                }.into_any()}}
-                <Show when=move ||total.get()==0><EmptyState title=trs!(ui.no_matching_results)><p>{tr!(ui.change_or_clear_the_filters_to_see_more_activity)}</p></EmptyState></Show>
-            </Show>
-                <div class="analysis-pagination">
-                    <span>{move ||if !loaded.get(){"—".to_owned()}else if recipient.is_some(){leptos_i18n::t_string!(i18n, messages.count_matching_events, count = total.get())}else{leptos_i18n::t_string!(i18n, messages.count_matching_recipients, count = total.get())}}</span>
+                <div class="analysis-filter-footer">
+                    <span>
+                        {move || {
+                            leptos_i18n::t_string!(
+                                i18n, messages.arg0_from_is_inclusive_until_is_exclusive, arg0 = (crate::time_display::zone_name()).to_string()
+                            )
+                        }}
+                    </span>
                     <div class="management-actions">
-                        <ActionButton disabled=Signal::derive(move ||loading.get()||filters.get().offset==0) on_click=move |_|{let mut f=filters.get_untracked();f.offset=f.offset.saturating_sub(f.limit);go(f);}>{tr!(ui.previous_page)}</ActionButton>
-                        <ActionButton disabled=Signal::derive(move ||loading.get()||!loaded.get()||filters.get().offset.saturating_add(filters.get().limit)>=total.get()) on_click=move |_|{let mut f=filters.get_untracked();f.offset+=f.limit;go(f);}>{tr!(ui.next_page)}</ActionButton>
+                        <ActionButton on_click=move |_| go(Filter {
+                            recipient,
+                            ..Default::default()
+                        })>{tr!(ui.clear_filters)}</ActionButton>
+                        <ActionButton kind="submit" style=ButtonStyle::Primary>
+                            {tr!(ui.apply_filters)}
+                        </ActionButton>
                     </div>
                 </div>
+                <Show when=move || !filters.get().search.is_empty()>
+                    <p>
+                        {move || {
+                            leptos_i18n::t_string!(
+                                i18n, messages.saved_recipient_search_arg0, arg0 = (filters.get().search).to_string()
+                            )
+                        }}
+                    </p>
+                </Show>
+            </form>
+            <Show when=move || {
+                loaded.get()
+            }>
+                {recipient
+                    .map(|_| {
+                        view! {
+                            <h2 class="analysis-recipient-title">
+                                {move || {
+                                    array(&data.get(), "recipients")
+                                        .first()
+                                        .map(|r| text(r, "email"))
+                                        .unwrap_or_else(|| {
+                                            leptos_i18n::t_string!(i18n, ui.recipient_details).into()
+                                        })
+                                }}
+                            </h2>
+                        }
+                    })}
+                <div class="analysis-summary">
+                    {labels()
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, label)| {
+                            view! {
+                                <Card class="analysis-metric">
+                                    <span>{move || label.get()}</span>
+                                    <strong>
+                                        {move || data.get()["progression"][i].as_i64().unwrap_or(0)}
+                                    </strong>
+                                    <small>
+                                        {move || {
+                                            leptos_i18n::t_string!(
+                                                i18n, messages.arg0_recorded_events, arg0 = (data.get()["totals"][i].as_i64().unwrap_or(0)).to_string()
+                                            )
+                                        }}
+                                    </small>
+                                </Card>
+                            }
+                        })
+                        .collect_view()}
+                </div>
+                <p class="analysis-context">
+                    {move || {
+                        leptos_i18n::t_string!(
+                            i18n, messages.recipient_progression_within_the_selected_filters_opens_include_clicks_and_submi, arg0 = (data.get()["audience"]).to_string()
+                        )
+                    }}
+                </p>
+                <ActivityChart
+                    data=chart
+                    interval=Signal::derive(move || {
+                        data.get()["bucket_seconds"].as_i64().unwrap_or(60).max(60)
+                    })
+                /> <details class="analysis-explanation">
+                    <summary>{tr!(ui.what_these_observations_mean)}</summary>
+                    <p>
+                        {tr!(
+                            ui.the_chart_recipient_table_and_exports_show_recorded_events_only_opens_are_image
+                        )}
+                    </p>
+                </details>
+                <h2>
+                    {move || {
+                        if recipient.is_some() {
+                            leptos_i18n::t_string!(i18n, ui.recipient_events)
+                        } else {
+                            leptos_i18n::t_string!(i18n, ui.recipients)
+                        }
+                    }}
+                </h2>
+                {if recipient.is_none() {
+                    view! {
+                        <DataTable
+                            label=trs!(ui.recipient_observations)
+                            headers=vec![
+                                trs!(ui.recipient),
+                                trs!(ui.delivery),
+                                trs!(ui.accepted),
+                                trs!(ui.opened),
+                                trs!(ui.clicked),
+                                trs!(ui.submitted),
+                                trs!(ui.reported),
+                                trs!(ui.details),
+                            ]
+                        >
+                            {move || {
+                                array(&data.get(), "recipients")
+                                    .into_iter()
+                                    .map(|row| {
+                                        let mut filter = filters.get();
+                                        filter.offset = 0;
+                                        let href = address(
+                                            &format!("/analysis/{id}/recipients/{}", row["id"]),
+                                            &filter,
+                                            false,
+                                        );
+                                        view! {
+                                            <tr>
+                                                <td>
+                                                    {text(&row, "email")}<small>{text(&row, "name")}</small>
+                                                </td>
+                                                <td>
+                                                    {ruphish_ui::localization::delivery_label(
+                                                        i18n,
+                                                        &text(&row, "delivery"),
+                                                    )}
+                                                </td>
+                                                {(0..5)
+                                                    .map(|i| {
+                                                        view! {
+                                                            <td>
+                                                                {row["counts"][i].as_i64().unwrap_or(0)}
+                                                                {(i == 4 && row["historical_reported"] == true)
+                                                                    .then(|| {
+                                                                        view! {
+                                                                            <small>{tr!(ui.legacy_report_time_unknown)}</small>
+                                                                        }
+                                                                    })}
+                                                            </td>
+                                                        }
+                                                    })
+                                                    .collect_view()}
+                                                <td>
+                                                    <ActionLink href=href>{tr!(ui.details)}</ActionLink>
+                                                </td>
+                                            </tr>
+                                        }
+                                    })
+                                    .collect_view()
+                            }}
+                        </DataTable>
+                    }
+                        .into_any()
+                } else {
+                    view! {
+                        <DataTable
+                            label=trs!(ui.recipient_events)
+                            headers=vec![
+                                trs!(ui.time),
+                                trs!(ui.event),
+                                trs!(ui.source),
+                                trs!(ui.details),
+                            ]
+                        >
+                            {move || {
+                                array(&data.get(), "events")
+                                    .into_iter()
+                                    .map(|e| {
+                                        view! {
+                                            <tr>
+                                                <td>{minute(&e["time"])}</td>
+                                                <td>
+                                                    {ruphish_ui::localization::event_label(
+                                                        i18n,
+                                                        &text(&e, "kind"),
+                                                    )}
+                                                </td>
+                                                <td>{text(&e, "source")}</td>
+                                                <td>
+                                                    {e["password_present"]
+                                                        .as_bool()
+                                                        .map(|v| {
+                                                            if v {
+                                                                leptos_i18n::t_string!(i18n, ui.password_field_was_nonempty)
+                                                            } else {
+                                                                leptos_i18n::t_string!(i18n, ui.password_field_was_empty)
+                                                            }
+                                                        })}
+                                                </td>
+                                            </tr>
+                                        }
+                                    })
+                                    .collect_view()
+                            }}
+                        </DataTable>
+                    }
+                        .into_any()
+                }} <Show when=move || total.get() == 0>
+                    <EmptyState title=trs!(ui.no_matching_results)>
+                        <p>{tr!(ui.change_or_clear_the_filters_to_see_more_activity)}</p>
+                    </EmptyState>
+                </Show>
+            </Show>
+            <div class="analysis-pagination">
+                <span>
+                    {move || {
+                        if !loaded.get() {
+                            "—".to_owned()
+                        } else if recipient.is_some() {
+                            leptos_i18n::t_string!(
+                                i18n, messages.count_matching_events, count = total.get()
+                            )
+                        } else {
+                            leptos_i18n::t_string!(
+                                i18n, messages.count_matching_recipients, count = total.get()
+                            )
+                        }
+                    }}
+                </span>
+                <div class="management-actions">
+                    <ActionButton
+                        disabled=Signal::derive(move || loading.get() || filters.get().offset == 0)
+                        on_click=move |_| {
+                            let mut f = filters.get_untracked();
+                            f.offset = f.offset.saturating_sub(f.limit);
+                            go(f);
+                        }
+                    >
+                        {tr!(ui.previous_page)}
+                    </ActionButton>
+                    <ActionButton
+                        disabled=Signal::derive(move || {
+                            loading.get() || !loaded.get()
+                                || filters.get().offset.saturating_add(filters.get().limit)
+                                    >= total.get()
+                        })
+                        on_click=move |_| {
+                            let mut f = filters.get_untracked();
+                            f.offset += f.limit;
+                            go(f);
+                        }
+                    >
+                        {tr!(ui.next_page)}
+                    </ActionButton>
+                </div>
+            </div>
         </ManagementPage>
     }
 }

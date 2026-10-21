@@ -1,6 +1,6 @@
 # Local development and verification
 
-Run commands from this product directory. rust-toolchain.toml selects Rust 1.99.1 with rustfmt, Clippy, and wasm32-unknown-unknown; edition 2024 and supported Rust 1.99 are inherited by every member. Rustup may download missing selected components. Trunk's exact requirement is in Trunk.toml, and cargo-deny's required version is in Cargo.toml workspace metadata. Add dependencies and install tools through CLI commands; keep Cargo.lock under version control.
+Run commands from this product directory. rust-toolchain.toml selects Rust 1.99.1 with rustfmt, Clippy, and wasm32-unknown-unknown; edition 2024 and supported Rust 1.99 are inherited by every member. Rustup may download missing selected components. Trunk's exact requirement is in Trunk.toml, and cargo-deny's and leptosfmt's required versions are in Cargo.toml workspace metadata. Add dependencies and install tools through CLI commands; keep Cargo.lock under version control.
 
 ## Direct checks
 
@@ -8,6 +8,7 @@ Run each command directly and report its result. AGENTS.md is the canonical comm
 
 ```sh
 cargo fmt --all -- --check
+leptosfmt --check crates/ruphish-ui/src crates/ruphish-ui/tests
 cargo clippy --workspace --exclude ruphish-ui --all-targets --locked -- -D warnings
 cargo test --workspace --exclude ruphish-ui --locked
 cargo build --workspace --exclude ruphish-ui --locked
@@ -26,12 +27,38 @@ cargo clippy -p ruphish-ui --lib --locked -- -D warnings
 node crates/ruphish-ui/web/build.mjs
 cargo check -p ruphish-ui --target wasm32-unknown-unknown --locked
 cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --locked -- -D warnings
-trunk build --release --locked
+trunk build --locked
 npm audit --prefix crates/ruphish-ui/web
 cargo deny check bans licenses sources advisories
 ```
 
 No application feature flags exist yet, so these commands cover the current supported combinations. The same binary supports SQLite, MySQL and PostgreSQL through startup configuration. Introduce future feature combinations with an explicit verification matrix; do not enable incompatible combinations with a blanket --all-features.
+
+## Formatting and editor setup
+
+Install the required Leptos formatter from the product directory:
+
+```sh
+cargo install leptosfmt --version 0.1.33 --locked --profile dev
+leptosfmt --version
+```
+
+The tool version must match `[workspace.metadata.tools]` in Cargo.toml. The formatter is a development executable, not an application dependency. Rustfmt is supplied by the pinned Rust toolchain. Both formatting checks are required before committing; these commands apply formatting and then check the result:
+
+```sh
+leptosfmt crates/ruphish-ui/src crates/ruphish-ui/tests
+cargo fmt --all
+leptosfmt --check crates/ruphish-ui/src crates/ruphish-ui/tests
+cargo fmt --all -- --check
+```
+
+The shared configurations use edition/style edition 2024 for Rust, a 100-column target width, four-space indentation and LF line endings. Rustfmt retains its default small-construct heuristics. Leptosfmt preserves attribute braces and closing-tag style. Long literals may exceed the width target. The Rust-source Git line-ending rule agrees with the formatters; byte-sensitive fixtures and SQL migration rules remain separate.
+
+`rust-analyzer.toml` selects `leptosfmt --stdin --rustfmt` for editor formatting. Open the product directory as the editor workspace and ensure leptosfmt is on the editor process's PATH; restart the editor after installing it if necessary. Rust-analyzer clients that support project configuration use this file. If a client does not load it, set its `rust-analyzer.rustfmt.overrideCommand` workspace option to `["leptosfmt", "--stdin", "--rustfmt"]`. The direct CLI checks remain authoritative; editor format-on-save is optional. See the [formatter's editor integration guidance](https://github.com/bram209/leptosfmt#using-with-rust-analyzer).
+
+Formatting does not replace review of complex markup: extract substantial handlers and transformations into named callbacks/functions when that improves clarity. Leptosfmt can drop ordinary comments inside embedded Rust expression blocks, so keep explanatory comments outside those blocks and review the formatting diff for preserved intent. Do not accept missing explanations or changed authored text merely because the formatter succeeded.
+
+Use development builds for local work. Optimized release builds are reserved for final verification explicitly requested by the user.
 
 ## Tests and checks
 
@@ -41,7 +68,7 @@ The UI also has a WASM integration test for its actual Fetch request builder: ca
 
 Original compatibility fixtures live in tests/fixtures/gophish-v0.12.1; additional Go-captured upgrade/wire/editor fixtures live in tests/fixtures/compatibility. Authentication fixtures in tests/fixtures/authentication preserve independent Go account API responses and an established bcrypt account database. The legacy map identifies implemented equivalents and their exact executable tests; remaining feature cases retain not_implemented status. Copy database fixtures into isolated temporary locations before mutating them. No browser automation or screenshot suite is configured; visual and UI interaction testing is performed manually.
 
-Production code forbids unsafe code and denies accidental unwrap/expect/panic/exit/todo/unimplemented/dbg use. Clippy allows narrow assertion/setup patterns inside tests; the isolated executable-test harness has local unwrap/panic exemptions for setup and deadline assertions; production lint policy remains unchanged. Every member inherits shared lints. rustfmt uses the pinned component's defaults.
+Production code forbids unsafe code and denies accidental unwrap/expect/panic/exit/todo/unimplemented/dbg use. Clippy allows narrow assertion/setup patterns inside tests; the isolated executable-test harness has local unwrap/panic exemptions for setup and deadline assertions; production lint policy remains unchanged. Every member inherits shared lints. Rustfmt uses the pinned component and the shared rustfmt.toml; leptosfmt formats the UI macros using leptosfmt.toml.
 
 ## Browser assets
 
@@ -51,7 +78,7 @@ Trunk reads crates/ruphish-ui/index.html and its adjacent Cargo.toml, builds the
 
 Build with Trunk, then run the native executable and open its admin listener for functional UI testing. Account screens call the same-origin backend; standalone `trunk serve` is not configured for the nested admin distribution or authentication backend and cannot validate these flows. Never use stale dist output as proof of current source behavior; rebuild after UI changes. target/, dist/, local data/, .env and PERSONAL.md are ignored. Regression SQLite fixtures are deliberately not globally ignored.
 
-Trunk 0.21.14 parses NO_COLOR as a boolean in both root and subcommand options, so NO_COLOR=1 can fail before a build starts even with a --no-color flag. Set `$env:NO_COLOR = 'true'` in PowerShell before direct Trunk commands, or use `NO_COLOR=true trunk build --release --locked` in a POSIX shell. This is a process-only value; do not change persistent environment settings.
+Trunk 0.21.14 parses NO_COLOR as a boolean in both root and subcommand options, so NO_COLOR=1 can fail before a build starts even with a --no-color flag. Set `$env:NO_COLOR = 'true'` in PowerShell before direct Trunk commands, or use `NO_COLOR=true trunk build --locked` in a POSIX shell. This is a process-only value; do not change persistent environment settings.
 
 ## Dependency policy
 

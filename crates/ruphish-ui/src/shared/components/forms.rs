@@ -6,7 +6,11 @@ pub(crate) fn FormFields(
     #[prop(into)] disabled: Signal<bool>,
     children: Children,
 ) -> impl IntoView {
-    view! { <fieldset class="management-form" disabled=move || disabled.get()>{children()}</fieldset> }
+    view! {
+        <fieldset class="management-form" disabled=move || disabled.get()>
+            {children()}
+        </fieldset>
+    }
 }
 
 #[component]
@@ -15,7 +19,12 @@ pub(crate) fn Field(
     #[prop(default = false)] checkbox: bool,
     children: Children,
 ) -> impl IntoView {
-    view! { <label class="form-field" class:checkbox-label=checkbox>{move || label.get()}{children()}</label> }
+    view! {
+        <label class="form-field" class:checkbox-label=checkbox>
+            {move || label.get()}
+            {children()}
+        </label>
+    }
 }
 
 #[component]
@@ -28,11 +37,16 @@ pub(crate) fn SecretField(
 ) -> impl IntoView {
     view! {
         <Field label=label>
-            <TextInput input_type="password" autocomplete="new-password"
+            <TextInput
+                input_type="password"
+                autocomplete="new-password"
                 required=Signal::derive(move || !has_saved_value.get())
                 value=Signal::derive(move || value.get())
-                on_input=move |event| on_input.run(event_target_value(&event))/>
-            <Show when=move || has_saved_value.get()><small>{move || saved_hint.get()}</small></Show>
+                on_input=move |event| on_input.run(event_target_value(&event))
+            />
+            <Show when=move || has_saved_value.get()>
+                <small>{move || saved_hint.get()}</small>
+            </Show>
         </Field>
     }
 }

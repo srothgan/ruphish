@@ -176,5 +176,5 @@ pub(super) fn content_editor(
             }
         })
     });
-    view! {<div class="content-editor" node_ref=node></div>}
+    view! { <div class="content-editor" node_ref=node></div> }
 }

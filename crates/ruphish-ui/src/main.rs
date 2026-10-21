@@ -58,7 +58,7 @@ fn main() {
                 let _ = html.set_attribute("lang", locale.as_str());
             }
         });
-        view! {<Router>{account::app}</Router>}
+        view! { <Router>{account::app}</Router> }
     });
 }
 

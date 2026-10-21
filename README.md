@@ -12,9 +12,10 @@ Rustup reads the exact compiler/components/browser target from rust-toolchain.to
 rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
 cargo install trunk --version 0.21.14 --locked
 cargo install cargo-deny --version 0.19.9 --locked
+cargo install leptosfmt --version 0.1.33 --locked --profile dev
 cargo fetch --locked
 npm ci --prefix crates/ruphish-ui/web
-trunk build --release --locked
+trunk build --locked
 cargo build --workspace --exclude ruphish-ui --locked
 cargo test --workspace --exclude ruphish-ui --locked
 cargo run -p ruphish --locked -- --help

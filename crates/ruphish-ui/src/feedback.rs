@@ -27,16 +27,36 @@ impl Message {
     }
 
     pub(crate) fn view(self) -> impl IntoView {
-        [true, false].into_iter().map(move |error| {
-            let text = move || self.0.with(|value| if value.1 == error { value.0.clone() } else { String::new() });
-            view! {
-                <p class="form-message feedback-region" class:error=error class:success=!error
-                    class:has-content=move || !text().is_empty()
-                    role=if error { "alert" } else { "status" } aria-atomic="true">
-                    <span class="form-message-icon" aria-hidden="true" inner_html=if error { ERROR_ICON } else { SUCCESS_ICON }></span>
-                    <span class="form-message-text">{text}</span>
-                </p>
-            }
-        }).collect_view()
+        [true, false]
+            .into_iter()
+            .map(move |error| {
+                let text = move || {
+                    self.0.with(|value| {
+                        if value.1 == error {
+                            value.0.clone()
+                        } else {
+                            String::new()
+                        }
+                    })
+                };
+                view! {
+                    <p
+                        class="form-message feedback-region"
+                        class:error=error
+                        class:success=!error
+                        class:has-content=move || !text().is_empty()
+                        role=if error { "alert" } else { "status" }
+                        aria-atomic="true"
+                    >
+                        <span
+                            class="form-message-icon"
+                            aria-hidden="true"
+                            inner_html=if error { ERROR_ICON } else { SUCCESS_ICON }
+                        ></span>
+                        <span class="form-message-text">{text}</span>
+                    </p>
+                }
+            })
+            .collect_view()
     }
 }

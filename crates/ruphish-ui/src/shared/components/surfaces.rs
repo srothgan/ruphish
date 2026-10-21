@@ -8,13 +8,24 @@ pub(crate) fn Card(
     #[prop(default = "")] class: &'static str,
     #[prop(into, optional)] label: Signal<String>,
 ) -> impl IntoView {
-    view! { <section class=format!("card {class}") aria-label=move || (!label.get().is_empty()).then(|| label.get())>{children()}</section> }
+    view! {
+        <section
+            class=format!("card {class}")
+            aria-label=move || (!label.get().is_empty()).then(|| label.get())
+        >
+            {children()}
+        </section>
+    }
 }
 
 /// A single parent link, rather than an invented multi-level hierarchy.
 #[component]
 pub(crate) fn BackLink(#[prop(into)] href: Signal<String>, children: Children) -> impl IntoView {
-    view! { <a class="breadcrumb" href=move || href.get()>{children()}</a> }
+    view! {
+        <a class="breadcrumb" href=move || href.get()>
+            {children()}
+        </a>
+    }
 }
 
 #[derive(Clone, Copy, Default)]

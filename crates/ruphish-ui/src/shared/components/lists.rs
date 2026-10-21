@@ -14,9 +14,22 @@ pub(crate) fn ListToolbar(
 ) -> impl IntoView {
     view! {
         <div class="management-toolbar">
-            <Field label=label><TextInput input_type="search" value=Signal::derive(move || search.get())
-                on_input=move |event| search.set(event_target_value(&event))/></Field>
-            <span>{move || format!("{} {}", if count_known.get() {count.get().to_string()} else {"—".into()}, noun.get())}</span>
+            <Field label=label>
+                <TextInput
+                    input_type="search"
+                    value=Signal::derive(move || search.get())
+                    on_input=move |event| search.set(event_target_value(&event))
+                />
+            </Field>
+            <span>
+                {move || {
+                    format!(
+                        "{} {}",
+                        if count_known.get() { count.get().to_string() } else { "—".into() },
+                        noun.get(),
+                    )
+                }}
+            </span>
         </div>
     }
 }
@@ -32,13 +45,28 @@ pub(crate) fn QueryStatus(
 ) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
     view! {
-        <Show when=move || fetching.get()><p role="status">{move || leptos_i18n::t_string!(i18n, messages.loading_arg0, arg0=noun.get())}</p></Show>
+        <Show when=move || fetching.get()>
+            <p role="status">
+                {move || leptos_i18n::t_string!(i18n, messages.loading_arg0, arg0=noun.get())}
+            </p>
+        </Show>
         <Show when=move || error.get().is_some()>
-            <p class="form-message error has-content" role="alert">{move || {
-                let error=error.get().unwrap_or_default();
-                if has_data.get() {leptos_i18n::t_string!(i18n, messages.refresh_failed_displayed_data_may_be_stale_arg0, arg0=error).to_string()} else {error}
-            }}</p>
-            <ActionButton disabled=fetching on_click=move |_| refresh.run(())>{move || leptos_i18n::t_string!(i18n, messages.retry_loading_arg0, arg0=noun.get())}</ActionButton>
+            <p class="form-message error has-content" role="alert">
+                {move || {
+                    let error = error.get().unwrap_or_default();
+                    if has_data.get() {
+                        leptos_i18n::t_string!(
+                            i18n, messages.refresh_failed_displayed_data_may_be_stale_arg0, arg0=error
+                        )
+                            .to_string()
+                    } else {
+                        error
+                    }
+                }}
+            </p>
+            <ActionButton disabled=fetching on_click=move |_| refresh.run(())>
+                {move || leptos_i18n::t_string!(i18n, messages.retry_loading_arg0, arg0=noun.get())}
+            </ActionButton>
         </Show>
     }
 }
@@ -49,7 +77,12 @@ pub(crate) fn TableToolbar(
     #[prop(into)] title: Signal<String>,
     children: Children,
 ) -> impl IntoView {
-    view! {<div class="management-toolbar management-toolbar--filters"><h2>{move||title.get()}</h2>{children()}</div>}
+    view! {
+        <div class="management-toolbar management-toolbar--filters">
+            <h2>{move || title.get()}</h2>
+            {children()}
+        </div>
+    }
 }
 
 /// Empty results are only shown after a successful completed read.
@@ -65,7 +98,17 @@ pub(crate) fn ListEmptyState(
 
     view! {
         <Show when=move || ready.get() && count.get() == 0>
-            <EmptyState title=title><p>{move || if search.get().trim().is_empty() { guidance.get() } else { leptos_i18n::t_string!(i18n, ui.try_another_search).to_owned() }}</p></EmptyState>
+            <EmptyState title=title>
+                <p>
+                    {move || {
+                        if search.get().trim().is_empty() {
+                            guidance.get()
+                        } else {
+                            leptos_i18n::t_string!(i18n, ui.try_another_search).to_owned()
+                        }
+                    }}
+                </p>
+            </EmptyState>
         </Show>
     }
 }
@@ -81,10 +124,25 @@ pub(crate) fn DataTable(
     #[prop(into, optional)]
     empty: Signal<bool>,
 ) -> impl IntoView {
-    view! { <div class="management-table-wrap"><table class=format!("management-table {class}") class:is-empty=move || empty.get() aria-label=move || label.get()>
-        <thead><tr>{headers.into_iter().map(|name| view!{<th scope="col">{move || name.get()}</th>}).collect_view()}</tr></thead>
-        <tbody>{children()}</tbody>
-    </table></div> }
+    view! {
+        <div class="management-table-wrap">
+            <table
+                class=format!("management-table {class}")
+                class:is-empty=move || empty.get()
+                aria-label=move || label.get()
+            >
+                <thead>
+                    <tr>
+                        {headers
+                            .into_iter()
+                            .map(|name| view! { <th scope="col">{move || name.get()}</th> })
+                            .collect_view()}
+                    </tr>
+                </thead>
+                <tbody>{children()}</tbody>
+            </table>
+        </div>
+    }
 }
 
 /// Shared pagination presentation for numeric and opaque cursor APIs.
@@ -96,10 +154,20 @@ pub(crate) fn PaginationControls(
     on_previous: Callback<()>,
     on_next: Callback<()>,
 ) -> impl IntoView {
-    view! { <FormFooter>
-        <ActionButton disabled=Signal::derive(move || disabled.get() || !has_previous.get())
-            on_click=move |_| on_previous.run(())>{tr!(ui.previous_page)}</ActionButton>
-        <ActionButton disabled=Signal::derive(move || disabled.get() || !has_next.get())
-            on_click=move |_| on_next.run(())>{tr!(ui.next_page)}</ActionButton>
-    </FormFooter> }
+    view! {
+        <FormFooter>
+            <ActionButton
+                disabled=Signal::derive(move || disabled.get() || !has_previous.get())
+                on_click=move |_| on_previous.run(())
+            >
+                {tr!(ui.previous_page)}
+            </ActionButton>
+            <ActionButton
+                disabled=Signal::derive(move || disabled.get() || !has_next.get())
+                on_click=move |_| on_next.run(())
+            >
+                {tr!(ui.next_page)}
+            </ActionButton>
+        </FormFooter>
+    }
 }

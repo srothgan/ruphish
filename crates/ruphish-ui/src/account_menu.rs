@@ -61,16 +61,66 @@ pub(super) fn menu(
             }
         });
     };
-    view! {<div class="account-footer">
-        <button node_ref=trigger class="account-trigger" aria-haspopup="dialog" aria-expanded="false" aria-controls="account-popover">
-            <svg class="account-person" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/></svg>
-            <span>{username.clone()}</span><svg class="account-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m7 14 5-5 5 5"/></svg>
-        </button>
-        <div node_ref=panel id="account-popover" class="account-popover" role="dialog" aria-labelledby="account-popover-name" hidden>
-            <div class="account-popover-identity"><strong id="account-popover-name">{username}</strong><span>{move || role.get()}</span></div>
-            <a href="/settings">{tr!(ui.my_account)}</a>
-            <ActionButton style=ButtonStyle::Ghost disabled=Signal::derive(move||busy.get()) on_click=logout>{move||if busy.get(){leptos_i18n::t_string!(i18n, ui.signing_out)}else{leptos_i18n::t_string!(i18n, ui.sign_out_2)}}</ActionButton>
-            {message.view()}
+    view! {
+        <div class="account-footer">
+            <button
+                node_ref=trigger
+                class="account-trigger"
+                aria-haspopup="dialog"
+                aria-expanded="false"
+                aria-controls="account-popover"
+            >
+                <svg
+                    class="account-person"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    aria-hidden="true"
+                >
+                    <circle cx="12" cy="8" r="4" />
+                    <path d="M4 22v-2a8 8 0 0 1 16 0v2" />
+                </svg>
+                <span>{username.clone()}</span>
+                <svg
+                    class="account-chevron"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    aria-hidden="true"
+                >
+                    <path d="m7 14 5-5 5 5" />
+                </svg>
+            </button>
+            <div
+                node_ref=panel
+                id="account-popover"
+                class="account-popover"
+                role="dialog"
+                aria-labelledby="account-popover-name"
+                hidden
+            >
+                <div class="account-popover-identity">
+                    <strong id="account-popover-name">{username}</strong>
+                    <span>{move || role.get()}</span>
+                </div>
+                <a href="/settings">{tr!(ui.my_account)}</a>
+                <ActionButton
+                    style=ButtonStyle::Ghost
+                    disabled=Signal::derive(move || busy.get())
+                    on_click=logout
+                >
+                    {move || {
+                        if busy.get() {
+                            leptos_i18n::t_string!(i18n, ui.signing_out)
+                        } else {
+                            leptos_i18n::t_string!(i18n, ui.sign_out_2)
+                        }
+                    }}
+                </ActionButton>
+                {message.view()}
+            </div>
         </div>
-    </div>}
+    }
 }

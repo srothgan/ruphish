@@ -28,6 +28,10 @@ Use development builds for routine implementation, local UI review, and function
 
 Build the real admin distribution before running the native process suite: npm ci --prefix crates/ruphish-ui/web, then trunk build --locked. Process tests intentionally use the real generated WASM/JavaScript assets and fail if they are absent. Run checks directly from this directory. Do not add a task runner, check script, Cargo alias layer, or npm wrapper around these commands. Keep the actual commands visible here and report their individual results.
 
+Formatting is required before a commit: `cargo fmt --all -- --check` and `leptosfmt --check crates/ruphish-ui/src crates/ruphish-ui/tests` must both pass. `rustfmt.toml` owns ordinary Rust layout; `leptosfmt.toml` owns Leptos markup. Both use 100-column target width, four spaces and LF endings. Rustfmt alone cannot verify `view!` readability. Keep substantial callbacks and transformations outside markup when a named function or variable makes their behavior clearer. Do not use formatter skips to preserve compressed code.
+
+Install the pinned formatter with `cargo install leptosfmt --version 0.1.33 --locked --profile dev`; its required version is recorded in Cargo.toml workspace metadata. To apply formatting, run `leptosfmt crates/ruphish-ui/src crates/ruphish-ui/tests`, then `cargo fmt --all`. Review the diff, especially comments inside macro expressions and authored text. `rust-analyzer.toml` enables the same formatter pipeline for supporting editors. See [formatting and editor setup](docs/development.md#formatting-and-editor-setup).
+
 After native Rust changes, run:
 
 ```sh
@@ -40,6 +44,7 @@ cargo build --workspace --exclude ruphish-ui --locked
 After browser/contract changes, install browser dependencies, run functional tests, generate the editor modules and admin stylesheet, then separately check, lint, and build the browser target. Run each command directly from the product root:
 
 ```sh
+leptosfmt --check crates/ruphish-ui/src crates/ruphish-ui/tests
 npm ci --prefix crates/ruphish-ui/web
 node --check crates/ruphish-adapters/src/landing-collector.js
 node --check crates/ruphish-ui/web/build.mjs

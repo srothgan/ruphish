@@ -42,15 +42,28 @@ pub(crate) fn Tabs(
     };
     view! {
         <div class="content-tabs" role="tablist" aria-label=move || label.get() on:keydown=keyboard>
-            {tabs.into_iter().enumerate().map(|(index, tab)| {
-                let node = nodes.with_value(|nodes| nodes[index]);
-                view! { <button node_ref=node id=format!("{}-tab", tab.id) type="button" role="tab"
-                    aria-controls=format!("{}-panel", tab.id)
-                    aria-selected=move || (selected.get() == index).to_string()
-                    tabindex=move || if selected.get() == index { 0 } else { -1 }
-                    disabled=move || tab.disabled.get()
-                    on:click=move |_| selected.set(index)>{move || tab.label.get()}</button> }
-            }).collect_view()}
+            {tabs
+                .into_iter()
+                .enumerate()
+                .map(|(index, tab)| {
+                    let node = nodes.with_value(|nodes| nodes[index]);
+                    view! {
+                        <button
+                            node_ref=node
+                            id=format!("{}-tab", tab.id)
+                            type="button"
+                            role="tab"
+                            aria-controls=format!("{}-panel", tab.id)
+                            aria-selected=move || (selected.get() == index).to_string()
+                            tabindex=move || if selected.get() == index { 0 } else { -1 }
+                            disabled=move || tab.disabled.get()
+                            on:click=move |_| selected.set(index)
+                        >
+                            {move || tab.label.get()}
+                        </button>
+                    }
+                })
+                .collect_view()}
         </div>
     }
 }
@@ -63,6 +76,16 @@ pub(crate) fn TabPanel(
     #[prop(default = "")] class: &'static str,
     children: Children,
 ) -> impl IntoView {
-    view! { <div id=format!("{id}-panel") class=class role="tabpanel" aria-labelledby=format!("{id}-tab")
-    hidden=move || !selected.get() aria-busy=move || busy.get().to_string()>{children()}</div> }
+    view! {
+        <div
+            id=format!("{id}-panel")
+            class=class
+            role="tabpanel"
+            aria-labelledby=format!("{id}-tab")
+            hidden=move || !selected.get()
+            aria-busy=move || busy.get().to_string()
+        >
+            {children()}
+        </div>
+    }
 }

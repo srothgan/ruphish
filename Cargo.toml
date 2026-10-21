@@ -27,6 +27,7 @@ publish = false
 
 [workspace.metadata.tools]
 cargo-deny = "0.19.9"
+leptosfmt = "0.1.33"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

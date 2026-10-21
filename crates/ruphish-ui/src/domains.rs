@@ -113,22 +113,152 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
             })
             .collect::<Vec<_>>()
     });
-    view! {<ManagementPage><PageHeader title=trs!(ui.domains) subtitle=trs!(ui.verified_destinations_for_campaign_links_and_landing_pages)>
-        <ActionButton disabled=list.fetching on_click=move |_|list.refresh.run(())>{tr!(ui.refresh)}</ActionButton>
-        {can_edit.then(||view!{<ActionLink style=ButtonStyle::Primary href="/domains/new">{tr!(ui.create_domain)}</ActionLink>})}
-    </PageHeader>{message.view()}<ResourceDeleteDialog deletion=deletion api=api token=token on_deleted=deleted/><ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) count_known=confirmed label=trs!(ui.search_by_name_or_hostname) noun=trs!(ui.domains_2)/>
-    <QueryStatus fetching=list.fetching has_data=confirmed error=list.error noun=trs!(ui.domains_2) refresh=list.refresh/>
-    <DataTable label=trs!(ui.domains) empty=Signal::derive(move || visible.with(Vec::is_empty)) headers=vec![trs!(ui.name),trs!(ui.public_origin),trs!(ui.status),trs!(ui.enabled),trs!(ui.campaigns),trs!(ui.actions)]>
-        {move || visible.get().into_iter().map(|d|{let id=d.id;let label=state(&d);view!{<tr><td><a href=format!("/domains/{id}")>{d.name.clone()}</a></td><td>{d.origin.clone()}</td><td><StatusBadge tone=status_tone(&d.status)>{label}</StatusBadge></td><td>{move || if d.enabled{leptos_i18n::t_string!(i18n, ui.yes)}else{leptos_i18n::t_string!(i18n, ui.no)}}</td><td>{d.campaigns}</td><td><ResourceActions view_href=format!("/domains/{id}") edit_href=format!("/domains/{id}/edit") can_edit=can_edit size=ControlSize::Small disabled=deletion.busy delete_disabled={d.campaigns>0} delete_reason=leptos_i18n::t_string!(i18n, ui.domains_used_by_campaigns_cannot_be_deleted) on_delete=Callback::new(move |()| deletion.select(DeleteTarget {id,name:d.name.clone(),path:format!("/api/domains/{id}"),revision:Some(format!("\"{}\"",d.revision)),description:leptos_i18n::t_string!(i18n, ui.only_unused_domains_can_be_deleted_this_removes_the_domain_configuration_and_its)}))/></td></tr>}}).collect_view()}
-    </DataTable><ListEmptyState ready=Signal::derive(move || confirmed.get() && !list.fetching.get() && list.error.get().is_none()) count=Signal::derive(move || visible.with(Vec::len)) search=search title=trs!(ui.no_domains_found) guidance=trs!(ui.add_a_hostname_prove_dns_control_and_check_routing_and_https_before_using_it_in)/></ManagementPage>}
+    view! {
+        <ManagementPage>
+            <PageHeader
+                title=trs!(ui.domains)
+                subtitle=trs!(ui.verified_destinations_for_campaign_links_and_landing_pages)
+            >
+                <ActionButton disabled=list.fetching on_click=move |_| list.refresh.run(())>
+                    {tr!(ui.refresh)}
+                </ActionButton>
+                {can_edit
+                    .then(|| {
+                        view! {
+                            <ActionLink style=ButtonStyle::Primary href="/domains/new">
+                                {tr!(ui.create_domain)}
+                            </ActionLink>
+                        }
+                    })}
+            </PageHeader>
+            {message.view()}
+            <ResourceDeleteDialog deletion=deletion api=api token=token on_deleted=deleted />
+            <ListToolbar
+                search=search
+                count=Signal::derive(move || visible.with(Vec::len))
+                count_known=confirmed
+                label=trs!(ui.search_by_name_or_hostname)
+                noun=trs!(ui.domains_2)
+            />
+            <QueryStatus
+                fetching=list.fetching
+                has_data=confirmed
+                error=list.error
+                noun=trs!(ui.domains_2)
+                refresh=list.refresh
+            />
+            <DataTable
+                label=trs!(ui.domains)
+                empty=Signal::derive(move || visible.with(Vec::is_empty))
+                headers=vec![
+                    trs!(ui.name),
+                    trs!(ui.public_origin),
+                    trs!(ui.status),
+                    trs!(ui.enabled),
+                    trs!(ui.campaigns),
+                    trs!(ui.actions),
+                ]
+            >
+                {move || {
+                    visible
+                        .get()
+                        .into_iter()
+                        .map(|d| {
+                            let id = d.id;
+                            let label = state(&d);
+                            view! {
+                                <tr>
+                                    <td>
+                                        <a href=format!("/domains/{id}")>{d.name.clone()}</a>
+                                    </td>
+                                    <td>{d.origin.clone()}</td>
+                                    <td>
+                                        <StatusBadge tone=status_tone(
+                                            &d.status,
+                                        )>{label}</StatusBadge>
+                                    </td>
+                                    <td>
+                                        {move || {
+                                            if d.enabled {
+                                                leptos_i18n::t_string!(i18n, ui.yes)
+                                            } else {
+                                                leptos_i18n::t_string!(i18n, ui.no)
+                                            }
+                                        }}
+                                    </td>
+                                    <td>{d.campaigns}</td>
+                                    <td>
+                                        <ResourceActions
+                                            view_href=format!("/domains/{id}")
+                                            edit_href=format!("/domains/{id}/edit")
+                                            can_edit=can_edit
+                                            size=ControlSize::Small
+                                            disabled=deletion.busy
+                                            delete_disabled={d.campaigns > 0}
+                                            delete_reason=leptos_i18n::t_string!(
+                                                i18n, ui.domains_used_by_campaigns_cannot_be_deleted
+                                            )
+                                            on_delete=Callback::new(move |()| {
+                                                deletion
+                                                    .select(DeleteTarget {
+                                                        id,
+                                                        name: d.name.clone(),
+                                                        path: format!("/api/domains/{id}"),
+                                                        revision: Some(format!("\"{}\"", d.revision)),
+                                                        description: leptos_i18n::t_string!(
+                                                            i18n, ui.only_unused_domains_can_be_deleted_this_removes_the_domain_configuration_and_its
+                                                        ),
+                                                    })
+                                            })
+                                        />
+                                    </td>
+                                </tr>
+                            }
+                        })
+                        .collect_view()
+                }}
+            </DataTable>
+            <ListEmptyState
+                ready=Signal::derive(move || {
+                    confirmed.get() && !list.fetching.get() && list.error.get().is_none()
+                })
+                count=Signal::derive(move || visible.with(Vec::len))
+                search=search
+                title=trs!(ui.no_domains_found)
+                guidance=trs!(
+                    ui.add_a_hostname_prove_dns_control_and_check_routing_and_https_before_using_it_in
+                )
+            />
+        </ManagementPage>
+    }
 }
 pub(super) fn detail(api: Api, token: String, editing: bool) -> impl IntoView {
     let params = leptos_router::hooks::use_params_map();
-    view! {<For each=move||vec![params.with(|p|p.get("id")).unwrap_or_default()] key=|s|s.clone() children=move|s|{
-        if s=="new"{form(api,token.clone(),None).into_any()}
-        else if let Ok(id)=s.parse::<i64>() {if editing{form(api,token.clone(),Some(id)).into_any()}else{show(api,token.clone(),id).into_any()}}
-        else{view!{<ManagementPage><p role="alert">{tr!(ui.invalid_domain_address)}</p><a href="/domains">{tr!(ui.back_to_domains)}</a></ManagementPage>}.into_any()}
-    }/>}
+    view! {
+        <For
+            each=move || vec![params.with(|p| p.get("id")).unwrap_or_default()]
+            key=|s| s.clone()
+            children=move |s| {
+                if s == "new" {
+                    form(api, token.clone(), None).into_any()
+                } else if let Ok(id) = s.parse::<i64>() {
+                    if editing {
+                        form(api, token.clone(), Some(id)).into_any()
+                    } else {
+                        show(api, token.clone(), id).into_any()
+                    }
+                } else {
+                    view! {
+                        <ManagementPage>
+                            <p role="alert">{tr!(ui.invalid_domain_address)}</p>
+                            <a href="/domains">{tr!(ui.back_to_domains)}</a>
+                        </ManagementPage>
+                    }
+                        .into_any()
+                }
+            }
+        />
+    }
 }
 fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
@@ -214,14 +344,106 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
             }
         });
     };
-    view! {<ManagementPage><BackLink href="/domains">{tr!(ui.back_to_domains)}</BackLink><PageHeader title=Signal::derive(move || (if id.is_some(){leptos_i18n::t_string!(i18n, ui.edit_domain)}else{leptos_i18n::t_string!(i18n, ui.create_domain)}).to_owned()) subtitle=Signal::derive(move||if dirty.get(){leptos_i18n::t_string!(i18n, ui.unsaved_changes)}else{leptos_i18n::t_string!(i18n, ui.verify_domain_control_routing_and_https_before_campaign_use)}.to_owned())>
-    </PageHeader>{message.view()}<Show when=move||!loaded.get()&&!loading.get()><ActionButton on_click=move |_|reload.update(|n|*n+=1)>{tr!(ui.retry_loading_domain)}</ActionButton></Show><form id="domain-form" on:submit=submit><FormFields disabled=Signal::derive(move||busy.get()||!loaded.get()||!can_edit)>
-        <Field label=trs!(ui.name)><TextInput required=true maxlength=200 value=Signal::derive(move||name.get()) on_input=move|e|name.set(event_target_value(&e))/></Field>
-        <Field label=trs!(ui.public_https_origin)><TextInput input_type="url" required=true placeholder=trs!(ui.https_training_example_com) readonly=id.is_some() value=Signal::derive(move||origin.get()) on_input=move|e|origin.set(event_target_value(&e))/></Field>
-        <p>{tr!(ui.use_the_hostname_participants_will_visit_paths_belong_to_the_campaign_a_saved_ho)}</p>
-        <Checkbox label=trs!(ui.enable_this_domain) checked=enabled on_toggle=Callback::new(move|v|enabled.set(v))/>
-        <p>{tr!(ui.disabling_stops_new_deliveries_and_public_campaign_handling_for_this_domain_exis)}</p>
-    </FormFields><FormFooter spread=true><ActionButton kind="button" style=ButtonStyle::Ghost disabled=Signal::derive(move||busy.get()) on_click=move |_|{loaded.set(false);cancel(&id.map(|id|format!("/domains/{id}")).unwrap_or_else(||"/domains".into()),Default::default());}>{tr!(ui.cancel_changes)}</ActionButton><SaveButton kind="submit" label=Signal::derive(move || (if id.is_some(){leptos_i18n::t_string!(i18n, ui.save_changes)}else{leptos_i18n::t_string!(i18n, ui.create_domain)}).to_owned()) disabled=Signal::derive(move||busy.get()||!loaded.get()||!can_edit)/></FormFooter></form></ManagementPage>}
+    view! {
+        <ManagementPage>
+            <BackLink href="/domains">{tr!(ui.back_to_domains)}</BackLink>
+            <PageHeader
+                title=Signal::derive(move || {
+                    (if id.is_some() {
+                        leptos_i18n::t_string!(i18n, ui.edit_domain)
+                    } else {
+                        leptos_i18n::t_string!(i18n, ui.create_domain)
+                    })
+                        .to_owned()
+                })
+                subtitle=Signal::derive(move || {
+                    if dirty.get() {
+                        leptos_i18n::t_string!(i18n, ui.unsaved_changes)
+                    } else {
+                        leptos_i18n::t_string!(
+                            i18n, ui.verify_domain_control_routing_and_https_before_campaign_use
+                        )
+                    }
+                        .to_owned()
+                })
+            ></PageHeader>
+            {message.view()}
+            <Show when=move || !loaded.get() && !loading.get()>
+                <ActionButton on_click=move |_| {
+                    reload.update(|n| *n += 1)
+                }>{tr!(ui.retry_loading_domain)}</ActionButton>
+            </Show>
+            <form id="domain-form" on:submit=submit>
+                <FormFields disabled=Signal::derive(move || {
+                    busy.get() || !loaded.get() || !can_edit
+                })>
+                    <Field label=trs!(ui.name)>
+                        <TextInput
+                            required=true
+                            maxlength=200
+                            value=Signal::derive(move || name.get())
+                            on_input=move |e| name.set(event_target_value(&e))
+                        />
+                    </Field>
+                    <Field label=trs!(ui.public_https_origin)>
+                        <TextInput
+                            input_type="url"
+                            required=true
+                            placeholder=trs!(ui.https_training_example_com)
+                            readonly=id.is_some()
+                            value=Signal::derive(move || origin.get())
+                            on_input=move |e| origin.set(event_target_value(&e))
+                        />
+                    </Field>
+                    <p>
+                        {tr!(
+                            ui.use_the_hostname_participants_will_visit_paths_belong_to_the_campaign_a_saved_ho
+                        )}
+                    </p>
+                    <Checkbox
+                        label=trs!(ui.enable_this_domain)
+                        checked=enabled
+                        on_toggle=Callback::new(move |v| enabled.set(v))
+                    />
+                    <p>
+                        {tr!(
+                            ui.disabling_stops_new_deliveries_and_public_campaign_handling_for_this_domain_exis
+                        )}
+                    </p>
+                </FormFields>
+                <FormFooter spread=true>
+                    <ActionButton
+                        kind="button"
+                        style=ButtonStyle::Ghost
+                        disabled=Signal::derive(move || busy.get())
+                        on_click=move |_| {
+                            loaded.set(false);
+                            cancel(
+                                &id
+                                    .map(|id| format!("/domains/{id}"))
+                                    .unwrap_or_else(|| "/domains".into()),
+                                Default::default(),
+                            );
+                        }
+                    >
+                        {tr!(ui.cancel_changes)}
+                    </ActionButton>
+                    <SaveButton
+                        kind="submit"
+                        label=Signal::derive(move || {
+                            (if id.is_some() {
+                                leptos_i18n::t_string!(i18n, ui.save_changes)
+                            } else {
+                                leptos_i18n::t_string!(i18n, ui.create_domain)
+                            })
+                                .to_owned()
+                        })
+                        disabled=Signal::derive(move || busy.get() || !loaded.get() || !can_edit)
+                    />
+                </FormFooter>
+            </form>
+        </ManagementPage>
+    }
 }
 fn show(api: Api, token: String, id: i64) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
@@ -306,49 +528,403 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
             deletion.select(DeleteTarget { id, name:d.name, path:format!("/api/domains/{id}"), revision:Some(format!("\"{}\"",d.revision)),description:leptos_i18n::t_string!(i18n, ui.only_unused_domains_can_be_deleted_this_removes_the_domain_configuration_and_its) });
         }
     });
-    view! {<ManagementPage><BackLink href="/domains">{tr!(ui.back_to_domains)}</BackLink>
-        <PageHeader title=Signal::derive(move||domain.get().map(|d|d.name).unwrap_or_else(||leptos_i18n::t_string!(i18n, ui.domain).into())) subtitle=Signal::derive(move||domain.get().map(|d|d.origin).unwrap_or_else(||leptos_i18n::t_string!(i18n, ui.loading_domain).into()))>
-            <ActionButton disabled=Signal::derive(move||busy.get()) busy=Signal::derive(move||read.fetching.get().to_string()) on_click=move |_|read.refresh.run(())>{move||if read.fetching.get(){leptos_i18n::t_string!(i18n, ui.refreshing)}else{leptos_i18n::t_string!(i18n, ui.refresh_status)}}</ActionButton>
-            {can_edit.then(||view!{<ActionButton style=ButtonStyle::Primary disabled=Signal::derive(move||busy.get()||domain.with(|d|d.as_ref().is_none_or(|d|!d.enabled||d.active_check.is_some()))) on_click=check>{move||if mutation.get(){leptos_i18n::t_string!(i18n, ui.requesting_verification)}else{leptos_i18n::t_string!(i18n, ui.verify_domain)}}</ActionButton><ResourceActions edit_href=format!("/domains/{id}/edit") can_edit=can_edit disabled=Signal::derive(move||busy.get()||domain.with(Option::is_none)) delete_disabled=Signal::derive(move||domain.with(|d|d.as_ref().is_none_or(|d|d.campaigns>0))) delete_reason=leptos_i18n::t_string!(i18n, ui.domains_used_by_campaigns_cannot_be_deleted) on_delete=select_delete/>})}
-        </PageHeader>{message.view()}
-        <QueryStatus fetching=read.fetching has_data=Signal::derive(move || domain.with(Option::is_some)) error=read.error noun=trs!(ui.domain) refresh=read.refresh/>
-        {move||domain.get().and_then(|d|d.active_check).map(|run|{
-            let running=run.state=="running";
-            let started=run.started_at.unwrap_or(run.scheduled_at);
-            view!{<section class="domain-verification-progress" aria-label=tr!(ui.active_verification) aria-busy=running.to_string()>
-                <div class="domain-progress-title">{running.then(||view!{<span class="domain-spinner" aria-hidden="true"></span>})}<strong role="status">{move || if running{leptos_i18n::t_string!(i18n, ui.verifying_domain)}else{leptos_i18n::t_string!(i18n, ui.verification_queued)}}</strong></div>
-                {if running {view!{<p>{move||leptos_i18n::t_string!(i18n, messages.running_for_arg0_seconds_results_appear_below_when_the_check_finishes, arg0 = ((clock.get() as i64-started).max(0)).to_string())}</p>}.into_any()}else{view!{<p>{move||if run.scheduled_at>clock.get() as i64 {leptos_i18n::t_string!(i18n, messages.scheduled_to_start_no_earlier_than_arg0, arg0 = (instant(run.scheduled_at)).to_string())}else{leptos_i18n::t_string!(i18n, ui.waiting_for_the_verification_worker).into()}}</p>}.into_any()}}
-                <p>{tr!(ui.this_check_continues_if_you_leave_or_refresh_the_page)}</p>
-            </section>}
-        })}
-        {move||domain.get().map(|d|{
-            let has_result=d.checked_at>0;
-            let domain_state=state(&d);
-            let domain_tone=status_tone(&d.status);
-            let checking=d.active_check.is_some();
-            let control_result=check_result(&d,"control",d.control);
-            let check_rows=[("DNS","DNS",d.dns,leptos_i18n::t_string!(i18n, ui.resolve_to_permitted_destinations)),("routing",leptos_i18n::t_string!(i18n, ui.instance_routing),d.routing,leptos_i18n::t_string!(i18n, ui.reach_this_ruphish_instance)),("HTTPS","HTTPS",d.tls,leptos_i18n::t_string!(i18n, ui.present_a_trusted_certificate_for_this_hostname))].map(|(kind,name,passed,help)|(name,check_result(&d,kind,passed),help));
-            view!{<Card class="resource-read-panel domain-context" label=trs!(ui.domain_status)><h2>{tr!(ui.domain_status)}</h2>
-                <p>{move || if !d.enabled {leptos_i18n::t_string!(i18n, ui.disabled_unavailable_for_campaigns)}else if d.eligible{leptos_i18n::t_string!(i18n, ui.available_for_campaigns)}else{leptos_i18n::t_string!(i18n, ui.unavailable_for_campaigns_until_verification_passes)}}</p>
-                <dl class="resource-facts"><div><dt>{tr!(ui.status)}</dt><dd><StatusBadge tone=domain_tone>{domain_state}</StatusBadge></dd></div><div><dt>{tr!(ui.enabled)}</dt><dd>{move || if d.enabled{leptos_i18n::t_string!(i18n, ui.yes)}else{leptos_i18n::t_string!(i18n, ui.no)}}</dd></div><div><dt>{tr!(ui.last_completed_check)}</dt><dd class="data-value">{instant(d.checked_at)}</dd></div><div><dt>{tr!(ui.verified_until)}</dt><dd>{move || if d.verified_until>0{instant(d.verified_until)}else{leptos_i18n::t_string!(i18n, ui.not_verified).into()}}</dd></div><div><dt>{tr!(ui.next_automatic_check)}</dt><dd>{move || if !d.enabled{leptos_i18n::t_string!(i18n, ui.disabled).into()}else if checking{leptos_i18n::t_string!(i18n, ui.after_the_active_check_finishes).into()}else{instant(d.next_check_at)}}</dd></div></dl>
-            </Card><section class="resource-section"><h2>{tr!(ui.verification_requirements)}</h2>
-                <p>{leptos_i18n::t!(i18n, messages.used_by_arg0_campaigns_verification_checks_dns_control_permitted_destinations_in, arg0 = (d.campaigns).to_string())}</p>
-                {checking.then(||view!{<p>{tr!(ui.the_table_shows_the_previous_completed_result_while_verification_is_in_progress)}</p>})}
-                <DataTable label=trs!(ui.domain_verification) class="domain-verification" headers=vec![trs!(ui.check),trs!(ui.latest_result),trs!(ui.requirement),trs!(ui.dns_record)]>
-                    <tr><th scope="row">{tr!(ui.domain_control)}</th><td>{control_result}</td><td>{tr!(ui.publish_this_txt_record_at_your_dns_provider_and_keep_it_for_periodic_checks)}</td><td><div class="domain-copy-actions"><CopyButton label=trs!(ui.record_name) value=d.txt_name.clone() message=message/><CopyButton label=trs!(ui.txt_value) value=d.txt_value.clone() message=message/></div></td></tr>
-                    {check_rows.into_iter().map(|(name,result,help)|view!{<tr><th scope="row">{name}</th><td>{result}</td><td>{help}</td><td></td></tr>}).collect_view()}
-                </DataTable>
-                <p role="status">{move || if has_result{check_explanation(&d.code)}else{leptos_i18n::t_string!(i18n, ui.publish_the_dns_proof_configure_routing_and_https_then_verify_the_domain)}}</p>
-            </section>
-            <section class="resource-section domain-history"><h2>{tr!(ui.verification_history)}</h2><p>{tr!(ui.latest_ten_completed_checks_a_failed_or_timed_out_check_immediately_makes_the_do)}</p>
-                <DataTable label=trs!(ui.verification_history) headers=vec![trs!(ui.finished),trs!(ui.outcome),trs!(ui.duration),trs!(ui.details)]>
-                    {d.history.into_iter().map(|r|view!{<tr><td class="data-value">{r.finished_at.map(instant).unwrap_or_else(||leptos_i18n::t_string!(i18n, ui.not_recorded).into())}</td><td><StatusBadge tone=status_tone(&r.state)>{outcome(&r.state)}</StatusBadge></td><td>{match(r.started_at,r.finished_at){(Some(start),Some(end))=>leptos_i18n::t_string!(i18n, messages.count_seconds, count = (end-start).max(0)),_=>leptos_i18n::t_string!(i18n, ui.not_recorded).into()}}</td><td>{check_explanation(&r.code)}</td></tr>}).collect_view()}
-                </DataTable>
-                {(!has_result).then(||view!{<p>{tr!(ui.no_completed_checks_yet)}</p>})}
-            </section>}
-        })}
-        <ResourceDeleteDialog deletion=deletion api=api token=token.get_value() on_deleted=deleted/>
-    </ManagementPage>}
+    view! {
+        <ManagementPage>
+            <BackLink href="/domains">{tr!(ui.back_to_domains)}</BackLink>
+            <PageHeader
+                title=Signal::derive(move || {
+                    domain
+                        .get()
+                        .map(|d| d.name)
+                        .unwrap_or_else(|| leptos_i18n::t_string!(i18n, ui.domain).into())
+                })
+                subtitle=Signal::derive(move || {
+                    domain
+                        .get()
+                        .map(|d| d.origin)
+                        .unwrap_or_else(|| leptos_i18n::t_string!(i18n, ui.loading_domain).into())
+                })
+            >
+                <ActionButton
+                    disabled=Signal::derive(move || busy.get())
+                    busy=Signal::derive(move || read.fetching.get().to_string())
+                    on_click=move |_| read.refresh.run(())
+                >
+                    {move || {
+                        if read.fetching.get() {
+                            leptos_i18n::t_string!(i18n, ui.refreshing)
+                        } else {
+                            leptos_i18n::t_string!(i18n, ui.refresh_status)
+                        }
+                    }}
+                </ActionButton>
+                {can_edit
+                    .then(|| {
+                        view! {
+                            <ActionButton
+                                style=ButtonStyle::Primary
+                                disabled=Signal::derive(move || {
+                                    busy.get()
+                                        || domain
+                                            .with(|d| {
+                                                d.as_ref()
+                                                    .is_none_or(|d| !d.enabled || d.active_check.is_some())
+                                            })
+                                })
+                                on_click=check
+                            >
+                                {move || {
+                                    if mutation.get() {
+                                        leptos_i18n::t_string!(i18n, ui.requesting_verification)
+                                    } else {
+                                        leptos_i18n::t_string!(i18n, ui.verify_domain)
+                                    }
+                                }}
+                            </ActionButton>
+                            <ResourceActions
+                                edit_href=format!("/domains/{id}/edit")
+                                can_edit=can_edit
+                                disabled=Signal::derive(move || {
+                                    busy.get() || domain.with(Option::is_none)
+                                })
+                                delete_disabled=Signal::derive(move || {
+                                    domain.with(|d| d.as_ref().is_none_or(|d| d.campaigns > 0))
+                                })
+                                delete_reason=leptos_i18n::t_string!(
+                                    i18n, ui.domains_used_by_campaigns_cannot_be_deleted
+                                )
+                                on_delete=select_delete
+                            />
+                        }
+                    })}
+            </PageHeader>
+            {message.view()}
+            <QueryStatus
+                fetching=read.fetching
+                has_data=Signal::derive(move || domain.with(Option::is_some))
+                error=read.error
+                noun=trs!(ui.domain)
+                refresh=read.refresh
+            />
+            {move || {
+                domain
+                    .get()
+                    .and_then(|d| d.active_check)
+                    .map(|run| {
+                        let running = run.state == "running";
+                        let started = run.started_at.unwrap_or(run.scheduled_at);
+                        view! {
+                            <section
+                                class="domain-verification-progress"
+                                aria-label=tr!(ui.active_verification)
+                                aria-busy=running.to_string()
+                            >
+                                <div class="domain-progress-title">
+                                    {running
+                                        .then(|| {
+                                            view! {
+                                                <span class="domain-spinner" aria-hidden="true"></span>
+                                            }
+                                        })}
+                                    <strong role="status">
+                                        {move || {
+                                            if running {
+                                                leptos_i18n::t_string!(i18n, ui.verifying_domain)
+                                            } else {
+                                                leptos_i18n::t_string!(i18n, ui.verification_queued)
+                                            }
+                                        }}
+                                    </strong>
+                                </div>
+                                {if running {
+                                    view! {
+                                        <p>
+                                            {move || {
+                                                leptos_i18n::t_string!(
+                                                    i18n, messages.running_for_arg0_seconds_results_appear_below_when_the_check_finishes, arg0 = ((clock.get() as i64-started).max(0)).to_string()
+                                                )
+                                            }}
+                                        </p>
+                                    }
+                                        .into_any()
+                                } else {
+                                    view! {
+                                        <p>
+                                            {move || {
+                                                if run.scheduled_at > clock.get() as i64 {
+                                                    leptos_i18n::t_string!(
+                                                        i18n, messages.scheduled_to_start_no_earlier_than_arg0, arg0 = (instant(run.scheduled_at)).to_string()
+                                                    )
+                                                } else {
+                                                    leptos_i18n::t_string!(
+                                                        i18n, ui.waiting_for_the_verification_worker
+                                                    )
+                                                        .into()
+                                                }
+                                            }}
+                                        </p>
+                                    }
+                                        .into_any()
+                                }}
+                                <p>
+                                    {tr!(ui.this_check_continues_if_you_leave_or_refresh_the_page)}
+                                </p>
+                            </section>
+                        }
+                    })
+            }}
+            {move || {
+                domain
+                    .get()
+                    .map(|d| {
+                        let has_result = d.checked_at > 0;
+                        let domain_state = state(&d);
+                        let domain_tone = status_tone(&d.status);
+                        let checking = d.active_check.is_some();
+                        let control_result = check_result(&d, "control", d.control);
+                        let check_rows = [
+                            (
+                                "DNS",
+                                "DNS",
+                                d.dns,
+                                leptos_i18n::t_string!(i18n, ui.resolve_to_permitted_destinations),
+                            ),
+                            (
+                                "routing",
+                                leptos_i18n::t_string!(i18n, ui.instance_routing),
+                                d.routing,
+                                leptos_i18n::t_string!(i18n, ui.reach_this_ruphish_instance),
+                            ),
+                            (
+                                "HTTPS",
+                                "HTTPS",
+                                d.tls,
+                                leptos_i18n::t_string!(
+                                    i18n, ui.present_a_trusted_certificate_for_this_hostname
+                                ),
+                            ),
+                        ]
+                            .map(|(kind, name, passed, help)| (
+                                name,
+                                check_result(&d, kind, passed),
+                                help,
+                            ));
+                        view! {
+                            <Card
+                                class="resource-read-panel domain-context"
+                                label=trs!(ui.domain_status)
+                            >
+                                <h2>{tr!(ui.domain_status)}</h2>
+                                <p>
+                                    {move || {
+                                        if !d.enabled {
+                                            leptos_i18n::t_string!(
+                                                i18n, ui.disabled_unavailable_for_campaigns
+                                            )
+                                        } else if d.eligible {
+                                            leptos_i18n::t_string!(i18n, ui.available_for_campaigns)
+                                        } else {
+                                            leptos_i18n::t_string!(
+                                                i18n, ui.unavailable_for_campaigns_until_verification_passes
+                                            )
+                                        }
+                                    }}
+                                </p>
+                                <dl class="resource-facts">
+                                    <div>
+                                        <dt>{tr!(ui.status)}</dt>
+                                        <dd>
+                                            <StatusBadge tone=domain_tone>{domain_state}</StatusBadge>
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt>{tr!(ui.enabled)}</dt>
+                                        <dd>
+                                            {move || {
+                                                if d.enabled {
+                                                    leptos_i18n::t_string!(i18n, ui.yes)
+                                                } else {
+                                                    leptos_i18n::t_string!(i18n, ui.no)
+                                                }
+                                            }}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt>{tr!(ui.last_completed_check)}</dt>
+                                        <dd class="data-value">{instant(d.checked_at)}</dd>
+                                    </div>
+                                    <div>
+                                        <dt>{tr!(ui.verified_until)}</dt>
+                                        <dd>
+                                            {move || {
+                                                if d.verified_until > 0 {
+                                                    instant(d.verified_until)
+                                                } else {
+                                                    leptos_i18n::t_string!(i18n, ui.not_verified).into()
+                                                }
+                                            }}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt>{tr!(ui.next_automatic_check)}</dt>
+                                        <dd>
+                                            {move || {
+                                                if !d.enabled {
+                                                    leptos_i18n::t_string!(i18n, ui.disabled).into()
+                                                } else if checking {
+                                                    leptos_i18n::t_string!(
+                                                        i18n, ui.after_the_active_check_finishes
+                                                    )
+                                                        .into()
+                                                } else {
+                                                    instant(d.next_check_at)
+                                                }
+                                            }}
+                                        </dd>
+                                    </div>
+                                </dl>
+                            </Card>
+                            <section class="resource-section">
+                                <h2>{tr!(ui.verification_requirements)}</h2>
+                                <p>
+                                    {leptos_i18n::t!(
+                                        i18n, messages.used_by_arg0_campaigns_verification_checks_dns_control_permitted_destinations_in, arg0 = (d.campaigns).to_string()
+                                    )}
+                                </p>
+                                {checking
+                                    .then(|| {
+                                        view! {
+                                            <p>
+                                                {tr!(
+                                                    ui.the_table_shows_the_previous_completed_result_while_verification_is_in_progress
+                                                )}
+                                            </p>
+                                        }
+                                    })}
+                                <DataTable
+                                    label=trs!(ui.domain_verification)
+                                    class="domain-verification"
+                                    headers=vec![
+                                        trs!(ui.check),
+                                        trs!(ui.latest_result),
+                                        trs!(ui.requirement),
+                                        trs!(ui.dns_record),
+                                    ]
+                                >
+                                    <tr>
+                                        <th scope="row">{tr!(ui.domain_control)}</th>
+                                        <td>{control_result}</td>
+                                        <td>
+                                            {tr!(
+                                                ui.publish_this_txt_record_at_your_dns_provider_and_keep_it_for_periodic_checks
+                                            )}
+                                        </td>
+                                        <td>
+                                            <div class="domain-copy-actions">
+                                                <CopyButton
+                                                    label=trs!(ui.record_name)
+                                                    value=d.txt_name.clone()
+                                                    message=message
+                                                />
+                                                <CopyButton
+                                                    label=trs!(ui.txt_value)
+                                                    value=d.txt_value.clone()
+                                                    message=message
+                                                />
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {check_rows
+                                        .into_iter()
+                                        .map(|(name, result, help)| {
+                                            view! {
+                                                <tr>
+                                                    <th scope="row">{name}</th>
+                                                    <td>{result}</td>
+                                                    <td>{help}</td>
+                                                    <td></td>
+                                                </tr>
+                                            }
+                                        })
+                                        .collect_view()}
+                                </DataTable>
+                                <p role="status">
+                                    {move || {
+                                        if has_result {
+                                            check_explanation(&d.code)
+                                        } else {
+                                            leptos_i18n::t_string!(
+                                                i18n, ui.publish_the_dns_proof_configure_routing_and_https_then_verify_the_domain
+                                            )
+                                        }
+                                    }}
+                                </p>
+                            </section>
+                            <section class="resource-section domain-history">
+                                <h2>{tr!(ui.verification_history)}</h2>
+                                <p>
+                                    {tr!(
+                                        ui.latest_ten_completed_checks_a_failed_or_timed_out_check_immediately_makes_the_do
+                                    )}
+                                </p>
+                                <DataTable
+                                    label=trs!(ui.verification_history)
+                                    headers=vec![
+                                        trs!(ui.finished),
+                                        trs!(ui.outcome),
+                                        trs!(ui.duration),
+                                        trs!(ui.details),
+                                    ]
+                                >
+                                    {d
+                                        .history
+                                        .into_iter()
+                                        .map(|r| {
+                                            view! {
+                                                <tr>
+                                                    <td class="data-value">
+                                                        {r
+                                                            .finished_at
+                                                            .map(instant)
+                                                            .unwrap_or_else(|| {
+                                                                leptos_i18n::t_string!(i18n, ui.not_recorded).into()
+                                                            })}
+                                                    </td>
+                                                    <td>
+                                                        <StatusBadge tone=status_tone(
+                                                            &r.state,
+                                                        )>{outcome(&r.state)}</StatusBadge>
+                                                    </td>
+                                                    <td>
+                                                        {match (r.started_at, r.finished_at) {
+                                                            (Some(start), Some(end)) => {
+                                                                leptos_i18n::t_string!(
+                                                                    i18n, messages.count_seconds, count = (end-start).max(0)
+                                                                )
+                                                            }
+                                                            _ => leptos_i18n::t_string!(i18n, ui.not_recorded).into(),
+                                                        }}
+                                                    </td>
+                                                    <td>{check_explanation(&r.code)}</td>
+                                                </tr>
+                                            }
+                                        })
+                                        .collect_view()}
+                                </DataTable>
+                                {(!has_result)
+                                    .then(|| view! { <p>{tr!(ui.no_completed_checks_yet)}</p> })}
+                            </section>
+                        }
+                    })
+            }}
+            <ResourceDeleteDialog
+                deletion=deletion
+                api=api
+                token=token.get_value()
+                on_deleted=deleted
+            />
+        </ManagementPage>
+    }
 }
 
 fn check_explanation(code: &str) -> &'static str {

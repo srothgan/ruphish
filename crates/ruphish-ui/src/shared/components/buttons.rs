@@ -57,13 +57,23 @@ pub(crate) fn ActionButton(
     #[prop(into, optional)] on_click: Option<Callback<leptos::ev::MouseEvent>>,
 ) -> impl IntoView {
     view! {
-        <button type=kind class=format!("{} {}", style.class(), size.class()) form=form autofocus=autofocus
+        <button
+            type=kind
+            class=format!("{} {}", style.class(), size.class())
+            form=form
+            autofocus=autofocus
             data-panel-close=close_panel.then_some("")
-            disabled=move || disabled.get() hidden=move || hidden.get()
+            disabled=move || disabled.get()
+            hidden=move || hidden.get()
             title=move || title.get()
             aria-busy=move || (!busy.get().is_empty()).then(|| busy.get())
             aria-pressed=move || (!pressed.get().is_empty()).then(|| pressed.get())
-            on:click=move |event| { if !disabled.get_untracked() && let Some(action) = on_click { action.run(event); } }>
+            on:click=move |event| {
+                if !disabled.get_untracked() && let Some(action) = on_click {
+                    action.run(event);
+                }
+            }
+        >
             {children()}
         </button>
     }
@@ -78,11 +88,17 @@ pub(crate) fn ActionLink(
     #[prop(into, optional)] hidden: Signal<bool>,
     #[prop(into, optional)] disabled: Signal<bool>,
 ) -> impl IntoView {
-    view! { <a class=format!("button {} {}", style.class(), size.class())
-    href=move || (!disabled.get()).then(|| href.clone())
-    aria-disabled=move || disabled.get().then_some("true")
-    tabindex=move || disabled.get().then_some("-1")
-    hidden=move || hidden.get()>{children()}</a> }
+    view! {
+        <a
+            class=format!("button {} {}", style.class(), size.class())
+            href=move || (!disabled.get()).then(|| href.clone())
+            aria-disabled=move || disabled.get().then_some("true")
+            tabindex=move || disabled.get().then_some("-1")
+            hidden=move || hidden.get()
+        >
+            {children()}
+        </a>
+    }
 }
 
 /// Copy a value without placing long verification tokens into the page layout.
@@ -102,23 +118,80 @@ pub(crate) fn CopyButton(label: Signal<String>, value: String, message: Message)
         });
     });
     view! {
-        <button type="button" class="copy-button" title=move || leptos_i18n::t_string!(i18n, messages.copy_arg0, arg0 = (label.get()).to_string()) disabled=move||copying.get() on:click=move |_|{
-            if copying.get_untracked() { return; }
-            reset.update_value(|timer| {
-                if let Some(timer) = timer.take() { timer.clear(); }
-            });
-            copied.set(false);
-            copying.set(true);
-            let value=value.clone();
-            leptos::task::spawn_local_scoped_with_cancellation(async move {
-                if crate::account::copy_text(&value).await.is_ok() {
-                    copied.set(true);
-                    reset.set_value(set_timeout_with_handle(move||copied.set(false), std::time::Duration::from_secs(2)).ok());
-                } else {message.error(leptos_i18n::t_string!(i18n, messages.could_not_copy_arg0, arg0 = (label.get_untracked()).to_string()))}
-                copying.set(false);
-            });
-        }><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M15 8V4H4v11h4"/></svg>
-            <span class="copy-button-label"><span class="copy-button-size" aria-hidden="true">{leptos_i18n::t!(i18n, messages.copy_arg0, arg0 = move || label.get())}</span><span role="status">{move||if copying.get(){leptos_i18n::t_string!(i18n, ui.copying).to_owned()}else if copied.get(){leptos_i18n::t_string!(i18n, ui.copied).to_owned()}else{leptos_i18n::t_string!(i18n, messages.copy_arg0, arg0 = (label.get()).to_string())}}</span></span>
+        <button
+            type="button"
+            class="copy-button"
+            title=move || {
+                leptos_i18n::t_string!(i18n, messages.copy_arg0, arg0 = (label.get()).to_string())
+            }
+            disabled=move || copying.get()
+            on:click=move |_| {
+                if copying.get_untracked() {
+                    return;
+                }
+                reset
+                    .update_value(|timer| {
+                        if let Some(timer) = timer.take() {
+                            timer.clear();
+                        }
+                    });
+                copied.set(false);
+                copying.set(true);
+                let value = value.clone();
+                leptos::task::spawn_local_scoped_with_cancellation(async move {
+                    if crate::account::copy_text(&value).await.is_ok() {
+                        copied.set(true);
+                        reset
+                            .set_value(
+                                set_timeout_with_handle(
+                                        move || copied.set(false),
+                                        std::time::Duration::from_secs(2),
+                                    )
+                                    .ok(),
+                            );
+                    } else {
+                        message
+                            .error(
+                                leptos_i18n::t_string!(
+                                    i18n, messages.could_not_copy_arg0, arg0 = (label.get_untracked()).to_string()
+                                ),
+                            )
+                    }
+                    copying.set(false);
+                });
+            }
+        >
+            <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                aria-hidden="true"
+                focusable="false"
+            >
+                <rect x="8" y="8" width="12" height="12" rx="2" />
+                <path d="M15 8V4H4v11h4" />
+            </svg>
+            <span class="copy-button-label">
+                <span class="copy-button-size" aria-hidden="true">
+                    {leptos_i18n::t!(i18n, messages.copy_arg0, arg0 = move || label.get())}
+                </span>
+                <span role="status">
+                    {move || {
+                        if copying.get() {
+                            leptos_i18n::t_string!(i18n, ui.copying).to_owned()
+                        } else if copied.get() {
+                            leptos_i18n::t_string!(i18n, ui.copied).to_owned()
+                        } else {
+                            leptos_i18n::t_string!(
+                                i18n, messages.copy_arg0, arg0 = (label.get()).to_string()
+                            )
+                        }
+                    }}
+                </span>
+            </span>
         </button>
     }
 }
@@ -131,6 +204,19 @@ pub(crate) fn SaveButton(
     #[prop(optional)] form: Option<&'static str>,
     #[prop(optional)] on_click: Option<Callback<leptos::ev::MouseEvent>>,
 ) -> impl IntoView {
-    view! { <ActionButton style=ButtonStyle::Primary kind=kind form=form disabled=disabled
-    on_click=move |event| {if let Some(action) = on_click {action.run(event)}}>{move || label.get()}</ActionButton> }
+    view! {
+        <ActionButton
+            style=ButtonStyle::Primary
+            kind=kind
+            form=form
+            disabled=disabled
+            on_click=move |event| {
+                if let Some(action) = on_click {
+                    action.run(event)
+                }
+            }
+        >
+            {move || label.get()}
+        </ActionButton>
+    }
 }

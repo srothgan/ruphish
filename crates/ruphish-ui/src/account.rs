@@ -33,10 +33,33 @@ fn viewport_is_narrow() -> bool {
 /// sidebar is expanded and is hollow when collapsed, as a quiet state cue.
 fn nav_toggle_icon(expanded: bool) -> impl IntoView {
     view! {
-        <svg class="nav-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-            <rect x="3" y="4" width="18" height="16" rx="2"/>
-            <line x1="9" y1="4" x2="9" y2="20"/>
-            {expanded.then(|| view! { <rect x="3.9" y="4.9" width="4.2" height="14.2" rx="1" fill="currentColor" stroke="none"/> })}
+        <svg
+            class="nav-toggle-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            focusable="false"
+        >
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <line x1="9" y1="4" x2="9" y2="20" />
+            {expanded
+                .then(|| {
+                    view! {
+                        <rect
+                            x="3.9"
+                            y="4.9"
+                            width="4.2"
+                            height="14.2"
+                            rx="1"
+                            fill="currentColor"
+                            stroke="none"
+                        />
+                    }
+                })}
         </svg>
     }
 }
@@ -409,14 +432,53 @@ pub(super) fn app() -> impl IntoView {
             }
         }
     });
-    view! { <div class="account-app">{navigation_guard}{move || if action.get() != SessionAction::Continue {
-        view! { <main class="login-screen"><p role="status">{tr!(ui.refreshing_your_session)}</p><a rel="external" href="/login">{tr!(ui.sign_in_again)}</a></main> }.into_any()
-    } else { match session.get() {
-        None => view! { <main class="login-screen"><p role="status">{tr!(ui.opening_ruphish)}</p></main> }.into_any(),
-        Some(Err(error)) => view! { <main class="login-screen"><h1>{tr!(ui.ruphish)}</h1><p class="form-message error" role="alert">{error}</p><a rel="external" href="/login">{tr!(ui.try_signing_in_again)}</a></main> }.into_any(),
-        Some(Ok(session)) if session.user.is_none() => login(api, session.csrf_token).into_any(),
-        Some(Ok(session)) => shell(api, session).into_any(),
-    } }}</div> }
+    view! {
+        <div class="account-app">
+            {navigation_guard}
+            {move || {
+                if action.get() != SessionAction::Continue {
+                    view! {
+                        <main class="login-screen">
+                            <p role="status">{tr!(ui.refreshing_your_session)}</p>
+                            <a rel="external" href="/login">
+                                {tr!(ui.sign_in_again)}
+                            </a>
+                        </main>
+                    }
+                        .into_any()
+                } else {
+                    match session.get() {
+                        None => {
+                            view! {
+                                <main class="login-screen">
+                                    <p role="status">{tr!(ui.opening_ruphish)}</p>
+                                </main>
+                            }
+                                .into_any()
+                        }
+                        Some(Err(error)) => {
+                            view! {
+                                <main class="login-screen">
+                                    <h1>{tr!(ui.ruphish)}</h1>
+                                    <p class="form-message error" role="alert">
+                                        {error}
+                                    </p>
+                                    <a rel="external" href="/login">
+                                        {tr!(ui.try_signing_in_again)}
+                                    </a>
+                                </main>
+                            }
+                                .into_any()
+                        }
+                        Some(Ok(session)) if session.user.is_none() => {
+                            login(api, session.csrf_token).into_any()
+                        }
+                        Some(Ok(session)) => shell(api, session).into_any(),
+                    }
+                }
+            }}
+        </div>
+    }
 }
 fn login(api: Api, token: String) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
@@ -474,10 +536,52 @@ fn login(api: Api, token: String) -> impl IntoView {
             }
         });
     };
-    view! { <main class="login-screen"><section class="login-form"><div class="login-brand">{tr!(ui.ruphish)}</div><h1>{tr!(ui.sign_in)}</h1><p>{tr!(ui.manage_your_security_awareness_workspace)}</p>
-    <form on:submit=submit><label>{tr!(ui.username)}<TextInput name="username" autocomplete="username" required=true value=Signal::derive(move || username.get()) on_input=move |e| username.set(event_target_value(&e))/></label>
-    <label>{tr!(ui.password)}<TextInput name="password" input_type="password" autocomplete="current-password" required=true value=Signal::derive(move || password.get()) on_input=move |e| password.set(event_target_value(&e))/></label>
-    {message.view()}<ActionButton style=ButtonStyle::Primary kind="submit" disabled=Signal::derive(move || busy.get())>{move || if busy.get() { leptos_i18n::t_string!(i18n, ui.signing_in) } else { leptos_i18n::t_string!(i18n, ui.sign_in) }}</ActionButton></form></section></main> }
+    view! {
+        <main class="login-screen">
+            <section class="login-form">
+                <div class="login-brand">{tr!(ui.ruphish)}</div>
+                <h1>{tr!(ui.sign_in)}</h1>
+                <p>{tr!(ui.manage_your_security_awareness_workspace)}</p>
+                <form on:submit=submit>
+                    <label>
+                        {tr!(ui.username)}
+                        <TextInput
+                            name="username"
+                            autocomplete="username"
+                            required=true
+                            value=Signal::derive(move || username.get())
+                            on_input=move |e| username.set(event_target_value(&e))
+                        />
+                    </label>
+                    <label>
+                        {tr!(ui.password)}
+                        <TextInput
+                            name="password"
+                            input_type="password"
+                            autocomplete="current-password"
+                            required=true
+                            value=Signal::derive(move || password.get())
+                            on_input=move |e| password.set(event_target_value(&e))
+                        />
+                    </label>
+                    {message.view()}
+                    <ActionButton
+                        style=ButtonStyle::Primary
+                        kind="submit"
+                        disabled=Signal::derive(move || busy.get())
+                    >
+                        {move || {
+                            if busy.get() {
+                                leptos_i18n::t_string!(i18n, ui.signing_in)
+                            } else {
+                                leptos_i18n::t_string!(i18n, ui.sign_in)
+                            }
+                        }}
+                    </ActionButton>
+                </form>
+            </section>
+        </main>
+    }
 }
 fn shell(api: Api, session: BrowserSession) -> impl IntoView {
     let queries = expect_context::<leptos_fetch::QueryClient>();
@@ -560,7 +664,19 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         if required {
             password_form(api, token.get_value(), true).into_any()
         } else if active {
-            view! { <Card class="account-panel"><h1>{tr!(ui.account_management)}</h1><p>{tr!(ui.exit_impersonation_to_manage_accounts_and_credentials)}</p><ActionButton disabled=Signal::derive(move||action_busy.get()) on_click=move |_| action("/impersonate/exit")>{tr!(ui.exit_impersonation)}</ActionButton></Card> }.into_any()
+            view! {
+                <Card class="account-panel">
+                    <h1>{tr!(ui.account_management)}</h1>
+                    <p>{tr!(ui.exit_impersonation_to_manage_accounts_and_credentials)}</p>
+                    <ActionButton
+                        disabled=Signal::derive(move || action_busy.get())
+                        on_click=move |_| action("/impersonate/exit")
+                    >
+                        {tr!(ui.exit_impersonation)}
+                    </ActionButton>
+                </Card>
+            }
+            .into_any()
         } else if let Some(screen) = users_page {
             if admin {
                 users::page(
@@ -571,7 +687,13 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
                 )
                 .into_any()
             } else {
-                view!{<Card class="account-panel"><h1>{tr!(ui.access_denied)}</h1><p>{tr!(ui.user_management_requires_administrator_permissions)}</p></Card>}.into_any()
+                view! {
+                    <Card class="account-panel">
+                        <h1>{tr!(ui.access_denied)}</h1>
+                        <p>{tr!(ui.user_management_requires_administrator_permissions)}</p>
+                    </Card>
+                }
+                .into_any()
             }
         } else if password_page {
             password_form(api, token.get_value(), false).into_any()
@@ -626,59 +748,262 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
             crate::analysis::page(api).into_any()
         }
     };
-    let content = view! {<Routes fallback=||view!{<p>{tr!(ui.this_page_is_not_available)}</p>}>
-    <Route path=path!("/logout") view=move||view! { <Card class="account-panel"><h1>{tr!(ui.sign_out)}</h1><p>{tr!(ui.your_saved_work_will_remain_available_the_next_time_you_sign_in)}</p><ActionButton style=ButtonStyle::Primary disabled=Signal::derive(move||action_busy.get()) on_click=move |_| action("/logout")>{tr!(ui.sign_out_2)}</ActionButton><a class="cancel-link ghost" href="/">{tr!(ui.stay_signed_in)}</a></Card> }/>
-    <Route path=path!("/settings") view=move||account_page(None,false)/>
-    <Route path=path!("/settings/password") view=move||account_page(None,true)/>
-    <Route path=path!("/users") view=move||account_page(Some(users::Screen::List),false)/>
-    <Route path=path!("/users/new") view=move||account_page(Some(users::Screen::New),false)/>
-    <Route path=path!("/users/:id/edit") view=move||account_page(Some(users::Screen::Edit),false)/>
-    <Route path=path!("/") view=move||if required{password_form(api,token.get_value(),true).into_any()}else{crate::overview::page().into_any()}/>
-    <Route path=path!("/analysis") view=move || analysis_page(true)/>
-    <Route path=path!("/analysis/:id") view=move || analysis_page(false)/>
-    <Route path=path!("/analysis/:id/recipients/:recipient") view=move || analysis_page(false)/>
-    <Route path=path!("/webhooks") view=move || integration_page(crate::integrations::Kind::Webhook, true, false)/>
-    <Route path=path!("/webhooks/:id") view=move || integration_page(crate::integrations::Kind::Webhook, false, false)/>
-    <Route path=path!("/webhooks/:id/edit") view=move || integration_page(crate::integrations::Kind::Webhook, false, true)/>
-    <Route path=path!("/reporting-mailboxes") view=move || integration_page(crate::integrations::Kind::Mailbox, true, false)/>
-    <Route path=path!("/reporting-mailboxes/:id") view=move || integration_page(crate::integrations::Kind::Mailbox, false, false)/>
-    <Route path=path!("/reporting-mailboxes/:id/edit") view=move || integration_page(crate::integrations::Kind::Mailbox, false, true)/>
-    <Route path=path!("/campaigns/drafts/:id") view=move||draft_page(false)/>
-    <Route path=path!("/campaigns/drafts/:id/edit") view=move||draft_page(true)/>
-    <Route path=path!("/campaigns") view=move||campaign_page(true)/>
-    <Route path=path!("/campaigns/:id") view=move||campaign_page(false)/>
-    <Route path=path!("/domains") view=move||if required{password_form(api,token.get_value(),true).into_any()}else{crate::domains::list(api, token.get_value()).into_any()}/>
-    <Route path=path!("/domains/:id") view=move||if required{password_form(api,token.get_value(),true).into_any()}else{crate::domains::detail(api,token.get_value(),false).into_any()}/>
-    <Route path=path!("/domains/:id/edit") view=move||if required{password_form(api,token.get_value(),true).into_any()}else{crate::domains::detail(api,token.get_value(),true).into_any()}/>
-    <Route path=path!("/groups") view=move||resource_page(Family::Groups,Screen::List)/>
-    <Route path=path!("/groups/:id") view=move||resource_page(Family::Groups,Screen::View)/>
-    <Route path=path!("/groups/:id/edit") view=move||resource_page(Family::Groups,Screen::Edit)/>
-    <Route path=path!("/templates") view=move||resource_page(Family::Templates,Screen::List)/>
-    <Route path=path!("/templates/:id") view=move||resource_page(Family::Templates,Screen::View)/>
-    <Route path=path!("/templates/:id/edit") view=move||resource_page(Family::Templates,Screen::Edit)/>
-    <Route path=path!("/pages") view=move||resource_page(Family::Pages,Screen::List)/>
-    <Route path=path!("/pages/:id") view=move||resource_page(Family::Pages,Screen::View)/>
-    <Route path=path!("/pages/:id/edit") view=move||resource_page(Family::Pages,Screen::Edit)/>
-    <Route path=path!("/smtp") view=move||resource_page(Family::Profiles,Screen::List)/>
-    <Route path=path!("/smtp/:id") view=move||resource_page(Family::Profiles,Screen::View)/>
-    <Route path=path!("/smtp/:id/edit") view=move||resource_page(Family::Profiles,Screen::Edit)/>
-        <Route path=path!("/reset_password") view=move||account_page(None,false)/>
-    </Routes>};
-    view! { <div class="admin-shell" data-nav-collapsed=move || nav_collapsed.get().then_some("") data-nav-open=move || drawer_open.get().then_some("")>
-    <button type="button" class="nav-launcher" aria-controls="main-navigation" aria-expanded=move || if drawer_open.get() { "true" } else { "false" } aria-label=trs!(ui.open_navigation) on:click=move |_| drawer_open.set(true)>
-        <svg class="nav-launcher-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16 M4 12h16 M4 17h16"/></svg>
-    </button>
-    <aside class="admin-nav" on:keydown=move |event: leptos::ev::KeyboardEvent| if event.key() == "Escape" { drawer_open.set(false); }>
-    <div class="nav-header"><a class="product-name" href="/"><img src="/branding/ruphish-wordmark-white.svg" alt=tr!(ui.ruphish) width="1576" height="512"/></a>
-    <button type="button" class="nav-toggle" aria-controls="main-navigation" aria-expanded=move || if nav_collapsed.get() { "false" } else { "true" } aria-label=move || if nav_collapsed.get() { expand_label.get() } else { collapse_label.get() } on:click=move |_| if viewport_is_narrow() { drawer_open.set(false) } else { nav_collapsed.update(|collapsed| *collapsed = !*collapsed) }>
-        {move || nav_toggle_icon(!nav_collapsed.get())}
-    </button></div>
-    <nav id="main-navigation" aria-label=tr!(ui.main_navigation)>
-    {crate::navigation::sections(path,admin)}
-    </nav>{account_menu::menu(api,token.get_value(),username,role_name)}</aside>
-    <div class="nav-scrim" aria-hidden="true" on:click=move |_| drawer_open.set(false)></div>
-    <div class="admin-content">{active.then(|| view! { <div class="impersonation" role="status"><span>{tr!(ui.viewing_as)}<strong>{username_banner}</strong>{tr!(ui.administrator)}{actor.unwrap_or_default()}</span><ActionButton disabled=Signal::derive(move||action_busy.get()) on_click=move |_| action("/impersonate/exit")>{tr!(ui.exit_impersonation)}</ActionButton></div> })}
-    {message.view()}{content}</div></div> }
+    let content = view! {
+        <Routes fallback=|| view! { <p>{tr!(ui.this_page_is_not_available)}</p> }>
+            <Route
+                path=path!("/logout")
+                view=move || {
+                    view! {
+                        <Card class="account-panel">
+                            <h1>{tr!(ui.sign_out)}</h1>
+                            <p>
+                                {tr!(
+                                    ui.your_saved_work_will_remain_available_the_next_time_you_sign_in
+                                )}
+                            </p>
+                            <ActionButton
+                                style=ButtonStyle::Primary
+                                disabled=Signal::derive(move || action_busy.get())
+                                on_click=move |_| action("/logout")
+                            >
+                                {tr!(ui.sign_out_2)}
+                            </ActionButton>
+                            <a class="cancel-link ghost" href="/">
+                                {tr!(ui.stay_signed_in)}
+                            </a>
+                        </Card>
+                    }
+                }
+            />
+            <Route path=path!("/settings") view=move || account_page(None, false) />
+            <Route path=path!("/settings/password") view=move || account_page(None, true) />
+            <Route
+                path=path!("/users")
+                view=move || account_page(Some(users::Screen::List), false)
+            />
+            <Route
+                path=path!("/users/new")
+                view=move || account_page(Some(users::Screen::New), false)
+            />
+            <Route
+                path=path!("/users/:id/edit")
+                view=move || account_page(Some(users::Screen::Edit), false)
+            />
+            <Route
+                path=path!("/")
+                view=move || {
+                    if required {
+                        password_form(api, token.get_value(), true).into_any()
+                    } else {
+                        crate::overview::page().into_any()
+                    }
+                }
+            />
+            <Route path=path!("/analysis") view=move || analysis_page(true) />
+            <Route path=path!("/analysis/:id") view=move || analysis_page(false) />
+            <Route
+                path=path!("/analysis/:id/recipients/:recipient")
+                view=move || analysis_page(false)
+            />
+            <Route
+                path=path!("/webhooks")
+                view=move || integration_page(crate::integrations::Kind::Webhook, true, false)
+            />
+            <Route
+                path=path!("/webhooks/:id")
+                view=move || integration_page(crate::integrations::Kind::Webhook, false, false)
+            />
+            <Route
+                path=path!("/webhooks/:id/edit")
+                view=move || integration_page(crate::integrations::Kind::Webhook, false, true)
+            />
+            <Route
+                path=path!("/reporting-mailboxes")
+                view=move || integration_page(crate::integrations::Kind::Mailbox, true, false)
+            />
+            <Route
+                path=path!("/reporting-mailboxes/:id")
+                view=move || integration_page(crate::integrations::Kind::Mailbox, false, false)
+            />
+            <Route
+                path=path!("/reporting-mailboxes/:id/edit")
+                view=move || integration_page(crate::integrations::Kind::Mailbox, false, true)
+            />
+            <Route path=path!("/campaigns/drafts/:id") view=move || draft_page(false) />
+            <Route path=path!("/campaigns/drafts/:id/edit") view=move || draft_page(true) />
+            <Route path=path!("/campaigns") view=move || campaign_page(true) />
+            <Route path=path!("/campaigns/:id") view=move || campaign_page(false) />
+            <Route
+                path=path!("/domains")
+                view=move || {
+                    if required {
+                        password_form(api, token.get_value(), true).into_any()
+                    } else {
+                        crate::domains::list(api, token.get_value()).into_any()
+                    }
+                }
+            />
+            <Route
+                path=path!("/domains/:id")
+                view=move || {
+                    if required {
+                        password_form(api, token.get_value(), true).into_any()
+                    } else {
+                        crate::domains::detail(api, token.get_value(), false).into_any()
+                    }
+                }
+            />
+            <Route
+                path=path!("/domains/:id/edit")
+                view=move || {
+                    if required {
+                        password_form(api, token.get_value(), true).into_any()
+                    } else {
+                        crate::domains::detail(api, token.get_value(), true).into_any()
+                    }
+                }
+            />
+            <Route path=path!("/groups") view=move || resource_page(Family::Groups, Screen::List) />
+            <Route
+                path=path!("/groups/:id")
+                view=move || resource_page(Family::Groups, Screen::View)
+            />
+            <Route
+                path=path!("/groups/:id/edit")
+                view=move || resource_page(Family::Groups, Screen::Edit)
+            />
+            <Route
+                path=path!("/templates")
+                view=move || resource_page(Family::Templates, Screen::List)
+            />
+            <Route
+                path=path!("/templates/:id")
+                view=move || resource_page(Family::Templates, Screen::View)
+            />
+            <Route
+                path=path!("/templates/:id/edit")
+                view=move || resource_page(Family::Templates, Screen::Edit)
+            />
+            <Route path=path!("/pages") view=move || resource_page(Family::Pages, Screen::List) />
+            <Route
+                path=path!("/pages/:id")
+                view=move || resource_page(Family::Pages, Screen::View)
+            />
+            <Route
+                path=path!("/pages/:id/edit")
+                view=move || resource_page(Family::Pages, Screen::Edit)
+            />
+            <Route path=path!("/smtp") view=move || resource_page(Family::Profiles, Screen::List) />
+            <Route
+                path=path!("/smtp/:id")
+                view=move || resource_page(Family::Profiles, Screen::View)
+            />
+            <Route
+                path=path!("/smtp/:id/edit")
+                view=move || resource_page(Family::Profiles, Screen::Edit)
+            />
+            <Route path=path!("/reset_password") view=move || account_page(None, false) />
+        </Routes>
+    };
+    view! {
+        <div
+            class="admin-shell"
+            data-nav-collapsed=move || nav_collapsed.get().then_some("")
+            data-nav-open=move || drawer_open.get().then_some("")
+        >
+            <button
+                type="button"
+                class="nav-launcher"
+                aria-controls="main-navigation"
+                aria-expanded=move || if drawer_open.get() { "true" } else { "false" }
+                aria-label=trs!(ui.open_navigation)
+                on:click=move |_| drawer_open.set(true)
+            >
+                <svg
+                    class="nav-launcher-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                    focusable="false"
+                >
+                    <path d="M4 7h16 M4 12h16 M4 17h16" />
+                </svg>
+            </button>
+            <aside
+                class="admin-nav"
+                on:keydown=move |event: leptos::ev::KeyboardEvent| {
+                    if event.key() == "Escape" {
+                        drawer_open.set(false);
+                    }
+                }
+            >
+                <div class="nav-header">
+                    <a class="product-name" href="/">
+                        <img
+                            src="/branding/ruphish-wordmark-white.svg"
+                            alt=tr!(ui.ruphish)
+                            width="1576"
+                            height="512"
+                        />
+                    </a>
+                    <button
+                        type="button"
+                        class="nav-toggle"
+                        aria-controls="main-navigation"
+                        aria-expanded=move || if nav_collapsed.get() { "false" } else { "true" }
+                        aria-label=move || {
+                            if nav_collapsed.get() {
+                                expand_label.get()
+                            } else {
+                                collapse_label.get()
+                            }
+                        }
+                        on:click=move |_| {
+                            if viewport_is_narrow() {
+                                drawer_open.set(false)
+                            } else {
+                                nav_collapsed.update(|collapsed| *collapsed = !*collapsed)
+                            }
+                        }
+                    >
+                        {move || nav_toggle_icon(!nav_collapsed.get())}
+                    </button>
+                </div>
+                <nav id="main-navigation" aria-label=tr!(ui.main_navigation)>
+                    {crate::navigation::sections(path, admin)}
+                </nav>
+                {account_menu::menu(api, token.get_value(), username, role_name)}
+            </aside>
+            <div
+                class="nav-scrim"
+                aria-hidden="true"
+                on:click=move |_| drawer_open.set(false)
+            ></div>
+            <div class="admin-content">
+                {active
+                    .then(|| {
+                        view! {
+                            <div class="impersonation" role="status">
+                                <span>
+                                    {tr!(ui.viewing_as)}<strong>{username_banner}</strong>
+                                    {tr!(ui.administrator)}{actor.unwrap_or_default()}
+                                </span>
+                                <ActionButton
+                                    disabled=Signal::derive(move || action_busy.get())
+                                    on_click=move |_| action("/impersonate/exit")
+                                >
+                                    {tr!(ui.exit_impersonation)}
+                                </ActionButton>
+                            </div>
+                        }
+                    })} {message.view()}{content}
+            </div>
+        </div>
+    }
 }
 fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
@@ -747,13 +1072,105 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
             }
         });
     };
-    view! { <Card class="account-panel password-page">{(!required).then(||view!{<BackLink href="/settings">{tr!(ui.back_to_my_account)}</BackLink>})}<h1>{move || if required { leptos_i18n::t_string!(i18n, ui.choose_your_password) } else { leptos_i18n::t_string!(i18n, ui.change_password) }}</h1>
-    <p>{move || if required { leptos_i18n::t_string!(i18n, ui.replace_your_temporary_password_to_finish_setting_up_your_account) } else { leptos_i18n::t_string!(i18n, ui.use_a_unique_password_changing_it_signs_out_your_other_sessions) }}</p>
-    <form class="account-form" on:submit=submit>
-    {(!required).then(|| view! { <label>{tr!(ui.current_password)}<TextInput input_type="password" autocomplete="current-password" required=true value=Signal::derive(move || current.get()) on_input=move |e| current.set(event_target_value(&e))/></label> })}
-    <label>{tr!(ui.new_password)}<TextInput input_type="password" autocomplete="new-password" required=true value=Signal::derive(move || candidate.get()) on_input=move |e| candidate.set(event_target_value(&e))/></label>
-    <label>{tr!(ui.confirm_new_password)}<TextInput input_type="password" autocomplete="new-password" required=true value=Signal::derive(move || confirm.get()) on_input=move |e| confirm.set(event_target_value(&e))/></label>
-    {message.view()}<ActionButton style=ButtonStyle::Primary kind="submit" disabled=Signal::derive(move || busy.get())>{move || if busy.get() { leptos_i18n::t_string!(i18n, ui.saving) } else { leptos_i18n::t_string!(i18n, ui.save_password) }}</ActionButton></form>{(!required).then(||view!{<div class="account-actions"><ActionButton style=ButtonStyle::Ghost disabled=Signal::derive(move||busy.get()) on_click=move |_|{current.set(String::new());candidate.set(String::new());confirm.set(String::new());cancel_navigation("/settings",Default::default());}>{tr!(ui.cancel)}</ActionButton></div>})}</Card> }
+    view! {
+        <Card class="account-panel password-page">
+            {(!required)
+                .then(|| {
+                    view! { <BackLink href="/settings">{tr!(ui.back_to_my_account)}</BackLink> }
+                })}
+            <h1>
+                {move || {
+                    if required {
+                        leptos_i18n::t_string!(i18n, ui.choose_your_password)
+                    } else {
+                        leptos_i18n::t_string!(i18n, ui.change_password)
+                    }
+                }}
+            </h1>
+            <p>
+                {move || {
+                    if required {
+                        leptos_i18n::t_string!(
+                            i18n, ui.replace_your_temporary_password_to_finish_setting_up_your_account
+                        )
+                    } else {
+                        leptos_i18n::t_string!(
+                            i18n, ui.use_a_unique_password_changing_it_signs_out_your_other_sessions
+                        )
+                    }
+                }}
+            </p> <form class="account-form" on:submit=submit>
+                {(!required)
+                    .then(|| {
+                        view! {
+                            <label>
+                                {tr!(ui.current_password)}
+                                <TextInput
+                                    input_type="password"
+                                    autocomplete="current-password"
+                                    required=true
+                                    value=Signal::derive(move || current.get())
+                                    on_input=move |e| current.set(event_target_value(&e))
+                                />
+                            </label>
+                        }
+                    })}
+                <label>
+                    {tr!(ui.new_password)}
+                    <TextInput
+                        input_type="password"
+                        autocomplete="new-password"
+                        required=true
+                        value=Signal::derive(move || candidate.get())
+                        on_input=move |e| candidate.set(event_target_value(&e))
+                    />
+                </label>
+                <label>
+                    {tr!(ui.confirm_new_password)}
+                    <TextInput
+                        input_type="password"
+                        autocomplete="new-password"
+                        required=true
+                        value=Signal::derive(move || confirm.get())
+                        on_input=move |e| confirm.set(event_target_value(&e))
+                    />
+                </label>
+                {message.view()}
+                <ActionButton
+                    style=ButtonStyle::Primary
+                    kind="submit"
+                    disabled=Signal::derive(move || busy.get())
+                >
+                    {move || {
+                        if busy.get() {
+                            leptos_i18n::t_string!(i18n, ui.saving)
+                        } else {
+                            leptos_i18n::t_string!(i18n, ui.save_password)
+                        }
+                    }}
+                </ActionButton>
+            </form>
+            {(!required)
+                .then(|| {
+                    view! {
+                        <div class="account-actions">
+                            <ActionButton
+                                style=ButtonStyle::Ghost
+                                disabled=Signal::derive(move || busy.get())
+                                on_click=move |_| {
+                                    current.set(String::new());
+                                    candidate.set(String::new());
+                                    confirm.set(String::new());
+                                    cancel_navigation("/settings", Default::default());
+                                }
+                            >
+                                {tr!(ui.cancel)}
+                            </ActionButton>
+                        </div>
+                    }
+                })}
+        </Card>
+    }
 }
 fn settings(api: Api, session: BrowserSession) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
@@ -866,26 +1283,154 @@ fn settings(api: Api, session: BrowserSession) -> impl IntoView {
             busy.set(false);
         });
     };
-    view! {<section class="account-overview"><div class="account-heading"><h1>{tr!(ui.my_account)}</h1><a class="button" href="/settings/password">{tr!(ui.change_password)}</a></div>
-    {message.view()}<div class="settings-stack"><Card class="account-panel"><h2>{tr!(ui.account)}</h2><dl class="account-facts"><div><dt>{tr!(ui.username)}</dt><dd>{username}</dd></div><div><dt>{tr!(ui.role)}</dt><dd>{role}</dd></div></dl></Card>
-    <crate::preferences::DisplayPreferencesForm api=api token=session.csrf_token.clone()/>
-    <Card class="account-panel"><h2>{tr!(ui.api_access)}</h2><p>{tr!(ui.use_your_api_key_for_integrations_treat_it_like_a_password)}</p>
-    <div class="account-api-row"><label>{tr!(ui.api_base_url)}<TextInput readonly=true value=base.get_value() on_focus=Callback::new(move|e: leptos::ev::FocusEvent|{event_target::<web_sys::HtmlInputElement>(&e).select();})/></label><ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|copy(false)>{tr!(ui.copy_url)}</ActionButton></div>
-    <div class="account-api-row"><label>{tr!(ui.api_key)}<TextInput id="account-api-key" class="secret-value" readonly=true value=Signal::derive(move||key.get().unwrap_or_else(||"\u{2022}".repeat(16))) on_focus=Callback::new(move|e: leptos::ev::FocusEvent|{if key.get_untracked().is_some(){event_target::<web_sys::HtmlInputElement>(&e).select();}})/></label>
-        <div class="api-key-controls">
-            <button type="button" class="key-visibility" disabled=move||busy.get() on:click=reveal aria-controls="account-api-key" aria-label=tr!(ui.show_api_key) aria-pressed=move||key.get().is_some().to_string() title=move||if key.get().is_some(){leptos_i18n::t_string!(i18n, ui.hide_api_key)}else{leptos_i18n::t_string!(i18n, ui.reveal_api_key)}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                    <path class:hidden-eye=move||key.get().is_some() d="m3 3 18 18"/>
-                </svg>
-            </button>
-            <ActionButton kind="button" disabled=Signal::derive(move||busy.get()) on_click=move |_|copy(true)>{tr!(ui.copy_key)}</ActionButton>
-        </div>
-    </div>
-    <div class="account-actions"><ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|confirm.set(true)>{tr!(ui.replace_api_key)}</ActionButton></div>
-    {move||confirm.get().then(||view!{<div class="confirmation"><p>{tr!(ui.the_previous_key_will_stop_working_immediately)}</p><ActionButton style=ButtonStyle::Danger disabled=Signal::derive(move||busy.get()) on_click=rotate>{tr!(ui.replace_key_now)}</ActionButton><ActionButton style=ButtonStyle::Ghost disabled=Signal::derive(move||busy.get()) on_click=move |_|confirm.set(false)>{tr!(ui.cancel)}</ActionButton></div>})}
-    </Card></div></section>}
+    view! {
+        <section class="account-overview">
+            <div class="account-heading">
+                <h1>{tr!(ui.my_account)}</h1>
+                <a class="button" href="/settings/password">
+                    {tr!(ui.change_password)}
+                </a>
+            </div>
+            {message.view()}
+            <div class="settings-stack">
+                <Card class="account-panel">
+                    <h2>{tr!(ui.account)}</h2>
+                    <dl class="account-facts">
+                        <div>
+                            <dt>{tr!(ui.username)}</dt>
+                            <dd>{username}</dd>
+                        </div>
+                        <div>
+                            <dt>{tr!(ui.role)}</dt>
+                            <dd>{role}</dd>
+                        </div>
+                    </dl>
+                </Card>
+                <crate::preferences::DisplayPreferencesForm
+                    api=api
+                    token=session.csrf_token.clone()
+                />
+                <Card class="account-panel">
+                    <h2>{tr!(ui.api_access)}</h2>
+                    <p>{tr!(ui.use_your_api_key_for_integrations_treat_it_like_a_password)}</p>
+                    <div class="account-api-row">
+                        <label>
+                            {tr!(ui.api_base_url)}
+                            <TextInput
+                                readonly=true
+                                value=base.get_value()
+                                on_focus=Callback::new(move |e: leptos::ev::FocusEvent| {
+                                    event_target::<web_sys::HtmlInputElement>(&e).select();
+                                })
+                            />
+                        </label>
+                        <ActionButton
+                            disabled=Signal::derive(move || busy.get())
+                            on_click=move |_| copy(false)
+                        >
+                            {tr!(ui.copy_url)}
+                        </ActionButton>
+                    </div>
+                    <div class="account-api-row">
+                        <label>
+                            {tr!(ui.api_key)}
+                            <TextInput
+                                id="account-api-key"
+                                class="secret-value"
+                                readonly=true
+                                value=Signal::derive(move || {
+                                    key.get().unwrap_or_else(|| "\u{2022}".repeat(16))
+                                })
+                                on_focus=Callback::new(move |e: leptos::ev::FocusEvent| {
+                                    if key.get_untracked().is_some() {
+                                        event_target::<web_sys::HtmlInputElement>(&e).select();
+                                    }
+                                })
+                            />
+                        </label>
+                        <div class="api-key-controls">
+                            <button
+                                type="button"
+                                class="key-visibility"
+                                disabled=move || busy.get()
+                                on:click=reveal
+                                aria-controls="account-api-key"
+                                aria-label=tr!(ui.show_api_key)
+                                aria-pressed=move || key.get().is_some().to_string()
+                                title=move || {
+                                    if key.get().is_some() {
+                                        leptos_i18n::t_string!(i18n, ui.hide_api_key)
+                                    } else {
+                                        leptos_i18n::t_string!(i18n, ui.reveal_api_key)
+                                    }
+                                }
+                            >
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="1.8"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    aria-hidden="true"
+                                    focusable="false"
+                                >
+                                    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+                                    <circle cx="12" cy="12" r="3" />
+                                    <path
+                                        class:hidden-eye=move || key.get().is_some()
+                                        d="m3 3 18 18"
+                                    />
+                                </svg>
+                            </button>
+                            <ActionButton
+                                kind="button"
+                                disabled=Signal::derive(move || busy.get())
+                                on_click=move |_| copy(true)
+                            >
+                                {tr!(ui.copy_key)}
+                            </ActionButton>
+                        </div>
+                    </div>
+                    <div class="account-actions">
+                        <ActionButton
+                            disabled=Signal::derive(move || busy.get())
+                            on_click=move |_| confirm.set(true)
+                        >
+                            {tr!(ui.replace_api_key)}
+                        </ActionButton>
+                    </div>
+                    {move || {
+                        confirm
+                            .get()
+                            .then(|| {
+                                view! {
+                                    <div class="confirmation">
+                                        <p>
+                                            {tr!(ui.the_previous_key_will_stop_working_immediately)}
+                                        </p>
+                                        <ActionButton
+                                            style=ButtonStyle::Danger
+                                            disabled=Signal::derive(move || busy.get())
+                                            on_click=rotate
+                                        >
+                                            {tr!(ui.replace_key_now)}
+                                        </ActionButton>
+                                        <ActionButton
+                                            style=ButtonStyle::Ghost
+                                            disabled=Signal::derive(move || busy.get())
+                                            on_click=move |_| confirm.set(false)
+                                        >
+                                            {tr!(ui.cancel)}
+                                        </ActionButton>
+                                    </div>
+                                }
+                            })
+                    }}
+                </Card>
+            </div>
+        </section>
+    }
 }
 
 /// Only retrieve the secret on an explicit reveal/copy action.

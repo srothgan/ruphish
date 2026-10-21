@@ -37,30 +37,70 @@ pub(crate) fn SearchSelect(
     };
     view! {
         <div class="multi-select search-select">
-            <span class="multi-select-label" id=format!("{id}-label")>{move || label.get()}</span>
-            <button node_ref=trigger type="button" class="multi-select-trigger" disabled=move || disabled.get()
-                aria-haspopup="dialog" aria-expanded="false" aria-controls=format!("{id}-panel") aria-labelledby=format!("{id}-label {id}-value")>
+            <span class="multi-select-label" id=format!("{id}-label")>
+                {move || label.get()}
+            </span>
+            <button
+                node_ref=trigger
+                type="button"
+                class="multi-select-trigger"
+                disabled=move || disabled.get()
+                aria-haspopup="dialog"
+                aria-expanded="false"
+                aria-controls=format!("{id}-panel")
+                aria-labelledby=format!("{id}-label {id}-value")
+            >
                 <span id=format!("{id}-value")>{selected_label}</span>
             </button>
-            <div node_ref=panel id=format!("{id}-panel") class="multi-select-panel search-select-panel" role="dialog" aria-label=move || label.get() data-panel-width="560" hidden>
-                <Field label=search_label><TextInput input_type="search" value=search on_input=move |event| search.set(event_target_value(&event))/></Field>
+            <div
+                node_ref=panel
+                id=format!("{id}-panel")
+                class="multi-select-panel search-select-panel"
+                role="dialog"
+                aria-label=move || label.get()
+                data-panel-width="560"
+                hidden
+            >
+                <Field label=search_label>
+                    <TextInput
+                        input_type="search"
+                        value=search
+                        on_input=move |event| search.set(event_target_value(&event))
+                    />
+                </Field>
                 <div class="search-select-options" role="radiogroup" aria-label=move || label.get()>
-                    <For each=move || filtered.get() key=|row| row.clone() children=move |(key, text)| {
-                        let key = StoredValue::new(key);
-                        view! {
-                            <label class="search-select-option">
-                                <input type="radio" name=id value=key.get_value() disabled=move || disabled.get() data-panel-close
-                                    prop:checked=move || value.get() == key.get_value()
-                                    on:change=move |_| value.set(key.get_value())/>
-                                <span>{text}</span>
-                            </label>
+                    <For
+                        each=move || filtered.get()
+                        key=|row| row.clone()
+                        children=move |(key, text)| {
+                            let key = StoredValue::new(key);
+                            view! {
+                                <label class="search-select-option">
+                                    <input
+                                        type="radio"
+                                        name=id
+                                        value=key.get_value()
+                                        disabled=move || disabled.get()
+                                        data-panel-close
+                                        prop:checked=move || value.get() == key.get_value()
+                                        on:change=move |_| value.set(key.get_value())
+                                    />
+                                    <span>{text}</span>
+                                </label>
+                            }
                         }
-                    }/>
+                    />
                 </div>
-                <Show when=move || filtered.with(|items| items.iter().all(|(value, _)| value.is_empty()))>
-                    <EmptyState title=trs!(preferences.no_matches)><p>{tr!(ui.try_another_search)}</p></EmptyState>
+                <Show when=move || {
+                    filtered.with(|items| items.iter().all(|(value, _)| value.is_empty()))
+                }>
+                    <EmptyState title=trs!(preferences.no_matches)>
+                        <p>{tr!(ui.try_another_search)}</p>
+                    </EmptyState>
                 </Show>
-                <div class="multi-select-footer"><ActionButton close_panel=true>{tr!(ui.done)}</ActionButton></div>
+                <div class="multi-select-footer">
+                    <ActionButton close_panel=true>{tr!(ui.done)}</ActionButton>
+                </div>
             </div>
         </div>
     }

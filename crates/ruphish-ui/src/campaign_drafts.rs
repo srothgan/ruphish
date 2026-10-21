@@ -72,7 +72,13 @@ impl Persistence {
 pub(super) fn page(api: Api, token: String, editing: bool) -> impl IntoView {
     let params = use_params_map();
     let token = StoredValue::new(token);
-    view! {<For each=move||vec![params.with(|p|p.get("id").unwrap_or_default())] key=|id|id.clone() children=move|id|load(api,token.get_value(),id,editing)/>}
+    view! {
+        <For
+            each=move || vec![params.with(|p| p.get("id").unwrap_or_default())]
+            key=|id| id.clone()
+            children=move |id| load(api, token.get_value(), id, editing)
+        />
+    }
 }
 fn load(api: Api, token: String, id: String, editing: bool) -> impl IntoView {
     if !editing {
@@ -107,8 +113,30 @@ fn load(api: Api, token: String, id: String, editing: bool) -> impl IntoView {
     });
     // Only a newly loaded record should replace the form. Initial preference reads
     // must not subscribe this factory and discard unsaved edits on preference changes.
-    view! { {move||data.get().map(|saved|untrack(||crate::campaigns::create(api,token.get_value(),Some(saved["configuration"].clone()),Some(saved))))}
-    <Show when=move||data.get().is_none()><ManagementPage><BackLink href="/campaigns">{tr!(ui.back_to_campaigns)}</BackLink>{message.view()}<ActionButton disabled=Signal::derive(move||loading.get()) on_click=move |_|refresh.update(|n|*n+=1)>{tr!(ui.refresh)}</ActionButton></ManagementPage></Show> }.into_any()
+    view! {
+        {move || {
+            data.get()
+                .map(|saved| untrack(|| crate::campaigns::create(
+                    api,
+                    token.get_value(),
+                    Some(saved["configuration"].clone()),
+                    Some(saved),
+                )))
+        }}
+        <Show when=move || data.get().is_none()>
+            <ManagementPage>
+                <BackLink href="/campaigns">{tr!(ui.back_to_campaigns)}</BackLink>
+                {message.view()}
+                <ActionButton
+                    disabled=Signal::derive(move || loading.get())
+                    on_click=move |_| refresh.update(|n| *n += 1)
+                >
+                    {tr!(ui.refresh)}
+                </ActionButton>
+            </ManagementPage>
+        </Show>
+    }
+    .into_any()
 }
 fn read_only(api: Api, token: String, id: String) -> impl IntoView {
     let queries = expect_context::<CampaignQueries>();
@@ -174,21 +202,164 @@ fn read_only(api: Api, token: String, id: String) -> impl IntoView {
             busy.set(false);
         });
     });
-    view! {<ManagementPage><BackLink href="/campaigns">{tr!(ui.back_to_campaigns)}</BackLink>
-        <PageHeader title=title subtitle=trs!(ui.draft_description)><StatusBadge tone=StatusTone::Warning>{tr!(ui.draft)}</StatusBadge>
-        <ActionButton disabled=read.fetching on_click=move |_|read.refresh.run(())>{tr!(ui.refresh)}</ActionButton><ResourceActions disabled=Signal::derive(move || !confirmed.get() || busy.get()) edit_href=format!("/campaigns/drafts/{}/edit",id.get_value()) can_edit=can_edit on_delete=Callback::new(move|()|deleting.set(saved.get_untracked()["revision"].as_i64()))/></PageHeader>
-        {message.view()}<QueryStatus fetching=read.fetching has_data=confirmed error=read.error noun=trs!(ui.draft) refresh=read.refresh/><QueryStatus fetching=resources.fetching has_data=names_known error=resources.error noun=trs!(ui.resources) refresh=resources.refresh/><Show when=move ||confirmed.get()><Card><dl class="campaign-review-fields">
-        <div><dt>{tr!(ui.last_saved)}</dt><dd>{move||crate::time_display::instant(&saved.get()["modified"])}</dd></div>
+    view! {
+        <ManagementPage>
+            <BackLink href="/campaigns">{tr!(ui.back_to_campaigns)}</BackLink>
+            <PageHeader title=title subtitle=trs!(ui.draft_description)>
+                <StatusBadge tone=StatusTone::Warning>{tr!(ui.draft)}</StatusBadge>
+                <ActionButton disabled=read.fetching on_click=move |_| read.refresh.run(())>
+                    {tr!(ui.refresh)}
+                </ActionButton>
+                <ResourceActions
+                    disabled=Signal::derive(move || !confirmed.get() || busy.get())
+                    edit_href=format!("/campaigns/drafts/{}/edit", id.get_value())
+                    can_edit=can_edit
+                    on_delete=Callback::new(move |()| {
+                        deleting.set(saved.get_untracked()["revision"].as_i64())
+                    })
+                />
+            </PageHeader>
+            {message.view()}
+            <QueryStatus
+                fetching=read.fetching
+                has_data=confirmed
+                error=read.error
+                noun=trs!(ui.draft)
+                refresh=read.refresh
+            />
+            <QueryStatus
+                fetching=resources.fetching
+                has_data=names_known
+                error=resources.error
+                noun=trs!(ui.resources)
+                refresh=resources.refresh
+            />
+            <Show when=move || confirmed.get()>
+                <Card>
+                    <dl class="campaign-review-fields">
+                        <div>
+                            <dt>{tr!(ui.last_saved)}</dt>
+                            <dd>
+                                {move || crate::time_display::instant(&saved.get()["modified"])}
+                            </dd>
+                        </div>
 
-        {[ ("template",trs!(ui.email_template)),("page",trs!(ui.landing_page)),("smtp",trs!(ui.sending_profile)) ].into_iter().map(move|(key,label)|view!{
-            <div><dt>{move||label.get()}</dt><dd>{move||{let selected=config.get()["selection"][key]["id"].clone();if !names_known.get(){return leptos_i18n::t_string!(i18n,ui.unavailable).to_owned();}array(&names.get(),key).iter().find(|v|v["id"]==selected).map(|v|text(v,"name")).unwrap_or_else(||if selected.as_i64().is_some_and(|id|id>0){leptos_i18n::t_string!(i18n,ui.unavailable).to_owned()}else{ruphish_ui::tr!(ui.choose_a_resource)()})}}</dd></div>
-        }).collect_view()}
-        <div><dt>{tr!(ui.recipients)}</dt><dd>{move||{if !names_known.get(){return leptos_i18n::t_string!(i18n,ui.unavailable).to_owned();}array(&config.get()["selection"],"groups").iter().map(|selected|array(&names.get(),"groups").iter().find(|v|v["id"]==selected["id"]).map(|v|text(v,"name")).unwrap_or_else(||ruphish_ui::tr!(ui.missing_draft_resource)())).collect::<Vec<_>>().join(", ")}}</dd></div>
-        <div><dt>{tr!(ui.public_url)}</dt><dd>{move||text(&config.get(),"url")}</dd></div>
-        </dl></Card>
-        <Card><h2>{tr!(ui.schedule)}</h2><p>{tr!(ui.not_scheduled)}</p><dl class="campaign-review-fields">
-        {[("launch_local",trs!(ui.launch_time)),("send_by_local",trs!(ui.initial_distribution_end_optional))].into_iter().map(move|(key,label)|view!{<div><dt>{move||label.get()}</dt><dd>{move||{let value=config.get();let time=&value[key];if time.is_null(){ruphish_ui::tr!(ui.not_set)()}else{match ruphish_domain::datetime::resolve_local(&text(time,"local"),&text(time,"time_zone")){Ok(time)=>crate::time_display::instant(&json!(ruphish_domain::datetime::utc(time))),Err(_)=>ruphish_ui::tr!(ui.time_not_recorded)()}}}}</dd></div>}).collect_view()}
-        </dl></Card>
-        </Show><Show when=move||deleting.get().is_some()><DeleteConfirmation title=trs!(ui.delete_draft) description=trs!(ui.delete_draft_description) confirm_label=trs!(ui.delete) busy=Signal::derive(move||busy.get()) message=message on_confirm=delete on_cancel=Callback::new(move|()|deleting.set(None))/></Show>
-    </ManagementPage>}
+                        {[
+                            ("template", trs!(ui.email_template)),
+                            ("page", trs!(ui.landing_page)),
+                            ("smtp", trs!(ui.sending_profile)),
+                        ]
+                            .into_iter()
+                            .map(move |(key, label)| {
+                                view! {
+                                    <div>
+                                        <dt>{move || label.get()}</dt>
+                                        <dd>
+                                            {move || {
+                                                let selected = config.get()["selection"][key]["id"].clone();
+                                                if !names_known.get() {
+                                                    return leptos_i18n::t_string!(i18n,ui.unavailable)
+                                                        .to_owned();
+                                                }
+                                                array(&names.get(), key)
+                                                    .iter()
+                                                    .find(|v| v["id"] == selected)
+                                                    .map(|v| text(v, "name"))
+                                                    .unwrap_or_else(|| {
+                                                        if selected.as_i64().is_some_and(|id| id > 0) {
+                                                            leptos_i18n::t_string!(i18n,ui.unavailable).to_owned()
+                                                        } else {
+                                                            ruphish_ui::tr!(ui.choose_a_resource)()
+                                                        }
+                                                    })
+                                            }}
+                                        </dd>
+                                    </div>
+                                }
+                            })
+                            .collect_view()}
+                        <div>
+                            <dt>{tr!(ui.recipients)}</dt>
+                            <dd>
+                                {move || {
+                                    if !names_known.get() {
+                                        return leptos_i18n::t_string!(i18n,ui.unavailable)
+                                            .to_owned();
+                                    }
+                                    array(&config.get()["selection"], "groups")
+                                        .iter()
+                                        .map(|selected| {
+                                            array(&names.get(), "groups")
+                                                .iter()
+                                                .find(|v| v["id"] == selected["id"])
+                                                .map(|v| text(v, "name"))
+                                                .unwrap_or_else(|| ruphish_ui::tr!(
+                                                    ui.missing_draft_resource
+                                                )())
+                                        })
+                                        .collect::<Vec<_>>()
+                                        .join(", ")
+                                }}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>{tr!(ui.public_url)}</dt>
+                            <dd>{move || text(&config.get(), "url")}</dd>
+                        </div>
+                    </dl>
+                </Card>
+                <Card>
+                    <h2>{tr!(ui.schedule)}</h2>
+                    <p>{tr!(ui.not_scheduled)}</p>
+                    <dl class="campaign-review-fields">
+                        {[
+                            ("launch_local", trs!(ui.launch_time)),
+                            ("send_by_local", trs!(ui.initial_distribution_end_optional)),
+                        ]
+                            .into_iter()
+                            .map(move |(key, label)| {
+                                view! {
+                                    <div>
+                                        <dt>{move || label.get()}</dt>
+                                        <dd>
+                                            {move || {
+                                                let value = config.get();
+                                                let time = &value[key];
+                                                if time.is_null() {
+                                                    ruphish_ui::tr!(ui.not_set)()
+                                                } else {
+                                                    match ruphish_domain::datetime::resolve_local(
+                                                        &text(time, "local"),
+                                                        &text(time, "time_zone"),
+                                                    ) {
+                                                        Ok(time) => {
+                                                            crate::time_display::instant(
+                                                                &json!(ruphish_domain::datetime::utc(time)),
+                                                            )
+                                                        }
+                                                        Err(_) => ruphish_ui::tr!(ui.time_not_recorded)(),
+                                                    }
+                                                }
+                                            }}
+                                        </dd>
+                                    </div>
+                                }
+                            })
+                            .collect_view()}
+                    </dl>
+                </Card>
+            </Show>
+            <Show when=move || deleting.get().is_some()>
+                <DeleteConfirmation
+                    title=trs!(ui.delete_draft)
+                    description=trs!(ui.delete_draft_description)
+                    confirm_label=trs!(ui.delete)
+                    busy=Signal::derive(move || busy.get())
+                    message=message
+                    on_confirm=delete
+                    on_cancel=Callback::new(move |()| deleting.set(None))
+                />
+            </Show>
+        </ManagementPage>
+    }
 }

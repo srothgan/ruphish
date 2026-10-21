@@ -22,12 +22,27 @@ pub(crate) fn ResourceActions(
 ) -> impl IntoView {
     view! {
         <div class="row-actions">
-            {view_href.map(|href| view! { <ActionLink href=href size=size disabled=disabled>{tr!(ui.view)}</ActionLink> })}
-            <ActionLink href=edit_href size=size hidden={!can_edit || hide_edit} disabled=disabled>{tr!(ui.edit)}</ActionLink>
-            {children.map(|children| children())}
-            <ActionButton style=ButtonStyle::Ghost size=size hidden=!can_edit
+            {view_href
+                .map(|href| {
+                    view! {
+                        <ActionLink href=href size=size disabled=disabled>
+                            {tr!(ui.view)}
+                        </ActionLink>
+                    }
+                })}
+            <ActionLink href=edit_href size=size hidden={!can_edit || hide_edit} disabled=disabled>
+                {tr!(ui.edit)}
+            </ActionLink> {children.map(|children| children())}
+            <ActionButton
+                style=ButtonStyle::Ghost
+                size=size
+                hidden=!can_edit
                 disabled=Signal::derive(move || disabled.get() || delete_disabled.get())
-                title=delete_reason on_click=move |_| on_delete.run(())>{tr!(ui.delete)}</ActionButton>
+                title=delete_reason
+                on_click=move |_| on_delete.run(())
+            >
+                {tr!(ui.delete)}
+            </ActionButton>
         </div>
     }
 }
@@ -100,13 +115,26 @@ pub(crate) fn ResourceDeleteDialog(
         });
     });
     view! {
-        {move || target.get().map(|target| view! {
-            <DeleteConfirmation title=leptos_i18n::t_string!(i18n, messages.delete_arg0, arg0 = (target.name).to_string())
-                description=target.description confirm_label=trs!(ui.delete)
-                busy=deletion.busy message=deletion.message on_confirm=confirm
-                on_cancel=Callback::new(move |()| {
-                    deletion.state.update(Deletion::cancel);
-                })/>
-        })}
+        {move || {
+            target
+                .get()
+                .map(|target| {
+                    view! {
+                        <DeleteConfirmation
+                            title=leptos_i18n::t_string!(
+                                i18n, messages.delete_arg0, arg0 = (target.name).to_string()
+                            )
+                            description=target.description
+                            confirm_label=trs!(ui.delete)
+                            busy=deletion.busy
+                            message=deletion.message
+                            on_confirm=confirm
+                            on_cancel=Callback::new(move |()| {
+                                deletion.state.update(Deletion::cancel);
+                            })
+                        />
+                    }
+                })
+        }}
     }
 }

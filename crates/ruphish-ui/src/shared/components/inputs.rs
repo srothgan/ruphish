@@ -21,16 +21,31 @@ pub(crate) fn TextInput(
     #[prop(default = false)] readonly: bool,
 ) -> impl IntoView {
     view! {
-        <input class=format!("text-input {class}") type=input_type
+        <input
+            class=format!("text-input {class}")
+            type=input_type
             name=(!name.is_empty()).then_some(name)
             autocomplete=(!autocomplete.is_empty()).then_some(autocomplete)
             id=(!id.is_empty()).then_some(id)
             aria-label=move || (!aria_label.get().is_empty()).then(|| aria_label.get())
-            placeholder=move || placeholder.get() step=(!step.is_empty()).then_some(step) maxlength=maxlength
-            prop:value=move || value.get() required=move || required.get()
-            disabled=move || disabled.get() readonly=readonly
-            on:input=move |event| { if let Some(callback) = on_input { callback.run(event); } }
-            on:focus=move |event| { if let Some(callback) = on_focus { callback.run(event); } }/>
+            placeholder=move || placeholder.get()
+            step=(!step.is_empty()).then_some(step)
+            maxlength=maxlength
+            prop:value=move || value.get()
+            required=move || required.get()
+            disabled=move || disabled.get()
+            readonly=readonly
+            on:input=move |event| {
+                if let Some(callback) = on_input {
+                    callback.run(event);
+                }
+            }
+            on:focus=move |event| {
+                if let Some(callback) = on_focus {
+                    callback.run(event);
+                }
+            }
+        />
     }
 }
 
@@ -43,8 +58,13 @@ pub(crate) fn Textarea(
     #[prop(into, optional)] required: Signal<bool>,
 ) -> impl IntoView {
     view! {
-        <textarea class="text-input" rows=rows prop:value=move || value.get()
-            disabled=move || disabled.get() required=move || required.get()
-            on:input=move |event| on_input.run(event)></textarea>
+        <textarea
+            class="text-input"
+            rows=rows
+            prop:value=move || value.get()
+            disabled=move || disabled.get()
+            required=move || required.get()
+            on:input=move |event| on_input.run(event)
+        ></textarea>
     }
 }
