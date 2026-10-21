@@ -1,8 +1,8 @@
 //! Owner-scoped resource transactions over the preserved legacy tables.
 use crate::mysql::InsertId;
+use ruphish_application::datetime;
 use ruphish_application::{auth::Identity, resources::*};
 use sqlx::{MySqlConnection, MySqlPool, Row, mysql::MySqlRow};
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 #[derive(Clone)]
 /// Resource repository over the startup-owned MySQL pool.
@@ -62,9 +62,9 @@ fn timestamp(row: &MySqlRow) -> Result<String, Error> {
     if value.is_empty() {
         return Ok("0001-01-01T00:00:00Z".into());
     }
-    let date = OffsetDateTime::parse(&value.replacen(' ', "T", 1), &Rfc3339)
-        .map_err(|_| Error::Internal)?;
-    date.format(&Rfc3339).map_err(|_| Error::Internal)
+    datetime::parse_stored(&value)
+        .map(datetime::utc)
+        .map_err(|_| Error::Internal)
 }
 pub(super) async fn load(
     c: &mut MySqlConnection,
@@ -353,15 +353,11 @@ impl Repository for Resources {
                 return Err(Error::Conflict(kind.label()));
             }
         }
-        let mut now = OffsetDateTime::now_utc();
-        if let Some(previous) = old
-            .as_ref()
-            .and_then(|o| OffsetDateTime::parse(&o.modified_date, &Rfc3339).ok())
-            && now <= previous
-        {
-            now = previous + time::Duration::nanoseconds(1);
-        }
-        value.modified_date = now.format(&Rfc3339).map_err(|_| Error::Internal)?;
+        value.modified_date = datetime::next_revision(
+            old.as_ref().map(|old| old.modified_date.as_str()),
+            datetime::now(),
+        )
+        .map_err(|_| Error::Internal)?;
         value.id = if let Some(id) = existing {
             sqlx::query(sqlx::AssertSqlSafe(format!(
                 "UPDATE {} SET name=?,modified_date=? WHERE id=? AND user_id=?",

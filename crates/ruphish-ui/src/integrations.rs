@@ -1,10 +1,11 @@
 //! Webhook administration and reporting mailbox resources share presentation primitives.
 use crate::{
     account::Api,
-    campaigns::{array, instant, text},
+    campaigns::{array, text},
     feedback::Message,
     resources::ResourceAccess,
     shared::components::*,
+    time_display::instant,
 };
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use leptos_router::hooks::{use_navigate, use_params_map};
@@ -446,7 +447,7 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                         <dt>"Transport"</dt><dd>{move || format!("{} ? port {}", if value.get()["tls"] == true { "TLS" } else { "STARTTLS" }, value.get()["port"])}</dd>
                         <dt>"Check interval"</dt><dd>{move || format!("{} seconds",value.get()["frequency"])}</dd>
                         <dt>"Last outcome"</dt><dd>{move || text(&value.get(), "code")}</dd>
-                        <dt>"Last successful check"</dt><dd>{move || instant(&value.get()["last_success"])}</dd>
+                        <dt>"Last successful check"</dt><dd>{move || if value.get()["last_success"] == 0 { "Not recorded".into() } else { instant(&value.get()["last_success"]) }}</dd>
                         <dt>"Next check"</dt><dd>{move || if value.get()["enabled"] != true { "Disabled".into() } else if value.get()["next_check"] == 0 { "Queued".into() } else { instant(&value.get()["next_check"]) }}</dd>
                     })}
                 </dl>

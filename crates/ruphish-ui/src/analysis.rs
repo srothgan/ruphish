@@ -1,10 +1,11 @@
 //! Campaign analysis: shared filters, activity chart and recipient drilldown.
 use crate::{
     account::Api,
-    analysis_chart::{ActivityChart, Bucket, LABELS, minute},
+    analysis_chart::{ActivityChart, Bucket, LABELS},
     campaigns::{array, text},
     feedback::Message,
     shared::components::*,
+    time_display::{instant as minute, local_input, parse_input},
 };
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use leptos_router::hooks::{use_navigate, use_params_map, use_query_map};
@@ -173,18 +174,10 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
     };
     let apply = move |event: leptos::ev::SubmitEvent| {
         event.prevent_default();
-        let parse = |value: String| -> Result<Option<i64>, ()> {
-            if value.is_empty() {
-                return Ok(None);
-            }
-            let ms = js_sys::Date::new(&value.into()).get_time();
-            if ms.is_finite() {
-                Ok(Some((ms / 1000.0) as i64))
-            } else {
-                Err(())
-            }
-        };
-        match (parse(from.get_untracked()), parse(until.get_untracked())) {
+        match (
+            parse_input(&from.get_untracked(), filters.get_untracked().from),
+            parse_input(&until.get_untracked(), filters.get_untracked().until),
+        ) {
             (Ok(from), Ok(until)) if !matches!((from,until),(Some(a),Some(b)) if a>=b) => {
                 let filter = Filter {
                     recipient,
@@ -284,7 +277,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                     <Field label="From"><TextInput input_type="datetime-local" step="60" value=Signal::derive(move ||from.get()) on_input=move |e|from.set(event_target_value(&e))/></Field>
                     <Field label="Until"><TextInput input_type="datetime-local" step="60" value=Signal::derive(move ||until.get()) on_input=move |e|until.set(event_target_value(&e))/></Field>
                 </div>
-                <div class="analysis-filter-footer"><span>"Local time. From is inclusive; until is exclusive."</span><div class="management-actions">
+                <div class="analysis-filter-footer"><span>{move || format!("{}. From is inclusive; until is exclusive.", crate::time_display::zone_name())}</span><div class="management-actions">
                     <ActionButton on_click=move |_|go(Filter{recipient,..Default::default()})>"Clear filters"</ActionButton>
                     <ActionButton kind="submit" style=ButtonStyle::Primary>"Apply filters"</ActionButton>
                 </div></div>
@@ -330,18 +323,4 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
             </Show>
         </ManagementPage>
     }
-}
-fn local_input(seconds: Option<i64>) -> String {
-    let Some(seconds) = seconds else {
-        return String::new();
-    };
-    let date = js_sys::Date::new(&wasm_bindgen::JsValue::from_f64(seconds as f64 * 1000.0));
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}",
-        date.get_full_year(),
-        date.get_month() + 1,
-        date.get_date(),
-        date.get_hours(),
-        date.get_minutes()
-    )
 }

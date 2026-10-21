@@ -27,7 +27,7 @@ fn instant(seconds: i64) -> String {
     if seconds == 0 {
         "Not recorded".into()
     } else {
-        crate::campaigns::instant(&json!(seconds))
+        crate::time_display::instant(&json!(seconds))
     }
 }
 fn outcome(value: &str) -> &'static str {

@@ -7,6 +7,88 @@ use serde_json::json;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn timestamps_use_jiff_zones_and_browser_locales_without_double_conversion() {
+    use ruphish_domain::datetime::{named_zone, parse};
+    use ruphish_ui::{browser_datetime::render_locale, datetime::Label};
+    let instant = parse("2026-10-18T19:53:21.8939891Z").unwrap();
+    for (zone, locale, expected) in [
+        (
+            "America/New_York",
+            "en-US",
+            "October 18, 2026, 03:53 PM (UTC-04:00)",
+        ),
+        (
+            "Europe/Berlin",
+            "de-DE",
+            "18. Oktober 2026, 21:53 (UTC+02:00)",
+        ),
+        (
+            "Europe/Berlin",
+            "en-US",
+            "October 18, 2026, 09:53 PM (UTC+02:00)",
+        ),
+        ("Asia/Tokyo", "ja-JP", "2026年10月19日, 04:53 (UTC+09:00)"),
+    ] {
+        assert_eq!(
+            render_locale(Label::at(instant, &named_zone(zone).unwrap()), Some(locale)),
+            expected
+        );
+    }
+    // Invalid Intl locale requests fall back without breaking the page.
+    assert_eq!(
+        render_locale(
+            Label::at(instant, &named_zone("UTC").unwrap()),
+            Some("invalid_locale!")
+        ),
+        "2026-10-18, 19:53 UTC+00:00"
+    );
+}
+
+#[wasm_bindgen_test]
+fn api_timestamp_values_reach_locale_display_without_losing_their_instant() {
+    use ruphish_domain::datetime::named_zone;
+    use ruphish_ui::{
+        browser_datetime::render_locale,
+        datetime::{Label, instant},
+    };
+
+    // The API sends RFC3339 strings for campaign dates/activity, and integer
+    // seconds for reporting, delivery attempts and integration history.
+    // Both representations must reach the same formatter, even across midnight.
+    let response = json!({
+        "launch_date": "2026-10-18T19:53:21.8939891Z",
+        "activity": [{"time": "2026-10-18T21:53:21.8939891+02:00"}],
+        "started": 1792353201
+    });
+    let zone = named_zone("Asia/Tokyo").unwrap();
+    for value in [
+        &response["launch_date"],
+        &response["activity"][0]["time"],
+        &response["started"],
+    ] {
+        let parsed = instant(value).unwrap().unwrap();
+        assert_eq!(
+            render_locale(Label::at(parsed, &zone), Some("en-GB")),
+            "19 October 2026, 04:53 (UTC+09:00)"
+        );
+    }
+    for value in [
+        serde_json::Value::Null,
+        json!(""),
+        json!("0001-01-01T00:00:00Z"),
+    ] {
+        assert_eq!(instant(&value).unwrap(), None);
+    }
+    for value in [
+        json!("2026-02-30T19:53:21Z"),
+        json!("2026-10-18T19:53:21"),
+        json!(i64::MAX),
+    ] {
+        assert!(instant(&value).is_err());
+    }
+}
+
+#[wasm_bindgen_test]
 fn resource_reads_construct_real_fetch_requests_without_a_body() {
     for method in ["GET", "HEAD"] {
         for family in ["groups", "templates", "pages", "smtp"] {

@@ -2,7 +2,8 @@
 use crate::shared::components::{ActionButton, ButtonStyle, StatusBadge, StatusTone};
 use crate::{
     account::{Api, copy_text},
-    campaigns::{array, instant, text},
+    campaigns::{array, text},
+    time_display::instant,
 };
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use ruphish_ui::recipient_history::{History, outcome, timeline, tone};
@@ -85,7 +86,7 @@ pub(super) fn recipient_row(
         </tr>
         <tr class="recipient-history-row" hidden=move||!open.get()><td colspan="5">
             <section id=panel_id aria-labelledby=button_id class="recipient-history" aria-busy=move||history.with(History::loading).to_string()>
-                <div class="recipient-history-heading"><h3>"Recipient history"</h3><span>"Times shown in your browser's time zone"</span></div>
+                <div class="recipient-history-heading"><h3>"Recipient history"</h3><span>{move || format!("Times shown in {}", crate::time_display::zone_name())}</span></div>
                 <Show when=move||history.with(History::loading)><p role="status">"Loading history…"</p></Show>
                 {move||history.get().error.map(|error|view!{<div class="form-message error" role="alert"><p>{error}</p><ActionButton kind="button" on_click=move |_|fetch(tasks,api,campaign,result,history,history.get_untracked().retry_older)>"Retry history"</ActionButton></div>})}
                 <div class="recipient-history-columns">

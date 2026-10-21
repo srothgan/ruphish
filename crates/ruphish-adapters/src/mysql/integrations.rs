@@ -23,7 +23,7 @@ pub(super) fn invalid(code: &str) -> Error {
     Error::Invalid(code.into())
 }
 pub(super) fn now() -> i64 {
-    time::OffsetDateTime::now_utc().unix_timestamp()
+    ruphish_application::datetime::now().as_second()
 }
 pub(super) fn text(r: &MySqlRow, key: &str) -> Result<String, Error> {
     Ok(r.try_get::<Option<String>, _>(key)

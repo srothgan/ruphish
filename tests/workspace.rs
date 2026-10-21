@@ -9,7 +9,7 @@ use std::process::Command;
 // Authoritative allowed direct workspace edges, including dev/build/target sections.
 const BOUNDARIES: &[(&str, &[&str])] = &[
     ("ruphish-domain", &[]),
-    ("ruphish-contracts", &[]),
+    ("ruphish-contracts", &["ruphish-domain"]),
     ("ruphish-application", &["ruphish-domain"]),
     (
         "ruphish-adapters",
@@ -19,7 +19,7 @@ const BOUNDARIES: &[(&str, &[&str])] = &[
         "ruphish-http",
         &["ruphish-application", "ruphish-contracts"],
     ),
-    ("ruphish-ui", &["ruphish-contracts"]),
+    ("ruphish-ui", &["ruphish-contracts", "ruphish-domain"]),
     (
         "ruphish",
         &[

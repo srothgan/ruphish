@@ -13,7 +13,7 @@ INSERT INTO ruphish_schema VALUES(4,'verified-domains-public-events-v1');").exec
     let rows = sqlx::query("SELECT id,user_id,url FROM campaigns ORDER BY id")
         .fetch_all(&mut *c)
         .await?;
-    let now = time::OffsetDateTime::now_utc().unix_timestamp();
+    let now = ruphish_application::datetime::now().as_second();
     for row in rows {
         let value: String = row.try_get::<Option<String>, _>("url")?.unwrap_or_default();
         let Ok(origin) = ruphish_domain::domains::origin(&value, true) else {

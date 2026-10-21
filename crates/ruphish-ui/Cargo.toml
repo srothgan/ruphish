@@ -9,6 +9,7 @@ publish.workspace = true
 [dependencies]
 base64 = "0.23.1"
 ruphish-contracts = { version = "0.1.0-dev", path = "../ruphish-contracts" }
+ruphish-domain = { version = "0.1.0-dev", path = "../ruphish-domain" }
 serde = "1.0.229"
 serde_json = "1.0.154"
 serde_urlencoded = "0.7.1"
@@ -25,6 +26,7 @@ workspace = true
 
 [target.wasm32-unknown-unknown.dependencies]
 gloo-net = { version = "0.7.0", default-features = false, features = ["http", "json"] }
+jiff = { version = "0.2", features = ["js"] }
 js-sys = "0.3.106"
 leptos = { version = "0.8.22", default-features = false, features = ["csr"] }
 leptos_router = "0.8"

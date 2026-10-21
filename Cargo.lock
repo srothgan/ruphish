@@ -2219,10 +2219,12 @@ dependencies = [
  "jiff-static",
  "jiff-tzdb",
  "jiff-tzdb-platform",
+ "js-sys",
  "log",
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
+ "wasm-bindgen",
  "windows-link",
 ]
 
@@ -3719,7 +3721,6 @@ name = "ruphish-application"
 version = "0.1.0-dev"
 dependencies = [
  "async-trait",
- "jiff",
  "ruphish-domain",
  "thiserror 2.0.21",
 ]
@@ -3728,15 +3729,16 @@ dependencies = [
 name = "ruphish-contracts"
 version = "0.1.0-dev"
 dependencies = [
+ "ruphish-domain",
  "serde",
  "serde_json",
- "time",
 ]
 
 [[package]]
 name = "ruphish-domain"
 version = "0.1.0-dev"
 dependencies = [
+ "jiff",
  "thiserror 2.0.21",
  "url",
 ]
@@ -3774,10 +3776,12 @@ dependencies = [
  "any_spawner",
  "base64 0.23.1",
  "gloo-net 0.7.0",
+ "jiff",
  "js-sys",
  "leptos",
  "leptos_router",
  "ruphish-contracts",
+ "ruphish-domain",
  "serde",
  "serde_json",
  "serde_urlencoded",

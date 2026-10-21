@@ -354,6 +354,7 @@ fn login(api: Api, token: String) -> impl IntoView {
     {message.view()}<ActionButton style=ButtonStyle::Primary kind="submit" disabled=Signal::derive(move || busy.get())>{move || if busy.get() { "Signing in…" } else { "Sign in" }}</ActionButton></form></section></main> }
 }
 fn shell(api: Api, session: BrowserSession) -> impl IntoView {
+    crate::time_display::provide(session.user.as_ref().map_or(0, |user| user.id));
     provide_context(ruphish_ui::import_drafts::ImportDrafts::default());
     provide_context(PasswordNotice(RwSignal::new(None)));
     provide_context(users::Notice(RwSignal::new(None)));
@@ -689,6 +690,7 @@ fn settings(api: Api, session: BrowserSession) -> impl IntoView {
     };
     view! {<section class="account-overview"><div class="account-heading"><h1>"My account"</h1><a class="button" href="/settings/password">"Change password"</a></div>
     {message.view()}<div class="settings-stack"><Card class="account-panel"><h2>"Account"</h2><dl class="account-facts"><div><dt>"Username"</dt><dd>{username}</dd></div><div><dt>"Role"</dt><dd>{role}</dd></div></dl></Card>
+    <crate::time_display::TimeZonePreference/>
     <Card class="account-panel"><h2>"API access"</h2><p>"Use your API key for integrations. Treat it like a password."</p>
     <div class="account-api-row"><label>"API base URL"<TextInput readonly=true value=base.get_value() on_focus=Callback::new(move|e: leptos::ev::FocusEvent|{event_target::<web_sys::HtmlInputElement>(&e).select();})/></label><ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|copy(false)>"Copy URL"</ActionButton></div>
     <div class="account-api-row"><label>"API key"<TextInput id="account-api-key" class="secret-value" readonly=true value=Signal::derive(move||key.get().unwrap_or_else(||"\u{2022}".repeat(16))) on_focus=Callback::new(move|e: leptos::ev::FocusEvent|{if key.get_untracked().is_some(){event_target::<web_sys::HtmlInputElement>(&e).select();}})/></label>

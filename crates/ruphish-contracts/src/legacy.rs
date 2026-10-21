@@ -1,7 +1,7 @@
 //! Compatibility-sensitive JSON values used by the existing HTTP API.
 
+use ruphish_domain::datetime;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 /// Existing success/error envelope; absent payloads serialize as explicit null.
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -16,20 +16,17 @@ pub struct Envelope<T> {
 
 /// An RFC3339 timestamp with Go's zero value and trimmed fractional seconds.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Timestamp(pub OffsetDateTime);
+pub struct Timestamp(pub datetime::Timestamp);
 
 impl Default for Timestamp {
     fn default() -> Self {
-        Self(time::macros::datetime!(0001-01-01 00:00 UTC))
+        Self(datetime::ZERO_TIMESTAMP)
     }
 }
 
 impl Serialize for Timestamp {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.0
-            .format(&Rfc3339)
-            .map_err(serde::ser::Error::custom)?
-            .serialize(serializer)
+        datetime::utc(self.0).serialize(serializer)
     }
 }
 
@@ -38,7 +35,7 @@ impl<'de> Deserialize<'de> for Timestamp {
         let Some(value) = Option::<String>::deserialize(deserializer)? else {
             return Ok(Self::default());
         };
-        OffsetDateTime::parse(&value, &Rfc3339)
+        datetime::parse(&value)
             .map(Self)
             .map_err(serde::de::Error::custom)
     }

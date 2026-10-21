@@ -13,7 +13,6 @@ use axum::{
 use ruphish_application::{overview as app, resources::Error};
 use ruphish_contracts::overview as wire;
 use serde::Deserialize;
-use time::OffsetDateTime;
 
 pub(crate) fn routes() -> Router<AuthState> {
     Router::new()
@@ -41,7 +40,10 @@ async fn snapshot(context: Context) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
     let s = context
         .overview()
-        .snapshot(user.identity, OffsetDateTime::now_utc().unix_timestamp())
+        .snapshot(
+            user.identity,
+            ruphish_application::datetime::now().as_second(),
+        )
         .await
         .map_err(error)?;
     json(wire::Snapshot {
@@ -107,7 +109,7 @@ async fn posture(
         app::Window::parse(&q.window)
             .ok_or_else(|| failure(StatusCode::BAD_REQUEST, "overview_invalid_window"))?
     };
-    let now = OffsetDateTime::now_utc().unix_timestamp();
+    let now = ruphish_application::datetime::now().as_second();
     let p = context
         .overview()
         .posture(user.identity, window, now)

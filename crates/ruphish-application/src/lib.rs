@@ -12,3 +12,6 @@ pub mod overview;
 pub mod reporting;
 pub mod resources;
 pub mod storage;
+
+/// Shared date/time rules used by application consumers.
+pub use ruphish_domain::datetime;

@@ -31,7 +31,7 @@ impl SessionStore {
     }
 }
 fn now() -> i64 {
-    OffsetDateTime::now_utc().unix_timestamp()
+    ruphish_application::datetime::now().as_second()
 }
 fn storage(_: storage::Error) -> Error {
     Error::Backend("Session storage unavailable".into())

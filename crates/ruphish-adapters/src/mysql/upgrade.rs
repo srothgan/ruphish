@@ -212,7 +212,7 @@ async fn import_domains(c: &mut MySqlConnection) -> Result<(), Error> {
         .fetch_all(&mut *c)
         .await
         .map_err(storage_error)?;
-    let now = time::OffsetDateTime::now_utc().unix_timestamp();
+    let now = ruphish_application::datetime::now().as_second();
     for row in rows {
         let value: Option<String> = row.try_get("url").map_err(storage_error)?;
         let Ok(origin) = ruphish_domain::domains::origin(value.as_deref().unwrap_or(""), true)

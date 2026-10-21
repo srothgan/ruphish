@@ -47,6 +47,7 @@ node --check crates/ruphish-ui/web/editor.mjs
 node --check crates/ruphish-ui/web/navigation.mjs
 node --check crates/ruphish-ui/web/account-menu.mjs
 node --check crates/ruphish-ui/web/analysis-time.mjs
+node --check crates/ruphish-ui/web/datetime.mjs
 node --check crates/ruphish-ui/web/anchored-panel.mjs
 node --check crates/ruphish-ui/web/template-html.mjs
 node --check crates/ruphish-ui/web/visual-session.mjs

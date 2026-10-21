@@ -1,13 +1,13 @@
 //! Atomic campaign persistence and durable queue adapters.
 use crate::postgres::InsertId;
 mod queue;
+use ruphish_application::datetime;
 use ruphish_application::{
     auth::Identity,
     campaign::*,
     resources::{Content, Error, Kind, Page, Profile, Recipient, Resource, Template},
 };
 use sqlx::{PgConnection, PgPool, Row, postgres::PgRow};
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 /// Campaign adapter shares the startup-owned database pool.
 #[derive(Clone)]
@@ -30,10 +30,7 @@ fn text(row: &PgRow, key: &str) -> Result<String, Error> {
         .unwrap_or_default())
 }
 fn stamp(seconds: i64) -> Result<String, Error> {
-    OffsetDateTime::from_unix_timestamp(seconds)
-        .map_err(|_| Error::Invalid("Invalid campaign date".into()))?
-        .format(&Rfc3339)
-        .map_err(|_| Error::Internal)
+    datetime::utc_seconds(seconds).map_err(|_| Error::Invalid("Invalid campaign date".into()))
 }
 const ZERO: &str = "0001-01-01T00:00:00Z";
 fn random() -> Result<String, Error> {
@@ -259,7 +256,7 @@ async fn header(c: &mut PgConnection, owner: i64, id: i64) -> Result<CampaignHea
             ruphish_domain::domains::eligibility(
                 enabled,
                 until,
-                time::OffsetDateTime::now_utc().unix_timestamp(),
+                ruphish_application::datetime::now().as_second(),
             )
         })
         .err()

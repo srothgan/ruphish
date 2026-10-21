@@ -174,11 +174,9 @@ impl Repository for Accounts {
         let result_id = match write {
             Write::Login => {
                 sqlx::query("UPDATE users SET last_login=$1 WHERE id=$2")
-                    .bind(
-                        time::OffsetDateTime::now_utc()
-                            .format(&time::format_description::well_known::Rfc3339)
-                            .map_err(|_| Error::Internal)?,
-                    )
+                    .bind(ruphish_application::datetime::utc(
+                        ruphish_application::datetime::now(),
+                    ))
                     .bind(caller.id)
                     .execute(&mut *tx)
                     .await

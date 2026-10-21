@@ -1,12 +1,12 @@
 //! Host-bound landing rendering and atomic engagement observations.
 use crate::postgres::InsertId;
+use ruphish_application::datetime;
 use ruphish_application::{
     delivery::MessageInput,
     interactions::*,
     resources::{Content, Error, Kind, Profile, Recipient, Template},
 };
 use sqlx::{PgPool, Row};
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 pub struct Interactions {
     pool: PgPool,
@@ -213,10 +213,7 @@ impl Persistence for Interactions {
                     .map_err(storage)?;
             check_event_capacity(count, false, false)?;
             {
-                let stamp = OffsetDateTime::from_unix_timestamp(now)
-                    .map_err(|_| Error::Internal)?
-                    .format(&Rfc3339)
-                    .map_err(|_| Error::Internal)?;
+                let stamp = datetime::utc_seconds(now).map_err(|_| Error::Internal)?;
                 let inserted = sqlx::query(
                     "INSERT INTO events(campaign_id,email,time,message,details) VALUES($1,$2,$3,$4,$5) RETURNING id",
                 )

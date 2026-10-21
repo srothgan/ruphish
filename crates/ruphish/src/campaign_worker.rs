@@ -14,7 +14,7 @@ pub(crate) struct Worker {
     pub smtp: Arc<Smtp>,
 }
 fn now() -> i64 {
-    time::OffsetDateTime::now_utc().unix_timestamp()
+    ruphish_application::datetime::now().as_second()
 }
 async fn execute(queue: Arc<dyn Queue>, smtp: Arc<Smtp>, claim: Arc<Claim>) -> Result<(), Error> {
     let message = claim.message.clone();

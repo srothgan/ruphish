@@ -39,14 +39,14 @@ fn decode(r: SqliteRow) -> Result<Domain, Error> {
         tls: r.try_get("tls").map_err(storage)?,
         code: r.try_get("code").map_err(storage)?,
         checking: r.try_get::<i64, _>("lease_until").map_err(storage)?
-            > time::OffsetDateTime::now_utc().unix_timestamp(),
+            > ruphish_application::datetime::now().as_second(),
         active_check: if let Some(id) = r.try_get::<Option<i64>, _>("active_id").map_err(storage)? {
             let started_at: Option<i64> = r.try_get("active_started_at").map_err(storage)?;
             Some(VerificationRun {
                 id,
                 state: if started_at.is_some()
                     && r.try_get::<i64, _>("lease_until").map_err(storage)?
-                        > time::OffsetDateTime::now_utc().unix_timestamp()
+                        > ruphish_application::datetime::now().as_second()
                 {
                     "running"
                 } else {

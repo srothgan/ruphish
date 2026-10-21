@@ -2,7 +2,7 @@
 use crate::{mailbox_transport, outbound::Policy, webhook_delivery};
 use ruphish_application::{integrations::work::*, resources::Error};
 fn now() -> i64 {
-    time::OffsetDateTime::now_utc().unix_timestamp()
+    ruphish_application::datetime::now().as_second()
 }
 
 pub(crate) fn webhook_payload(

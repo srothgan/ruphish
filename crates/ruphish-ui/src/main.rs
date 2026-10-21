@@ -38,3 +38,6 @@ fn main() {
     use leptos_router::components::Router;
     leptos::mount::mount_to_body(|| view! {<Router>{account::app}</Router>});
 }
+
+#[cfg(target_arch = "wasm32")]
+mod time_display;

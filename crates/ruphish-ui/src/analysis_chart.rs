@@ -15,29 +15,15 @@ const SERIES: [&str; 5] = [
 
 #[wasm_bindgen(module = "/web/analysis-time.mjs")]
 extern "C" {
-    #[wasm_bindgen(js_name=analysisMinute)]
-    fn format_minute(value: JsValue) -> String;
-    #[wasm_bindgen(js_name=analysisZone)]
-    fn zone() -> String;
-    #[wasm_bindgen(js_name=analysisTick)]
-    fn tick(seconds: f64, step: f64, first: f64, last: f64) -> String;
     #[wasm_bindgen(js_name=observeAnalysisWidth)]
     fn observe_width(element: &JsValue, callback: &js_sys::Function) -> JsValue;
     #[wasm_bindgen(js_name=unobserveAnalysisWidth)]
     fn unobserve_width(observer: &JsValue);
 }
 
-pub(super) fn minute(value: &serde_json::Value) -> String {
-    if let Some(seconds) = value.as_i64() {
-        format_minute(JsValue::from_f64(seconds as f64 * 1000.0))
-    } else if let Some(value) = value.as_str() {
-        format_minute(JsValue::from_str(value))
-    } else {
-        "Not recorded".into()
-    }
-}
+use crate::time_display::{instant as minute, tick, zone_name as zone};
 fn time(seconds: i64) -> String {
-    format_minute(JsValue::from_f64(seconds as f64 * 1000.0))
+    minute(&seconds.into())
 }
 
 #[derive(Clone, PartialEq)]
@@ -146,7 +132,7 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
                     ticks.into_iter().map(|value| {
                         let position=(value-first) as f64/span as f64*100.0;
                         view! { <span on:mouseenter=move |_| {active.set(data.with(|rows|rows.iter().min_by_key(|bucket|bucket.time.abs_diff(value)).map(|bucket|bucket.time)));} on:mouseleave=move |_|active.set(None) style:left=format!("{position}%") class:analysis-tick-start={position<10.0} class:analysis-tick-end={position>90.0}>
-                            {tick(value as f64,step as f64,first as f64,last as f64)}
+                            {tick(value,step,first,last)}
                         </span> }
                     }).collect_view()
                 }}</div>

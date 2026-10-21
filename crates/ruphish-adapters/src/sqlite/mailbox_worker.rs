@@ -284,9 +284,8 @@ impl MailboxQueue for Integrations {
         }
         if !existing {
             if let Some((result, campaign, email)) = &result {
-                let stamp = time::OffsetDateTime::now_utc()
-                    .format(&time::format_description::well_known::Rfc3339)
-                    .map_err(|_| "mailbox_storage_failed")?;
+                let stamp =
+                    ruphish_application::datetime::utc(ruphish_application::datetime::now());
                 let event = sqlx::query(
                     r#"
                 INSERT INTO events(campaign_id,email,time,message,details)

@@ -277,7 +277,7 @@ impl Snapshots for Reports {
             id,
             name: campaign.try_get("name").map_err(storage)?,
             status: campaign.try_get("status").map_err(storage)?,
-            as_of: time::OffsetDateTime::now_utc().unix_timestamp(),
+            as_of: ruphish_application::datetime::now().as_second(),
             audience,
             unique,
             progression: progression.counts,

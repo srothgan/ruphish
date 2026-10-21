@@ -15,7 +15,7 @@ use ruphish_application::domains as app;
 use ruphish_contracts::domains as wire;
 
 fn now() -> i64 {
-    time::OffsetDateTime::now_utc().unix_timestamp()
+    ruphish_application::datetime::now().as_second()
 }
 fn encode(d: app::Domain) -> wire::Domain {
     let observed_at = now();

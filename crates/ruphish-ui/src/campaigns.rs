@@ -7,16 +7,11 @@ use ruphish_ui::pagination::CursorPages;
 use serde_json::{Value, json};
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen(
-    inline_js = "export function campaignKey(){return crypto.randomUUID()} export function campaignZone(){return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'} export function campaignTime(json){const v=JSON.parse(json); if(v==null || v==='' || (typeof v==='string' && v.startsWith('0001-')))return 'Not set'; const d=new Date(typeof v==='number'?v*1000:v); return Number.isNaN(d.getTime())?'Time not recorded':new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'long'}).format(d);}"
-)]
+use crate::time_display::{instant, zone_name as local_zone};
+#[wasm_bindgen(inline_js = "export function campaignKey(){return crypto.randomUUID()}")]
 extern "C" {
     #[wasm_bindgen(catch,js_name=campaignKey)]
     fn random_key() -> Result<String, JsValue>;
-    #[wasm_bindgen(js_name=campaignZone)]
-    fn local_zone() -> String;
-    #[wasm_bindgen(js_name=campaignTime)]
-    fn campaign_time(value: &str) -> String;
 }
 pub(super) fn text(value: &Value, key: &str) -> String {
     value[key].as_str().unwrap_or_default().to_owned()
@@ -76,7 +71,7 @@ fn list_mode(api: Api, analysis: bool) -> impl IntoView {
         <ActionLink style=ButtonStyle::Primary hidden={ !can_edit || analysis } href="/campaigns/new">"Create campaign"</ActionLink>
     </PageHeader>{message.view()}<Show when=move||busy.get()><p role="status">"Loading campaigns…"</p></Show>
     <DataTable label="Campaigns" empty=Signal::derive(move||rows.get().is_empty()) headers=vec!["Campaign","Lifecycle","Recipients","Launch"]>
-        {move||rows.get().into_iter().filter(|_|pages.with(CursorPages::loaded)).map(|r|view!{<tr><th scope="row"><a href=format!("/{}/{}",if analysis { "analysis" } else { "campaigns" },r["id"])>{text(&r,"name")}</a></th><td>{text(&r,"status")}</td><td>{r["total"].to_string()}</td><td>{text(&r,"launch_date")}</td></tr>}).collect_view()}
+        {move||rows.get().into_iter().filter(|_|pages.with(CursorPages::loaded)).map(|r|view!{<tr><th scope="row"><a href=format!("/{}/{}",if analysis { "analysis" } else { "campaigns" },r["id"])>{text(&r,"name")}</a></th><td>{text(&r,"status")}</td><td>{r["total"].to_string()}</td><td>{instant(&r["launch_date"])}</td></tr>}).collect_view()}
     </DataTable><Show when=move||!busy.get()&&!failed.get()&&rows.get().is_empty()><EmptyState title="No campaigns on this page"><p>"Create a campaign to select an audience, review content and choose a schedule."</p></EmptyState></Show>
     <PageControls pages=pages disabled=Signal::derive(move||busy.get())/>
     </ManagementPage>}
@@ -412,7 +407,9 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
                             p.received(cursor, v["next_after"].as_i64());
                         });
                         data.set(v);
-                        updated.set(instant(&Value::from(js_sys::Date::now() / 1000.0)));
+                        updated.set(instant(&Value::from(
+                            ruphish_domain::datetime::now().as_second(),
+                        )));
                         if failures.get_untracked() > 0 {
                             message.clear();
                         }
@@ -542,13 +539,9 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
     <DataTable label="Campaign delivery" headers=vec!["History", "Recipient", "Delivery", "Next/last due", "Attempts and actions"]>
         <For each=move||{array(&data.get(),"items").into_iter().filter(|_|pages.with(CursorPages::loaded)).filter_map(|r|r["id"].as_i64()).collect::<Vec<_>>()} key=|id|*id children=move|result|{crate::campaign_delivery::recipient_row(api,id,result,data,crate::campaign_delivery::Controls {busy,can_edit,action})}/>
     </DataTable><PageControls pages=pages disabled=Signal::derive(move||loading.get()||busy.get())/>
-    <section class="resource-section"><h2>"Recent activity"</h2><p>"Latest 50 campaign events. Expand a recipient above for their timeline and earlier history."</p><DataTable label="Campaign activity" headers=vec!["Time","Recipient","Event"]>{move||array(&data.get(),"activity").into_iter().map(|e|view!{<tr><td>{text(&e,"time")}</td><td>{text(&e,"email")}</td><td>{text(&e,"message")}</td></tr>}).collect_view()}</DataTable></section>
+    <section class="resource-section"><h2>"Recent activity"</h2><p>"Latest 50 campaign events. Expand a recipient above for their timeline and earlier history."</p><DataTable label="Campaign activity" headers=vec!["Time","Recipient","Event"]>{move||array(&data.get(),"activity").into_iter().map(|e|view!{<tr><td>{instant(&e["time"])}</td><td>{text(&e,"email")}</td><td>{text(&e,"message")}</td></tr>}).collect_view()}</DataTable></section>
     {move||action.get().map(|(kind,_)|{let (title,description,label)=match kind.as_str(){"delete"=>("Delete campaign?","Campaign history will be removed. Already submitted mail cannot be recalled.","Delete campaign"),"complete"=>("Complete campaign?","Pending delivery will stop. Already armed or in-flight submissions may still finish.","Complete campaign"),"resend_unknown"=>("Resend despite an unknown outcome?","Check your mail server first. The earlier attempt may have been accepted; resending can deliver a duplicate.","Resend"),"confirm_accepted"=>("Confirm SMTP acceptance?","Use the attempt Message-ID to verify acceptance in your mail server before recording this outcome.","Confirm accepted"),_=>("Retry this delivery?","Correct the reported content, account or sending-profile problem before retrying.","Retry")};let counts=data.get_untracked();let description=if matches!(kind.as_str(),"complete"|"delete"){format!("{description} Pending: {}. Preparing: {}. Submitting: {}.",["ready","retry","blocked"].iter().map(|k|counts["counts"][*k].as_i64().unwrap_or(0)).sum::<i64>(),counts["counts"]["preparing"].as_i64().unwrap_or(0),counts["counts"]["submitting"].as_i64().unwrap_or(0))}else{description.to_owned()};view!{<DeleteConfirmation title=title.into() description=description confirm_label=label busy=Signal::derive(move||busy.get()) on_confirm=confirm on_cancel=Callback::new(move|()|action.set(None)) message=message/>}})}
     </ManagementPage>}
-}
-
-pub(super) fn instant(value: &Value) -> String {
-    campaign_time(&value.to_string())
 }
 
 fn delivery_progress(data: RwSignal<Value>) -> impl IntoView {

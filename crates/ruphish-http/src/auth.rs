@@ -12,6 +12,7 @@ use axum::{
 use axum_csrf::{CsrfConfig, CsrfToken};
 use governor::clock::DefaultClock;
 use ruphish_application::auth::{Account, AccountError, Edit, Error, Identity, Service};
+use ruphish_application::datetime;
 use ruphish_contracts::{
     auth::{BrowserSession, BrowserUser, Role, User, UserEdit},
     legacy::{Envelope, Timestamp},
@@ -22,7 +23,7 @@ use std::{
     net::{IpAddr, SocketAddr},
     sync::Arc,
 };
-use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
+use time::{Duration, OffsetDateTime};
 use tower_sessions::{
     Session, SessionManagerLayer, SessionStore,
     cookie::{Key, SameSite},
@@ -265,7 +266,7 @@ impl Context {
             .await
             .map_err(session_error)?
             .ok_or_else(unauthorized)?;
-        if login.expires <= OffsetDateTime::now_utc().unix_timestamp() {
+        if login.expires <= ruphish_application::datetime::now().as_second() {
             self.session.flush().await.map_err(session_error)?;
             return Err(unauthorized());
         }
@@ -633,7 +634,7 @@ async fn login(context: Context, request: Request) -> Result<Response, Rejection
         .establish(
             user.identity,
             None,
-            (OffsetDateTime::now_utc() + Duration::hours(12)).unix_timestamp(),
+            datetime::now().as_second() + 12 * 60 * 60,
         )
         .await?;
     let query: HashMap<String, String> =
@@ -699,7 +700,7 @@ async fn password(context: Context, request: Request) -> Result<Response, Reject
         .establish(
             changed.identity,
             None,
-            (OffsetDateTime::now_utc() + Duration::hours(12)).unix_timestamp(),
+            datetime::now().as_second() + 12 * 60 * 60,
         )
         .await?;
     if reset {
@@ -910,14 +911,7 @@ fn wire(user: Account) -> Result<User, Rejection> {
         Timestamp::default()
     } else {
         Timestamp(
-            OffsetDateTime::parse(&user.last_login, &Rfc3339)
-                .or_else(|_| {
-                    OffsetDateTime::parse(
-                        &user.last_login.replace(' ', "T").replace("+00:00", "Z"),
-                        &Rfc3339,
-                    )
-                })
-                .map_err(|_| auth_error(Error::Internal))?,
+            datetime::parse_stored(&user.last_login).map_err(|_| auth_error(Error::Internal))?,
         )
     };
     Ok(User {

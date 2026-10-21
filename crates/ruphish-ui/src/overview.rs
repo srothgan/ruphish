@@ -1,5 +1,7 @@
 //! Home dashboard: two independent reads, one existing administrative shell.
-use crate::{account::Api, analysis_chart::minute, feedback::Message, shared::components::*};
+use crate::{
+    account::Api, feedback::Message, shared::components::*, time_display::instant as minute,
+};
 use leptos::prelude::*;
 use ruphish_contracts::overview::{PostureResponse, Snapshot};
 use ruphish_ui::{

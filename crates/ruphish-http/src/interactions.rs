@@ -129,7 +129,7 @@ pub fn router(services: Services) -> Router {
         .layer(middleware::from_fn(super::server::access_log))
 }
 async fn handle(request: Request<Body>, state: &Services) -> Response {
-    let now = time::OffsetDateTime::now_utc().unix_timestamp();
+    let now = ruphish_application::datetime::now().as_second();
     let method = request.method().clone();
     if !matches!(
         method,

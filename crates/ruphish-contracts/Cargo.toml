@@ -7,9 +7,9 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+ruphish-domain = { version = "0.1.0-dev", path = "../ruphish-domain" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-time = { version = "0.3.55", features = ["parsing", "formatting", "macros"] }
 
 [lints]
 workspace = true

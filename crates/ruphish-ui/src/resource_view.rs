@@ -56,7 +56,7 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
             let export=value.clone();
             let export_name=name.clone();
             let delete_name=name.clone();
-            view! {<PageHeader title=name subtitle=format!("Last updated: {}",text(&value,"modified_date"))>
+            view! {<PageHeader title=name subtitle=format!("Last updated: {}",crate::time_display::instant(&value["modified_date"]))>
                 <ResourceActions edit_href=format!("/{}/{id}/edit",family.route()) can_edit=can_edit disabled=deletion.busy on_delete=Callback::new(move |()| deletion.select(DeleteTarget {id,name:delete_name.clone(),path:format!("/api/{}/{id}",family.route()),revision:revision.get_untracked(),description:"This permanently removes the saved resource. Resources used by unfinished campaigns cannot be deleted."}))>
                     <ActionLink hidden=!can_edit disabled=deletion.busy href=format!("/{}/new?duplicate={id}",family.route())>"Duplicate"</ActionLink>
                     <ActionButton on_click=move |_|download(&export,&export_name,message)>"Export JSON"</ActionButton>

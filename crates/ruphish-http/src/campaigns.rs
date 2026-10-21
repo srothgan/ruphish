@@ -11,15 +11,15 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
+use ruphish_application::datetime;
 use ruphish_application::{
     campaign as app,
     resources::{Error, Kind},
 };
 use ruphish_contracts::{campaign as wire, legacy::Timestamp};
 use serde_json::{Value, json};
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 fn now() -> i64 {
-    OffsetDateTime::now_utc().unix_timestamp()
+    ruphish_application::datetime::now().as_second()
 }
 pub(crate) fn routes() -> Router<AuthState> {
     Router::new()
@@ -67,11 +67,9 @@ fn date(value: &str) -> String {
     if value.is_empty() {
         return "0001-01-01T00:00:00Z".into();
     }
-    let normalized = value.replacen(' ', "T", 1);
-    OffsetDateTime::parse(&normalized, &Rfc3339)
-        .ok()
-        .and_then(|d| d.to_offset(time::UtcOffset::UTC).format(&Rfc3339).ok())
-        .unwrap_or(normalized)
+    datetime::parse_stored(value)
+        .map(datetime::utc)
+        .unwrap_or_else(|_| value.replacen(' ', "T", 1))
 }
 fn policy(p: &app::CapturePolicy) -> Value {
     json!({"capture_credentials":p.capture_credentials,"capture_passwords":p.capture_passwords,"redirect_url":p.redirect_url})
@@ -125,7 +123,7 @@ fn decode(context: &Context, bytes: &[u8]) -> Result<app::Create, Rejection> {
     };
     let timestamp = |t: Option<Timestamp>| {
         t.filter(|t| *t != Timestamp::default())
-            .map(|t| t.0.unix_timestamp())
+            .map(|t| t.0.as_second())
     };
     let p = input.policy.unwrap_or_default();
     let mut result = app::Create {
@@ -396,7 +394,7 @@ async fn recipient_history(
         &json!({
             "result_id":history.result_id,"email":history.email,
             "attempts":history.attempts.iter().map(encode_attempt).collect::<Vec<_>>(),
-            "events":history.events.iter().map(|e|json!({"id":e.id,"time":date(&e.time),"at":OffsetDateTime::parse(&date(&e.time), &Rfc3339).ok().map(|t|t.unix_timestamp()),"message":e.message,"details":e.details})).collect::<Vec<_>>(),
+            "events":history.events.iter().map(|e|json!({"id":e.id,"time":date(&e.time),"at":datetime::parse_stored(&e.time).ok().map(|t|t.as_second()),"message":e.message,"details":e.details})).collect::<Vec<_>>(),
             "next_attempt":history.next_attempt,"next_event":history.next_event
         }),
         None,

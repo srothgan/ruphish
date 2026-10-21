@@ -11,7 +11,7 @@ impl Worker {
     pub(crate) async fn run(self, cancel: CancellationToken) -> Result<(), std::io::Error> {
         let mut backoff = crate::worker_backoff::Backoff::new();
         loop {
-            let now = time::OffsetDateTime::now_utc().unix_timestamp();
+            let now = ruphish_application::datetime::now().as_second();
             let result = tokio::select! {
                 biased;
                 _=cancel.cancelled()=>return Ok(()),
@@ -20,7 +20,7 @@ impl Worker {
             let result = match result {
                 Ok(Some(check)) => {
                     let observation = tokio::select! {biased;_=cancel.cancelled()=>return Ok(()),v=self.verifier.verify(&check)=>v};
-                    let completed = tokio::select! {biased;_=cancel.cancelled()=>return Ok(()),v=self.domains.finish(&check,observation,time::OffsetDateTime::now_utc().unix_timestamp())=>v};
+                    let completed = tokio::select! {biased;_=cancel.cancelled()=>return Ok(()),v=self.domains.finish(&check,observation,ruphish_application::datetime::now().as_second())=>v};
                     if completed.is_ok() {
                         backoff.succeeded();
                         continue;
