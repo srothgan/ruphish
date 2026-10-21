@@ -232,14 +232,16 @@
   .management-page > .breadcrumb { display: inline-block; margin-bottom: var(--s5); font-size: var(--fs-sm); }
   .management-page .save-state { font-size: var(--fs-sm); }
 
-  /* Data tables: continuous hairline rows, sentence-case headers. */
+  /* All data tables keep a readable width and scroll inside their container on small screens. */
   .management-table-wrap { min-width: 0; width: 100%; overflow-x: auto; }
-  .management-table { border-collapse: collapse; width: 100%; background: var(--paper); font-size: var(--fs-sm); }
+  .management-table { border-collapse: collapse; width: 100%; min-width: 48rem; background: var(--paper); font-size: var(--fs-sm); }
   .management-table th, .management-table td { padding: var(--s4); text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
   .management-table thead { color: var(--muted); background: var(--canvas); }
-  .management-table tbody th { font-weight: var(--fw-semibold); overflow-wrap: anywhere; }
-  .management-table .row-actions { align-items: center; gap: var(--s3); }
+  .management-table thead th { white-space: nowrap; }
+  .management-table tbody th { font-weight: var(--fw-semibold); }
+  .management-table .row-actions { align-items: center; flex-wrap: nowrap; gap: var(--s3); }
   .management-table button { padding: 0 var(--s2); min-height: var(--control-h-sm); font-size: var(--fs-sm); }
+  .management-table.is-empty { min-width: 0; }
   .management-table.is-empty thead { display: none; }
   .management-empty { padding: 48px var(--s5); text-align: center; background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md); }
   .management-empty p { margin-inline: auto; color: var(--muted); }
@@ -431,7 +433,8 @@
     /* The drawer always shows full labels, even if the desktop rail was left collapsed. */
     .admin-shell[data-nav-collapsed] .admin-nav { padding: var(--s5) var(--s3) var(--s3); }
     .admin-shell[data-nav-collapsed] .product-name, .admin-shell[data-nav-collapsed] .nav-section h2, .admin-shell[data-nav-collapsed] nav a span, .admin-shell[data-nav-collapsed] .account-trigger span, .admin-shell[data-nav-collapsed] .account-chevron { display: revert; }
-    .admin-shell[data-nav-collapsed] .nav-header, .admin-shell[data-nav-collapsed] nav a, .admin-shell[data-nav-collapsed] .account-trigger { justify-content: flex-start; }
+    .admin-shell[data-nav-collapsed] .nav-header { justify-content: space-between; }
+    .admin-shell[data-nav-collapsed] nav a, .admin-shell[data-nav-collapsed] .account-trigger { justify-content: flex-start; }
     .admin-shell[data-nav-collapsed] .nav-section { border-top: 0; padding-top: 0; }
     .admin-content { padding: var(--s5) var(--s4); padding-top: calc(44px + var(--s5)); }
     .account-panel { padding: var(--s5); }
