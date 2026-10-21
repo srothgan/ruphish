@@ -348,7 +348,7 @@ fn login(api: Api, token: String) -> impl IntoView {
             }
         });
     };
-    view! { <main class="login-screen"><div class="login-brand">"Ruphish"</div><section class="login-form"><h1>"Sign in"</h1><p>"Manage your security awareness workspace."</p>
+    view! { <main class="login-screen"><section class="login-form"><div class="login-brand">"Ruphish"</div><h1>"Sign in"</h1><p>"Manage your security awareness workspace."</p>
     <form on:submit=submit><label>"Username"<TextInput name="username" autocomplete="username" required=true value=Signal::derive(move || username.get()) on_input=move |e| username.set(event_target_value(&e))/></label>
     <label>"Password"<TextInput name="password" input_type="password" autocomplete="current-password" required=true value=Signal::derive(move || password.get()) on_input=move |e| password.set(event_target_value(&e))/></label>
     {message.view()}<ActionButton style=ButtonStyle::Primary kind="submit" disabled=Signal::derive(move || busy.get())>{move || if busy.get() { "Signing in…" } else { "Sign in" }}</ActionButton></form></section></main> }

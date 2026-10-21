@@ -303,10 +303,26 @@
 
 /* ---------------------------------------------------------------- features */
 @layer features {
-  /* Login. */
+  /* Login. A faint teal honeycomb — a phishing net — fills the viewport behind
+     the card; the card itself stays an opaque paper surface on top. The net is a
+     single translucent teal (--net); the mesh cells stay opaque --canvas so the
+     honeycomb masks cleanly. Tune presence with the --net alpha alone. */
+  .account-app:has(.login-screen) {
+    --net: color-mix(in srgb, var(--teal-600) 22%, transparent);
+    background-color: var(--canvas);
+    background-image:
+      radial-gradient(circle farthest-side at 0% 50%, var(--canvas) 23.5%, transparent 0),
+      radial-gradient(circle farthest-side at 0% 50%, var(--net) 24%, transparent 0),
+      linear-gradient(var(--canvas) 14%, transparent 0, transparent 85%, var(--canvas) 0),
+      linear-gradient(150deg, var(--canvas) 24%, var(--net) 0 26%, transparent 0 74%, var(--net) 0 76%, var(--canvas) 0),
+      linear-gradient(30deg, var(--canvas) 24%, var(--net) 0 26%, transparent 0 74%, var(--net) 0 76%, var(--canvas) 0),
+      linear-gradient(90deg, var(--net) 1.6%, var(--canvas) 0 98.4%, var(--net) 0);
+    background-position: 16px 23px, 14px 23px, 0 0, 0 0, 0 0, 0 0;
+    background-size: 30px 45px;
+  }
   .login-screen { max-width: 460px; padding: 10vh var(--s5) 48px; margin: 0 auto; }
-  .login-brand { color: var(--ink); font-size: var(--fs-lg); font-weight: var(--fw-bold); letter-spacing: -.02em; margin: 0 0 36px; }
-  .login-form { padding: var(--s6); background: var(--paper); border: 1px solid var(--line); border-top: 3px solid var(--teal-600); border-radius: var(--r-md); }
+  .login-brand { color: var(--ink); font-size: var(--fs-lg); font-weight: var(--fw-bold); letter-spacing: -.02em; text-align: center; margin: 0 0 var(--s5); }
+  .login-form { padding: var(--s6); background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md); }
   .login-form > p { color: var(--muted); margin-bottom: var(--s5); }
   .login-form form { display: grid; gap: var(--s5); }
   .login-form button { margin-top: var(--s2); width: 100%; }
