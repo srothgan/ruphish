@@ -6,7 +6,7 @@ use leptos::prelude::*;
 use leptos::task::spawn_local_scoped_with_cancellation as spawn_local;
 use ruphish_contracts::auth::{BrowserSession, UserEdit};
 use ruphish_ui::session::{SessionAction, SessionMonitor};
-use ruphish_ui::tr;
+use ruphish_ui::{tr, trs};
 use serde_json::Value;
 
 #[path = "account_menu.rs"]
@@ -17,6 +17,29 @@ mod users;
 
 #[derive(Clone, Copy)]
 struct PasswordNotice(RwSignal<bool>);
+
+/// localStorage key for the persisted desktop sidebar collapse state (per device).
+const NAV_COLLAPSED_KEY: &str = "nav-collapsed";
+
+/// Whether the viewport is in the mobile range where the sidebar is an off-canvas drawer.
+/// Checked at click time so no resize listener is needed; the breakpoint matches the stylesheet.
+fn viewport_is_narrow() -> bool {
+    web_sys::window()
+        .and_then(|window| window.match_media("(max-width: 700px)").ok().flatten())
+        .is_some_and(|query| query.matches())
+}
+
+/// Sidebar-panel glyph for the collapse/expand control; the left column fills when the
+/// sidebar is expanded and is hollow when collapsed, as a quiet state cue.
+fn nav_toggle_icon(expanded: bool) -> impl IntoView {
+    view! {
+        <svg class="nav-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <rect x="3" y="4" width="18" height="16" rx="2"/>
+            <line x1="9" y1="4" x2="9" y2="20"/>
+            {expanded.then(|| view! { <rect x="3.9" y="4.9" width="4.2" height="14.2" rx="1" fill="currentColor" stroke="none"/> })}
+        </svg>
+    }
+}
 
 #[derive(Clone, Copy)]
 pub(super) struct Api {
@@ -461,6 +484,16 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         path,
     };
     let path = use_location().pathname;
+    // Desktop icon-rail state persists per device; the mobile drawer is always ephemeral.
+    let nav_collapsed = ruphish_ui::local_storage::persistent(NAV_COLLAPSED_KEY, false);
+    let drawer_open = RwSignal::new(false);
+    // Close the mobile drawer on any navigation so it never covers the page just opened.
+    Effect::new(move |_| {
+        path.track();
+        drawer_open.set(false);
+    });
+    let expand_label = trs!(ui.expand_navigation);
+    let collapse_label = trs!(ui.collapse_navigation);
     let session = StoredValue::new(session);
     let account_page = move |users_page: Option<users::Screen>, password_page: bool| {
         if required {
@@ -561,9 +594,19 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
     <Route path=path!("/smtp/:id/edit") view=move||resource_page(Family::Profiles,Screen::Edit)/>
         <Route path=path!("/reset_password") view=move||account_page(None,false)/>
     </Routes>};
-    view! { <div class="admin-shell"><aside class="admin-nav"><a class="product-name" href="/">{tr!(ui.ruphish)}</a><nav aria-label=tr!(ui.main_navigation)>
+    view! { <div class="admin-shell" data-nav-collapsed=move || nav_collapsed.get().then_some("") data-nav-open=move || drawer_open.get().then_some("")>
+    <button type="button" class="nav-launcher" aria-controls="main-navigation" aria-expanded=move || if drawer_open.get() { "true" } else { "false" } aria-label=trs!(ui.open_navigation) on:click=move |_| drawer_open.set(true)>
+        <svg class="nav-launcher-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16 M4 12h16 M4 17h16"/></svg>
+    </button>
+    <aside class="admin-nav" on:keydown=move |event: leptos::ev::KeyboardEvent| if event.key() == "Escape" { drawer_open.set(false); }>
+    <div class="nav-header"><a class="product-name" href="/">{tr!(ui.ruphish)}</a>
+    <button type="button" class="nav-toggle" aria-controls="main-navigation" aria-expanded=move || if nav_collapsed.get() { "false" } else { "true" } aria-label=move || if nav_collapsed.get() { expand_label.get() } else { collapse_label.get() } on:click=move |_| if viewport_is_narrow() { drawer_open.set(false) } else { nav_collapsed.update(|collapsed| *collapsed = !*collapsed) }>
+        {move || nav_toggle_icon(!nav_collapsed.get())}
+    </button></div>
+    <nav id="main-navigation" aria-label=tr!(ui.main_navigation)>
     {crate::navigation::sections(path,admin)}
     </nav>{account_menu::menu(api,token.get_value(),username,role_name)}</aside>
+    <div class="nav-scrim" aria-hidden="true" on:click=move |_| drawer_open.set(false)></div>
     <div class="admin-content">{active.then(|| view! { <div class="impersonation" role="status"><span>{tr!(ui.viewing_as)}<strong>{username_banner}</strong>{tr!(ui.administrator)}{actor.unwrap_or_default()}</span><ActionButton disabled=Signal::derive(move||action_busy.get()) on_click=move |_| action("/impersonate/exit")>{tr!(ui.exit_impersonation)}</ActionButton></div> })}
     {message.view()}{content}</div></div> }
 }

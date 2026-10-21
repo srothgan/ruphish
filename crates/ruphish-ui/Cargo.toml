@@ -33,7 +33,7 @@ leptos_i18n = { version = "0.6.2", default-features = false, features = ["csr"] 
 leptos_router = "0.8"
 wasm-bindgen = "0.2.129"
 wasm-bindgen-futures = "0.4.79"
-web-sys = { version = "0.3.106", features = ["HtmlTextAreaElement", "HtmlElement", "HtmlInputElement", "File", "FileList", "Blob", "Window", "Document", "HtmlIFrameElement", "Url", "BlobPropertyBag", "HtmlSelectElement", "console", "Location", "BeforeUnloadEvent", "History", "HtmlDialogElement"] }
+web-sys = { version = "0.3.106", features = ["HtmlTextAreaElement", "HtmlElement", "HtmlInputElement", "File", "FileList", "Blob", "Window", "Document", "HtmlIFrameElement", "Url", "BlobPropertyBag", "HtmlSelectElement", "console", "Location", "BeforeUnloadEvent", "History", "HtmlDialogElement", "Storage", "MediaQueryList"] }
 
 [target.wasm32-unknown-unknown.dev-dependencies]
 any_spawner = { version = "0.3", features = ["wasm-bindgen"] }

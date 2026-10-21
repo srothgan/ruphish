@@ -62,3 +62,6 @@ pub mod browser_datetime;
 
 #[cfg(target_arch = "wasm32")]
 pub mod display_preferences;
+
+#[cfg(target_arch = "wasm32")]
+pub mod local_storage;

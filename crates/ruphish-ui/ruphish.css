@@ -337,8 +337,8 @@
   .login-form button { margin-top: var(--s2); width: 100%; }
 
   /* App shell + sidebar — deep teal-ink, a filled active pill (no left border). */
-  .admin-shell { display: grid; grid-template-columns: 244px minmax(0,1fr); min-height: 100vh; }
-  .admin-nav { position: sticky; top: 0; height: 100vh; height: 100dvh; align-self: start; overflow: hidden; background: var(--nav-bg); color: var(--nav-fg); display: flex; flex-direction: column; padding: var(--s5) var(--s3) var(--s3); gap: var(--s6); }
+  .admin-shell { display: grid; grid-template-columns: 244px minmax(0,1fr); min-height: 100vh; transition: grid-template-columns .2s ease; }
+  .admin-nav { position: sticky; top: 0; height: 100vh; height: 100dvh; align-self: start; overflow: hidden; background: var(--nav-bg); color: var(--nav-fg); display: flex; flex-direction: column; padding: var(--s5) var(--s3) var(--s3); gap: var(--s6); transition: padding .2s ease; }
   .admin-nav .product-name { flex-shrink: 0; color: var(--nav-fg-strong); text-decoration: none; font-size: var(--fs-md); font-weight: var(--fw-bold); letter-spacing: -.01em; padding: 0 var(--s3); }
   .admin-nav nav { display: grid; align-content: start; flex: 1; min-height: 0; overflow-y: auto; gap: var(--s5); }
   .admin-nav .nav-section { display: grid; gap: var(--s1); }
@@ -357,9 +357,27 @@
   .account-trigger span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .account-person { width: 24px; height: 24px; flex-shrink: 0; }
   .account-chevron { width: 18px; height: 18px; flex-shrink: 0; }
+  /* Collapse/expand control in the sidebar header. */
+  .admin-nav .nav-header { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); flex-shrink: 0; }
+  .account-app .nav-toggle { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex: 0 0 34px; padding: 0; background: transparent; color: var(--nav-fg); border-color: transparent; border-radius: var(--r-md); }
+  .account-app .nav-toggle:hover:not(:disabled) { background: var(--nav-hover-bg); color: var(--nav-fg-strong); border-color: transparent; }
+  .nav-toggle-icon { width: 20px; height: 20px; }
+  /* Mobile-only drawer launcher and scrim; hidden until the narrow breakpoint. */
+  .nav-launcher, .nav-scrim { display: none; }
+  /* Collapsed desktop icon rail: icons hold their positions, labels become tooltips. */
+  .admin-shell[data-nav-collapsed] { grid-template-columns: 64px minmax(0,1fr); }
+  .admin-shell[data-nav-collapsed] .admin-nav { padding-left: var(--s2); padding-right: var(--s2); }
+  .admin-shell[data-nav-collapsed] .nav-header { justify-content: center; }
+  .admin-shell[data-nav-collapsed] .product-name { display: none; }
+  .admin-shell[data-nav-collapsed] .nav-section { border-top: 1px solid var(--nav-hover-bg); padding-top: var(--s4); }
+  .admin-shell[data-nav-collapsed] .nav-section h2 { display: none; }
+  .admin-shell[data-nav-collapsed] nav a { justify-content: center; }
+  .admin-shell[data-nav-collapsed] nav a span { display: none; }
+  .admin-shell[data-nav-collapsed] .account-trigger { justify-content: center; }
+  .admin-shell[data-nav-collapsed] .account-trigger span, .admin-shell[data-nav-collapsed] .account-chevron { display: none; }
 
   /* Account menu — sits on the shared surface token. */
-  .account-popover { position: fixed; z-index: 100; box-sizing: border-box; overflow-y: auto; padding: var(--s2); }
+  .account-popover { position: fixed; z-index: 120; box-sizing: border-box; overflow-y: auto; padding: var(--s2); }
   .account-popover-identity { display: grid; gap: 3px; padding: var(--s3); margin-bottom: var(--s2); border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
   .account-popover-identity span { font-size: var(--fs-sm); color: var(--muted); }
   .account-app .account-popover > a, .account-app .account-popover > button { display: block; width: 100%; min-height: auto; justify-content: flex-start; padding: var(--s2) var(--s3); border: 0; border-radius: var(--r-sm); text-align: left; text-decoration: none; background: transparent; }
@@ -402,13 +420,27 @@
   .cancel-link { display: inline-block; margin-left: var(--s4); }
 
   @media (max-width: 700px) {
-    .admin-shell { grid-template-columns: 1fr; }
-    .admin-nav { position: static; height: auto; overflow: visible; padding: var(--s4); gap: var(--s4); }
-    .admin-nav nav { display: flex; flex-wrap: wrap; overflow: visible; }
-    .admin-content { padding: var(--s5) var(--s4); }
+    .admin-shell, .admin-shell[data-nav-collapsed] { grid-template-columns: 1fr; }
+    .nav-launcher { display: inline-flex; align-items: center; justify-content: center; position: fixed; top: var(--s4); left: 0; z-index: 90; width: 44px; height: 44px; padding: 0; background: var(--nav-bg); color: var(--nav-fg-strong); border: 0; border-radius: 0 var(--r-md) var(--r-md) 0; box-shadow: var(--shadow-pop); }
+    .nav-launcher-icon { width: 22px; height: 22px; }
+    .admin-nav { position: fixed; top: 0; z-index: 110; --drawer-w: min(70vw, 320px); width: var(--drawer-w); left: calc(var(--drawer-w) * -1); height: 100vh; height: 100dvh; padding: var(--s5) var(--s3) var(--s3); overflow-y: auto; transition: left .2s ease; }
+    .admin-shell[data-nav-open] .admin-nav { left: 0; box-shadow: var(--shadow-pop); }
+    .admin-shell[data-nav-open] .nav-launcher { display: none; }
+    .nav-scrim { display: block; position: fixed; inset: 0; z-index: 100; background: #13302c73; opacity: 0; visibility: hidden; transition: opacity .2s ease, visibility .2s ease; }
+    .admin-shell[data-nav-open] .nav-scrim { opacity: 1; visibility: visible; }
+    /* The drawer always shows full labels, even if the desktop rail was left collapsed. */
+    .admin-shell[data-nav-collapsed] .admin-nav { padding: var(--s5) var(--s3) var(--s3); }
+    .admin-shell[data-nav-collapsed] .product-name, .admin-shell[data-nav-collapsed] .nav-section h2, .admin-shell[data-nav-collapsed] nav a span, .admin-shell[data-nav-collapsed] .account-trigger span, .admin-shell[data-nav-collapsed] .account-chevron { display: revert; }
+    .admin-shell[data-nav-collapsed] .nav-header, .admin-shell[data-nav-collapsed] nav a, .admin-shell[data-nav-collapsed] .account-trigger { justify-content: flex-start; }
+    .admin-shell[data-nav-collapsed] .nav-section { border-top: 0; padding-top: 0; }
+    .admin-content { padding: var(--s5) var(--s4); padding-top: calc(44px + var(--s5)); }
     .account-panel { padding: var(--s5); }
     .impersonation { align-items: start; flex-direction: column; gap: var(--s3); }
     .login-screen { padding-top: 6vh; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .admin-shell, .admin-nav, .nav-scrim { transition: none; }
   }
 
   /* Content editor (CodeMirror / visual frame are JS-bound; keep their hooks). */

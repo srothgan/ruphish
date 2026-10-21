@@ -100,7 +100,7 @@ fn link(
                 .strip_prefix(href)
                 .is_some_and(|tail| tail.starts_with('/'))
     };
-    view! { <a href=href aria-current=move || active().then_some("page")>{icon(drawing)}<span>{move || label.get()}</span></a> }
+    view! { <a href=href aria-current=move || active().then_some("page") title=move || label.get() aria-label=move || label.get()>{icon(drawing)}<span>{move || label.get()}</span></a> }
 }
 pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<> {
     view! {
