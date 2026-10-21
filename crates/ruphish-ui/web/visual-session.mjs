@@ -1,3 +1,4 @@
+import {EditorError} from './editor-i18n.mjs';
 import {TemplateVault} from './template-html.mjs';
 
 // One local transaction: no normalized document is saved simply by opening a mode.
@@ -45,11 +46,14 @@ export class VisualSession {
   }
 
   insertVariable(name) {
-    this.editor.s.insertHTML(this.vault.mask(`{{.${name}}}`));
+    const marker = this.vault.mask(`{{.${name}}}`);
+    this.editor.s.insertHTML(marker);
     this.vault.decorate(this.editor.editor.ownerDocument);
+    const chip = this.editor.editor.querySelector(`[data-ruphish-field="${marker}"]`);
+    if (chip) this.editor.s.setCursorAfter(chip);
   }
 
-  insertForm({action, method, name, label, type}) {
+  insertForm({action, method, name, label, type, submitLabel}) {
     const document = this.editor.editor.ownerDocument;
     const form = document.createElement('form');
     form.setAttribute('action', this.vault.mask(action));
@@ -61,19 +65,19 @@ export class VisualSession {
     field.setAttribute('type', type);
     fieldLabel.append(field);
     const submit = document.createElement('button');
-    submit.setAttribute('type', 'submit'); submit.textContent = 'Continue';
+    submit.setAttribute('type', 'submit'); submit.textContent = submitLabel;
     form.append(fieldLabel, submit);
     this.editor.s.insertHTML(form.outerHTML);
   }
 
   selectField(field) {
-    if (field.ownerDocument !== this.editor.ed || !field.closest('form')) throw new Error('Select a field inside a form.');
+    if (field.ownerDocument !== this.editor.ed || !field.closest('form')) throw new EditorError('select_form_field');
     this.selectedField = field;
   }
 
   selectedProperties() {
     const field = this.selectedField;
-    if (!field?.isConnected) throw new Error('Click an existing form field in the visual document first.');
+    if (!field?.isConnected) throw new EditorError('select_existing_field');
     return {
       action: this.vault.restore(field.closest('form').getAttribute('action') ?? ''),
       method: field.closest('form').getAttribute('method') ?? 'get',
@@ -99,10 +103,11 @@ export class VisualSession {
   }
 }
 
-export function visualOptions(window, source = '') {
+export function visualOptions(window, source = '', locale = 'en') {
   let policyMarker = 'ruphish-editor-policy';
   while (source.includes(policyMarker)) policyMarker += 'X';
   return {
+    language: locale,
     ownerWindow: window, iframe: true, iframeSandbox: 'allow-same-origin',
     editHTMLDocumentMode: true, height: 400, iframeStyle: '', iframeTitle: '',
     // Only this authored-content frame is a security boundary. Its trusted host
@@ -112,7 +117,7 @@ export function visualOptions(window, source = '') {
     sourceEditorCDNUrlsJS: [], beautifyHTMLCDNUrlsJS: [],
     toolbarAdaptive: false, toolbarSticky: false, toolbarInline: false,
     buttons: ['bold', 'italic', 'underline', '|', 'ul', 'ol', '|', 'fontsize', 'paragraph', 'brush', '|', 'link', 'image', 'table', '|', 'undo', 'redo'],
-    statusbar: false,
+    statusbar: false, showPlaceholder: false,
     disablePlugins: ['source', 'preview', 'fullsize', 'file', 'video', 'media', 'image-properties', 'image-processor', 'drag-and-drop', 'drag-and-drop-element', 'paste-from-word', 'paste-storage', 'powered-by-jodit'],
     cleanHTML: {
       // Preserve authored data. Isolation is supplied by the nested sandbox/CSP,

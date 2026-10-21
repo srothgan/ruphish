@@ -12,6 +12,7 @@ use axum::{
     routing::{get, post},
 };
 use ruphish_application::integrations as app;
+use ruphish_contracts::errors::ErrorCode;
 use serde::Deserialize;
 use serde_json::{Value, json};
 fn runs(history: Vec<app::Run>) -> Vec<Value> {
@@ -188,8 +189,13 @@ struct MailEdit {
     revision: Option<i64>,
 }
 fn decode<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T, Rejection> {
-    serde_json::from_slice(body)
-        .map_err(|_| failure(StatusCode::BAD_REQUEST, "integration_invalid_request"))
+    serde_json::from_slice(body).map_err(|_| {
+        failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::RequestInvalid,
+            "integration_invalid_request",
+        )
+    })
 }
 async fn save_hook(context: Context, id: Option<i64>, body: Bytes) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
@@ -302,7 +308,13 @@ fn expected_revision(headers: &HeaderMap) -> Result<Option<i64>, Rejection> {
                 .to_str()
                 .ok()
                 .and_then(|value| value.trim_matches('"').parse().ok())
-                .ok_or_else(|| failure(StatusCode::BAD_REQUEST, "integration_invalid_revision"))
+                .ok_or_else(|| {
+                    failure(
+                        StatusCode::BAD_REQUEST,
+                        ErrorCode::RevisionRequired,
+                        "integration_invalid_revision",
+                    )
+                })
         })
         .transpose()
 }
@@ -493,6 +505,7 @@ fn legacy_edit(body: &[u8]) -> Result<app::MailboxEdit, Rejection> {
     if value.ignore_cert_errors {
         return Err(failure(
             StatusCode::BAD_REQUEST,
+            ErrorCode::MailboxTlsRequired,
             "mailbox_tls_verification_required",
         ));
     }
@@ -500,10 +513,13 @@ fn legacy_edit(body: &[u8]) -> Result<app::MailboxEdit, Rejection> {
         name: "Reporting mailbox".into(),
         enabled: value.enabled,
         host: value.host,
-        port: value
-            .port
-            .parse()
-            .map_err(|_| failure(StatusCode::BAD_REQUEST, "mailbox_invalid_port"))?,
+        port: value.port.parse().map_err(|_| {
+            failure(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::MailboxPortInvalid,
+                "mailbox_invalid_port",
+            )
+        })?,
         username: value.username,
         password: (!value.password.is_empty()).then_some(value.password),
         tls: value.tls,
@@ -538,7 +554,7 @@ async fn legacy_validate(context: Context, body: Bytes) -> Result<Response, Reje
         ),
         Err(error) => response(
             StatusCode::OK,
-            &json!({"success":false,"message":error.to_string()}),
+            &json!({"success":false,"code":crate::resources::resource_code(&error),"message":error.to_string()}),
             None,
         ),
     }
@@ -546,5 +562,9 @@ async fn legacy_validate(context: Context, body: Bytes) -> Result<Response, Reje
 
 async fn legacy_validate_get(context: Context) -> Result<Response, Rejection> {
     context.api(None).await?;
-    Err(failure(StatusCode::BAD_REQUEST, "Only POSTs allowed"))
+    Err(failure(
+        StatusCode::BAD_REQUEST,
+        ErrorCode::MethodNotAllowed,
+        "Only POSTs allowed",
+    ))
 }

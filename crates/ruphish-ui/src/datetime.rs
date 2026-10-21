@@ -58,6 +58,14 @@ pub struct Label {
     pub offset: String,
 }
 impl Label {
+    /// Apply the account display choice without changing civil fields or the instant.
+    pub fn with_offset(mut self, show: bool) -> Self {
+        if !show {
+            self.offset.clear();
+        }
+        self
+    }
+
     /// Full readable date/time at minute precision.
     pub fn at(value: Timestamp, zone: &TimeZone) -> Self {
         let date = value.to_zoned(zone.clone());

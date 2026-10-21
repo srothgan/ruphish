@@ -11,8 +11,8 @@ pub(crate) fn TextInput(
     #[prop(default = "")] name: &'static str,
     #[prop(default = "")] autocomplete: &'static str,
     #[prop(into, optional)] id: String,
-    #[prop(into, optional)] placeholder: String,
-    #[prop(into, optional)] aria_label: String,
+    #[prop(into, optional)] placeholder: Signal<String>,
+    #[prop(into, optional)] aria_label: Signal<String>,
     #[prop(default = "")] class: &'static str,
     #[prop(default = "")] step: &'static str,
     #[prop(optional)] maxlength: Option<u32>,
@@ -25,8 +25,8 @@ pub(crate) fn TextInput(
             name=(!name.is_empty()).then_some(name)
             autocomplete=(!autocomplete.is_empty()).then_some(autocomplete)
             id=(!id.is_empty()).then_some(id)
-            aria-label=(!aria_label.is_empty()).then_some(aria_label)
-            placeholder=placeholder step=(!step.is_empty()).then_some(step) maxlength=maxlength
+            aria-label=move || (!aria_label.get().is_empty()).then(|| aria_label.get())
+            placeholder=move || placeholder.get() step=(!step.is_empty()).then_some(step) maxlength=maxlength
             prop:value=move || value.get() required=move || required.get()
             disabled=move || disabled.get() readonly=readonly
             on:input=move |event| { if let Some(callback) = on_input { callback.run(event); } }

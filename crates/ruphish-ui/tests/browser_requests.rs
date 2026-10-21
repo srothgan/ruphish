@@ -6,6 +6,108 @@ use ruphish_ui::browser_http::resource_request;
 use serde_json::json;
 use wasm_bindgen_test::wasm_bindgen_test;
 
+#[path = "support/locale_window.rs"]
+mod locale_window;
+
+#[wasm_bindgen_test]
+fn language_selection_prefers_saved_choices_then_supported_browser_languages() {
+    use ruphish_ui::localization::{Locale, resolve};
+    let languages = |values: &[&str]| {
+        values
+            .iter()
+            .map(|value| (*value).to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(resolve(None, &languages(&["de-DE", "en-US"])), Locale::de);
+    assert_eq!(resolve(None, &languages(&["fr-FR", "de-AT"])), Locale::de);
+    assert_eq!(resolve(None, &languages(&["en-GB", "de-DE"])), Locale::en);
+    assert_eq!(resolve(Some("en"), &languages(&["de-DE"])), Locale::en);
+    assert_eq!(resolve(Some("de"), &languages(&["en-US"])), Locale::de);
+    assert_eq!(resolve(Some("invalid"), &languages(&["de-CH"])), Locale::de);
+    assert_eq!(resolve(None, &languages(&["DE-de"])), Locale::de);
+    assert_eq!(resolve(None, &languages(&["fr-FR"])), Locale::en);
+    assert_eq!(resolve(Some(""), &[]), Locale::en);
+}
+
+#[wasm_bindgen_test]
+async fn translated_text_updates_in_place_without_replacing_draft_state() {
+    locale_window::install();
+    use leptos::prelude::*;
+    use ruphish_ui::{
+        localization::{Locale, provide},
+        trs,
+    };
+    let _ = any_spawner::Executor::init_wasm_bindgen();
+    let owner = Owner::new();
+    let (context, label, greeting, draft) = owner.with(|| {
+        let context = provide(Locale::en);
+        let draft = RwSignal::new("User content: Save changes / Änderungen speichern".to_owned());
+        (
+            context,
+            trs!(ui.save_changes),
+            trs!(messages.copy_arg0, arg0 = "API"),
+            draft,
+        )
+    });
+    // Allow the provider's initialization effects to settle before a manual choice.
+    any_spawner::Executor::tick().await;
+    assert_eq!(label.get_untracked(), "Save changes");
+    let observed = owner.with(|| Memo::new(move |_| label.get()));
+    assert_eq!(observed.get_untracked(), "Save changes");
+    context.set_locale(Locale::de);
+    assert_eq!(label.get_untracked(), "Änderungen speichern");
+    assert_eq!(greeting.get_untracked(), "API kopieren");
+    locale_window::change();
+    any_spawner::Executor::tick().await;
+    assert_eq!(context.get_locale_untracked(), Locale::de);
+    assert_eq!(observed.get_untracked(), "Änderungen speichern");
+    assert_eq!(
+        draft.get_untracked(),
+        "User content: Save changes / Änderungen speichern"
+    );
+    context.set_locale(Locale::en);
+    assert_eq!(label.get_untracked(), "Save changes");
+    assert_eq!(greeting.get_untracked(), "Copy API");
+    owner.cleanup();
+}
+
+#[wasm_bindgen_test]
+fn localized_observations_preserve_recorded_outcomes_and_external_details() {
+    locale_window::install();
+    use leptos::prelude::*;
+    use ruphish_ui::{
+        localization::*,
+        recipient_history::{History, timeline},
+    };
+    let _ = any_spawner::Executor::init_wasm_bindgen();
+    let owner = Owner::new();
+    owner.with(|| untrack(|| {
+        let context = provide(Locale::en);
+        let mut history = History::default();
+        let note = ruphish_ui::import_state::ImportNote::Email;
+        assert!(import_note(context, &note).contains("Attachments"));
+        history.toggle();
+        let (ticket, _) = history.begin(false).unwrap();
+        history.finish(ticket, Ok(json!({"attempts":[{"generation":2,"started":30,"finished":31,"state":"accepted","smtp_code":null,"stage":""}],"events":[{"id":1,"at":32,"message":"Email Opened"}]})));
+        let entries = timeline(&history);
+        assert_eq!(timeline_title(context, &entries[1].title), "Attempt 2: Accepted by SMTP server");
+        context.set_locale(Locale::de);
+        assert!(import_note(context, &note).contains("Anhänge"));
+        assert_eq!(timeline_title(context, &entries[1].title), "Versuch 2: Vom SMTP-Server angenommen");
+        assert_eq!(timeline_title(context, &entries[2].title), "E-Mail geöffnet");
+        assert_eq!(event_label(context, "An external diagnostic"), "An external diagnostic");
+        assert!(entries.iter().all(|entry| {
+            let text = timeline_title(context, &entry.title);
+            !text.contains("null") && !text.contains("250")
+        }));
+        let error = ruphish_ui::import_state::ImportError::RequestFailed("External response".into());
+        assert_eq!(import_error(context, &error), "External response (IMPORT_REQUEST_FAILED)");
+        assert_eq!(entries[1].at, Some(31));
+        assert_eq!(entries[1].tone, "success");
+    }));
+    owner.cleanup();
+}
+
 #[wasm_bindgen_test]
 fn timestamps_use_jiff_zones_and_browser_locales_without_double_conversion() {
     use ruphish_domain::datetime::{named_zone, parse};
@@ -15,19 +117,11 @@ fn timestamps_use_jiff_zones_and_browser_locales_without_double_conversion() {
         (
             "America/New_York",
             "en-US",
-            "October 18, 2026, 03:53 PM (UTC-04:00)",
+            "10/18/2026, 03:53 PM (UTC-04:00)",
         ),
-        (
-            "Europe/Berlin",
-            "de-DE",
-            "18. Oktober 2026, 21:53 (UTC+02:00)",
-        ),
-        (
-            "Europe/Berlin",
-            "en-US",
-            "October 18, 2026, 09:53 PM (UTC+02:00)",
-        ),
-        ("Asia/Tokyo", "ja-JP", "2026年10月19日, 04:53 (UTC+09:00)"),
+        ("Europe/Berlin", "de-DE", "18.10.2026, 21:53 (UTC+02:00)"),
+        ("Europe/Berlin", "en-US", "10/18/2026, 09:53 PM (UTC+02:00)"),
+        ("Asia/Tokyo", "ja-JP", "2026/10/19 04:53 (UTC+09:00)"),
     ] {
         assert_eq!(
             render_locale(Label::at(instant, &named_zone(zone).unwrap()), Some(locale)),
@@ -69,7 +163,7 @@ fn api_timestamp_values_reach_locale_display_without_losing_their_instant() {
         let parsed = instant(value).unwrap().unwrap();
         assert_eq!(
             render_locale(Label::at(parsed, &zone), Some("en-GB")),
-            "19 October 2026, 04:53 (UTC+09:00)"
+            "19/10/2026, 04:53 (UTC+09:00)"
         );
     }
     for value in [
@@ -318,3 +412,152 @@ async fn campaign_launch_retry_preserves_reviewed_body_key_and_browser_auth_boun
 
 #[path = "support/request_lifecycle.rs"]
 mod request_lifecycle;
+
+#[wasm_bindgen_test]
+fn account_preferences_change_text_and_format_independently_without_changing_instants() {
+    locale_window::install();
+    use leptos::prelude::*;
+    use ruphish_contracts::auth::Preferences;
+    use ruphish_domain::datetime;
+    use ruphish_ui::{
+        datetime::Label,
+        display_preferences::DisplayPreferences,
+        localization::{self, Locale},
+    };
+    let _ = any_spawner::Executor::init_wasm_bindgen();
+    let owner = Owner::new();
+    owner.with(|| {
+        let context = localization::provide(Locale::en);
+        let state = DisplayPreferences::provide();
+        let instant = datetime::parse("2026-10-18T19:53:21.8939891Z").unwrap();
+        let preview = Memo::new(move |_| state.render(Label::at(instant, &state.zone())));
+        let heading = ruphish_ui::trs!(preferences.heading);
+        let value = Preferences {
+            language: Some("de".into()),
+            format_locale: Some("zh-CN".into()),
+            time_zone: Some("Europe/Berlin".into()),
+            show_utc_offset: true,
+        };
+        state.apply(value.clone(), context);
+        assert_eq!(heading.get_untracked(), "Sprache, Datum und Uhrzeit");
+        assert_eq!(preview.get_untracked(), "2026/10/18 21:53 (UTC+02:00)");
+        state.apply(
+            Preferences {
+                language: Some("en".into()),
+                ..value.clone()
+            },
+            context,
+        );
+        assert_eq!(heading.get_untracked(), "Language, date and time");
+        assert_eq!(preview.get_untracked(), "2026/10/18 21:53 (UTC+02:00)");
+        state.apply(
+            Preferences {
+                language: Some("en".into()),
+                format_locale: Some("de-DE".into()),
+                ..value.clone()
+            },
+            context,
+        );
+        assert_eq!(heading.get_untracked(), "Language, date and time");
+        assert_eq!(preview.get_untracked(), "18.10.2026, 21:53 (UTC+02:00)");
+        state.apply(
+            Preferences {
+                time_zone: Some("Asia/Shanghai".into()),
+                ..value
+            },
+            context,
+        );
+        assert_eq!(preview.get_untracked(), "2026/10/19 03:53 (UTC+08:00)");
+        let mut hidden_offset = state.value.get_untracked();
+        hidden_offset.show_utc_offset = false;
+        state.apply(hidden_offset, context);
+        assert_eq!(preview.get_untracked(), "2026/10/19 03:53");
+        assert_eq!(datetime::utc(instant), "2026-10-18T19:53:21.8939891Z");
+        state.apply(Preferences::default(), context);
+        assert_eq!(
+            context.get_locale_untracked(),
+            localization::browser_locale()
+        );
+        assert_eq!(
+            datetime::zone_name(&state.zone()),
+            datetime::zone_name(&ruphish_ui::browser_datetime::detected_zone())
+        );
+        assert_eq!(
+            preview.get_untracked(),
+            ruphish_ui::browser_datetime::render(Label::at(instant, &state.zone()))
+        );
+    });
+    owner.cleanup();
+}
+
+#[wasm_bindgen_test]
+fn preference_picker_choices_are_accepted_by_the_authoritative_domain() {
+    use ruphish_domain::{datetime, preferences::Preferences};
+    let zones = datetime::available_zones();
+    assert!(zones.len() > 300);
+    for expected in ["UTC", "Europe/Berlin", "Asia/Shanghai", "America/New_York"] {
+        assert!(zones.iter().any(|zone| zone == expected));
+    }
+    for zone in zones {
+        Preferences {
+            time_zone: Some(zone),
+            ..Default::default()
+        }
+        .validate()
+        .unwrap();
+    }
+    let formats = ruphish_ui::browser_datetime::format_locale_options(
+        "de",
+        "zh-CN",
+        ruphish_ui::datetime::Label::at(
+            datetime::parse("2026-10-18T19:53:00Z").unwrap(),
+            &datetime::named_zone("Europe/Berlin").unwrap(),
+        ),
+    );
+    assert!(formats.len() > 100);
+    assert!(
+        formats
+            .iter()
+            .any(|(id, label)| id == "zh-CN" && label.contains("Chinesisch"))
+    );
+    for (locale, _) in formats {
+        Preferences {
+            format_locale: Some(locale),
+            ..Default::default()
+        }
+        .validate()
+        .unwrap();
+    }
+}
+
+#[wasm_bindgen_test]
+fn received_error_codes_translate_to_plain_text_with_a_stable_support_identifier() {
+    use leptos::prelude::*;
+    use ruphish_ui::localization::{self, Locale};
+    let owner = Owner::new();
+    owner.with(|| {
+        let context = localization::provide(Locale::de);
+        let text = localization::failure_label(context, "AUTH_INVALID_CREDENTIALS");
+        assert_eq!(
+            text,
+            "AUTH_INVALID_CREDENTIALS - Benutzername oder Passwort ungültig."
+        );
+        context.set_locale(Locale::en);
+        assert_eq!(
+            localization::failure_label(context, "AUTH_INVALID_CREDENTIALS"),
+            "AUTH_INVALID_CREDENTIALS - Invalid username or password."
+        );
+        assert_eq!(
+            text,
+            "AUTH_INVALID_CREDENTIALS - Benutzername oder Passwort ungültig."
+        );
+        assert_eq!(
+            localization::failure_label(context, "FUTURE_ERROR"),
+            "FUTURE_ERROR - The request failed. Try again or contact your administrator."
+        );
+        assert_eq!(
+            localization::failure_label(context, "CSV_ROW_COLUMNS"),
+            "CSV_ROW_COLUMNS - Column count does not match the header."
+        );
+    });
+}

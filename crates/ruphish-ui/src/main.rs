@@ -28,6 +28,8 @@ mod navigation;
 #[cfg(target_arch = "wasm32")]
 mod overview;
 #[cfg(target_arch = "wasm32")]
+mod preferences;
+#[cfg(target_arch = "wasm32")]
 mod resources;
 #[cfg(target_arch = "wasm32")]
 mod shared;
@@ -36,7 +38,19 @@ mod shared;
 fn main() {
     use leptos::prelude::*;
     use leptos_router::components::Router;
-    leptos::mount::mount_to_body(|| view! {<Router>{account::app}</Router>});
+    leptos::mount::mount_to_body(|| {
+        use leptos_i18n::Locale as _;
+        let context = ruphish_ui::localization::provide(ruphish_ui::localization::browser_locale());
+        Effect::new(move |_| {
+            let locale = context.get_locale();
+            if let Some(document) = web_sys::window().and_then(|window| window.document())
+                && let Some(html) = document.document_element()
+            {
+                let _ = html.set_attribute("lang", locale.as_str());
+            }
+        });
+        view! {<Router>{account::app}</Router>}
+    });
 }
 
 #[cfg(target_arch = "wasm32")]

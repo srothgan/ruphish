@@ -279,7 +279,7 @@ fn incomplete_content_imports_remain_drafts_and_invalid_imports_are_rejected() {
         mail.review
             .notes
             .iter()
-            .any(|note| note.contains("Attachments"))
+            .any(|note| matches!(note, crate::import_state::ImportNote::Email))
     );
     let page = prepare_creation(
         "pages",

@@ -8,6 +8,7 @@ publish.workspace = true
 
 [dependencies]
 jiff = { version = "0.2", features = ["tzdb-bundle-always"] }
+language-tags = "0.3.2"
 thiserror = "2.0.21"
 url = "2"
 

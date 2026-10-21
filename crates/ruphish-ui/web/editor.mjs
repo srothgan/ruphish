@@ -1,35 +1,41 @@
+import {editorText, codeMirrorPhrases} from './editor-i18n.mjs';
 import {EditorView, keymap, lineNumbers, drawSelection, highlightActiveLine} from '@codemirror/view';
 import {defaultKeymap, historyKeymap} from '@codemirror/commands';
-import {Compartment} from '@codemirror/state';
+import {Compartment, EditorState} from '@codemirror/state';
 import {autocompletion, completionKeymap} from '@codemirror/autocomplete';
 import {syntaxHighlighting, defaultHighlightStyle} from '@codemirror/language';
 import {createState, templateCompletions, applyVisual} from './state.mjs';
 import {visualFrameDocument} from './visual-shell.mjs';
 
-export function mountEditor(parent, source, onChange, variablesJson, onVisualState = () => {}, readOnly = false) {
+export function mountEditor(parent, source, onChange, variablesJson, onVisualState = () => {}, readOnly = false, locale = 'en', allowForms = false) {
+  const labels = new Map();
+  const t = key => editorText(locale, key);
+  const setText = (node, key) => { labels.set(node, key); node.textContent = t(key); };
   const variables = JSON.parse(variablesJson);
   const modes = document.createElement('div'); modes.className = 'editor-mode';
-  const mode = document.createElement('strong'); mode.textContent = 'HTML source';
-  const variableLabel = document.createElement('label'); variableLabel.textContent = 'Insert recipient field ';
-  const picker = document.createElement('select'); picker.append(new Option('Choose a field…', ''));
+  const mode = document.createElement('strong'); setText(mode, 'source');
+  const variableLabel = document.createElement('label'); const variableText = document.createTextNode(''); variableLabel.append(variableText); setText(variableText, 'recipient_field');
+  const picker = document.createElement('select'); picker.append(new Option(t('choose_field'), ''));
   for (const name of variables) picker.append(new Option(name, name));
   variableLabel.append(picker);
-  const open = document.createElement('button'); open.type = 'button'; open.textContent = 'Edit visually'; open.disabled = readOnly; picker.disabled = readOnly;
-  const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'text-danger'; cancel.textContent = 'Cancel visual edits'; cancel.hidden = true;
+  const open = document.createElement('button'); open.type = 'button'; setText(open, 'edit_visually'); open.disabled = readOnly; picker.disabled = readOnly;
+  const sourceButton = document.createElement('button'); sourceButton.type = 'button'; setText(sourceButton, 'source'); sourceButton.disabled = true;
   const note = document.createElement('p'); note.className = 'editor-help'; note.setAttribute('role', 'status');
   const sourcePane = document.createElement('div'); sourcePane.className = 'source';
   const container = document.createElement('div');
-  modes.append(mode, variableLabel, open, cancel); parent.append(modes, note, sourcePane, container);
-  const sourceHelp = 'Edit the HTML directly, or choose “Edit visually” to format the rendered message. Recipient fields stay as {{…}} until sending.';
-  note.setAttribute('role', 'status'); note.textContent = sourceHelp;
+  modes.append(mode, variableLabel, sourceButton, open); parent.append(modes, note, sourcePane, container);
+  note.setAttribute('role', 'status'); setText(note, 'source_help');
   const editable = new Compartment();
+  const contentLabel = new Compartment();
+  const phrases = new Compartment();
   const extensions = [
+    phrases.of(EditorState.phrases.of(codeMirrorPhrases(locale))),
     editable.of(EditorView.editable.of(!readOnly)),
     lineNumbers(), drawSelection(), highlightActiveLine(),
     syntaxHighlighting(defaultHighlightStyle),
     keymap.of([...completionKeymap, ...defaultKeymap, ...historyKeymap]),
     autocompletion({override: [context => templateCompletions(context, variables)]}),
-    EditorView.contentAttributes.of({'aria-label': 'HTML source'}),
+    contentLabel.of(EditorView.contentAttributes.of({'aria-label': t('source')})),
     EditorView.updateListener.of(update => {
       if (update.docChanged) onChange(update.state.sliceDoc());
     }),
@@ -41,12 +47,23 @@ export function mountEditor(parent, source, onChange, variablesJson, onVisualSta
     window.removeEventListener('message', visual.listener);
     visual.frame.remove(); visual = null;
     onVisualState(false);
-    sourcePane.hidden = false; open.disabled = readOnly; cancel.hidden = true; variableLabel.hidden = false;
-    mode.textContent = 'HTML source'; note.setAttribute('role', 'status'); note.textContent = sourceHelp;
+    sourcePane.hidden = false; open.disabled = readOnly; sourceButton.disabled = true; picker.disabled = readOnly;
+    note.hidden = false; setText(mode, 'source'); note.setAttribute('role', 'status'); setText(note, 'source_help');
     view.dispatch({effects: editable.reconfigure(EditorView.editable.of(!readOnly))});
+    view.requestMeasure();
   };
   const editor = {
-    replace(source) { closeVisual(); view.setState(createState(source, extensions)); },
+    setLocale(value) {
+      locale = value;
+      for (const [node, key] of labels) node.textContent = t(key);
+      picker.options[0].textContent = t('choose_field');
+      view.dispatch({effects: [contentLabel.reconfigure(EditorView.contentAttributes.of({'aria-label': t('source')})), phrases.reconfigure(EditorState.phrases.of(codeMirrorPhrases(locale)))]});
+      if (visual) {
+        visual.frame.title = t('visual_title');
+        visual.frame.contentWindow.postMessage({type: 'locale', token: visual.token, locale}, '*');
+      }
+    },
+    replace(source) { closeVisual(); view.setState(createState(source, extensions)); editor.setLocale(locale); },
     insert(name) {
       if (readOnly) return;
       if (visual) {
@@ -56,66 +73,76 @@ export function mountEditor(parent, source, onChange, variablesJson, onVisualSta
       }
       view.dispatch(view.state.replaceSelection(`{{.${name}}}`)); view.focus();
     },
+    openSource() {
+      if (!visual) return;
+      if (!visual.ready) { closeVisual(); return; }
+      visual.frame.contentWindow.postMessage({type: 'snapshot', token: visual.token}, '*');
+    },
     openVisual() {
-      if (readOnly) return;
+      if (readOnly || visual) return;
       closeVisual(); container.replaceChildren();
       const frame = document.createElement('iframe');
-      frame.className = 'visual-frame'; frame.title = 'Visual HTML editor';
+      frame.className = 'visual-frame'; frame.title = t('visual_title');
       // This frame contains trusted application controls, not authored HTML.
       // An opaque origin here also blocks Jodit's access to its child document.
       // The child authored-content frame is separately sandboxed without scripts.
       frame.referrerPolicy = 'no-referrer';
       const token = crypto.getRandomValues(new Uint32Array(4)).join('-');
       const base = view.state.sliceDoc();
-      const script = new URL('visual-frame.js', document.baseURI).href;
-      const css = new URL('visual-frame.css', document.baseURI).href;
-      frame.srcdoc = visualFrameDocument(script, css);
+      const script = new URL('/visual-frame.js', window.location.origin).href;
+      const css = new URL('/visual-frame.css', window.location.origin).href;
+      frame.srcdoc = visualFrameDocument(script, css, locale, allowForms);
       const listener = event => {
         if (event.source !== frame.contentWindow || !visual || visual.frame !== frame) return;
         const message = event.data;
         if (message?.type === 'booted' && !visual.booted) {
           visual.booted = true;
-          frame.contentWindow.postMessage({type: 'open', token, source: base, variables}, '*');
+          frame.contentWindow.postMessage({type: 'open', token, source: base, variables, locale}, '*');
           return;
         }
         if (message?.token !== token) return;
         if (message.type === 'opened') {
-          visual.ready = true;
-          note.textContent = 'Select text and use the formatting toolbar below. Apply visual changes to return to source, or cancel to discard them.';
+          visual.ready = true; onVisualState(false); picker.disabled = readOnly;
+          note.hidden = true; labels.delete(note); note.textContent = '';
           for (const name of visual.pending.splice(0)) frame.contentWindow.postMessage({type: 'insert', token, name}, '*');
           return;
         }
         if (message.type === 'failed') {
-          note.setAttribute('role', 'alert');
-          note.textContent = 'Visual editing could not start. Your HTML source is unchanged. Choose “Cancel visual edits” to return.';
+          note.hidden = false; note.setAttribute('role', 'alert');
+          setText(note, 'start_failed');
           return;
         }
-        if (message.type !== 'apply' || typeof message.source !== 'string') return;
-        if (view.state.sliceDoc() !== base) {
+        if (message.type === 'invalid') { onVisualState(true); return; }
+        if (!['change', 'snapshot'].includes(message.type) || typeof message.source !== 'string') return;
+        if (view.state.sliceDoc() !== visual.source) {
           const status = document.createElement('p'); status.setAttribute('role', 'alert');
-          status.textContent = 'Source changed while visual editing was open. Close and reopen visual editing to use the current document.';
+          setText(status, 'source_changed');
           container.append(status); return;
         }
         const next = message.source;
-        closeVisual();
-        const transaction = applyVisual(view.state, base, next);
+        const transaction = applyVisual(view.state, visual.source, next);
+        visual.source = next;
         if (transaction) view.dispatch(transaction);
+        onVisualState(false);
+        if (message.type === 'snapshot') closeVisual();
       };
-      visual = {frame, listener, token, booted: false, ready: false, pending: []};
+      visual = {frame, listener, token, booted: false, ready: false, pending: [], source: base};
       onVisualState(true);
       window.addEventListener('message', listener);
       view.dispatch({effects: editable.reconfigure(EditorView.editable.of(false))});
-      sourcePane.hidden = true; open.disabled = true; cancel.hidden = false; variableLabel.hidden = true;
-      mode.textContent = 'Visual editor'; note.textContent = 'Loading visual editing. You can cancel at any time; HTML source is unchanged until you apply.';
+      sourcePane.hidden = true; open.disabled = true; sourceButton.disabled = false; picker.disabled = true;
+      setText(mode, 'visual'); setText(note, 'loading');
       container.append(frame);
     },
     destroy() { closeVisual(); view.destroy(); parent.replaceChildren(); },
   };
   open.onclick = () => editor.openVisual();
-  cancel.onclick = () => closeVisual();
+  sourceButton.onclick = () => editor.openSource();
   picker.onchange = () => { if (variables.includes(picker.value)) editor.insert(picker.value); picker.value = ''; };
   return editor;
 }
 
 export function replaceSource(editor, source) { editor.replace(source); }
 export function destroyEditor(editor) { editor.destroy(); }
+
+export function setEditorLocale(editor, locale) { editor.setLocale(locale); }

@@ -178,6 +178,18 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
             "{id}"
         );
         let mut actual: Value = response.json().unwrap();
+        // Assert the additive error code without changing the recorded Go response.
+        let expected_code = match id {
+            "missing" | "deleted" => Some("RESOURCE_NOT_FOUND"),
+            "invalid-json" => Some("REQUEST_INVALID"),
+            "missing-name" | "missing-groups" | "missing-template" | "missing-page"
+            | "missing-profile" | "date-order" => Some("RESOURCE_INVALID"),
+            _ => None,
+        };
+        if let Some(expected_code) = expected_code {
+            let code = actual.as_object_mut().unwrap().remove("code");
+            assert_eq!(code, Some(json!(expected_code)), "Go case {id}");
+        }
         let mut expected = case["json"].clone();
         // Landing pages retain authored HTML. Go's wrapper insertion is incidental formatting.
         fn exceptions(v: &mut Value) {

@@ -101,3 +101,32 @@ test('searchable selection retains choices while editing and stays within a narr
     assert.equal(win.document.activeElement.id, 'outside');
   } finally { remove(); win.close(); }
 });
+
+test('single-choice picker cannot submit from search and keeps keyboard radio navigation open', () => {
+  const dom = new JSDOM('<form><button type="button" id="trigger">Time zone</button><div id="panel" hidden><input type="search"><label><input type="radio" name="zone" value="" data-panel-close checked>Browser default</label><label><input type="radio" name="zone" value="Europe/Berlin" data-panel-close>Berlin</label><button type="button" data-panel-close>Done</button></div><button type="submit">Save</button></form>');
+  const win = dom.window;
+  const trigger = win.document.getElementById('trigger');
+  const panel = win.document.getElementById('panel');
+  const remove = bindAnchoredPanel(trigger, panel, win);
+  try {
+    trigger.click();
+    const search = panel.querySelector('input[type=search]');
+    const enter = new win.KeyboardEvent('keydown', {key: 'Enter', bubbles: true, cancelable: true});
+    search.dispatchEvent(enter);
+    assert.equal(enter.defaultPrevented, true);
+    const berlin = panel.querySelector('input[value="Europe/Berlin"]');
+    berlin.click(); // detail=0 represents keyboard activation.
+    assert.equal(berlin.checked, true);
+    assert.equal(panel.hidden, false);
+    panel.querySelector('button').click();
+    assert.equal(panel.hidden, true);
+    assert.equal(win.document.activeElement, trigger);
+    trigger.click();
+    const automatic = panel.querySelector('input[value=""]');
+    automatic.dispatchEvent(new win.MouseEvent('click', {bubbles: true, cancelable: true, detail: 1}));
+    assert.equal(automatic.checked, true);
+    assert.equal(berlin.checked, false);
+    assert.equal(panel.hidden, true);
+    assert.equal(win.document.activeElement, trigger);
+  } finally { remove(); win.close(); }
+});

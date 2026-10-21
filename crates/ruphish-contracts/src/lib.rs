@@ -10,3 +10,5 @@ pub mod legacy;
 pub mod reporting;
 
 pub mod overview;
+
+pub mod errors;

@@ -1,3 +1,4 @@
+import {EditorError} from './editor-i18n.mjs';
 // Protect Go actions before any HTML parser can reinterpret quotes or operators.
 export class TemplateVault {
   constructor(source) {
@@ -26,7 +27,7 @@ export class TemplateVault {
         else if (['"', "'", '`'].includes(character)) quote = character;
         else if (pair === '}}') { end = index + 2; break; }
       }
-      if (end < 0) throw new Error('Unclosed template expression. Keep editing this document in source mode.');
+      if (end < 0) throw new EditorError('unclosed_template');
       const marker = `${this.prefix}${this.actions.length}_END`;
       this.actions.push({marker, source: source.slice(start, end)});
       output += marker;
@@ -39,12 +40,12 @@ export class TemplateVault {
     // One pass prevents a restored expression from being treated as another marker.
     const known = new Map(this.actions.map(action => [action.marker, action.source]));
     const output = source.replace(new RegExp(`${this.prefix}\\d+_END`, 'g'), marker => {
-      if (!known.has(marker)) throw new Error('An unknown template marker was introduced. The source was kept.');
+      if (!known.has(marker)) throw new EditorError('unknown_marker');
       return known.get(marker);
     });
     // The prefix does not occur in original content; an incomplete marker is an edit error.
     const withoutKnown = source.replace(new RegExp(`${this.prefix}\\d+_END`, 'g'), '');
-    if (withoutKnown.includes(this.prefix)) throw new Error('A template field was partially edited. Undo that edit or use source mode.');
+    if (withoutKnown.includes(this.prefix)) throw new EditorError('damaged_field');
     return output;
   }
 
@@ -60,7 +61,7 @@ export class TemplateVault {
       let start = 0;
       for (const match of matches) {
         const action = this.actions.find(action => action.marker === match[0]);
-        if (!action) throw new Error('Unknown template field');
+        if (!action) throw new EditorError('unknown_field');
         fragment.append(document.createTextNode(node.data.slice(start, match.index)));
         const chip = document.createElement('span');
         chip.setAttribute('data-ruphish-field', action.marker);
@@ -79,7 +80,7 @@ export class TemplateVault {
     for (const chip of copy.querySelectorAll('[data-ruphish-field]')) {
       const marker = chip.getAttribute('data-ruphish-field');
       if (!marker.startsWith(this.prefix)) continue;
-      if (!this.actions.some(action => action.marker === marker)) throw new Error('Unknown template field');
+      if (!this.actions.some(action => action.marker === marker)) throw new EditorError('unknown_field');
       chip.replaceWith(copy.createTextNode(marker));
     }
     return this.restore(copy.documentElement.outerHTML);

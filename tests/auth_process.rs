@@ -1031,6 +1031,24 @@ fn go_account_observations_match_except_approved_self_deletion_policy() {
             assert_eq!(user_key.len(), 64);
         }
         normalize_key(&mut value);
+        // Error codes are an additive contract extension. Assert them separately
+        // while retaining every field from the independent Go observation.
+        let expected_code = match case["id"].as_str().unwrap() {
+            "missing-key" => Some("AUTH_REQUIRED"),
+            "invalid-key" => Some("AUTH_API_KEY_INVALID"),
+            "missing-user" => Some("ACCOUNT_NOT_FOUND"),
+            "empty-name" => Some("USERNAME_REQUIRED"),
+            "empty-role" => Some("ROLE_REQUIRED"),
+            "duplicate-create" | "duplicate-update" => Some("USERNAME_TAKEN"),
+            "unknown-role" => Some("ROLE_NOT_FOUND"),
+            "forbidden-list" | "forbidden-get" | "forbidden-role" => Some("AUTH_FORBIDDEN"),
+            "delete-last-admin" => Some("SELF_DELETION"),
+            _ => None,
+        };
+        if let Some(expected_code) = expected_code {
+            let code = value.as_object_mut().unwrap().remove("code");
+            assert_eq!(code, Some(json!(expected_code)), "{}", case["id"]);
+        }
         // Account policy rejects all self-deletion, including the last admin.
         // Preserve and verify the independent Go observation rather than rewriting it.
         if case["id"] == "delete-last-admin" {
@@ -1751,4 +1769,90 @@ fn browser_import_review_has_no_resource_writes_until_explicit_valid_create() {
     assert_eq!(denied.status(), 403);
     assert_eq!(groups(), all);
     process.stop();
+}
+
+#[test]
+fn account_display_preferences_survive_restart_and_browser_changes_without_session_revocation() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = endpoint(&mut process);
+    let client = browser();
+    let session = setup(&client, &base);
+    let defaults =
+        json!({"language":null,"format_locale":null,"time_zone":null,"show_utc_offset":true});
+    assert_eq!(session["preferences"], defaults);
+    let chosen = json!({"language":"de","format_locale":"zh-CN","time_zone":"Europe/Berlin","show_utc_offset":false});
+    let send = |body: &Value, token: &str| {
+        client
+            .put(format!("{base}/api/user-preferences"))
+            .header("origin", &base)
+            .header("x-ruphish-client", "browser")
+            .header("x-csrf-token", token)
+            .json(body)
+            .send()
+            .unwrap()
+    };
+    let token = session["csrf_token"].as_str().unwrap();
+    assert_eq!(send(&chosen, "invalid").status(), 403);
+    assert_eq!(bootstrap(&client, &base)["preferences"], defaults);
+    let response = send(&chosen, token);
+    assert_eq!(response.status(), 200, "{}", response.text().unwrap());
+    assert_eq!(bootstrap(&client, &base)["preferences"], chosen);
+    for invalid in [
+        json!({"show_utc_offset":"false"}),
+        json!({"show_utc_offset":null}),
+        json!({"language":"zh","format_locale":null,"time_zone":null}),
+        json!({"language":"de","format_locale":"bad_locale","time_zone":null}),
+        json!({"language":"de","format_locale":"zh-CN","time_zone":"bad-zone"}),
+        json!({"language":"en","format_locale":null,"time_zone":null,"user_id":2}),
+    ] {
+        assert_eq!(send(&invalid, token).status(), 400);
+        assert_eq!(bootstrap(&client, &base)["preferences"], chosen);
+    }
+    assert_eq!(
+        browser()
+            .get(format!("{base}/api/user-preferences"))
+            .header("x-ruphish-client", "browser")
+            .send()
+            .unwrap()
+            .status(),
+        401
+    );
+    let second = browser();
+    assert_eq!(
+        sign_in(&second, &base, "admin", "established-admin-password").status(),
+        200
+    );
+    assert_eq!(bootstrap(&second, &base)["preferences"], chosen);
+    process.stop();
+    let mut restarted = Process::start(directory.path(), "admin");
+    let base = endpoint(&mut restarted);
+    assert_eq!(
+        bootstrap(&client, &base)["preferences"],
+        chosen,
+        "existing session survives preference updates and restart"
+    );
+    let session = bootstrap(&second, &base);
+    let response = second
+        .put(format!("{base}/api/user-preferences"))
+        .header("origin", &base)
+        .header("x-ruphish-client", "browser")
+        .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
+        .json(&defaults)
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(
+        bootstrap(&client, &base)["preferences"],
+        defaults,
+        "clearing stores null, not a snapshot of browser defaults"
+    );
+    let row = &database(
+        directory.path(),
+        "SELECT language,format_locale,time_zone FROM ruphish_user_preferences WHERE user_id=1",
+    )[0];
+    for field in ["language", "format_locale", "time_zone"] {
+        assert!(row.get::<Option<String>, _>(field).is_none());
+    }
+    restarted.stop();
 }

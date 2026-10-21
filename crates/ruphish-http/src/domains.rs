@@ -13,6 +13,7 @@ use axum::{
 };
 use ruphish_application::domains as app;
 use ruphish_contracts::domains as wire;
+use ruphish_contracts::errors::ErrorCode;
 
 fn now() -> i64 {
     ruphish_application::datetime::now().as_second()
@@ -100,8 +101,13 @@ async fn read(context: Context, Path(id): Path<i64>) -> Result<Response, Rejecti
 }
 async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
-    let input: wire::Edit = wire::decode_request(&body)
-        .map_err(|_| failure(StatusCode::BAD_REQUEST, "domain_invalid_request"))?;
+    let input: wire::Edit = wire::decode_request(&body).map_err(|_| {
+        failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::RequestInvalid,
+            "domain_invalid_request",
+        )
+    })?;
     let result = context
         .domains()
         .save(
@@ -155,6 +161,7 @@ async fn delete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejec
         .ok_or_else(|| {
             failure(
                 StatusCode::PRECONDITION_REQUIRED,
+                ErrorCode::RevisionRequired,
                 "domain_revision_required",
             )
         })?;

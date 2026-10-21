@@ -2,6 +2,9 @@
 // No FormData, field maps, entered values or value-derived strings cross the network.
 const passwordControls = new WeakSet(document.querySelectorAll('input[type="password"]'));
 const pending = new WeakMap();
+const candidates = [document.documentElement.lang, ...(navigator.languages || [navigator.language])];
+const language = candidates.map(value => (value || '').split('-')[0].toLowerCase()).find(value => Object.hasOwn(messages, value)) || 'en';
+const text = messages[language];
 document.addEventListener('submit', async (event) => {
     event.preventDefault();
     const form = event.target;
@@ -21,7 +24,7 @@ document.addEventListener('submit', async (event) => {
     }
     attempt.busy = true;
     const notice = attempt.notice;
-    notice.textContent = 'Submitting…';
+    notice.textContent = text.submitting;
     // Cover both response headers and body, allowing time beyond the server's 10s
     // deadline. A timeout means unconfirmed, not necessarily unrecorded.
     const controller = new AbortController();
@@ -36,10 +39,10 @@ document.addEventListener('submit', async (event) => {
         const result = await response.json();
         if (controller.signal.aborted || result?.success !== true) throw new Error('submission_unconfirmed');
         attempt.done = true;
-        notice.textContent = 'Submitted.';
+        notice.textContent = text.submitted;
         if (typeof result.redirect === 'string') location.assign(result.redirect);
     } catch {
-        notice.textContent = 'Submission could not be confirmed. Please try again.';
+        notice.textContent = text.unconfirmed;
     } finally {
         clearTimeout(timeout);
         attempt.busy = false;

@@ -9,6 +9,7 @@ use axum::{
     routing::get,
 };
 use ruphish_application::resources::{self as app, Content, Kind, Resource};
+use ruphish_contracts::errors::ErrorCode;
 use ruphish_contracts::legacy as wire;
 use serde_json::{Value, json};
 
@@ -51,8 +52,13 @@ async fn editor_identity(
     Ok(user.identity)
 }
 fn parse<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T, Rejection> {
-    serde_json::from_slice(body)
-        .map_err(|_| failure(StatusCode::BAD_REQUEST, "Invalid JSON structure"))
+    serde_json::from_slice(body).map_err(|_| {
+        failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::RequestInvalid,
+            "Invalid JSON structure",
+        )
+    })
 }
 fn recipients(rows: &[app::Recipient]) -> Value {
     json!(rows.iter().map(|r|json!({"email":r.email,"first_name":r.first_name,"last_name":r.last_name,"position":r.position})).collect::<Vec<_>>())
@@ -63,18 +69,23 @@ async fn import_group(
 ) -> Result<Response, Rejection> {
     editor_identity(&context).await?;
     let mut targets = Vec::new();
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|_| failure(StatusCode::BAD_REQUEST, "Invalid CSV upload"))?
-    {
+    while let Some(field) = multipart.next_field().await.map_err(|_| {
+        failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::CsvInvalid,
+            "Invalid CSV upload",
+        )
+    })? {
         if field.file_name().is_none() {
             continue;
         }
-        let bytes = field
-            .bytes()
-            .await
-            .map_err(|_| failure(StatusCode::BAD_REQUEST, "Cannot read CSV upload"))?;
+        let bytes = field.bytes().await.map_err(|_| {
+            failure(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::CsvInvalid,
+                "Cannot read CSV upload",
+            )
+        })?;
         let report = context
             .resources()
             .tools()
@@ -83,6 +94,7 @@ async fn import_group(
         if !report.errors.is_empty() {
             return Err(failure(
                 StatusCode::BAD_REQUEST,
+                ErrorCode::CsvRowsInvalid,
                 "CSV contains invalid rows. Use import review to inspect them.",
             ));
         }
@@ -105,7 +117,7 @@ async fn review_group(context: Context, body: Bytes) -> Result<Response, Rejecti
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &json!({"targets":recipients(&report.recipients),"columns":report.columns,"errors":report.errors.iter().map(|e|json!({"row":e.row,"message":e.message,"fields":e.fields})).collect::<Vec<_>>()}),
+        &json!({"targets":recipients(&report.recipients),"columns":report.columns,"errors":report.errors.iter().map(|e|json!({"row":e.row,"code": match e.kind { app::RowErrorKind::Encoding => ErrorCode::CsvRowEncoding, app::RowErrorKind::Columns => ErrorCode::CsvRowColumns, app::RowErrorKind::Email => ErrorCode::CsvRowEmail },"message":e.message,"fields":e.fields})).collect::<Vec<_>>()}),
         None,
     )
 }
@@ -225,7 +237,11 @@ async fn send_test(context: Context, body: Bytes) -> Result<Response, Rejection>
         )
         .await
         .map_err(|failure_value| match failure_value {
-            app::Error::NotFound(_) => failure(StatusCode::BAD_REQUEST, &failure_value.to_string()),
+            app::Error::NotFound(_) => failure(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::DeliveryFailed,
+                &failure_value.to_string(),
+            ),
             other => error(other),
         })?;
     response(
@@ -255,7 +271,23 @@ fn kind(context: &Context) -> Result<Kind, Rejection> {
         Some("templates") => Ok(Kind::Template),
         Some("pages") => Ok(Kind::Page),
         Some("smtp") => Ok(Kind::Profile),
-        _ => Err(failure(StatusCode::NOT_FOUND, "Resource not found")),
+        _ => Err(failure(
+            StatusCode::NOT_FOUND,
+            ErrorCode::ResourceNotFound,
+            "Resource not found",
+        )),
+    }
+}
+pub(crate) fn resource_code(error: &app::Error) -> ErrorCode {
+    match error {
+        app::Error::Policy(error) => crate::auth::policy_code(error),
+        app::Error::NotFound(_) => ErrorCode::ResourceNotFound,
+        app::Error::Conflict(_) => ErrorCode::ResourceNameTaken,
+        app::Error::Changed => ErrorCode::ResourceChanged,
+        app::Error::InUse => ErrorCode::ResourceInUse,
+        app::Error::Invalid(_) => ErrorCode::ResourceInvalid,
+        app::Error::Delivery(_) => ErrorCode::DeliveryFailed,
+        app::Error::Storage(_) | app::Error::Internal => ErrorCode::InternalError,
     }
 }
 pub(crate) fn error(error: app::Error) -> Rejection {
@@ -272,16 +304,20 @@ pub(crate) fn error(error: app::Error) -> Rejection {
         app::Error::Policy(_) => StatusCode::FORBIDDEN,
         app::Error::Invalid(_) => StatusCode::BAD_REQUEST,
     };
-    failure(status, &error.to_string())
+    failure(status, resource_code(&error), &error.to_string())
 }
 fn expected(context: &Context) -> Result<Option<String>, Rejection> {
     context
         .headers
         .get(header::IF_MATCH)
         .map(|h| {
-            let value = h
-                .to_str()
-                .map_err(|_| failure(StatusCode::BAD_REQUEST, "Invalid If-Match header"))?;
+            let value = h.to_str().map_err(|_| {
+                failure(
+                    StatusCode::BAD_REQUEST,
+                    ErrorCode::RevisionRequired,
+                    "Invalid If-Match header",
+                )
+            })?;
             value
                 .strip_prefix('"')
                 .and_then(|v| v.strip_suffix('"'))
@@ -290,6 +326,7 @@ fn expected(context: &Context) -> Result<Option<String>, Rejection> {
                 .ok_or_else(|| {
                     failure(
                         StatusCode::BAD_REQUEST,
+                        ErrorCode::RevisionRequired,
                         "Use the ETag returned when loading this resource",
                     )
                 })
@@ -343,7 +380,13 @@ pub(crate) fn encode(r: &Resource) -> Value {
     value
 }
 fn decode(kind: Kind, bytes: &[u8]) -> Result<Resource, Rejection> {
-    let invalid = |_| failure(StatusCode::BAD_REQUEST, "Invalid JSON structure");
+    let invalid = |_| {
+        failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::RequestInvalid,
+            "Invalid JSON structure",
+        )
+    };
     match kind {
         Kind::Group => {
             let v: wire::Group = serde_json::from_slice(bytes).map_err(invalid)?;
@@ -505,6 +548,7 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
             } else {
                 StatusCode::BAD_REQUEST
             },
+            ErrorCode::ResourceIdMismatch,
             match kind {
                 Kind::Group => "Error: /:id and group_id mismatch",
                 Kind::Template => "Error: /:id and template_id mismatch",

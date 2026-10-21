@@ -2,7 +2,7 @@ use leptos::{html, prelude::*};
 
 pub(crate) struct Tab {
     pub id: &'static str,
-    pub label: &'static str,
+    pub label: Signal<String>,
     pub disabled: Signal<bool>,
 }
 
@@ -10,7 +10,7 @@ pub(crate) struct Tab {
 /// remain mounted so changing tabs never destroys the user's draft.
 #[component]
 pub(crate) fn Tabs(
-    label: &'static str,
+    #[prop(into)] label: Signal<String>,
     tabs: Vec<Tab>,
     selected: RwSignal<usize>,
 ) -> impl IntoView {
@@ -41,7 +41,7 @@ pub(crate) fn Tabs(
         });
     };
     view! {
-        <div class="content-tabs" role="tablist" aria-label=label on:keydown=keyboard>
+        <div class="content-tabs" role="tablist" aria-label=move || label.get() on:keydown=keyboard>
             {tabs.into_iter().enumerate().map(|(index, tab)| {
                 let node = nodes.with_value(|nodes| nodes[index]);
                 view! { <button node_ref=node id=format!("{}-tab", tab.id) type="button" role="tab"
@@ -49,7 +49,7 @@ pub(crate) fn Tabs(
                     aria-selected=move || (selected.get() == index).to_string()
                     tabindex=move || if selected.get() == index { 0 } else { -1 }
                     disabled=move || tab.disabled.get()
-                    on:click=move |_| selected.set(index)>{tab.label}</button> }
+                    on:click=move |_| selected.set(index)>{move || tab.label.get()}</button> }
             }).collect_view()}
         </div>
     }

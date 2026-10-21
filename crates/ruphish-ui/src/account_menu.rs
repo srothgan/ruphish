@@ -2,6 +2,7 @@
 use super::{Api, Message};
 use crate::shared::components::{ActionButton, ButtonStyle};
 use leptos::{html, prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
+use ruphish_ui::tr;
 use wasm_bindgen::{JsCast, prelude::*};
 
 #[wasm_bindgen(module = "/web/account-menu.mjs")]
@@ -12,7 +13,14 @@ extern "C" {
     pub(crate) async fn copy_text(text: &str) -> Result<(), JsValue>;
 }
 
-pub(super) fn menu(api: Api, token: String, username: String, role: String) -> impl IntoView {
+pub(super) fn menu(
+    api: Api,
+    token: String,
+    username: String,
+    role: Signal<String>,
+) -> impl IntoView {
+    let i18n = ruphish_ui::localization::use_i18n();
+
     let trigger = NodeRef::<html::Button>::new();
     let panel = NodeRef::<html::Div>::new();
     let remove = StoredValue::new_local(None::<js_sys::Function>);
@@ -59,9 +67,9 @@ pub(super) fn menu(api: Api, token: String, username: String, role: String) -> i
             <span>{username.clone()}</span><svg class="account-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m7 14 5-5 5 5"/></svg>
         </button>
         <div node_ref=panel id="account-popover" class="account-popover" role="dialog" aria-labelledby="account-popover-name" hidden>
-            <div class="account-popover-identity"><strong id="account-popover-name">{username}</strong><span>{role}</span></div>
-            <a href="/settings">"My account"</a>
-            <ActionButton style=ButtonStyle::Ghost disabled=Signal::derive(move||busy.get()) on_click=logout>{move||if busy.get(){"Signing out…"}else{"Sign out"}}</ActionButton>
+            <div class="account-popover-identity"><strong id="account-popover-name">{username}</strong><span>{move || role.get()}</span></div>
+            <a href="/settings">{tr!(ui.my_account)}</a>
+            <ActionButton style=ButtonStyle::Ghost disabled=Signal::derive(move||busy.get()) on_click=logout>{move||if busy.get(){leptos_i18n::t_string!(i18n, ui.signing_out)}else{leptos_i18n::t_string!(i18n, ui.sign_out_2)}}</ActionButton>
             {message.view()}
         </div>
     </div>}

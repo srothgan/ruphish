@@ -62,6 +62,7 @@ mod tests {
     fn session() -> BrowserSession {
         BrowserSession {
             csrf_token: "first-token".into(),
+            preferences: Default::default(),
             actor: None,
             user: Some(BrowserUser {
                 id: 1,
@@ -98,6 +99,8 @@ mod tests {
         monitor.observe(&signed_in);
         let mut refreshed = signed_in.clone();
         refreshed.csrf_token = "new-masked-token".into();
+        refreshed.preferences.language = Some("de".into());
+        refreshed.preferences.time_zone = Some("Asia/Shanghai".into());
         monitor.observe(&refreshed);
         assert_eq!(monitor.action(), SessionAction::Continue);
         let mut logged_out = monitor.clone();

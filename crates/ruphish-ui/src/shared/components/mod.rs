@@ -22,5 +22,7 @@ mod lists;
 pub(crate) use lists::*;
 mod multi_select;
 pub(crate) use multi_select::*;
+mod search_select;
+pub(crate) use search_select::*;
 mod resource_actions;
 pub(crate) use resource_actions::*;

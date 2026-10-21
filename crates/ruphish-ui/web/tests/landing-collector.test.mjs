@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 
-const collector = await readFile(new URL('../../../ruphish-adapters/src/landing-collector.js', import.meta.url), 'utf8');
+const messages = await readFile(new URL('../../../ruphish-adapters/src/landing-locales.json', import.meta.url), 'utf8');
+const source = await readFile(new URL('../../../ruphish-adapters/src/landing-collector.js', import.meta.url), 'utf8');
+const collector = `const messages=${messages};${source}`;
 
 function page() {
     const dom = new JSDOM(`<form id="training"><input name="username" value="username-canary"><input id="pw" name="password" type="password" value="password-canary"><input name="otp" value="otp-canary"><textarea name="notes">notes-canary</textarea><button name="button" value="button-canary">Continue</button></form><input form="training" type="password" value="associated-canary">`, { url: 'https://training.example.test/', runScripts: 'outside-only' });
@@ -174,6 +176,29 @@ test('an expired response cannot mark success and an invalid acknowledgement rem
         assert.equal(form.querySelector('[role="status"]').textContent, 'Submitted.');
         assert.equal(new Set(requests.map(request => request.event_id)).size, 1);
     } finally {
+        dom.window.close();
+    }
+});
+
+test('public feedback uses the document language, then browser language, then English without changing authored content', async () => {
+    for (const [documentLanguage, languages, expected] of [
+        ['de-DE', ['en-US'], 'Übermittelt.'],
+        ['en', ['de-DE'], 'Submitted.'],
+        ['', ['de-AT'], 'Übermittelt.'],
+        ['fr', ['zh-CN'], 'Submitted.'],
+    ]) {
+        const dom = page();
+        const {window} = dom;
+        window.document.documentElement.lang = documentLanguage;
+        Object.defineProperty(window.navigator, 'languages', {value: languages});
+        window.fetch = async () => ({ok: true, json: async () => ({success: true})});
+        window.eval(`(()=>{const endpoint='https://training.example.test/'; ${collector}})()`);
+        const form = window.document.querySelector('form');
+        form.dispatchEvent(new window.Event('submit', {bubbles: true, cancelable: true}));
+        await new Promise(resolve => setImmediate(resolve));
+        assert.equal(form.querySelector('[role="status"]').textContent, expected);
+        assert.equal(form.querySelector('button').textContent, 'Continue');
+        assert.equal(form.querySelector('input').value, 'username-canary');
         dom.window.close();
     }
 });

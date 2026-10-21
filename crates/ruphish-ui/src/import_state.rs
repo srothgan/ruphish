@@ -97,13 +97,33 @@ pub fn parse_json(source: &str) -> Result<Value, ImportError> {
 #[derive(Clone, Debug)]
 pub struct ImportReview {
     /// Persistent explanations of imported and omitted content.
-    pub notes: Vec<String>,
+    pub notes: Vec<ImportNote>,
     /// CSV errors retained for inspection and download.
     pub rejected_rows: Vec<Value>,
     /// Lossy imports need explicit acceptance before creation.
     pub requires_acknowledgement: bool,
     /// The user's acceptance of the reported omissions.
     pub acknowledged: bool,
+}
+
+/// Import facts rendered in the currently selected language by the UI.
+#[derive(Clone, Debug)]
+pub enum ImportNote {
+    /// The imported resource still needs review and creation.
+    Unsaved,
+    /// Accepted, rejected and duplicate CSV row counts.
+    Csv {
+        /// Number of accepted recipients.
+        loaded: usize,
+        /// Number of rejected rows.
+        rejected: usize,
+        /// Number of omitted duplicate addresses.
+        duplicates: usize,
+    },
+    /// Email import excludes attachments and the visible sender.
+    Email,
+    /// HTML import excludes other resource settings.
+    Html,
 }
 
 impl ImportReview {
@@ -169,9 +189,7 @@ pub fn prepare_creation(
         }
     }
     let mut review = ImportReview {
-        notes: vec![
-            "Loaded into an unsaved draft. Review the fields, then create the resource.".into(),
-        ],
+        notes: vec![ImportNote::Unsaved],
         rejected_rows: Vec::new(),
         requires_acknowledgement: false,
         acknowledged: false,
@@ -191,16 +209,17 @@ pub fn prepare_creation(
         if unique.is_empty() {
             return Err(ImportError::NoValidRecipients);
         }
-        review.notes.push(format!("{} recipients loaded; {} rows rejected; {duplicates} duplicate addresses omitted. The first accepted row for each address is kept.", unique.len(), review.rejected_rows.len()));
+        review.notes.push(ImportNote::Csv {
+            loaded: unique.len(),
+            rejected: review.rejected_rows.len(),
+            duplicates,
+        });
         review.requires_acknowledgement = duplicates > 0 || !review.rejected_rows.is_empty();
         value["targets"] = json!(unique);
     } else if format == "email" {
-        review.notes.push("Only the subject, HTML and plain text were imported. Attachments and the visible From address were not imported; add them below if needed.".into());
+        review.notes.push(ImportNote::Email);
     } else if matches!(format, "html" | "site") {
-        review.notes.push(
-            "Only HTML content was imported. Review the name and other settings before creating."
-                .into(),
-        );
+        review.notes.push(ImportNote::Html);
     }
     // Drop identity before decoding so an irrelevant old timestamp/ID cannot block an import.
     if let Some(fields) = value.as_object_mut() {

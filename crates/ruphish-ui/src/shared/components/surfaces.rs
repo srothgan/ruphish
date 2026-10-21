@@ -6,9 +6,9 @@ use leptos::prelude::*;
 pub(crate) fn Card(
     children: Children,
     #[prop(default = "")] class: &'static str,
-    #[prop(optional)] label: Option<&'static str>,
+    #[prop(into, optional)] label: Signal<String>,
 ) -> impl IntoView {
-    view! { <section class=format!("card {class}") aria-label=label>{children()}</section> }
+    view! { <section class=format!("card {class}") aria-label=move || (!label.get().is_empty()).then(|| label.get())>{children()}</section> }
 }
 
 /// A single parent link, rather than an invented multi-level hierarchy.

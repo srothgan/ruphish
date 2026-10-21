@@ -118,7 +118,8 @@ pub fn render(source: &str, endpoint: Option<&str>) -> Result<Document, Error> {
             .map_err(|_| Error::Internal)?
             .replace('<', "\\u003c");
         html.push_str(&format!(
-            "<script nonce=\"{nonce}\">(()=>{{const endpoint={config};{} }})();</script>",
+            "<script nonce=\"{nonce}\">(()=>{{const endpoint={config};const messages={};{} }})();</script>",
+            include_str!("landing-locales.json"),
             include_str!("landing-collector.js")
         ));
     }

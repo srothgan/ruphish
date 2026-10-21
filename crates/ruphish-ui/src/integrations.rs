@@ -10,6 +10,7 @@ use crate::{
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use leptos_router::hooks::{use_navigate, use_params_map};
 use ruphish_ui::view_tasks::ViewTasks;
+use ruphish_ui::{tr, trs};
 use serde_json::{Value, json};
 
 #[derive(Clone, Copy)]
@@ -18,6 +19,13 @@ pub(super) enum Kind {
     Mailbox,
 }
 impl Kind {
+    fn back_label(self) -> &'static str {
+        let i18n = ruphish_ui::localization::use_i18n();
+        match self {
+            Self::Webhook => leptos_i18n::t_string!(i18n, ui.back_to_webhooks),
+            Self::Mailbox => leptos_i18n::t_string!(i18n, ui.back_to_mailboxes),
+        }
+    }
     fn path(self) -> &'static str {
         match self {
             Self::Webhook => "/webhooks",
@@ -25,34 +33,50 @@ impl Kind {
         }
     }
     fn title(self) -> &'static str {
+        let i18n = ruphish_ui::localization::use_i18n();
+
         match self {
-            Self::Webhook => "Webhooks",
-            Self::Mailbox => "Reporting mailboxes",
+            Self::Webhook => leptos_i18n::t_string!(i18n, ui.webhooks),
+            Self::Mailbox => leptos_i18n::t_string!(i18n, ui.reporting_mailboxes),
         }
     }
     fn singular(self) -> &'static str {
+        let i18n = ruphish_ui::localization::use_i18n();
+
         match self {
-            Self::Webhook => "webhook",
-            Self::Mailbox => "reporting mailbox",
+            Self::Webhook => leptos_i18n::t_string!(i18n, ui.webhook),
+            Self::Mailbox => leptos_i18n::t_string!(i18n, ui.reporting_mailbox_2),
         }
     }
     fn plural(self) -> &'static str {
+        let i18n = ruphish_ui::localization::use_i18n();
+
         match self {
-            Self::Webhook => "webhooks",
-            Self::Mailbox => "reporting mailboxes",
+            Self::Webhook => leptos_i18n::t_string!(i18n, ui.webhooks),
+            Self::Mailbox => leptos_i18n::t_string!(i18n, ui.reporting_mailboxes_2),
         }
     }
     fn empty_title(self) -> &'static str {
+        let i18n = ruphish_ui::localization::use_i18n();
+
         match self {
-            Self::Webhook => "No webhooks yet",
-            Self::Mailbox => "No reporting mailboxes yet",
+            Self::Webhook => leptos_i18n::t_string!(i18n, ui.no_webhooks_yet),
+            Self::Mailbox => leptos_i18n::t_string!(i18n, ui.no_reporting_mailboxes_yet),
         }
     }
     fn empty_guidance(self) -> &'static str {
+        let i18n = ruphish_ui::localization::use_i18n();
+
         match self {
-            Self::Webhook => "Add a webhook endpoint to receive campaign events as they happen.",
+            Self::Webhook => leptos_i18n::t_string!(
+                i18n,
+                ui.add_a_webhook_endpoint_to_receive_campaign_events_as_they_happen
+            ),
             Self::Mailbox => {
-                "Connect a reporting mailbox to correlate the messages recipients report."
+                leptos_i18n::t_string!(
+                    i18n,
+                    ui.connect_a_reporting_mailbox_to_correlate_the_messages_recipients_report
+                )
             }
         }
     }
@@ -65,6 +89,8 @@ impl Kind {
 }
 
 pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
+    let i18n = ruphish_ui::localization::use_i18n();
+
     let rows = RwSignal::new(Vec::<Value>::new());
     let loading = RwSignal::new(false);
     let loaded = RwSignal::new(false);
@@ -80,7 +106,7 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
         loading.set(false);
         failed.set(false);
         rows.update(|rows| rows.retain(|row| row["id"].as_i64() != Some(id)));
-        message.status("Resource deleted.".into());
+        message.status(leptos_i18n::t_string!(i18n, ui.resource_deleted).to_owned());
     });
     Effect::new(move |_| {
         refresh.get();
@@ -101,10 +127,7 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
                         message.clear();
                     } else {
                         failed.set(true);
-                        message.error(
-                            "The server returned an invalid resource list. Refresh to try again."
-                                .into(),
-                        );
+                        message.error(leptos_i18n::t_string!(i18n, ui.the_server_returned_an_invalid_resource_list_refresh_to_try_again).to_owned());
                     }
                 }
                 Err(error) => {
@@ -124,29 +147,29 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
     });
     view! {
         <ManagementPage>
-            <PageHeader title=kind.title() subtitle=if kind.webhook() { "Administrator-managed event notifications. Enabled endpoints receive events across campaigns." } else { "Owner-scoped IMAP resources that correlate reported campaign messages without retaining email content." }>
-                <ActionButton on_click=move |_| refresh.update(|value| *value += 1) busy=Signal::derive(move || loading.get().to_string())>"Refresh"</ActionButton>
-                {can_edit.then(|| view! { <ActionLink style=ButtonStyle::Primary href=format!("{}/new", kind.path())>{format!("Create {}", kind.singular())}</ActionLink> })}
+            <PageHeader title=Signal::derive(move || kind.title().to_owned()) subtitle=Signal::derive(move || (if kind.webhook() { leptos_i18n::t_string!(i18n, ui.administrator_managed_event_notifications_enabled_endpoints_receive_events_acros) } else { leptos_i18n::t_string!(i18n, ui.owner_scoped_imap_resources_that_correlate_reported_campaign_messages_without_re) }).to_owned())>
+                <ActionButton on_click=move |_| refresh.update(|value| *value += 1) busy=Signal::derive(move || loading.get().to_string())>{tr!(ui.refresh)}</ActionButton>
+                {can_edit.then(|| view! { <ActionLink style=ButtonStyle::Primary href=format!("{}/new", kind.path())>{leptos_i18n::t!(i18n, messages.create_arg0, arg0 = (kind.singular()).to_string())}</ActionLink> })}
             </PageHeader>
             {message.view()}
             <ResourceDeleteDialog deletion=deletion api=api token=token on_deleted=deleted/>
-            <ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) noun=kind.plural()/>
-            <Show when=move || loading.get()><p role="status">{format!("Loading {}…", kind.plural())}</p></Show>
-            <DataTable label=kind.title() empty=Signal::derive(move || visible.with(Vec::is_empty)) headers=vec!["Name", "Destination", "Enabled", "Status", "Actions"]>
+            <ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) noun=Signal::derive(move || kind.plural().to_owned())/>
+            <Show when=move || loading.get()><p role="status">{leptos_i18n::t!(i18n, messages.loading_arg0, arg0 = (kind.plural()).to_string())}</p></Show>
+            <DataTable label=Signal::derive(move || kind.title().to_owned()) empty=Signal::derive(move || visible.with(Vec::is_empty)) headers=vec![trs!(ui.name), trs!(ui.destination), trs!(ui.enabled), trs!(ui.status), trs!(ui.actions)]>
                 {move || visible.get().into_iter().map(|row| {
                     let href = format!("{}/{}", kind.path(), row["id"]);
-                    let target = DeleteTarget {id:row["id"].as_i64().unwrap_or(0),name:text(&row,"name"),path:format!("{}/{}",kind.api(),row["id"]),revision:row["revision"].as_i64().map(|v|v.to_string()),description:"This removes the configuration and its processing history. Already dispatched requests cannot be recalled."};
+                    let target = DeleteTarget {id:row["id"].as_i64().unwrap_or(0),name:text(&row,"name"),path:format!("{}/{}",kind.api(),row["id"]),revision:row["revision"].as_i64().map(|v|v.to_string()),description:leptos_i18n::t_string!(i18n, ui.this_removes_the_configuration_and_its_processing_history_already_dispatched_req)};
                     view! {
                         <tr><th scope="row"><a href=href.clone()>{text(&row, "name")}</a></th>
                             <td>{text(&row, if kind.webhook() { "url" } else { "host" })}</td>
-                            <td>{if row[if kind.webhook() { "is_active" } else { "enabled" }].as_bool().unwrap_or(false) { "Yes" } else { "No" }}</td>
-                            <td>{if row["running"] == true { "Checking".into() } else { text(&row, "code") }}</td>
+                            <td>{if row[if kind.webhook() { "is_active" } else { "enabled" }].as_bool().unwrap_or(false) { leptos_i18n::t_string!(i18n, ui.yes) } else { leptos_i18n::t_string!(i18n, ui.no) }}</td>
+                            <td>{if row["running"] == true { leptos_i18n::t_string!(i18n, ui.checking).into() } else { text(&row, "code") }}</td>
                             <td><ResourceActions view_href=href.clone() edit_href=format!("{href}/edit") can_edit=can_edit size=ControlSize::Small disabled=deletion.busy on_delete=Callback::new(move |()|deletion.select(target.clone()))/></td>
                         </tr>
                     }
                 }).collect_view()}
             </DataTable>
-            <ListEmptyState ready=Signal::derive(move || loaded.get() && !loading.get() && !failed.get()) count=Signal::derive(move || visible.with(Vec::len)) search=search title=kind.empty_title() guidance=kind.empty_guidance()/>
+            <ListEmptyState ready=Signal::derive(move || loaded.get() && !loading.get() && !failed.get()) count=Signal::derive(move || visible.with(Vec::len)) search=search title=Signal::derive(move || kind.empty_title().to_owned()) guidance=Signal::derive(move || kind.empty_guidance().to_owned())/>
         </ManagementPage>
     }
 }
@@ -160,15 +183,17 @@ pub(super) fn page(api: Api, token: String, kind: Kind, editing: bool) -> impl I
             else if let Ok(id) = id.parse::<i64>() {
                 if editing { form(api, token.get_value(), kind, Some(id)).into_any() }
                 else { detail(api, token.get_value(), kind, id).into_any() }
-            } else { view! { <p role="alert">"Invalid resource address"</p> }.into_any() }
+            } else { view! { <p role="alert">{tr!(ui.invalid_resource_address)}</p> }.into_any() }
         }/>
     }
 }
 
+// TODO: Evaluate consolidating resource and integration field helpers through the
+// shared form components, keeping feature-specific validation and draft state local.
 fn field(
     draft: RwSignal<Value>,
     key: &'static str,
-    label: &'static str,
+    label: Signal<String>,
     input_type: &'static str,
 ) -> impl IntoView {
     view! {
@@ -181,7 +206,7 @@ fn field(
     }
 }
 
-fn checkbox(draft: RwSignal<Value>, key: &'static str, label: &'static str) -> impl IntoView {
+fn checkbox(draft: RwSignal<Value>, key: &'static str, label: Signal<String>) -> impl IntoView {
     view! {
         <Checkbox label=label checked=Signal::derive(move || draft.get()[key].as_bool().unwrap_or(false))
             on_toggle=Callback::new(move |value| draft.update(|draft| draft[key] = json!(value)))/>
@@ -214,6 +239,8 @@ fn edit_value(kind: Kind, value: &Value) -> Value {
 }
 
 fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
+    let i18n = ruphish_ui::localization::use_i18n();
+
     let initial = if kind.webhook() {
         json!({"name":"","url":"","is_active":true,"revision":null})
     } else {
@@ -222,6 +249,8 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
     let draft = RwSignal::new(initial.clone());
     let baseline = RwSignal::new(initial);
     let loaded = RwSignal::new(id.is_none());
+    let loading = RwSignal::new(id.is_some());
+    let load_failed = RwSignal::new(false);
     let has_saved_secret = RwSignal::new(false);
     let busy = RwSignal::new(false);
     let refresh = RwSignal::new(0u64);
@@ -236,6 +265,8 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
     if let Some(id) = id {
         Effect::new(move |_| {
             refresh.get();
+            loading.set(true);
+            load_failed.set(false);
             spawn_local(async move {
                 match api.get(&format!("{}/{id}", kind.api())).await {
                     Ok(value) => {
@@ -254,8 +285,12 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                         loaded.set(true);
                         message.clear();
                     }
-                    Err(error) => message.error(error),
+                    Err(error) => {
+                        load_failed.set(true);
+                        message.error(error);
+                    }
                 }
+                loading.set(false);
             });
         });
     }
@@ -303,48 +338,76 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
         });
     };
     view! {
-        <ManagementPage><BackLink href=kind.path()>{format!("Back to {}",kind.title().to_lowercase())}</BackLink><PageHeader title=format!("{} {}", if id.is_some() { "Edit" } else { "Create" }, kind.singular())/>
+        <ManagementPage><BackLink href=kind.path()>{move || kind.back_label()}</BackLink><PageHeader status=true title=Signal::derive(move || {
+                let name = text(&draft.get(), "name");
+                if !name.is_empty() { name } else if kind.webhook() {
+                    leptos_i18n::t_string!(i18n, ui.new_webhook).to_owned()
+                } else { leptos_i18n::t_string!(i18n, ui.new_reporting_mailbox).to_owned() }
+            }) subtitle=Signal::derive(move || {
+                if busy.get() { leptos_i18n::t_string!(i18n, ui.saving) }
+                else if loading.get() { leptos_i18n::t_string!(i18n, ui.loading_resource) }
+                else if load_failed.get() { leptos_i18n::t_string!(i18n, ui.resource_could_not_be_loaded) }
+                else if !editable { leptos_i18n::t_string!(i18n, ui.read_only_access) }
+                else if draft.get() != baseline.get() { leptos_i18n::t_string!(i18n, ui.unsaved_changes) }
+                else if id.is_none() { leptos_i18n::t_string!(i18n, ui.not_saved_yet) }
+                else { leptos_i18n::t_string!(i18n, ui.no_unsaved_changes) }.to_owned()
+            })/>
+            <p class="resource-usage">{move || if kind.webhook() {
+                leptos_i18n::t_string!(i18n, ui.webhook_configuration_context)
+            } else { leptos_i18n::t_string!(i18n, ui.mailbox_configuration_context) }}</p>
             {message.view()}
-            <Show when=move || !loaded.get()><ActionButton on_click=move |_| refresh.update(|r| *r += 1)>"Retry loading"</ActionButton></Show>
-            <form on:submit=save><fieldset disabled=move || busy.get() || !loaded.get() || !editable>
+            <Show when=move || load_failed.get() && !loading.get()><ActionButton on_click=move |_| refresh.update(|r| *r += 1)>{tr!(ui.retry_loading)}</ActionButton></Show>
+            <form on:submit=save>
                 <FormFields disabled=Signal::derive(move || busy.get() || !loaded.get() || !editable)>
-                    {field(draft, "name", "Name", "text")}
+                    {field(draft, "name", trs!(ui.name), "text")}
                     {if kind.webhook() {
                         view! {
-                            {field(draft, "url", "Endpoint URL", "url")}
-                            <SecretField label="Signing secret" saved_hint="Leave empty to keep the saved secret."
+                            <section class="resource-section"><h2>{tr!(ui.connection)}</h2>
+                            {field(draft, "url", trs!(ui.endpoint_url), "url")}
+                            <SecretField label=trs!(ui.signing_secret) saved_hint=trs!(ui.leave_empty_to_keep_the_saved_secret)
                                 has_saved_value=has_saved_secret
                                 value=Signal::derive(move || text(&draft.get(), "secret"))
                                 on_input=Callback::new(move |value: String| draft.update(|draft| draft["secret"] = json!(value)))/>
-                            {checkbox(draft, "is_active", "Enabled")}
-                            <p>"Delivery is at least once. Receivers should deduplicate X-Ruphish-Event-ID. Saving configuration changes cancels pending deliveries for the previous configuration."</p>
+                            </section><section class="resource-section"><h2>{tr!(ui.delivery)}</h2>
+                            {checkbox(draft, "is_active", trs!(ui.enabled))}
+                            <p>{tr!(ui.webhook_delivery_guidance)}</p></section>
                         }.into_any()
                     } else {
                         view! {
-                            {field(draft, "host", "IMAP hostname", "text")}
-                            {field(draft, "port", "Port", "number")}
-                            {field(draft, "username", "Service account username", "text")}
-                            <SecretField label="Service account password" saved_hint="Leave empty to keep the saved password."
+                            <section class="resource-section"><h2>{tr!(ui.connection)}</h2><div class="resource-columns">
+                            {field(draft, "host", trs!(ui.imap_hostname), "text")}
+                            {field(draft, "port", trs!(ui.port), "number")}
+                            </div>
+                            {checkbox(draft, "tls", trs!(ui.use_implicit_tls_otherwise_starttls_is_required))}
+                            </section><section class="resource-section"><h2>{tr!(ui.service_account)}</h2><div class="resource-columns">
+                            {field(draft, "username", trs!(ui.service_account_username), "text")}
+                            <SecretField label=trs!(ui.service_account_password) saved_hint=trs!(ui.leave_empty_to_keep_the_saved_password)
                                 has_saved_value=has_saved_secret
                                 value=Signal::derive(move || text(&draft.get(), "password"))
                                 on_input=Callback::new(move |value: String| draft.update(|draft| draft["password"] = json!(value)))/>
-                            {field(draft, "folder", "Folder", "text")}
-                            {field(draft, "frequency", "Check interval in seconds (minimum 30)", "number")}
-                            {field(draft, "restrict_domain", "Optional sender-domain filter", "text")}
-                            {checkbox(draft, "tls", "Use implicit TLS (otherwise STARTTLS is required)")}
-                            {checkbox(draft, "delete_reported", "Delete successfully matched messages after processing")}
-                            {checkbox(draft, "enabled", "Enabled")}
-                            <p>"The first successful check starts monitoring new arrivals. Existing mail is left untouched. Message bodies are processed temporarily and never retained. The From-domain filter does not authenticate the reporter."</p>
+                            </div></section><section class="resource-section"><h2>{tr!(ui.monitoring)}</h2><div class="resource-columns">
+                            {field(draft, "folder", trs!(ui.folder), "text")}
+                            {field(draft, "frequency", trs!(ui.check_interval_in_seconds_minimum_30), "number")}
+                            {field(draft, "restrict_domain", trs!(ui.optional_sender_domain_filter), "text")}
+                            </div>
+                            {checkbox(draft, "delete_reported", trs!(ui.delete_successfully_matched_messages_after_processing))}
+                            {checkbox(draft, "enabled", trs!(ui.enabled))}
+                            <p>{tr!(ui.mailbox_processing_guidance)}</p></section>
                         }.into_any()
                     }}
                 </FormFields>
-                <FormFooter spread=true><ActionLink style=ButtonStyle::Ghost disabled=busy href=id.map_or_else(|| kind.path().into(), |id| format!("{}/{id}", kind.path()))>"Cancel changes"</ActionLink><SaveButton kind="submit" disabled=Signal::derive(move || busy.get() || !loaded.get() || !editable) label=Signal::derive(move || if busy.get() { "Saving\u{2026}".to_owned() } else if id.is_some() { "Save changes".to_owned() } else { format!("Create {}",kind.singular()) })/></FormFooter>
-            </fieldset></form>
+                <FormFooter spread=true><ActionButton style=ButtonStyle::Ghost disabled=busy on_click=move |_| {
+                    draft.set(baseline.get_untracked());
+                    navigate.with_value(|navigate| navigate(&id.map_or_else(|| kind.path().into(), |id| format!("{}/{id}", kind.path())), Default::default()));
+                }>{tr!(ui.cancel_changes)}</ActionButton><SaveButton kind="submit" disabled=Signal::derive(move || busy.get() || !loaded.get() || !editable) label=Signal::derive(move || if busy.get() { leptos_i18n::t_string!(i18n, ui.saving).to_owned() } else if id.is_some() { leptos_i18n::t_string!(i18n, ui.save_changes).to_owned() } else { leptos_i18n::t_string!(i18n, messages.create_arg0, arg0 = (kind.singular()).to_string()) })/></FormFooter>
+            </form>
         </ManagementPage>
     }
 }
 
 fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
+    let i18n = ruphish_ui::localization::use_i18n();
+
     let value = RwSignal::new(Value::Null);
     let refresh = RwSignal::new(0u64);
     let loading = RwSignal::new(false);
@@ -365,7 +428,16 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
             return;
         }
         let data = value.get_untracked();
-        deletion.select(DeleteTarget {id,name:text(&data,"name"),path:format!("{}/{id}",kind.api()),revision:data["revision"].as_i64().map(|v|v.to_string()),description:"This removes the configuration and its processing history. Already dispatched requests cannot be recalled."});
+        deletion.select(DeleteTarget {
+            id,
+            name: text(&data, "name"),
+            path: format!("{}/{id}", kind.api()),
+            revision: data["revision"].as_i64().map(|v| v.to_string()),
+            description: leptos_i18n::t_string!(
+                i18n,
+                ui.this_removes_the_configuration_and_its_processing_history_already_dispatched_req
+            ),
+        });
     });
     let editable = use_context::<ResourceAccess>().is_some_and(|access| access.0);
     Effect::new(move |_| {
@@ -413,9 +485,12 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                 Ok(_) => {
                     message.status(
                         if operation == "validate" {
-                            "Connection validated successfully."
+                            leptos_i18n::t_string!(i18n, ui.connection_validated_successfully)
                         } else {
-                            "Check queued. Results refresh automatically every five seconds."
+                            leptos_i18n::t_string!(
+                                i18n,
+                                ui.check_queued_results_refresh_automatically_every_five_seconds
+                            )
                         }
                         .into(),
                     );
@@ -428,42 +503,42 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
         });
     };
     view! {
-        <ManagementPage><BackLink href=kind.path()>{format!("Back to {}", kind.title().to_lowercase())}</BackLink>
+        <ManagementPage><BackLink href=kind.path()>{move || kind.back_label()}</BackLink>
             <PageHeader title=Signal::derive(move || text(&value.get(), "name"))>
-                <ActionButton on_click=move |_| refresh.update(|r| *r += 1) busy=Signal::derive(move || loading.get().to_string())>"Refresh"</ActionButton>
+                <ActionButton on_click=move |_| refresh.update(|r| *r += 1) busy=Signal::derive(move || loading.get().to_string())>{tr!(ui.refresh)}</ActionButton>
                 {editable.then(|| view! {
-                    <ActionButton disabled=unavailable on_click=move |_| action("validate")>{move || if busy.get() { "Working…" } else { "Validate connection" }}</ActionButton>
-                    {(!kind.webhook()).then(|| view! { <ActionButton disabled=Signal::derive(move || unavailable.get() || value.get()["running"] == true || value.get()["enabled"] != true) on_click=move |_| action("check")>"Check mailbox now"</ActionButton> })}
+                    <ActionButton disabled=unavailable on_click=move |_| action("validate")>{move || if busy.get() { leptos_i18n::t_string!(i18n, ui.working) } else { leptos_i18n::t_string!(i18n, ui.validate_connection) }}</ActionButton>
+                    {(!kind.webhook()).then(|| view! { <ActionButton disabled=Signal::derive(move || unavailable.get() || value.get()["running"] == true || value.get()["enabled"] != true) on_click=move |_| action("check")>{tr!(ui.check_mailbox_now)}</ActionButton> })}
                     <ResourceActions edit_href=format!("{}/{id}/edit",kind.path()) can_edit=editable disabled=unavailable on_delete=select_delete/>
                 })}
             </PageHeader>{message.view()}
             <Card class="integration-status">
-                <dl><dt>"Destination"</dt><dd>{move || text(&value.get(), if kind.webhook() { "url" } else { "host" })}</dd>
-                    <dt>"Enabled"</dt><dd>{move || if value.get()[if kind.webhook() { "is_active" } else { "enabled" }] == true { "Yes" } else { "No" }}</dd>
-                    <dt>"Credential configured"</dt><dd>{move || if value.get()[if kind.webhook() { "has_secret" } else { "has_password" }] == true { "Yes" } else { "No" }}</dd>
+                <dl><dt>{tr!(ui.destination)}</dt><dd>{move || text(&value.get(), if kind.webhook() { "url" } else { "host" })}</dd>
+                    <dt>{tr!(ui.enabled)}</dt><dd>{move || if value.get()[if kind.webhook() { "is_active" } else { "enabled" }] == true { leptos_i18n::t_string!(i18n, ui.yes) } else { leptos_i18n::t_string!(i18n, ui.no) }}</dd>
+                    <dt>{tr!(ui.credential_configured)}</dt><dd>{move || if value.get()[if kind.webhook() { "has_secret" } else { "has_password" }] == true { leptos_i18n::t_string!(i18n, ui.yes) } else { leptos_i18n::t_string!(i18n, ui.no) }}</dd>
                     {(!kind.webhook()).then(|| view! {
-                        <dt>"Account"</dt><dd>{move || text(&value.get(), "username")}</dd>
-                        <dt>"Folder"</dt><dd>{move || text(&value.get(), "folder")}</dd>
-                        <dt>"Transport"</dt><dd>{move || format!("{} ? port {}", if value.get()["tls"] == true { "TLS" } else { "STARTTLS" }, value.get()["port"])}</dd>
-                        <dt>"Check interval"</dt><dd>{move || format!("{} seconds",value.get()["frequency"])}</dd>
-                        <dt>"Last outcome"</dt><dd>{move || text(&value.get(), "code")}</dd>
-                        <dt>"Last successful check"</dt><dd>{move || if value.get()["last_success"] == 0 { "Not recorded".into() } else { instant(&value.get()["last_success"]) }}</dd>
-                        <dt>"Next check"</dt><dd>{move || if value.get()["enabled"] != true { "Disabled".into() } else if value.get()["next_check"] == 0 { "Queued".into() } else { instant(&value.get()["next_check"]) }}</dd>
+                        <dt>{tr!(ui.account)}</dt><dd>{move || text(&value.get(), "username")}</dd>
+                        <dt>{tr!(ui.folder)}</dt><dd>{move || text(&value.get(), "folder")}</dd>
+                        <dt>{tr!(ui.transport)}</dt><dd>{move || leptos_i18n::t_string!(i18n, messages.transport_port, transport = if value.get()["tls"] == true { "TLS" } else { "STARTTLS" }, port = value.get()["port"].to_string())}</dd>
+                        <dt>{tr!(ui.check_interval)}</dt><dd>{move || leptos_i18n::t_string!(i18n, messages.count_seconds, count = value.get()["frequency"].to_string())}</dd>
+                        <dt>{tr!(ui.last_outcome)}</dt><dd>{move || text(&value.get(), "code")}</dd>
+                        <dt>{tr!(ui.last_successful_check)}</dt><dd>{move || if value.get()["last_success"] == 0 { leptos_i18n::t_string!(i18n, ui.not_recorded).into() } else { instant(&value.get()["last_success"]) }}</dd>
+                        <dt>{tr!(ui.next_check)}</dt><dd>{move || if value.get()["enabled"] != true { leptos_i18n::t_string!(i18n, ui.disabled).into() } else if value.get()["next_check"] == 0 { leptos_i18n::t_string!(i18n, ui.queued).into() } else { instant(&value.get()["next_check"]) }}</dd>
                     })}
                 </dl>
-                <Show when=move || value.get()["running"] == true><p role="status" aria-busy="true">"Checking reporting mailbox…"</p></Show>
+                <Show when=move || value.get()["running"] == true><p role="status" aria-busy="true">{tr!(ui.checking_reporting_mailbox)}</p></Show>
             </Card>
             <Show when=move || !kind.webhook() && value.get()["code"] == "mailbox_uidvalidity_changed">
-                <p role="alert">"The mail server changed its message identifiers. Processing is paused to protect existing report history."</p>
-                {editable.then(|| view! { <ActionButton disabled=unavailable on_click=move |_| resuming.set(true)>"Resume with new arrivals"</ActionButton> })}
+                <p role="alert">{tr!(ui.the_mail_server_changed_its_message_identifiers_processing_is_paused_to_protect)}</p>
+                {editable.then(|| view! { <ActionButton disabled=unavailable on_click=move |_| resuming.set(true)>{tr!(ui.resume_with_new_arrivals)}</ActionButton> })}
             </Show>
             <Show when=move || resuming.get()>
-                <DeleteConfirmation title="Resume with new arrivals?".to_owned() description="Existing messages in the changed folder will be left untouched. Monitoring starts at the next successful check; saved campaign reports remain intact." confirm_label="Resume monitoring" busy=Signal::derive(move || busy.get()) on_confirm=Callback::new(move |()| action("resume")) on_cancel=Callback::new(move |()| resuming.set(false)) message=message/>
+                <DeleteConfirmation title=trs!(ui.resume_with_new_arrivals_2) description=trs!(ui.existing_messages_in_the_changed_folder_will_be_left_untouched_monitoring_starts) confirm_label=trs!(ui.resume_monitoring) busy=Signal::derive(move || busy.get()) on_confirm=Callback::new(move |()| action("resume")) on_cancel=Callback::new(move |()| resuming.set(false)) message=message/>
             </Show>
-            <h2>{if kind.webhook() { "Recent delivery attempts" } else { "Recent mailbox checks" }}</h2>
-            <DataTable label="Integration history" headers=if kind.webhook() { vec!["Started", "Finished", "Outcome", "HTTP status", "Event", "Attempt"] } else { vec!["Started", "Finished", "Outcome", "Matched", "Rejected"] }>
+            <h2>{move || if kind.webhook() { leptos_i18n::t_string!(i18n, ui.recent_delivery_attempts) } else { leptos_i18n::t_string!(i18n, ui.recent_mailbox_checks) }}</h2>
+            <DataTable label=trs!(ui.integration_history) headers=if kind.webhook() { vec![trs!(ui.started), trs!(ui.finished), trs!(ui.outcome), trs!(ui.http_status), trs!(ui.event), trs!(ui.attempt)] } else { vec![trs!(ui.started), trs!(ui.finished), trs!(ui.outcome), trs!(ui.matched), trs!(ui.rejected)] }>
                 {move || array(&value.get(), "history").into_iter().map(|run| view! {
-                    <tr><td class="data-value">{instant(&run["started"])}</td><td>{if run["finished"].is_null() { "Running".into() } else { instant(&run["finished"]) }}</td>
+                    <tr><td class="data-value">{instant(&run["started"])}</td><td>{if run["finished"].is_null() { leptos_i18n::t_string!(i18n, ui.running).into() } else { instant(&run["finished"]) }}</td>
                         <td>{text(&run, "code")}</td>{if kind.webhook() { view! { <td>{run["status"].as_i64().map(|s| s.to_string()).unwrap_or_default()}</td><td>{run["event_id"].as_i64().map(|s| s.to_string()).unwrap_or_default()}</td><td>{run["attempt"].as_i64().map(|s| s.to_string()).unwrap_or_default()}</td> }.into_any() } else { view! { <td>{run["matched"].as_i64().unwrap_or(0)}</td><td>{run["rejected"].as_i64().unwrap_or(0)}</td> }.into_any() }}
                     </tr>
                 }).collect_view()}

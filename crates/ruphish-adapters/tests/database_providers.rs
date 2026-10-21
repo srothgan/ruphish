@@ -113,6 +113,94 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         .unwrap()
         .unwrap();
 
+    assert_eq!(normal.preferences, auth::Preferences::default());
+    let overrides = auth::Preferences {
+        language: Some("de".into()),
+        format_locale: Some("zh-CN".into()),
+        time_zone: Some("Europe/Berlin".into()),
+        show_utc_offset: false,
+    };
+    let changed = accounts
+        .write(normal.identity, auth::Write::Preferences(overrides.clone()))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        changed.identity, normal.identity,
+        "presentation changes must not revoke sessions"
+    );
+    assert_eq!(
+        changed.last_login, normal.last_login,
+        "preferences never rewrite recorded timestamps"
+    );
+    assert_eq!(
+        db.accounts()
+            .by_id(normal.identity.id)
+            .await
+            .unwrap()
+            .preferences,
+        overrides
+    );
+    assert_eq!(
+        accounts.by_id(actor.id).await.unwrap().preferences,
+        auth::Preferences::default(),
+        "other accounts remain isolated"
+    );
+    for invalid in [
+        auth::Preferences {
+            language: Some("zh".into()),
+            ..overrides.clone()
+        },
+        auth::Preferences {
+            format_locale: Some("not_a_locale".into()),
+            ..overrides.clone()
+        },
+        auth::Preferences {
+            time_zone: Some("Mars/Unknown".into()),
+            ..overrides.clone()
+        },
+    ] {
+        assert!(matches!(
+            accounts
+                .write(normal.identity, auth::Write::Preferences(invalid))
+                .await,
+            Err(auth::Error::Preferences(_))
+        ));
+        assert_eq!(
+            accounts
+                .by_id(normal.identity.id)
+                .await
+                .unwrap()
+                .preferences,
+            overrides
+        );
+    }
+    let stale = auth::Identity {
+        epoch: normal.identity.epoch + 1,
+        ..normal.identity
+    };
+    assert!(
+        accounts
+            .write(stale, auth::Write::Preferences(Default::default()))
+            .await
+            .is_err()
+    );
+    accounts
+        .write(
+            normal.identity,
+            auth::Write::Preferences(Default::default()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        accounts
+            .by_id(normal.identity.id)
+            .await
+            .unwrap()
+            .preferences,
+        auth::Preferences::default()
+    );
+
     let integrations = db.integrations();
     use ruphish_application::integrations::{MailboxEdit, WebhookEdit};
     let hook_edit = |revision| WebhookEdit {
@@ -1360,7 +1448,7 @@ async fn mysql_rejects_schema_drift_dirty_history_and_unknown_versions_without_r
     db.close().await;
     for change in [
         "UPDATE _sqlx_migrations SET success=0",
-        "UPDATE _sqlx_migrations SET version=999",
+        "UPDATE _sqlx_migrations SET version=999 WHERE version=1",
         "UPDATE _sqlx_migrations SET checksum=UNHEX(REPEAT('00',48))",
     ] {
         sqlx::query("CREATE TEMPORARY TABLE fixture_history AS SELECT * FROM _sqlx_migrations")
@@ -1809,8 +1897,8 @@ async fn postgres_schema_drift_is_rejected_and_restoration_recovers() {
             "UPDATE _sqlx_migrations SET success=TRUE",
         ),
         (
-            "UPDATE _sqlx_migrations SET version=9999",
-            "UPDATE _sqlx_migrations SET version=1",
+            "UPDATE _sqlx_migrations SET version=9999 WHERE version=1",
+            "UPDATE _sqlx_migrations SET version=1 WHERE version=9999",
         ),
     ] {
         sqlx::raw_sql(sqlx::AssertSqlSafe(damage.to_owned()))
@@ -2156,4 +2244,152 @@ async fn postgres_deadlock_rolls_back_the_losing_edit_and_recovers() {
     inspect.close().await.unwrap();
     db.close().await;
     postgres_cleanup(&mut admin, &config).await;
+}
+
+#[tokio::test]
+#[ignore = "Requires canonical MySQL fixture and RUPHISH_MYSQL_TEST_PORT"]
+async fn mysql_preferences_migrate_existing_accounts_and_survive_reopen() {
+    let (mut inspect, config) = fixture().await;
+    let db = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    db.bootstrap(
+        Some("Preferences fixture password 42!".into()),
+        Some("preferences-key".into()),
+    )
+    .await
+    .unwrap();
+    let original = db.accounts().by_name("admin").await.unwrap();
+    db.close().await;
+    sqlx::raw_sql("DROP TABLE ruphish_user_preferences; DELETE FROM _sqlx_migrations WHERE version>=2; UPDATE users SET password_change_required=FALSE").execute(&mut inspect).await.unwrap();
+    let db = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    let account = db.accounts().by_name("admin").await.unwrap();
+    assert_eq!(account.hash, original.hash);
+    assert_eq!(account.identity, original.identity);
+    assert_eq!(account.preferences, Default::default());
+    let chosen = auth::Preferences {
+        language: Some("de".into()),
+        format_locale: Some("zh-CN".into()),
+        time_zone: Some("Europe/Berlin".into()),
+        show_utc_offset: false,
+    };
+    db.accounts()
+        .write(account.identity, auth::Write::Preferences(chosen.clone()))
+        .await
+        .unwrap();
+    db.close().await;
+    sqlx::raw_sql("ALTER TABLE ruphish_user_preferences DROP COLUMN show_utc_offset; DELETE FROM _sqlx_migrations WHERE version=3;").execute(&mut inspect).await.unwrap();
+    let db = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    assert_eq!(
+        db.accounts()
+            .by_id(account.identity.id)
+            .await
+            .unwrap()
+            .preferences,
+        auth::Preferences {
+            show_utc_offset: true,
+            ..chosen.clone()
+        }
+    );
+    db.accounts()
+        .write(account.identity, auth::Write::Preferences(chosen.clone()))
+        .await
+        .unwrap();
+    db.close().await;
+    let db = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    assert_eq!(
+        db.accounts()
+            .by_id(account.identity.id)
+            .await
+            .unwrap()
+            .preferences,
+        chosen
+    );
+    db.close().await;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE `{}`",
+        config.database
+    )))
+    .execute(&mut inspect)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires canonical PostgreSQL fixture and RUPHISH_POSTGRES_TEST_PORT"]
+async fn postgres_preferences_migrate_existing_accounts_and_survive_reopen() {
+    let (mut inspect, config) = postgres_fixture().await;
+    let db = database::open(Config::Postgres(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    db.bootstrap(
+        Some("Preferences fixture password 42!".into()),
+        Some("preferences-key".into()),
+    )
+    .await
+    .unwrap();
+    let original = db.accounts().by_name("admin").await.unwrap();
+    db.close().await;
+    let mut connection = postgres_inspect(&config).await;
+    sqlx::raw_sql("DROP TABLE ruphish_user_preferences; DELETE FROM _sqlx_migrations WHERE version>=2; UPDATE users SET password_change_required=FALSE").execute(&mut connection).await.unwrap();
+    connection.close().await.unwrap();
+    let db = database::open(Config::Postgres(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    let account = db.accounts().by_name("admin").await.unwrap();
+    assert_eq!(account.hash, original.hash);
+    assert_eq!(account.identity, original.identity);
+    assert_eq!(account.preferences, Default::default());
+    let chosen = auth::Preferences {
+        language: Some("de".into()),
+        format_locale: Some("zh-CN".into()),
+        time_zone: Some("Europe/Berlin".into()),
+        show_utc_offset: false,
+    };
+    db.accounts()
+        .write(account.identity, auth::Write::Preferences(chosen.clone()))
+        .await
+        .unwrap();
+    db.close().await;
+    let mut connection = postgres_inspect(&config).await;
+    sqlx::raw_sql("ALTER TABLE ruphish_user_preferences DROP COLUMN show_utc_offset; DELETE FROM _sqlx_migrations WHERE version=3;").execute(&mut connection).await.unwrap();
+    connection.close().await.unwrap();
+    let db = database::open(Config::Postgres(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    assert_eq!(
+        db.accounts()
+            .by_id(account.identity.id)
+            .await
+            .unwrap()
+            .preferences,
+        auth::Preferences {
+            show_utc_offset: true,
+            ..chosen.clone()
+        }
+    );
+    db.accounts()
+        .write(account.identity, auth::Write::Preferences(chosen.clone()))
+        .await
+        .unwrap();
+    db.close().await;
+    let db = database::open(Config::Postgres(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    assert_eq!(
+        db.accounts()
+            .by_id(account.identity.id)
+            .await
+            .unwrap()
+            .preferences,
+        chosen
+    );
+    db.close().await;
+    postgres_cleanup(&mut inspect, &config).await;
 }

@@ -12,6 +12,7 @@ pub mod interactions;
 pub(crate) mod mailbox_worker;
 mod migrations;
 pub mod overview;
+mod preferences_schema;
 pub mod previews;
 pub mod reporting;
 mod reporting_schema;
@@ -278,6 +279,12 @@ async fn validate_schema(
         }
         if auth_schema::version(connection).await? >= 6 {
             reporting_schema::migrate(&mut expected).await?;
+        }
+        if auth_schema::version(connection).await? >= 7 {
+            preferences_schema::migrate(&mut expected).await?;
+        }
+        if auth_schema::version(connection).await? >= 8 {
+            preferences_schema::offset(&mut expected).await?;
         }
     }
     if schema(connection).await? != schema(&mut expected).await? {

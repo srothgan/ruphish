@@ -1,3 +1,4 @@
+import {EditorError} from './editor-i18n.mjs';
 // Shared by the browser view and functional tests: actual CodeMirror document/history.
 import {EditorState, Transaction} from '@codemirror/state';
 import {history, isolateHistory} from '@codemirror/commands';
@@ -11,7 +12,7 @@ export function createState(source, extensions = []) {
 }
 
 export function applyVisual(state, original, next) {
-  if (state.sliceDoc() !== original) throw new Error('The source changed while visual editing was open.');
+  if (state.sliceDoc() !== original) throw new EditorError('source_changed_error');
   if (next === original) return null;
   return state.update({changes: {from: 0, to: state.doc.length, insert: next}, annotations: [Transaction.userEvent.of('input.visual'), isolateHistory.of('full')]});
 }

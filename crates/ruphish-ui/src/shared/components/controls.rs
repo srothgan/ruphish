@@ -7,7 +7,7 @@ use leptos::prelude::*;
 /// appearance (chevron, height, focus) is owned centrally.
 #[component]
 pub(crate) fn Select(
-    #[prop(into)] label: String,
+    #[prop(into)] label: Signal<String>,
     #[prop(into)] value: Signal<String>,
     on_change: Callback<String>,
     children: Children,
@@ -30,7 +30,7 @@ pub(crate) fn Select(
 /// menu. Children are the action buttons; the panel closes after a choice.
 #[component]
 pub(crate) fn ActionMenu(
-    #[prop(into)] label: String,
+    #[prop(into)] label: Signal<String>,
     children: Children,
     #[prop(default = ButtonStyle::Secondary)] style: ButtonStyle,
     #[prop(into, optional)] disabled: Signal<bool>,
@@ -39,10 +39,10 @@ pub(crate) fn ActionMenu(
     view! {
         <div class="action-menu">
             <button node_ref=trigger type="button" class=style.class() disabled=move || disabled.get() aria-expanded="false">
-                <span>{label.clone()}</span>
+                <span>{move || label.get()}</span>
                 <svg class="action-menu-chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
             </button>
-            <div node_ref=panel class="action-menu-panel" role="group" aria-label=label data-close-after-action hidden>{children()}</div>
+            <div node_ref=panel class="action-menu-panel" role="group" aria-label=move || label.get() data-close-after-action hidden>{children()}</div>
         </div>
     }
 }
@@ -50,7 +50,7 @@ pub(crate) fn ActionMenu(
 /// Labelled checkbox with the brand accent. The label text follows the control.
 #[component]
 pub(crate) fn Checkbox(
-    #[prop(into)] label: String,
+    #[prop(into)] label: Signal<String>,
     #[prop(into)] checked: Signal<bool>,
     on_toggle: Callback<bool>,
     #[prop(into, optional)] disabled: Signal<bool>,
@@ -60,7 +60,7 @@ pub(crate) fn Checkbox(
         <label class="checkbox-label" class:compact=compact>
             <input type="checkbox" prop:checked=move || checked.get() disabled=move || disabled.get()
                 on:change=move |event| on_toggle.run(event_target_checked(&event))/>
-            <span>{label}</span>
+            <span>{move || label.get()}</span>
         </label>
     }
 }

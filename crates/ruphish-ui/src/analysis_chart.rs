@@ -2,9 +2,18 @@
 use crate::shared::components::*;
 use leptos::prelude::*;
 use ruphish_ui::analysis_state::{count_axis, time_axis};
+use ruphish_ui::{tr, trs};
 use wasm_bindgen::prelude::*;
 
-pub(super) const LABELS: [&str; 5] = ["Accepted", "Opened", "Clicked", "Submitted", "Reported"];
+pub(super) fn labels() -> [Signal<String>; 5] {
+    [
+        trs!(ui.accepted),
+        trs!(ui.opened),
+        trs!(ui.clicked),
+        trs!(ui.submitted),
+        trs!(ui.reported),
+    ]
+}
 const SERIES: [&str; 5] = [
     "series-accepted",
     "series-opened",
@@ -34,6 +43,9 @@ pub(super) struct Bucket {
 
 #[component]
 pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) -> impl IntoView {
+    let i18n = ruphish_ui::localization::use_i18n();
+
+    let labels = labels();
     let root = NodeRef::<leptos::html::Div>::new();
     let width = RwSignal::new(900usize);
     Effect::new(move |_| {
@@ -64,13 +76,13 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
         (first, last.max(first + 60), count_axis(maximum))
     });
     view! {
-        <Card class="analysis-chart" label="Recorded events over time">
-            <div class="analysis-section-heading"><h2>"Activity over time"</h2>
-                <span>{move || format!("Events per {} minute{} · {}", interval.get()/60, if interval.get()==60 {""} else {"s"}, zone())}</span>
+        <Card class="analysis-chart" label=trs!(ui.recorded_events_over_time)>
+            <div class="analysis-section-heading"><h2>{tr!(ui.activity_over_time)}</h2>
+                <span>{move || leptos_i18n::t_string!(i18n, messages.events_per_arg0_minute_arg1_arg2, arg0 = (interval.get()/60).to_string(), arg2 = (zone()).to_string())}</span>
             </div>
-            <Show when=move || !data.with(Vec::is_empty) fallback=|| view! { <p>"No recorded activity matches these filters."</p> }>
+            <Show when=move || !data.with(Vec::is_empty) fallback=|| view! { <p>{tr!(ui.no_recorded_activity_matches_these_filters)}</p> }>
                 <div class="analysis-plot" node_ref=root on:mouseleave=move |_|active.set(None) on:keydown=move |event| {if event.key()=="Escape" {active.set(None);}}>
-                    <svg class="analysis-plot-svg" width="100%" height="260" role="img" aria-label="Event counts over time; use the interval buttons below for exact values">
+                    <svg class="analysis-plot-svg" width="100%" height="260" role="img" aria-label=tr!(ui.event_counts_over_time_use_the_interval_buttons_below_for_exact_values)>
                         {move || { let (_,_,(top,step)) = bounds.get(); (0..=top/step).map(|n| {
                             let y=format!("{}%", 100.0 - n as f64*step as f64/top as f64*100.0);
                             view! { <line x1="0" x2="100%" y1=y.clone() y2=y class="analysis-grid" stroke-width="1"/> }
@@ -86,7 +98,7 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
                                     }).collect_view()}
                                     {rows.iter().map(|bucket| view! {
                                         <circle cx=x(bucket.time) cy=y(bucket.counts[i]) r="4" class="analysis-point" stroke-width="1.5">
-                                            <title>{format!("{}: {} {}",time(bucket.time),bucket.counts[i],LABELS[i])}</title>
+                                            <title>{format!("{}: {} {}",time(bucket.time),bucket.counts[i],labels[i].get())}</title>
                                         </circle>
                                     }).collect_view()}
                                 </g> }
@@ -101,7 +113,7 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
                     <div class="analysis-bin-targets">{move || {
                         let (first,last,_)=bounds.get(); let span=(last-first) as f64;
                         data.get().into_iter().map(move |bucket| {
-                            let title=format!("{} to {}: {}",time(bucket.time),time(bucket.time+interval.get()),(0..5).map(|i|format!("{} {}",bucket.counts[i],LABELS[i])).collect::<Vec<_>>().join(", "));
+                            let title=format!("{}: {}",leptos_i18n::t_string!(i18n, messages.start_to_end, start = time(bucket.time), end = time(bucket.time+interval.get())),(0..5).map(|i|format!("{} {}",bucket.counts[i],labels[i].get())).collect::<Vec<_>>().join(", "));
                             view! { <button type="button" class="analysis-bin" aria-label=title aria-describedby="analysis-interval-details"
                                 style:left=format!("{}%",(bucket.time-first-interval.get()/2) as f64/span*100.0) style:width=format!("{}%",interval.get() as f64/span*100.0)
                                 on:mouseenter=move |_| active.set(Some(bucket.time)) on:focus=move |_| active.set(Some(bucket.time)) on:blur=move |_|active.set(None) on:click=move |_| active.set(Some(bucket.time))/> }
@@ -116,10 +128,10 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
                                 <div class="analysis-hover-guide" style:left=format!("{position}%") aria-hidden="true"></div>
                                 <div id="analysis-interval-details" role="tooltip" class="analysis-chart-tooltip"
                                     style:left=format!("clamp(0px, calc({position}% - 140px), max(0px, calc(100% - 280px)))")>
-                                    <strong>"Details"</strong>
-                                    <span>{format!("{} to {}",time(bucket.time),time(bucket.time+interval.get()))}</span>
+                                    <strong>{tr!(ui.details)}</strong>
+                                    <span>{leptos_i18n::t_string!(i18n, messages.start_to_end, start = time(bucket.time), end = time(bucket.time+interval.get()))}</span>
                                     <dl>{(0..5).map(|i|view!{
-                                        <div><dt><i class=format!("analysis-swatch {}", SERIES[i])></i>{LABELS[i]}</dt><dd>{bucket.counts[i]}</dd></div>
+                                        <div><dt><i class=format!("analysis-swatch {}", SERIES[i])></i>{labels[i].get()}</dt><dd>{bucket.counts[i]}</dd></div>
                                     }).collect_view()}</dl>
                                 </div>
                             }
@@ -136,10 +148,10 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
                         </span> }
                     }).collect_view()
                 }}</div>
-                <div class="analysis-legend" aria-label="Visible event types">
-                    {LABELS.into_iter().enumerate().map(|(i,label)| view! {
+                <div class="analysis-legend" aria-label=tr!(ui.visible_event_types)>
+                    {labels.into_iter().enumerate().map(|(i,label)| view! {
                         <ActionButton pressed=Signal::derive(move || visible.get()[i].to_string()) on_click=move |_| visible.update(|values| values[i] = !values[i])>
-                            <span class=format!("analysis-swatch {}", SERIES[i])></span>{label}
+                            <span class=format!("analysis-swatch {}", SERIES[i])></span>{move || label.get()}
                         </ActionButton>
                     }).collect_view()}
                 </div>

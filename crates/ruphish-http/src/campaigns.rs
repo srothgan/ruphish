@@ -16,6 +16,7 @@ use ruphish_application::{
     campaign as app,
     resources::{Error, Kind},
 };
+use ruphish_contracts::errors::ErrorCode;
 use ruphish_contracts::{campaign as wire, legacy::Timestamp};
 use serde_json::{Value, json};
 fn now() -> i64 {
@@ -110,13 +111,23 @@ fn encode_summary(c: &app::Campaign) -> Value {
     v
 }
 fn decode(context: &Context, bytes: &[u8]) -> Result<app::Create, Rejection> {
-    let input: wire::Create = ruphish_contracts::legacy::decode_object(bytes)
-        .map_err(|_| failure(StatusCode::BAD_REQUEST, "Invalid JSON structure"))?;
+    let input: wire::Create = ruphish_contracts::legacy::decode_object(bytes).map_err(|_| {
+        failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::RequestInvalid,
+            "Invalid JSON structure",
+        )
+    })?;
     use sha2::{Digest, Sha256};
-    let fingerprint = hex::encode(Sha256::digest(
-        serde_json::to_vec(&input)
-            .map_err(|_| failure(StatusCode::BAD_REQUEST, "Invalid campaign request"))?,
-    ));
+    let fingerprint = hex::encode(Sha256::digest(serde_json::to_vec(&input).map_err(
+        |_| {
+            failure(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::CampaignInvalid,
+                "Invalid campaign request",
+            )
+        },
+    )?));
     let select = |s: wire::NamedResource| app::Selection {
         name: s.name.unwrap_or_default(),
         ..Default::default()
@@ -172,17 +183,29 @@ fn decode(context: &Context, bytes: &[u8]) -> Result<app::Create, Rejection> {
         }
     }
     if let Some(key) = context.headers.get("idempotency-key") {
-        let key = key
-            .to_str()
-            .map_err(|_| failure(StatusCode::BAD_REQUEST, "Invalid launch idempotency key"))?;
+        let key = key.to_str().map_err(|_| {
+            failure(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::LaunchKeyInvalid,
+                "Invalid launch idempotency key",
+            )
+        })?;
         result.idempotency = Some((key.into(), fingerprint));
     }
     Ok(result)
 }
 fn launch_error(e: Error) -> Rejection {
     match e {
-        Error::NotFound("SMTP") => failure(StatusCode::BAD_REQUEST, "Sending profile not found"),
-        Error::NotFound(kind) => failure(StatusCode::BAD_REQUEST, &format!("{kind} not found")),
+        Error::NotFound("SMTP") => failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::ResourceNotFound,
+            "Sending profile not found",
+        ),
+        Error::NotFound(kind) => failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::ResourceNotFound,
+            &format!("{kind} not found"),
+        ),
         other => error(other),
     }
 }
@@ -289,6 +312,7 @@ async fn complete_legacy(context: Context, Path(id): Path<i64>) -> Result<Respon
     if !context.explicit_api_key() {
         return Err(failure(
             StatusCode::METHOD_NOT_ALLOWED,
+            ErrorCode::MethodNotAllowed,
             "Use POST to complete a campaign",
         ));
     }
@@ -414,8 +438,13 @@ async fn resolve(
     body: Bytes,
 ) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
-    let r: Resolve = serde_json::from_slice(&body)
-        .map_err(|_| failure(StatusCode::BAD_REQUEST, "Invalid delivery action"))?;
+    let r: Resolve = serde_json::from_slice(&body).map_err(|_| {
+        failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::DeliveryActionInvalid,
+            "Invalid delivery action",
+        )
+    })?;
     context
         .campaigns()
         .resolve(
@@ -437,10 +466,20 @@ async fn resolve(
 
 async fn test(context: Context, body: Bytes) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
-    let value: Value = serde_json::from_slice(&body)
-        .map_err(|_| failure(StatusCode::BAD_REQUEST, "Invalid test request"))?;
-    let campaign = serde_json::to_vec(&value["campaign"])
-        .map_err(|_| failure(StatusCode::BAD_REQUEST, "Invalid campaign"))?;
+    let value: Value = serde_json::from_slice(&body).map_err(|_| {
+        failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::RequestInvalid,
+            "Invalid test request",
+        )
+    })?;
+    let campaign = serde_json::to_vec(&value["campaign"]).map_err(|_| {
+        failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::CampaignInvalid,
+            "Invalid campaign",
+        )
+    })?;
     let input = decode(&context, &campaign)?;
     let recipient = ruphish_application::resources::Recipient {
         email: value["email"].as_str().unwrap_or_default().into(),

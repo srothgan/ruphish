@@ -482,6 +482,22 @@ fn independent_go_resource_observations_run_against_the_executable() {
             response.text().unwrap()
         );
         let mut observed: Value = response.json().unwrap();
+        // Assert the additive error code without changing the recorded Go response.
+        let expected_code = match id {
+            "groups-no-name"
+            | "groups-no-targets"
+            | "templates-no-content"
+            | "templates-unknown-field" => Some("RESOURCE_INVALID"),
+            "groups-duplicate" | "templates-duplicate" | "profiles-duplicate" => {
+                Some("RESOURCE_NAME_TAKEN")
+            }
+            "groups-mismatch" => Some("RESOURCE_ID_MISMATCH"),
+            _ => None,
+        };
+        if let Some(expected_code) = expected_code {
+            let code = observed.as_object_mut().unwrap().remove("code");
+            assert_eq!(code, Some(json!(expected_code)), "{id}");
+        }
         normalize(&mut observed);
         let mut expected = case["json"].clone();
         match id {

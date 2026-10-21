@@ -27,6 +27,8 @@ pub struct Role {
 /// A backend account; deliberately not serializable or printable.
 #[derive(Clone)]
 pub struct Account {
+    /// Optional account-owned language, format and time-zone overrides.
+    pub preferences: crate::preferences::Preferences,
     /// User identifier and revocation generation.
     pub identity: Identity,
     /// Login name, preserved without normalization.

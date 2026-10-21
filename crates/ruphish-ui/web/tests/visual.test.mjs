@@ -52,7 +52,7 @@ test('actual visual insertion retains form behavior, names, Unicode labels and v
   try {
     const session = new VisualSession(harness.value, '<p>Introduction</p>');
     harness.value.s.setCursorIn(harness.value.editor, false);
-    session.insertForm({action: '{{.URL}}', method: 'post', name: 'email', label: 'Email – Grüße', type: 'email'});
+    session.insertForm({action: '{{.URL}}', method: 'post', name: 'email', label: 'Email – Grüße', type: 'email', submitLabel: 'Weiter'});
     session.insertVariable('FirstName');
     const source = session.result();
     assert.ok(!source.includes('data-ruphish-editor-policy'));
@@ -63,6 +63,7 @@ test('actual visual insertion retains form behavior, names, Unicode labels and v
     assert.equal(document.querySelector('input').name, 'email');
     assert.equal(document.querySelector('input').type, 'email');
     assert.equal(document.querySelector('button').type, 'submit');
+    assert.equal(document.querySelector('button').textContent, 'Weiter');
     assert.ok(document.querySelector('label').textContent.includes('Grüße'));
     assert.ok(source.includes('{{.FirstName}}'));
     assert.ok(!source.includes('data-ruphish-field'));
@@ -122,5 +123,22 @@ test('hostile page data is retained through a visual edit without being silently
     for (const content of ['window.attack=true', 'onclick="attack()"', 'name="password"', '{{.URL}}', 'javascript:attack()', 'p{color:red}', 'Text edited']) assert.ok(saved.includes(content), content);
     assert.equal(harness.value.iframe.getAttribute('sandbox'), 'allow-same-origin');
     // jsdom does not enforce browser CSP or sandbox flags. Do not infer isolation from this test.
+  } finally { harness.close(); }
+});
+
+
+test('inserting fields leaves the caret after each chip so subsequent input follows it', () => {
+  const harness = editor();
+  try {
+    const session = new VisualSession(harness.value, '<p>Before After</p>');
+    const text = harness.value.editor.querySelector('p').firstChild;
+    const range = harness.value.ed.createRange();
+    range.setStart(text, 7); range.collapse(true);
+    harness.value.s.selectRange(range);
+    session.insertVariable('FirstName');
+    session.insertVariable('LastName');
+    harness.value.s.insertHTML('typed');
+    const document = new JSDOM(session.result()).window.document;
+    assert.equal(document.querySelector('p').textContent.replaceAll('\uFEFF', ''), 'Before {{.FirstName}}{{.LastName}}typedAfter');
   } finally { harness.close(); }
 });

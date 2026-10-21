@@ -27,7 +27,7 @@ fn storage(error: sqlx::Error) -> Error {
 }
 
 pub(super) async fn account(connection: &mut SqliteConnection, id: i64) -> Result<Account, Error> {
-    let row = sqlx::query("SELECT u.*,COALESCE(a.epoch,0) AS epoch FROM users u LEFT JOIN ruphish_auth_state a ON a.user_id=u.id WHERE u.id=?")
+    let row = sqlx::query("SELECT u.*,COALESCE(a.epoch,0) AS epoch,p.language,p.format_locale,p.time_zone,p.show_utc_offset FROM users u LEFT JOIN ruphish_auth_state a ON a.user_id=u.id LEFT JOIN ruphish_user_preferences p ON p.user_id=u.id WHERE u.id=?")
         .bind(id).fetch_optional(&mut *connection).await.map_err(storage)?.ok_or(Error::NotFound)?;
     let role_id: i64 = row.try_get("role_id").map_err(storage)?;
     let role_row = sqlx::query("SELECT id,slug,name,description FROM roles WHERE id=?")
@@ -44,6 +44,15 @@ pub(super) async fn account(connection: &mut SqliteConnection, id: i64) -> Resul
             .unwrap_or_default())
     };
     Ok(Account {
+        preferences: ruphish_application::auth::Preferences {
+            language: row.try_get("language").map_err(storage)?,
+            format_locale: row.try_get("format_locale").map_err(storage)?,
+            time_zone: row.try_get("time_zone").map_err(storage)?,
+            show_utc_offset: row
+                .try_get::<Option<bool>, _>("show_utc_offset")
+                .map_err(storage)?
+                .unwrap_or(true),
+        },
         identity: Identity {
             id,
             epoch: row.try_get("epoch").map_err(storage)?,
@@ -138,6 +147,16 @@ impl Repository for Accounts {
         let actor = account(&mut tx, caller.id).await?;
         actor.authenticate(caller)?;
         let result_id = match write {
+            Write::Preferences(preferences) => {
+                if actor.password_change_required {
+                    return Err(ruphish_application::auth::AccountError::ResetRequired.into());
+                }
+                preferences.validate()?;
+                sqlx::query("INSERT INTO ruphish_user_preferences(user_id,language,format_locale,time_zone,show_utc_offset) VALUES(?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET language=excluded.language,format_locale=excluded.format_locale,time_zone=excluded.time_zone,show_utc_offset=excluded.show_utc_offset")
+                    .bind(caller.id).bind(preferences.language).bind(preferences.format_locale).bind(preferences.time_zone).bind(preferences.show_utc_offset)
+                    .execute(&mut *tx).await.map_err(storage)?;
+                Some(caller.id)
+            }
             Write::Login => {
                 sqlx::query("UPDATE users SET last_login=? WHERE id=?")
                     .bind(ruphish_application::datetime::utc(
@@ -255,6 +274,7 @@ impl Repository for Accounts {
                     "DELETE FROM ruphish_mailboxes WHERE owner_id=?",
                     "DELETE FROM imap WHERE user_id=?",
                     "DELETE FROM email_requests WHERE user_id=?",
+                    "DELETE FROM ruphish_user_preferences WHERE user_id=?",
                     "DELETE FROM users WHERE id=?",
                 ] {
                     sqlx::query(statement)

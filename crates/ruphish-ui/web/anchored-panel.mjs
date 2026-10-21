@@ -43,6 +43,9 @@ export function bindAnchoredPanel(trigger, panel, win = window) {
   };
   const keyboard = event => {
     if (event.defaultPrevented || win.document.querySelector('dialog[open]')) return;
+    if (event.key === 'Enter' && !panel.hidden && panel.contains(event.target) && event.target.matches?.('input[type="search"]')) {
+      event.preventDefault(); // Searching a picker must never implicitly submit its enclosing form.
+    }
     if (event.key === 'Escape' && !panel.hidden) { event.preventDefault(); close(); }
   };
   const focus = event => {
@@ -52,6 +55,7 @@ export function bindAnchoredPanel(trigger, panel, win = window) {
   const link = event => {
     const action = event.target.closest?.('a[href],button,[data-panel-close]');
     if (!action || action.disabled || event.defaultPrevented) return;
+    if (action.matches('input[type="radio"]') && event.detail === 0) return; // Native arrow/space navigation stays open until Done/Escape.
     if (action.matches('a[href], [data-panel-close]') || panel.hasAttribute('data-close-after-action')) close();
   };
   const disabledObserver = new win.MutationObserver(() => { if (trigger.disabled) close(false); });

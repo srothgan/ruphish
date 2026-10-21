@@ -165,6 +165,12 @@ async fn deletion_rolls_back_owned_records_then_preserves_other_owners_and_share
     let repo = db.accounts();
     let actor = repo.by_id(100).await.unwrap();
     let old = repo.by_id(17).await.unwrap();
+    sqlx::raw_sql(
+        "INSERT INTO ruphish_user_preferences(user_id,language) VALUES(17,'de'),(100,'en')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     assert!(matches!(
         repo.write(actor.identity, ruphish_application::auth::Write::Delete(17))
             .await,
@@ -195,6 +201,15 @@ async fn deletion_rolls_back_owned_records_then_preserves_other_owners_and_share
             "{table} rolled back"
         );
     }
+    assert_eq!(
+        repo.by_id(17)
+            .await
+            .unwrap()
+            .preferences
+            .language
+            .as_deref(),
+        Some("de")
+    );
     sqlx::raw_sql("DROP TRIGGER fail_delete;")
         .execute(&pool)
         .await
@@ -235,6 +250,24 @@ async fn deletion_rolls_back_owned_records_then_preserves_other_owners_and_share
             .await
             .unwrap()
             > 0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM ruphish_user_preferences WHERE user_id=17"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0
+    );
+    assert_eq!(
+        repo.by_id(100)
+            .await
+            .unwrap()
+            .preferences
+            .language
+            .as_deref(),
+        Some("en")
     );
     // A manual restore/import reusing a deleted identifier must not revive prior identities.
     sqlx::query("INSERT INTO users(id,username,hash,api_key,role_id,password_change_required,account_locked) VALUES(17,'reused-id','unused','new-key',2,0,0)").execute(&pool).await.unwrap();
@@ -277,4 +310,97 @@ async fn unsupported_auth_history_and_partial_schemas_are_refused_without_reinit
             "No partial schema may be mistaken for a fresh database"
         );
     }
+}
+
+#[tokio::test]
+async fn preferences_upgrade_keeps_a_recoverable_original_and_failed_writes_preserve_choices() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("preferences.db");
+    let db = DatabaseFixture::open(&path, "").await.unwrap();
+    db.bootstrap(
+        Some("Preferences fixture password 42!".into()),
+        Some("preferences-fixture-key".into()),
+    )
+    .await
+    .unwrap();
+    let pool = db.inspection_pool();
+    sqlx::raw_sql("UPDATE users SET password_change_required=0; DROP TABLE ruphish_user_preferences; DELETE FROM ruphish_schema WHERE version>=7;").execute(&pool).await.unwrap();
+    pool.close().await;
+    db.close().await;
+    let upgraded = DatabaseFixture::open(&path, "").await.unwrap();
+    assert!(upgraded.has_recovery_backup());
+    let pool = upgraded.inspection_pool();
+    let service = Service::new(upgraded.accounts(), Arc::new(PasswordWorker::default()));
+    let actor = upgraded.accounts().by_name("admin").await.unwrap();
+    assert_eq!(actor.api_key, "preferences-fixture-key");
+    assert_eq!(actor.preferences, Default::default());
+    let selected = ruphish_application::auth::Preferences {
+        language: Some("de".into()),
+        format_locale: Some("zh-CN".into()),
+        time_zone: Some("Europe/Berlin".into()),
+        show_utc_offset: false,
+    };
+    assert_eq!(
+        service
+            .save_preferences(actor.identity, selected.clone())
+            .await
+            .unwrap(),
+        selected
+    );
+    sqlx::raw_sql("CREATE TRIGGER fail_preferences BEFORE UPDATE ON ruphish_user_preferences BEGIN SELECT RAISE(ABORT,'synthetic preference storage failure'); END;").execute(&pool).await.unwrap();
+    assert!(
+        service
+            .save_preferences(actor.identity, Default::default())
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        upgraded
+            .accounts()
+            .by_id(actor.identity.id)
+            .await
+            .unwrap()
+            .preferences,
+        selected
+    );
+    sqlx::raw_sql("DROP TRIGGER fail_preferences")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::raw_sql("ALTER TABLE ruphish_user_preferences DROP COLUMN show_utc_offset; DELETE FROM ruphish_schema WHERE version=8;").execute(&pool).await.unwrap();
+    pool.close().await;
+    upgraded.close().await;
+    let reopened = DatabaseFixture::open(&path, "").await.unwrap();
+    assert_eq!(
+        reopened
+            .accounts()
+            .by_id(actor.identity.id)
+            .await
+            .unwrap()
+            .preferences,
+        ruphish_application::auth::Preferences {
+            show_utc_offset: true,
+            ..selected.clone()
+        }
+    );
+    reopened
+        .accounts()
+        .write(
+            actor.identity,
+            ruphish_application::auth::Write::Preferences(selected.clone()),
+        )
+        .await
+        .unwrap();
+    reopened.close().await;
+    let reopened = DatabaseFixture::open(&path, "").await.unwrap();
+    assert_eq!(
+        reopened
+            .accounts()
+            .by_id(actor.identity.id)
+            .await
+            .unwrap()
+            .preferences,
+        selected
+    );
+    reopened.close().await;
 }

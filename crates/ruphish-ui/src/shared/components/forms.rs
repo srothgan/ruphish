@@ -11,17 +11,17 @@ pub(crate) fn FormFields(
 
 #[component]
 pub(crate) fn Field(
-    #[prop(into)] label: String,
+    #[prop(into)] label: Signal<String>,
     #[prop(default = false)] checkbox: bool,
     children: Children,
 ) -> impl IntoView {
-    view! { <label class="form-field" class:checkbox-label=checkbox>{label}{children()}</label> }
+    view! { <label class="form-field" class:checkbox-label=checkbox>{move || label.get()}{children()}</label> }
 }
 
 #[component]
 pub(crate) fn SecretField(
-    label: &'static str,
-    saved_hint: &'static str,
+    #[prop(into)] label: Signal<String>,
+    #[prop(into)] saved_hint: Signal<String>,
     #[prop(into)] has_saved_value: Signal<bool>,
     #[prop(into)] value: Signal<String>,
     on_input: Callback<String>,
@@ -32,7 +32,7 @@ pub(crate) fn SecretField(
                 required=Signal::derive(move || !has_saved_value.get())
                 value=Signal::derive(move || value.get())
                 on_input=move |event| on_input.run(event_target_value(&event))/>
-            <Show when=move || has_saved_value.get()><small>{saved_hint}</small></Show>
+            <Show when=move || has_saved_value.get()><small>{move || saved_hint.get()}</small></Show>
         </Field>
     }
 }

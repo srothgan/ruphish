@@ -11,6 +11,7 @@ use axum::{
     routing::get,
 };
 use ruphish_application::reporting as app;
+use ruphish_contracts::errors::ErrorCode;
 use ruphish_contracts::reporting::Filter;
 use serde_json::json;
 fn filter(f: &Filter) -> Result<app::Filter, Rejection> {
@@ -18,13 +19,23 @@ fn filter(f: &Filter) -> Result<app::Filter, Rejection> {
         Vec::new()
     } else {
         if f.recipients.len() > 4200 {
-            return Err(failure(StatusCode::BAD_REQUEST, "analysis_invalid_filter"));
+            return Err(failure(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::AnalysisFilterInvalid,
+                "analysis_invalid_filter",
+            ));
         }
         f.recipients
             .split(',')
             .map(str::parse::<i64>)
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| failure(StatusCode::BAD_REQUEST, "analysis_invalid_filter"))?
+            .map_err(|_| {
+                failure(
+                    StatusCode::BAD_REQUEST,
+                    ErrorCode::AnalysisFilterInvalid,
+                    "analysis_invalid_filter",
+                )
+            })?
     };
     Ok(app::Filter {
         recipient: f.recipient,
@@ -49,8 +60,13 @@ async fn read(
     query: Result<Query<Filter>, axum::extract::rejection::QueryRejection>,
 ) -> Result<Response, Rejection> {
     let user = c.api(None).await?;
-    let Query(f) =
-        query.map_err(|_| failure(StatusCode::BAD_REQUEST, "analysis_invalid_filter"))?;
+    let Query(f) = query.map_err(|_| {
+        failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::AnalysisFilterInvalid,
+            "analysis_invalid_filter",
+        )
+    })?;
     let a = c
         .reporting()
         .analysis(user.identity, id, filter(&f)?)
@@ -117,8 +133,13 @@ async fn export(
     query: Result<Query<Filter>, axum::extract::rejection::QueryRejection>,
 ) -> Result<Response, Rejection> {
     let user = c.api(None).await?;
-    let Query(f) =
-        query.map_err(|_| failure(StatusCode::BAD_REQUEST, "analysis_invalid_filter"))?;
+    let Query(f) = query.map_err(|_| {
+        failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::AnalysisFilterInvalid,
+            "analysis_invalid_filter",
+        )
+    })?;
     let d = c
         .reporting()
         .export(user.identity, id, filter(&f)?, &f.format, &f.scope)

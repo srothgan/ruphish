@@ -2,7 +2,7 @@
 use super::UpgradeError;
 use sqlx::SqliteConnection;
 
-pub(super) const LATEST_VERSION: i64 = 6;
+pub(super) const LATEST_VERSION: i64 = 8;
 
 pub(super) const SCHEMA: &str = "
 CREATE TABLE ruphish_schema(version INTEGER PRIMARY KEY NOT NULL, name TEXT NOT NULL);
@@ -38,6 +38,8 @@ pub(super) async fn validate_version(
         (4, "verified-domains-public-events-v1".to_owned()),
         (5, "domain-verification-history-v1".to_owned()),
         (6, "analysis-integrations-v1".to_owned()),
+        (7, "user-preferences-v1".to_owned()),
+        (8, "utc-offset-preference-v1".to_owned()),
     ];
     if entries.is_empty() || !history.starts_with(&entries) {
         return Err(UpgradeError::Unrecognized(
@@ -76,6 +78,12 @@ pub(super) async fn migrate(connection: &mut SqliteConnection) -> Result<(), Upg
     }
     if version(connection).await? == 5 {
         super::reporting_schema::migrate(connection).await?;
+    }
+    if version(connection).await? == 6 {
+        super::preferences_schema::migrate(connection).await?;
+    }
+    if version(connection).await? == 7 {
+        super::preferences_schema::offset(connection).await?;
     }
     Ok(())
 }

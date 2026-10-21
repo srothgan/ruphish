@@ -6,6 +6,7 @@ use leptos::prelude::*;
 use leptos::task::spawn_local_scoped_with_cancellation as spawn_local;
 use ruphish_contracts::auth::{BrowserSession, UserEdit};
 use ruphish_ui::session::{SessionAction, SessionMonitor};
+use ruphish_ui::tr;
 use serde_json::Value;
 
 #[path = "account_menu.rs"]
@@ -15,11 +16,12 @@ pub(super) use account_menu::copy_text;
 mod users;
 
 #[derive(Clone, Copy)]
-struct PasswordNotice(RwSignal<Option<String>>);
+struct PasswordNotice(RwSignal<bool>);
 
 #[derive(Clone, Copy)]
 pub(super) struct Api {
     monitor: RwSignal<SessionMonitor>,
+    i18n: leptos_i18n::I18nContext<ruphish_ui::localization::Locale>,
 }
 impl Api {
     pub(super) async fn launch(
@@ -28,13 +30,18 @@ impl Api {
         key: &str,
         value: &Value,
     ) -> Result<Value, (u16, String)> {
+        let i18n = self.i18n;
+
         if !self.active() {
-            return Err((401, "Your session ended.".into()));
+            return Err((
+                401,
+                leptos_i18n::t_string!(i18n, ui.your_session_ended).into(),
+            ));
         }
         let request =
             ruphish_ui::browser_http::launch_request("/api/campaigns/", token, key, value)
                 .map_err(|e| (0, e))?;
-        let response=self.send_request("/api/campaigns/", request).await.map_err(|_|(0,"Launch outcome is not known. Retry uses the same launch key; do not create another campaign.".into()))?;
+        let response=self.send_request("/api/campaigns/", request).await.map_err(|_|(0,leptos_i18n::t_string!(i18n, ui.launch_outcome_is_not_known_retry_uses_the_same_launch_key_do_not_create_another).into()))?;
         let status = response.status;
         self.response("/api/campaigns/", response)
             .await
@@ -48,8 +55,14 @@ impl Api {
         value: Option<&Value>,
         revision: Option<&str>,
     ) -> Result<(Value, Option<String>), String> {
+        let i18n = self.i18n;
+
         if !self.active() {
-            return Err("Your session ended. Sign in again to continue.".into());
+            return Err(leptos_i18n::t_string!(
+                i18n,
+                ui.your_session_ended_sign_in_again_to_continue
+            )
+            .into());
         }
         let request =
             ruphish_ui::browser_http::resource_request(method, path, token, value, revision)?;
@@ -60,8 +73,10 @@ impl Api {
             .map(|value| (value, etag))
     }
     pub(super) async fn download(self, path: &str, filename: &str) -> Result<(), String> {
+        let i18n = self.i18n;
+
         if !self.active() {
-            return Err("Your session ended.".into());
+            return Err(leptos_i18n::t_string!(i18n, ui.your_session_ended).into());
         }
         let request = ruphish_ui::browser_http::resource_request("GET", path, "", None, None)?;
         let observed_path = path.to_owned();
@@ -71,11 +86,11 @@ impl Api {
         })
         .await?;
         if !self.active() {
-            return Err("Your session ended.".into());
+            return Err(leptos_i18n::t_string!(i18n, ui.your_session_ended).into());
         }
         if !(200..300).contains(&response.status) {
             self.response(path, response).await?;
-            return Err("The export could not be generated.".into());
+            return Err(leptos_i18n::t_string!(i18n, ui.the_export_could_not_be_generated).into());
         }
         ruphish_ui::browser_http::save_file(&file, filename)
     }
@@ -112,9 +127,15 @@ impl Api {
         _path: &str,
         response: ruphish_ui::browser_http::Received,
     ) -> Result<Value, String> {
+        let i18n = self.i18n;
+
         let status = response.status;
         if !self.active() {
-            return Err("Your session ended. Sign in again to continue.".into());
+            return Err(leptos_i18n::t_string!(
+                i18n,
+                ui.your_session_ended_sign_in_again_to_continue
+            )
+            .into());
         }
         let text = response.body;
         let decoded = ruphish_ui::browser_http::decode(status, &text);
@@ -123,27 +144,33 @@ impl Api {
         } else {
             decoded.unwrap_or(Value::Null)
         };
-        if !(200..300).contains(&status) {
-            return Err(value["message"].as_str().map(str::to_owned).unwrap_or_else(
-                || match status {
-                    401 => "Your session ended. Sign in again to continue.".into(),
-                    429 => "Too many requests. Wait a moment and try again.".into(),
-                    503 => "The server is temporarily unavailable. Try again shortly.".into(),
-                    _ => format!("The request failed ({status}). Try again."),
-                },
-            ));
+        if !(200..300).contains(&status) || value["success"] == false {
+            let code = value["code"].as_str().unwrap_or(match status {
+                401 => "AUTH_REQUIRED",
+                403 => "AUTH_FORBIDDEN",
+                429 => "RATE_LIMITED",
+                503 => "SERVICE_BUSY",
+                _ => "REQUEST_FAILED",
+            });
+            return Err(ruphish_ui::localization::failure_label(i18n, code));
         }
         Ok(value)
     }
     pub(super) async fn get(self, path: &str) -> Result<Value, String> {
+        let i18n = self.i18n;
+
         if !self.active() {
-            return Err("Your session ended. Sign in again to continue.".into());
+            return Err(leptos_i18n::t_string!(
+                i18n,
+                ui.your_session_ended_sign_in_again_to_continue
+            )
+            .into());
         }
         let request = Request::get(path)
             .header("x-ruphish-client", "browser")
             .header("accept", "application/json")
             .build()
-            .map_err(|_| "Cannot prepare request".to_owned())?;
+            .map_err(|_| leptos_i18n::t_string!(i18n, ui.cannot_prepare_request).to_owned())?;
         self.response(path, self.send_request(path, request).await?)
             .await
     }
@@ -154,18 +181,24 @@ impl Api {
         token: &str,
         fields: &[(&str, String)],
     ) -> Result<Value, String> {
+        let i18n = self.i18n;
+
         if !self.active() {
-            return Err("Your session ended. Sign in again to continue.".into());
+            return Err(leptos_i18n::t_string!(
+                i18n,
+                ui.your_session_ended_sign_in_again_to_continue
+            )
+            .into());
         }
         let body = serde_urlencoded::to_string(fields)
-            .map_err(|_| "Cannot prepare the request".to_owned())?;
+            .map_err(|_| leptos_i18n::t_string!(i18n, ui.cannot_prepare_the_request).to_owned())?;
         let request = Request::post(path)
             .header("x-ruphish-client", "browser")
             .header("accept", "application/json")
             .header("content-type", "application/x-www-form-urlencoded")
             .header("x-csrf-token", token)
             .body(body)
-            .map_err(|_| "Cannot prepare the request".to_owned())?;
+            .map_err(|_| leptos_i18n::t_string!(i18n, ui.cannot_prepare_the_request).to_owned())?;
         self.response(path, self.send_request(path, request).await?)
             .await
     }
@@ -176,8 +209,14 @@ impl Api {
         token: &str,
         value: Option<&UserEdit>,
     ) -> Result<Value, String> {
+        let i18n = self.i18n;
+
         if !self.active() {
-            return Err("Your session ended. Sign in again to continue.".into());
+            return Err(leptos_i18n::t_string!(
+                i18n,
+                ui.your_session_ended_sign_in_again_to_continue
+            )
+            .into());
         }
         let builder = match method {
             "PUT" => Request::put(path),
@@ -192,23 +231,28 @@ impl Api {
         } else {
             builder.build()
         }
-        .map_err(|_| "Cannot prepare the request".to_owned())?;
+        .map_err(|_| leptos_i18n::t_string!(i18n, ui.cannot_prepare_the_request).to_owned())?;
         self.response(path, self.send_request(path, request).await?)
             .await
     }
 }
 
 pub(super) fn app() -> impl IntoView {
+    let i18n = ruphish_ui::localization::use_i18n();
+
+    let preferences = ruphish_ui::display_preferences::DisplayPreferences::provide();
     let session = RwSignal::new(None::<Result<BrowserSession, String>>);
     let api = Api {
         monitor: RwSignal::new(SessionMonitor::default()),
+        i18n,
     };
     spawn_local(async move {
         let loaded = api.get("/auth/session").await.and_then(|v| {
             serde_json::from_value::<BrowserSession>(v)
-                .map_err(|_| "Invalid session response".into())
+                .map_err(|_| leptos_i18n::t_string!(i18n, ui.invalid_session_response).into())
         });
         if let Ok(value) = &loaded {
+            preferences.apply(value.preferences.clone(), i18n);
             api.monitor.update(|m| m.observe(value));
         }
         session.set(Some(loaded));
@@ -227,8 +271,9 @@ pub(super) fn app() -> impl IntoView {
                 owner.with(|| {
                     spawn_local(async move {
                         if let Ok(value) = api.get("/auth/session").await.and_then(|v| {
-                            serde_json::from_value::<BrowserSession>(v)
-                                .map_err(|_| "Invalid session response".into())
+                            serde_json::from_value::<BrowserSession>(v).map_err(|_| {
+                                leptos_i18n::t_string!(i18n, ui.invalid_session_response).into()
+                            })
                         }) {
                             api.monitor.update(|m| m.observe(&value));
                         }
@@ -286,15 +331,17 @@ pub(super) fn app() -> impl IntoView {
         }
     });
     view! { <div class="account-app">{navigation_guard}{move || if action.get() != SessionAction::Continue {
-        view! { <main class="login-screen"><p role="status">"Refreshing your session…"</p><a rel="external" href="/login">"Sign in again"</a></main> }.into_any()
+        view! { <main class="login-screen"><p role="status">{tr!(ui.refreshing_your_session)}</p><a rel="external" href="/login">{tr!(ui.sign_in_again)}</a></main> }.into_any()
     } else { match session.get() {
-        None => view! { <main class="login-screen"><p role="status">"Opening Ruphish…"</p></main> }.into_any(),
-        Some(Err(error)) => view! { <main class="login-screen"><h1>"Ruphish"</h1><p class="form-message error" role="alert">{error}</p><a rel="external" href="/login">"Try signing in again"</a></main> }.into_any(),
+        None => view! { <main class="login-screen"><p role="status">{tr!(ui.opening_ruphish)}</p></main> }.into_any(),
+        Some(Err(error)) => view! { <main class="login-screen"><h1>{tr!(ui.ruphish)}</h1><p class="form-message error" role="alert">{error}</p><a rel="external" href="/login">{tr!(ui.try_signing_in_again)}</a></main> }.into_any(),
         Some(Ok(session)) if session.user.is_none() => login(api, session.csrf_token).into_any(),
         Some(Ok(session)) => shell(api, session).into_any(),
     } }}</div> }
 }
 fn login(api: Api, token: String) -> impl IntoView {
+    let i18n = ruphish_ui::localization::use_i18n();
+
     let token = StoredValue::new(token);
     let username = RwSignal::new(String::new());
     let password = RwSignal::new(String::new());
@@ -307,7 +354,7 @@ fn login(api: Api, token: String) -> impl IntoView {
                 .any(|p| p == "reason=session-ended")
         });
     let message = Message::new(if expired {
-        "Your session ended. Sign in again to continue.".to_owned()
+        leptos_i18n::t_string!(i18n, ui.your_session_ended_sign_in_again_to_continue).to_owned()
     } else {
         String::new()
     });
@@ -348,15 +395,14 @@ fn login(api: Api, token: String) -> impl IntoView {
             }
         });
     };
-    view! { <main class="login-screen"><section class="login-form"><div class="login-brand">"Ruphish"</div><h1>"Sign in"</h1><p>"Manage your security awareness workspace."</p>
-    <form on:submit=submit><label>"Username"<TextInput name="username" autocomplete="username" required=true value=Signal::derive(move || username.get()) on_input=move |e| username.set(event_target_value(&e))/></label>
-    <label>"Password"<TextInput name="password" input_type="password" autocomplete="current-password" required=true value=Signal::derive(move || password.get()) on_input=move |e| password.set(event_target_value(&e))/></label>
-    {message.view()}<ActionButton style=ButtonStyle::Primary kind="submit" disabled=Signal::derive(move || busy.get())>{move || if busy.get() { "Signing in…" } else { "Sign in" }}</ActionButton></form></section></main> }
+    view! { <main class="login-screen"><section class="login-form"><div class="login-brand">{tr!(ui.ruphish)}</div><h1>{tr!(ui.sign_in)}</h1><p>{tr!(ui.manage_your_security_awareness_workspace)}</p>
+    <form on:submit=submit><label>{tr!(ui.username)}<TextInput name="username" autocomplete="username" required=true value=Signal::derive(move || username.get()) on_input=move |e| username.set(event_target_value(&e))/></label>
+    <label>{tr!(ui.password)}<TextInput name="password" input_type="password" autocomplete="current-password" required=true value=Signal::derive(move || password.get()) on_input=move |e| password.set(event_target_value(&e))/></label>
+    {message.view()}<ActionButton style=ButtonStyle::Primary kind="submit" disabled=Signal::derive(move || busy.get())>{move || if busy.get() { leptos_i18n::t_string!(i18n, ui.signing_in) } else { leptos_i18n::t_string!(i18n, ui.sign_in) }}</ActionButton></form></section></main> }
 }
 fn shell(api: Api, session: BrowserSession) -> impl IntoView {
-    crate::time_display::provide(session.user.as_ref().map_or(0, |user| user.id));
     provide_context(ruphish_ui::import_drafts::ImportDrafts::default());
-    provide_context(PasswordNotice(RwSignal::new(None)));
+    provide_context(PasswordNotice(RwSignal::new(false)));
     provide_context(users::Notice(RwSignal::new(None)));
     let user = session.user.clone();
     provide_context(crate::resources::ResourceAccess(user.as_ref().is_some_and(
@@ -370,10 +416,14 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         .as_ref()
         .map(|u| u.username.clone())
         .unwrap_or_default();
-    let role_name = user
-        .as_ref()
-        .map(|u| u.role.name.clone())
-        .unwrap_or_default();
+    let role_name = StoredValue::new(user.as_ref().map(|u| u.role.clone()));
+    let role_name = Signal::derive(move || {
+        role_name.with_value(|role| {
+            role.as_ref()
+                .map(|role| ruphish_ui::localization::role_label(api.i18n, role))
+                .unwrap_or_default()
+        })
+    });
     let admin = user
         .as_ref()
         .is_some_and(|u| u.permissions.iter().any(|p| p == "modify_system"));
@@ -416,7 +466,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         if required {
             password_form(api, token.get_value(), true).into_any()
         } else if active {
-            view! { <Card class="account-panel"><h1>"Account management"</h1><p>"Exit impersonation to manage accounts and credentials."</p><ActionButton disabled=Signal::derive(move||action_busy.get()) on_click=move |_| action("/impersonate/exit")>"Exit impersonation"</ActionButton></Card> }.into_any()
+            view! { <Card class="account-panel"><h1>{tr!(ui.account_management)}</h1><p>{tr!(ui.exit_impersonation_to_manage_accounts_and_credentials)}</p><ActionButton disabled=Signal::derive(move||action_busy.get()) on_click=move |_| action("/impersonate/exit")>{tr!(ui.exit_impersonation)}</ActionButton></Card> }.into_any()
         } else if let Some(screen) = users_page {
             if admin {
                 users::page(
@@ -427,7 +477,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
                 )
                 .into_any()
             } else {
-                view!{<Card class="account-panel"><h1>"Access denied"</h1><p>"User management requires administrator permissions."</p></Card>}.into_any()
+                view!{<Card class="account-panel"><h1>{tr!(ui.access_denied)}</h1><p>{tr!(ui.user_management_requires_administrator_permissions)}</p></Card>}.into_any()
             }
         } else if password_page {
             password_form(api, token.get_value(), false).into_any()
@@ -459,7 +509,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         if required {
             password_form(api, token.get_value(), true).into_any()
         } else if matches!(kind, crate::integrations::Kind::Webhook) && (!admin || active) {
-            view! { <p role="alert">"Webhooks require administrator access outside impersonation."</p> }.into_any()
+            view! { <p role="alert">{tr!(ui.webhooks_require_administrator_access_outside_impersonation)}</p> }.into_any()
         } else if list {
             crate::integrations::list(api, token.get_value(), kind).into_any()
         } else {
@@ -475,8 +525,8 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
             crate::analysis::page(api).into_any()
         }
     };
-    let content = view! {<Routes fallback=||view!{<p>"This page is not available."</p>}>
-    <Route path=path!("/logout") view=move||view! { <Card class="account-panel"><h1>"Sign out?"</h1><p>"Your saved work will remain available the next time you sign in."</p><ActionButton style=ButtonStyle::Primary disabled=Signal::derive(move||action_busy.get()) on_click=move |_| action("/logout")>"Sign out"</ActionButton><a class="cancel-link ghost" href="/">"Stay signed in"</a></Card> }/>
+    let content = view! {<Routes fallback=||view!{<p>{tr!(ui.this_page_is_not_available)}</p>}>
+    <Route path=path!("/logout") view=move||view! { <Card class="account-panel"><h1>{tr!(ui.sign_out)}</h1><p>{tr!(ui.your_saved_work_will_remain_available_the_next_time_you_sign_in)}</p><ActionButton style=ButtonStyle::Primary disabled=Signal::derive(move||action_busy.get()) on_click=move |_| action("/logout")>{tr!(ui.sign_out_2)}</ActionButton><a class="cancel-link ghost" href="/">{tr!(ui.stay_signed_in)}</a></Card> }/>
     <Route path=path!("/settings") view=move||account_page(None,false)/>
     <Route path=path!("/settings/password") view=move||account_page(None,true)/>
     <Route path=path!("/users") view=move||account_page(Some(users::Screen::List),false)/>
@@ -511,13 +561,15 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
     <Route path=path!("/smtp/:id/edit") view=move||resource_page(Family::Profiles,Screen::Edit)/>
         <Route path=path!("/reset_password") view=move||account_page(None,false)/>
     </Routes>};
-    view! { <div class="admin-shell"><aside class="admin-nav"><a class="product-name" href="/">"Ruphish"</a><nav aria-label="Main navigation">
+    view! { <div class="admin-shell"><aside class="admin-nav"><a class="product-name" href="/">{tr!(ui.ruphish)}</a><nav aria-label=tr!(ui.main_navigation)>
     {crate::navigation::sections(path,admin)}
     </nav>{account_menu::menu(api,token.get_value(),username,role_name)}</aside>
-    <div class="admin-content">{active.then(|| view! { <div class="impersonation" role="status"><span>"Viewing as "<strong>{username_banner}</strong>". Administrator: "{actor.unwrap_or_default()}</span><ActionButton disabled=Signal::derive(move||action_busy.get()) on_click=move |_| action("/impersonate/exit")>"Exit impersonation"</ActionButton></div> })}
+    <div class="admin-content">{active.then(|| view! { <div class="impersonation" role="status"><span>{tr!(ui.viewing_as)}<strong>{username_banner}</strong>{tr!(ui.administrator)}{actor.unwrap_or_default()}</span><ActionButton disabled=Signal::derive(move||action_busy.get()) on_click=move |_| action("/impersonate/exit")>{tr!(ui.exit_impersonation)}</ActionButton></div> })}
     {message.view()}{content}</div></div> }
 }
 fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
+    let i18n = ruphish_ui::localization::use_i18n();
+
     let token = StoredValue::new(token);
     let current = RwSignal::new(String::new());
     let candidate = RwSignal::new(String::new());
@@ -568,9 +620,7 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
                 Ok(_) if required => navigate("/"),
                 Ok(_) => {
                     if let Some(notice) = notice {
-                        notice.0.set(Some(
-                            "Password changed. Your other sessions have been signed out.".into(),
-                        ));
+                        notice.0.set(true);
                     }
                     navigate_account(
                         "/settings",
@@ -584,15 +634,17 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
             }
         });
     };
-    view! { <Card class="account-panel password-page">{(!required).then(||view!{<BackLink href="/settings">"Back to my account"</BackLink>})}<h1>{if required { "Choose your password" } else { "Change password" }}</h1>
-    <p>{if required { "Replace your temporary password to finish setting up your account." } else { "Use a unique password. Changing it signs out your other sessions." }}</p>
+    view! { <Card class="account-panel password-page">{(!required).then(||view!{<BackLink href="/settings">{tr!(ui.back_to_my_account)}</BackLink>})}<h1>{move || if required { leptos_i18n::t_string!(i18n, ui.choose_your_password) } else { leptos_i18n::t_string!(i18n, ui.change_password) }}</h1>
+    <p>{move || if required { leptos_i18n::t_string!(i18n, ui.replace_your_temporary_password_to_finish_setting_up_your_account) } else { leptos_i18n::t_string!(i18n, ui.use_a_unique_password_changing_it_signs_out_your_other_sessions) }}</p>
     <form class="account-form" on:submit=submit>
-    {(!required).then(|| view! { <label>"Current password"<TextInput input_type="password" autocomplete="current-password" required=true value=Signal::derive(move || current.get()) on_input=move |e| current.set(event_target_value(&e))/></label> })}
-    <label>"New password"<TextInput input_type="password" autocomplete="new-password" required=true value=Signal::derive(move || candidate.get()) on_input=move |e| candidate.set(event_target_value(&e))/></label>
-    <label>"Confirm new password"<TextInput input_type="password" autocomplete="new-password" required=true value=Signal::derive(move || confirm.get()) on_input=move |e| confirm.set(event_target_value(&e))/></label>
-    {message.view()}<ActionButton style=ButtonStyle::Primary kind="submit" disabled=Signal::derive(move || busy.get())>{move || if busy.get() { "Saving…" } else { "Save password" }}</ActionButton></form>{(!required).then(||view!{<div class="account-actions"><ActionButton style=ButtonStyle::Ghost disabled=Signal::derive(move||busy.get()) on_click=move |_|{current.set(String::new());candidate.set(String::new());confirm.set(String::new());cancel_navigation("/settings",Default::default());}>"Cancel"</ActionButton></div>})}</Card> }
+    {(!required).then(|| view! { <label>{tr!(ui.current_password)}<TextInput input_type="password" autocomplete="current-password" required=true value=Signal::derive(move || current.get()) on_input=move |e| current.set(event_target_value(&e))/></label> })}
+    <label>{tr!(ui.new_password)}<TextInput input_type="password" autocomplete="new-password" required=true value=Signal::derive(move || candidate.get()) on_input=move |e| candidate.set(event_target_value(&e))/></label>
+    <label>{tr!(ui.confirm_new_password)}<TextInput input_type="password" autocomplete="new-password" required=true value=Signal::derive(move || confirm.get()) on_input=move |e| confirm.set(event_target_value(&e))/></label>
+    {message.view()}<ActionButton style=ButtonStyle::Primary kind="submit" disabled=Signal::derive(move || busy.get())>{move || if busy.get() { leptos_i18n::t_string!(i18n, ui.saving) } else { leptos_i18n::t_string!(i18n, ui.save_password) }}</ActionButton></form>{(!required).then(||view!{<div class="account-actions"><ActionButton style=ButtonStyle::Ghost disabled=Signal::derive(move||busy.get()) on_click=move |_|{current.set(String::new());candidate.set(String::new());confirm.set(String::new());cancel_navigation("/settings",Default::default());}>{tr!(ui.cancel)}</ActionButton></div>})}</Card> }
 }
 fn settings(api: Api, session: BrowserSession) -> impl IntoView {
+    let i18n = ruphish_ui::localization::use_i18n();
+
     let token = StoredValue::new(session.csrf_token.clone());
     let id = session.user.as_ref().map(|u| u.id).unwrap_or_default();
     let username = session
@@ -600,11 +652,14 @@ fn settings(api: Api, session: BrowserSession) -> impl IntoView {
         .as_ref()
         .map(|u| u.username.clone())
         .unwrap_or_default();
-    let role = session
-        .user
-        .as_ref()
-        .map(|u| u.role.name.clone())
-        .unwrap_or_default();
+    let role = StoredValue::new(session.user.as_ref().map(|u| u.role.clone()));
+    let role = move || {
+        role.with_value(|role| {
+            role.as_ref()
+                .map(|role| ruphish_ui::localization::role_label(i18n, role))
+                .unwrap_or_default()
+        })
+    };
     let base = StoredValue::new(
         web_sys::window()
             .and_then(|w| w.location().origin().ok())
@@ -614,10 +669,16 @@ fn settings(api: Api, session: BrowserSession) -> impl IntoView {
     let key = RwSignal::new(None::<String>);
     let message = Message::new(String::new());
     if let Some(notice) = use_context::<PasswordNotice>() {
-        let mut success = None;
-        notice.0.update(|value| success = value.take());
-        if let Some(success) = success {
-            message.status(success);
+        let mut success = false;
+        notice.0.update(|value| success = std::mem::take(value));
+        if success {
+            message.status({
+                leptos_i18n::t_string!(
+                    i18n,
+                    ui.password_changed_your_other_sessions_have_been_signed_out
+                )
+                .to_owned()
+            });
         }
     }
     let confirm = RwSignal::new(false);
@@ -658,10 +719,10 @@ fn settings(api: Api, session: BrowserSession) -> impl IntoView {
             };
             match value {
                 Ok(value) => match account_menu::copy_text(&value).await {
-                    Ok(()) => message.status(if secret { "API key copied." } else { "API base URL copied." }.into()),
+                    Ok(()) => message.status(if secret { leptos_i18n::t_string!(i18n, ui.api_key_copied) } else { leptos_i18n::t_string!(i18n, ui.api_base_url_copied) }.into()),
                     Err(_) => message.error(if secret {
-                        "Clipboard access is unavailable. Reveal the key, select it and copy it manually."
-                    } else { "Clipboard access is unavailable. Select the URL and copy it manually." }.into()),
+                        leptos_i18n::t_string!(i18n, ui.clipboard_access_is_unavailable_reveal_the_key_select_it_and_copy_it_manually)
+                    } else { leptos_i18n::t_string!(i18n, ui.clipboard_access_is_unavailable_select_the_url_and_copy_it_manually) }.into()),
                 },
                 Err(error) => message.error(error),
             }
@@ -679,43 +740,51 @@ fn settings(api: Api, session: BrowserSession) -> impl IntoView {
                 Ok(value) => {
                     key.set(value["data"].as_str().map(str::to_owned));
                     confirm.set(false);
-                    message.status(
-                        "API key replaced. Update integrations that used the previous key.".into(),
-                    );
+                    message.status({
+                        leptos_i18n::t_string!(
+                            i18n,
+                            ui.api_key_replaced_update_integrations_that_used_the_previous_key
+                        )
+                        .to_owned()
+                    });
                 }
                 Err(error) => message.error(error),
             }
             busy.set(false);
         });
     };
-    view! {<section class="account-overview"><div class="account-heading"><h1>"My account"</h1><a class="button" href="/settings/password">"Change password"</a></div>
-    {message.view()}<div class="settings-stack"><Card class="account-panel"><h2>"Account"</h2><dl class="account-facts"><div><dt>"Username"</dt><dd>{username}</dd></div><div><dt>"Role"</dt><dd>{role}</dd></div></dl></Card>
-    <crate::time_display::TimeZonePreference/>
-    <Card class="account-panel"><h2>"API access"</h2><p>"Use your API key for integrations. Treat it like a password."</p>
-    <div class="account-api-row"><label>"API base URL"<TextInput readonly=true value=base.get_value() on_focus=Callback::new(move|e: leptos::ev::FocusEvent|{event_target::<web_sys::HtmlInputElement>(&e).select();})/></label><ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|copy(false)>"Copy URL"</ActionButton></div>
-    <div class="account-api-row"><label>"API key"<TextInput id="account-api-key" class="secret-value" readonly=true value=Signal::derive(move||key.get().unwrap_or_else(||"\u{2022}".repeat(16))) on_focus=Callback::new(move|e: leptos::ev::FocusEvent|{if key.get_untracked().is_some(){event_target::<web_sys::HtmlInputElement>(&e).select();}})/></label>
+    view! {<section class="account-overview"><div class="account-heading"><h1>{tr!(ui.my_account)}</h1><a class="button" href="/settings/password">{tr!(ui.change_password)}</a></div>
+    {message.view()}<div class="settings-stack"><Card class="account-panel"><h2>{tr!(ui.account)}</h2><dl class="account-facts"><div><dt>{tr!(ui.username)}</dt><dd>{username}</dd></div><div><dt>{tr!(ui.role)}</dt><dd>{role}</dd></div></dl></Card>
+    <crate::preferences::DisplayPreferencesForm api=api token=session.csrf_token.clone()/>
+    <Card class="account-panel"><h2>{tr!(ui.api_access)}</h2><p>{tr!(ui.use_your_api_key_for_integrations_treat_it_like_a_password)}</p>
+    <div class="account-api-row"><label>{tr!(ui.api_base_url)}<TextInput readonly=true value=base.get_value() on_focus=Callback::new(move|e: leptos::ev::FocusEvent|{event_target::<web_sys::HtmlInputElement>(&e).select();})/></label><ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|copy(false)>{tr!(ui.copy_url)}</ActionButton></div>
+    <div class="account-api-row"><label>{tr!(ui.api_key)}<TextInput id="account-api-key" class="secret-value" readonly=true value=Signal::derive(move||key.get().unwrap_or_else(||"\u{2022}".repeat(16))) on_focus=Callback::new(move|e: leptos::ev::FocusEvent|{if key.get_untracked().is_some(){event_target::<web_sys::HtmlInputElement>(&e).select();}})/></label>
         <div class="api-key-controls">
-            <button type="button" class="key-visibility" disabled=move||busy.get() on:click=reveal aria-controls="account-api-key" aria-label="Show API key" aria-pressed=move||key.get().is_some().to_string() title=move||if key.get().is_some(){"Hide API key"}else{"Reveal API key"}>
+            <button type="button" class="key-visibility" disabled=move||busy.get() on:click=reveal aria-controls="account-api-key" aria-label=tr!(ui.show_api_key) aria-pressed=move||key.get().is_some().to_string() title=move||if key.get().is_some(){leptos_i18n::t_string!(i18n, ui.hide_api_key)}else{leptos_i18n::t_string!(i18n, ui.reveal_api_key)}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
                     <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/>
                     <circle cx="12" cy="12" r="3"/>
                     <path class:hidden-eye=move||key.get().is_some() d="m3 3 18 18"/>
                 </svg>
             </button>
-            <ActionButton kind="button" disabled=Signal::derive(move||busy.get()) on_click=move |_|copy(true)>"Copy key"</ActionButton>
+            <ActionButton kind="button" disabled=Signal::derive(move||busy.get()) on_click=move |_|copy(true)>{tr!(ui.copy_key)}</ActionButton>
         </div>
     </div>
-    <div class="account-actions"><ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|confirm.set(true)>"Replace API key…"</ActionButton></div>
-    {move||confirm.get().then(||view!{<div class="confirmation"><p>"The previous key will stop working immediately."</p><ActionButton style=ButtonStyle::Danger disabled=Signal::derive(move||busy.get()) on_click=rotate>"Replace key now"</ActionButton><ActionButton style=ButtonStyle::Ghost disabled=Signal::derive(move||busy.get()) on_click=move |_|confirm.set(false)>"Cancel"</ActionButton></div>})}
+    <div class="account-actions"><ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|confirm.set(true)>{tr!(ui.replace_api_key)}</ActionButton></div>
+    {move||confirm.get().then(||view!{<div class="confirmation"><p>{tr!(ui.the_previous_key_will_stop_working_immediately)}</p><ActionButton style=ButtonStyle::Danger disabled=Signal::derive(move||busy.get()) on_click=rotate>{tr!(ui.replace_key_now)}</ActionButton><ActionButton style=ButtonStyle::Ghost disabled=Signal::derive(move||busy.get()) on_click=move |_|confirm.set(false)>{tr!(ui.cancel)}</ActionButton></div>})}
     </Card></div></section>}
 }
 
 /// Only retrieve the secret on an explicit reveal/copy action.
 async fn load_api_key(api: Api, id: i64) -> Result<String, String> {
+    let i18n = api.i18n;
+
     let value = api.get(&format!("/api/users/{id}")).await?;
     value["api_key"]
         .as_str()
         .filter(|key| !key.is_empty())
         .map(str::to_owned)
-        .ok_or_else(|| "The server did not return an API key.".to_owned())
+        .ok_or_else(|| {
+            leptos_i18n::t_string!(i18n, ui.the_server_did_not_return_an_api_key).to_owned()
+        })
 }

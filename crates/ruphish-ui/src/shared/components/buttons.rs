@@ -87,7 +87,9 @@ pub(crate) fn ActionLink(
 
 /// Copy a value without placing long verification tokens into the page layout.
 #[component]
-pub(crate) fn CopyButton(label: &'static str, value: String, message: Message) -> impl IntoView {
+pub(crate) fn CopyButton(label: Signal<String>, value: String, message: Message) -> impl IntoView {
+    let i18n = ruphish_ui::localization::use_i18n();
+
     use leptos::leptos_dom::helpers::{TimeoutHandle, set_timeout_with_handle};
     let copied = RwSignal::new(false);
     let copying = RwSignal::new(false);
@@ -100,7 +102,7 @@ pub(crate) fn CopyButton(label: &'static str, value: String, message: Message) -
         });
     });
     view! {
-        <button type="button" class="copy-button" title=format!("Copy {label}") disabled=move||copying.get() on:click=move |_|{
+        <button type="button" class="copy-button" title=move || leptos_i18n::t_string!(i18n, messages.copy_arg0, arg0 = (label.get()).to_string()) disabled=move||copying.get() on:click=move |_|{
             if copying.get_untracked() { return; }
             reset.update_value(|timer| {
                 if let Some(timer) = timer.take() { timer.clear(); }
@@ -112,11 +114,11 @@ pub(crate) fn CopyButton(label: &'static str, value: String, message: Message) -
                 if crate::account::copy_text(&value).await.is_ok() {
                     copied.set(true);
                     reset.set_value(set_timeout_with_handle(move||copied.set(false), std::time::Duration::from_secs(2)).ok());
-                } else {message.error(format!("Could not copy {label}."))}
+                } else {message.error(leptos_i18n::t_string!(i18n, messages.could_not_copy_arg0, arg0 = (label.get_untracked()).to_string()))}
                 copying.set(false);
             });
         }><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M15 8V4H4v11h4"/></svg>
-            <span class="copy-button-label"><span class="copy-button-size" aria-hidden="true">{format!("Copy {label}")}</span><span role="status">{move||if copying.get(){"Copying…".to_owned()}else if copied.get(){"Copied".to_owned()}else{format!("Copy {label}")}}</span></span>
+            <span class="copy-button-label"><span class="copy-button-size" aria-hidden="true">{leptos_i18n::t!(i18n, messages.copy_arg0, arg0 = move || label.get())}</span><span role="status">{move||if copying.get(){leptos_i18n::t_string!(i18n, ui.copying).to_owned()}else if copied.get(){leptos_i18n::t_string!(i18n, ui.copied).to_owned()}else{leptos_i18n::t_string!(i18n, messages.copy_arg0, arg0 = (label.get()).to_string())}}</span></span>
         </button>
     }
 }

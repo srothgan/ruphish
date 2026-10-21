@@ -1,11 +1,16 @@
 //! Authentication and account use cases, independent of HTTP and SQL.
 pub use ruphish_domain::account::{Account, AccountError, Identity, Role};
+pub use ruphish_domain::password::PasswordError;
+pub use ruphish_domain::preferences::Preferences;
 use ruphish_domain::{account, password};
 use std::sync::Arc;
 
 /// An application failure with safe public messages.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// Invalid display override.
+    #[error(transparent)]
+    Preferences(#[from] ruphish_domain::preferences::Error),
     /// Safe persistence classification retained for reconciliation and retry policy.
     #[error("Account operation could not be completed")]
     Storage(#[from] crate::storage::Error),
@@ -57,6 +62,8 @@ pub struct Edit {
 
 /// Prepared write executed atomically with current authorization checks.
 pub enum Write {
+    /// Replace the caller's display preferences without revoking sessions.
+    Preferences(Preferences),
     /// Create or update a user, preserving unrelated fields.
     Save {
         /// Existing account identity for optimistic concurrency, or a new user.
@@ -115,6 +122,19 @@ pub struct Service {
 }
 
 impl Service {
+    /// Save only the authenticated caller's display overrides.
+    pub async fn save_preferences(
+        &self,
+        caller: Identity,
+        preferences: Preferences,
+    ) -> Result<Preferences, Error> {
+        Ok(self
+            .repository
+            .write(caller, Write::Preferences(preferences))
+            .await?
+            .ok_or(Error::Internal)?
+            .preferences)
+    }
     /// Compose the concrete repository and password worker.
     pub fn new(repository: Arc<dyn Repository>, passwords: Arc<dyn Passwords>) -> Self {
         Self {

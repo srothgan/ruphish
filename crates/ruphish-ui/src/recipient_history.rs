@@ -129,24 +129,19 @@ pub struct TimelineEntry {
     /// Recorded UTC seconds, absent for an unparseable legacy timestamp.
     pub at: Option<i64>,
     /// Human-readable observation; never a fabricated protocol phase.
-    pub title: String,
+    pub title: TimelineTitle,
     /// Semantic marker color accompanied by the textual outcome.
     pub tone: &'static str,
 }
-/// Human-readable transport state without raw null or internal separators.
-pub fn outcome(state: &str) -> &'static str {
-    match state {
-        "accepted" => "Accepted by SMTP server",
-        "retry" => "Temporary failure",
-        "failed" => "Delivery failed",
-        "blocked" => "Delivery blocked",
-        "unknown" => "Outcome unknown",
-        "cancelled" => "Cancelled",
-        "preparing" => "Preparing message",
-        "submitting" => "Submitting message",
-        "ready" => "Scheduled",
-        _ => "Recorded delivery state",
-    }
+/// Observed timeline facts, rendered into the selected language by the UI.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TimelineTitle {
+    /// The recorded start of this attempt generation.
+    Started(i64),
+    /// The recorded generation and resulting transport state.
+    Finished(i64, String),
+    /// A recorded event name from the server.
+    Event(String),
 }
 /// Consistent semantic colors for state labels and timeline markers.
 pub fn tone(state: &str) -> &'static str {
@@ -164,14 +159,14 @@ pub fn timeline(history: &History) -> Vec<TimelineEntry> {
     for (generation, a) in &history.attempts {
         entries.push(TimelineEntry {
             at: a["started"].as_i64(),
-            title: format!("Attempt {generation} started"),
+            title: TimelineTitle::Started(*generation),
             tone: "neutral",
         });
         if let Some(finished) = a["finished"].as_i64() {
             let state = a["state"].as_str().unwrap_or_default();
             entries.push(TimelineEntry {
                 at: Some(finished),
-                title: format!("Attempt {generation}: {}", outcome(state)),
+                title: TimelineTitle::Finished(*generation, state.to_owned()),
                 tone: tone(state),
             });
         }
@@ -202,7 +197,7 @@ pub fn timeline(history: &History) -> Vec<TimelineEntry> {
         }
         entries.push(TimelineEntry {
             at,
-            title: message.to_owned(),
+            title: TimelineTitle::Event(message.to_owned()),
             tone: if message == "Email Sent" {
                 "success"
             } else if message == "Error Sending Email" {
@@ -268,14 +263,16 @@ mod tests {
             events.iter().map(|e| e.at.unwrap()).collect::<Vec<_>>(),
             vec![10, 11, 30, 31, 31, 32]
         );
-        assert_eq!(events[1].title, "Attempt 1: Temporary failure");
-        assert_eq!(events[3].title, "Attempt 2: Accepted by SMTP server");
-        assert_eq!(events[5].title, "Email Opened");
-        assert!(
-            !events
-                .iter()
-                .any(|e| e.title.contains("null") || e.title.contains("250"))
+        assert_eq!(events[1].title, TimelineTitle::Finished(1, "retry".into()));
+        assert_eq!(
+            events[3].title,
+            TimelineTitle::Finished(2, "accepted".into())
         );
+        assert_eq!(events[5].title, TimelineTitle::Event("Email Opened".into()));
+        // The title carries only recorded state, never invented SMTP codes/phases.
+        assert_eq!(events[0].title, TimelineTitle::Started(1));
+        assert_eq!(events[2].title, TimelineTitle::Started(2));
+        assert_eq!(events[4].title, TimelineTitle::Event("Email Sent".into()));
     }
 
     #[test]

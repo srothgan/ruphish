@@ -88,6 +88,18 @@ pub fn named_zone(name: &str) -> Result<TimeZone, Error> {
     TimeZone::get(name).map_err(|_| Error::UnknownZone)
 }
 
+/// Enumerate selectable identifiers from the same database used for conversion.
+pub fn available_zones() -> Vec<String> {
+    let mut zones = jiff::tz::db()
+        .available()
+        .map(|name| name.to_string())
+        .collect::<Vec<_>>();
+    zones.push("UTC".to_owned());
+    zones.sort_unstable();
+    zones.dedup();
+    zones
+}
+
 /// Choose a valid explicit preference, detected zone, then UTC.
 pub fn display_zone(preferred: Option<&str>, detected: Option<&str>) -> TimeZone {
     preferred

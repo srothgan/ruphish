@@ -5,6 +5,7 @@ pub mod account;
 pub mod campaign;
 pub mod domains;
 pub mod password;
+pub mod preferences;
 pub mod reporting;
 pub mod resources;
 

@@ -1,5 +1,8 @@
 //! Editing state shared by the browser component and native workflow tests.
 
+#[cfg(target_arch = "wasm32")]
+pub mod localization;
+
 pub mod analysis_state;
 pub mod campaign_state;
 pub mod deletion_state;
@@ -56,3 +59,6 @@ pub mod datetime;
 
 #[cfg(target_arch = "wasm32")]
 pub mod browser_datetime;
+
+#[cfg(target_arch = "wasm32")]
+pub mod display_preferences;

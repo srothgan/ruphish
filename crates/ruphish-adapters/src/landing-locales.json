@@ -1,0 +1,12 @@
+{
+  "en": {
+    "submitting": "Submitting…",
+    "submitted": "Submitted.",
+    "unconfirmed": "Submission could not be confirmed. Please try again."
+  },
+  "de": {
+    "submitting": "Wird übermittelt…",
+    "submitted": "Übermittelt.",
+    "unconfirmed": "Übermittlung nicht bestätigt. Bitte erneut versuchen."
+  }
+}

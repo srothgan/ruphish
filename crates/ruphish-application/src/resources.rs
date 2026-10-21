@@ -90,9 +90,21 @@ pub struct Service {
     tools: Arc<dyn ContentTools>,
 }
 
+/// Reason a CSV record cannot be imported.
+#[derive(Clone, Copy, Debug)]
+pub enum RowErrorKind {
+    /// Malformed encoding or record syntax.
+    Encoding,
+    /// Number of fields differs from the header.
+    Columns,
+    /// Recipient address is not a valid mailbox.
+    Email,
+}
 /// A CSV row that could not be imported, including its original fields.
 #[derive(Clone, Debug)]
 pub struct RowError {
+    /// Machine-readable rejection reason.
+    pub kind: RowErrorKind,
     /// One-based input record position including the header.
     pub row: u64,
     /// Safe user-facing explanation.

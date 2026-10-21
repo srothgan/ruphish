@@ -9,13 +9,29 @@ use std::borrow::Cow;
 const BASELINE: &str = include_str!("../../migrations/postgres/1_application.sql");
 fn migrator() -> Migrator {
     Migrator {
-        migrations: Cow::Owned(vec![Migration::new(
-            1,
-            Cow::Borrowed("application"),
-            MigrationType::Simple,
-            BASELINE.into_sql_str(),
-            false,
-        )]),
+        migrations: Cow::Owned(vec![
+            Migration::new(
+                1,
+                Cow::Borrowed("application"),
+                MigrationType::Simple,
+                BASELINE.into_sql_str(),
+                false,
+            ),
+            Migration::new(
+                2,
+                Cow::Borrowed("user preferences"),
+                MigrationType::Simple,
+                include_str!("../../migrations/postgres/2_user_preferences.sql").into_sql_str(),
+                false,
+            ),
+            Migration::new(
+                3,
+                Cow::Borrowed("UTC offset preference"),
+                MigrationType::Simple,
+                include_str!("../../migrations/postgres/3_utc_offset.sql").into_sql_str(),
+                false,
+            ),
+        ]),
         locking: false,
         ..Migrator::DEFAULT
     }

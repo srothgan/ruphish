@@ -3,18 +3,41 @@ use crate::datetime::Label;
 use ruphish_domain::datetime::{self, TimeZone};
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen(module = "/web/datetime.mjs")]
+#[wasm_bindgen(module = "/web/generated/datetime.js")]
 extern "C" {
     #[wasm_bindgen(catch, js_name = formatDateLabel)]
     fn format_label(value: &str, locale: Option<&str>) -> Result<String, JsValue>;
-    /// Read a browser-local preference; storage restrictions are recoverable.
-    #[wasm_bindgen(catch, js_name = loadTimeZone)]
-    pub fn load_zone(key: &str) -> Result<String, JsValue>;
-    /// Persist or clear the browser-local preference.
-    #[wasm_bindgen(catch, js_name = saveTimeZone)]
-    pub fn save_zone(key: &str, value: &str) -> Result<(), JsValue>;
+    /// Effective browser formatting locale, independently of UI translation.
+    #[wasm_bindgen(catch, js_name = browserFormatLocale)]
+    pub fn browser_format_locale() -> Result<String, JsValue>;
+    /// Whether Intl can honor this explicit date/time formatting locale.
+    #[wasm_bindgen(catch, js_name = supportsFormatLocale)]
+    pub fn supports_format_locale(locale: &str) -> Result<bool, JsValue>;
+    #[wasm_bindgen(catch, js_name = formatLocaleOptions)]
+    fn locale_options(locale: &str, selected: &str, sample: &str) -> Result<String, JsValue>;
+    /// Human-readable formatting locale for compact browser-default controls.
+    #[wasm_bindgen(catch, js_name = formatLocaleName)]
+    pub fn format_locale_name(display_locale: &str, locale: &str) -> Result<String, JsValue>;
     #[wasm_bindgen(catch, js_name = browserTimeZone)]
     fn browser_zone() -> Result<String, JsValue>;
+}
+
+/// Browser-supported CLDR format choices that also satisfy the server's domain policy.
+pub fn format_locale_options(locale: &str, selected: &str, sample: Label) -> Vec<(String, String)> {
+    let mut options: Vec<(String, String)> = serde_json::to_string(&sample)
+        .ok()
+        .and_then(|sample| locale_options(locale, selected, &sample).ok())
+        .and_then(|value| serde_json::from_str(&value).ok())
+        .unwrap_or_default();
+    options.retain(|(value, _)| {
+        ruphish_domain::preferences::Preferences {
+            format_locale: Some(value.clone()),
+            ..Default::default()
+        }
+        .validate()
+        .is_ok()
+    });
+    options
 }
 
 /// Browser IANA setting, with UTC fallback even if Intl is unavailable/throws.

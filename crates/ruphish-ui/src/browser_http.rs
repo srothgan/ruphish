@@ -53,16 +53,25 @@ pub async fn send(
     ));
     let value = wasm_bindgen_futures::JsFuture::from(request_promise(&pending.0)).await.map_err(|_| {
         if read {
-            "The request failed or timed out. Try again.".to_owned()
+            leptos_i18n::td_string!(crate::localization::current_locale(), ui.the_request_failed_or_timed_out_try_again).to_owned()
         } else {
-            "The request failed or timed out; its outcome is unconfirmed. Refresh the saved state before retrying.".to_owned()
+            leptos_i18n::td_string!(crate::localization::current_locale(), ui.the_request_failed_or_timed_out_its_outcome_is_unconfirmed_refresh_the_saved_sta).to_owned()
         }
     })?;
     let json = js_sys::JSON::stringify(&value)
         .ok()
         .and_then(|v| v.as_string())
-        .ok_or("Invalid transport response")?;
-    serde_json::from_str(&json).map_err(|_| "Invalid transport response".into())
+        .ok_or(leptos_i18n::td_string!(
+            crate::localization::current_locale(),
+            ui.invalid_transport_response
+        ))?;
+    serde_json::from_str(&json).map_err(|_| {
+        leptos_i18n::td_string!(
+            crate::localization::current_locale(),
+            ui.invalid_transport_response
+        )
+        .into()
+    })
 }
 
 /// Reject broken success payloads rather than interpreting them as empty saved data.
@@ -71,7 +80,11 @@ pub fn decode(status: u16, body: &str) -> Result<Value, String> {
         return Ok(Value::Null);
     }
     serde_json::from_str(body).map_err(|_| {
-        "The server returned an invalid JSON response. Refresh before retrying an operation.".into()
+        leptos_i18n::td_string!(
+            crate::localization::current_locale(),
+            ui.the_server_returned_an_invalid_json_response_refresh_before_retrying_an_operatio
+        )
+        .into()
     })
 }
 
@@ -97,11 +110,22 @@ pub fn resource_request(
 ) -> Result<Request, String> {
     let mut builder = match method {
         "GET" => Request::get(path),
-        "HEAD" => Request::get(path).method("HEAD".parse().map_err(|_| "Invalid request method")?),
+        "HEAD" => Request::get(path).method("HEAD".parse().map_err(|_| {
+            leptos_i18n::td_string!(
+                crate::localization::current_locale(),
+                ui.invalid_request_method
+            )
+        })?),
         "POST" => Request::post(path),
         "PUT" => Request::put(path),
         "DELETE" => Request::delete(path),
-        _ => return Err("Unsupported request method".into()),
+        _ => {
+            return Err(leptos_i18n::td_string!(
+                crate::localization::current_locale(),
+                ui.unsupported_request_method
+            )
+            .into());
+        }
     }
     .header("x-ruphish-client", "browser")
     .header("accept", "application/json")
@@ -114,7 +138,13 @@ pub fn resource_request(
     } else {
         builder.build()
     };
-    request.map_err(|_| format!("Cannot prepare {method} request"))
+    request.map_err(|_| {
+        leptos_i18n::td_string!(
+            crate::localization::current_locale(),
+            messages.cannot_prepare_method_request,
+            method = method.to_owned()
+        )
+    })
 }
 
 /// A bounded binary transfer; callers process session/error status before saving it.
@@ -131,15 +161,34 @@ pub async fn download(
     ));
     let value = wasm_bindgen_futures::JsFuture::from(request_promise(&pending.0))
         .await
-        .map_err(|_| "The export failed or timed out. Narrow the filters and try again.")?;
+        .map_err(|_| {
+            leptos_i18n::td_string!(
+                crate::localization::current_locale(),
+                ui.the_export_failed_or_timed_out_narrow_the_filters_and_try_again
+            )
+        })?;
     let serialized = js_sys::JSON::stringify(&value)
         .ok()
         .and_then(|v| v.as_string())
-        .ok_or("Invalid export response")?;
-    let received = serde_json::from_str(&serialized).map_err(|_| "Invalid export response")?;
+        .ok_or(leptos_i18n::td_string!(
+            crate::localization::current_locale(),
+            ui.invalid_export_response
+        ))?;
+    let received = serde_json::from_str(&serialized).map_err(|_| {
+        leptos_i18n::td_string!(
+            crate::localization::current_locale(),
+            ui.invalid_export_response
+        )
+    })?;
     Ok((received, value))
 }
 /// Save a completed successful transfer through the native browser download workflow.
 pub fn save_file(value: &JsValue, filename: &str) -> Result<(), String> {
-    save_download(value, filename).map_err(|_| "The browser could not save this export.".into())
+    save_download(value, filename).map_err(|_| {
+        leptos_i18n::td_string!(
+            crate::localization::current_locale(),
+            ui.the_browser_could_not_save_this_export
+        )
+        .into()
+    })
 }

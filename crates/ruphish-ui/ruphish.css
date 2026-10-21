@@ -169,7 +169,10 @@
   .account-app .button.primary:hover:not([aria-disabled="true"]) { background: var(--teal-700); border-color: var(--teal-700); }
 
   .account-app .danger { background: var(--danger); border-color: var(--danger); color: var(--paper); }
-  .account-app .danger:hover:not(:disabled) { filter: brightness(.9); }
+  .account-app button.danger:hover:not(:disabled),
+  .account-app .button.danger:hover:not([aria-disabled="true"]) {
+    background: var(--danger); border-color: var(--danger); color: var(--paper); filter: brightness(.9);
+  }
 
   /* Quiet dismiss/cancel: a ghost, never red. */
   .account-app .ghost { color: var(--muted); background: transparent; border-color: transparent; }
@@ -283,6 +286,12 @@
   .multi-select-panel .form-field { margin: 0; }
   .multi-select-panel > p { margin: 0; }
   .multi-select-toolbar, .multi-select-footer { display: flex; justify-content: space-between; align-items: center; gap: var(--s3); }
+  .account-app .search-select .multi-select-trigger { white-space: normal; text-align: start; gap: var(--s3); padding-block: var(--s2); }
+  .search-select-options { display: flex; flex-direction: column; gap: var(--s1); max-height: 22rem; overflow-y: auto; }
+  .search-select-option { display: flex; align-items: baseline; gap: var(--s3); padding: var(--s2); cursor: pointer; border-radius: var(--r-sm); }
+  .search-select-option:hover, .search-select-option:focus-within { background: var(--teal-50); }
+  .account-app .search-select-option input[type="radio"] { width: 1rem; min-height: 1rem; height: 1rem; flex: 0 0 1rem; margin: 0; accent-color: var(--teal-600); }
+  .search-select-option span { overflow-wrap: anywhere; }
 
   /* Domain verification progress + history. */
   .domain-verification th:last-child, .domain-verification td:last-child { text-align: end; width: 1%; white-space: nowrap; }
@@ -361,8 +370,12 @@
   .admin-content { min-width: 0; padding: var(--s6); }
   .account-panel { max-width: 680px; }
   .account-panel > p { color: var(--muted); }
+  .preference-field { display: grid; gap: var(--s1); min-width: 0; }
+  .preference-field .form-field { margin: 0; }
+  .preference-reset { display: flex; justify-content: flex-start; }
+  .account-app .preference-reset button { white-space: normal; text-align: start; justify-content: flex-start; }
   .account-form { display: grid; gap: var(--s4); }
-  .account-form input, .account-form select { width: 100%; }
+  .account-form input:not([type=checkbox]), .account-form select { width: 100%; }
   .account-form > button { justify-self: start; }
   .account-actions, .row-actions { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s4); }
   .row-actions { margin: 0; }

@@ -51,6 +51,7 @@ impl ContentTools for Tools {
             match record {
                 Err(_) => result.errors.push(RowError {
                     row,
+                    kind: RowErrorKind::Encoding,
                     message: "Invalid CSV encoding or record".into(),
                     fields: vec![],
                 }),
@@ -58,6 +59,7 @@ impl ContentTools for Tools {
                     if record.len() != headers.len() {
                         result.errors.push(RowError {
                             row,
+                            kind: RowErrorKind::Columns,
                             message: "Column count does not match the header".into(),
                             fields: record.iter().map(str::to_owned).collect(),
                         });
@@ -79,6 +81,7 @@ impl ContentTools for Tools {
                     match mailbox(&recipient.email) {
                         Err(_) => result.errors.push(RowError {
                             row,
+                            kind: RowErrorKind::Email,
                             message: "Invalid email address".into(),
                             fields: record.iter().map(str::to_owned).collect(),
                         }),

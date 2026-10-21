@@ -13,6 +13,7 @@ use axum_csrf::{CsrfConfig, CsrfToken};
 use governor::clock::DefaultClock;
 use ruphish_application::auth::{Account, AccountError, Edit, Error, Identity, Service};
 use ruphish_application::datetime;
+use ruphish_contracts::errors::ErrorCode;
 use ruphish_contracts::{
     auth::{BrowserSession, BrowserUser, Role, User, UserEdit},
     legacy::{Envelope, Timestamp},
@@ -109,6 +110,10 @@ pub fn router<S: SessionStore + Clone>(
         .route("/reset_password", get(page).post(password))
         .route("/settings", get(page).post(password))
         .route("/settings/password", get(page))
+        .route(
+            "/api/user-preferences",
+            get(preferences).put(save_preferences),
+        )
         .route("/users", get(page))
         .route("/users/new", get(page))
         .route("/users/{id}/edit", get(page))
@@ -211,6 +216,7 @@ impl FromRequestParts<AuthState> for Context {
             .ok_or_else(|| {
                 failure(
                     StatusCode::INTERNAL_SERVER_ERROR,
+                    ErrorCode::InternalError,
                     "Connection identity unavailable",
                 )
             })?
@@ -299,14 +305,24 @@ impl Context {
             .and_then(|h| h.to_str().ok())
             .or(form)
             .unwrap_or("");
-        self.csrf
-            .verify(token)
-            .map_err(|_| failure(StatusCode::FORBIDDEN, "Invalid CSRF token"))?;
+        self.csrf.verify(token).map_err(|_| {
+            failure(
+                StatusCode::FORBIDDEN,
+                ErrorCode::AuthCsrfInvalid,
+                "Invalid CSRF token",
+            )
+        })?;
         if let Some(origin) = self.headers.get(header::ORIGIN) {
             self.origin(origin.to_str().unwrap_or(""))?;
         } else if let Some(referer) = self.headers.get(header::REFERER) {
             let origin = url::Url::parse(referer.to_str().unwrap_or(""))
-                .map_err(|_| failure(StatusCode::FORBIDDEN, "Invalid request origin"))?
+                .map_err(|_| {
+                    failure(
+                        StatusCode::FORBIDDEN,
+                        ErrorCode::AuthOriginInvalid,
+                        "Invalid request origin",
+                    )
+                })?
                 .origin()
                 .ascii_serialization();
             self.origin(&origin)?;
@@ -316,7 +332,11 @@ impl Context {
             .get("sec-fetch-site")
             .is_some_and(|v| v == "cross-site")
         {
-            return Err(failure(StatusCode::FORBIDDEN, "Cross-site request denied"));
+            return Err(failure(
+                StatusCode::FORBIDDEN,
+                ErrorCode::AuthOriginInvalid,
+                "Cross-site request denied",
+            ));
         }
         Ok(())
     }
@@ -331,7 +351,13 @@ impl Context {
             "{scheme}://{}",
             authority.or(header_host).unwrap_or("")
         ))
-        .map_err(|_| failure(StatusCode::FORBIDDEN, "Invalid request origin"))?
+        .map_err(|_| {
+            failure(
+                StatusCode::FORBIDDEN,
+                ErrorCode::AuthOriginInvalid,
+                "Invalid request origin",
+            )
+        })?
         .origin();
         if let (Some(_), Some(host)) = (authority, header_host)
             && !url::Url::parse(&format!("{scheme}://{host}"))
@@ -339,11 +365,17 @@ impl Context {
         {
             return Err(failure(
                 StatusCode::FORBIDDEN,
+                ErrorCode::AuthOriginInvalid,
                 "Conflicting request authority",
             ));
         }
-        let parsed = url::Url::parse(origin)
-            .map_err(|_| failure(StatusCode::FORBIDDEN, "Invalid request origin"))?;
+        let parsed = url::Url::parse(origin).map_err(|_| {
+            failure(
+                StatusCode::FORBIDDEN,
+                ErrorCode::AuthOriginInvalid,
+                "Invalid request origin",
+            )
+        })?;
         if !matches!(parsed.scheme(), "http" | "https")
             || !parsed.username().is_empty()
             || parsed.password().is_some()
@@ -351,7 +383,11 @@ impl Context {
             || parsed.query().is_some()
             || parsed.fragment().is_some()
         {
-            return Err(failure(StatusCode::FORBIDDEN, "Invalid request origin"));
+            return Err(failure(
+                StatusCode::FORBIDDEN,
+                ErrorCode::AuthOriginInvalid,
+                "Invalid request origin",
+            ));
         }
         let matches = |allowed: &str| {
             url::Url::parse(allowed).is_ok_and(|allowed| allowed.origin() == parsed.origin())
@@ -367,7 +403,11 @@ impl Context {
                 }
             })
         {
-            return Err(failure(StatusCode::FORBIDDEN, "Invalid request origin"));
+            return Err(failure(
+                StatusCode::FORBIDDEN,
+                ErrorCode::AuthOriginInvalid,
+                "Invalid request origin",
+            ));
         }
         Ok(())
     }
@@ -394,6 +434,7 @@ impl Context {
                     Error::Internal | Error::Storage(_) | Error::Busy => auth_error(error),
                     _ => failure(
                         StatusCode::UNAUTHORIZED,
+                        ErrorCode::AuthApiKeyInvalid,
                         if key.is_empty() {
                             "API Key not set"
                         } else {
@@ -409,6 +450,7 @@ impl Context {
             ) {
                 failure(
                     StatusCode::UNAUTHORIZED,
+                    ErrorCode::AuthRequired,
                     if self
                         .headers
                         .get("x-ruphish-client")
@@ -424,10 +466,13 @@ impl Context {
             }
         })?;
         if actor.is_some()
-            && (self.uri.path().starts_with("/api/users") || self.uri.path() == "/api/reset")
+            && (self.uri.path().starts_with("/api/users")
+                || self.uri.path() == "/api/reset"
+                || self.uri.path() == "/api/user-preferences")
         {
             return Err(failure(
                 StatusCode::FORBIDDEN,
+                ErrorCode::AuthImpersonationActive,
                 "Exit impersonation before managing accounts",
             ));
         }
@@ -522,7 +567,8 @@ async fn page(context: Context) -> Response {
                 if (path == "/users" || path.starts_with("/users/"))
                     && !user.permits("modify_system")
                 {
-                    return failure(StatusCode::FORBIDDEN, "Forbidden").into_response();
+                    return failure(StatusCode::FORBIDDEN, ErrorCode::AuthForbidden, "Forbidden")
+                        .into_response();
                 }
             }
             Err(error)
@@ -545,17 +591,21 @@ async fn bootstrap(context: Context) -> Result<Response, Rejection> {
         .csrf
         .authenticity_token()
         .map_err(|_| auth_error(Error::Internal))?;
+    let mut preferences = ruphish_contracts::auth::Preferences::default();
     let (user, actor) = match context.identity().await {
-        Ok((user, actor)) => (
-            Some(BrowserUser {
-                id: user.identity.id,
-                username: user.username,
-                role: role(&user.role),
-                password_change_required: user.password_change_required,
-                permissions: user.role.permissions,
-            }),
-            actor.map(|a| a.username),
-        ),
+        Ok((user, actor)) => {
+            preferences = preference_wire(user.preferences);
+            (
+                Some(BrowserUser {
+                    id: user.identity.id,
+                    username: user.username,
+                    role: role(&user.role),
+                    password_change_required: user.password_change_required,
+                    permissions: user.role.permissions,
+                }),
+                actor.map(|a| a.username),
+            )
+        }
         Err(error)
             if matches!(
                 error.status(),
@@ -569,12 +619,79 @@ async fn bootstrap(context: Context) -> Result<Response, Rejection> {
     Ok((
         context.csrf,
         Json(BrowserSession {
+            preferences,
             csrf_token,
             user,
             actor,
         }),
     )
         .into_response())
+}
+
+fn preference_wire(
+    value: ruphish_application::auth::Preferences,
+) -> ruphish_contracts::auth::Preferences {
+    ruphish_contracts::auth::Preferences {
+        language: value.language,
+        format_locale: value.format_locale,
+        time_zone: value.time_zone,
+        show_utc_offset: value.show_utc_offset,
+    }
+}
+
+async fn preferences(
+    context: Context,
+) -> Result<Json<ruphish_contracts::auth::Preferences>, Rejection> {
+    Ok(Json(preference_wire(context.api(None).await?.preferences)))
+}
+
+async fn save_preferences(
+    context: Context,
+    request: Request,
+) -> Result<Json<ruphish_contracts::auth::Preferences>, Rejection> {
+    let actor = context.api(None).await?;
+    let bytes = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        axum::body::to_bytes(request.into_body(), 4096),
+    )
+    .await
+    .map_err(|_| {
+        failure(
+            StatusCode::REQUEST_TIMEOUT,
+            ErrorCode::RequestTimeout,
+            "Request body timed out",
+        )
+    })?
+    .map_err(|_| {
+        failure(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            ErrorCode::RequestTooLarge,
+            "Request body too large",
+        )
+    })?;
+    let input: ruphish_contracts::auth::Preferences =
+        serde_json::from_slice(&bytes).map_err(|_| {
+            failure(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::PreferencesInvalid,
+                "Invalid preferences",
+            )
+        })?;
+    let result = context
+        .state
+        .service
+        .save_preferences(
+            actor.identity,
+            ruphish_application::auth::Preferences {
+                language: input.language,
+                format_locale: input.format_locale,
+                time_zone: input.time_zone,
+                show_utc_offset: input.show_utc_offset,
+            },
+        )
+        .await
+        .map_err(auth_error)?;
+    Ok(Json(preference_wire(result)))
 }
 
 #[derive(Deserialize, Default)]
@@ -596,10 +713,27 @@ async fn form(request: Request) -> Result<Form, Rejection> {
         axum::body::to_bytes(request.into_body(), 16 * 1024),
     )
     .await
-    .map_err(|_| failure(StatusCode::REQUEST_TIMEOUT, "Request body timed out"))?
-    .map_err(|_| failure(StatusCode::PAYLOAD_TOO_LARGE, "Request body too large"))?;
-    serde_urlencoded::from_bytes(&bytes)
-        .map_err(|_| failure(StatusCode::BAD_REQUEST, "Invalid form"))
+    .map_err(|_| {
+        failure(
+            StatusCode::REQUEST_TIMEOUT,
+            ErrorCode::RequestTimeout,
+            "Request body timed out",
+        )
+    })?
+    .map_err(|_| {
+        failure(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            ErrorCode::RequestTooLarge,
+            "Request body too large",
+        )
+    })?;
+    serde_urlencoded::from_bytes(&bytes).map_err(|_| {
+        failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::RequestInvalid,
+            "Invalid form",
+        )
+    })
 }
 async fn login(context: Context, request: Request) -> Result<Response, Rejection> {
     let input = form(request).await?;
@@ -607,6 +741,7 @@ async fn login(context: Context, request: Request) -> Result<Response, Rejection
     if !context.state.limiter.admit(context.peer) {
         return Err(failure(
             StatusCode::TOO_MANY_REQUESTS,
+            ErrorCode::RateLimited,
             "Too many login attempts",
         ));
     }
@@ -664,6 +799,7 @@ async fn password(context: Context, request: Request) -> Result<Response, Reject
     if actor.is_some() {
         return Err(failure(
             StatusCode::FORBIDDEN,
+            ErrorCode::AuthImpersonationActive,
             "Exit impersonation before changing credentials",
         ));
     }
@@ -691,7 +827,11 @@ async fn password(context: Context, request: Request) -> Result<Response, Reject
         .await
         .map_err(|error| {
             if matches!(error, Error::InvalidCredentials) {
-                failure(StatusCode::BAD_REQUEST, "Invalid password")
+                failure(
+                    StatusCode::BAD_REQUEST,
+                    ErrorCode::PasswordInvalid,
+                    "Invalid password",
+                )
             } else {
                 auth_error(error)
             }
@@ -721,6 +861,7 @@ async fn impersonate(context: Context, request: Request) -> Result<Response, Rej
     if original.is_some() {
         return Err(failure(
             StatusCode::FORBIDDEN,
+            ErrorCode::AuthImpersonationActive,
             "Exit the current impersonation first",
         ));
     }
@@ -750,8 +891,13 @@ async fn exit_impersonation(context: Context, request: Request) -> Result<Respon
     let input = form(request).await?;
     context.csrf(Some(&input.csrf_token))?;
     let (_, actor) = context.identity().await?;
-    let actor =
-        actor.ok_or_else(|| failure(StatusCode::BAD_REQUEST, "No impersonation is active"))?;
+    let actor = actor.ok_or_else(|| {
+        failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::AuthImpersonationInactive,
+            "No impersonation is active",
+        )
+    })?;
     let prior: Login = context
         .session
         .get("login")
@@ -802,10 +948,27 @@ async fn edit(request: Request) -> Result<Edit, Rejection> {
         axum::body::to_bytes(request.into_body(), 16 * 1024),
     )
     .await
-    .map_err(|_| failure(StatusCode::REQUEST_TIMEOUT, "Request body timed out"))?
-    .map_err(|_| failure(StatusCode::PAYLOAD_TOO_LARGE, "Request body too large"))?;
-    let value: UserEdit = serde_json::from_slice(&body)
-        .map_err(|_| failure(StatusCode::BAD_REQUEST, "Invalid JSON"))?;
+    .map_err(|_| {
+        failure(
+            StatusCode::REQUEST_TIMEOUT,
+            ErrorCode::RequestTimeout,
+            "Request body timed out",
+        )
+    })?
+    .map_err(|_| {
+        failure(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            ErrorCode::RequestTooLarge,
+            "Request body too large",
+        )
+    })?;
+    let value: UserEdit = serde_json::from_slice(&body).map_err(|_| {
+        failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::RequestInvalid,
+            "Invalid JSON",
+        )
+    })?;
     Ok(Edit {
         username: value.username,
         password: value.password,
@@ -942,11 +1105,16 @@ fn redirect(status: StatusCode, target: &str) -> Response {
     (status, [(header::LOCATION, target)]).into_response()
 }
 fn unauthorized() -> Rejection {
-    failure(StatusCode::UNAUTHORIZED, "Authentication required")
+    failure(
+        StatusCode::UNAUTHORIZED,
+        ErrorCode::AuthRequired,
+        "Authentication required",
+    )
 }
 pub(crate) struct Rejection {
     status: StatusCode,
     message: String,
+    code: ErrorCode,
 }
 impl Rejection {
     fn status(&self) -> StatusCode {
@@ -955,13 +1123,14 @@ impl Rejection {
 }
 impl IntoResponse for Rejection {
     fn into_response(self) -> Response {
+        tracing::debug!(
+            error_code = self.code.as_str(),
+            status = self.status.as_u16(),
+            "Request rejected"
+        );
         let mut response = (
             self.status,
-            Json(Envelope::<()> {
-                success: false,
-                message: self.message,
-                data: None,
-            }),
+            Json(serde_json::json!({"success": false, "message": self.message, "data": null, "code": self.code.as_str()})),
         )
             .into_response();
         if self.status == StatusCode::TOO_MANY_REQUESTS {
@@ -972,14 +1141,47 @@ impl IntoResponse for Rejection {
         response
     }
 }
-pub(crate) fn failure(status: StatusCode, message: &str) -> Rejection {
+pub(crate) fn failure(status: StatusCode, code: ErrorCode, message: &str) -> Rejection {
     Rejection {
         status,
         message: message.into(),
+        code,
     }
 }
 fn session_error(_: tower_sessions::session::Error) -> Rejection {
     auth_error(Error::Internal)
+}
+pub(crate) fn policy_code(error: &AccountError) -> ErrorCode {
+    match error {
+        AccountError::Unauthorized => ErrorCode::AuthRequired,
+        AccountError::Forbidden | AccountError::Escalation => ErrorCode::AuthForbidden,
+        AccountError::ResetRequired => ErrorCode::PasswordChangeRequired,
+        AccountError::EmptyUsername => ErrorCode::UsernameRequired,
+        AccountError::EmptyRole => ErrorCode::RoleRequired,
+        AccountError::LastAdmin => ErrorCode::LastAdmin,
+        AccountError::SelfDeletion => ErrorCode::SelfDeletion,
+    }
+}
+fn auth_code(error: &Error) -> ErrorCode {
+    use ruphish_application::auth::PasswordError;
+    match error {
+        Error::Policy(error) => policy_code(error),
+        Error::Preferences(_) => ErrorCode::PreferencesInvalid,
+        Error::Password(error) => match error {
+            PasswordError::Empty => ErrorCode::PasswordRequired,
+            PasswordError::TooShort => ErrorCode::PasswordTooShort,
+            PasswordError::Mismatch => ErrorCode::PasswordMismatch,
+            PasswordError::Reused => ErrorCode::PasswordReused,
+        },
+        Error::InvalidCredentials => ErrorCode::AuthInvalidCredentials,
+        Error::NotFound => ErrorCode::AccountNotFound,
+        Error::Conflict => ErrorCode::UsernameTaken,
+        Error::RoleNotFound => ErrorCode::RoleNotFound,
+        Error::Changed => ErrorCode::AuthChanged,
+        Error::Busy => ErrorCode::ServiceBusy,
+        Error::TooLong => ErrorCode::PasswordTooLong,
+        Error::Storage(_) | Error::Internal => ErrorCode::InternalError,
+    }
 }
 fn auth_error(error: Error) -> Rejection {
     let status = match &error {
@@ -1002,7 +1204,7 @@ fn auth_error(error: Error) -> Rejection {
     } else {
         error.to_string()
     };
-    failure(status, &message)
+    failure(status, auth_code(&error), &message)
 }
 async fn security_headers(request: Request<Body>, next: Next) -> Response {
     let api = request.uri().path().starts_with("/api/");
@@ -1046,4 +1248,32 @@ async fn security_headers(request: Request<Body>, next: Next) -> Response {
         .headers_mut()
         .insert("x-frame-options", header::HeaderValue::from_static("DENY"));
     response
+}
+
+#[cfg(test)]
+mod error_contract_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn error_codes_extend_legacy_errors_without_changing_status_or_message() {
+        let response = auth_error(Error::InvalidCredentials).into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value["code"], "AUTH_INVALID_CREDENTIALS");
+        assert_eq!(value["message"], "Invalid Username/Password");
+        assert_eq!(value["success"], false);
+        assert!(value["data"].is_null());
+        let legacy: Envelope<()> = serde_json::from_slice(&body).unwrap();
+        assert!(!legacy.success);
+        let response = failure(
+            StatusCode::TOO_MANY_REQUESTS,
+            ErrorCode::RateLimited,
+            "Too many login attempts",
+        )
+        .into_response();
+        assert_eq!(response.headers()[header::RETRY_AFTER], "12");
+    }
 }

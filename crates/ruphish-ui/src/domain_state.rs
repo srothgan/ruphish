@@ -14,6 +14,7 @@ pub struct Details {
     pub mutation: Option<u64>,
     generation: u64,
 }
+
 impl Details {
     /// Admit one refresh without overlapping a mutation.
     pub fn refresh(&mut self) -> Option<u64> {
@@ -68,15 +69,7 @@ impl Details {
                 self.error = None;
             }
             Err(error) => {
-                self.error = Some(if mutation {
-                    format!(
-                        "Could not confirm the verification request. Refresh status before retrying. {error}"
-                    )
-                } else {
-                    format!(
-                        "Unable to refresh verification status. Displayed results may be stale. {error}"
-                    )
-                });
+                self.error = Some(error);
             }
         }
     }

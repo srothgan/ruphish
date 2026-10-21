@@ -26,7 +26,23 @@ fn baseline() -> Migration {
 
 fn migrator() -> Migrator {
     Migrator {
-        migrations: Cow::Owned(vec![baseline()]),
+        migrations: Cow::Owned(vec![
+            baseline(),
+            Migration::new(
+                2,
+                Cow::Borrowed("user preferences"),
+                MigrationType::Simple,
+                include_str!("../../migrations/mysql/2_user_preferences.sql").into_sql_str(),
+                false,
+            ),
+            Migration::new(
+                3,
+                Cow::Borrowed("UTC offset preference"),
+                MigrationType::Simple,
+                include_str!("../../migrations/mysql/3_utc_offset.sql").into_sql_str(),
+                false,
+            ),
+        ]),
         locking: false,
         ..Migrator::DEFAULT
     }
@@ -237,7 +253,8 @@ pub(super) async fn statement(c: &mut MySqlConnection, sql: String) -> Result<()
 
 async fn validate_current(c: &mut MySqlConnection) -> Result<(), Error> {
     let actual = names(c).await?;
-    let expected = tables();
+    let mut expected = tables();
+    expected.insert("ruphish_user_preferences".into());
     if !expected.is_subset(&actual) {
         return Err(Error::UnsupportedSchema);
     }
@@ -278,7 +295,8 @@ async fn validate_columns(c: &mut MySqlConnection) -> Result<(), Error> {
         .fetch_all(c)
         .await
         .map_err(storage_error)?;
-    let application = tables();
+    let mut application = tables();
+    application.insert("ruphish_user_preferences".into());
     let mut actual = Vec::new();
     for row in rows {
         let value: serde_json::Value =

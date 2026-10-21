@@ -11,6 +11,7 @@ use axum::{
     routing::get,
 };
 use ruphish_application::{overview as app, resources::Error};
+use ruphish_contracts::errors::ErrorCode;
 use ruphish_contracts::overview as wire;
 use serde::Deserialize;
 
@@ -101,13 +102,23 @@ async fn posture(
     query: Result<Query<WindowQuery>, QueryRejection>,
 ) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
-    let Query(q) =
-        query.map_err(|_| failure(StatusCode::BAD_REQUEST, "overview_invalid_window"))?;
+    let Query(q) = query.map_err(|_| {
+        failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::OverviewWindowInvalid,
+            "overview_invalid_window",
+        )
+    })?;
     let window = if q.window.is_empty() {
         app::Window::All
     } else {
-        app::Window::parse(&q.window)
-            .ok_or_else(|| failure(StatusCode::BAD_REQUEST, "overview_invalid_window"))?
+        app::Window::parse(&q.window).ok_or_else(|| {
+            failure(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::OverviewWindowInvalid,
+                "overview_invalid_window",
+            )
+        })?
     };
     let now = ruphish_application::datetime::now().as_second();
     let p = context
