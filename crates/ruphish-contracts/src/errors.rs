@@ -5,6 +5,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ErrorCode {
+    /// The saved draft contains invalid or unsupported input.
+    DraftInvalid,
+    /// Choose a new launch time or immediate delivery before launching.
+    DraftSchedulePast,
     /// Invalid CSV encoding or record.
     CsvRowEncoding,
     /// Column count does not match the header.
@@ -114,6 +118,8 @@ impl ErrorCode {
     /// Canonical protocol spelling.
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::DraftInvalid => "DRAFT_INVALID",
+            Self::DraftSchedulePast => "DRAFT_SCHEDULE_PAST",
             Self::CsvRowEncoding => "CSV_ROW_ENCODING",
             Self::CsvRowColumns => "CSV_ROW_COLUMNS",
             Self::CsvRowEmail => "CSV_ROW_EMAIL",

@@ -1,4 +1,6 @@
 //! Legacy campaign routes with explicit mutation permissions and additive UI metadata.
+mod directory;
+mod drafts;
 use crate::{
     auth::{AuthState, Context, Rejection, failure},
     resources::{encode, error, response},
@@ -24,6 +26,8 @@ fn now() -> i64 {
 }
 pub(crate) fn routes() -> Router<AuthState> {
     Router::new()
+        .merge(drafts::routes())
+        .route("/api/campaigns/directory", get(directory::list))
         .route("/api/campaigns", get(slash).post(slash))
         .route("/api/campaigns/", get(list).post(create))
         .route("/api/campaigns/prepare", post(prepare))
@@ -210,8 +214,15 @@ fn launch_error(e: Error) -> Rejection {
     }
 }
 async fn prepare(context: Context, body: Bytes) -> Result<Response, Rejection> {
+    prepare_inner(context, body, false).await
+}
+async fn prepare_inner(context: Context, body: Bytes, draft: bool) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
     let input = decode(&context, &body)?;
+    if draft && input.launch.is_some_and(|time| time < now()) {
+        return Err(error(Error::DraftSchedulePast));
+    }
+
     let p = context
         .campaigns()
         .prepare(user.identity, &input, now())
@@ -349,6 +360,7 @@ async fn delete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejec
 struct Page {
     after: i64,
     limit: Option<i64>,
+    completed: Option<bool>,
 }
 fn encode_header(c: &app::CampaignHeader) -> Value {
     let resource = |r: &app::CampaignResource| json!({"id":r.id,"name":r.name});
@@ -358,7 +370,12 @@ async fn overview(context: Context, Query(page): Query<Page>) -> Result<Response
     let user = context.api(None).await?;
     let rows = context
         .campaigns()
-        .overview(user.identity, page.after, page.limit.unwrap_or(50))
+        .overview_filtered(
+            user.identity,
+            page.after,
+            page.limit.unwrap_or(50),
+            page.completed,
+        )
         .await
         .map_err(error)?;
     response(

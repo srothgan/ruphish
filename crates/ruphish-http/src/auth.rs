@@ -131,6 +131,8 @@ pub fn router<S: SessionStore + Clone>(
         .route("/domains/{id}", get(page))
         .route("/domains/{id}/edit", get(page))
         .route("/campaigns/{id}", get(page))
+        .route("/campaigns/drafts/{id}", get(page))
+        .route("/campaigns/drafts/{id}/edit", get(page))
         .route("/groups", get(page))
         .route("/groups/{id}", get(page))
         .route("/groups/{id}/edit", get(page))

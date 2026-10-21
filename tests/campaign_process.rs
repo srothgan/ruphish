@@ -1,5 +1,7 @@
 //! Executable campaign contracts, real SMTP effects, crash recovery and privacy.
 use super::*;
+#[path = "campaign_draft_process.rs"]
+mod campaign_draft_process;
 #[path = "proxy_process.rs"]
 mod proxy_process;
 use std::{

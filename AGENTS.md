@@ -22,9 +22,11 @@ Native libraries are scaffolds until functionality is implemented with its tests
 
 ## Toolchain and verification
 
+Use development builds for routine implementation, local UI review, and functional/process verification: `trunk build --locked` for the UI and `cargo build --workspace --exclude ruphish-ui --locked` for native code. Run optimized release builds, including `trunk build --release --locked` and `cargo build --release`, only when the user explicitly requests final release-profile verification. Finishing a feature or preparing a commit does not authorize a release build. Development builds must still generate the real assets and distribution manifest; retain all relevant tests, linting, and asset-integrity checks.
+
 `rust-toolchain.toml` pins Rust 1.99.1, rustfmt, Clippy, and wasm32-unknown-unknown. Manifests inherit edition 2024 and supported Rust 1.99. Lower compiler versions have not been validated. Keep the application Cargo.lock and use locked checks. Native default members exclude the browser binary deliberately; native success is not WASM verification.
 
-Build the real admin distribution before running the native process suite: npm ci --prefix crates/ruphish-ui/web, then trunk build --release --locked. Process tests intentionally use the real generated WASM/JavaScript assets and fail if they are absent. Run checks directly from this directory. Do not add a task runner, check script, Cargo alias layer, or npm wrapper around these commands. Keep the actual commands visible here and report their individual results.
+Build the real admin distribution before running the native process suite: npm ci --prefix crates/ruphish-ui/web, then trunk build --locked. Process tests intentionally use the real generated WASM/JavaScript assets and fail if they are absent. Run checks directly from this directory. Do not add a task runner, check script, Cargo alias layer, or npm wrapper around these commands. Keep the actual commands visible here and report their individual results.
 
 After native Rust changes, run:
 
@@ -62,10 +64,10 @@ node crates/ruphish-ui/web/build.mjs
 cargo check -p ruphish-ui --target wasm32-unknown-unknown --locked
 cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --locked -- -D warnings
 cargo clippy -p ruphish-ui --test browser_requests --target wasm32-unknown-unknown --locked -- -D warnings
-trunk build --release --locked
+trunk build --locked
 ```
 
-Trunk 0.21.14 expects NO_COLOR to be a boolean. If the invoking environment has NO_COLOR=1, set the process value to true before direct Trunk commands: `$env:NO_COLOR = 'true'` in PowerShell, or `NO_COLOR=true trunk build --release --locked` in a POSIX shell. Do not change persistent user/system environment settings.
+Trunk 0.21.14 expects NO_COLOR to be a boolean. If the invoking environment has NO_COLOR=1, set the process value to true before direct Trunk commands: `$env:NO_COLOR = 'true'` in PowerShell, or `NO_COLOR=true trunk build --locked` in a POSIX shell. Do not change persistent user/system environment settings.
 
 The WASM request tests execute the production Fetch request builder in Node using wasm-bindgen-test-runner. Install the matching runner with cargo install wasm-bindgen-cli --version 0.2.129 --locked; keep its version aligned with the locked wasm-bindgen crate. The target runner in .cargo/config.toml is the Cargo test runtime, not a check wrapper. These tests require Node with native Fetch support and do not launch or automate a browser.
 

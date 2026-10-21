@@ -20,6 +20,15 @@ pub(crate) fn ListToolbar(
     }
 }
 
+/// Table heading and compact trailing filter controls share one aligned row.
+#[component]
+pub(crate) fn TableToolbar(
+    #[prop(into)] title: Signal<String>,
+    children: Children,
+) -> impl IntoView {
+    view! {<div class="management-toolbar management-toolbar--filters"><h2>{move||title.get()}</h2>{children()}</div>}
+}
+
 /// Empty results are only shown after a successful completed read.
 #[component]
 pub(crate) fn ListEmptyState(
@@ -61,10 +70,26 @@ pub(crate) fn PageControls(
     #[prop(into)] disabled: Signal<bool>,
 ) -> impl IntoView {
     use ruphish_ui::pagination::CursorPages;
+    view! { <PaginationControls disabled=disabled
+    has_previous=Signal::derive(move||pages.with(CursorPages::has_previous))
+    has_next=Signal::derive(move||pages.with(CursorPages::has_next))
+    on_previous=Callback::new(move|()|pages.update(CursorPages::previous))
+    on_next=Callback::new(move|()|pages.update(CursorPages::advance))/> }
+}
+
+/// Shared pagination presentation for numeric and opaque cursor APIs.
+#[component]
+pub(crate) fn PaginationControls(
+    #[prop(into)] disabled: Signal<bool>,
+    #[prop(into)] has_previous: Signal<bool>,
+    #[prop(into)] has_next: Signal<bool>,
+    on_previous: Callback<()>,
+    on_next: Callback<()>,
+) -> impl IntoView {
     view! { <FormFooter>
-        <ActionButton disabled=Signal::derive(move || disabled.get() || !pages.with(CursorPages::has_previous))
-            on_click=move |_| {pages.update(CursorPages::previous)}>{tr!(ui.previous_page)}</ActionButton>
-        <ActionButton disabled=Signal::derive(move || disabled.get() || !pages.with(CursorPages::has_next))
-            on_click=move |_| {pages.update(CursorPages::advance)}>{tr!(ui.next_page)}</ActionButton>
+        <ActionButton disabled=Signal::derive(move || disabled.get() || !has_previous.get())
+            on_click=move |_| on_previous.run(())>{tr!(ui.previous_page)}</ActionButton>
+        <ActionButton disabled=Signal::derive(move || disabled.get() || !has_next.get())
+            on_click=move |_| on_next.run(())>{tr!(ui.next_page)}</ActionButton>
     </FormFooter> }
 }

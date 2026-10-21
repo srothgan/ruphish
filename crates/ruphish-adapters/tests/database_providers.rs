@@ -16,6 +16,8 @@ use sqlx::{
 };
 use std::path::PathBuf;
 
+#[path = "support/campaign_drafts.rs"]
+mod campaign_drafts;
 #[path = "support/mysql_proxy.rs"]
 mod mysql_proxy;
 #[path = "support/postgres_proxy.rs"]
@@ -492,6 +494,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         idempotency: Some(("launch-once".into(), "request-fingerprint".into())),
         ..campaign::Create::default()
     };
+    campaign_drafts::exercise(db, actor, normal.identity, input.clone(), now, fault).await;
     let campaigns = db.campaigns();
     let review = campaigns.prepare(actor, &input, now).await.unwrap();
     assert_eq!(review.recipients.len(), 1);
@@ -876,6 +879,17 @@ async fn sqlite_provider_contract() {
     .await
     .unwrap();
     assert!(db.bootstrap(None, None).await.unwrap().is_none());
+    let draft = db
+        .campaigns()
+        .draft(
+            db.accounts().by_name("admin").await.unwrap().identity,
+            "draft-survives-restart-01",
+        )
+        .await
+        .unwrap();
+    assert_eq!(draft.step, 2);
+    assert_eq!(draft.configuration, Default::default());
+
     assert_eq!(
         db.campaigns()
             .list(db.accounts().by_name("admin").await.unwrap().identity)
@@ -905,6 +919,17 @@ async fn mysql_provider_contract() {
         .await
         .unwrap();
     assert!(db.bootstrap(None, None).await.unwrap().is_none());
+    let draft = db
+        .campaigns()
+        .draft(
+            db.accounts().by_name("admin").await.unwrap().identity,
+            "draft-survives-restart-01",
+        )
+        .await
+        .unwrap();
+    assert_eq!(draft.step, 2);
+    assert_eq!(draft.configuration, Default::default());
+
     assert_eq!(
         db.campaigns()
             .list(db.accounts().by_name("admin").await.unwrap().identity)
@@ -1241,6 +1266,7 @@ async fn mysql_upgrades_every_legacy_version_preserving_identity_and_recoverable
             .await
             .unwrap_or_else(|e| panic!("upgrade version {version}: {e}"));
         assert!(db.bootstrap(None, None).await.unwrap().is_none());
+
         let user = db.accounts().by_name("legacy-admin").await.unwrap();
         assert_eq!(user.identity.id, 17);
         assert_eq!(user.hash, password["bcrypt_hash"].as_str().unwrap());
@@ -1427,6 +1453,7 @@ async fn mysql_failed_publication_resumes_without_losing_or_duplicating_legacy_d
         .await
         .unwrap();
     assert!(db.bootstrap(None, None).await.unwrap().is_none());
+
     db.close().await;
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
         "DROP DATABASE `{}`; DROP USER '{username}'@'%'",
@@ -1644,6 +1671,17 @@ async fn postgres_provider_contract() {
         .await
         .unwrap();
     assert!(db.bootstrap(None, None).await.unwrap().is_none());
+    let draft = db
+        .campaigns()
+        .draft(
+            db.accounts().by_name("admin").await.unwrap().identity,
+            "draft-survives-restart-01",
+        )
+        .await
+        .unwrap();
+    assert_eq!(draft.step, 2);
+    assert_eq!(draft.configuration, Default::default());
+
     assert_eq!(
         db.campaigns()
             .list(db.accounts().by_name("admin").await.unwrap().identity)
@@ -2261,7 +2299,7 @@ async fn mysql_preferences_migrate_existing_accounts_and_survive_reopen() {
     .unwrap();
     let original = db.accounts().by_name("admin").await.unwrap();
     db.close().await;
-    sqlx::raw_sql("DROP TABLE ruphish_user_preferences; DELETE FROM _sqlx_migrations WHERE version>=2; UPDATE users SET password_change_required=FALSE").execute(&mut inspect).await.unwrap();
+    sqlx::raw_sql("DROP TABLE ruphish_campaign_drafts; DROP TABLE ruphish_user_preferences; DELETE FROM _sqlx_migrations WHERE version>=2; UPDATE users SET password_change_required=FALSE").execute(&mut inspect).await.unwrap();
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
         .unwrap();
@@ -2280,7 +2318,7 @@ async fn mysql_preferences_migrate_existing_accounts_and_survive_reopen() {
         .await
         .unwrap();
     db.close().await;
-    sqlx::raw_sql("ALTER TABLE ruphish_user_preferences DROP COLUMN show_utc_offset; DELETE FROM _sqlx_migrations WHERE version=3;").execute(&mut inspect).await.unwrap();
+    sqlx::raw_sql("DROP TABLE ruphish_campaign_drafts; ALTER TABLE ruphish_user_preferences DROP COLUMN show_utc_offset; DELETE FROM _sqlx_migrations WHERE version>=3;").execute(&mut inspect).await.unwrap();
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
         .unwrap();
@@ -2337,7 +2375,7 @@ async fn postgres_preferences_migrate_existing_accounts_and_survive_reopen() {
     let original = db.accounts().by_name("admin").await.unwrap();
     db.close().await;
     let mut connection = postgres_inspect(&config).await;
-    sqlx::raw_sql("DROP TABLE ruphish_user_preferences; DELETE FROM _sqlx_migrations WHERE version>=2; UPDATE users SET password_change_required=FALSE").execute(&mut connection).await.unwrap();
+    sqlx::raw_sql("DROP TABLE ruphish_campaign_drafts; DROP TABLE ruphish_user_preferences; DELETE FROM _sqlx_migrations WHERE version>=2; UPDATE users SET password_change_required=FALSE").execute(&mut connection).await.unwrap();
     connection.close().await.unwrap();
     let db = database::open(Config::Postgres(config.clone()), Policy::default())
         .await
@@ -2358,7 +2396,7 @@ async fn postgres_preferences_migrate_existing_accounts_and_survive_reopen() {
         .unwrap();
     db.close().await;
     let mut connection = postgres_inspect(&config).await;
-    sqlx::raw_sql("ALTER TABLE ruphish_user_preferences DROP COLUMN show_utc_offset; DELETE FROM _sqlx_migrations WHERE version=3;").execute(&mut connection).await.unwrap();
+    sqlx::raw_sql("DROP TABLE ruphish_campaign_drafts; ALTER TABLE ruphish_user_preferences DROP COLUMN show_utc_offset; DELETE FROM _sqlx_migrations WHERE version>=3;").execute(&mut connection).await.unwrap();
     connection.close().await.unwrap();
     let db = database::open(Config::Postgres(config.clone()), Policy::default())
         .await

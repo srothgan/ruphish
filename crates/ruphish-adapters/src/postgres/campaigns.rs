@@ -1,5 +1,7 @@
 //! Atomic campaign persistence and durable queue adapters.
 use crate::postgres::InsertId;
+mod directory;
+mod drafts;
 mod queue;
 use ruphish_application::datetime;
 use ruphish_application::{
@@ -308,11 +310,22 @@ async fn header(c: &mut PgConnection, owner: i64, id: i64) -> Result<CampaignHea
 }
 #[async_trait::async_trait]
 impl Repository for Campaigns {
-    async fn overview(
+    async fn directory(
+        &self,
+        caller: Identity,
+        filter: ruphish_application::campaign::directory::Filter,
+        after: ruphish_application::campaign::directory::Cursor,
+        limit: i64,
+    ) -> Result<ruphish_application::campaign::directory::Page, Error> {
+        self.management_directory(caller, filter, after, limit)
+            .await
+    }
+    async fn overview_filtered(
         &self,
         caller: Identity,
         after: i64,
         limit: i64,
+        completed: Option<bool>,
     ) -> Result<CampaignOverview, Error> {
         let mut tx = crate::postgres::locks::snapshot(&self.pool)
             .await
@@ -320,10 +333,13 @@ impl Repository for Campaigns {
         super::resources::authorize(&mut tx, caller, false).await?;
         let limit = limit.clamp(1, 200);
         let mut ids: Vec<i64> = sqlx::query_scalar(
-            "SELECT id FROM campaigns WHERE user_id=$1 AND id>$2 ORDER BY id LIMIT $3",
+            "SELECT id FROM campaigns WHERE user_id=$1 AND id>$2 AND ($3=0 OR ($4=1 AND status='Completed') OR ($5=2 AND (status IS NULL OR status<>'Completed'))) ORDER BY id LIMIT $6",
         )
         .bind(caller.id)
         .bind(after)
+        .bind(completed.map(|v|if v{1i32}else{2}).unwrap_or(0))
+        .bind(completed.map(|v|if v{1i32}else{2}).unwrap_or(0))
+        .bind(completed.map(|v|if v{1i32}else{2}).unwrap_or(0))
         .bind(limit + 1)
         .fetch_all(&mut *tx)
         .await
@@ -355,89 +371,7 @@ impl Repository for Campaigns {
         Ok(value)
     }
     async fn create(&self, caller: Identity, input: Create, now: i64) -> Result<Campaign, Error> {
-        let mut tx = crate::postgres::locks::write(&self.pool)
-            .await
-            .map_err(storage)?;
-        super::resources::authorize(&mut tx, caller, true).await?;
-        if let Some((key, fingerprint)) = &input.idempotency {
-            if key.is_empty() || key.len() > 128 {
-                return Err(Error::Invalid("Invalid launch idempotency key".into()));
-            }
-            if let Some(row)=sqlx::query("SELECT fingerprint,campaign_id FROM ruphish_campaign_launch WHERE owner_id=$1 AND key=$2").bind(caller.id).bind(key).fetch_optional(&mut *tx).await.map_err(storage)? {
-                if text(&row,"fingerprint")?!=*fingerprint {return Err(Error::Conflict("Launch key"));}
-                return load(&mut tx,caller.id,row.try_get("campaign_id").map_err(storage)?).await;
-            }
-        }
-        let p = prepare(&mut tx, caller, &input, now).await?;
-        let created = stamp(now)?;
-        let launch = stamp(p.launch)?;
-        let end = input.send_by.map(stamp).transpose()?.unwrap_or(ZERO.into());
-        let status = if p.launch <= now {
-            "In progress"
-        } else {
-            "Queued"
-        };
-        let id=sqlx::query("INSERT INTO campaigns(user_id,name,created_date,launch_date,send_by_date,completed_date,template_id,page_id,status,smtp_id,url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id").bind(caller.id).bind(&input.name).bind(&created).bind(&launch).bind(end).bind(ZERO).bind(p.template.id).bind(p.page.id).bind(status).bind(p.profile.id).bind(&input.url).fetch_one(&mut *tx).await.map_err(storage)?.insert_id().map_err(storage)?;
-        let domain_id = super::domains::eligible(&mut tx, caller.id, &input.url, now, true).await?;
-        sqlx::query("INSERT INTO ruphish_campaign_domains VALUES($1,$2)")
-            .bind(id)
-            .bind(domain_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(storage)?;
-        sqlx::query("INSERT INTO ruphish_campaign_policy VALUES($1,$2,$3,$4)")
-            .bind(id)
-            .bind(p.policy.capture_credentials)
-            .bind(p.policy.capture_passwords)
-            .bind(&p.policy.redirect_url)
-            .execute(&mut *tx)
-            .await
-            .map_err(storage)?;
-        let inserted=sqlx::query("INSERT INTO events(campaign_id,email,time,message,details) VALUES($1,'',$2,'Campaign Created','') RETURNING id").bind(id).bind(&created).fetch_one(&mut *tx).await.map_err(storage)?;
-        super::events::publish(
-            &mut tx,
-            inserted.insert_id().map_err(storage)?,
-            "application",
-        )
-        .await
-        .map_err(storage)?;
-        for (index, r) in p.recipients.iter().enumerate() {
-            let due = send_date(p.launch, input.send_by, index, p.recipients.len())
-                .ok_or_else(|| Error::Invalid("Campaign schedule overflow".into()))?;
-            let rid = loop {
-                let candidate = random()?;
-                let exists:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM results WHERE r_id=$1 UNION ALL SELECT 1 FROM email_requests WHERE r_id=$2)").bind(&candidate).bind(&candidate).fetch_one(&mut *tx).await.map_err(storage)?;
-                if !exists {
-                    break candidate;
-                }
-            };
-            let result=sqlx::query("INSERT INTO results(campaign_id,user_id,r_id,email,first_name,last_name,position,status,ip,latitude,longitude,send_date,reported,modified_date) VALUES($1,$2,$3,$4,$5,$6,$7,$8, '',0,0,$9,FALSE,$10) RETURNING id").bind(id).bind(caller.id).bind(rid).bind(&r.email).bind(&r.first_name).bind(&r.last_name).bind(&r.position).bind(if due<=now {"Sending"} else {"Scheduled"}).bind(stamp(due)?).bind(&created).fetch_one(&mut *tx).await.map_err(storage)?.insert_id().map_err(storage)?;
-            sqlx::query("INSERT INTO ruphish_delivery(result_id,campaign_id,state,due) VALUES($1,$2,'ready',$3)").bind(result).bind(id).bind(due).execute(&mut *tx).await.map_err(storage)?;
-        }
-        if let Some((key, fingerprint)) = input.idempotency {
-            sqlx::query("INSERT INTO ruphish_campaign_launch VALUES($1,$2,$3,$4)")
-                .bind(caller.id)
-                .bind(key)
-                .bind(fingerprint)
-                .bind(id)
-                .execute(&mut *tx)
-                .await
-                .map_err(storage)?;
-        }
-        for (index, g) in p.groups.iter().enumerate() {
-            sqlx::query("INSERT INTO ruphish_campaign_groups VALUES($1,$2,$3)")
-                .bind(id)
-                .bind(index as i64)
-                .bind(g.id)
-                .execute(&mut *tx)
-                .await
-                .map_err(storage)?;
-        }
-        let campaign = load(&mut tx, caller.id, id).await?;
-        tx.commit()
-            .await
-            .map_err(|e| Error::Storage(crate::postgres::commit_error(e)))?;
-        Ok(campaign)
+        self.create_inner(caller, input, now, None).await
     }
     async fn get(&self, caller: Identity, id: i64) -> Result<Campaign, Error> {
         let mut tx = crate::postgres::locks::snapshot(&self.pool)
@@ -762,4 +696,111 @@ fn decode_attempt(a: PgRow) -> Result<Attempt, Error> {
         smtp_code: a.try_get("smtp_code").map_err(storage)?,
         message_id: text(&a, "message_id")?,
     })
+}
+
+impl Campaigns {
+    async fn create_inner(
+        &self,
+        caller: Identity,
+        mut input: Create,
+        now: i64,
+        draft: Option<(&str, i64)>,
+    ) -> Result<Campaign, Error> {
+        let mut tx = crate::postgres::locks::write(&self.pool)
+            .await
+            .map_err(storage)?;
+        super::resources::authorize(&mut tx, caller, true).await?;
+        if draft.is_some() {
+            input.idempotency = None;
+        }
+        if let Some((id, revision)) = draft {
+            let saved = drafts::launching(&mut tx, caller.id, id).await?;
+            if let Some(campaign_id) = saved.campaign_id {
+                return load(&mut tx, caller.id, campaign_id).await;
+            }
+            ruphish_application::campaign::drafts::validate_launch(&saved, revision, &input, now)?;
+        }
+        if let Some((key, fingerprint)) = &input.idempotency {
+            if key.is_empty() || key.len() > 128 {
+                return Err(Error::Invalid("Invalid launch idempotency key".into()));
+            }
+            if let Some(row)=sqlx::query("SELECT fingerprint,campaign_id FROM ruphish_campaign_launch WHERE owner_id=$1 AND key=$2").bind(caller.id).bind(key).fetch_optional(&mut *tx).await.map_err(storage)? {
+                if text(&row,"fingerprint")?!=*fingerprint {return Err(Error::Conflict("Launch key"));}
+                return load(&mut tx,caller.id,row.try_get("campaign_id").map_err(storage)?).await;
+            }
+        }
+        let p = prepare(&mut tx, caller, &input, now).await?;
+        let created = stamp(now)?;
+        let launch = stamp(p.launch)?;
+        let end = input.send_by.map(stamp).transpose()?.unwrap_or(ZERO.into());
+        let status = if p.launch <= now {
+            "In progress"
+        } else {
+            "Queued"
+        };
+        let id=sqlx::query("INSERT INTO campaigns(user_id,name,created_date,launch_date,send_by_date,completed_date,template_id,page_id,status,smtp_id,url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id").bind(caller.id).bind(&input.name).bind(&created).bind(&launch).bind(end).bind(ZERO).bind(p.template.id).bind(p.page.id).bind(status).bind(p.profile.id).bind(&input.url).fetch_one(&mut *tx).await.map_err(storage)?.insert_id().map_err(storage)?;
+        let domain_id = super::domains::eligible(&mut tx, caller.id, &input.url, now, true).await?;
+        sqlx::query("INSERT INTO ruphish_campaign_domains VALUES($1,$2)")
+            .bind(id)
+            .bind(domain_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+        sqlx::query("INSERT INTO ruphish_campaign_policy VALUES($1,$2,$3,$4)")
+            .bind(id)
+            .bind(p.policy.capture_credentials)
+            .bind(p.policy.capture_passwords)
+            .bind(&p.policy.redirect_url)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+        let inserted=sqlx::query("INSERT INTO events(campaign_id,email,time,message,details) VALUES($1,'',$2,'Campaign Created','') RETURNING id").bind(id).bind(&created).fetch_one(&mut *tx).await.map_err(storage)?;
+        super::events::publish(
+            &mut tx,
+            inserted.insert_id().map_err(storage)?,
+            "application",
+        )
+        .await
+        .map_err(storage)?;
+        for (index, r) in p.recipients.iter().enumerate() {
+            let due = send_date(p.launch, input.send_by, index, p.recipients.len())
+                .ok_or_else(|| Error::Invalid("Campaign schedule overflow".into()))?;
+            let rid = loop {
+                let candidate = random()?;
+                let exists:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM results WHERE r_id=$1 UNION ALL SELECT 1 FROM email_requests WHERE r_id=$2)").bind(&candidate).bind(&candidate).fetch_one(&mut *tx).await.map_err(storage)?;
+                if !exists {
+                    break candidate;
+                }
+            };
+            let result=sqlx::query("INSERT INTO results(campaign_id,user_id,r_id,email,first_name,last_name,position,status,ip,latitude,longitude,send_date,reported,modified_date) VALUES($1,$2,$3,$4,$5,$6,$7,$8, '',0,0,$9,FALSE,$10) RETURNING id").bind(id).bind(caller.id).bind(rid).bind(&r.email).bind(&r.first_name).bind(&r.last_name).bind(&r.position).bind(if due<=now {"Sending"} else {"Scheduled"}).bind(stamp(due)?).bind(&created).fetch_one(&mut *tx).await.map_err(storage)?.insert_id().map_err(storage)?;
+            sqlx::query("INSERT INTO ruphish_delivery(result_id,campaign_id,state,due) VALUES($1,$2,'ready',$3)").bind(result).bind(id).bind(due).execute(&mut *tx).await.map_err(storage)?;
+        }
+        if let Some((key, fingerprint)) = input.idempotency {
+            sqlx::query("INSERT INTO ruphish_campaign_launch VALUES($1,$2,$3,$4)")
+                .bind(caller.id)
+                .bind(key)
+                .bind(fingerprint)
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .map_err(storage)?;
+        }
+        for (index, g) in p.groups.iter().enumerate() {
+            sqlx::query("INSERT INTO ruphish_campaign_groups VALUES($1,$2,$3)")
+                .bind(id)
+                .bind(index as i64)
+                .bind(g.id)
+                .execute(&mut *tx)
+                .await
+                .map_err(storage)?;
+        }
+        if let Some((draft_id, _)) = draft {
+            sqlx::query("UPDATE ruphish_campaign_drafts SET campaign_id=$1,revision=revision+1,modified=$2 WHERE id=$3 AND owner_id=$4").bind(id).bind(now).bind(draft_id).bind(caller.id).execute(&mut *tx).await.map_err(storage)?;
+        }
+        let campaign = load(&mut tx, caller.id, id).await?;
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::postgres::commit_error(e)))?;
+        Ok(campaign)
+    }
 }

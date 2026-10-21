@@ -31,6 +31,13 @@ fn migrator() -> Migrator {
                 include_str!("../../migrations/postgres/3_utc_offset.sql").into_sql_str(),
                 false,
             ),
+            Migration::new(
+                4,
+                Cow::Borrowed("campaign drafts"),
+                MigrationType::Simple,
+                include_str!("../../migrations/postgres/4_campaign_drafts.sql").into_sql_str(),
+                false,
+            ),
         ]),
         locking: false,
         ..Migrator::DEFAULT

@@ -10,3 +10,5 @@ pub mod reporting;
 pub mod resources;
 
 pub mod datetime;
+
+pub mod campaign_draft;

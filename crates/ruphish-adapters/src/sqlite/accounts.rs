@@ -275,6 +275,7 @@ impl Repository for Accounts {
                     "DELETE FROM imap WHERE user_id=?",
                     "DELETE FROM email_requests WHERE user_id=?",
                     "DELETE FROM ruphish_user_preferences WHERE user_id=?",
+                    "DELETE FROM ruphish_campaign_drafts WHERE owner_id=?",
                     "DELETE FROM users WHERE id=?",
                 ] {
                     sqlx::query(statement)

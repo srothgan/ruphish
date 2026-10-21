@@ -324,7 +324,7 @@ async fn preferences_upgrade_keeps_a_recoverable_original_and_failed_writes_pres
     .await
     .unwrap();
     let pool = db.inspection_pool();
-    sqlx::raw_sql("UPDATE users SET password_change_required=0; DROP TABLE ruphish_user_preferences; DELETE FROM ruphish_schema WHERE version>=7;").execute(&pool).await.unwrap();
+    sqlx::raw_sql("UPDATE users SET password_change_required=0; DROP TABLE ruphish_campaign_drafts; DROP TABLE ruphish_user_preferences; DELETE FROM ruphish_schema WHERE version>=7;").execute(&pool).await.unwrap();
     pool.close().await;
     db.close().await;
     let upgraded = DatabaseFixture::open(&path, "").await.unwrap();
@@ -367,7 +367,7 @@ async fn preferences_upgrade_keeps_a_recoverable_original_and_failed_writes_pres
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::raw_sql("ALTER TABLE ruphish_user_preferences DROP COLUMN show_utc_offset; DELETE FROM ruphish_schema WHERE version=8;").execute(&pool).await.unwrap();
+    sqlx::raw_sql("DROP TABLE ruphish_campaign_drafts; ALTER TABLE ruphish_user_preferences DROP COLUMN show_utc_offset; DELETE FROM ruphish_schema WHERE version>=8;").execute(&pool).await.unwrap();
     pool.close().await;
     upgraded.close().await;
     let reopened = DatabaseFixture::open(&path, "").await.unwrap();

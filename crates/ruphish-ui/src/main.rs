@@ -14,6 +14,8 @@ mod analysis_chart;
 #[cfg(target_arch = "wasm32")]
 mod campaign_delivery;
 #[cfg(target_arch = "wasm32")]
+mod campaign_drafts;
+#[cfg(target_arch = "wasm32")]
 mod campaigns;
 #[cfg(target_arch = "wasm32")]
 mod domains;

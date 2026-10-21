@@ -229,6 +229,10 @@
   .management-actions, .management-footer { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); }
   .management-toolbar { display: flex; align-items: end; justify-content: space-between; margin: var(--s5) 0 var(--s4); gap: var(--s5); color: var(--muted); }
   .management-toolbar .form-field { width: min(420px, 100%); margin: 0; }
+  .management-toolbar--filters { flex-wrap: wrap; }
+  .management-toolbar--filters h2 { margin: 0; }
+  .management-toolbar--filters .form-field { width: min(16rem, 100%); margin-inline-start: auto; }
+
   .management-page > .breadcrumb { display: inline-block; margin-bottom: var(--s5); font-size: var(--fs-sm); }
   .management-page .save-state { font-size: var(--fs-sm); }
 

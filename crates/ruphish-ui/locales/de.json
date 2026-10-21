@@ -154,7 +154,7 @@
     "send_test_email": "Test-E-Mail senden",
     "the_mailer_is_disabled_this_campaign_will_remain_queued_until_an_enabled_admin_p": "Der Mailversand ist deaktiviert. Diese Kampagne bleibt in der Warteschlange, bis ein aktivierter Adminprozess läuft.",
     "back": "Zurück",
-    "view_analysis": "Auswertung anzeigen",
+    "view_analysis": "Auswertung",
     "duplicate": "Duplizieren",
     "complete_campaign": "Kampagne abschließen",
     "delete": "Löschen",
@@ -730,7 +730,31 @@
     "service_account": "Dienstkonto",
     "monitoring": "Überwachung",
     "webhook_delivery_guidance": "Ereignisse werden mindestens einmal zugestellt. Empfänger sollten Duplikate anhand von X-Ruphish-Event-ID erkennen.",
-    "mailbox_processing_guidance": "Nachrichteninhalte werden nur vorübergehend verarbeitet und nicht gespeichert. Der Absenderdomain-Filter bestätigt nicht die Identität der meldenden Person."
+    "mailbox_processing_guidance": "Nachrichteninhalte werden nur vorübergehend verarbeitet und nicht gespeichert. Der Absenderdomain-Filter bestätigt nicht die Identität der meldenden Person.",
+    "draft": "Entwurf",
+    "drafts": "Entwürfe",
+    "save_as_draft": "Als Entwurf speichern",
+    "draft_saved": "Gespeichert",
+    "draft_saving": "Wird gespeichert…",
+    "draft_unsaved": "Ungespeicherte Änderungen",
+    "continue_editing": "Weiter bearbeiten",
+    "untitled_campaign": "Unbenannte Kampagne",
+    "draft_description": "Diese Kampagne ist nicht geplant. Bearbeiten Sie den Entwurf weiter, um ihn zu prüfen und zu starten.",
+    "delete_draft": "Entwurf löschen",
+    "delete_draft_description": "Diesen gespeicherten Entwurf löschen? Es wurde keine Kampagne gestartet.",
+    "no_drafts": "Keine gespeicherten Entwürfe",
+    "draft_guidance": "Speichern Sie eine unvollständige Kampagne, um später fortzufahren.",
+    "last_saved": "Zuletzt gespeichert",
+    "not_scheduled": "Nicht geplant",
+    "campaign_filter": "Kampagnenstatus",
+    "all_campaigns": "Alle",
+    "active_campaigns_filter": "Aktiv",
+    "completed_campaigns_filter": "Abgeschlossen",
+    "missing_draft_resource": "Eine gespeicherte Auswahl ist nicht verfügbar. Wählen Sie vor dem Start einen Ersatz.",
+    "schedule_campaign": "Kampagne planen",
+    "draft_step": "Bearbeitungsschritt",
+    "public_url": "Öffentliche URL",
+    "edit_campaign_draft": "Kampagnenentwurf bearbeiten"
   },
   "messages": {
     "the_request_failed_arg0_try_again": "Die Anfrage ist fehlgeschlagen ({{ arg0 }}). Versuchen Sie es erneut.",
@@ -795,7 +819,8 @@
     "attempt_one": "Erfasste Versuche: 1",
     "copy_name": "{{name}} – Kopie",
     "edit_resource": "{{name}} bearbeiten",
-    "transport_port": "{{transport}} · Port {{port}}"
+    "transport_port": "{{transport}} · Port {{port}}",
+    "unavailable_draft_group": "Nicht verfügbare Gruppe (ID {{id}}) - abwählen zum Entfernen"
   },
   "editor": {
     "source": "HTML-Quelltext",
@@ -922,6 +947,8 @@
     "unknown": "Die Anfrage ist fehlgeschlagen. Versuchen Sie es erneut oder wenden Sie sich an Ihren Administrator.",
     "csv_row_encoding": "Ungültige CSV-Kodierung oder Zeile.",
     "csv_row_columns": "Die Spaltenanzahl passt nicht zur Kopfzeile.",
-    "csv_row_email": "Ungültige E-Mail-Adresse."
+    "csv_row_email": "Ungültige E-Mail-Adresse.",
+    "draft_invalid": "Prüfen Sie die Entwurfsfelder und Eingabegrenzen. Ihre Änderungen bleiben erhalten.",
+    "draft_schedule_past": "Die gespeicherte Startzeit liegt in der Vergangenheit. Wählen Sie eine zukünftige Zeit oder entfernen Sie sie für einen sofortigen Start."
   }
 }

@@ -12,7 +12,7 @@ use crate::time_display::{instant, zone_name as local_zone};
 #[wasm_bindgen(inline_js = "export function campaignKey(){return crypto.randomUUID()}")]
 extern "C" {
     #[wasm_bindgen(catch,js_name=campaignKey)]
-    fn random_key() -> Result<String, JsValue>;
+    pub(super) fn random_key() -> Result<String, JsValue>;
 }
 pub(super) fn text(value: &Value, key: &str) -> String {
     value[key].as_str().unwrap_or_default().to_owned()
@@ -20,63 +20,135 @@ pub(super) fn text(value: &Value, key: &str) -> String {
 pub(super) fn array(value: &Value, key: &str) -> Vec<Value> {
     value[key].as_array().cloned().unwrap_or_default()
 }
-fn editable() -> bool {
+pub(super) fn editable() -> bool {
     use_context::<ResourceAccess>().is_some_and(|v| v.0)
 }
 
-pub(super) fn list(api: Api) -> impl IntoView {
-    list_mode(api, false)
+pub(super) fn list(api: Api, token: String) -> impl IntoView {
+    list_mode(api, false, token)
 }
 pub(super) fn analysis_directory(api: Api) -> impl IntoView {
-    list_mode(api, true)
+    list_mode(api, true, String::new())
 }
-fn list_mode(api: Api, analysis: bool) -> impl IntoView {
+fn list_mode(api: Api, analysis: bool, token: String) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
-
+    let token = StoredValue::new(token);
+    let filter = RwSignal::new(String::from(if analysis { "executions" } else { "all" }));
     let rows = RwSignal::new(Vec::<Value>::new());
-    let pages = RwSignal::new(CursorPages::default());
-    let after = Memo::new(move |_| pages.with(CursorPages::after));
+    let cursors = RwSignal::new(vec![String::new()]);
+    let after = Memo::new(move |_| cursors.with(|v| v.last().cloned().unwrap_or_default()));
+    let next = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
+    let loaded = RwSignal::new(false);
     let message = Message::new(String::new());
-    let can_edit = editable();
+    let delete_message = Message::new(String::new());
+    let can_edit = editable() && !analysis;
     let refresh = RwSignal::new(0u64);
-    let failed = RwSignal::new(false);
+    let deleting = RwSignal::new(None::<Value>);
+    let mutating = RwSignal::new(false);
+    let tasks = ruphish_ui::view_tasks::ViewTasks::default();
     Effect::new(move |_| {
-        refresh.get();
+        let generation = refresh.get();
+        let selected = filter.get();
         let cursor = after.get();
         busy.set(true);
-        failed.set(false);
-        spawn_local(async move {
+        loaded.set(false);
+        next.set(None);
+        tasks.spawn(async move {
             let result = api
-                .get(&format!("/api/campaigns/overview?after={cursor}"))
+                .get(&format!(
+                    "/api/campaigns/directory?after={cursor}&filter={selected}"
+                ))
                 .await;
-            if cursor != after.get_untracked() {
+            if cursor != after.get_untracked()
+                || generation != refresh.get_untracked()
+                || selected != filter.get_untracked()
+            {
                 return;
             }
             match result {
                 Ok(value) => {
                     rows.set(array(&value, "items"));
-                    pages.update(|p| {
-                        p.received(cursor, value["next_after"].as_i64());
-                    });
+                    next.set(value["next_after"].as_str().map(str::to_owned));
+                    loaded.set(true);
                     message.clear();
                 }
                 Err(e) => {
-                    failed.set(true);
+                    rows.set(Vec::new());
                     message.error(e);
                 }
             }
             busy.set(false);
         });
     });
+    let confirm = Callback::new(move |()| {
+        let Some(target) = deleting.get_untracked() else {
+            return;
+        };
+        if mutating.get_untracked() {
+            return;
+        }
+        mutating.set(true);
+        delete_message.clear();
+        tasks.spawn(async move {
+            let id = text(&target, "id");
+            let path = if target["kind"] == "draft" {
+                format!("/api/campaign-drafts/{id}?revision={}", target["revision"])
+            } else {
+                format!("/api/campaigns/{id}")
+            };
+            match api
+                .resource("DELETE", &path, &token.get_value(), None, None)
+                .await
+            {
+                Ok(_) => {
+                    rows.update(|v| {
+                        v.retain(|r| r["kind"] != target["kind"] || r["id"] != target["id"])
+                    });
+                    deleting.set(None);
+                    // Deleting the last row on a later page returns to the previous page.
+                    batch(move || {
+                        if rows.with_untracked(Vec::is_empty)
+                            && cursors.with_untracked(|c| c.len() > 1)
+                        {
+                            cursors.update(|c| {
+                                c.pop();
+                            });
+                        }
+                        refresh.update(|v| *v += 1);
+                    });
+                }
+                Err(e) => delete_message.error(e),
+            }
+            mutating.set(false);
+        });
+    });
     view! {<ManagementPage><PageHeader title=Signal::derive(move || (if analysis { leptos_i18n::t_string!(i18n, ui.campaign_analysis) } else { leptos_i18n::t_string!(i18n, ui.campaigns) }).to_owned()) subtitle=Signal::derive(move || (if analysis { leptos_i18n::t_string!(i18n, ui.select_a_campaign_to_inspect_its_recorded_events_and_recipient_outcomes) } else { leptos_i18n::t_string!(i18n, ui.prepare_a_simulation_and_follow_its_delivery_progress) }).to_owned())>
-        <ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|refresh.update(|v|*v+=1)>{tr!(ui.refresh)}</ActionButton>
-        <ActionLink style=ButtonStyle::Primary hidden={ !can_edit || analysis } href="/campaigns/new">{tr!(ui.create_campaign)}</ActionLink>
+        <ActionButton disabled=Signal::derive(move||busy.get()||mutating.get()) on_click=move |_|refresh.update(|v|*v+=1)>{tr!(ui.refresh)}</ActionButton>
+        <ActionLink style=ButtonStyle::Primary hidden={!can_edit} href="/campaigns/new">{tr!(ui.create_campaign)}</ActionLink>
     </PageHeader>{message.view()}<Show when=move||busy.get()><p role="status">{tr!(ui.loading_campaigns)}</p></Show>
-    <DataTable label=trs!(ui.campaigns) empty=Signal::derive(move||rows.get().is_empty()) headers=vec![trs!(ui.campaign),trs!(ui.lifecycle),trs!(ui.recipients),trs!(ui.launch)]>
-        {move||rows.get().into_iter().filter(|_|pages.with(CursorPages::loaded)).map(|r|view!{<tr><th scope="row"><a href=format!("/{}/{}",if analysis { "analysis" } else { "campaigns" },r["id"])>{text(&r,"name")}</a></th><td>{ruphish_ui::localization::event_label(i18n,&text(&r,"status"))}</td><td>{r["total"].to_string()}</td><td>{instant(&r["launch_date"])}</td></tr>}).collect_view()}
-    </DataTable><Show when=move||!busy.get()&&!failed.get()&&rows.get().is_empty()><EmptyState title=trs!(ui.no_campaigns_on_this_page)><p>{tr!(ui.create_a_campaign_to_select_an_audience_review_content_and_choose_a_schedule)}</p></EmptyState></Show>
-    <PageControls pages=pages disabled=Signal::derive(move||busy.get())/>
+    <TableToolbar title=trs!(ui.campaigns)><Show when=move||!analysis><Select label=trs!(ui.campaign_filter) value=Signal::derive(move||filter.get()) on_change=Callback::new(move|v:String|batch(move||{cursors.set(vec![String::new()]);filter.set(v);}))><option value="all">{tr!(ui.all_campaigns)}</option><option value="drafts">{tr!(ui.drafts)}</option><option value="active">{tr!(ui.active_campaigns_filter)}</option><option value="completed">{tr!(ui.completed_campaigns_filter)}</option></Select></Show></TableToolbar>
+    <DataTable label=trs!(ui.campaigns) empty=Signal::derive(move||rows.get().is_empty()) headers=vec![trs!(ui.campaign),trs!(ui.lifecycle),trs!(ui.recipients),trs!(ui.launch),trs!(ui.actions)]>
+        {move||rows.get().into_iter().map(|r|{
+            let draft = r["kind"] == "draft";
+            let id = text(&r,"id");
+            let href = if draft {format!("/campaigns/drafts/{id}")}else{format!("/campaigns/{id}")};
+            let analysis_href = format!("/analysis/{id}");
+            let view_href = if analysis {analysis_href.clone()}else{href.clone()};
+            let name = text(&r,"name");
+            let target=r.clone();
+            view!{<tr><th scope="row"><a href=view_href.clone()>{if name.is_empty(){leptos_i18n::t_string!(i18n, ui.untitled_campaign).to_owned()}else{name}}</a></th>
+                <td>{if draft {view!{<StatusBadge tone=StatusTone::Warning>{tr!(ui.draft)}</StatusBadge>}.into_any()}else{ruphish_ui::localization::event_label(i18n,&text(&r,"status")).into_any()}}</td>
+                <td>{r["total"].as_i64().map(|n|n.to_string()).unwrap_or_else(||leptos_i18n::t_string!(i18n,ui.not_set).to_owned())}</td>
+                <td>{if draft {leptos_i18n::t_string!(i18n,ui.not_scheduled).to_owned()}else{instant(&r["launch_date"])}}</td>
+                <td><ResourceActions view_href=view_href edit_href=format!("{href}/edit") can_edit=can_edit hide_edit=!draft disabled=Signal::derive(move||mutating.get()) on_delete=Callback::new(move|()|{delete_message.clear();deleting.set(Some(target.clone()));})>
+                    <ActionLink hidden={draft||analysis} href=analysis_href>{tr!(ui.view_analysis)}</ActionLink>
+                </ResourceActions></td></tr>}
+        }).collect_view()}
+    </DataTable>
+    <Show when=move||loaded.get()&&!busy.get()&&rows.get().is_empty()><EmptyState title=Signal::derive(move||if filter.get()=="drafts"{leptos_i18n::t_string!(i18n,ui.no_drafts).to_owned()}else{leptos_i18n::t_string!(i18n,ui.no_campaigns_on_this_page).to_owned()})><p>{tr!(ui.create_a_campaign_to_select_an_audience_review_content_and_choose_a_schedule)}</p></EmptyState></Show>
+    <PaginationControls disabled=Signal::derive(move||busy.get()||mutating.get()) has_previous=Signal::derive(move||cursors.with(|c|c.len()>1)) has_next=Signal::derive(move||next.get().is_some()) on_previous=Callback::new(move|()|cursors.update(|c|{c.pop();})) on_next=Callback::new(move|()|{if let Some(cursor)=next.get_untracked(){cursors.update(|c|c.push(cursor));}})/>
+    {move||deleting.get().map(|target|{let draft=target["kind"]=="draft";view!{<DeleteConfirmation title=if draft {trs!(ui.delete_draft)}else{trs!(ui.delete_campaign)} description=if draft {trs!(ui.delete_draft_description)}else{trs!(ui.campaign_history_will_be_removed_already_submitted_mail_cannot_be_recalled)} confirm_label=trs!(ui.delete) busy=Signal::derive(move||mutating.get()) message=delete_message on_confirm=confirm on_cancel=Callback::new(move|()|deleting.set(None))/>}})}
     </ManagementPage>}
 }
 pub(super) fn detail(api: Api, token: String) -> impl IntoView {
@@ -89,7 +161,7 @@ pub(super) fn detail(api: Api, token: String) -> impl IntoView {
             let key=query.with(|q|q.get("draft"));
             let initial=key.as_ref().and_then(|key|drafts.and_then(|store|store.get("campaigns",key))).map(|stored|stored.draft.get_untracked().value().clone());
             if let Some(key)=key {on_cleanup(move||{if let Some(store)=drafts{store.remove(&key);}}); if initial.is_none(){return view!{<ManagementPage><h1>{tr!(ui.draft_unavailable)}</h1><a href="/campaigns">{tr!(ui.return_to_campaigns)}</a></ManagementPage>}.into_any();}}
-            create(api,token.get_value(),initial).into_any()
+            create(api,token.get_value(),initial,None).into_any()
         }} else {show(api,token.get_value(),id).into_any()}
     }/>}
 }
@@ -197,26 +269,39 @@ fn schedule(
         <Field label=trs!(ui.time_zone)><TextInput disabled=Signal::derive(move||draft.get().value[key].is_null()) placeholder=zone.get_value() value=Signal::derive(move||text(&draft.get().value[key],"time_zone")) on_input=move|e|draft.update(|d|d.edit(|v|v[key]["time_zone"]=json!(event_target_value(&e))))/></Field></div>
     </section>}
 }
-fn create(api: Api, token: String, initial: Option<Value>) -> impl IntoView {
+pub(super) fn create(
+    api: Api,
+    token: String,
+    initial: Option<Value>,
+    saved: Option<Value>,
+) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
     let tasks = ruphish_ui::view_tasks::ViewTasks::default();
     let token = StoredValue::new(token);
     let navigate = use_navigate();
     let zone = StoredValue::new(local_zone());
-    let generation = u64::from(initial.is_some());
+    let generation = u64::from(initial.is_some() && saved.is_none());
+    let persistence = crate::campaign_drafts::Persistence::new(saved.as_ref());
+    let initial_step = saved
+        .as_ref()
+        .and_then(|s| s["step"].as_u64())
+        .unwrap_or(0)
+        .min(3) as usize;
     let draft = RwSignal::new(Draft {
         generation,
-        value: initial.unwrap_or_else(||json!({"name":"","url":"","groups":[],"selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"capture_credentials":false,"capture_passwords":false,"redirect_url":""}})),
+        value: initial.unwrap_or_else(||json!({"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"capture_credentials":false,"capture_passwords":false,"redirect_url":""}})),
         ..Default::default()
     });
     let resources = RwSignal::new(json!({}));
     let busy = RwSignal::new(false);
     let loading = RwSignal::new(true);
-    let step = RwSignal::new(0usize);
+    let step = RwSignal::new(initial_step);
     let message = Message::new(String::new());
     let can_edit = editable();
-    crate::navigation::protect_draft(move || draft.with(|d| d.generation > 0));
+    crate::navigation::protect_draft(move || {
+        draft.with(|d| d.generation != persistence.saved_generation.get() || d.launch.is_some())
+    });
     let reload = RwSignal::new(0u64);
     let recipient = RwSignal::new(String::new());
     Effect::new(move |_| {
@@ -276,7 +361,7 @@ fn create(api: Api, token: String, initial: Option<Value>) -> impl IntoView {
             let result = api
                 .resource(
                     "POST",
-                    "/api/campaigns/prepare",
+                    "/api/campaign-drafts/prepare",
                     &token.get_value(),
                     Some(&body),
                     None,
@@ -319,6 +404,45 @@ fn create(api: Api, token: String, initial: Option<Value>) -> impl IntoView {
             busy.set(false);
         });
     };
+    let save_navigate = navigate.clone();
+    let save = Callback::new(move |destination: Option<usize>| {
+        if busy.get_untracked()
+            || draft.with_untracked(|d| d.launch.is_some() || d.page_request.is_some())
+        {
+            return;
+        }
+        busy.set(true);
+        message.clear();
+        let snapshot = draft.get_untracked();
+        let next = destination.unwrap_or(step.get_untracked());
+        let first = persistence.revision.get_untracked().is_none();
+        let navigate = save_navigate.clone();
+        tasks.spawn(async move {
+            match persistence
+                .save(api, &token.get_value(), &snapshot, next)
+                .await
+            {
+                Ok(_) => {
+                    if destination.is_none() {
+                        navigate(
+                            &format!("/campaigns/drafts/{}", persistence.id.get_untracked()),
+                            Default::default(),
+                        );
+                    } else if first && draft.with_untracked(|d| d.generation == snapshot.generation)
+                    {
+                        navigate(
+                            &format!("/campaigns/drafts/{}/edit", persistence.id.get_untracked()),
+                            Default::default(),
+                        );
+                    } else {
+                        step.set(next);
+                    }
+                }
+                Err(e) => message.error(e),
+            }
+            busy.set(false);
+        });
+    });
     let launch = move |_| {
         if busy.get_untracked() {
             return;
@@ -338,9 +462,29 @@ fn create(api: Api, token: String, initial: Option<Value>) -> impl IntoView {
         busy.set(true);
         let navigate = navigate.clone();
         tasks.spawn(async move {
-            match api.launch(&token.get_value(), &key, &body).await {
+            let snapshot = draft.get_untracked();
+            if (snapshot.generation != persistence.saved_generation.get_untracked()
+                || persistence.revision.get_untracked().is_none())
+                && let Err(e) = persistence
+                    .save(api, &token.get_value(), &snapshot, step.get_untracked())
+                    .await
+            {
+                draft.update(Draft::rejected);
+                message.error(e);
+                busy.set(false);
+                return;
+            }
+            let request = json!({"revision":persistence.revision.get_untracked(),"campaign":body});
+            let path = format!(
+                "/api/campaign-drafts/{}/launch",
+                persistence.id.get_untracked()
+            );
+            match api.launch(&path, &token.get_value(), &key, &request).await {
                 Ok(v) => {
-                    draft.update(|d| d.generation = 0);
+                    draft.update(|d| {
+                        d.generation = persistence.saved_generation.get_untracked();
+                        d.launch = None;
+                    });
                     navigate(&format!("/campaigns/{}", v["id"]), Default::default());
                 }
                 Err((status, e)) => {
@@ -354,13 +498,19 @@ fn create(api: Api, token: String, initial: Option<Value>) -> impl IntoView {
             busy.set(false);
         });
     };
-    view! {<ManagementPage><BackLink href="/campaigns">{tr!(ui.back_to_campaigns)}</BackLink><PageHeader title=trs!(ui.create_campaign) subtitle=trs!(ui.review_the_audience_content_and_schedule_before_launching)><span>{tr!(ui.unsaved_draft)}</span><ActionButton disabled=Signal::derive(move||busy.get()||loading.get()||draft.with(|d|d.launch.is_some())) on_click=move |_|reload.update(|v|*v+=1)>{tr!(ui.refresh_resources)}</ActionButton></PageHeader>
+    view! {<ManagementPage><BackLink href="/campaigns">{tr!(ui.back_to_campaigns)}</BackLink><PageHeader title=Signal::derive(move||if persistence.revision.get().is_some(){leptos_i18n::t_string!(i18n,ui.edit_campaign_draft).to_string()}else{leptos_i18n::t_string!(i18n,ui.create_campaign).to_string()}) subtitle=trs!(ui.review_the_audience_content_and_schedule_before_launching)><span role="status">{move||if persistence.saving.get(){leptos_i18n::t_string!(i18n,ui.draft_saving).to_string()}else if draft.with(|d|d.generation!=persistence.saved_generation.get())||persistence.revision.get().is_none(){leptos_i18n::t_string!(i18n,ui.draft_unsaved).to_string()}else{format!("{}: {}",leptos_i18n::t_string!(i18n,ui.draft_saved),instant(&persistence.modified.get()))}}</span><ActionButton disabled=Signal::derive(move||busy.get()||loading.get()||draft.with(|d|d.launch.is_some())) on_click=move |_|reload.update(|v|*v+=1)>{tr!(ui.refresh_resources)}</ActionButton></PageHeader>
         {message.view()}<Show when=move||loading.get()><p role="status">{tr!(ui.loading_resources)}</p></Show>
+        <Show when=move||!loading.get() && ["template","page","smtp","groups"].into_iter().any(|key| {
+            let value=draft.get().value;
+            let selections=if key=="groups"{array(&value["selection"],"groups")}else{vec![value["selection"][key].clone()]};
+            selections.iter().any(|selected|selected["id"].as_i64().is_some_and(|id|id>0)&&!array(&resources.get(),key).iter().any(|r|r["id"]==selected["id"]))
+        })><p class="form-message error">{tr!(ui.missing_draft_resource)}</p></Show>
         <ol class="campaign-steps">{[trs!(ui.audience),trs!(ui.content_and_destination),trs!(ui.schedule),trs!(ui.review_and_launch)].into_iter().enumerate().map(|(index,label)|view!{<li aria-current=move||(step.get()==index).then_some("step")>{move || label.get()}</li>}).collect_view()}</ol>
         <FormFields disabled=Signal::derive(move||busy.get()||loading.get()||!can_edit||draft.with(|d|d.launch.is_some()))>
         <section hidden=move||step.get()!=0><h2>{tr!(ui.audience)}</h2>{input(draft, "name", trs!(ui.campaign_name))}
         <p>{tr!(ui.choose_recipient_groups_overlaps_are_counted_once_by_exact_email_address_the_fir)}</p>
         {move||array(&resources.get(),"groups").into_iter().map(|r|{let id=r["id"].as_i64().unwrap_or(0);view!{<Checkbox label=leptos_i18n::t_string!(i18n, messages.group_count, name = text(&r,"name"), count = r["num_targets"].to_string()) checked=Signal::derive(move||draft.with(|d|array(&d.value["selection"],"groups").iter().any(|r|r["id"]==id))) on_toggle=Callback::new(move|checked|draft.update(|d|d.edit(|v|{let mut groups=array(&v["selection"],"groups");groups.retain(|r|r["id"]!=id);if checked{groups.push(json!({"id":id}));}v["selection"]["groups"]=json!(groups);})))/>}}).collect_view()}
+        {move||array(&draft.get().value["selection"],"groups").into_iter().filter(|selected|!loading.get()&&!array(&resources.get(),"groups").iter().any(|r|r["id"]==selected["id"])).map(|selected|{let id=selected["id"].as_i64().unwrap_or(0);view!{<Checkbox label=leptos_i18n::t_string!(i18n,messages.unavailable_draft_group,id=id.to_string()) checked=true on_toggle=Callback::new(move|_:bool|draft.update(|d|d.edit(|v|{let mut groups=array(&v["selection"],"groups");groups.retain(|r|r["id"]!=id);v["selection"]["groups"]=json!(groups);}))) />}}).collect_view()}
         <a href="/groups/new" target="_blank" rel="noopener">{tr!(ui.create_a_group_in_a_new_tab)}</a></section>
         <section hidden=move||step.get()!=1><h2>{tr!(ui.content_and_destination)}</h2><div class="resource-columns">{selector(draft, resources, "template", trs!(ui.email_template))}{selector(draft, resources, "smtp", trs!(ui.sending_profile))}{page_selector(tasks,api,draft,resources,message)}{domain_selector(draft,resources)}</div>
         <ul class="campaign-resource-links" aria-label=tr!(ui.create_resources_in_a_new_tab)><li><a href="/templates/new" target="_blank" rel="noopener">{tr!(ui.create_template)}</a></li><li><a href="/pages/new" target="_blank" rel="noopener">{tr!(ui.create_landing_page)}</a></li><li><a href="/smtp/new" target="_blank" rel="noopener">{tr!(ui.create_sending_profile)}</a></li></ul><p class="resource-usage">{tr!(ui.changes_to_saved_templates_or_sending_profiles_can_affect_scheduled_emails_and_r)}</p>
@@ -379,9 +529,10 @@ fn create(api: Api, token: String, initial: Option<Value>) -> impl IntoView {
         <section class="resource-section"><h3>{tr!(ui.rendered_sample)}</h3><p>{tr!(ui.uses_the_first_recipient_s_details_test_emails_use_sample_recipient_preview_link)}</p><dl class="resource-facts"><div><dt>{tr!(ui.visible_from)}</dt><dd>{text(&r["preview"],"visible_sender")}</dd></div><div><dt>{tr!(ui.transport_sender)}</dt><dd>{text(&r["preview"],"transport_sender")}</dd></div><div><dt>{tr!(ui.subject)}</dt><dd>{text(&r["preview"],"subject")}</dd></div></dl><iframe class="saved-content-preview" title=trs!(ui.rendered_email_sample) sandbox="" referrerpolicy="no-referrer" srcdoc=ruphish_ui::preview_document(&text(&r["preview"],"html"))></iframe><details><summary>{tr!(ui.plain_text)}</summary><pre>{text(&r["preview"],"text")}</pre></details><Field label=trs!(ui.test_recipient_email)><TextInput input_type="email" value=Signal::derive(move||recipient.get()) on_input=move|e|recipient.set(event_target_value(&e))/></Field><ActionButton disabled=Signal::derive(move||busy.get()||recipient.get().is_empty()) on_click=send_test>{tr!(ui.send_test_email)}</ActionButton></section>
         {(!r["mailer_enabled"].as_bool().unwrap_or(false)).then(||view!{<p class="form-message error">{tr!(ui.the_mailer_is_disabled_this_campaign_will_remain_queued_until_an_enabled_admin_p)}</p>})}</div>})}</section>
         </FormFields>
-        <FormFooter><ActionLink href="/campaigns" style=ButtonStyle::Ghost>{tr!(ui.cancel)}</ActionLink><ActionButton disabled=Signal::derive(move||busy.get()||step.get()==0||draft.with(|d|d.launch.is_some())) on_click=move |_|step.update(|s|*s=s.saturating_sub(1))>{tr!(ui.back)}</ActionButton>
-        <ActionButton style=ButtonStyle::Primary hidden=Signal::derive(move||step.get()==3) disabled=Signal::derive(move||busy.get()||loading.get()||!can_edit) on_click=move |_|step.update(|s|*s=(*s+1).min(3))>{tr!(ui.continue_action)}</ActionButton>
-        <ActionButton style=ButtonStyle::Primary hidden=Signal::derive(move||step.get()!=3) disabled=Signal::derive(move||busy.get()||loading.get()||!can_edit||draft.with(|d|d.review.is_none()||d.review_request.is_some())) on_click=launch>{move||if draft.with(|d|d.launch.is_some()){ leptos_i18n::t_string!(i18n, ui.retry_same_launch) }else{leptos_i18n::t_string!(i18n, ui.launch_campaign)}}</ActionButton></FormFooter>
+        <FormFooter><ActionLink href="/campaigns" style=ButtonStyle::Ghost>{tr!(ui.cancel)}</ActionLink><ActionButton disabled=Signal::derive(move||busy.get()||!can_edit||step.get()==0||draft.with(|d|d.launch.is_some()||d.page_request.is_some())) on_click=move |_|save.run(Some(step.get_untracked().saturating_sub(1)))>{tr!(ui.back)}</ActionButton>
+        <ActionButton disabled=Signal::derive(move||busy.get()||!can_edit||draft.with(|d|d.launch.is_some()||d.page_request.is_some())) on_click=move |_|save.run(None)>{move||if persistence.revision.get().is_some(){leptos_i18n::t_string!(i18n,ui.save_changes)}else{leptos_i18n::t_string!(i18n,ui.save_as_draft)}}</ActionButton>
+        <ActionButton style=ButtonStyle::Primary hidden=Signal::derive(move||step.get()==3) disabled=Signal::derive(move||busy.get()||loading.get()||!can_edit||draft.with(|d|d.page_request.is_some())) on_click=move |_|save.run(Some((step.get_untracked()+1).min(3)))>{tr!(ui.continue_action)}</ActionButton>
+        <ActionButton style=ButtonStyle::Primary hidden=Signal::derive(move||step.get()!=3) disabled=Signal::derive(move||busy.get()||loading.get()||!can_edit||draft.with(|d|d.review.is_none()||d.review_request.is_some())) on_click=launch>{move||if draft.with(|d|d.launch.is_some()){ leptos_i18n::t_string!(i18n, ui.retry_same_launch) }else if !draft.get().value["launch_local"].is_null(){leptos_i18n::t_string!(i18n,ui.schedule_campaign)}else{leptos_i18n::t_string!(i18n, ui.launch_campaign)}}</ActionButton></FormFooter>
     </ManagementPage>}
 }
 

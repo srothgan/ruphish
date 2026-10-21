@@ -21,6 +21,9 @@ pub enum Error {
     #[error("{0}")]
     /// Invalid input with a safe diagnostic.
     Invalid(String),
+    /// A saved schedule must be corrected before launching a draft.
+    #[error("Draft schedule is in the past")]
+    DraftSchedulePast,
     #[error("{0}")]
     /// A synchronous external delivery failure, including an ambiguous outcome.
     Delivery(String),

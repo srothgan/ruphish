@@ -6,6 +6,7 @@ mod campaign_schema;
 pub mod campaigns;
 mod domain_schema;
 pub mod domains;
+mod draft_schema;
 mod engagement;
 pub mod integrations;
 pub mod interactions;
@@ -286,6 +287,9 @@ async fn validate_schema(
         if auth_schema::version(connection).await? >= 8 {
             preferences_schema::offset(&mut expected).await?;
         }
+    }
+    if auth_schema::version(connection).await? >= 9 {
+        draft_schema::migrate(&mut expected).await?;
     }
     if schema(connection).await? != schema(&mut expected).await? {
         return Err(UpgradeError::Unrecognized(

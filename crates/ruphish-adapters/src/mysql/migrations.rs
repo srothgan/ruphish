@@ -42,6 +42,13 @@ fn migrator() -> Migrator {
                 include_str!("../../migrations/mysql/3_utc_offset.sql").into_sql_str(),
                 false,
             ),
+            Migration::new(
+                4,
+                Cow::Borrowed("campaign drafts"),
+                MigrationType::Simple,
+                include_str!("../../migrations/mysql/4_campaign_drafts.sql").into_sql_str(),
+                false,
+            ),
         ]),
         locking: false,
         ..Migrator::DEFAULT
@@ -255,6 +262,7 @@ async fn validate_current(c: &mut MySqlConnection) -> Result<(), Error> {
     let actual = names(c).await?;
     let mut expected = tables();
     expected.insert("ruphish_user_preferences".into());
+    expected.insert("ruphish_campaign_drafts".into());
     if !expected.is_subset(&actual) {
         return Err(Error::UnsupportedSchema);
     }
@@ -297,6 +305,7 @@ async fn validate_columns(c: &mut MySqlConnection) -> Result<(), Error> {
         .map_err(storage_error)?;
     let mut application = tables();
     application.insert("ruphish_user_preferences".into());
+    application.insert("ruphish_campaign_drafts".into());
     let mut actual = Vec::new();
     for row in rows {
         let value: serde_json::Value =

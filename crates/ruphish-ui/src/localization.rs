@@ -273,6 +273,10 @@ pub fn failure_label(context: leptos_i18n::I18nContext<Locale>, code: &str) -> S
     use ruphish_contracts::errors::ErrorCode;
     let parsed = serde_json::from_value::<ErrorCode>(serde_json::Value::String(code.to_owned()));
     let text = match parsed {
+        Ok(ErrorCode::DraftInvalid) => leptos_i18n::t_string!(context, errors.draft_invalid),
+        Ok(ErrorCode::DraftSchedulePast) => {
+            leptos_i18n::t_string!(context, errors.draft_schedule_past)
+        }
         Ok(ErrorCode::CsvRowEncoding) => leptos_i18n::t_string!(context, errors.csv_row_encoding),
         Ok(ErrorCode::CsvRowColumns) => leptos_i18n::t_string!(context, errors.csv_row_columns),
         Ok(ErrorCode::CsvRowEmail) => leptos_i18n::t_string!(context, errors.csv_row_email),

@@ -49,6 +49,7 @@ pub(super) struct Api {
 impl Api {
     pub(super) async fn launch(
         self,
+        path: &str,
         token: &str,
         key: &str,
         value: &Value,
@@ -61,14 +62,11 @@ impl Api {
                 leptos_i18n::t_string!(i18n, ui.your_session_ended).into(),
             ));
         }
-        let request =
-            ruphish_ui::browser_http::launch_request("/api/campaigns/", token, key, value)
-                .map_err(|e| (0, e))?;
-        let response=self.send_request("/api/campaigns/", request).await.map_err(|_|(0,leptos_i18n::t_string!(i18n, ui.launch_outcome_is_not_known_retry_uses_the_same_launch_key_do_not_create_another).into()))?;
+        let request = ruphish_ui::browser_http::launch_request(path, token, key, value)
+            .map_err(|e| (0, e))?;
+        let response=self.send_request(path, request).await.map_err(|_|(0,leptos_i18n::t_string!(i18n, ui.launch_outcome_is_not_known_retry_uses_the_same_launch_key_do_not_create_another).into()))?;
         let status = response.status;
-        self.response("/api/campaigns/", response)
-            .await
-            .map_err(|e| (status, e))
+        self.response(path, response).await.map_err(|e| (status, e))
     }
     pub(super) async fn resource(
         self,
@@ -533,9 +531,16 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         if required {
             password_form(api, token.get_value(), true).into_any()
         } else if list {
-            crate::campaigns::list(api).into_any()
+            crate::campaigns::list(api, token.get_value()).into_any()
         } else {
             crate::campaigns::detail(api, token.get_value()).into_any()
+        }
+    };
+    let draft_page = move |editing: bool| {
+        if required {
+            password_form(api, token.get_value(), true).into_any()
+        } else {
+            crate::campaign_drafts::page(api, token.get_value(), editing).into_any()
         }
     };
     let integration_page = move |kind: crate::integrations::Kind, list: bool, editing: bool| {
@@ -575,6 +580,8 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
     <Route path=path!("/reporting-mailboxes") view=move || integration_page(crate::integrations::Kind::Mailbox, true, false)/>
     <Route path=path!("/reporting-mailboxes/:id") view=move || integration_page(crate::integrations::Kind::Mailbox, false, false)/>
     <Route path=path!("/reporting-mailboxes/:id/edit") view=move || integration_page(crate::integrations::Kind::Mailbox, false, true)/>
+    <Route path=path!("/campaigns/drafts/:id") view=move||draft_page(false)/>
+    <Route path=path!("/campaigns/drafts/:id/edit") view=move||draft_page(true)/>
     <Route path=path!("/campaigns") view=move||campaign_page(true)/>
     <Route path=path!("/campaigns/:id") view=move||campaign_page(false)/>
     <Route path=path!("/domains") view=move||if required{password_form(api,token.get_value(),true).into_any()}else{crate::domains::list(api, token.get_value()).into_any()}/>

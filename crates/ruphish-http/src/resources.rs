@@ -286,6 +286,7 @@ pub(crate) fn resource_code(error: &app::Error) -> ErrorCode {
         app::Error::Changed => ErrorCode::ResourceChanged,
         app::Error::InUse => ErrorCode::ResourceInUse,
         app::Error::Invalid(_) => ErrorCode::ResourceInvalid,
+        app::Error::DraftSchedulePast => ErrorCode::DraftSchedulePast,
         app::Error::Delivery(_) => ErrorCode::DeliveryFailed,
         app::Error::Storage(_) | app::Error::Internal => ErrorCode::InternalError,
     }
@@ -302,7 +303,7 @@ pub(crate) fn error(error: app::Error) -> Rejection {
             StatusCode::UNAUTHORIZED
         }
         app::Error::Policy(_) => StatusCode::FORBIDDEN,
-        app::Error::Invalid(_) => StatusCode::BAD_REQUEST,
+        app::Error::Invalid(_) | app::Error::DraftSchedulePast => StatusCode::BAD_REQUEST,
     };
     failure(status, resource_code(&error), &error.to_string())
 }

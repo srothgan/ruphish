@@ -11,6 +11,7 @@ use ruphish_ui::{tr, trs};
 pub(crate) fn ResourceActions(
     #[prop(into)] edit_href: String,
     can_edit: bool,
+    #[prop(optional)] hide_edit: bool,
     on_delete: Callback<()>,
     #[prop(optional)] view_href: Option<String>,
     #[prop(default = ControlSize::Medium)] size: ControlSize,
@@ -22,7 +23,7 @@ pub(crate) fn ResourceActions(
     view! {
         <div class="row-actions">
             {view_href.map(|href| view! { <ActionLink href=href size=size disabled=disabled>{tr!(ui.view)}</ActionLink> })}
-            <ActionLink href=edit_href size=size hidden=!can_edit disabled=disabled>{tr!(ui.edit)}</ActionLink>
+            <ActionLink href=edit_href size=size hidden={!can_edit || hide_edit} disabled=disabled>{tr!(ui.edit)}</ActionLink>
             {children.map(|children| children())}
             <ActionButton style=ButtonStyle::Ghost size=size hidden=!can_edit
                 disabled=Signal::derive(move || disabled.get() || delete_disabled.get())

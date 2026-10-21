@@ -730,7 +730,31 @@
     "service_account": "Service account",
     "monitoring": "Monitoring",
     "webhook_delivery_guidance": "Delivery is at least once. Receivers should deduplicate X-Ruphish-Event-ID.",
-    "mailbox_processing_guidance": "Message bodies are processed temporarily and never retained. The From-domain filter does not authenticate the reporter."
+    "mailbox_processing_guidance": "Message bodies are processed temporarily and never retained. The From-domain filter does not authenticate the reporter.",
+    "draft": "Draft",
+    "drafts": "Drafts",
+    "save_as_draft": "Save as draft",
+    "draft_saved": "Saved",
+    "draft_saving": "Saving…",
+    "draft_unsaved": "Unsaved changes",
+    "continue_editing": "Continue editing",
+    "untitled_campaign": "Untitled campaign",
+    "draft_description": "This campaign is not scheduled. Continue editing to review and launch it.",
+    "delete_draft": "Delete draft",
+    "delete_draft_description": "Delete this saved draft? No campaign has been launched.",
+    "no_drafts": "No saved drafts",
+    "draft_guidance": "Save an unfinished campaign to continue later.",
+    "last_saved": "Last saved",
+    "not_scheduled": "Not scheduled",
+    "campaign_filter": "Campaign status",
+    "all_campaigns": "All",
+    "active_campaigns_filter": "Active",
+    "completed_campaigns_filter": "Completed",
+    "missing_draft_resource": "A saved selection is unavailable. Select a replacement before launching.",
+    "schedule_campaign": "Schedule campaign",
+    "draft_step": "Editing step",
+    "public_url": "Public URL",
+    "edit_campaign_draft": "Edit campaign draft"
   },
   "messages": {
     "the_request_failed_arg0_try_again": "The request failed ({{ arg0 }}). Try again.",
@@ -795,7 +819,8 @@
     "attempt_one": "1 recorded attempt",
     "copy_name": "{{name}} copy",
     "edit_resource": "Edit {{name}}",
-    "transport_port": "{{transport}} · Port {{port}}"
+    "transport_port": "{{transport}} · Port {{port}}",
+    "unavailable_draft_group": "Unavailable group (ID {{id}}) - clear to remove"
   },
   "editor": {
     "source": "HTML source",
@@ -922,6 +947,8 @@
     "unknown": "The request failed. Try again or contact your administrator.",
     "csv_row_encoding": "Invalid CSV encoding or record.",
     "csv_row_columns": "Column count does not match the header.",
-    "csv_row_email": "Invalid email address."
+    "csv_row_email": "Invalid email address.",
+    "draft_invalid": "Check the draft fields and supported input limits. Your changes have been kept.",
+    "draft_schedule_past": "The saved launch time is in the past. Choose a future time or clear it to launch now."
   }
 }

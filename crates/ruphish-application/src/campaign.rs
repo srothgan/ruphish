@@ -5,6 +5,8 @@ use crate::{
     resources::{Error, Resource},
 };
 pub use ruphish_domain::campaign::*;
+pub mod directory;
+pub mod drafts;
 pub mod preparation;
 
 /// A name-based legacy selection or an explicitly opted-in stable UI selection.
@@ -309,13 +311,31 @@ pub trait Queue: Send + Sync {
 }
 /// Owner-authorized campaign transaction boundary.
 #[async_trait::async_trait]
-pub trait Repository: Send + Sync {
+pub trait Repository: drafts::Repository + Send + Sync {
     /// Bounded metadata for the UI without content, secrets or event payloads.
     async fn overview(
         &self,
         caller: Identity,
         after: i64,
         limit: i64,
+    ) -> Result<CampaignOverview, Error> {
+        self.overview_filtered(caller, after, limit, None).await
+    }
+    /// Unified owner-scoped management list, filtered before a single page is selected.
+    async fn directory(
+        &self,
+        caller: Identity,
+        filter: directory::Filter,
+        after: directory::Cursor,
+        limit: i64,
+    ) -> Result<directory::Page, Error>;
+    /// Execution-only overview with an optional lifecycle filter.
+    async fn overview_filtered(
+        &self,
+        caller: Identity,
+        after: i64,
+        limit: i64,
+        completed: Option<bool>,
     ) -> Result<CampaignOverview, Error>;
     /// Resolve a named-zone local time using iCalendar-compatible rules:
     /// first occurrence in a fold, forward by the transition duration in a gap.
