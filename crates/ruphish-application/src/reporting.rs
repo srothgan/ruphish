@@ -120,3 +120,16 @@ pub trait Repository: Send + Sync {
         scope: &str,
     ) -> Result<Download, Error>;
 }
+
+/// Provider-owned consistent read; materialization limits apply before returning data.
+#[async_trait::async_trait]
+pub trait Snapshots: Send + Sync {
+    /// Load an authorized analysis, expanding rows only for a bounded export.
+    async fn snapshot(
+        &self,
+        caller: Identity,
+        id: i64,
+        filter: &Filter,
+        export: bool,
+    ) -> Result<Analysis, Error>;
+}

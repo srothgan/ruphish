@@ -3,21 +3,24 @@
     clippy::unwrap_used,
     reason = "Isolated functional fixture setup and assertions"
 )]
-use super::*;
-use crate::sqlite::StartupDatabase;
+mod support;
+use ruphish_application::{auth::Identity, overview::*, resources::Error};
+use sqlx::SqlitePool;
+use std::sync::Arc;
+use support::DatabaseFixture;
 const NOW: i64 = 2_000_000_000;
 const OWNER: Identity = Identity { id: 1, epoch: 0 };
-async fn setup() -> (tempfile::TempDir, SqlitePool, Overview) {
+async fn setup() -> (tempfile::TempDir, DatabaseFixture, Arc<dyn Repository>) {
     let dir = tempfile::tempdir().unwrap();
-    let db = StartupDatabase::open(&dir.path().join("overview.db"), "")
+    let db = DatabaseFixture::open(&dir.path().join("overview.db"), "")
         .await
         .unwrap();
-    let pool = db.pool();
+    let pool = db.inspection_pool();
     sqlx::raw_sql("INSERT INTO users(id,username,api_key,role_id,password_change_required,account_locked) VALUES(1,'owner','one-key',1,0,0),(2,'other','two-key',2,0,0); INSERT INTO ruphish_auth_state VALUES(1,0),(2,0);
         INSERT INTO campaigns(id,user_id,name,status,launch_date) VALUES(1,1,'Owner','In progress','2026-01-01T00:00:00Z'),(2,2,'Other owner','In progress','2026-01-01T00:00:00Z');")
         .execute(&pool).await.unwrap();
-    let repo = Overview::new(pool.clone());
-    (dir, pool, repo)
+    let repo = db.overview();
+    (dir, db, repo)
 }
 async fn recipient(pool: &SqlitePool, campaign: i64, email: &str) {
     sqlx::query("INSERT INTO results(campaign_id,user_id,email,status) VALUES(?,?,?,'Email Sent')")
@@ -41,7 +44,8 @@ async fn event(
 }
 #[tokio::test]
 async fn acceptance_cohorts_deduplicate_isolate_owners_and_reject_untrusted_presence_values() {
-    let (_dir, pool, repo) = setup().await;
+    let (_dir, db, repo) = setup().await;
+    let pool = db.inspection_pool();
     for (email, at) in [
         ("old", NOW - 31 * 86400),
         ("month", NOW - 30 * 86400),
@@ -131,11 +135,12 @@ async fn acceptance_cohorts_deduplicate_isolate_owners_and_reject_untrusted_pres
             .await
             .unwrap();
     assert_eq!(n, 4);
-    pool.close().await;
+    db.close().await;
 }
 #[tokio::test]
 async fn snapshot_tracks_queued_launches_expiry_current_delivery_issues_and_inventory() {
-    let (_dir, pool, repo) = setup().await;
+    let (_dir, db, repo) = setup().await;
+    let pool = db.inspection_pool();
     for (id, status, at) in [
         (3, "Queued", NOW + 10),
         (4, "Scheduled", NOW + 50),
@@ -194,11 +199,12 @@ async fn snapshot_tracks_queued_launches_expiry_current_delivery_issues_and_inve
     assert_eq!(later.attention.next_launch.as_ref().map(|n| n.id), Some(4));
     assert_eq!(later.inventory.domains_verified, 0);
     assert_eq!(later.attention.unverified_enabled_domains, 4);
-    pool.close().await;
+    db.close().await;
 }
 #[tokio::test]
 async fn empty_data_revoked_identities_and_missing_permissions_are_not_fake_zero_successes() {
-    let (_dir, pool, repo) = setup().await;
+    let (_dir, db, repo) = setup().await;
+    let pool = db.inspection_pool();
     sqlx::raw_sql("DELETE FROM campaigns;")
         .execute(&pool)
         .await
@@ -220,7 +226,9 @@ async fn empty_data_revoked_identities_and_missing_permissions_are_not_fake_zero
         .unwrap();
     assert!(matches!(
         repo.snapshot(OWNER, NOW).await,
-        Err(Error::Internal)
+        Err(Error::Storage(
+            ruphish_application::storage::Error::Unavailable
+        ))
     ));
     sqlx::query("ALTER TABLE unavailable_domains RENAME TO ruphish_domains")
         .execute(&pool)
@@ -241,12 +249,13 @@ async fn empty_data_revoked_identities_and_missing_permissions_are_not_fake_zero
         .await
         .unwrap();
     assert!(repo.posture(OWNER, Window::All, NOW).await.is_err());
-    pool.close().await;
+    db.close().await;
 }
 
 #[tokio::test]
 async fn the_same_address_in_two_campaigns_counts_separately_without_fabricated_events() {
-    let (_dir, pool, repo) = setup().await;
+    let (_dir, db, repo) = setup().await;
+    let pool = db.inspection_pool();
     sqlx::query(
         "INSERT INTO campaigns(id,user_id,name,status) VALUES(3,1,'Second campaign','In progress')",
     )
@@ -292,7 +301,7 @@ async fn the_same_address_in_two_campaigns_counts_separately_without_fabricated_
         .await
         .unwrap();
     assert_eq!(before, after);
-    pool.close().await;
+    db.close().await;
 }
 
 #[tokio::test]
@@ -302,7 +311,8 @@ async fn comparisons_use_disjoint_periods_and_do_not_rewrite_previous_outcomes_w
         (Window::Last30Days, 30),
         (Window::LastYear, 365),
     ] {
-        let (_dir, pool, repo) = setup().await;
+        let (_dir, db, repo) = setup().await;
+        let pool = db.inspection_pool();
         let boundary = NOW - days * 86400;
         let start = NOW - 2 * days * 86400;
         for (email, at) in [
@@ -378,6 +388,6 @@ async fn comparisons_use_disjoint_periods_and_do_not_rewrite_previous_outcomes_w
             .unwrap();
         assert_eq!(empty.counts, Posture::default());
         assert_eq!(empty.previous.unwrap().counts, Posture::default());
-        pool.close().await;
+        db.close().await;
     }
 }

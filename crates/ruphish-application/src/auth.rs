@@ -6,6 +6,9 @@ use std::sync::Arc;
 /// An application failure with safe public messages.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// Safe persistence classification retained for reconciliation and retry policy.
+    #[error("Account operation could not be completed")]
+    Storage(#[from] crate::storage::Error),
     /// Domain authorization or account rule.
     #[error(transparent)]
     Policy(#[from] AccountError),

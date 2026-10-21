@@ -15,8 +15,8 @@ impl Integrations {
         Self { pool, policy }
     }
 }
-pub(super) fn db(_: sqlx::Error) -> Error {
-    Error::Internal
+pub(super) fn db(error: sqlx::Error) -> Error {
+    crate::sqlite::resource_error(error)
 }
 pub(super) fn invalid(code: &str) -> Error {
     Error::Invalid(code.into())
@@ -39,31 +39,8 @@ async fn authorize(
     if admin {
         super::accounts::account(c, who.id)
             .await
-            .map_err(|_| Error::Internal)?
+            .map_err(Error::from)?
             .require("modify_system")?;
-    }
-    Ok(())
-}
-fn label(s: &str) -> bool {
-    !s.trim().is_empty() && s.len() <= 255 && !s.chars().any(char::is_control)
-}
-fn validate_mailbox_edit(e: &MailboxEdit) -> Result<(), Error> {
-    if !label(&e.name)
-        || !label(&e.host)
-        || (e.host.parse::<std::net::IpAddr>().is_err()
-            && (e.host.contains(['/', ':', '@', ' ', '?', '#'])
-                || url::Host::parse(&e.host).is_err()))
-        || e.port == 0
-        || !label(&e.username)
-        || !label(&e.folder)
-        || !(30..=31540000).contains(&e.frequency)
-        || e.password
-            .as_ref()
-            .is_some_and(|s| s.is_empty() || s.len() > 4096)
-        || e.restrict_domain.len() > 253
-        || e.restrict_domain.chars().any(char::is_control)
-    {
-        return Err(invalid("mailbox_invalid_configuration"));
     }
     Ok(())
 }
@@ -175,23 +152,7 @@ impl Repository for Integrations {
         id: Option<i64>,
         e: WebhookEdit,
     ) -> Result<Webhook, Error> {
-        let url = url::Url::parse(&e.url).map_err(|_| invalid("webhook_invalid_url"))?;
-        if !label(&e.name)
-            || e.url.len() > 1000
-            || !matches!(url.scheme(), "https" | "http")
-            || url.host_str().is_none()
-            || !url.username().is_empty()
-            || url.password().is_some()
-            || url.fragment().is_some()
-        {
-            return Err(invalid("webhook_invalid_configuration"));
-        }
-        if e.secret
-            .as_ref()
-            .is_some_and(|s| s.len() > 1024 || s.is_empty())
-        {
-            return Err(invalid("webhook_secret_required"));
-        }
+        crate::integration_work::validate_webhook_edit(&e)?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(db)?;
         authorize(&mut tx, who, true, true).await?;
         let id = if let Some(id) = id {
@@ -314,20 +275,9 @@ impl Repository for Integrations {
         let url = text(&r, "url")?;
         let secret = text(&r, "secret")?;
         tx.commit().await.map_err(db)?;
-        let result = crate::webhook_delivery::send(
-            &self.policy,
-            &url,
-            &secret,
-            b"{\"success\":true}",
-            "validation",
-        )
-        .await;
-        if result.code == "accepted" {
-            Ok(())
-        } else {
-            Err(invalid(result.code))
-        }
+        crate::integration_work::validate_webhook(&self.policy, &url, &secret).await
     }
+
     async fn mailboxes(&self, who: Identity) -> Result<Vec<Mailbox>, Error> {
         let mut tx = self.pool.begin().await.map_err(db)?;
         authorize(&mut tx, who, false, false).await?;
@@ -380,7 +330,7 @@ impl Repository for Integrations {
         id: Option<i64>,
         e: MailboxEdit,
     ) -> Result<Mailbox, Error> {
-        validate_mailbox_edit(&e)?;
+        crate::integration_work::validate_mailbox_edit(&e)?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(db)?;
         authorize(&mut tx, who, true, false).await?;
         let duplicate: bool = sqlx::query_scalar(
@@ -516,22 +466,16 @@ impl Repository for Integrations {
             .await
             .map_err(db)?
             .ok_or(Error::NotFound("Reporting mailbox"))?;
-        let config = super::mailbox_worker::Config::read(&r)?;
+        let config = super::mailbox_worker::config(&r)?;
         tx.commit().await.map_err(db)?;
-        tokio::time::timeout(
-            std::time::Duration::from_secs(30),
-            crate::mailbox_transport::validate(&self.policy, &config),
-        )
-        .await
-        .map_err(|_| invalid("mailbox_timeout"))?
-        .map_err(invalid)
+        crate::integration_work::validate_mailbox(&self.policy, &config).await
     }
     async fn validate_mailbox_settings(
         &self,
         who: Identity,
         edit: MailboxEdit,
     ) -> Result<(), Error> {
-        validate_mailbox_edit(&edit)?;
+        crate::integration_work::validate_mailbox_edit(&edit)?;
         let mut tx = self.pool.begin().await.map_err(db)?;
         authorize(&mut tx, who, true, false).await?;
         // Only reuse the saved secret for the same account and endpoint.
@@ -558,7 +502,7 @@ impl Repository for Integrations {
             .ok_or_else(|| invalid("mailbox_password_required"))?,
         };
         tx.commit().await.map_err(db)?;
-        let config = super::mailbox_worker::Config {
+        let config = ruphish_application::integrations::work::MailboxConfig {
             id: 0,
             owner: who.id,
             revision: 0,
@@ -574,13 +518,7 @@ impl Repository for Integrations {
             last: 0,
             initialized: false,
         };
-        tokio::time::timeout(
-            std::time::Duration::from_secs(30),
-            crate::mailbox_transport::validate(&self.policy, &config),
-        )
-        .await
-        .map_err(|_| invalid("mailbox_timeout"))?
-        .map_err(invalid)
+        crate::integration_work::validate_mailbox(&self.policy, &config).await
     }
     async fn resume_mailbox(&self, who: Identity, id: i64, revision: i64) -> Result<(), Error> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(db)?;

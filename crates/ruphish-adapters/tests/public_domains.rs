@@ -4,12 +4,13 @@
     clippy::expect_used,
     reason = "Isolated functional fixture setup and assertions"
 )]
-use ruphish_adapters::sqlite::{StartupDatabase, domains::Domains, interactions::Interactions};
+mod support;
 use ruphish_application::{
     auth::Identity,
-    domains::{Edit, Observation, Repository, eligibility},
-    interactions::{Action, Output, Public},
+    domains::{Edit, Observation, eligibility},
+    interactions::{Action, Output},
 };
+use support::DatabaseFixture;
 fn caller() -> Identity {
     Identity { id: 1, epoch: 0 }
 }
@@ -22,7 +23,7 @@ fn proof() -> Observation {
         code: "verified",
     }
 }
-async fn fixture() -> (tempfile::TempDir, StartupDatabase) {
+async fn fixture() -> (tempfile::TempDir, DatabaseFixture) {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("state.db");
     std::fs::copy(
@@ -31,13 +32,13 @@ async fn fixture() -> (tempfile::TempDir, StartupDatabase) {
         &path,
     )
     .unwrap();
-    let db = StartupDatabase::open(&path, "").await.unwrap();
+    let db = DatabaseFixture::open(&path, "").await.unwrap();
     (dir, db)
 }
 #[tokio::test]
 async fn legacy_domains_start_unverified_and_stale_claims_cannot_revalidate_disabled_resources() {
     let (_dir, db) = fixture().await;
-    let store = Domains::new(db.pool());
+    let store = db.domains();
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     let domains = store.list(caller()).await.unwrap();
     assert_eq!(domains.len(), 1);
@@ -113,8 +114,8 @@ async fn legacy_domains_start_unverified_and_stale_claims_cannot_revalidate_disa
 async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_only() {
     let (_dir, db) = fixture().await;
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
-    let store = Domains::new(db.pool());
-    let public = Interactions::new(db.pool());
+    let store = db.domains();
+    let public = db.interactions();
     assert!(
         public
             .interact("training.example.test", "zSDu57f", Action::View, now)
@@ -123,8 +124,8 @@ async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_on
     );
     let check = store.claim(now).await.unwrap().unwrap();
     store.finish(&check, proof(), now + 1).await.unwrap();
-    sqlx::query("UPDATE ruphish_campaign_policy SET capture_credentials=1,capture_passwords=1,redirect_url='https://training.example.test/finished'").execute(&db.pool()).await.unwrap();
-    sqlx::query("UPDATE pages SET html=?").bind("<style>.form { color: navy }</style><form id='form'><label for='pw'>Password</label><input id='pw' name='password' type='password' autocomplete='current-password'><button>Continue</button></form><script>fetch('https://outside.invalid')</script>").execute(&db.pool()).await.unwrap();
+    sqlx::query("UPDATE ruphish_campaign_policy SET capture_credentials=1,capture_passwords=1,redirect_url='https://training.example.test/finished'").execute(&db.inspection_pool()).await.unwrap();
+    sqlx::query("UPDATE pages SET html=?").bind("<style>.form { color: navy }</style><form id='form'><label for='pw'>Password</label><input id='pw' name='password' type='password' autocomplete='current-password'><button>Continue</button></form><script>fetch('https://outside.invalid')</script>").execute(&db.inspection_pool()).await.unwrap();
     assert!(
         public
             .interact("other.example.test", "zSDu57f", Action::View, now + 2)
@@ -170,18 +171,18 @@ async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_on
         .unwrap();
     let row: (String, bool) =
         sqlx::query_as("SELECT status,reported FROM results WHERE r_id='zSDu57f'")
-            .fetch_one(&db.pool())
+            .fetch_one(&db.inspection_pool())
             .await
             .unwrap();
     assert_eq!(row, ("Submitted Data".into(), true));
     let values: Vec<String> =
         sqlx::query_scalar("SELECT details FROM events WHERE message='Submitted Data'")
-            .fetch_all(&db.pool())
+            .fetch_all(&db.inspection_pool())
             .await
             .unwrap();
     assert_eq!(values, vec!["{\"password_present\":true}"]);
     sqlx::query("UPDATE campaigns SET status='Completed'")
-        .execute(&db.pool())
+        .execute(&db.inspection_pool())
         .await
         .unwrap();
     assert!(
@@ -196,11 +197,11 @@ async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_on
 async fn failed_event_write_rolls_back_submission_deduplication_and_result_state() {
     let (_dir, db) = fixture().await;
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
-    let store = Domains::new(db.pool());
+    let store = db.domains();
     let check = store.claim(now).await.unwrap().unwrap();
     store.finish(&check, proof(), now + 1).await.unwrap();
-    sqlx::raw_sql("UPDATE ruphish_campaign_policy SET capture_credentials=1; CREATE TRIGGER reject_event BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT,'synthetic private trigger canary'); END;").execute(&db.pool()).await.unwrap();
-    let public = Interactions::new(db.pool());
+    sqlx::raw_sql("UPDATE ruphish_campaign_policy SET capture_credentials=1; CREATE TRIGGER reject_event BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT,'synthetic private trigger canary'); END;").execute(&db.inspection_pool()).await.unwrap();
+    let public = db.interactions();
     let error = public
         .interact(
             "training.example.test",
@@ -216,7 +217,7 @@ async fn failed_event_write_rolls_back_submission_deduplication_and_result_state
         .unwrap();
     assert!(!error.to_string().contains("canary"));
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM ruphish_submission_ids")
-        .fetch_one(&db.pool())
+        .fetch_one(&db.inspection_pool())
         .await
         .unwrap();
     assert_eq!(count, 0);
@@ -252,7 +253,7 @@ async fn actual_dns_and_https_require_exact_control_trust_routing_and_permitted_
         atomic::{AtomicUsize, Ordering},
     };
     let (dir, db) = fixture().await;
-    let store = Domains::new(db.pool());
+    let store = db.domains();
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     let mut check = store.claim(now).await.unwrap().unwrap();
     let expected = check.routing_proof.clone();
@@ -327,7 +328,7 @@ async fn domain_probe_does_not_follow_redirects_or_accept_oversized_proofs() {
         atomic::{AtomicUsize, Ordering},
     };
     let (dir, db) = fixture().await;
-    let store = Domains::new(db.pool());
+    let store = db.domains();
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     let check = store.claim(now).await.unwrap().unwrap();
     for (status, body) in [(302, check.routing_proof.clone()), (200, "x".repeat(129))] {
@@ -358,15 +359,15 @@ async fn domain_probe_does_not_follow_redirects_or_accept_oversized_proofs() {
 #[tokio::test]
 async fn event_limits_preserve_retry_idempotency_and_roll_back_unrecorded_submissions() {
     let (_dir, db) = fixture().await;
-    let store = Domains::new(db.pool());
+    let store = db.domains();
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     let check = store.claim(now).await.unwrap().unwrap();
     store.finish(&check, proof(), now + 1).await.unwrap();
     sqlx::query("UPDATE ruphish_campaign_policy SET capture_credentials=1,capture_passwords=0")
-        .execute(&db.pool())
+        .execute(&db.inspection_pool())
         .await
         .unwrap();
-    let public = Interactions::new(db.pool());
+    let public = db.interactions();
     let id = "a".repeat(32);
     let submit = || Action::Submit {
         event_id: id.clone(),
@@ -379,11 +380,11 @@ async fn event_limits_preserve_retry_idempotency_and_roll_back_unrecorded_submis
     let details: String = sqlx::query_scalar(
         "SELECT details FROM events WHERE message='Submitted Data' ORDER BY id DESC LIMIT 1",
     )
-    .fetch_one(&db.pool())
+    .fetch_one(&db.inspection_pool())
     .await
     .unwrap();
     assert_eq!(details, "");
-    sqlx::query("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<999) INSERT INTO ruphish_submission_ids SELECT (SELECT id FROM results WHERE r_id='zSDu57f'),printf('%032x',x) FROM n").execute(&db.pool()).await.unwrap();
+    sqlx::query("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<999) INSERT INTO ruphish_submission_ids SELECT (SELECT id FROM results WHERE r_id='zSDu57f'),printf('%032x',x) FROM n").execute(&db.inspection_pool()).await.unwrap();
     public
         .interact("training.example.test", "zSDu57f", submit(), now + 3)
         .await
@@ -404,7 +405,7 @@ async fn event_limits_preserve_retry_idempotency_and_roll_back_unrecorded_submis
     );
     let count: i64 =
         sqlx::query_scalar("SELECT count(*) FROM events WHERE message='Submitted Data'")
-            .fetch_one(&db.pool())
+            .fetch_one(&db.inspection_pool())
             .await
             .unwrap();
     assert_eq!(count, 1);
@@ -466,11 +467,9 @@ fn whole_document_layout_attributes_and_embedded_images_survive_final_policy() {
 
 #[tokio::test]
 async fn domain_expiry_and_disabling_fence_queue_claim_and_submission_without_losing_work() {
-    use ruphish_adapters::sqlite::campaigns::Campaigns;
-    use ruphish_application::campaign::Queue;
     let (_dir, db) = fixture().await;
-    let store = Domains::new(db.pool());
-    let queue = Campaigns::new(db.pool());
+    let store = db.domains();
+    let queue = db.campaigns();
     let now = 2_100_000_000; // Both independent 2035 fixture deliveries are due by this instant.
     assert!(queue.claim(now).await.unwrap().is_none());
     let domain = store.list(caller()).await.unwrap().remove(0);
@@ -501,7 +500,7 @@ async fn domain_expiry_and_disabling_fence_queue_claim_and_submission_without_lo
     queue.release(&resumed, now + 86406).await.unwrap();
     let state: String = sqlx::query_scalar("SELECT state FROM ruphish_delivery WHERE result_id=?")
         .bind(resumed.result_id)
-        .fetch_one(&db.pool())
+        .fetch_one(&db.inspection_pool())
         .await
         .unwrap();
     assert_eq!(state, "ready");
@@ -513,7 +512,7 @@ async fn domain_expiry_and_disabling_fence_queue_claim_and_submission_without_lo
 async fn expired_leases_and_rotated_challenges_cannot_publish_stale_evidence_or_cross_owner_claims()
 {
     let (_dir, db) = fixture().await;
-    let store = Domains::new(db.pool());
+    let store = db.domains();
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     let first = store.claim(now).await.unwrap().unwrap();
     let recovered = store.claim(now + 91).await.unwrap().unwrap();
@@ -529,7 +528,7 @@ async fn expired_leases_and_rotated_challenges_cannot_publish_stale_evidence_or_
     store.finish(&recovered, proof(), now + 92).await.unwrap();
     let verified = store.get(caller(), first.domain.id).await.unwrap();
     assert!(eligibility(true, verified.verified_until, now + 93).is_ok());
-    sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id,account_locked,password_change_required) SELECT 2,'second-domain-owner',hash,'second-domain-owner-key',role_id,0,0 FROM users WHERE id=1; INSERT INTO ruphish_auth_state(user_id,epoch) VALUES(2,0);").execute(&db.pool()).await.unwrap();
+    sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id,account_locked,password_change_required) SELECT 2,'second-domain-owner',hash,'second-domain-owner-key',role_id,0,0 FROM users WHERE id=1; INSERT INTO ruphish_auth_state(user_id,epoch) VALUES(2,0);").execute(&db.inspection_pool()).await.unwrap();
     let other = Identity { id: 2, epoch: 0 };
     assert!(store.get(other, verified.id).await.is_err());
     let second = store
@@ -587,7 +586,7 @@ async fn expired_leases_and_rotated_challenges_cannot_publish_stale_evidence_or_
 async fn verification_history_is_coalesced_atomic_bounded_and_latest_failure_revokes_success() {
     use ruphish_application::domains::verification_status;
     let (_dir, db) = fixture().await;
-    let store = Domains::new(db.pool());
+    let store = db.domains();
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     let id = store.list(caller()).await.unwrap()[0].id;
     let initial = store.get(caller(), id).await.unwrap();
@@ -634,7 +633,7 @@ async fn verification_history_is_coalesced_atomic_bounded_and_latest_failure_rev
     assert!(store.claim(now + 30).await.unwrap().is_none());
     let failed = store.claim(now + 31).await.unwrap().unwrap();
     // A failed history write must roll back the domain observation too.
-    sqlx::raw_sql("CREATE TRIGGER fail_history BEFORE UPDATE OF outcome ON ruphish_domain_checks BEGIN SELECT RAISE(ABORT,'fixture'); END;").execute(&db.pool()).await.unwrap();
+    sqlx::raw_sql("CREATE TRIGGER fail_history BEFORE UPDATE OF outcome ON ruphish_domain_checks BEGIN SELECT RAISE(ABORT,'fixture'); END;").execute(&db.inspection_pool()).await.unwrap();
     assert!(
         store
             .finish(
@@ -653,7 +652,7 @@ async fn verification_history_is_coalesced_atomic_bounded_and_latest_failure_rev
     assert_eq!(unchanged.history.len(), 1);
     assert!(unchanged.active_check.is_some());
     sqlx::raw_sql("DROP TRIGGER fail_history")
-        .execute(&db.pool())
+        .execute(&db.inspection_pool())
         .await
         .unwrap();
     store
@@ -699,7 +698,7 @@ async fn verification_history_is_coalesced_atomic_bounded_and_latest_failure_rev
     let count: i64 =
         sqlx::query_scalar("SELECT count(*) FROM ruphish_domain_checks WHERE domain_id=?")
             .bind(id)
-            .fetch_one(&db.pool())
+            .fetch_one(&db.inspection_pool())
             .await
             .unwrap();
     assert_eq!(count, 10);
@@ -710,15 +709,15 @@ async fn verification_history_is_coalesced_atomic_bounded_and_latest_failure_rev
 async fn queued_and_running_checks_survive_reopen_and_expired_workers_cannot_publish_late_results()
 {
     let (dir, db) = fixture().await;
-    let store = Domains::new(db.pool());
+    let store = db.domains();
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     let before = store.list(caller()).await.unwrap().remove(0);
     let queued_id = before.active_check.unwrap().id;
     db.close().await;
-    let db = StartupDatabase::open(&dir.path().join("state.db"), "")
+    let db = DatabaseFixture::open(&dir.path().join("state.db"), "")
         .await
         .unwrap();
-    let store = Domains::new(db.pool());
+    let store = db.domains();
     assert_eq!(
         store
             .get(caller(), before.id)
@@ -731,10 +730,10 @@ async fn queued_and_running_checks_survive_reopen_and_expired_workers_cannot_pub
     );
     let old = store.claim(now).await.unwrap().unwrap();
     db.close().await;
-    let db = StartupDatabase::open(&dir.path().join("state.db"), "")
+    let db = DatabaseFixture::open(&dir.path().join("state.db"), "")
         .await
         .unwrap();
-    let store = Domains::new(db.pool());
+    let store = db.domains();
     let restored = store
         .get(caller(), before.id)
         .await
@@ -765,20 +764,13 @@ async fn queued_and_running_checks_survive_reopen_and_expired_workers_cannot_pub
 async fn version_four_upgrade_preserves_known_history_without_inventing_duration_or_trusting_a_failed_recheck()
  {
     let (dir, db) = fixture().await;
-    let original = Domains::new(db.pool())
-        .list(caller())
-        .await
-        .unwrap()
-        .remove(0);
-    sqlx::raw_sql("DROP TRIGGER ruphish_event_insert; DROP TRIGGER ruphish_event_delete; DROP INDEX ruphish_events_campaign_time; DROP INDEX ruphish_events_recipient; CREATE INDEX ruphish_events_recipient ON events(campaign_id,email); DROP TABLE ruphish_event_sources; DROP TABLE ruphish_webhook_state; DROP TABLE ruphish_webhook_jobs; DROP TABLE ruphish_webhook_attempts; DROP TABLE ruphish_mailbox_messages; DROP TABLE ruphish_mailbox_runs; DROP TABLE ruphish_mailboxes; DROP TABLE ruphish_domain_checks; DELETE FROM ruphish_schema WHERE version>=5; UPDATE ruphish_domains SET checked_at=200,verified_until=9999999999,code='domain_txt_mismatch',lease_until=9999999999;").execute(&db.pool()).await.unwrap();
+    let original = db.domains().list(caller()).await.unwrap().remove(0);
+    sqlx::raw_sql("DROP TRIGGER ruphish_event_insert; DROP TRIGGER ruphish_event_delete; DROP INDEX ruphish_events_campaign_time; DROP INDEX ruphish_events_recipient; CREATE INDEX ruphish_events_recipient ON events(campaign_id,email); DROP TABLE ruphish_event_sources; DROP TABLE ruphish_webhook_state; DROP TABLE ruphish_webhook_jobs; DROP TABLE ruphish_webhook_attempts; DROP TABLE ruphish_mailbox_messages; DROP TABLE ruphish_mailbox_runs; DROP TABLE ruphish_mailboxes; DROP TABLE ruphish_domain_checks; DELETE FROM ruphish_schema WHERE version>=5; UPDATE ruphish_domains SET checked_at=200,verified_until=9999999999,code='domain_txt_mismatch',lease_until=9999999999;").execute(&db.inspection_pool()).await.unwrap();
     db.close().await;
-    let db = StartupDatabase::open(&dir.path().join("state.db"), "")
+    let db = DatabaseFixture::open(&dir.path().join("state.db"), "")
         .await
         .unwrap();
-    let upgraded = Domains::new(db.pool())
-        .get(caller(), original.id)
-        .await
-        .unwrap();
+    let upgraded = db.domains().get(caller(), original.id).await.unwrap();
     assert_eq!(upgraded.challenge, original.challenge);
     assert_eq!(upgraded.verified_until, 0);
     assert_eq!(upgraded.history.len(), 1);
@@ -788,13 +780,10 @@ async fn version_four_upgrade_preserves_known_history_without_inventing_duration
     assert!(upgraded.active_check.is_none());
     let first_id = upgraded.history[0].id;
     db.close().await;
-    let db = StartupDatabase::open(&dir.path().join("state.db"), "")
+    let db = DatabaseFixture::open(&dir.path().join("state.db"), "")
         .await
         .unwrap();
-    let again = Domains::new(db.pool())
-        .get(caller(), original.id)
-        .await
-        .unwrap();
+    let again = db.domains().get(caller(), original.id).await.unwrap();
     assert_eq!(again.history.len(), 1);
     assert_eq!(again.history[0].id, first_id);
     db.close().await;

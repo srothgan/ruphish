@@ -1,7 +1,9 @@
 //! SQLite startup using committed WAL data, real transactions and migration configuration.
-use ruphish_adapters::sqlite::{LATEST_LEGACY_VERSION, StartupDatabase};
+mod support;
+use ruphish_adapters::database::migrations::LATEST_LEGACY_VERSION;
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::path::Path;
+use support::DatabaseFixture;
 
 #[tokio::test]
 async fn startup_snapshot_includes_committed_wal_records_and_never_resets_queue_ownership() {
@@ -17,7 +19,7 @@ async fn startup_snapshot_includes_committed_wal_records_and_never_resets_queue_
         .await
         .unwrap();
     sqlx::raw_sql("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; UPDATE groups SET name='Committed WAL preservation' WHERE id=23; INSERT INTO mail_logs(id,campaign_id,user_id,r_id,processing,send_attempt) VALUES(9001,53,17,'preserved-rid',1,3);").execute(&mut writer).await.unwrap();
-    let database = StartupDatabase::open(&path, "").await.unwrap();
+    let database = DatabaseFixture::open(&path, "").await.unwrap();
     let snapshot = database.backup_path().unwrap().to_owned();
     database.close().await;
     for file in [&path, &snapshot] {
@@ -75,13 +77,13 @@ async fn custom_migrations_must_match_the_verified_set_before_any_database_is_cr
     )
     .unwrap();
     assert!(
-        StartupDatabase::open(&path, prefix.to_str().unwrap())
+        DatabaseFixture::open(&path, prefix.to_str().unwrap())
             .await
             .is_err()
     );
     assert!(!path.exists());
     std::fs::remove_file(migrations.join("99999999999999_custom.sql")).unwrap();
-    let database = StartupDatabase::open(&path, prefix.to_str().unwrap())
+    let database = DatabaseFixture::open(&path, prefix.to_str().unwrap())
         .await
         .unwrap();
     database.close().await;
@@ -93,7 +95,7 @@ async fn custom_migrations_must_match_the_verified_set_before_any_database_is_cr
     std::fs::write(entry.path(), "changed SQL").unwrap();
     let original = std::fs::read(&path).unwrap();
     assert!(
-        StartupDatabase::open(&path, prefix.to_str().unwrap())
+        DatabaseFixture::open(&path, prefix.to_str().unwrap())
             .await
             .is_err()
     );

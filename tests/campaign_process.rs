@@ -24,6 +24,16 @@ fn sql(directory: &Path, query: &str) {
     });
 }
 fn start(directory: &Path, options: &[&str]) -> (Process, String) {
+    start_verified(directory, options, |_| {
+        sql(directory, "UPDATE users SET password_change_required=0");
+    })
+}
+
+pub(super) fn start_verified(
+    directory: &Path,
+    options: &[&str],
+    prepare: impl FnOnce(&str),
+) -> (Process, String) {
     // Use real DNS/TLS proofs for the delivery suite's existing fixed URL fixtures.
     let upstream = Arc::new(Mutex::new(None::<String>));
     let destination = upstream.clone();
@@ -56,7 +66,7 @@ fn start(directory: &Path, options: &[&str]) -> (Process, String) {
     let ready = process.ready();
     let base = format!("http://{}", ready["admin"].as_str().unwrap());
     *upstream.lock().unwrap() = Some(ready["phish"].as_str().unwrap().into());
-    sql(directory, "UPDATE users SET password_change_required=0");
+    prepare(&base);
     for host in ["training.example.test", "example.test"] {
         let items = read(&base, "/api/domains/");
         let existing = items
@@ -196,16 +206,16 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
     }
     process.stop();
 }
-struct Probe {
-    address: String,
-    received: mpsc::Receiver<String>,
-    reply: mpsc::Sender<Option<&'static str>>,
-    thread: std::thread::JoinHandle<()>,
+pub(super) struct Probe {
+    pub address: String,
+    pub received: mpsc::Receiver<String>,
+    pub reply: mpsc::Sender<Option<&'static str>>,
+    pub thread: std::thread::JoinHandle<()>,
 }
 fn probe() -> Probe {
     probe_many(1)
 }
-fn probe_many(count: usize) -> Probe {
+pub(super) fn probe_many(count: usize) -> Probe {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap().to_string();
     let (sent, received) = mpsc::channel();

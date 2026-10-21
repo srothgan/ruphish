@@ -1,11 +1,10 @@
 //! Transactional account workflows against real SQLite, including failure injection.
 #![allow(clippy::unwrap_used, reason = "Integration setup and assertions")]
-use ruphish_adapters::{
-    password_worker::{self, PasswordWorker},
-    sqlite::{StartupDatabase, accounts::Accounts},
-};
-use ruphish_application::auth::{Edit, Error, Repository, Service};
+mod support;
+use ruphish_adapters::password_worker::{self, PasswordWorker};
+use ruphish_application::auth::{Edit, Error, Service};
 use std::{path::Path, sync::Arc};
+use support::DatabaseFixture;
 
 #[tokio::test]
 async fn imported_accounts_lookups_roles_and_password_failure_are_atomic() {
@@ -17,9 +16,9 @@ async fn imported_accounts_lookups_roles_and_password_failure_are_atomic() {
         &path,
     )
     .unwrap();
-    let db = StartupDatabase::open(&path, "").await.unwrap();
-    let pool = db.pool();
-    let repo = Arc::new(Accounts::new(pool.clone()));
+    let db = DatabaseFixture::open(&path, "").await.unwrap();
+    let pool = db.inspection_pool();
+    let repo = db.accounts();
     let service = Service::new(repo.clone(), Arc::new(PasswordWorker::default()));
     let original = repo.by_id(1).await.unwrap();
     assert_eq!(
@@ -88,7 +87,9 @@ async fn imported_accounts_lookups_roles_and_password_failure_are_atomic() {
                 "new-password"
             )
             .await,
-        Err(Error::Internal)
+        Err(Error::Storage(
+            ruphish_application::storage::Error::Integrity
+        ))
     ));
     let unchanged = repo.by_id(1).await.unwrap();
     assert_eq!(unchanged.hash, original.hash);
@@ -141,9 +142,9 @@ async fn imported_accounts_lookups_roles_and_password_failure_are_atomic() {
     assert_eq!(winner.identity.epoch, changed.identity.epoch + 1);
     assert_eq!(repo.by_id(1).await.unwrap().hash, winner.hash);
     db.close().await;
-    let reopened = StartupDatabase::open(&path, "").await.unwrap();
+    let reopened = DatabaseFixture::open(&path, "").await.unwrap();
     assert!(reopened.backup_path().is_none());
-    let repo = Accounts::new(reopened.pool());
+    let repo = reopened.accounts();
     assert_eq!(repo.by_id(1).await.unwrap().hash, winner.hash);
     reopened.close().await;
 }
@@ -158,16 +159,18 @@ async fn deletion_rolls_back_owned_records_then_preserves_other_owners_and_share
         &path,
     )
     .unwrap();
-    let db = StartupDatabase::open(&path, "").await.unwrap();
-    let pool = db.pool();
+    let db = DatabaseFixture::open(&path, "").await.unwrap();
+    let pool = db.inspection_pool();
     sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id,password_change_required,account_locked) VALUES(100,'surviving-admin','unused','surviving-key',1,0,0); INSERT INTO groups(id,user_id,name) VALUES(101,100,'Other owner'); INSERT INTO group_targets(group_id,target_id) SELECT 101,id FROM targets; CREATE TRIGGER fail_delete BEFORE DELETE ON users WHEN OLD.id=17 BEGIN SELECT RAISE(ABORT,'synthetic late delete failure'); END;").execute(&pool).await.unwrap();
-    let repo = Accounts::new(pool.clone());
+    let repo = db.accounts();
     let actor = repo.by_id(100).await.unwrap();
     let old = repo.by_id(17).await.unwrap();
     assert!(matches!(
         repo.write(actor.identity, ruphish_application::auth::Write::Delete(17))
             .await,
-        Err(Error::Internal)
+        Err(Error::Storage(
+            ruphish_application::storage::Error::Integrity
+        ))
     ));
     for table in [
         "campaigns",
@@ -254,17 +257,20 @@ async fn unsupported_auth_history_and_partial_schemas_are_refused_without_reinit
     ] {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("accounts.db");
-        let db = StartupDatabase::open(&path, "").await.unwrap();
+        let db = DatabaseFixture::open(&path, "").await.unwrap();
         db.bootstrap(
             Some("original-password".into()),
             Some("original-key".into()),
         )
         .await
         .unwrap();
-        sqlx::raw_sql(sql).execute(&db.pool()).await.unwrap();
+        sqlx::raw_sql(sql)
+            .execute(&db.inspection_pool())
+            .await
+            .unwrap();
         db.close().await;
         let bytes = std::fs::read(&path).unwrap();
-        assert!(StartupDatabase::open(&path, "").await.is_err(), "{sql}");
+        assert!(DatabaseFixture::open(&path, "").await.is_err(), "{sql}");
         assert_eq!(
             std::fs::read(&path).unwrap(),
             bytes,

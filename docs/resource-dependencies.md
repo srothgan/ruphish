@@ -10,7 +10,8 @@ The HTML rewriting proof uses lol_html and its unmodified selector/CSS parser de
 - `encoding_rs-0.8.42`: [LICENSE-MIT](licenses/encoding_rs-0.8.42-LICENSE-MIT.txt); unmodified upstream source: https://docs.rs/crate/encoding_rs/0.8.42/source/.
 - `encoding_rs-0.8.42`: [LICENSE-WHATWG](licenses/encoding_rs-0.8.42-LICENSE-WHATWG.txt); unmodified upstream source: https://docs.rs/crate/encoding_rs/0.8.42/source/.
 - `quoted_printable-0.5.2`: [LICENSE](licenses/quoted_printable-0.5.2-LICENSE.txt); unmodified upstream source: https://docs.rs/crate/quoted_printable/0.5.2/source/.
-- `webpki-roots-1.0.8`: [LICENSE](licenses/webpki-roots-1.0.8-LICENSE.txt); unmodified upstream source: https://docs.rs/crate/webpki-roots/1.0.8/source/.
+- `webpki-roots-1.0.10`: [LICENSE](licenses/webpki-roots-1.0.10-LICENSE.txt); unmodified upstream source: https://docs.rs/crate/webpki-roots/1.0.10/source/.
+- `webpki-root-certs-1.0.10`: [LICENSE](licenses/webpki-root-certs-1.0.10-LICENSE.txt); unmodified upstream source: https://docs.rs/crate/webpki-root-certs/1.0.10/source/.
 - `selectors-0.37.0`: source-file MPL-2.0 notices and [license text](licenses/cssparser-0.36.0-LICENSE.txt); unmodified source: https://docs.rs/crate/selectors/0.37.0/source/.
 
 - `cssparser-0.38.0`: [LICENSE](licenses/cssparser-0.38.0-LICENSE.txt); unmodified Ammonia dependency, source: https://docs.rs/crate/cssparser/0.38.0/source/.

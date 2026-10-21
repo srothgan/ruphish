@@ -167,3 +167,19 @@ pub trait Repository: Send + Sync {
     /// Schedule an immediate check; coalesce active work.
     async fn check_mailbox(&self, caller: Identity, id: i64) -> Result<(), Error>;
 }
+
+/// Durable background work, independent of the selected database engine.
+#[async_trait::async_trait]
+pub trait Worker: Send + Sync {
+    /// Dispatch a bounded batch of claimed webhooks.
+    async fn deliver_webhooks(&self) -> Result<(), Error>;
+    /// Poll a bounded batch of claimed mailboxes.
+    async fn poll_mailboxes(&self) -> Result<(), Error>;
+    /// Run both independent batches; each persists its own outcomes.
+    async fn tick(&self) -> Result<(), Error>;
+}
+/// Integration configuration and execution capabilities of one provider.
+pub trait Store: Repository + Worker {}
+impl<T: Repository + Worker> Store for T {}
+
+pub mod work;

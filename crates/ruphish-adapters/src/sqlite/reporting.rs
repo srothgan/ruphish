@@ -1,24 +1,19 @@
 //! Observed-event analysis with a separate cumulative progression summary.
 use ruphish_application::{auth::Identity, reporting::*, resources::Error};
 use sqlx::{Row, SqlitePool};
-use std::sync::Arc;
 
-/// Snapshot reads and bounded export generation share the startup pool.
+/// Authorized reporting snapshot reads using the startup pool.
 pub struct Reports {
     pool: SqlitePool,
-    exports: Arc<tokio::sync::Semaphore>,
 }
 impl Reports {
     /// Compose reporting over the existing database.
     pub fn new(pool: SqlitePool) -> Self {
-        Self {
-            pool,
-            exports: Arc::new(tokio::sync::Semaphore::new(2)),
-        }
+        Self { pool }
     }
 }
-fn storage(_: sqlx::Error) -> Error {
-    Error::Internal
+fn storage(error: sqlx::Error) -> Error {
+    crate::sqlite::resource_error(error)
 }
 const CTE: &str = r#"WITH identities AS (
  SELECT email, CASE WHEN count(*)=1 THEN min(id) END AS id FROM results WHERE campaign_id=?1 GROUP BY email
@@ -43,7 +38,8 @@ const TYPES: [&str; 5] = [
     "Submitted Data",
     "Email Reported",
 ];
-impl Reports {
+#[async_trait::async_trait]
+impl Snapshots for Reports {
     async fn snapshot(
         &self,
         caller: Identity,
@@ -183,7 +179,7 @@ impl Reports {
                 .map_err(storage)?
                 .unwrap_or_default();
             let safe: serde_json::Value =
-                serde_json::from_str(&super::participant_privacy::details(&details))
+                serde_json::from_str(&crate::participant_privacy::details(&details))
                     .unwrap_or_default();
             events.push(Event {
                 id: r.try_get("id").map_err(storage)?,
@@ -298,40 +294,5 @@ impl Reports {
         };
         tx.commit().await.map_err(storage)?;
         Ok(result)
-    }
-}
-#[async_trait::async_trait]
-impl Repository for Reports {
-    async fn analysis(&self, caller: Identity, id: i64, filter: Filter) -> Result<Analysis, Error> {
-        self.snapshot(caller, id, &filter, false).await
-    }
-    async fn export(
-        &self,
-        caller: Identity,
-        id: i64,
-        filter: Filter,
-        format: &str,
-        scope: &str,
-    ) -> Result<Download, Error> {
-        if !["csv", "xlsx"].contains(&format)
-            || !["events", "recipients", "all"].contains(&scope)
-            || format == "csv" && scope == "all"
-        {
-            return Err(Error::Invalid("export_invalid_format_or_scope".into()));
-        }
-        let permit = self
-            .exports
-            .clone()
-            .try_acquire_owned()
-            .map_err(|_| Error::Invalid("export_busy".into()))?;
-        let snapshot = self.snapshot(caller, id, &filter, true).await?;
-        let format = format.to_owned();
-        let scope = scope.to_owned();
-        tokio::task::spawn_blocking(move || {
-            let _permit = permit;
-            super::report_exports::generate(snapshot, &filter, &format, &scope)
-        })
-        .await
-        .map_err(|_| Error::Internal)?
     }
 }

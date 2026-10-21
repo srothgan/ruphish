@@ -3,8 +3,9 @@
     clippy::unwrap_used,
     reason = "Integration fixture setup and assertions"
 )]
-use ruphish_adapters::sqlite::{StartupDatabase, sessions::Sessions};
+mod support;
 use std::sync::Arc;
+use support::DatabaseFixture;
 use time::{Duration, OffsetDateTime};
 use tower_sessions_core::{
     Session, SessionStore,
@@ -14,11 +15,14 @@ use tower_sessions_core::{
 #[tokio::test]
 async fn late_session_write_cannot_restore_logout_across_independent_stores() {
     let temporary = tempfile::tempdir().unwrap();
-    let database = StartupDatabase::open(&temporary.path().join("accounts.db"), "")
+    let database = DatabaseFixture::open(&temporary.path().join("accounts.db"), "")
         .await
         .unwrap();
-    let a = Arc::new(Sessions::new(database.pool()));
-    let b = Arc::new(Sessions::new(database.pool()));
+    let a = Arc::new(database.sessions());
+    let other = DatabaseFixture::open(&temporary.path().join("accounts.db"), "")
+        .await
+        .unwrap();
+    let b = Arc::new(other.sessions());
     let initial = Session::new(None, a.clone(), None);
     initial.insert("user", 42_i64).await.unwrap();
     initial.save().await.unwrap();
@@ -30,6 +34,7 @@ async fn late_session_write_cannot_restore_logout_across_independent_stores() {
     assert!(overlapping.save().await.is_err());
     assert!(a.load(&id).await.unwrap().is_none());
     assert!(b.load(&id).await.unwrap().is_none());
+    other.close().await;
     database.close().await;
 }
 
@@ -37,8 +42,8 @@ async fn late_session_write_cannot_restore_logout_across_independent_stores() {
 async fn collision_expiry_storage_failure_and_restart_preserve_session_boundaries() {
     let temporary = tempfile::tempdir().unwrap();
     let path = temporary.path().join("accounts.db");
-    let database = StartupDatabase::open(&path, "").await.unwrap();
-    let store = Sessions::new(database.pool());
+    let database = DatabaseFixture::open(&path, "").await.unwrap();
+    let store = database.sessions();
     let key = store.cookie_key().await.unwrap();
     let mut original = Record {
         id: Id(7),
@@ -64,14 +69,14 @@ async fn collision_expiry_storage_failure_and_restart_preserve_session_boundarie
     store.cleanup().await.unwrap();
     drop(store);
     database.close().await;
-    let restarted = StartupDatabase::open(&path, "").await.unwrap();
-    let store = Sessions::new(restarted.pool());
+    let restarted = DatabaseFixture::open(&path, "").await.unwrap();
+    let store = restarted.sessions();
     assert_eq!(key, store.cookie_key().await.unwrap());
     assert_eq!(
         store.load(&original.id).await.unwrap().unwrap().data["user"],
         42
     );
-    sqlx::query("CREATE TRIGGER fail_session_write BEFORE UPDATE ON ruphish_sessions BEGIN SELECT RAISE(ABORT,'synthetic failure'); END").execute(&restarted.pool()).await.unwrap();
+    sqlx::query("CREATE TRIGGER fail_session_write BEFORE UPDATE ON ruphish_sessions BEGIN SELECT RAISE(ABORT,'synthetic failure'); END").execute(&restarted.inspection_pool()).await.unwrap();
     assert!(store.save(&original).await.is_err());
     assert_eq!(
         store.load(&original.id).await.unwrap().unwrap().data["user"],

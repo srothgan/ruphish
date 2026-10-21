@@ -3,7 +3,7 @@ use super::*;
 use reqwest::blocking::{Client, Response};
 use sqlx::Row;
 
-fn browser() -> Client {
+pub(super) fn browser() -> Client {
     Client::builder()
         .no_proxy()
         .cookie_store(true)
@@ -15,7 +15,7 @@ fn browser() -> Client {
 fn endpoint(process: &mut Process) -> String {
     format!("http://{}", process.ready()["admin"].as_str().unwrap())
 }
-fn bootstrap(client: &Client, base: &str) -> Value {
+pub(super) fn bootstrap(client: &Client, base: &str) -> Value {
     let response = client.get(format!("{base}/auth/session")).send().unwrap();
     assert_eq!(response.status(), 200);
     assert_eq!(response.headers()["cache-control"], "no-store");
@@ -37,7 +37,7 @@ fn post(client: &Client, base: &str, path: &str, fields: &[(&str, &str)]) -> Res
         .send()
         .unwrap()
 }
-fn sign_in(client: &Client, base: &str, username: &str, password: &str) -> Response {
+pub(super) fn sign_in(client: &Client, base: &str, username: &str, password: &str) -> Response {
     post(
         client,
         base,
@@ -45,7 +45,7 @@ fn sign_in(client: &Client, base: &str, username: &str, password: &str) -> Respo
         &[("username", username), ("password", password)],
     )
 }
-fn setup(client: &Client, base: &str) -> Value {
+pub(super) fn setup(client: &Client, base: &str) -> Value {
     assert_eq!(
         sign_in(client, base, "admin", "synthetic-bootstrap-password").status(),
         200

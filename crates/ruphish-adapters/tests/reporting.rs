@@ -4,22 +4,20 @@
     clippy::expect_used,
     reason = "Isolated functional fixtures and assertions"
 )]
-use ruphish_adapters::{
-    outbound::Policy,
-    sqlite::{StartupDatabase, integrations::Integrations, reporting::Reports},
-};
+mod support;
 use ruphish_application::{
     auth::Identity,
-    integrations::{MailboxEdit, Repository as _, WebhookEdit},
-    reporting::{Filter, Repository as _},
+    integrations::{MailboxEdit, WebhookEdit},
+    reporting::Filter,
 };
 use sqlx::Row;
+use support::DatabaseFixture;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 fn caller() -> Identity {
     Identity { id: 1, epoch: 0 }
 }
-async fn fixture() -> (tempfile::TempDir, StartupDatabase) {
+async fn fixture() -> (tempfile::TempDir, DatabaseFixture) {
     let _ = rustls::crypto::ring::default_provider().install_default();
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("reporting.db");
@@ -29,7 +27,7 @@ async fn fixture() -> (tempfile::TempDir, StartupDatabase) {
         &path,
     )
     .unwrap();
-    let database = StartupDatabase::open(&path, "").await.unwrap();
+    let database = DatabaseFixture::open(&path, "").await.unwrap();
     (directory, database)
 }
 fn filter() -> Filter {
@@ -42,7 +40,7 @@ fn filter() -> Filter {
 #[tokio::test]
 async fn observations_filters_and_exports_preserve_evidence_without_credentials_or_locations() {
     let (_directory, database) = fixture().await;
-    let pool = database.pool();
+    let pool = database.inspection_pool();
     sqlx::query("DELETE FROM events")
         .execute(&pool)
         .await
@@ -70,7 +68,7 @@ async fn observations_filters_and_exports_preserve_evidence_without_credentials_
             .bind(r#"{"password_present":true,"payload":{"password":"PRIVATE-CANARY"},"ip":"192.0.2.42"}"#)
             .execute(&pool).await.unwrap();
     }
-    let reports = Reports::new(pool.clone());
+    let reports = database.reporting();
     let result = reports
         .analysis(caller(), campaign, filter())
         .await
@@ -204,8 +202,8 @@ async fn observations_filters_and_exports_preserve_evidence_without_credentials_
 
 #[tokio::test]
 async fn committed_events_retry_after_receiver_failure_and_rollback_never_sends() {
-    let (_directory, database) = fixture().await;
-    let pool = database.pool();
+    let (directory, database) = fixture().await;
+    let pool = database.inspection_pool();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}/events", listener.local_addr().unwrap());
     let (sender, mut requests) = tokio::sync::mpsc::channel(4);
@@ -244,7 +242,7 @@ async fn committed_events_retry_after_receiver_failure_and_rollback_never_sends(
                 .unwrap();
         }
     });
-    let integrations = Integrations::new(pool.clone(), Policy::default());
+    let integrations = database.integrations();
     let hook = integrations
         .save_webhook(
             caller(),
@@ -280,7 +278,11 @@ async fn committed_events_retry_after_receiver_failure_and_rollback_never_sends(
         .execute(&pool)
         .await
         .unwrap();
-    let restarted = Integrations::new(pool.clone(), Policy::default());
+    database.close().await;
+    let reopened = DatabaseFixture::open(&directory.path().join("reporting.db"), "")
+        .await
+        .unwrap();
+    let restarted = reopened.integrations();
     restarted.tick().await.unwrap();
     let second = requests.recv().await.unwrap();
     assert_eq!(
@@ -292,13 +294,13 @@ async fn committed_events_retry_after_receiver_failure_and_rollback_never_sends(
     assert_eq!(detail.history[0].code, "accepted");
     assert_eq!(detail.history[1].status, Some(503));
     receiver.await.unwrap();
-    database.close().await;
+    reopened.close().await;
 }
 
 #[tokio::test]
 async fn mailbox_edits_are_owner_scoped_revision_checked_and_secret_preserving() {
     let (_directory, database) = fixture().await;
-    let integrations = Integrations::new(database.pool(), Policy::default());
+    let integrations = database.integrations();
     let edit = || MailboxEdit {
         name: "Reports".into(),
         enabled: false,
@@ -395,9 +397,9 @@ async fn legacy_mailbox_and_location_migration_is_recoverable_and_idempotent() {
         .unwrap();
     sqlx::raw_sql("UPDATE results SET ip='192.0.2.42',latitude=51.5,longitude=7.2; INSERT INTO imap(user_id,host,port,username,password,tls,enabled,folder,imap_freq,modified_date,last_login) VALUES(1,'imap.example.test',993,'reports','LEGACY-SERVICE-SECRET',1,1,'Reports',60,'2025-01-02T03:04:05.123456789Z','2025-01-03T04:05:06Z'); INSERT INTO imap(user_id,host,port,enabled) VALUES(1,'',99999,1);").execute(&mut legacy).await.unwrap();
     legacy.close().await.unwrap();
-    let db = StartupDatabase::open(&path, "").await.unwrap();
+    let db = DatabaseFixture::open(&path, "").await.unwrap();
     let backup = db.backup_path().unwrap().to_path_buf();
-    let store = Integrations::new(db.pool(), Policy::default());
+    let store = db.integrations();
     let rows = store.mailboxes(caller()).await.unwrap();
     assert_eq!(rows.len(), 2);
     assert!(
@@ -411,22 +413,19 @@ async fn legacy_mailbox_and_location_migration_is_recoverable_and_idempotent() {
     let locations: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM results WHERE ip!='' OR latitude!=0 OR longitude!=0",
     )
-    .fetch_one(&db.pool())
+    .fetch_one(&db.inspection_pool())
     .await
     .unwrap();
     assert_eq!(locations, 0);
     let old: i64 = sqlx::query_scalar("SELECT count(*) FROM imap")
-        .fetch_one(&db.pool())
+        .fetch_one(&db.inspection_pool())
         .await
         .unwrap();
     assert_eq!(old, 0, "one authoritative credential store after migration");
     let ids: Vec<_> = rows.iter().map(|r| r.id).collect();
     db.close().await;
-    let reopened = StartupDatabase::open(&path, "").await.unwrap();
-    let again = Integrations::new(reopened.pool(), Policy::default())
-        .mailboxes(caller())
-        .await
-        .unwrap();
+    let reopened = DatabaseFixture::open(&path, "").await.unwrap();
+    let again = reopened.integrations().mailboxes(caller()).await.unwrap();
     assert_eq!(ids, again.iter().map(|r| r.id).collect::<Vec<_>>());
     reopened.close().await;
     let mut original = sqlx::SqliteConnection::connect_with(
@@ -442,4 +441,217 @@ async fn legacy_mailbox_and_location_migration_is_recoverable_and_idempotent() {
         .unwrap();
     assert!(preserved > 0);
     original.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn changing_webhook_during_delivery_preserves_cancellation_and_releases_database() {
+    let (_directory, database) = fixture().await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}/events", listener.local_addr().unwrap());
+    let (received, ready) = tokio::sync::oneshot::channel();
+    let (release, released) = tokio::sync::oneshot::channel();
+    let receiver = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut request = Vec::new();
+        let mut buffer = [0; 4096];
+        loop {
+            let n = stream.read(&mut buffer).await.unwrap();
+            assert_ne!(n, 0);
+            request.extend_from_slice(&buffer[..n]);
+            if let Some(end) = request.windows(4).position(|s| s == b"\r\n\r\n") {
+                let headers = String::from_utf8_lossy(&request[..end]).to_lowercase();
+                let length: usize = headers
+                    .lines()
+                    .find_map(|line| {
+                        line.strip_prefix("content-length:")
+                            .map(|v| v.trim().parse().unwrap())
+                    })
+                    .unwrap();
+                if request.len() >= end + 4 + length {
+                    break;
+                }
+            }
+        }
+        received.send(request).unwrap();
+        released.await.unwrap();
+        stream
+            .write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .await
+            .unwrap();
+    });
+    let integrations = database.integrations();
+    let hook = integrations
+        .save_webhook(
+            caller(),
+            None,
+            WebhookEdit {
+                name: "Slow receiver".into(),
+                url: url.clone(),
+                secret: Some("signing-test".into()),
+                active: true,
+                revision: None,
+            },
+        )
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO events(campaign_id,email,time,message,details) VALUES(1,'recipient@example.test','2026-10-19T12:00:00Z','Email Reported','{\"password\":\"MUST-NOT-SEND\"}')")
+        .execute(&database.inspection_pool()).await.unwrap();
+    let worker = integrations.clone();
+    let operation = tokio::spawn(async move { worker.deliver_webhooks().await });
+    let request = tokio::time::timeout(std::time::Duration::from_secs(10), ready)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!String::from_utf8_lossy(&request).contains("MUST-NOT-SEND"));
+    // These public facade operations use the same single-connection pool as the worker.
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        assert!(
+            integrations
+                .webhook(caller(), hook.id)
+                .await
+                .unwrap()
+                .history[0]
+                .finished
+                .is_none()
+        );
+        integrations
+            .save_webhook(
+                caller(),
+                Some(hook.id),
+                WebhookEdit {
+                    name: "Disabled while sending".into(),
+                    url,
+                    secret: None,
+                    active: false,
+                    revision: Some(hook.revision),
+                },
+            )
+            .await
+            .unwrap();
+    })
+    .await
+    .unwrap();
+    release.send(()).unwrap();
+    operation.await.unwrap().unwrap();
+    receiver.await.unwrap();
+    let detail = integrations.webhook(caller(), hook.id).await.unwrap();
+    assert!(!detail.active);
+    assert_eq!(detail.history.len(), 1);
+    assert_eq!(detail.history[0].code, "configuration_changed");
+    let state: String =
+        sqlx::query_scalar("SELECT state FROM ruphish_webhook_jobs WHERE webhook_id=?")
+            .bind(hook.id)
+            .fetch_one(&database.inspection_pool())
+            .await
+            .unwrap();
+    assert_eq!(
+        state, "cancelled",
+        "late network success must not resurrect a cancelled job"
+    );
+    integrations.deliver_webhooks().await.unwrap();
+    assert_eq!(
+        integrations
+            .webhook(caller(), hook.id)
+            .await
+            .unwrap()
+            .history
+            .len(),
+        1
+    );
+    database.close().await;
+}
+
+#[tokio::test]
+async fn mailbox_disconnects_back_off_across_restart_and_invalid_claims_do_not_commit() {
+    let (directory, mut database) = fixture().await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let mailbox = database
+        .integrations()
+        .save_mailbox(
+            caller(),
+            None,
+            MailboxEdit {
+                name: "Disconnecting receiver".into(),
+                enabled: true,
+                host: "127.0.0.1".into(),
+                port,
+                username: "service".into(),
+                password: Some("SERVICE-CANARY".into()),
+                tls: false,
+                folder: "INBOX".into(),
+                restrict_domain: String::new(),
+                delete_reported: false,
+                frequency: 300,
+                revision: None,
+            },
+        )
+        .await
+        .unwrap();
+    sqlx::query("UPDATE ruphish_mailboxes SET failures=-1 WHERE id=?")
+        .bind(mailbox.id)
+        .execute(&database.inspection_pool())
+        .await
+        .unwrap();
+    assert!(database.integrations().poll_mailboxes().await.is_err());
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT lease FROM ruphish_mailboxes WHERE id=?")
+            .bind(mailbox.id)
+            .fetch_one(&database.inspection_pool())
+            .await
+            .unwrap(),
+        0
+    );
+    assert!(
+        database
+            .integrations()
+            .mailbox(caller(), mailbox.id)
+            .await
+            .unwrap()
+            .history
+            .is_empty()
+    );
+    sqlx::query("UPDATE ruphish_mailboxes SET failures=0 WHERE id=?")
+        .bind(mailbox.id)
+        .execute(&database.inspection_pool())
+        .await
+        .unwrap();
+    let receiver = tokio::spawn(async move {
+        for _ in 0..7 {
+            let (stream, _) = listener.accept().await.unwrap();
+            drop(stream); // Disconnect before sending an IMAP greeting or receiving a credential.
+        }
+    });
+    for (index, expected_delay) in [60, 120, 240, 480, 960, 1920, 3600].into_iter().enumerate() {
+        if index == 3 {
+            database.close().await;
+            database = DatabaseFixture::open(&directory.path().join("reporting.db"), "")
+                .await
+                .unwrap();
+        }
+        database
+            .integrations()
+            .check_mailbox(caller(), mailbox.id)
+            .await
+            .unwrap();
+        tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            database.integrations().poll_mailboxes(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let result = database
+            .integrations()
+            .mailbox(caller(), mailbox.id)
+            .await
+            .unwrap();
+        assert_eq!(result.code, "mailbox_protocol_error");
+        assert_eq!(result.next_check - result.last_check, expected_delay);
+        assert_eq!(result.history.len(), index + 1);
+        assert!(result.history.iter().all(|run| run.finished.is_some()));
+        assert!(!result.running);
+    }
+    receiver.await.unwrap();
+    database.close().await;
 }

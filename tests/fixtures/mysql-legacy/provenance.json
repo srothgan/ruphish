@@ -1,0 +1,118 @@
+{
+  "source": "https://github.com/gophish/gophish",
+  "commit": "95618469799295e2c0fec980805a2dfbb818816b",
+  "files": [
+    {
+      "file": "20160118194630_init.sql",
+      "sha256": "0e1e6ffdbb81caa2b71a2d59d9524220aceabcd12494d6e6e3e04a6f3e479781"
+    },
+    {
+      "file": "20160131153104_0.1.2_add_event_details.sql",
+      "sha256": "7be0c53a95e7149d27ce3a44a4151f78c4a484ee1aed52c4ea049b98d9a6b4d1"
+    },
+    {
+      "file": "20160211211220_0.1.2_add_ignore_cert_errors.sql",
+      "sha256": "1657440c9436ec7f022dd676324d062b8dba18b13b7e9a8be0ba05c9e57d214b"
+    },
+    {
+      "file": "20160217211342_0.1.2_create_from_col_results.sql",
+      "sha256": "c447868a727bc2b7578bde38576bd3454d1f83a20264c32cf69620adb4e4da2c"
+    },
+    {
+      "file": "20160225173824_0.1.2_capture_credentials.sql",
+      "sha256": "7eff688fbb8126e78901c2e49ee0c14c7a6d9dfa6694e2cd33773e070d65ceb6"
+    },
+    {
+      "file": "20160227180335_0.1.2_store-smtp-settings.sql",
+      "sha256": "be3915fee63e554378cf2c75f224b300fe4089320e8663e0c0dd3acac5c278cb"
+    },
+    {
+      "file": "20160317214457_0.2_redirect_url.sql",
+      "sha256": "dee807878bab55ea91e8a97cf8575fd042e5bbb59674e7fd278c6c686cd912b9"
+    },
+    {
+      "file": "20160605210903_0.2_campaign_scheduling.sql",
+      "sha256": "983e131f1aa58585e13e557672748abf9194a9b5cea02043c739b596c16d594f"
+    },
+    {
+      "file": "20161202153627_AttachmentFix.sql",
+      "sha256": "cd8d0060ef18358a0456bcc3879e19838ba259074374f626461100453568d9a3"
+    },
+    {
+      "file": "20170104231222_0.2_result_statuses.sql",
+      "sha256": "86ac48ea2e2eab79b5ba044effbed19d2bfa81c0f828dbb673599e6446b0eda8"
+    },
+    {
+      "file": "20170219122503_0.2.1_email_headers.sql",
+      "sha256": "641f9b3d11b1c6a48a3188b431f3aba12ba46b65c4490c1041ef6f8b504df77c"
+    },
+    {
+      "file": "20170828220440_0.4_utc_dates.sql",
+      "sha256": "2c08075360e420d184757e6d376bf39f7b5ba1fb5be50ee827bc0cfb549c523a"
+    },
+    {
+      "file": "20171027213457_0.4.1_maillogs.sql",
+      "sha256": "a504ed2bdb6e57a2447a2bb4c1a080d8bd843502ec655e55ca3863f4a163c887"
+    },
+    {
+      "file": "20171208201932_0.4.1_next_send_date.sql",
+      "sha256": "f461b4216cb475e467c0a4f5941b64b55c88fff7847f0485e5885eb918402a6c"
+    },
+    {
+      "file": "20180223101813_0.5.1_user_reporting.sql",
+      "sha256": "186092e03bc65a15d7f05f4d6a2324d932130c824e4e6122f6b380f97c1f77fc"
+    },
+    {
+      "file": "20180524203752_0.7.0_result_last_modified.sql",
+      "sha256": "ad8fe9d94d39d92b836346ddd71ea43eb4f038dd127a1d26d74a7bf4fc6efd5b"
+    },
+    {
+      "file": "20180527213648_0.7.0_store_email_request.sql",
+      "sha256": "c49aff070fbb3bac4c0e47d1f709d414e876a1bce052d47fd36661f92abdb0c5"
+    },
+    {
+      "file": "20180609164054_0.7.0_update_html_storage.sql",
+      "sha256": "9013d563bd104c629f6fed2a4dff327fba052780fcfaef8f98db0247036f972a"
+    },
+    {
+      "file": "20180830215615_0.7.0_send_by_date.sql",
+      "sha256": "891fd21adb669b549b2be6a6cb304d3c13a78066017407050b7281144198a713"
+    },
+    {
+      "file": "20190105192341_0.8.0_rbac.sql",
+      "sha256": "f12da8e2dd854ca34a3c56e6ba85f462c930b6f849ffedd83fa03a40d7ffcb63"
+    },
+    {
+      "file": "20190219214543_0.8.0_redirect_url_field.sql",
+      "sha256": "c1093b35a2979eedd1545e1e89ddb8c2baa94c9be45f4879b267645e41d82d43"
+    },
+    {
+      "file": "20191104103306_0.9.0_create_webhooks.sql",
+      "sha256": "058ff4e4d7f047a28b92ae6949b3523533a7cd9179a8118cb8fdcded1a21fc9d"
+    },
+    {
+      "file": "20200116000000_0.9.0_imap.sql",
+      "sha256": "b3aea7ef4cf1e1fef54d741540227aa27062171a4396430fd7f1d85f1413fa90"
+    },
+    {
+      "file": "20200619000000_0.11.0_password_policy.sql",
+      "sha256": "347461eca0bce1f1a3b521ed125be9f68293e65181ab9995bc3857dbdd2c8f44"
+    },
+    {
+      "file": "20200730000000_0.11.0_imap_ignore_cert_errors.sql",
+      "sha256": "8490a666323c8b03ba81c9051e4d3d9c545df39a066c7113fe0c7cb53d6ebf6d"
+    },
+    {
+      "file": "20200914000000_0.11.0_last_login.sql",
+      "sha256": "e038e1b4ea34143031588d6e4b91a1d12623b53a8aaa4d397e284ad8f4eeaae1"
+    },
+    {
+      "file": "20201201000000_0.11.0_account_locked.sql",
+      "sha256": "38bf38f6fc146b9a8e04ba1e07f622b48ea7bac6b03da059cdc912691d2e6741"
+    },
+    {
+      "file": "20220321133237_0.4.1_envelope_sender.sql",
+      "sha256": "adb03e07424dca855fe5e36e8d530e263c396d08f73850918b041d6621a332d6"
+    }
+  ]
+}

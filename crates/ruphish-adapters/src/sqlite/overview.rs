@@ -14,8 +14,8 @@ impl Overview {
         Self { pool }
     }
 }
-fn storage(_: sqlx::Error) -> Error {
-    Error::Internal
+fn storage(error: sqlx::Error) -> Error {
+    crate::sqlite::resource_error(error)
 }
 
 #[async_trait::async_trait]
@@ -242,7 +242,3 @@ async fn aggregate(
         credentials_entered: summary.credentials_entered,
     })
 }
-
-#[cfg(test)]
-#[path = "overview/tests.rs"]
-mod tests;

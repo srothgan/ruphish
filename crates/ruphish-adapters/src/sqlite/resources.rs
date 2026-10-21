@@ -14,8 +14,8 @@ impl Resources {
         Self { pool }
     }
 }
-fn storage(_: sqlx::Error) -> Error {
-    Error::Internal
+fn storage(error: sqlx::Error) -> Error {
+    crate::sqlite::resource_error(error)
 }
 fn table(kind: Kind) -> &'static str {
     match kind {
@@ -32,13 +32,7 @@ pub(super) async fn authorize(
 ) -> Result<(), Error> {
     let user = super::accounts::account(c, caller.id)
         .await
-        .map_err(|e| match e {
-            ruphish_application::auth::Error::NotFound => {
-                Error::Policy(ruphish_application::auth::AccountError::Unauthorized)
-            }
-            ruphish_application::auth::Error::Policy(p) => Error::Policy(p),
-            _ => Error::Internal,
-        })?;
+        .map_err(Error::from)?;
     user.authenticate(caller)?;
     user.require(if write {
         "modify_objects"

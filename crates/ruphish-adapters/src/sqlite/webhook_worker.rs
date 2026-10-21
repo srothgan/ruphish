@@ -1,30 +1,27 @@
-//! Durable webhook claims, persisted attempts and restart recovery.
-use super::integrations::{Integrations, db, now, text};
-use ruphish_application::resources::Error;
+//! Atomic webhook claims and fenced outcome persistence.
+use super::integrations::{Integrations, db, text};
+use ruphish_application::{
+    integrations::{Worker, work::*},
+    resources::Error,
+};
 use sqlx::Row;
-impl Integrations {
-    /// Run a bounded integration batch. Persistence survives process cancellation.
-    pub async fn tick(&self) -> Result<(), Error> {
+#[async_trait::async_trait]
+impl Worker for Integrations {
+    async fn tick(&self) -> Result<(), Error> {
         let (hooks, mail) = tokio::join!(self.deliver_webhooks(), self.poll_mailboxes());
         hooks?;
         mail
     }
-    /// Dispatch at most four claimed webhooks without blocking mailbox scheduling.
-    pub async fn deliver_webhooks(&self) -> Result<(), Error> {
-        for result in futures_util::future::join_all((0..4).map(|_| self.webhook_once())).await {
-            result?;
-        }
-        Ok(())
+    async fn deliver_webhooks(&self) -> Result<(), Error> {
+        crate::integration_work::webhooks(self, &self.policy).await
     }
-    /// Poll at most two independently claimed mailboxes concurrently.
-    pub async fn poll_mailboxes(&self) -> Result<(), Error> {
-        for result in futures_util::future::join_all((0..2).map(|_| self.mailbox_once())).await {
-            result?;
-        }
-        Ok(())
+    async fn poll_mailboxes(&self) -> Result<(), Error> {
+        crate::integration_work::mailboxes(self, &self.policy).await
     }
-    async fn webhook_once(&self) -> Result<(), Error> {
-        let clock = now();
+}
+#[async_trait::async_trait]
+impl WebhookQueue for Integrations {
+    async fn claim_webhook(&self, clock: i64) -> Result<Option<WebhookClaim>, Error> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(db)?;
         sqlx::query(
             r#"
@@ -62,7 +59,7 @@ impl Integrations {
             "#).bind(clock).fetch_optional(&mut *tx).await.map_err(db)?;
         let Some(r) = row else {
             tx.commit().await.map_err(db)?;
-            return Ok(());
+            return Ok(None);
         };
         let id: i64 = r.try_get("job").map_err(db)?;
         let event: i64 = r.try_get("event_id").map_err(db)?;
@@ -85,35 +82,33 @@ impl Integrations {
         .map_err(db)?
         .last_insert_rowid();
         // Serialize once per attempt from immutable, allowlisted event fields. Never raw payloads.
-        let body = serde_json::to_vec(&serde_json::json!({
-            "campaign_id": r.try_get::<i64, _>("campaign_id").map_err(db)?,
-            "email": text(&r, "email")?,
-            "time": text(&r, "time")?,
-            "message": text(&r, "message")?,
-            "details": super::participant_privacy::details(&text(&r, "details")?),
-        }))
-        .map_err(|_| Error::Internal)?;
+        let body = crate::integration_work::webhook_payload(
+            r.try_get("campaign_id").map_err(db)?,
+            text(&r, "email")?,
+            text(&r, "time")?,
+            text(&r, "message")?,
+            &text(&r, "details")?,
+        )?;
         let url = text(&r, "url")?;
         let secret = text(&r, "secret")?;
         tx.commit().await.map_err(db)?;
-        let outcome =
-            crate::webhook_delivery::send(&self.policy, &url, &secret, &body, &event.to_string())
-                .await;
-        let done = now();
-        let retry = outcome.code != "accepted"
-            && !matches!(
-                outcome.code,
-                "webhook_invalid_url" | "webhook_signing_failed"
-            )
-            && ruphish_domain::reporting::retryable(outcome.status)
-            && attempt < 8;
-        let state = if outcome.code == "accepted" {
-            "accepted"
-        } else if retry {
-            "retry"
-        } else {
-            "failed"
-        };
+        Ok(Some(WebhookClaim {
+            id,
+            run,
+            event,
+            attempt,
+            url,
+            secret,
+            body,
+        }))
+    }
+    async fn finish_webhook(
+        &self,
+        claim: &WebhookClaim,
+        outcome: WebhookCompletion,
+        done: i64,
+    ) -> Result<(), Error> {
+        let (id, attempt, run) = (claim.id, claim.attempt, claim.run);
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(db)?;
         let owned = sqlx::query(
             r#"
@@ -124,14 +119,9 @@ impl Integrations {
                 AND state='running'
             "#,
         )
-        .bind(state)
+        .bind(outcome.state)
         .bind(outcome.code)
-        .bind(
-            done + ruphish_domain::reporting::retry_delay(
-                attempt as u32,
-                (id as u32).wrapping_add(attempt as u32),
-            ),
-        )
+        .bind(outcome.due)
         .bind(id)
         .bind(attempt)
         .execute(&mut *tx)

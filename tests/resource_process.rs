@@ -702,10 +702,13 @@ fn groups_round_trip_isolate_recipients_clear_fields_and_survive_restart() {
     // Go's name lookup has no dedicated HTTP route. Exercise the actual repository
     // against the executable-created database, including missing names and SQL metacharacters.
     tokio::runtime::Runtime::new().unwrap().block_on(async {
-        use ruphish_application::{auth::Identity, resources::{Repository,Kind,Error,Content}};
+        use ruphish_application::{auth::Identity, resources::{Kind,Error,Content}};
         let pool = sqlx::SqlitePool::connect(&format!("sqlite:{}",directory.path().join("installation.sqlite3").display())).await.unwrap();
         let epoch: i64 = sqlx::query_scalar("SELECT COALESCE((SELECT epoch FROM ruphish_auth_state WHERE user_id=1),0)").fetch_one(&pool).await.unwrap();
-        let repository = ruphish_adapters::sqlite::resources::Resources::new(pool.clone());
+        let provider = ruphish_adapters::database::open(ruphish_adapters::database::Config::Sqlite {
+            path: directory.path().join("installation.sqlite3"), migrations_prefix: String::new(),
+        }, ruphish_adapters::outbound::Policy::default()).await.unwrap();
+        let repository = provider.resources();
         let caller = Identity{id:1,epoch};
         let named = repository.get_by_name(caller,Kind::Group,"Second").await.unwrap();
         assert_eq!(named.id,second["id"].as_i64().unwrap());
@@ -714,6 +717,7 @@ fn groups_round_trip_isolate_recipients_clear_fields_and_survive_restart() {
             assert!(matches!(repository.get_by_name(caller,Kind::Group,name).await,Err(Error::NotFound(_))));
         }
         pool.close().await;
+        provider.close().await;
     });
     process.stop();
     let mut process = Process::start(directory.path(), "admin");

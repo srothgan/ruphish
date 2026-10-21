@@ -18,16 +18,28 @@ use std::{
 mod auth_process;
 #[path = "campaign_process.rs"]
 mod campaign_process;
+#[path = "support/database_network.rs"]
+mod database_network;
 #[path = "support/domain_network.rs"]
 mod domain_network;
+#[path = "support/mailbox.rs"]
+mod mailbox;
+#[path = "mysql_process.rs"]
+mod mysql_process;
 #[path = "overview_process.rs"]
 mod overview_process;
+#[path = "postgres_process.rs"]
+mod postgres_process;
 #[path = "public_process.rs"]
 mod public_process;
 #[path = "reporting_process.rs"]
 mod reporting_process;
 #[path = "resource_process.rs"]
 mod resource_process;
+#[path = "server_database_process.rs"]
+mod server_database_process;
+#[path = "support/webhook_receiver.rs"]
+mod webhook_receiver;
 
 struct Process {
     domain_network: Option<domain_network::Network>,
@@ -322,7 +334,7 @@ fn killing_a_process_during_migration_leaves_the_old_database_recoverable_and_re
     restarted.stop();
     assert_eq!(
         version(directory.path()),
-        ruphish_adapters::sqlite::LATEST_LEGACY_VERSION
+        ruphish_adapters::database::migrations::LATEST_LEGACY_VERSION
     );
 }
 
@@ -635,7 +647,7 @@ fn every_populated_goose_version_starts_in_place_with_a_verified_recoverable_sna
         process.ready();
         assert_eq!(
             version(directory.path()),
-            ruphish_adapters::sqlite::LATEST_LEGACY_VERSION,
+            ruphish_adapters::database::migrations::LATEST_LEGACY_VERSION,
             "{old}"
         );
         let rows = database(
@@ -816,7 +828,7 @@ fn migration_failures_roll_back_and_retain_a_snapshot_while_invalid_databases_ar
             fixed.stop();
             assert_eq!(
                 version(directory.path()),
-                ruphish_adapters::sqlite::LATEST_LEGACY_VERSION
+                ruphish_adapters::database::migrations::LATEST_LEGACY_VERSION
             );
         }
     }
@@ -870,6 +882,11 @@ fn preflight_failures_never_publish_readiness_or_create_a_database_and_release_r
         "assets",
         "logging",
         "mysql",
+        "postgres-missing-settings",
+        "postgres-conflicting-settings",
+        "postgres-password-sources",
+        "postgres-unknown-field",
+        "postgres-ca-without-tls",
         "custom-migrations",
         "domain-ca",
         "public-asset-size",
@@ -891,6 +908,28 @@ fn preflight_failures_never_publish_readiness_or_create_a_database_and_release_r
             }
             "logging" => config["logging"]["filename"] = json!("dist"),
             "mysql" => config["db_name"] = json!("mysql"),
+            name if name.starts_with("postgres-") => {
+                config["db_name"] = json!("postgres");
+                config["db_path"] = json!("");
+                config["postgres"] = json!({"host":"127.0.0.1","database":"fixture","username":"fixture","password":"private-config-canary"});
+                match name {
+                    "postgres-missing-settings" => {
+                        config.as_object_mut().unwrap().remove("postgres");
+                    }
+                    "postgres-conflicting-settings" => {
+                        config["db_path"] = json!("installation.sqlite3")
+                    }
+                    "postgres-password-sources" => {
+                        config["postgres"]["password_env"] = json!("PRIVATE_FIXTURE_PASSWORD")
+                    }
+                    "postgres-unknown-field" => config["postgres"]["sslmode"] = json!("disable"),
+                    "postgres-ca-without-tls" => {
+                        config["postgres"]["tls"] = json!("disabled");
+                        config["postgres"]["ca_path"] = json!("unused.pem");
+                    }
+                    _ => unreachable!(),
+                }
+            }
             "custom-migrations" => config["migrations_prefix"] = json!("missing-custom-"),
             "domain-ca" => {
                 config["domain_verification"] = json!({"trusted_ca_path":"missing-domain-ca.pem"})

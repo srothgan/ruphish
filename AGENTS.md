@@ -90,11 +90,28 @@ Public transport/proxy changes also require the executable `startup_process` tes
 
 Maintain one canonical Docker test fixture under `tests/acceptance/`. Extend its services and scenarios in place; adding tests does not justify another persistent lab, alternate login, port set or duplicated setup tooling. Preserve local state during fixture changes. Future CI uses the same fixture with disposable per-job state; production configuration and secrets remain separate from test infrastructure.
 
+MySQL changes also require real-server verification on both pinned LTS images using the same fixture service. Follow [MySQL verification](docs/mysql-verification.md), set `RUPHISH_MYSQL_TEST_PORT` from the published service port, and run these direct commands. Ordinary Cargo checks report opt-in server scenarios as ignored; that is not MySQL verification.
+
+```sh
+cargo test -p ruphish-adapters --test mysql_preflight --locked -- --ignored --nocapture
+cargo test -p ruphish-adapters --test database_providers mysql_ --locked -- --ignored --nocapture
+cargo test -p ruphish --test startup_process mysql_process --locked -- --ignored --nocapture
+```
+
+PostgreSQL changes require the same canonical fixture and real-server checks on both pinned supported majors, following [PostgreSQL verification](docs/postgresql-verification.md). Set `RUPHISH_POSTGRES_TEST_PORT` to its published service port and run:
+
+```sh
+cargo test -p ruphish-adapters --test database_providers postgres_ --locked -- --ignored --nocapture
+cargo test -p ruphish --test startup_process postgres_process --locked -- --ignored --nocapture
+```
+
+Provider filters keep opt-in suites independent of which service is running; ordinary workspace tests still exercise the shared SQLite workflow. Do not run every ignored provider case with only one server configured. Driver connections in tests are restricted to fixture setup, independent assertions and fault injection; operations under test always use the facade or executable HTTP boundary.
+
 ## Data and side effects
 
 Participant interaction tracking must never collect or retain entered login information or arbitrary submitted field values. Allow only explicit event metadata and optional presence booleans; prohibit password hashes, lengths, samples, and other value derivatives. No setting or legacy API flag may enable value capture. Use a controlled browser submission path, restricted authored content, and a closed server event schema; do not rely on HTML field-name removal. Apply the same boundary to logs, errors, database records, exports, webhooks, and legacy-data reads. Administrator authentication and configured service credentials are separate. Prove the guarantee with functional and adversarial tests before claiming it is implemented.
 
-SQLite is the initial complete target; MySQL follows later. Database upgrades must preserve a recoverable original and be tested against independent legacy data. Fixtures contain synthetic credentials and must be copied before mutation. Product tests must not contact real recipients or external integration endpoints.
+SQLite remains the default local configuration; MySQL and PostgreSQL are selected explicitly at startup. Database upgrades must preserve a recoverable original and be tested against independent legacy data. Fixtures contain synthetic credentials and must be copied before mutation. Product tests must not contact real recipients or external integration endpoints.
 
 Do not operate on GitHub, create releases/tags, publish, package for distribution, or deploy unless explicitly requested. Stop only development processes started in the current session. Report commands actually run and any unresolved checks or reachable defects honestly. Optional PERSONAL.md in this directory adds local preferences if present.
 

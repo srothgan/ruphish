@@ -1,5 +1,46 @@
 name: ruphish-acceptance
 services:
+  postgres:
+    image: ${RUPHISH_POSTGRES_IMAGE:-postgres@sha256:afc7e2d441324c0388fa80c3d24f733b4194a4eb7f47dd8ee2b08eb1a24a647c}
+    profiles: [database]
+    environment:
+      POSTGRES_PASSWORD: ruphish-postgres-fixture-only
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --encoding=UTF8
+      PGDATA: /var/lib/postgresql/data
+    entrypoint: [sh, /fixture/postgres-start.sh]
+    volumes:
+      - ./data/postgres:/tls:ro
+      - ./postgres-start.sh:/fixture/postgres-start.sh:ro
+    tmpfs:
+      - /var/lib/postgresql
+    ports:
+      - "127.0.0.1::5432"
+    healthcheck:
+      test: [CMD, pg_isready, -U, postgres]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    networks: [lab]
+  mysql:
+    # One parameterized service in the canonical fixture; data is disposable.
+    image: ${RUPHISH_MYSQL_IMAGE:-mysql@sha256:e2fa358a74ac81148e7e27d9433e4c0ab62133de8ea4428b4f39a51a4ba7d07f}
+    profiles: [database]
+    environment:
+      MYSQL_ROOT_PASSWORD: ruphish-mysql-fixture-only
+      MYSQL_ROOT_HOST: "%"
+    command: [--ssl-ca=/tls/ca.pem, --ssl-cert=/tls/server.pem, --ssl-key=/tls/server.key]
+    volumes:
+      - ./data/mysql:/tls:ro
+    tmpfs:
+      - /var/lib/mysql
+    ports:
+      - "127.0.0.1::3306"
+    healthcheck:
+      test: [CMD, mysqladmin, ping, -h, 127.0.0.1, -P, "3306"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    networks: [lab]
   prepare:
     image: rust:1.99.1-bookworm
     profiles: [setup]

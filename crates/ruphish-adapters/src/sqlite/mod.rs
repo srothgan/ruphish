@@ -12,9 +12,7 @@ pub mod interactions;
 pub(crate) mod mailbox_worker;
 mod migrations;
 pub mod overview;
-mod participant_privacy;
 pub mod previews;
-mod report_exports;
 pub mod reporting;
 mod reporting_schema;
 pub mod resources;
@@ -289,4 +287,27 @@ async fn validate_schema(
     }
     expected.close().await?;
     Ok(())
+}
+
+/// Map SQLite failures without leaking queries, bound values or file names.
+pub(crate) fn storage_error(error: sqlx::Error) -> ruphish_application::storage::Error {
+    use ruphish_application::storage::Error;
+    match error {
+        sqlx::Error::PoolTimedOut => Error::Busy,
+        sqlx::Error::Database(error) => {
+            match error.code().and_then(|code| code.parse::<u32>().ok()) {
+                Some(517) => Error::TransactionConflict,
+                Some(code) if matches!(code & 0xff, 5 | 6) => Error::Busy,
+                Some(code) if code & 0xff == 19 => Error::Integrity,
+                Some(code) if code & 0xff == 17 => Error::UnsupportedSchema,
+                _ => Error::Unavailable,
+            }
+        }
+        _ => Error::Unavailable,
+    }
+}
+
+/// Classify statement failures without exposing driver diagnostics.
+pub(super) fn resource_error(error: sqlx::Error) -> ruphish_application::resources::Error {
+    ruphish_application::resources::Error::Storage(storage_error(error))
 }

@@ -5,6 +5,7 @@ use crate::{
     resources::{Error, Resource},
 };
 pub use ruphish_domain::campaign::*;
+pub mod preparation;
 
 /// A name-based legacy selection or an explicitly opted-in stable UI selection.
 #[derive(Clone, Default)]
@@ -318,7 +319,29 @@ pub trait Repository: Send + Sync {
     ) -> Result<CampaignOverview, Error>;
     /// Resolve a named-zone local time using iCalendar-compatible rules:
     /// first occurrence in a fold, forward by the transition duration in a gap.
-    fn resolve_time(&self, local: &str, zone: &str) -> Result<i64, Error>;
+    fn resolve_time(&self, local: &str, zone: &str) -> Result<i64, Error> {
+        // Jiff's civil parser can discard numeric offsets and zone annotations.
+        // This field is a wall-clock time; exact instants use launch_date/send_by_date.
+        if local
+            .split_once(['T', 't', ' '])
+            .is_none_or(|(_, clock)| clock.contains(['+', '-', 'Z', 'z', '[', ']']))
+        {
+            return Err(Error::Invalid(
+                "Local date/time must not include an offset or time-zone annotation".into(),
+            ));
+        }
+        let date: jiff::civil::DateTime = local
+            .parse()
+            .map_err(|_| Error::Invalid("Invalid local date/time".into()))?;
+        let zone = jiff::tz::TimeZone::get(zone)
+            .map_err(|_| Error::Invalid("Unknown time zone".into()))?;
+        // RFC 5545 section 3.3.5: choose the first repeated time and move a
+        // skipped time forward by the actual transition (not always one hour).
+        let date = zone.to_ambiguous_zoned(date).compatible().map_err(|_| {
+            Error::Invalid("Local date/time is outside the supported time-zone range".into())
+        })?;
+        Ok(date.timestamp().as_second())
+    }
     /// Resolve resources and schedule without side effects.
     async fn prepare(&self, caller: Identity, input: &Create, now: i64) -> Result<Prepared, Error>;
     /// Commit the complete campaign or replay its existing idempotent launch.
@@ -359,3 +382,7 @@ pub trait Repository: Send + Sync {
         now: i64,
     ) -> Result<(), Error>;
 }
+
+/// Campaign persistence capabilities supplied together by a database provider.
+pub trait Store: Repository + Queue {}
+impl<T: Repository + Queue> Store for T {}

@@ -31,7 +31,7 @@ npm audit --prefix crates/ruphish-ui/web
 cargo deny check bans licenses sources advisories
 ```
 
-No application feature flags exist yet, so these commands cover the current supported combinations. Introduce future SQLite/MySQL or alternative feature combinations with an explicit verification matrix; do not enable incompatible combinations with a blanket --all-features.
+No application feature flags exist yet, so these commands cover the current supported combinations. The same binary supports SQLite, MySQL and PostgreSQL through startup configuration. Introduce future feature combinations with an explicit verification matrix; do not enable incompatible combinations with a blanket --all-features.
 
 ## Tests and checks
 
@@ -57,7 +57,7 @@ Trunk 0.21.14 parses NO_COLOR as a boolean in both root and subcommand options, 
 
 deny.toml evaluates Windows/Linux native and browser graphs, explicitly allows reviewed permissive licenses and crates.io, rejects unknown registry/Git sources, and checks advisories/yanked packages. Duplicate versions are reported for review rather than globally denied because third-party version splits do not necessarily imply an actionable conflict. Avoid broad suppressions. No advisory ignore entries are configured. Network access is required for initial dependency/tool downloads and current advisory information; a network failure is a failed/unavailable check, not a clean audit.
 
-Five exact-version license exceptions cover reviewed transitive dependencies: base16 0.2.1 (CC0), xxhash-rust 0.8.19 (Boost), matchit 0.8.4 (MIT AND BSD-3-Clause), subtle 2.6.1 (BSD-3-Clause), and dev-only webpki-root-certs 1.0.9 (CDLA-Permissive-2.0 trust data; retain its agreement if sharing that data). These satisfy the current allowlist without suppressing security advisories. CodeMirror and Jodit runtime packages are MIT; their notices are preserved in the browser output. cargo-deny does not inspect npm dependencies; npm audit checks their advisory graph separately.
+Exact-version license exceptions in deny.toml identify the reviewed dependencies and reasons; do not broaden the general allowlist to silence a finding. TLS trust-data agreements and resource-parser notices are retained in [resource dependency notices](resource-dependencies.md). CodeMirror and Jodit runtime packages are MIT; their notices are preserved in the browser output. cargo-deny does not inspect npm dependencies; npm audit checks their advisory graph separately.
 
 GitHub actions/state, releases, publishing, distribution packaging, and deployment are deferred. Completing local checks does not authorize any of those actions.
 

@@ -270,7 +270,7 @@ async fn handle(request: Request<Body>, state: &Services) -> Response {
         Ok(Output::Submitted{redirect})=>([(header::CACHE_CONTROL,"no-store")],axum::Json(serde_json::json!({"success":true,"redirect":redirect}))).into_response(),
         Err(ruphish_application::resources::Error::Invalid(code)) if code == "interaction_limit_reached" => empty(StatusCode::TOO_MANY_REQUESTS),
         Err(ruphish_application::resources::Error::Invalid(_))=>empty(StatusCode::BAD_REQUEST),
-        Err(ruphish_application::resources::Error::Internal)=>empty(StatusCode::SERVICE_UNAVAILABLE),
+        Err(ruphish_application::resources::Error::Internal | ruphish_application::resources::Error::Storage(_))=>empty(StatusCode::SERVICE_UNAVAILABLE),
         Err(_)=>empty(StatusCode::NOT_FOUND),
     };
     if path.ends_with("/report") {

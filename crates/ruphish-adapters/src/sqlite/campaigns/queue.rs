@@ -187,69 +187,31 @@ impl Queue for Campaigns {
         let row=sqlx::query("SELECT d.*,c.status AS campaign_status,c.smtp_id FROM ruphish_delivery d JOIN campaigns c ON c.id=d.campaign_id WHERE d.result_id=? AND d.generation=? AND d.state IN ('preparing','submitting','unknown')").bind(claim.result_id).bind(claim.generation).fetch_optional(&mut *tx).await.map_err(storage)?;
         let Some(row) = row else { return Ok(()) };
         let current = text(&row, "state")?;
-        if (current == "unknown" && outcome.is_err()) || (current == "preparing" && outcome.is_ok())
-        {
-            return Ok(());
-        }
         let retries: u32 = row.try_get("retries").map_err(storage)?;
-        let mut next = now;
-        let mut count = retries;
-        let mut code = "";
-        let mut stage = String::new();
-        let mut smtp_code = None;
-        let state = match &outcome {
-            Ok(()) => "accepted",
-            Err(e) => {
-                stage = format!("{:?}", e.stage);
-                smtp_code = e.smtp_code;
-                match e.kind {
-                    FailureKind::Unknown => {
-                        code = "delivery_outcome_unknown";
-                        "unknown"
-                    }
-                    FailureKind::Permanent => {
-                        code = "smtp_permanent_rejection";
-                        "failed"
-                    }
-                    FailureKind::Blocked => {
-                        code = "smtp_profile_blocked";
-                        "blocked"
-                    }
-                    FailureKind::Retryable => {
-                        if text(&row, "campaign_status")? == "Completed" {
-                            "cancelled"
-                        } else {
-                            let mut jitter = [0];
-                            getrandom::fill(&mut jitter).map_err(|_| Error::Internal)?;
-                            if let Some(delay) = retry_delay(retries, jitter[0]) {
-                                next = now + delay;
-                                count += 1;
-                                code = "smtp_temporary_rejection";
-                                "retry"
-                            } else {
-                                code = "delivery_retry_exhausted";
-                                "failed"
-                            }
-                        }
-                    }
-                }
-            }
+        let Some(DeliveryUpdate {
+            state,
+            next,
+            count,
+            code,
+            stage,
+            smtp_code,
+            cooldown,
+            status,
+        }) = crate::campaign_preparation::delivery_update(
+            &current,
+            text(&row, "campaign_status")? == "Completed",
+            retries,
+            now,
+            &outcome,
+        )?
+        else {
+            return Ok(());
         };
         sqlx::query("UPDATE ruphish_delivery SET state=?,due=?,retries=?,lease_until=0,code=?,stage=?,smtp_code=? WHERE result_id=? AND generation=?").bind(state).bind(next).bind(count).bind(code).bind(&stage).bind(smtp_code).bind(claim.result_id).bind(claim.generation).execute(&mut *tx).await.map_err(storage)?;
         sqlx::query("UPDATE ruphish_delivery_attempt SET state=?,finished=?,stage=?,smtp_code=? WHERE result_id=? AND generation=?").bind(state).bind(now).bind(stage).bind(smtp_code).bind(claim.result_id).bind(claim.generation).execute(&mut *tx).await.map_err(storage)?;
-        if state == "blocked"
-            || (state == "retry"
-                && outcome.as_ref().err().is_some_and(|e| {
-                    matches!(e.stage, Stage::Connect | Stage::Tls | Stage::Authentication)
-                }))
-        {
+        if cooldown {
             sqlx::query("INSERT INTO ruphish_profile_cooldown VALUES(?,?,?,?) ON CONFLICT(profile_id) DO UPDATE SET until_time=max(until_time,excluded.until_time),revision=excluded.revision,blocked=excluded.blocked").bind(row.try_get::<i64,_>("smtp_id").map_err(storage)?).bind(next).bind(text(&row,"profile_revision")?).bind(state=="blocked").execute(&mut *tx).await.map_err(storage)?;
         }
-        let status = match state {
-            "accepted" => "Email Sent",
-            "retry" => "Retrying",
-            _ => "Error",
-        };
         sqlx::query("UPDATE results SET status=CASE WHEN status IN ('Email Opened','Clicked Link','Submitted Data') THEN status ELSE ? END,send_date=CASE WHEN ? IN ('accepted','retry') THEN ? ELSE send_date END,modified_date=? WHERE id=?").bind(status).bind(state).bind(stamp(if state=="retry" {next} else {now})?).bind(stamp(now)?).bind(claim.result_id).execute(&mut *tx).await.map_err(storage)?;
         let details = outcome
             .as_ref()

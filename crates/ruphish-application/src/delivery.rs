@@ -287,3 +287,21 @@ impl Service {
         self.previews.render(rid).await
     }
 }
+
+/// Stored preview data, fully owned and independent of a SQL connection.
+pub struct PreviewSnapshot {
+    /// Authored landing page.
+    pub page: crate::resources::Page,
+    /// Saved message context.
+    pub message: MessageInput,
+}
+/// Preview persistence, separate from identifier allocation and HTML rendering.
+#[async_trait::async_trait]
+pub trait PreviewPersistence: Send + Sync {
+    /// Check whether a valid preview identifier exists.
+    async fn contains(&self, rid: &str) -> Result<bool, Error>;
+    /// Recheck ownership and store preview state atomically.
+    async fn store(&self, caller: Identity, message: &MessageInput) -> Result<(), Error>;
+    /// Load the saved context and current owned page consistently.
+    async fn snapshot(&self, rid: &str) -> Result<PreviewSnapshot, Error>;
+}

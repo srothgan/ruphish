@@ -32,6 +32,21 @@ const BOUNDARIES: &[(&str, &[&str])] = &[
     ),
 ];
 
+const DATABASE_DRIVERS: &[&str] = &[
+    "sqlx",
+    "sqlx-core",
+    "sqlx-sqlite",
+    "sqlx-mysql",
+    "sqlx-postgres",
+    "rusqlite",
+    "mysql",
+    "mysql_async",
+    "postgres",
+    "tokio-postgres",
+    "diesel",
+    "sea-orm",
+];
+
 fn product_root() -> Result<PathBuf, std::io::Error> {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -102,23 +117,21 @@ fn workspace_dependencies_follow_boundaries_and_stay_inside_product() {
                     "{name} depends on a parent/external source path: {path}"
                 );
             }
+            // Production consumers cannot acquire a driver or bypass the facade.
+            // Dev dependencies are reserved for independent fixtures/fault injection.
+            if name != "ruphish-adapters" && dependency["kind"] != "dev" {
+                assert!(
+                    !DATABASE_DRIVERS.contains(&dependency_name),
+                    "database driver leaked into {name}: {dependency_name}"
+                );
+            }
             if matches!(
                 name,
                 "ruphish-domain" | "ruphish-contracts" | "ruphish-application" | "ruphish-ui"
             ) {
-                let backend = [
-                    "axum",
-                    "hyper",
-                    "sqlx",
-                    "sqlx-core",
-                    "rusqlite",
-                    "lettre",
-                    "async-imap",
-                    "mysql",
-                    "mysql_async",
-                ];
                 assert!(
-                    !backend.contains(&dependency_name),
+                    !DATABASE_DRIVERS.contains(&dependency_name)
+                        && !["axum", "hyper", "lettre", "async-imap"].contains(&dependency_name),
                     "backend dependency leaked into {name}: {dependency_name}"
                 );
             }

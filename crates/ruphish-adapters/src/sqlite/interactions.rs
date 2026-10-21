@@ -7,46 +7,25 @@ use ruphish_application::{
 use sqlx::{Row, SqlitePool};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
-/// Public application adapter shares the startup-owned database pool.
 pub struct Interactions {
     pool: SqlitePool,
-    rendering: std::sync::Arc<tokio::sync::Semaphore>,
 }
 impl Interactions {
-    /// Attach public operations to the migrated startup pool.
     pub fn new(pool: SqlitePool) -> Self {
-        Self {
-            pool,
-            rendering: std::sync::Arc::new(tokio::sync::Semaphore::new(8)),
-        }
+        Self { pool }
     }
 }
-fn storage(_: sqlx::Error) -> Error {
-    Error::Internal
+fn storage(error: sqlx::Error) -> Error {
+    crate::sqlite::resource_error(error)
 }
 fn missing() -> Error {
     Error::NotFound("Interaction")
 }
-
 #[async_trait::async_trait]
-impl Public for Interactions {
-    async fn interact(
-        &self,
-        authority: &str,
-        rid: &str,
-        action: Action,
-        now: i64,
-    ) -> Result<Output, Error> {
-        if rid.is_empty()
-            || rid.len() > 128
-            || !rid.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-')
-        {
-            return Err(missing());
-        }
-        let origin = ruphish_domain::domains::origin(&format!("https://{authority}"), false)
-            .map_err(|_| missing())?;
+impl Persistence for Interactions {
+    async fn snapshot(&self, origin: &str, rid: &str, action: &Action) -> Result<Snapshot, Error> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
-        let row=sqlx::query("SELECT r.id AS result_id,r.campaign_id,r.user_id,r.email,r.first_name,r.last_name,r.position,r.send_date,c.url,c.page_id,c.smtp_id,c.template_id,cp.capture_credentials,cp.capture_passwords,cp.redirect_url FROM results r JOIN campaigns c ON c.id=r.campaign_id AND c.user_id=r.user_id JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=c.user_id JOIN ruphish_campaign_policy cp ON cp.campaign_id=c.id WHERE r.r_id=? AND c.status!='Completed' AND d.origin=? AND d.enabled=1 AND d.verified_until>0").bind(rid).bind(&origin.value).fetch_all(&mut *tx).await.map_err(storage)?;
+        let row=sqlx::query("SELECT r.id AS result_id,r.campaign_id,r.user_id,r.email,r.first_name,r.last_name,r.position,r.send_date,c.url,c.page_id,c.smtp_id,c.template_id,cp.capture_credentials,cp.capture_passwords,cp.redirect_url FROM results r JOIN campaigns c ON c.id=r.campaign_id AND c.user_id=r.user_id JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=c.user_id JOIN ruphish_campaign_policy cp ON cp.campaign_id=c.id WHERE r.r_id=? AND c.status!='Completed' AND d.origin=? AND d.enabled=1 AND d.verified_until>0").bind(rid).bind(origin).fetch_all(&mut *tx).await.map_err(storage)?;
         if row.len() != 1 {
             return Err(missing());
         }
@@ -60,14 +39,6 @@ impl Public for Interactions {
                 .map_err(storage)
         };
         let email = text("email")?;
-        if matches!(action, Action::Inspect) {
-            return Ok(Output::Transparency {
-                send_date: text("send_date")?,
-            });
-        }
-        if matches!(action, Action::Head) {
-            return Ok(Output::Empty);
-        }
         let captures: bool = row.try_get("capture_credentials").map_err(storage)?;
         let passwords: bool = row.try_get("capture_passwords").map_err(storage)?;
         let mut rendering = None;
@@ -118,57 +89,53 @@ impl Public for Interactions {
                 url: text("url")?,
                 rid: rid.into(),
             };
-            rendering = Some((
+            rendering = Some(RenderInput {
                 message,
-                text("redirect_url")?,
-                matches!(action, Action::View).then_some(page.html),
-            ));
+                redirect: text("redirect_url")?,
+                source: matches!(action, Action::View).then_some(page.html),
+            });
         }
+        let send_date = text("send_date")?;
         tx.commit().await.map_err(storage)?;
-        // The snapshot owns its data. Context construction (including URL templates),
-        // template execution and final HTML sanitization all run without a connection.
-        let (document, destination) = if let Some((message, redirect, source)) = rendering {
-            // A cancelled HTTP request must not release capacity while its blocking
-            // parser is still running. The task owns the permit until it finishes.
-            let permit = self
-                .rendering
-                .clone()
-                .try_acquire_owned()
-                .map_err(|_| Error::Internal)?;
-            let endpoint = format!("{}/?rid={rid}", origin.value);
-            let base = origin.value.clone();
-            tokio::task::spawn_blocking(move || {
-                let _permit = permit;
-                let context = crate::smtp::context(&message)?;
-                let redirect =
-                    crate::resources::render(&redirect, &context).map_err(|_| missing())?;
-                let destination = crate::landing::redirect(&redirect, &base)?;
-                let document = source
-                    .map(|source| {
-                        let html =
-                            crate::resources::render(&source, &context).map_err(|_| missing())?;
-                        crate::landing::render(&html, Some(&endpoint))
-                    })
-                    .transpose()?;
-                Ok::<_, Error>((document, destination))
-            })
-            .await
-            .map_err(|_| Error::Internal)??
-        } else {
-            (None, None)
-        };
+        Ok(Snapshot {
+            result_id,
+            campaign_id,
+            email,
+            send_date,
+            captures,
+            passwords,
+            rendering,
+        })
+    }
+    async fn record(
+        &self,
+        snapshot: &Snapshot,
+        origin: &str,
+        action: &Action,
+        now: i64,
+    ) -> Result<(), Error> {
+        let Snapshot {
+            result_id,
+            campaign_id,
+            email,
+            captures,
+            passwords,
+            ..
+        } = snapshot;
+        let (result_id, campaign_id, captures, passwords) =
+            (*result_id, *campaign_id, *captures, *passwords);
         let mut tx = self
             .pool
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(storage)?;
         // Completion and disabling must win over a render that started earlier.
-        let active:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM campaigns c JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id WHERE c.id=? AND c.status!='Completed' AND d.enabled=1 AND d.origin=?)").bind(campaign_id).bind(&origin.value).fetch_one(&mut *tx).await.map_err(storage)?;
+        let active:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM campaigns c JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id WHERE c.id=? AND c.status!='Completed' AND d.enabled=1 AND d.origin=?)").bind(campaign_id).bind(origin).fetch_one(&mut *tx).await.map_err(storage)?;
         if !active {
             return Err(missing());
         }
         let mut details = String::new();
-        let message = match &action {
+        let message = match action {
             Action::View => Some("Clicked Link"),
             Action::Open => Some("Email Opened"),
             Action::Report => Some("Email Reported"),
@@ -189,9 +156,7 @@ impl Public for Interactions {
                     .map_err(storage)?;
                     let duplicate: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ruphish_submission_ids WHERE result_id=? AND event_id=?)")
                         .bind(result_id).bind(event_id).fetch_one(&mut *tx).await.map_err(storage)?;
-                    if count >= 1000 && !duplicate {
-                        return Err(Error::Invalid("interaction_limit_reached".into()));
-                    }
+                    check_event_capacity(count, true, duplicate)?;
                     let inserted =
                         sqlx::query("INSERT OR IGNORE INTO ruphish_submission_ids VALUES(?,?)")
                             .bind(result_id)
@@ -221,13 +186,11 @@ impl Public for Interactions {
             let count: i64 =
                 sqlx::query_scalar("SELECT count(*) FROM events WHERE campaign_id=? AND email=?")
                     .bind(campaign_id)
-                    .bind(&email)
+                    .bind(email)
                     .fetch_one(&mut *tx)
                     .await
                     .map_err(storage)?;
-            if count >= 10000 {
-                return Err(Error::Invalid("interaction_limit_reached".into()));
-            }
+            check_event_capacity(count, false, false)?;
             {
                 let stamp = OffsetDateTime::from_unix_timestamp(now)
                     .map_err(|_| Error::Internal)?
@@ -237,7 +200,7 @@ impl Public for Interactions {
                     "INSERT INTO events(campaign_id,email,time,message,details) VALUES(?,?,?,?,?)",
                 )
                 .bind(campaign_id)
-                .bind(&email)
+                .bind(email)
                 .bind(&stamp)
                 .bind(message)
                 .bind(details)
@@ -253,22 +216,6 @@ impl Public for Interactions {
             }
         }
         tx.commit().await.map_err(storage)?;
-        match action {
-            Action::View => {
-                let document = document.ok_or(Error::Internal)?;
-                Ok(Output::Html {
-                    html: document.html,
-                    csp: document.csp,
-                })
-            }
-            Action::Open => Ok(Output::Pixel),
-            Action::Submit { .. } => Ok(Output::Submitted {
-                redirect: destination,
-            }),
-            _ => Ok(Output::Empty),
-        }
+        Ok(())
     }
 }
-
-#[cfg(test)]
-mod tests;

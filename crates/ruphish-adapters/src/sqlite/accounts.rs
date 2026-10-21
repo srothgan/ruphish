@@ -22,7 +22,7 @@ fn storage(error: sqlx::Error) -> Error {
     {
         Error::Conflict
     } else {
-        Error::Internal
+        Error::Storage(super::storage_error(error))
     }
 }
 

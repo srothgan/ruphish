@@ -1,8 +1,7 @@
 //! Real executable reporting, integration APIs, verified IMAP and restart behavior.
+use super::mailbox;
 use super::*;
 use sqlx::Row;
-#[path = "support/mailbox.rs"]
-mod mailbox;
 fn request(
     client: &reqwest::blocking::Client,
     base: &str,

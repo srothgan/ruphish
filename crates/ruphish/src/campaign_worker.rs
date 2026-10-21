@@ -1,5 +1,5 @@
 //! Supervised bounded campaign execution; the database owns runnable work.
-use ruphish_adapters::{smtp::Smtp, sqlite::campaigns::Campaigns};
+use ruphish_adapters::smtp::Smtp;
 use ruphish_application::{
     campaign::{Claim, DeliveryFailure, FailureKind, Queue, Stage},
     delivery::{Sender, Transport},
@@ -10,13 +10,13 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
 pub(crate) struct Worker {
-    pub queue: Arc<Campaigns>,
+    pub queue: Arc<dyn Queue>,
     pub smtp: Arc<Smtp>,
 }
 fn now() -> i64 {
     time::OffsetDateTime::now_utc().unix_timestamp()
 }
-async fn execute(queue: Arc<Campaigns>, smtp: Arc<Smtp>, claim: Arc<Claim>) -> Result<(), Error> {
+async fn execute(queue: Arc<dyn Queue>, smtp: Arc<Smtp>, claim: Arc<Claim>) -> Result<(), Error> {
     let message = claim.message.clone();
     let composer = smtp.clone();
     let prepared = tokio::task::spawn_blocking(move || composer.compose(&message))
@@ -57,23 +57,48 @@ impl Worker {
     pub async fn run(self, stop: CancellationToken) -> Result<(), std::io::Error> {
         let mut tasks: JoinSet<(i64, Result<(), Error>)> = JoinSet::new();
         let mut active = HashMap::<i64, Arc<Claim>>::new();
+        let mut backoff = crate::worker_backoff::Backoff::new();
         let mut tick = tokio::time::interval(Duration::from_millis(500));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        let result=async {
+        let result = async {
             loop {
                 tokio::select! {
                     biased;
-                    _=stop.cancelled()=>return Ok::<_,std::io::Error>(()),
-                    joined=tasks.join_next(),if !tasks.is_empty()=>{
-                        let (id,outcome)=joined.ok_or_else(||std::io::Error::other("Campaign worker lost task"))?.map_err(std::io::Error::other)?;
-                        active.remove(&id);outcome.map_err(std::io::Error::other)?;
+                    _ = stop.cancelled() => return Ok::<_, std::io::Error>(()),
+                    joined = tasks.join_next(), if !tasks.is_empty() => {
+                        let (id, outcome) = joined
+                            .ok_or_else(|| std::io::Error::other("Campaign worker lost task"))?
+                            .map_err(std::io::Error::other)?;
+                        active.remove(&id);
+                        if outcome.is_err() {
+                            // The durable lease retains ambiguous submission state. Never rerun SMTP here.
+                            let delay = backoff.failed();
+                            tracing::warn!(retry_seconds = delay.as_secs(), "campaign_outcome_storage_unavailable");
+                        }
                     },
-                    _=tick.tick()=>{
-                        while tasks.len()<4 && !stop.is_cancelled() {
-                            let Some(claim)=self.queue.claim(now()).await.map_err(std::io::Error::other)? else {break};
-                            let id=claim.result_id;let claim=Arc::new(claim);active.insert(id,claim.clone());
-                            let queue=self.queue.clone();let smtp=self.smtp.clone();
-                            tasks.spawn(async move {(id,execute(queue,smtp,claim).await)});
+                    _ = tick.tick() => {
+                        if !backoff.ready() {
+                            continue;
+                        }
+                        while tasks.len() < 4 && !stop.is_cancelled() {
+                            let claim = match self.queue.claim(now()).await {
+                                Ok(claim) => {
+                                    backoff.succeeded();
+                                    claim
+                                },
+                                Err(_) => {
+                                    let delay = backoff.failed();
+                                    tracing::warn!(retry_seconds = delay.as_secs(), "campaign_queue_storage_unavailable");
+                                    break;
+                                }
+                            };
+                            let Some(claim) = claim else { break };
+                            let id = claim.result_id;
+                            let claim = Arc::new(claim);
+                            active.insert(id, claim.clone());
+                            let queue = self.queue.clone();
+                            let smtp = self.smtp.clone();
+                            tasks.spawn(async move { (id, execute(queue, smtp, claim).await) });
                         }
                     }
                 }

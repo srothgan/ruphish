@@ -2,7 +2,7 @@
 use serde_json::{Value, json};
 
 /// Rebuild permitted event metadata instead of forwarding a legacy payload map.
-pub(super) fn details(source: &str) -> String {
+pub(crate) fn details(source: &str) -> String {
     let Ok(Value::Object(value)) = serde_json::from_str(source) else {
         return String::new();
     };

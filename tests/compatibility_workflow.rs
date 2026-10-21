@@ -1,7 +1,8 @@
 //! A migrated installation must retain usable credentials, relationships, and stored content.
 
 use ruphish_adapters::{
-    password_worker as password, sqlite,
+    database::migrations,
+    password_worker as password,
     template::{self, Context},
 };
 use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
@@ -15,7 +16,9 @@ async fn migrated_installation_can_authenticate_and_render_its_saved_campaign_fo
     let directory = tempfile::tempdir().unwrap();
     let destination = directory.path().join("ruphish.db");
     let original = fs::read(&source).unwrap();
-    sqlite::upgrade_copy(&source, &destination).await.unwrap();
+    migrations::upgrade_copy(&source, &destination)
+        .await
+        .unwrap();
     let mut connection =
         SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&destination))
             .await

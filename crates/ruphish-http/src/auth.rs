@@ -390,7 +390,7 @@ impl Context {
                 .api_key(key)
                 .await
                 .map_err(|error| match error {
-                    Error::Internal | Error::Busy => auth_error(error),
+                    Error::Internal | Error::Storage(_) | Error::Busy => auth_error(error),
                     _ => failure(
                         StatusCode::UNAUTHORIZED,
                         if key.is_empty() {
@@ -996,9 +996,10 @@ fn auth_error(error: Error) -> Rejection {
         Error::Policy(
             AccountError::Forbidden | AccountError::ResetRequired | AccountError::SelfDeletion,
         ) => StatusCode::FORBIDDEN,
-        Error::Policy(AccountError::LastAdmin) | Error::Internal | Error::RoleNotFound => {
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
+        Error::Policy(AccountError::LastAdmin)
+        | Error::Internal
+        | Error::Storage(_)
+        | Error::RoleNotFound => StatusCode::INTERNAL_SERVER_ERROR,
         Error::Busy => StatusCode::SERVICE_UNAVAILABLE,
         _ => StatusCode::BAD_REQUEST,
     };

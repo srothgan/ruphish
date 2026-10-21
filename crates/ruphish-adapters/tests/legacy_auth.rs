@@ -1,8 +1,10 @@
 //! Existing authentication guarantees and independently captured Go bcrypt vectors.
 
+mod support;
 use ruphish_adapters::password_worker as password;
 use ruphish_domain::password::{PasswordError, validate};
 use serde_json::Value;
+use support::DatabaseFixture;
 
 #[test]
 fn password_policy_preserves_original_cases_and_captured_byte_lengths() {
@@ -54,21 +56,18 @@ fn captured_go_hash_accepts_only_the_correct_password() {
 
 #[tokio::test]
 async fn password_change_preserves_original_rejections_and_verifies_the_new_hash() {
-    use ruphish_adapters::{
-        password_worker::PasswordWorker,
-        sqlite::{StartupDatabase, accounts::Accounts},
-    };
-    use ruphish_application::auth::{Error, Repository, Service};
+    use ruphish_adapters::password_worker::PasswordWorker;
+    use ruphish_application::auth::{Error, Service};
     use std::sync::Arc;
     let directory = tempfile::tempdir().unwrap();
-    let database = StartupDatabase::open(&directory.path().join("accounts.db"), "")
+    let database = DatabaseFixture::open(&directory.path().join("accounts.db"), "")
         .await
         .unwrap();
     database
         .bootstrap(Some("current password".into()), None)
         .await
         .unwrap();
-    let pool = database.pool();
+    let pool = database.inspection_pool();
     let captured: Value = serde_json::from_str(include_str!(
         "../../../tests/fixtures/gophish-v0.12.1/password.json"
     ))
@@ -78,7 +77,7 @@ async fn password_change_preserves_original_rejections_and_verifies_the_new_hash
         .execute(&pool)
         .await
         .unwrap();
-    let repo = Arc::new(Accounts::new(pool.clone()));
+    let repo = database.accounts();
     let service = Service::new(repo.clone(), Arc::new(PasswordWorker::default()));
     let user = service
         .login("admin", "FixtureOnlyPassword42!".into())

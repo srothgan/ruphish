@@ -6,6 +6,9 @@ use std::sync::Arc;
 /// Safe public resource failure.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// Safe persistence classification retained for reconciliation and retry policy.
+    #[error("Resource operation could not be completed")]
+    Storage(#[from] crate::storage::Error),
     #[error(transparent)]
     /// Authentication or authorization failure.
     Policy(#[from] AccountError),
@@ -30,6 +33,16 @@ pub enum Error {
     #[error("Resource operation could not be completed")]
     /// Infrastructure failure with details withheld from clients.
     Internal,
+}
+impl From<crate::auth::Error> for Error {
+    fn from(error: crate::auth::Error) -> Self {
+        match error {
+            crate::auth::Error::Storage(error) => Self::Storage(error),
+            crate::auth::Error::Policy(error) => Self::Policy(error),
+            crate::auth::Error::NotFound => Self::Policy(AccountError::Unauthorized),
+            _ => Self::Internal,
+        }
+    }
 }
 /// Persistence authorizes the live identity inside each read/write transaction.
 #[async_trait::async_trait]

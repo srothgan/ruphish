@@ -1,0 +1,3545 @@
+[
+  {
+    "tables": {
+      "attachments": {
+        "content": "text",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "name": "varchar",
+        "page_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "pages": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "r_id": "varchar",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "campaign_id": "bigint",
+        "from_address": "varchar",
+        "host": "varchar",
+        "smtp_id": "int",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20160118194630
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "text",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "name": "varchar",
+        "page_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "pages": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "r_id": "varchar",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "campaign_id": "bigint",
+        "from_address": "varchar",
+        "host": "varchar",
+        "smtp_id": "int",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20160131153104
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "text",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "name": "varchar",
+        "page_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "pages": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "r_id": "varchar",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "campaign_id": "bigint",
+        "from_address": "varchar",
+        "host": "varchar",
+        "ignore_cert_errors": "tinyint",
+        "smtp_id": "int",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20160211211220
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "text",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "name": "varchar",
+        "page_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "pages": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "position": "varchar",
+        "r_id": "varchar",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "campaign_id": "bigint",
+        "from_address": "varchar",
+        "host": "varchar",
+        "ignore_cert_errors": "tinyint",
+        "smtp_id": "int",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20160217211342
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "text",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "name": "varchar",
+        "page_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "position": "varchar",
+        "r_id": "varchar",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "campaign_id": "bigint",
+        "from_address": "varchar",
+        "host": "varchar",
+        "ignore_cert_errors": "tinyint",
+        "smtp_id": "int",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20160225173824
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "text",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "name": "varchar",
+        "page_id": "bigint",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "position": "varchar",
+        "r_id": "varchar",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20160227180335
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "text",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "name": "varchar",
+        "page_id": "bigint",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "position": "varchar",
+        "r_id": "varchar",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20160317214457
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "text",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "position": "varchar",
+        "r_id": "varchar",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20160605210903
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "position": "varchar",
+        "r_id": "varchar",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20161202153627
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "position": "varchar",
+        "r_id": "varchar",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20170104231222
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "headers": {
+        "id": "int",
+        "key": "varchar",
+        "smtp_id": "bigint",
+        "value": "varchar"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "position": "varchar",
+        "r_id": "varchar",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20170219122503
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "headers": {
+        "id": "int",
+        "key": "varchar",
+        "smtp_id": "bigint",
+        "value": "varchar"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "position": "varchar",
+        "r_id": "varchar",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20170828220440
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "headers": {
+        "id": "int",
+        "key": "varchar",
+        "smtp_id": "bigint",
+        "value": "varchar"
+      },
+      "mail_logs": {
+        "campaign_id": "int",
+        "id": "int",
+        "processing": "tinyint",
+        "r_id": "varchar",
+        "send_attempt": "int",
+        "send_date": "datetime",
+        "user_id": "int"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "position": "varchar",
+        "r_id": "varchar",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20171027213457
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "headers": {
+        "id": "int",
+        "key": "varchar",
+        "smtp_id": "bigint",
+        "value": "varchar"
+      },
+      "mail_logs": {
+        "campaign_id": "int",
+        "id": "int",
+        "processing": "tinyint",
+        "r_id": "varchar",
+        "send_attempt": "int",
+        "send_date": "datetime",
+        "user_id": "int"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "position": "varchar",
+        "r_id": "varchar",
+        "send_date": "datetime",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20171208201932
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "headers": {
+        "id": "int",
+        "key": "varchar",
+        "smtp_id": "bigint",
+        "value": "varchar"
+      },
+      "mail_logs": {
+        "campaign_id": "int",
+        "id": "int",
+        "processing": "tinyint",
+        "r_id": "varchar",
+        "send_attempt": "int",
+        "send_date": "datetime",
+        "user_id": "int"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "position": "varchar",
+        "r_id": "varchar",
+        "reported": "tinyint",
+        "send_date": "datetime",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20180223101813
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "headers": {
+        "id": "int",
+        "key": "varchar",
+        "smtp_id": "bigint",
+        "value": "varchar"
+      },
+      "mail_logs": {
+        "campaign_id": "int",
+        "id": "int",
+        "processing": "tinyint",
+        "r_id": "varchar",
+        "send_attempt": "int",
+        "send_date": "datetime",
+        "user_id": "int"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "modified_date": "datetime",
+        "position": "varchar",
+        "r_id": "varchar",
+        "reported": "tinyint",
+        "send_date": "datetime",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20180524203752
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "email_requests": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "from_address": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "page_id": "int",
+        "position": "varchar",
+        "r_id": "varchar",
+        "template_id": "int",
+        "url": "varchar",
+        "user_id": "int"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "headers": {
+        "id": "int",
+        "key": "varchar",
+        "smtp_id": "bigint",
+        "value": "varchar"
+      },
+      "mail_logs": {
+        "campaign_id": "int",
+        "id": "int",
+        "processing": "tinyint",
+        "r_id": "varchar",
+        "send_attempt": "int",
+        "send_date": "datetime",
+        "user_id": "int"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "modified_date": "datetime",
+        "position": "varchar",
+        "r_id": "varchar",
+        "reported": "tinyint",
+        "send_date": "datetime",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "text",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20180527213648
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "email_requests": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "from_address": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "page_id": "int",
+        "position": "varchar",
+        "r_id": "varchar",
+        "template_id": "int",
+        "url": "varchar",
+        "user_id": "int"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "headers": {
+        "id": "int",
+        "key": "varchar",
+        "smtp_id": "bigint",
+        "value": "varchar"
+      },
+      "mail_logs": {
+        "campaign_id": "int",
+        "id": "int",
+        "processing": "tinyint",
+        "r_id": "varchar",
+        "send_attempt": "int",
+        "send_date": "datetime",
+        "user_id": "int"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "modified_date": "datetime",
+        "position": "varchar",
+        "r_id": "varchar",
+        "reported": "tinyint",
+        "send_date": "datetime",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20180609164054
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "send_by_date": "datetime",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "email_requests": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "from_address": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "page_id": "int",
+        "position": "varchar",
+        "r_id": "varchar",
+        "template_id": "int",
+        "url": "varchar",
+        "user_id": "int"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "headers": {
+        "id": "int",
+        "key": "varchar",
+        "smtp_id": "bigint",
+        "value": "varchar"
+      },
+      "mail_logs": {
+        "campaign_id": "int",
+        "id": "int",
+        "processing": "tinyint",
+        "r_id": "varchar",
+        "send_attempt": "int",
+        "send_date": "datetime",
+        "user_id": "int"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "varchar",
+        "user_id": "bigint"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "modified_date": "datetime",
+        "position": "varchar",
+        "r_id": "varchar",
+        "reported": "tinyint",
+        "send_date": "datetime",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20180830215615
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "send_by_date": "datetime",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "email_requests": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "from_address": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "page_id": "int",
+        "position": "varchar",
+        "r_id": "varchar",
+        "template_id": "int",
+        "url": "varchar",
+        "user_id": "int"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "headers": {
+        "id": "int",
+        "key": "varchar",
+        "smtp_id": "bigint",
+        "value": "varchar"
+      },
+      "mail_logs": {
+        "campaign_id": "int",
+        "id": "int",
+        "processing": "tinyint",
+        "r_id": "varchar",
+        "send_attempt": "int",
+        "send_date": "datetime",
+        "user_id": "int"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "varchar",
+        "user_id": "bigint"
+      },
+      "permissions": {
+        "description": "varchar",
+        "id": "int",
+        "name": "varchar",
+        "slug": "varchar"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "modified_date": "datetime",
+        "position": "varchar",
+        "r_id": "varchar",
+        "reported": "tinyint",
+        "send_date": "datetime",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "role_permissions": {
+        "permission_id": "int",
+        "role_id": "int"
+      },
+      "roles": {
+        "description": "varchar",
+        "id": "int",
+        "name": "varchar",
+        "slug": "varchar"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "role_id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20190105192341
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "send_by_date": "datetime",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "email_requests": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "from_address": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "page_id": "int",
+        "position": "varchar",
+        "r_id": "varchar",
+        "template_id": "int",
+        "url": "varchar",
+        "user_id": "int"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "headers": {
+        "id": "int",
+        "key": "varchar",
+        "smtp_id": "bigint",
+        "value": "varchar"
+      },
+      "mail_logs": {
+        "campaign_id": "int",
+        "id": "int",
+        "processing": "tinyint",
+        "r_id": "varchar",
+        "send_attempt": "int",
+        "send_date": "datetime",
+        "user_id": "int"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "text",
+        "user_id": "bigint"
+      },
+      "permissions": {
+        "description": "varchar",
+        "id": "int",
+        "name": "varchar",
+        "slug": "varchar"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "modified_date": "datetime",
+        "position": "varchar",
+        "r_id": "varchar",
+        "reported": "tinyint",
+        "send_date": "datetime",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "role_permissions": {
+        "permission_id": "int",
+        "role_id": "int"
+      },
+      "roles": {
+        "description": "varchar",
+        "id": "int",
+        "name": "varchar",
+        "slug": "varchar"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "role_id": "int",
+        "username": "varchar"
+      }
+    },
+    "version": 20190219214543
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "send_by_date": "datetime",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "email_requests": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "from_address": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "page_id": "int",
+        "position": "varchar",
+        "r_id": "varchar",
+        "template_id": "int",
+        "url": "varchar",
+        "user_id": "int"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "headers": {
+        "id": "int",
+        "key": "varchar",
+        "smtp_id": "bigint",
+        "value": "varchar"
+      },
+      "mail_logs": {
+        "campaign_id": "int",
+        "id": "int",
+        "processing": "tinyint",
+        "r_id": "varchar",
+        "send_attempt": "int",
+        "send_date": "datetime",
+        "user_id": "int"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "text",
+        "user_id": "bigint"
+      },
+      "permissions": {
+        "description": "varchar",
+        "id": "int",
+        "name": "varchar",
+        "slug": "varchar"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "modified_date": "datetime",
+        "position": "varchar",
+        "r_id": "varchar",
+        "reported": "tinyint",
+        "send_date": "datetime",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "role_permissions": {
+        "permission_id": "int",
+        "role_id": "int"
+      },
+      "roles": {
+        "description": "varchar",
+        "id": "int",
+        "name": "varchar",
+        "slug": "varchar"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "role_id": "int",
+        "username": "varchar"
+      },
+      "webhooks": {
+        "id": "int",
+        "is_active": "tinyint",
+        "name": "varchar",
+        "secret": "varchar",
+        "url": "varchar"
+      }
+    },
+    "version": 20191104103306
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "send_by_date": "datetime",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "email_requests": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "from_address": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "page_id": "int",
+        "position": "varchar",
+        "r_id": "varchar",
+        "template_id": "int",
+        "url": "varchar",
+        "user_id": "int"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "headers": {
+        "id": "int",
+        "key": "varchar",
+        "smtp_id": "bigint",
+        "value": "varchar"
+      },
+      "imap": {
+        "delete_reported_campaign_email": "tinyint",
+        "enabled": "tinyint",
+        "folder": "varchar",
+        "host": "varchar",
+        "imap_freq": "int",
+        "last_login": "datetime",
+        "modified_date": "datetime",
+        "password": "varchar",
+        "port": "int",
+        "restrict_domain": "varchar",
+        "tls": "tinyint",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "mail_logs": {
+        "campaign_id": "int",
+        "id": "int",
+        "processing": "tinyint",
+        "r_id": "varchar",
+        "send_attempt": "int",
+        "send_date": "datetime",
+        "user_id": "int"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "text",
+        "user_id": "bigint"
+      },
+      "permissions": {
+        "description": "varchar",
+        "id": "int",
+        "name": "varchar",
+        "slug": "varchar"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "modified_date": "datetime",
+        "position": "varchar",
+        "r_id": "varchar",
+        "reported": "tinyint",
+        "send_date": "datetime",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "role_permissions": {
+        "permission_id": "int",
+        "role_id": "int"
+      },
+      "roles": {
+        "description": "varchar",
+        "id": "int",
+        "name": "varchar",
+        "slug": "varchar"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "role_id": "int",
+        "username": "varchar"
+      },
+      "webhooks": {
+        "id": "int",
+        "is_active": "tinyint",
+        "name": "varchar",
+        "secret": "varchar",
+        "url": "varchar"
+      }
+    },
+    "version": 20200116000000
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "send_by_date": "datetime",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "email_requests": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "from_address": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "page_id": "int",
+        "position": "varchar",
+        "r_id": "varchar",
+        "template_id": "int",
+        "url": "varchar",
+        "user_id": "int"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "headers": {
+        "id": "int",
+        "key": "varchar",
+        "smtp_id": "bigint",
+        "value": "varchar"
+      },
+      "imap": {
+        "delete_reported_campaign_email": "tinyint",
+        "enabled": "tinyint",
+        "folder": "varchar",
+        "host": "varchar",
+        "imap_freq": "int",
+        "last_login": "datetime",
+        "modified_date": "datetime",
+        "password": "varchar",
+        "port": "int",
+        "restrict_domain": "varchar",
+        "tls": "tinyint",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "mail_logs": {
+        "campaign_id": "int",
+        "id": "int",
+        "processing": "tinyint",
+        "r_id": "varchar",
+        "send_attempt": "int",
+        "send_date": "datetime",
+        "user_id": "int"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "text",
+        "user_id": "bigint"
+      },
+      "permissions": {
+        "description": "varchar",
+        "id": "int",
+        "name": "varchar",
+        "slug": "varchar"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "modified_date": "datetime",
+        "position": "varchar",
+        "r_id": "varchar",
+        "reported": "tinyint",
+        "send_date": "datetime",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "role_permissions": {
+        "permission_id": "int",
+        "role_id": "int"
+      },
+      "roles": {
+        "description": "varchar",
+        "id": "int",
+        "name": "varchar",
+        "slug": "varchar"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "password_change_required": "tinyint",
+        "role_id": "int",
+        "username": "varchar"
+      },
+      "webhooks": {
+        "id": "int",
+        "is_active": "tinyint",
+        "name": "varchar",
+        "secret": "varchar",
+        "url": "varchar"
+      }
+    },
+    "version": 20200619000000
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "send_by_date": "datetime",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "email_requests": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "from_address": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "page_id": "int",
+        "position": "varchar",
+        "r_id": "varchar",
+        "template_id": "int",
+        "url": "varchar",
+        "user_id": "int"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "headers": {
+        "id": "int",
+        "key": "varchar",
+        "smtp_id": "bigint",
+        "value": "varchar"
+      },
+      "imap": {
+        "delete_reported_campaign_email": "tinyint",
+        "enabled": "tinyint",
+        "folder": "varchar",
+        "host": "varchar",
+        "ignore_cert_errors": "tinyint",
+        "imap_freq": "int",
+        "last_login": "datetime",
+        "modified_date": "datetime",
+        "password": "varchar",
+        "port": "int",
+        "restrict_domain": "varchar",
+        "tls": "tinyint",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "mail_logs": {
+        "campaign_id": "int",
+        "id": "int",
+        "processing": "tinyint",
+        "r_id": "varchar",
+        "send_attempt": "int",
+        "send_date": "datetime",
+        "user_id": "int"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "text",
+        "user_id": "bigint"
+      },
+      "permissions": {
+        "description": "varchar",
+        "id": "int",
+        "name": "varchar",
+        "slug": "varchar"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "modified_date": "datetime",
+        "position": "varchar",
+        "r_id": "varchar",
+        "reported": "tinyint",
+        "send_date": "datetime",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "role_permissions": {
+        "permission_id": "int",
+        "role_id": "int"
+      },
+      "roles": {
+        "description": "varchar",
+        "id": "int",
+        "name": "varchar",
+        "slug": "varchar"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "password_change_required": "tinyint",
+        "role_id": "int",
+        "username": "varchar"
+      },
+      "webhooks": {
+        "id": "int",
+        "is_active": "tinyint",
+        "name": "varchar",
+        "secret": "varchar",
+        "url": "varchar"
+      }
+    },
+    "version": 20200730000000
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "send_by_date": "datetime",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "email_requests": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "from_address": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "page_id": "int",
+        "position": "varchar",
+        "r_id": "varchar",
+        "template_id": "int",
+        "url": "varchar",
+        "user_id": "int"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "headers": {
+        "id": "int",
+        "key": "varchar",
+        "smtp_id": "bigint",
+        "value": "varchar"
+      },
+      "imap": {
+        "delete_reported_campaign_email": "tinyint",
+        "enabled": "tinyint",
+        "folder": "varchar",
+        "host": "varchar",
+        "ignore_cert_errors": "tinyint",
+        "imap_freq": "int",
+        "last_login": "datetime",
+        "modified_date": "datetime",
+        "password": "varchar",
+        "port": "int",
+        "restrict_domain": "varchar",
+        "tls": "tinyint",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "mail_logs": {
+        "campaign_id": "int",
+        "id": "int",
+        "processing": "tinyint",
+        "r_id": "varchar",
+        "send_attempt": "int",
+        "send_date": "datetime",
+        "user_id": "int"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "text",
+        "user_id": "bigint"
+      },
+      "permissions": {
+        "description": "varchar",
+        "id": "int",
+        "name": "varchar",
+        "slug": "varchar"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "modified_date": "datetime",
+        "position": "varchar",
+        "r_id": "varchar",
+        "reported": "tinyint",
+        "send_date": "datetime",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "role_permissions": {
+        "permission_id": "int",
+        "role_id": "int"
+      },
+      "roles": {
+        "description": "varchar",
+        "id": "int",
+        "name": "varchar",
+        "slug": "varchar"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "last_login": "datetime",
+        "password_change_required": "tinyint",
+        "role_id": "int",
+        "username": "varchar"
+      },
+      "webhooks": {
+        "id": "int",
+        "is_active": "tinyint",
+        "name": "varchar",
+        "secret": "varchar",
+        "url": "varchar"
+      }
+    },
+    "version": 20200914000000
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "send_by_date": "datetime",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "email_requests": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "from_address": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "page_id": "int",
+        "position": "varchar",
+        "r_id": "varchar",
+        "template_id": "int",
+        "url": "varchar",
+        "user_id": "int"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "headers": {
+        "id": "int",
+        "key": "varchar",
+        "smtp_id": "bigint",
+        "value": "varchar"
+      },
+      "imap": {
+        "delete_reported_campaign_email": "tinyint",
+        "enabled": "tinyint",
+        "folder": "varchar",
+        "host": "varchar",
+        "ignore_cert_errors": "tinyint",
+        "imap_freq": "int",
+        "last_login": "datetime",
+        "modified_date": "datetime",
+        "password": "varchar",
+        "port": "int",
+        "restrict_domain": "varchar",
+        "tls": "tinyint",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "mail_logs": {
+        "campaign_id": "int",
+        "id": "int",
+        "processing": "tinyint",
+        "r_id": "varchar",
+        "send_attempt": "int",
+        "send_date": "datetime",
+        "user_id": "int"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "text",
+        "user_id": "bigint"
+      },
+      "permissions": {
+        "description": "varchar",
+        "id": "int",
+        "name": "varchar",
+        "slug": "varchar"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "modified_date": "datetime",
+        "position": "varchar",
+        "r_id": "varchar",
+        "reported": "tinyint",
+        "send_date": "datetime",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "role_permissions": {
+        "permission_id": "int",
+        "role_id": "int"
+      },
+      "roles": {
+        "description": "varchar",
+        "id": "int",
+        "name": "varchar",
+        "slug": "varchar"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "account_locked": "tinyint",
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "last_login": "datetime",
+        "password_change_required": "tinyint",
+        "role_id": "int",
+        "username": "varchar"
+      },
+      "webhooks": {
+        "id": "int",
+        "is_active": "tinyint",
+        "name": "varchar",
+        "secret": "varchar",
+        "url": "varchar"
+      }
+    },
+    "version": 20201201000000
+  },
+  {
+    "tables": {
+      "attachments": {
+        "content": "longtext",
+        "id": "int",
+        "name": "varchar",
+        "template_id": "bigint",
+        "type": "varchar"
+      },
+      "campaigns": {
+        "completed_date": "datetime",
+        "created_date": "datetime",
+        "id": "int",
+        "launch_date": "datetime",
+        "name": "varchar",
+        "page_id": "bigint",
+        "send_by_date": "datetime",
+        "smtp_id": "bigint",
+        "status": "varchar",
+        "template_id": "bigint",
+        "url": "varchar",
+        "user_id": "bigint"
+      },
+      "email_requests": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "from_address": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "page_id": "int",
+        "position": "varchar",
+        "r_id": "varchar",
+        "template_id": "int",
+        "url": "varchar",
+        "user_id": "int"
+      },
+      "events": {
+        "campaign_id": "bigint",
+        "details": "blob",
+        "email": "varchar",
+        "id": "int",
+        "message": "varchar",
+        "time": "datetime"
+      },
+      "group_targets": {
+        "group_id": "bigint",
+        "target_id": "bigint"
+      },
+      "groups": {
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "user_id": "bigint"
+      },
+      "headers": {
+        "id": "int",
+        "key": "varchar",
+        "smtp_id": "bigint",
+        "value": "varchar"
+      },
+      "imap": {
+        "delete_reported_campaign_email": "tinyint",
+        "enabled": "tinyint",
+        "folder": "varchar",
+        "host": "varchar",
+        "ignore_cert_errors": "tinyint",
+        "imap_freq": "int",
+        "last_login": "datetime",
+        "modified_date": "datetime",
+        "password": "varchar",
+        "port": "int",
+        "restrict_domain": "varchar",
+        "tls": "tinyint",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "mail_logs": {
+        "campaign_id": "int",
+        "id": "int",
+        "processing": "tinyint",
+        "r_id": "varchar",
+        "send_attempt": "int",
+        "send_date": "datetime",
+        "user_id": "int"
+      },
+      "pages": {
+        "capture_credentials": "tinyint",
+        "capture_passwords": "tinyint",
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "redirect_url": "text",
+        "user_id": "bigint"
+      },
+      "permissions": {
+        "description": "varchar",
+        "id": "int",
+        "name": "varchar",
+        "slug": "varchar"
+      },
+      "results": {
+        "campaign_id": "bigint",
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "ip": "varchar",
+        "last_name": "varchar",
+        "latitude": "double",
+        "longitude": "double",
+        "modified_date": "datetime",
+        "position": "varchar",
+        "r_id": "varchar",
+        "reported": "tinyint",
+        "send_date": "datetime",
+        "status": "varchar",
+        "user_id": "bigint"
+      },
+      "role_permissions": {
+        "permission_id": "int",
+        "role_id": "int"
+      },
+      "roles": {
+        "description": "varchar",
+        "id": "int",
+        "name": "varchar",
+        "slug": "varchar"
+      },
+      "smtp": {
+        "from_address": "varchar",
+        "host": "varchar",
+        "id": "int",
+        "ignore_cert_errors": "tinyint",
+        "interface_type": "varchar",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "password": "varchar",
+        "user_id": "bigint",
+        "username": "varchar"
+      },
+      "targets": {
+        "email": "varchar",
+        "first_name": "varchar",
+        "id": "int",
+        "last_name": "varchar",
+        "position": "varchar"
+      },
+      "templates": {
+        "envelope_sender": "varchar",
+        "html": "mediumtext",
+        "id": "int",
+        "modified_date": "datetime",
+        "name": "varchar",
+        "subject": "varchar",
+        "text": "text",
+        "user_id": "bigint"
+      },
+      "users": {
+        "account_locked": "tinyint",
+        "api_key": "varchar",
+        "hash": "varchar",
+        "id": "int",
+        "last_login": "datetime",
+        "password_change_required": "tinyint",
+        "role_id": "int",
+        "username": "varchar"
+      },
+      "webhooks": {
+        "id": "int",
+        "is_active": "tinyint",
+        "name": "varchar",
+        "secret": "varchar",
+        "url": "varchar"
+      }
+    },
+    "version": 20220321133237
+  }
+]

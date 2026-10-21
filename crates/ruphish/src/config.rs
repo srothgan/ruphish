@@ -31,6 +31,8 @@ pub(crate) struct Config {
     pub(crate) db_name: String,
     pub(crate) db_path: PathBuf,
     pub(crate) db_sslca_path: PathBuf,
+    pub(crate) postgres: Option<ruphish_adapters::database::PostgresConfig>,
+    pub(crate) mysql: Option<ruphish_adapters::database::MySqlConfig>,
     pub(crate) migrations_prefix: String,
     pub(crate) contact_address: String,
     pub(crate) logging: Logging,
@@ -58,16 +60,7 @@ pub(crate) fn load(path: &Path) -> Result<Config, ConfigError> {
 
 impl Config {
     pub(crate) fn validate(&self, mode: Mode) -> Result<(), ConfigError> {
-        if self.db_name != "sqlite3" {
-            return Err(ConfigError::Invalid(
-                "Unsupported database backend; only db_name=sqlite3 is supported".into(),
-            ));
-        }
-        if self.db_path.as_os_str().is_empty() {
-            return Err(ConfigError::Invalid(
-                "db_path must name a SQLite file".into(),
-            ));
-        }
+        self.database()?;
         for (selected, name, server) in [
             (mode.admin(), "admin_server", &self.admin),
             (mode.phish(), "phish_server", &self.phish),
@@ -83,6 +76,85 @@ impl Config {
             }
         }
         Ok(())
+    }
+
+    pub(crate) fn database(&self) -> Result<ruphish_adapters::database::Config, ConfigError> {
+        use ruphish_adapters::database::{Config as Database, MySqlConfig};
+        match self.db_name.as_str() {
+            "sqlite3" => {
+                if self.mysql.is_some()
+                    || self.postgres.is_some()
+                    || !self.db_sslca_path.as_os_str().is_empty()
+                {
+                    return Err(ConfigError::Invalid(
+                        "Server database settings cannot be used with SQLite".into(),
+                    ));
+                }
+                if self.db_path.as_os_str().is_empty() {
+                    return Err(ConfigError::Invalid(
+                        "db_path must name a SQLite file".into(),
+                    ));
+                }
+                Ok(Database::Sqlite {
+                    path: self.db_path.clone(),
+                    migrations_prefix: self.migrations_prefix.clone(),
+                })
+            }
+            "postgres" => {
+                if self.mysql.is_some()
+                    || !self.db_path.as_os_str().is_empty()
+                    || !self.db_sslca_path.as_os_str().is_empty()
+                    || !matches!(self.migrations_prefix.as_str(), "" | "db/db_" | "./db/db_")
+                {
+                    return Err(ConfigError::Invalid("PostgreSQL requires its typed settings and embedded migrations; remove other database settings".into()));
+                }
+                let settings = self.postgres.clone().ok_or_else(|| {
+                    ConfigError::Invalid("PostgreSQL settings are required".into())
+                })?;
+                settings
+                    .validate()
+                    .map_err(|e| ConfigError::Invalid(e.to_string()))?;
+                Ok(Database::Postgres(settings))
+            }
+            "mysql" => {
+                if self.postgres.is_some() {
+                    return Err(ConfigError::Invalid(
+                        "PostgreSQL settings cannot be used with MySQL".into(),
+                    ));
+                }
+
+                if !matches!(self.migrations_prefix.as_str(), "" | "db/db_" | "./db/db_") {
+                    return Err(ConfigError::Invalid("MySQL uses embedded application migrations; custom migrations_prefix is unsupported".into()));
+                }
+                let settings = if let Some(settings) = &self.mysql {
+                    if !self.db_path.as_os_str().is_empty()
+                        || !self.db_sslca_path.as_os_str().is_empty()
+                    {
+                        return Err(ConfigError::Invalid(
+                            "Use either mysql settings or legacy db_path/db_sslca_path, not both"
+                                .into(),
+                        ));
+                    }
+                    settings.clone()
+                } else {
+                    MySqlConfig::from_legacy(
+                        self.db_path.to_str().ok_or_else(|| {
+                            ConfigError::Invalid("MySQL DSN must be Unicode".into())
+                        })?,
+                        (!self.db_sslca_path.as_os_str().is_empty())
+                            .then(|| self.db_sslca_path.clone()),
+                    )
+                    .map_err(|e| ConfigError::Invalid(e.to_string()))?
+                };
+                settings
+                    .validate()
+                    .map_err(|e| ConfigError::Invalid(e.to_string()))?;
+                Ok(Database::MySql(settings))
+            }
+            _ => Err(ConfigError::Invalid(
+                "Unsupported database backend; choose db_name=sqlite3, mysql or postgres".into(),
+            )),
+        }
     }
 }
 
@@ -145,6 +217,8 @@ impl Apply for Config {
             "db_name" => scalar(&mut self.db_name, value),
             "db_path" => scalar(&mut self.db_path, value),
             "db_sslca_path" => scalar(&mut self.db_sslca_path, value),
+            "postgres" => scalar(&mut self.postgres, value),
+            "mysql" => scalar(&mut self.mysql, value),
             "migrations_prefix" => scalar(&mut self.migrations_prefix, value),
             "contact_address" => scalar(&mut self.contact_address, value),
             "logging" if value.get() == "null" => {

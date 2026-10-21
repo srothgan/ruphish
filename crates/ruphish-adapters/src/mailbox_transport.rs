@@ -2,10 +2,10 @@
 use crate::{
     imap_limit::{Limited, MAX_MESSAGE},
     outbound::Policy,
-    sqlite::mailbox_worker::Config,
 };
 use async_imap::imap_proto::{AttributeValue, MailboxDatum, Response, Status};
 use mail_parser::MimeHeaders;
+use ruphish_application::integrations::work::MailboxConfig as Config;
 use std::{collections::BTreeSet, sync::Arc};
 type Session = async_imap::Session<Limited<tokio_rustls::client::TlsStream<tokio::net::TcpStream>>>;
 pub(crate) async fn connect(

@@ -1,6 +1,6 @@
 //! Upgrade actual Goose-created databases and test preservation and failure boundaries.
 
-use ruphish_adapters::{password_worker as password, sqlite};
+use ruphish_adapters::{database::migrations, password_worker as password};
 use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::{
     fs,
@@ -25,7 +25,7 @@ async fn all_populated_goose_versions_upgrade_without_losing_records_or_the_sour
         let source = fixtures().join(format!("compatibility/{version}.sqlite3"));
         let original_bytes = fs::read(&source).unwrap();
         let destination = directory.path().join(format!("{version}.db"));
-        sqlite::upgrade_copy(&source, &destination)
+        migrations::upgrade_copy(&source, &destination)
             .await
             .unwrap_or_else(|error| panic!("{version}: {error}"));
         assert_eq!(
@@ -114,7 +114,7 @@ async fn all_populated_goose_versions_upgrade_without_losing_records_or_the_sour
             .fetch_one(&mut connection)
             .await
             .unwrap(),
-            sqlite::LATEST_LEGACY_VERSION
+            migrations::LATEST_LEGACY_VERSION
         );
         connection.close().await.unwrap();
     }
@@ -126,8 +126,8 @@ async fn latest_real_gophish_database_is_preserved_and_repeated_upgrades_are_ide
     let original = fixtures().join("gophish-v0.12.1/legacy-latest.sqlite3");
     let first = directory.path().join("first.db");
     let second = directory.path().join("second.db");
-    sqlite::upgrade_copy(&original, &first).await.unwrap();
-    sqlite::upgrade_copy(&first, &second).await.unwrap();
+    migrations::upgrade_copy(&original, &first).await.unwrap();
+    migrations::upgrade_copy(&first, &second).await.unwrap();
     for path in [&original, &first, &second] {
         let mut connection = open(path).await.unwrap();
         let hash: String = sqlx::query_scalar("SELECT hash FROM users WHERE id=1")
@@ -157,10 +157,10 @@ async fn latest_real_gophish_database_is_preserved_and_repeated_upgrades_are_ide
 async fn fresh_schema_has_no_implicit_accounts_and_never_overwrites_existing_files() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("fresh.db");
-    sqlite::create(&path).await.unwrap();
+    migrations::create_legacy_baseline(&path).await.unwrap();
     let before = fs::read(&path).unwrap();
-    assert!(sqlite::create(&path).await.is_err());
-    assert!(sqlite::upgrade_copy(&path, &path).await.is_err());
+    assert!(migrations::create_legacy_baseline(&path).await.is_err());
+    assert!(migrations::upgrade_copy(&path, &path).await.is_err());
     assert_eq!(fs::read(&path).unwrap(), before);
     let mut connection = open(&path).await.unwrap();
     assert_eq!(
@@ -197,7 +197,7 @@ async fn bad_history_schema_and_migration_failures_never_publish_or_modify_the_s
         sqlx::raw_sql(*mutation).execute(&mut connection).await.unwrap(); connection.close().await.unwrap();
         let before=fs::read(&source).unwrap();
         let files_before: std::collections::BTreeSet<_> = fs::read_dir(directory.path()).unwrap().map(|entry| entry.unwrap().file_name()).collect();
-        assert!(sqlite::upgrade_copy(&source,&destination).await.is_err(),"mutation {mutation}");
+        assert!(migrations::upgrade_copy(&source,&destination).await.is_err(),"mutation {mutation}");
         assert!(!destination.exists()); assert_eq!(fs::read(&source).unwrap(),before);
         let files_after: std::collections::BTreeSet<_> = fs::read_dir(directory.path()).unwrap().map(|entry| entry.unwrap().file_name()).collect();
         assert_eq!(files_after, files_before, "failed upgrade leaked a temporary database");
@@ -205,10 +205,10 @@ async fn bad_history_schema_and_migration_failures_never_publish_or_modify_the_s
     let corrupt = directory.path().join("corrupt.db");
     fs::write(&corrupt, b"not sqlite").unwrap();
     let output = directory.path().join("corrupt-output.db");
-    assert!(sqlite::upgrade_copy(&corrupt, &output).await.is_err());
+    assert!(migrations::upgrade_copy(&corrupt, &output).await.is_err());
     assert!(!output.exists());
     assert!(
-        sqlite::upgrade_copy(&directory.path().join("missing.db"), &output)
+        migrations::upgrade_copy(&directory.path().join("missing.db"), &output)
             .await
             .is_err()
     );
@@ -226,7 +226,9 @@ async fn committed_wal_records_are_included_in_the_upgrade_snapshot() {
     .unwrap();
     let mut writer = open(&source).await.unwrap();
     sqlx::raw_sql("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; UPDATE groups SET name='Committed in WAL' WHERE id=1;").execute(&mut writer).await.unwrap();
-    sqlite::upgrade_copy(&source, &destination).await.unwrap();
+    migrations::upgrade_copy(&source, &destination)
+        .await
+        .unwrap();
     let mut snapshot = open(&destination).await.unwrap();
     assert_eq!(
         sqlx::query_scalar::<_, String>("SELECT name FROM groups WHERE id=1")
@@ -253,7 +255,9 @@ async fn old_smtp_profiles_are_converted_with_their_campaign_and_owner() {
     sqlx::query("INSERT INTO smtp(campaign_id,host,username,from_address) VALUES(53,'localhost:2525','preserved-user','sender@example.test')").execute(&mut connection).await.unwrap();
     connection.close().await.unwrap();
     let before = fs::read(&source).unwrap();
-    sqlite::upgrade_copy(&source, &destination).await.unwrap();
+    migrations::upgrade_copy(&source, &destination)
+        .await
+        .unwrap();
     assert_eq!(fs::read(&source).unwrap(), before);
     let mut upgraded = open(&destination).await.unwrap();
     let profile=sqlx::query("SELECT s.host,s.username,s.from_address,s.user_id FROM smtp AS s JOIN campaigns AS c ON c.smtp_id=s.id WHERE c.id=53").fetch_one(&mut upgraded).await.unwrap();
@@ -276,7 +280,7 @@ async fn old_smtp_profiles_are_converted_with_their_campaign_and_owner() {
     let bytes = fs::read(&ambiguous).unwrap();
     let ambiguous_output = directory.path().join("ambiguous-output.db");
     assert!(
-        sqlite::upgrade_copy(&ambiguous, &ambiguous_output)
+        migrations::upgrade_copy(&ambiguous, &ambiguous_output)
             .await
             .is_err()
     );
@@ -289,7 +293,7 @@ async fn old_smtp_profiles_are_converted_with_their_campaign_and_owner() {
         .unwrap();
     original.close().await.unwrap();
     assert!(
-        sqlite::upgrade_copy(&source, &directory.path().join("orphan-output.db"))
+        migrations::upgrade_copy(&source, &directory.path().join("orphan-output.db"))
             .await
             .is_err()
     );

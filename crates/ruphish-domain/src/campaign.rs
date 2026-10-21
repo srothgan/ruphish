@@ -88,3 +88,94 @@ pub fn retry_delay(retries: u32, jitter: u8) -> Option<i64> {
     let base = 60i64 * (1i64 << (retries + 1));
     Some(base + base * i64::from(jitter) / 2550)
 }
+
+/// One decision for all providers; persistence fences generation before applying it.
+pub struct DeliveryUpdate {
+    /// Durable queue state.
+    pub state: &'static str,
+    /// Earliest next attempt in UTC seconds.
+    pub next: i64,
+    /// Consumed retry budget.
+    pub count: u32,
+    /// Safe reason, without peer text.
+    pub code: &'static str,
+    /// Last protocol stage.
+    pub stage: String,
+    /// Explicit server reply, if any.
+    pub smtp_code: Option<u16>,
+    /// Whether this outcome updates the profile circuit breaker.
+    pub cooldown: bool,
+    /// Legacy recipient status unless a later interaction already exists.
+    pub status: &'static str,
+}
+/// Late failures cannot replace uncertainty; acceptance requires an armed delivery.
+pub fn delivery_update(
+    current: &str,
+    completed: bool,
+    retries: u32,
+    now: i64,
+    outcome: &Result<(), DeliveryFailure>,
+    jitter: u8,
+) -> Option<DeliveryUpdate> {
+    if (current == "unknown" && outcome.is_err()) || (current == "preparing" && outcome.is_ok()) {
+        return None;
+    }
+    let mut next = now;
+    let mut count = retries;
+    let mut code = "";
+    let mut stage = String::new();
+    let mut smtp_code = None;
+    let state = match outcome {
+        Ok(()) => "accepted",
+        Err(e) => {
+            stage = format!("{:?}", e.stage);
+            smtp_code = e.smtp_code;
+            match e.kind {
+                FailureKind::Unknown => {
+                    code = "delivery_outcome_unknown";
+                    "unknown"
+                }
+                FailureKind::Permanent => {
+                    code = "smtp_permanent_rejection";
+                    "failed"
+                }
+                FailureKind::Blocked => {
+                    code = "smtp_profile_blocked";
+                    "blocked"
+                }
+                FailureKind::Retryable if completed => "cancelled",
+                FailureKind::Retryable => {
+                    if let Some(delay) = retry_delay(retries, jitter) {
+                        next = now.saturating_add(delay);
+                        count += 1;
+                        code = "smtp_temporary_rejection";
+                        "retry"
+                    } else {
+                        code = "delivery_retry_exhausted";
+                        "failed"
+                    }
+                }
+            }
+        }
+    };
+    let cooldown = state == "blocked"
+        || (state == "retry"
+            && outcome.as_ref().err().is_some_and(|e| {
+                matches!(e.stage, Stage::Connect | Stage::Tls | Stage::Authentication)
+            }));
+    let status = match state {
+        "accepted" => "Email Sent",
+        "retry" => "Retrying",
+        _ => "Error",
+    };
+    Some(DeliveryUpdate {
+        state,
+        next,
+        count,
+        code,
+        stage,
+        smtp_code,
+        cooldown,
+        status,
+    })
+}

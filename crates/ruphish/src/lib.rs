@@ -6,6 +6,7 @@ mod config;
 mod domain_worker;
 mod logging;
 mod runtime;
+mod worker_backoff;
 
 /// Execute informational CLI commands or run the configured application.
 pub fn entry() -> std::process::ExitCode {

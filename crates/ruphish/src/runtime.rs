@@ -3,7 +3,7 @@ use crate::{
     config::{Config, Server},
 };
 use axum_server::{Handle, tls_rustls::RustlsConfig};
-use ruphish_adapters::{sqlite::StartupDatabase, tls};
+use ruphish_adapters::{database, tls};
 use std::{
     net::{SocketAddr, TcpListener},
     path::Path,
@@ -63,8 +63,9 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
     };
     let domain_verifier =
         ruphish_adapters::domain_verification::DnsHttps::new(config.domain_verification.clone())?;
-    let database = StartupDatabase::open(&config.db_path, &config.migrations_prefix).await?;
-    if database.backup_path().is_some() {
+    let policy = ruphish_adapters::outbound::Policy::new(&config.admin.allowed_internal_hosts)?;
+    let database = database::open(config.database()?, policy.clone()).await?;
+    if database.has_recovery_backup() {
         tracing::info!(
             "database_backup_verified; recovery backup may contain legacy captured credentials; protect or retire it under your retention policy"
         );
@@ -80,27 +81,26 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
             }
         }
         if config.contact_address.is_empty() { tracing::warn!("No contact_address configured"); }
-        let integrations=std::sync::Arc::new(ruphish_adapters::sqlite::integrations::Integrations::new(database.pool(),ruphish_adapters::outbound::Policy::new(&config.admin.allowed_internal_hosts)?));
-        let campaigns=std::sync::Arc::new(ruphish_adapters::sqlite::campaigns::Campaigns::new(database.pool()));
-        let domains=std::sync::Arc::new(ruphish_adapters::sqlite::domains::Domains::new(database.pool()));
+        let integrations=database.integrations();
+        let campaigns=database.campaigns();
+        let domains=database.domains();
         let domain_worker=crate::domain_worker::Worker { domains:domains.clone(),verifier:std::sync::Arc::new(domain_verifier) };
-        let smtp=std::sync::Arc::new(ruphish_adapters::smtp::Smtp::new(ruphish_adapters::outbound::Policy::new(&config.admin.allowed_internal_hosts)?,config.contact_address.clone()));
+        let smtp=std::sync::Arc::new(ruphish_adapters::smtp::Smtp::new(policy.clone(),config.contact_address.clone()));
         let worker=if arguments.mode.admin() && !arguments.disable_mailer {Some(crate::campaign_worker::Worker {queue:campaigns.clone(),smtp:smtp.clone()})} else {None};
         tracing::info!(mailer_requested = worker.is_some(), "campaign_worker_configured");
-        let previews: std::sync::Arc<dyn ruphish_application::delivery::Previews> = std::sync::Arc::new(ruphish_adapters::sqlite::previews::PreviewStore::new(database.pool()));
-        let public_router = ruphish_http::interactions::router(ruphish_http::interactions::Services{assets:public_assets,domains:domains.clone(),interactions:std::sync::Arc::new(ruphish_adapters::sqlite::interactions::Interactions::new(database.pool())),previews:previews.clone(),tls:config.phish.use_tls,trusted_proxies:config.domain_verification.trusted_proxies.clone(),contact:config.contact_address.clone()});
+        let previews: std::sync::Arc<dyn ruphish_application::delivery::Previews> = database.previews();
+        let public_router = ruphish_http::interactions::router(ruphish_http::interactions::Services{assets:public_assets,domains:domains.clone(),interactions:database.interactions(),previews:previews.clone(),tls:config.phish.use_tls,trusted_proxies:config.domain_verification.trusted_proxies.clone(),contact:config.contact_address.clone()});
         let admin_router = if let Some(assets) = admin_router {
-            let sessions = ruphish_adapters::sqlite::sessions::Sessions::new(database.pool());
+            let sessions = database.sessions();
             sessions.cleanup().await?;
             let key = sessions.cookie_key().await?;
             let service = ruphish_application::auth::Service::new(
-                std::sync::Arc::new(ruphish_adapters::sqlite::accounts::Accounts::new(database.pool())),
+                database.accounts(),
                 std::sync::Arc::new(ruphish_adapters::password_worker::PasswordWorker::default()),
             );
-            let policy = ruphish_adapters::outbound::Policy::new(&config.admin.allowed_internal_hosts)?;
-            let resources = ruphish_application::resources::Service::new(std::sync::Arc::new(ruphish_adapters::sqlite::resources::Resources::new(database.pool())), std::sync::Arc::new(ruphish_adapters::resources::Validate), std::sync::Arc::new(ruphish_adapters::imports::Tools {policy:policy.clone()}));
+            let resources = ruphish_application::resources::Service::new(database.resources(), std::sync::Arc::new(ruphish_adapters::resources::Validate), std::sync::Arc::new(ruphish_adapters::imports::Tools {policy:policy.clone()}));
             let delivery = ruphish_application::delivery::Service::new(service.clone(),resources.clone(),smtp,previews);
-            Some(ruphish_http::auth::router(assets, ruphish_http::auth::Services {integrations:integrations.clone(),reporting:std::sync::Arc::new(ruphish_adapters::sqlite::reporting::Reports::new(database.pool())),overview:std::sync::Arc::new(ruphish_adapters::sqlite::overview::Overview::new(database.pool())),accounts:service,resources,delivery,campaigns,domains,mailer_enabled:!arguments.disable_mailer}, sessions, &key, config.admin.use_tls, config.admin.trusted_origins.clone(), config.admin.csrf_key.clone()))
+            Some(ruphish_http::auth::router(assets, ruphish_http::auth::Services {integrations:integrations.clone(),reporting:database.reporting(),overview:database.overview(),accounts:service,resources,delivery,campaigns,domains,mailer_enabled:!arguments.disable_mailer}, sessions, &key, config.admin.use_tls, config.admin.trusted_origins.clone(), config.admin.csrf_key.clone()))
         } else { None };
         supervise(arguments.mode, admin_listener, phish_listener, admin_tls, phish_tls, (admin_router,public_router,worker,domain_worker,integrations), termination).await
     }.await;
@@ -199,7 +199,7 @@ async fn supervise(
         axum::Router,
         Option<crate::campaign_worker::Worker>,
         crate::domain_worker::Worker,
-        std::sync::Arc<ruphish_adapters::sqlite::integrations::Integrations>,
+        std::sync::Arc<dyn ruphish_application::integrations::Worker>,
     ),
     mut termination: Termination,
 ) -> Result<(), Error> {

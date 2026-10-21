@@ -6,7 +6,6 @@ use ruphish_application::{
     resources::{Content, Error, Kind, Page, Profile, Recipient, Resource, Template},
 };
 use sqlx::{Row, SqliteConnection, SqlitePool, sqlite::SqliteRow};
-use std::collections::HashMap;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 /// Campaign adapter shares the startup-owned database pool.
@@ -20,8 +19,8 @@ impl Campaigns {
         Self { pool }
     }
 }
-fn storage(_: sqlx::Error) -> Error {
-    Error::Internal
+fn storage(error: sqlx::Error) -> Error {
+    crate::sqlite::resource_error(error)
 }
 fn text(row: &SqliteRow, key: &str) -> Result<String, Error> {
     Ok(row
@@ -82,102 +81,24 @@ async fn prepare(
     now: i64,
 ) -> Result<Prepared, Error> {
     super::resources::authorize(c, caller, true).await?;
-    for (invalid, message) in [
-        (input.name.is_empty(), "Campaign name not specified"),
-        (input.groups.is_empty(), "No groups specified"),
-        (
-            input.template.name.is_empty() && input.template.id.is_none(),
-            "No email template specified",
-        ),
-        (
-            input.page.name.is_empty() && input.page.id.is_none(),
-            "No landing page specified",
-        ),
-        (
-            input.profile.name.is_empty() && input.profile.id.is_none(),
-            "No sending profile specified",
-        ),
-    ] {
-        if invalid {
-            return Err(Error::Invalid(message.into()));
-        }
-    }
-    let launch = input.launch.unwrap_or(now);
-    if input.send_by.is_some_and(|end| end < launch) {
-        return Err(Error::Invalid(
-            "The launch date must be before the \"send emails by\" date".into(),
-        ));
-    }
+    let launch = ruphish_application::campaign::preparation::validate(input, now)?;
     let mut groups = Vec::new();
-    let mut recipients = Vec::new();
-    let mut seen = HashMap::<String, Recipient>::new();
-    let mut conflicts = Vec::new();
-    let mut conflict_count = 0;
     for s in &input.groups {
-        let group = selection(c, caller.id, Kind::Group, s).await?;
-        if let Content::Group(rows) = &group.content {
-            for r in rows {
-                if let Some(first) = seen.get(&r.email) {
-                    if first != r {
-                        conflict_count += 1;
-                        if conflicts.len() < 100 {
-                            conflicts.push((first.clone(), r.clone()));
-                        }
-                    }
-                } else {
-                    seen.insert(r.email.clone(), r.clone());
-                    recipients.push(r.clone());
-                }
-            }
-        }
-        groups.push(group);
+        groups.push(selection(c, caller.id, Kind::Group, s).await?);
     }
-    if recipients.is_empty() {
-        return Err(Error::Invalid("No targets specified".into()));
-    }
-    if recipients.len() > 100_000 {
-        return Err(Error::Invalid("Campaign exceeds 100000 recipients".into()));
-    }
+    let ruphish_application::campaign::preparation::Audience {
+        recipients,
+        conflicts,
+        conflict_count,
+    } = ruphish_application::campaign::preparation::audience(&groups)?;
     let template = selection(c, caller.id, Kind::Template, &input.template).await?;
     let page = selection(c, caller.id, Kind::Page, &input.page).await?;
     let profile = selection(c, caller.id, Kind::Profile, &input.profile).await?;
-    let Content::Page(defaults) = &page.content else {
-        return Err(Error::Internal);
-    };
-    let passwords = input
-        .policy
-        .capture_passwords
-        .unwrap_or(defaults.capture_passwords);
-    let credentials = input
-        .policy
-        .capture_credentials
-        .unwrap_or(defaults.capture_credentials);
-    if passwords && input.policy.capture_credentials == Some(false) {
-        return Err(Error::Invalid(
-            "Password-presence tracking requires submission tracking".into(),
-        ));
-    }
-    let policy = CapturePolicy {
-        capture_credentials: credentials || passwords,
-        capture_passwords: passwords,
-        redirect_url: input
-            .policy
-            .redirect_url
-            .clone()
-            .unwrap_or_else(|| defaults.redirect_url.clone()),
-    };
+    let policy = ruphish_application::campaign::preparation::policy(input, &page)?;
     // Validate syntax using the same renderer; recipient-dependent failures are still
     // checked before every individual submission.
     let sample = crate::resources::sample();
-    let url = crate::resources::render(&input.url, &sample)?;
-    // Check the original authority as well: recipient expressions cannot select hosts.
-    let configured = ruphish_domain::domains::origin(&input.url, true)
-        .map_err(|code| Error::Invalid(code.into()))?;
-    let rendered =
-        ruphish_domain::domains::origin(&url, true).map_err(|code| Error::Invalid(code.into()))?;
-    if configured != rendered {
-        return Err(Error::Invalid("domain_dynamic_hostname".into()));
-    }
+    let url = crate::campaign_preparation::url(&input.url)?;
     super::domains::eligible(c, caller.id, &url, now).await?;
     crate::resources::render(&policy.redirect_url, &sample)?;
     Ok(Prepared {
@@ -279,7 +200,7 @@ async fn load(c: &mut SqliteConnection, owner: i64, id: i64) -> Result<Campaign,
             email: text(&e, "email")?,
             time: text(&e, "time")?,
             message: text(&e, "message")?,
-            details: super::participant_privacy::details(&text(&e, "details")?),
+            details: crate::participant_privacy::details(&text(&e, "details")?),
         });
     }
     let policy = sqlx::query("SELECT * FROM ruphish_campaign_policy WHERE campaign_id=?")
@@ -418,29 +339,6 @@ impl Repository for Campaigns {
             items: result,
             next_after,
         })
-    }
-    fn resolve_time(&self, local: &str, zone: &str) -> Result<i64, Error> {
-        // Jiff's civil parser can discard numeric offsets and zone annotations.
-        // This field is a wall-clock time; exact instants use launch_date/send_by_date.
-        if local
-            .split_once(['T', 't', ' '])
-            .is_none_or(|(_, clock)| clock.contains(['+', '-', 'Z', 'z', '[', ']']))
-        {
-            return Err(Error::Invalid(
-                "Local date/time must not include an offset or time-zone annotation".into(),
-            ));
-        }
-        let date: jiff::civil::DateTime = local
-            .parse()
-            .map_err(|_| Error::Invalid("Invalid local date/time".into()))?;
-        let zone = jiff::tz::TimeZone::get(zone)
-            .map_err(|_| Error::Invalid("Unknown time zone".into()))?;
-        // RFC 5545 section 3.3.5: choose the first repeated time and move a
-        // skipped time forward by the actual transition (not always one hour).
-        let date = zone.to_ambiguous_zoned(date).compatible().map_err(|_| {
-            Error::Invalid("Local date/time is outside the supported time-zone range".into())
-        })?;
-        Ok(date.timestamp().as_second())
     }
 
     async fn prepare(&self, caller: Identity, input: &Create, now: i64) -> Result<Prepared, Error> {
@@ -681,7 +579,7 @@ impl Repository for Campaigns {
                 email: text(&e, "email")?,
                 time: text(&e, "time")?,
                 message: text(&e, "message")?,
-                details: super::participant_privacy::details(&text(&e, "details")?),
+                details: crate::participant_privacy::details(&text(&e, "details")?),
             });
         }
         tx.commit().await.map_err(storage)?;
@@ -724,7 +622,7 @@ impl Repository for Campaigns {
                 email: text(&e, "email")?,
                 time: text(&e, "time")?,
                 message: text(&e, "message")?,
-                details: super::participant_privacy::details(&text(&e, "details")?),
+                details: crate::participant_privacy::details(&text(&e, "details")?),
             });
         }
         tx.commit().await.map_err(storage)?;
@@ -777,6 +675,12 @@ impl Repository for Campaigns {
             .await
             .map_err(storage)?;
         sqlx::query("UPDATE results SET status=CASE WHEN status IN ('Email Opened','Clicked Link','Submitted Data') THEN status ELSE ? END,send_date=?,modified_date=? WHERE id=?").bind(if target=="accepted" {"Email Sent"} else {"Sending"}).bind(stamp(now)?).bind(stamp(now)?).bind(result).execute(&mut *tx).await.map_err(storage)?;
+        if target == "accepted" {
+            sqlx::query("INSERT INTO events(campaign_id,email,time,message,details) SELECT r.campaign_id,r.email,?,'Email Sent',? FROM results r WHERE r.id=? AND NOT EXISTS(SELECT 1 FROM events e WHERE e.campaign_id=r.campaign_id AND e.email=r.email AND e.message='Email Sent')")
+                .bind(stamp(now)?)
+                .bind(serde_json::json!({"action":action,"actor":caller.id}).to_string())
+                .bind(result).execute(&mut *tx).await.map_err(storage)?;
+        }
         sqlx::query("INSERT INTO events(campaign_id,email,time,message,details) SELECT campaign_id,email,?,'Delivery reconciled',? FROM results WHERE id=?").bind(stamp(now)?).bind(serde_json::json!({"action":action,"actor":caller.id,"previous_state":state}).to_string()).bind(result).execute(&mut *tx).await.map_err(storage)?;
         tx.commit().await.map_err(storage)?;
         Ok(())

@@ -71,7 +71,7 @@ fn csv_text(s: &str) -> String {
         s.into()
     }
 }
-pub(super) fn generate(
+pub(crate) fn generate(
     a: Analysis,
     f: &Filter,
     format: &str,

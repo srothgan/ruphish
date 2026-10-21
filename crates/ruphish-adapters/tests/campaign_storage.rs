@@ -3,21 +3,22 @@
     clippy::unwrap_used,
     reason = "Isolated integration-test fixture setup must fail on errors"
 )]
-use ruphish_adapters::sqlite::{StartupDatabase, campaigns::Campaigns};
+mod support;
 use ruphish_application::{
     auth::Identity,
-    campaign::{Create, DeliveryFailure, FailureKind, Queue, Repository, Selection, Stage},
+    campaign::{Create, DeliveryFailure, FailureKind, Selection, Stage},
 };
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::path::Path;
+use support::DatabaseFixture;
 #[path = "../../../tests/support/domain_network.rs"]
 mod domain_network;
 
 // Delivery scenarios retain their independent logical clock. Actual DNS and HTTPS
 // verification runs before using their origin; no verified database flag is seeded.
-async fn verify_domain(db: &StartupDatabase, now: i64) {
-    use ruphish_application::domains::{Repository as _, Verifier as _};
-    let domains = ruphish_adapters::sqlite::domains::Domains::new(db.pool());
+async fn verify_domain(db: &DatabaseFixture, now: i64) {
+    use ruphish_application::domains::Verifier as _;
+    let domains = db.domains();
     let existing = domains.list(caller()).await.unwrap().remove(0);
     if ruphish_application::domains::eligibility(existing.enabled, existing.verified_until, now)
         .is_ok()
@@ -25,15 +26,12 @@ async fn verify_domain(db: &StartupDatabase, now: i64) {
         return;
     }
     let directory = tempfile::tempdir().unwrap();
-    let pool = db.pool();
+    let routing = db.domains();
     let runtime = tokio::runtime::Handle::current();
     let network = domain_network::Network::new(move |host, path| {
         let challenge = path.strip_prefix("/.well-known/ruphish/")?;
         runtime
-            .block_on(
-                ruphish_adapters::sqlite::domains::Domains::new(pool.clone())
-                    .routing_proof(host, challenge, now),
-            )
+            .block_on(routing.routing_proof(host, challenge, now))
             .unwrap()
     });
     let domain = domains
@@ -58,8 +56,8 @@ async fn verify_domain(db: &StartupDatabase, now: i64) {
     domains.finish(&check, observation, now).await.unwrap();
 }
 
-async fn prepared_database(path: &Path) -> StartupDatabase {
-    let db = StartupDatabase::open(path, "").await.unwrap();
+async fn prepared_database(path: &Path) -> DatabaseFixture {
+    let db = DatabaseFixture::open(path, "").await.unwrap();
     verify_domain(&db, 1_900_000_000).await;
     db
 }
@@ -123,7 +121,7 @@ async fn participant_privacy_removes_legacy_payloads_and_never_exposes_injected_
     );
     original.close().await.unwrap();
     let details: Vec<String> = sqlx::query_scalar("SELECT details FROM events")
-        .fetch_all(&db.pool())
+        .fetch_all(&db.inspection_pool())
         .await
         .unwrap();
     assert!(details.iter().all(String::is_empty));
@@ -137,14 +135,10 @@ async fn participant_privacy_removes_legacy_payloads_and_never_exposes_injected_
     ] {
         sqlx::query("UPDATE events SET details=?")
             .bind(payload)
-            .execute(&db.pool())
+            .execute(&db.inspection_pool())
             .await
             .unwrap();
-        let events = Campaigns::new(db.pool())
-            .get(caller(), 1)
-            .await
-            .unwrap()
-            .events;
+        let events = db.campaigns().get(caller(), 1).await.unwrap().events;
         for event in events {
             assert!(!event.details.contains(secret));
             assert!(!event.details.contains("payload"));
@@ -162,7 +156,7 @@ async fn participant_privacy_removes_legacy_payloads_and_never_exposes_injected_
 async fn named_zone_schedule_uses_calendar_rules_for_folds_gaps_and_non_hour_changes() {
     let (_directory, path) = fixture();
     let db = prepared_database(&path).await;
-    let store = Campaigns::new(db.pool());
+    let store = db.campaigns();
     // Independent expected UTC instants; do not derive them with the resolver.
     for (local, zone, expected) in [
         (
@@ -257,14 +251,14 @@ async fn legacy_upgrade_preserves_unknown_work_and_effective_capture_policy() {
     raw.close().await.unwrap();
     let db = prepared_database(&path).await;
     assert!(db.backup_path().is_some());
-    let store = Campaigns::new(db.pool());
+    let store = db.campaigns();
     verify_domain(&db, 2_100_000_000).await;
     assert!(store.claim(2_100_000_000).await.unwrap().is_none());
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM ruphish_delivery WHERE state='unknown' AND retries=3"
         )
-        .fetch_one(&db.pool())
+        .fetch_one(&db.inspection_pool())
         .await
         .unwrap(),
         2
@@ -272,7 +266,7 @@ async fn legacy_upgrade_preserves_unknown_work_and_effective_capture_policy() {
     let before = store.get(caller(), 1).await.unwrap();
     assert!(before.policy.unwrap().capture_credentials);
     sqlx::query("UPDATE pages SET capture_credentials=0")
-        .execute(&db.pool())
+        .execute(&db.inspection_pool())
         .await
         .unwrap();
     assert!(
@@ -287,20 +281,14 @@ async fn legacy_upgrade_preserves_unknown_work_and_effective_capture_policy() {
     db.close().await;
     let db = prepared_database(&path).await;
     assert!(db.backup_path().is_none());
-    assert!(
-        Campaigns::new(db.pool())
-            .claim(2_100_000_000)
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(db.campaigns().claim(2_100_000_000).await.unwrap().is_none());
     db.close().await;
 }
 #[tokio::test]
 async fn creation_is_atomic_deduplicated_and_idempotent_with_stable_policy() {
     let (_directory, path) = fixture();
     let db = prepared_database(&path).await;
-    let store = Campaigns::new(db.pool());
+    let store = db.campaigns();
     let mut request = input();
     request.send_by = Some(1_900_000_600);
     request.idempotency = Some(("review-123".into(), "independent-body-fingerprint".into()));
@@ -317,7 +305,7 @@ async fn creation_is_atomic_deduplicated_and_idempotent_with_stable_policy() {
         "SELECT due FROM ruphish_delivery WHERE campaign_id=? ORDER BY result_id",
     )
     .bind(campaign.id)
-    .fetch_all(&db.pool())
+    .fetch_all(&db.inspection_pool())
     .await
     .unwrap();
     assert_eq!(due, vec![1_900_000_000, 1_900_000_300]);
@@ -337,10 +325,10 @@ async fn creation_is_atomic_deduplicated_and_idempotent_with_stable_policy() {
             .is_err()
     );
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM campaigns")
-        .fetch_one(&db.pool())
+        .fetch_one(&db.inspection_pool())
         .await
         .unwrap();
-    sqlx::raw_sql("CREATE TRIGGER reject_queue BEFORE INSERT ON ruphish_delivery BEGIN SELECT RAISE(ABORT,'synthetic failure'); END;").execute(&db.pool()).await.unwrap();
+    sqlx::raw_sql("CREATE TRIGGER reject_queue BEFORE INSERT ON ruphish_delivery BEGIN SELECT RAISE(ABORT,'synthetic failure'); END;").execute(&db.inspection_pool()).await.unwrap();
     assert!(
         store
             .create(caller(), input(), 1_900_000_000)
@@ -349,7 +337,7 @@ async fn creation_is_atomic_deduplicated_and_idempotent_with_stable_policy() {
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM campaigns")
-            .fetch_one(&db.pool())
+            .fetch_one(&db.inspection_pool())
             .await
             .unwrap(),
         count
@@ -358,13 +346,13 @@ async fn creation_is_atomic_deduplicated_and_idempotent_with_stable_policy() {
         sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM results WHERE campaign_id NOT IN (SELECT id FROM campaigns)"
         )
-        .fetch_one(&db.pool())
+        .fetch_one(&db.inspection_pool())
         .await
         .unwrap(),
         0
     );
     sqlx::raw_sql("DROP TRIGGER reject_queue;")
-        .execute(&db.pool())
+        .execute(&db.inspection_pool())
         .await
         .unwrap();
     store.delete(caller(), campaign.id).await.unwrap();
@@ -378,8 +366,8 @@ async fn competing_claims_recover_preparation_but_never_resend_expired_submissio
     let (_directory, path) = fixture();
     let db = prepared_database(&path).await;
     let second = prepared_database(&path).await;
-    let a = Campaigns::new(db.pool());
-    let b = Campaigns::new(second.pool());
+    let a = db.campaigns();
+    let b = second.campaigns();
     let campaign = a.create(caller(), input(), 1_900_000_000).await.unwrap();
     let (x, y) = tokio::join!(a.claim(1_900_000_000), b.claim(1_900_000_000));
     let claims: Vec<_> = [x.unwrap(), y.unwrap()].into_iter().flatten().collect();
@@ -400,7 +388,7 @@ async fn competing_claims_recover_preparation_but_never_resend_expired_submissio
     }
     let state: String = sqlx::query_scalar("SELECT state FROM ruphish_delivery WHERE result_id=?")
         .bind(recovered.result_id)
-        .fetch_one(&db.pool())
+        .fetch_one(&db.inspection_pool())
         .await
         .unwrap();
     assert_eq!(state, "unknown");
@@ -421,7 +409,7 @@ async fn competing_claims_recover_preparation_but_never_resend_expired_submissio
 async fn retries_use_failure_time_and_failed_outcome_commit_never_changes_queue_partially() {
     let (_directory, path) = fixture();
     let db = prepared_database(&path).await;
-    let store = Campaigns::new(db.pool());
+    let store = db.campaigns();
     store
         .create(caller(), input(), 1_900_000_000)
         .await
@@ -430,7 +418,7 @@ async fn retries_use_failure_time_and_failed_outcome_commit_never_changes_queue_
     let claim = store.claim(1_900_010_000).await.unwrap().unwrap();
     assert!(store.arm(&claim, 1_900_010_000).await.unwrap());
     let failure = DeliveryFailure::new(FailureKind::Retryable, Stage::Acceptance, Some(451));
-    sqlx::raw_sql("CREATE TRIGGER reject_event BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT,'synthetic commit failure'); END;").execute(&db.pool()).await.unwrap();
+    sqlx::raw_sql("CREATE TRIGGER reject_event BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT,'synthetic commit failure'); END;").execute(&db.inspection_pool()).await.unwrap();
     assert!(
         store
             .finish(&claim, Err(failure.clone()), 1_900_010_001)
@@ -440,13 +428,13 @@ async fn retries_use_failure_time_and_failed_outcome_commit_never_changes_queue_
     assert_eq!(
         sqlx::query_scalar::<_, String>("SELECT state FROM ruphish_delivery WHERE result_id=?")
             .bind(claim.result_id)
-            .fetch_one(&db.pool())
+            .fetch_one(&db.inspection_pool())
             .await
             .unwrap(),
         "submitting"
     );
     sqlx::raw_sql("DROP TRIGGER reject_event;")
-        .execute(&db.pool())
+        .execute(&db.inspection_pool())
         .await
         .unwrap();
     store
@@ -455,13 +443,13 @@ async fn retries_use_failure_time_and_failed_outcome_commit_never_changes_queue_
         .unwrap();
     let due: i64 = sqlx::query_scalar("SELECT due FROM ruphish_delivery WHERE result_id=?")
         .bind(claim.result_id)
-        .fetch_one(&db.pool())
+        .fetch_one(&db.inspection_pool())
         .await
         .unwrap();
     assert!((1_900_010_121..=1_900_010_133).contains(&due));
     let events: i64 =
         sqlx::query_scalar("SELECT count(*) FROM events WHERE message='Error Sending Email'")
-            .fetch_one(&db.pool())
+            .fetch_one(&db.inspection_pool())
             .await
             .unwrap();
     store.finish(&claim, Ok(()), 1_900_010_005).await.unwrap();
@@ -469,7 +457,7 @@ async fn retries_use_failure_time_and_failed_outcome_commit_never_changes_queue_
         sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM events WHERE message='Error Sending Email'"
         )
-        .fetch_one(&db.pool())
+        .fetch_one(&db.inspection_pool())
         .await
         .unwrap(),
         events
@@ -481,7 +469,7 @@ async fn retries_use_failure_time_and_failed_outcome_commit_never_changes_queue_
 async fn schedule_and_result_snapshots_cover_immediate_future_mixed_and_overlap_cases() {
     let (_directory, path) = fixture();
     let db = prepared_database(&path).await;
-    let store = Campaigns::new(db.pool());
+    let store = db.campaigns();
     let now = 1_900_000_000;
     for (launch, end, expected) in [
         (None, None, vec!["Sending", "Sending"]),
@@ -541,7 +529,7 @@ async fn schedule_and_result_snapshots_cover_immediate_future_mixed_and_overlap_
 async fn every_creation_write_boundary_rolls_back_the_whole_launch() {
     let (_directory, path) = fixture();
     let db = prepared_database(&path).await;
-    let store = Campaigns::new(db.pool());
+    let store = db.campaigns();
     for table in [
         "campaigns",
         "ruphish_campaign_policy",
@@ -552,10 +540,10 @@ async fn every_creation_write_boundary_rolls_back_the_whole_launch() {
         "ruphish_campaign_launch",
     ] {
         let before: i64 = sqlx::query_scalar("SELECT count(*) FROM campaigns")
-            .fetch_one(&db.pool())
+            .fetch_one(&db.inspection_pool())
             .await
             .unwrap();
-        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE TRIGGER reject_write BEFORE INSERT ON {table} BEGIN SELECT RAISE(ABORT,'injected'); END;"))).execute(&db.pool()).await.unwrap();
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE TRIGGER reject_write BEFORE INSERT ON {table} BEGIN SELECT RAISE(ABORT,'injected'); END;"))).execute(&db.inspection_pool()).await.unwrap();
         let mut request = input();
         request.idempotency = Some(("atomic".into(), "digest".into()));
         assert!(
@@ -567,7 +555,7 @@ async fn every_creation_write_boundary_rolls_back_the_whole_launch() {
         );
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM campaigns")
-                .fetch_one(&db.pool())
+                .fetch_one(&db.inspection_pool())
                 .await
                 .unwrap(),
             before
@@ -585,7 +573,7 @@ async fn every_creation_write_boundary_rolls_back_the_whole_launch() {
             );
             assert_eq!(
                 sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(query))
-                    .fetch_one(&db.pool())
+                    .fetch_one(&db.inspection_pool())
                     .await
                     .unwrap(),
                 0,
@@ -593,7 +581,7 @@ async fn every_creation_write_boundary_rolls_back_the_whole_launch() {
             );
         }
         sqlx::raw_sql("DROP TRIGGER reject_write")
-            .execute(&db.pool())
+            .execute(&db.inspection_pool())
             .await
             .unwrap();
     }
@@ -603,12 +591,12 @@ async fn every_creation_write_boundary_rolls_back_the_whole_launch() {
 async fn persisted_retry_budget_exhausts_and_cannot_resurrect_after_restart() {
     let (_directory, path) = fixture();
     let db = prepared_database(&path).await;
-    let store = Campaigns::new(db.pool());
+    let store = db.campaigns();
     let created = store
         .create(caller(), input(), 1_900_000_000)
         .await
         .unwrap();
-    sqlx::query("UPDATE ruphish_delivery SET state='cancelled' WHERE campaign_id=? AND result_id!=(SELECT min(result_id) FROM ruphish_delivery WHERE campaign_id=?)").bind(created.id).bind(created.id).execute(&db.pool()).await.unwrap();
+    sqlx::query("UPDATE ruphish_delivery SET state='cancelled' WHERE campaign_id=? AND result_id!=(SELECT min(result_id) FROM ruphish_delivery WHERE campaign_id=?)").bind(created.id).bind(created.id).execute(&db.inspection_pool()).await.unwrap();
     let mut now = 1_900_000_000;
     for attempt in 0..=8u32 {
         verify_domain(&db, now).await;
@@ -647,20 +635,14 @@ async fn persisted_retry_budget_exhausts_and_cannot_resurrect_after_restart() {
     }
     db.close().await;
     let db = prepared_database(&path).await;
-    assert!(
-        Campaigns::new(db.pool())
-            .claim(now + 10_000)
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(db.campaigns().claim(now + 10_000).await.unwrap().is_none());
     db.close().await;
 }
 #[tokio::test]
 async fn resource_changes_owner_lock_and_completion_fence_unsubmitted_work() {
     let (_directory, path) = fixture();
     let db = prepared_database(&path).await;
-    let store = Campaigns::new(db.pool());
+    let store = db.campaigns();
     let campaign = store
         .create(caller(), input(), 1_900_000_000)
         .await
@@ -670,7 +652,7 @@ async fn resource_changes_owner_lock_and_completion_fence_unsubmitted_work() {
         "UPDATE templates SET subject='Changed',modified_date='2031-01-01T00:00:00Z' WHERE id=?",
     )
     .bind(claim.message.template_id)
-    .execute(&db.pool())
+    .execute(&db.inspection_pool())
     .await
     .unwrap();
     assert!(!store.arm(&claim, 1_900_000_001).await.unwrap());
@@ -698,7 +680,7 @@ async fn resource_changes_owner_lock_and_completion_fence_unsubmitted_work() {
         .await
         .unwrap();
     sqlx::query("UPDATE users SET account_locked=1 WHERE id=1")
-        .execute(&db.pool())
+        .execute(&db.inspection_pool())
         .await
         .unwrap();
     assert!(store.claim(1_900_000_011).await.unwrap().is_none());
@@ -707,7 +689,7 @@ async fn resource_changes_owner_lock_and_completion_fence_unsubmitted_work() {
             "SELECT code FROM ruphish_delivery WHERE campaign_id=? ORDER BY result_id LIMIT 1"
         )
         .bind(second.id)
-        .fetch_one(&db.pool())
+        .fetch_one(&db.inspection_pool())
         .await
         .unwrap(),
         "campaign_owner_unavailable"
@@ -725,14 +707,14 @@ async fn migration_quarantines_global_rid_collisions_instead_of_choosing_an_owne
     let db = prepared_database(&path).await;
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM ruphish_legacy_queue_issues")
-            .fetch_one(&db.pool())
+            .fetch_one(&db.inspection_pool())
             .await
             .unwrap(),
         1
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM mail_logs")
-            .fetch_one(&db.pool())
+            .fetch_one(&db.inspection_pool())
             .await
             .unwrap(),
         1
@@ -745,13 +727,13 @@ async fn ten_campaigns_keep_resources_and_credentials_isolated_under_bounded_fai
     use ruphish_application::delivery::Sender;
     let (_directory, path) = fixture();
     let db = prepared_database(&path).await;
-    let store = Campaigns::new(db.pool());
+    let store = db.campaigns();
     let sender =
         ruphish_adapters::smtp::Smtp::new(Default::default(), "contact@example.test".into());
     let mut campaigns = std::collections::HashMap::new();
     for index in 0..10i64 {
-        let template=sqlx::query("INSERT INTO templates(user_id,name,subject,text,html,modified_date,envelope_sender) VALUES(1,?,'{{.RId}} - Subject',?,'{{.RId}} - HTML','2030-01-01T00:00:00Z','visible@example.test')").bind(format!("Template {index}")).bind(format!("Content {index}: {{{{.RId}}}}" )).execute(&db.pool()).await.unwrap().last_insert_rowid();
-        let profile=sqlx::query("INSERT INTO smtp(user_id,name,host,username,password,from_address,modified_date,ignore_cert_errors) VALUES(1,?,'127.0.0.1:25',?,?,?,'2030-01-01T00:00:00Z',0)").bind(format!("Profile {index}")).bind(format!("account-{index}")).bind(format!("service-secret-{index}")).bind(format!("transport-{index}@example.test")).execute(&db.pool()).await.unwrap().last_insert_rowid();
+        let template=sqlx::query("INSERT INTO templates(user_id,name,subject,text,html,modified_date,envelope_sender) VALUES(1,?,'{{.RId}} - Subject',?,'{{.RId}} - HTML','2030-01-01T00:00:00Z','visible@example.test')").bind(format!("Template {index}")).bind(format!("Content {index}: {{{{.RId}}}}" )).execute(&db.inspection_pool()).await.unwrap().last_insert_rowid();
+        let profile=sqlx::query("INSERT INTO smtp(user_id,name,host,username,password,from_address,modified_date,ignore_cert_errors) VALUES(1,?,'127.0.0.1:25',?,?,?,'2030-01-01T00:00:00Z',0)").bind(format!("Profile {index}")).bind(format!("account-{index}")).bind(format!("service-secret-{index}")).bind(format!("transport-{index}@example.test")).execute(&db.inspection_pool()).await.unwrap().last_insert_rowid();
         let mut request = input();
         request.template = Selection {
             id: Some(template),
@@ -831,7 +813,7 @@ async fn ten_campaigns_keep_resources_and_credentials_isolated_under_bounded_fai
 async fn outcome_projection_preserves_engagement_and_deleted_campaigns_cannot_be_recreated() {
     let (_directory, path) = fixture();
     let db = prepared_database(&path).await;
-    let store = Campaigns::new(db.pool());
+    let store = db.campaigns();
     let c = store
         .create(caller(), input(), 1_900_000_000)
         .await
@@ -840,7 +822,7 @@ async fn outcome_projection_preserves_engagement_and_deleted_campaigns_cannot_be
     assert!(store.arm(&claim, 1_900_000_000).await.unwrap());
     sqlx::query("UPDATE results SET status='Clicked Link' WHERE id=?")
         .bind(claim.result_id)
-        .execute(&db.pool())
+        .execute(&db.inspection_pool())
         .await
         .unwrap();
     store.finish(&claim, Ok(()), 1_900_000_001).await.unwrap();
@@ -864,7 +846,7 @@ async fn outcome_projection_preserves_engagement_and_deleted_campaigns_cannot_be
         assert_eq!(
             sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(query))
                 .bind(c.id)
-                .fetch_one(&db.pool())
+                .fetch_one(&db.inspection_pool())
                 .await
                 .unwrap(),
             0
@@ -880,9 +862,9 @@ async fn measure_launch_read_claim_and_compose_at_legacy_audience_sizes() {
     for size in [100, 1_000, 5_000, 10_000] {
         let (_directory, path) = fixture();
         let db = prepared_database(&path).await;
-        let store = Campaigns::new(db.pool());
-        sqlx::raw_sql("DELETE FROM group_targets WHERE group_id=1; WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<10000) INSERT INTO targets(first_name,last_name,email,position) SELECT 'Sample',printf('Recipient %d',x),printf('performance-%d@example.test',x),'' FROM n;").execute(&db.pool()).await.unwrap();
-        sqlx::query("INSERT INTO group_targets(group_id,target_id) SELECT 1,id FROM targets WHERE email LIKE 'performance-%' ORDER BY id LIMIT ?").bind(size).execute(&db.pool()).await.unwrap();
+        let store = db.campaigns();
+        sqlx::raw_sql("DELETE FROM group_targets WHERE group_id=1; WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<10000) INSERT INTO targets(first_name,last_name,email,position) SELECT 'Sample',printf('Recipient %d',x),printf('performance-%d@example.test',x),'' FROM n;").execute(&db.inspection_pool()).await.unwrap();
+        sqlx::query("INSERT INTO group_targets(group_id,target_id) SELECT 1,id FROM targets WHERE email LIKE 'performance-%' ORDER BY id LIMIT ?").bind(size).execute(&db.inspection_pool()).await.unwrap();
         let mut request = input();
         request.groups.truncate(1);
         let clock = std::time::Instant::now();
@@ -933,8 +915,8 @@ async fn measure_launch_read_claim_and_compose_at_legacy_audience_sizes() {
 async fn duplicate_attributes_are_reviewable_and_first_recipient_wins_within_a_group() {
     let (_directory, path) = fixture();
     let db = prepared_database(&path).await;
-    let store = Campaigns::new(db.pool());
-    sqlx::raw_sql("INSERT INTO targets(id,email,first_name,last_name,position) VALUES(999,'alice@example.test','Duplicate','Discarded','Different'); INSERT INTO group_targets VALUES(1,999);").execute(&db.pool()).await.unwrap();
+    let store = db.campaigns();
+    sqlx::raw_sql("INSERT INTO targets(id,email,first_name,last_name,position) VALUES(999,'alice@example.test','Duplicate','Discarded','Different'); INSERT INTO group_targets VALUES(1,999);").execute(&db.inspection_pool()).await.unwrap();
     let request = input();
     let review = store
         .prepare(caller(), &request, 1_900_000_000)

@@ -13,8 +13,8 @@ impl Domains {
         Self { pool }
     }
 }
-fn storage(_: sqlx::Error) -> Error {
-    Error::Internal
+fn storage(error: sqlx::Error) -> Error {
+    crate::sqlite::resource_error(error)
 }
 fn token() -> Result<String, Error> {
     let mut bytes = [0; 32];
@@ -149,10 +149,7 @@ impl Repository for Domains {
         edit: Edit,
         now: i64,
     ) -> Result<Domain, Error> {
-        let canonical = origin(&edit.origin, false).map_err(|s| Error::Invalid(s.into()))?;
-        if edit.name.trim().is_empty() || edit.name.len() > 200 {
-            return Err(Error::Invalid("domain_invalid_name".into()));
-        }
+        let canonical = edit.validate()?;
         let mut tx = self
             .pool
             .begin_with("BEGIN IMMEDIATE")
