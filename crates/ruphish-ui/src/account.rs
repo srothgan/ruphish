@@ -599,7 +599,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         <svg class="nav-launcher-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16 M4 12h16 M4 17h16"/></svg>
     </button>
     <aside class="admin-nav" on:keydown=move |event: leptos::ev::KeyboardEvent| if event.key() == "Escape" { drawer_open.set(false); }>
-    <div class="nav-header"><a class="product-name" href="/">{tr!(ui.ruphish)}</a>
+    <div class="nav-header"><a class="product-name" href="/"><img src="/branding/ruphish-wordmark-white.svg" alt=tr!(ui.ruphish) width="1576" height="512"/></a>
     <button type="button" class="nav-toggle" aria-controls="main-navigation" aria-expanded=move || if nav_collapsed.get() { "false" } else { "true" } aria-label=move || if nav_collapsed.get() { expand_label.get() } else { collapse_label.get() } on:click=move |_| if viewport_is_narrow() { drawer_open.set(false) } else { nav_collapsed.update(|collapsed| *collapsed = !*collapsed) }>
         {move || nav_toggle_icon(!nav_collapsed.get())}
     </button></div>

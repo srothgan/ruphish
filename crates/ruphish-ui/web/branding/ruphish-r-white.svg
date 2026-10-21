@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="#ffffff" role="img" aria-labelledby="title desc">
+  <title id="title">Ruphish R</title>
+  <desc id="desc">A white fish-shaped R with a vertical upper-left edge, a tapered full-height left stem, and a fishing-hook leg.</desc>
+  <path fill-rule="evenodd" d="M64 40H290C368 40 431 87 448 130C444 172 358 229 252 246C254 326 299 434 354 434C389 434 410 413 416 382L384 398C410 371 425 327 420 284C438 334 448 367 448 398C448 443 408 472 352 472C244 472 152 379 152 280C152 207 195 152 238 116C169 128 110 166 64 198ZM383 119A18 18 0 1 0 347 119A18 18 0 1 0 383 119Z"/>
+  <path d="M64 235C91 199 122 170 172 152C133 205 114 267 104 340C99 381 96 429 94 472H64Z"/>
+</svg>

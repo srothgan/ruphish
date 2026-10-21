@@ -341,7 +341,8 @@
   /* App shell + sidebar — deep teal-ink, a filled active pill (no left border). */
   .admin-shell { display: grid; grid-template-columns: 244px minmax(0,1fr); min-height: 100vh; transition: grid-template-columns .2s ease; }
   .admin-nav { position: sticky; top: 0; height: 100vh; height: 100dvh; align-self: start; overflow: hidden; background: var(--nav-bg); color: var(--nav-fg); display: flex; flex-direction: column; padding: var(--s5) var(--s3) var(--s3); gap: var(--s6); transition: padding .2s ease; }
-  .admin-nav .product-name { flex-shrink: 0; color: var(--nav-fg-strong); text-decoration: none; font-size: var(--fs-md); font-weight: var(--fw-bold); letter-spacing: -.01em; padding: 0 var(--s3); }
+  .admin-nav .product-name { display: block; min-width: 0; padding: 0 var(--s3); }
+  .admin-nav .product-name img { display: block; width: 148px; max-width: 100%; height: auto; }
   .admin-nav nav { display: grid; align-content: start; flex: 1; min-height: 0; overflow-y: auto; gap: var(--s5); }
   .admin-nav .nav-section { display: grid; gap: var(--s1); }
   .admin-nav .nav-section h2 { margin: 0 var(--s3) var(--s2); color: var(--nav-muted); font-size: var(--fs-xs); font-weight: var(--fw-semibold); letter-spacing: .01em; }
