@@ -7,7 +7,7 @@ use ruphish_contracts::auth::Preferences;
 use ruphish_domain::datetime;
 use ruphish_ui::{
     browser_datetime,
-    display_preferences::DisplayPreferences,
+    display_preferences::{DisplayPreferences, PreferenceRefresh},
     localization::{Locale, use_i18n},
     tr, trs,
 };
@@ -21,7 +21,9 @@ fn optional(value: String) -> Option<String> {
 pub(crate) fn DisplayPreferencesForm(api: Api, token: String) -> impl IntoView {
     let i18n = use_i18n();
     let state = expect_context::<DisplayPreferences>();
+    let read = expect_context::<PreferenceRefresh>();
     let saved = state.value.get_untracked();
+    let baseline = RwSignal::new(saved.clone());
     let language = RwSignal::new(saved.language.unwrap_or_default());
     let format = RwSignal::new(saved.format_locale.unwrap_or_default());
     let zone = RwSignal::new(saved.time_zone.unwrap_or_default());
@@ -50,7 +52,6 @@ pub(crate) fn DisplayPreferencesForm(api: Api, token: String) -> impl IntoView {
         )
         .unwrap_or_else(|_| browser_format.get_value())
     });
-    let initial_format = StoredValue::new(format.get_untracked());
     let zone_choices = StoredValue::new(
         datetime::available_zones()
             .into_iter()
@@ -74,7 +75,7 @@ pub(crate) fn DisplayPreferencesForm(api: Api, token: String) -> impl IntoView {
         )];
         choices.extend(browser_datetime::format_locale_options(
             i18n.get_locale().as_str(),
-            &initial_format.get_value(),
+            &format.get(),
             sample(),
         ));
         choices
@@ -93,7 +94,18 @@ pub(crate) fn DisplayPreferencesForm(api: Api, token: String) -> impl IntoView {
         time_zone: optional(zone.get()),
         show_utc_offset: show_offset.get(),
     };
-    crate::navigation::protect_draft(move || busy.get() || draft() != state.value.get());
+    // A clean form follows confirmed external changes; unsaved input stays local.
+    Effect::new(move |_| {
+        let value = state.value.get();
+        if !busy.get() && untrack(draft) == baseline.get_untracked() {
+            language.set(value.language.clone().unwrap_or_default());
+            format.set(value.format_locale.clone().unwrap_or_default());
+            zone.set(value.time_zone.clone().unwrap_or_default());
+            show_offset.set(value.show_utc_offset);
+            baseline.set(value);
+        }
+    });
+    crate::navigation::protect_draft(move || busy.get() || draft() != baseline.get());
     let submit = move |event: leptos::ev::SubmitEvent| {
         event.prevent_default();
         if busy.get_untracked() {
@@ -128,7 +140,7 @@ pub(crate) fn DisplayPreferencesForm(api: Api, token: String) -> impl IntoView {
                     )
                     .await
                     .ok()
-                    .and_then(|(value, _)| serde_json::from_value::<Preferences>(value).ok()),
+                    .and_then(|(value, _)| ruphish_ui::preference_state::decode(value)),
                 Err(_) => None,
             };
             busy.set(false);
@@ -137,6 +149,7 @@ pub(crate) fn DisplayPreferencesForm(api: Api, token: String) -> impl IntoView {
                 format.set(value.format_locale.clone().unwrap_or_default());
                 zone.set(value.time_zone.clone().unwrap_or_default());
                 show_offset.set(value.show_utc_offset);
+                baseline.set(value.clone());
                 state.apply(value, i18n);
                 message.status(leptos_i18n::t_string!(i18n, preferences.saved).to_owned());
             } else {
@@ -165,6 +178,7 @@ pub(crate) fn DisplayPreferencesForm(api: Api, token: String) -> impl IntoView {
         <Card class="account-panel">
             <h2>{tr!(preferences.heading)}</h2>
             <p>{tr!(preferences.description)}</p>
+            <QueryStatus fetching=Signal::derive(move || read.fetching.get()) has_data=Signal::derive(|| true) error=Signal::derive(move || state.error.get()) noun=trs!(preferences.heading) refresh=read.refresh/>
             <form class="account-form" on:submit=submit>
                 <div class="preference-field"><Select label=trs!(language.label) value=language disabled=busy
                     on_change=Callback::new(move |value| language.set(value))>

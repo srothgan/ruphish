@@ -1,6 +1,7 @@
 //! Resource lists and full-page editors using the preserved HTTP boundary.
 use crate::account::Api;
 use crate::feedback::Message;
+use crate::resource_queries::ResourceQueries;
 use crate::shared::components::*;
 use leptos::{html, prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use ruphish_ui::{
@@ -58,7 +59,7 @@ pub(super) fn detail(api: Api, token: String, family: Family, editing: bool) -> 
     }/>}
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(super) enum Family {
     Groups,
     Templates,
@@ -84,7 +85,7 @@ impl Family {
             Self::Profiles => leptos_i18n::t_string!(i18n, ui.back_to_profiles),
         }
     }
-    fn route(self) -> &'static str {
+    pub(crate) fn route(self) -> &'static str {
         match self {
             Self::Groups => "groups",
             Self::Templates => "templates",
@@ -194,78 +195,39 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
     let import_open = RwSignal::new(
         can_edit && query.with_untracked(|q| q.get("import").as_deref() == Some("1")),
     );
-    let rows = RwSignal::new(Vec::<Value>::new());
+    let queries = expect_context::<crate::resource_queries::ResourceQueries>();
+    let list = queries.list(family);
+    let confirmed = Signal::derive(move || list.data.with(Option::is_some));
     let message = Message::new(String::new());
-    let loading = RwSignal::new(true);
-    let failed = RwSignal::new(false);
     let search = RwSignal::new(String::new());
-    let refresh = RwSignal::new(0u64);
     let deletion = ResourceDeletion::new();
-    let generation = StoredValue::new(0u64);
-    Effect::new(move |_| {
-        refresh.get();
-        generation.update_value(|n| *n += 1);
-        let ticket = generation.get_value();
-        loading.set(true);
-        failed.set(false);
-        spawn_local(async move {
-            let result = api.get(&format!("/api/{}/summary", family.route())).await;
-            if generation.get_value() != ticket {
-                return;
-            }
-            match result {
-                Ok(v) => rows.set(
-                    v[if family == Family::Groups {
-                        "groups"
-                    } else {
-                        "items"
-                    }]
-                    .as_array()
-                    .cloned()
-                    .unwrap_or_default(),
-                ),
-                Err(e) => {
-                    failed.set(true);
-                    message.error(e);
-                }
-            }
-            loading.set(false);
-        });
-    });
     let deleted = Callback::new(move |id| {
-        generation.update_value(|n| *n += 1);
-        loading.set(false);
-        failed.set(false);
-        rows.update(|rows| rows.retain(|row| row["id"].as_i64() != Some(id)));
+        queries.deleted(family, id);
         message.status(leptos_i18n::t_string!(i18n, ui.resource_deleted).to_owned());
     });
     let visible = Signal::derive(move || {
         let needle = search.get().to_lowercase();
-        rows.get()
+        list.data
+            .get()
+            .unwrap_or_default()
             .into_iter()
-            .filter(|v| {
-                v["name"]
-                    .as_str()
-                    .unwrap_or("")
-                    .to_lowercase()
-                    .contains(&needle)
-            })
+            .filter(|v| v.name.to_lowercase().contains(&needle))
             .collect::<Vec<_>>()
     });
     view! {<ManagementPage>
     <PageHeader title=Signal::derive(move || family.title().to_owned()) subtitle=match family{Family::Groups=>leptos_i18n::t_string!(i18n, ui.organize_recipients_and_review_imported_data_before_saving),Family::Templates=>leptos_i18n::t_string!(i18n, ui.compose_messages_manage_attachments_and_send_a_test),Family::Pages=>leptos_i18n::t_string!(i18n, ui.prepare_landing_page_content_and_optional_interaction_defaults),Family::Profiles=>leptos_i18n::t_string!(i18n, ui.configure_mail_connections_and_verify_them_before_use)}.to_owned()>
+        <ActionButton disabled=list.fetching on_click=move |_| list.refresh.run(())>{tr!(ui.refresh)}</ActionButton>
         <ActionButton hidden=!can_edit on_click=move |_|import_open.set(true)>{tr!(ui.import)}</ActionButton><ActionLink hidden=!can_edit style=ButtonStyle::Primary href=format!("/{}/new",family.route())>{leptos_i18n::t!(i18n, messages.create_arg0, arg0 = (family.singular()).to_string())}</ActionLink>
     </PageHeader>
     {move||(can_edit && import_open.get()).then(||import_panel(api,token.get_value(),family,import_open))}
     {message.view()}
     <ResourceDeleteDialog deletion=deletion api=api token=token.get_value() on_deleted=deleted/>
-    <ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) noun=Signal::derive(move || family.plural().to_owned())/>
-    <Show when=move||loading.get()><p role="status">{leptos_i18n::t!(i18n, messages.loading_arg0, arg0 = (family.plural()).to_string())}</p></Show>
-    <Show when=move||!loading.get()&&failed.get()><ActionButton on_click=move |_|refresh.update(|v|*v+=1)>{leptos_i18n::t!(i18n, messages.retry_loading_arg0, arg0 = (family.plural()).to_string())}</ActionButton></Show>
+    <ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) count_known=confirmed noun=Signal::derive(move || family.plural().to_owned())/>
+    <QueryStatus fetching=list.fetching has_data=confirmed error=list.error noun=Signal::derive(move || family.plural().to_owned()) refresh=list.refresh/>
     <DataTable label=Signal::derive(move || family.title().to_owned()) empty=Signal::derive(move || visible.with(Vec::is_empty)) headers=vec![trs!(ui.name),if family==Family::Groups{trs!(ui.recipients)}else{trs!(ui.active_campaigns)},trs!(ui.last_modified),trs!(ui.actions)]>
-    {move||visible.get().into_iter().map(|v|{let id=v["id"].as_i64().unwrap_or(0);let name=v["name"].as_str().unwrap_or(leptos_i18n::t_string!(i18n, ui.unnamed)).to_owned();let delete_value=v.clone();view!{<tr><th scope="row"><a href=format!("/{}/{id}",family.route())>{name}</a></th><td>{v[if family==Family::Groups{"num_targets"}else{"active_campaigns"}].as_i64().unwrap_or(0)}</td><td>{crate::time_display::instant(&v["modified_date"])}</td><td><ResourceActions view_href=format!("/{}/{id}",family.route()) edit_href=format!("/{}/{id}/edit",family.route()) can_edit=can_edit size=ControlSize::Small disabled=deletion.busy on_delete=Callback::new(move |()| deletion.select(DeleteTarget { id, name:delete_value["name"].as_str().unwrap_or("resource").to_owned(), path:format!("/api/{}/{id}",family.route()), revision:None, description:leptos_i18n::t_string!(i18n, ui.this_permanently_removes_the_saved_resource_resources_used_by_unfinished_campaig) }))><ActionLink hidden=!can_edit size=ControlSize::Small disabled=deletion.busy href=format!("/{}/new?duplicate={id}",family.route())>{tr!(ui.duplicate)}</ActionLink></ResourceActions></td></tr>}}).collect_view()}
+    {move||visible.get().into_iter().map(|v|{let id=v.id;let delete_name=v.name.clone();view!{<tr><th scope="row"><a href=format!("/{}/{id}",family.route())>{v.name}</a></th><td>{v.count}</td><td>{crate::time_display::instant(&Value::String(v.modified_date))}</td><td><ResourceActions view_href=format!("/{}/{id}",family.route()) edit_href=format!("/{}/{id}/edit",family.route()) can_edit=can_edit size=ControlSize::Small disabled=deletion.busy on_delete=Callback::new(move |()| deletion.select(DeleteTarget { id, name:delete_name.clone(), path:format!("/api/{}/{id}",family.route()), revision:None, description:leptos_i18n::t_string!(i18n, ui.this_permanently_removes_the_saved_resource_resources_used_by_unfinished_campaig) }))><ActionLink hidden=!can_edit size=ControlSize::Small disabled=deletion.busy href=format!("/{}/new?duplicate={id}",family.route())>{tr!(ui.duplicate)}</ActionLink></ResourceActions></td></tr>}}).collect_view()}
     </DataTable>
-    <ListEmptyState ready=Signal::derive(move || !loading.get() && !failed.get()) count=Signal::derive(move || visible.with(Vec::len)) search=search title=Signal::derive(move || family.empty_title().to_owned()) guidance=Signal::derive(move || family.empty_guidance().to_owned())/>
+    <ListEmptyState ready=Signal::derive(move || confirmed.get() && !list.fetching.get() && list.error.get().is_none()) count=Signal::derive(move || visible.with(Vec::len)) search=search title=Signal::derive(move || family.empty_title().to_owned()) guidance=Signal::derive(move || family.empty_guidance().to_owned())/>
     </ManagementPage>}
 }
 
@@ -350,14 +312,7 @@ fn edit(
                 Some(id)
             };
             if let Some(target) = target {
-                match api
-                    .resource(
-                        "GET",
-                        &format!("/api/{}/{target}", family.route()),
-                        &token.get_value(),
-                        None,
-                        None,
-                    )
+                match crate::resource_queries::ResourceQueries::read_detail(api, family, &target)
                     .await
                 {
                     Ok((mut value, revision)) => {
@@ -428,6 +383,7 @@ fn finish_edit(editor: Editor, family: Family) {
 
 async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> bool {
     let i18n = ruphish_ui::localization::use_i18n();
+    let queries = expect_context::<crate::resource_queries::ResourceQueries>();
 
     if editor.readonly
         || editor.busy.get_untracked()
@@ -456,10 +412,17 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
             Some(&submitted),
             current.revision(),
         )
-        .await;
+        .await
+        .and_then(|(value, revision)| {
+            ResourceQueries::validate_detail(api, family, &value, (id != 0).then_some(id))?;
+            Ok((value, revision))
+        });
     editor.busy.set(false);
     match result {
         Ok((value, revision)) => {
+            if let Some(id) = value["id"].as_i64() {
+                queries.saved(family, id);
+            }
             editor
                 .draft
                 .update(|d| d.saved(&submitted, value, revision));
@@ -791,8 +754,9 @@ fn test_panel(
     let i18n = ruphish_ui::localization::use_i18n();
 
     let token = StoredValue::new(token);
-    let profiles = RwSignal::new(Vec::<Value>::new());
-    let pages = RwSignal::new(Vec::<Value>::new());
+    let queries = expect_context::<ResourceQueries>();
+    let profiles = (family == Family::Templates).then(|| queries.list(Family::Profiles));
+    let pages = queries.list(Family::Pages);
     let selected = RwSignal::new(String::new());
     let page = RwSignal::new(String::new());
     let recipient = RwSignal::new(String::new());
@@ -802,22 +766,43 @@ fn test_panel(
     let url = RwSignal::new(String::new());
     let busy = RwSignal::new(false);
     let message = Message::new(String::new());
-    spawn_local(async move {
-        for (kind, signal) in [("smtp", profiles), ("pages", pages)] {
-            match api.get(&format!("/api/{kind}/summary")).await {
-                Ok(v) => signal.set(v["items"].as_array().cloned().unwrap_or_default()),
-                Err(e) => message.error(e),
-            }
+    // Persist selection identity while names and availability revalidate. The
+    // preserved test-email API still receives the latest confirmed resource name.
+    let profile_name = Signal::derive(move || {
+        profiles
+            .and_then(|read| read.data.get())
+            .and_then(|rows| {
+                rows.into_iter()
+                    .find(|row| row.id.to_string() == selected.get())
+            })
+            .map(|row| row.name)
+    });
+    let page_name = Signal::derive(move || {
+        let rows = pages.data.get()?;
+        let id = page.get();
+        if id.is_empty() {
+            Some(String::new())
+        } else {
+            rows.into_iter()
+                .find(|row| row.id.to_string() == id)
+                .map(|row| row.name)
         }
     });
+    let profile_ready =
+        Signal::derive(move || family == Family::Profiles || profile_name.get().is_some());
     let close = move || {
         open.set(false);
         finish_edit(editor, family);
     };
     let send = move |connection: bool| {
-        if busy.get_untracked() {
+        if busy.get_untracked()
+            || !profile_ready.get_untracked()
+            || (!connection && page_name.get_untracked().is_none())
+        {
             return;
         }
+        let profile_name = profile_name.get_untracked();
+        let page_name = page_name.get_untracked();
         busy.set(true);
         message.clear();
         spawn_local(async move {
@@ -841,18 +826,18 @@ fn test_panel(
             let smtp = if family == Family::Profiles {
                 editor.draft.get_untracked().value().clone()
             } else {
-                json!({"name":selected.get_untracked()})
+                json!({"name":profile_name})
             };
             let (path, payload) = if connection {
                 ("/api/util/test_connection", smtp)
             } else {
                 (
                     "/api/util/send_test_email",
-                    json!({"smtp":smtp,"template":{"name":if family==Family::Templates{editor.text("name")}else{String::new()}},"page":{"name":page.get_untracked()},"url":url.get_untracked(),"email":recipient.get_untracked(),"first_name":first.get_untracked(),"last_name":last.get_untracked(),"position":position.get_untracked()}),
+                    json!({"smtp":smtp,"template":{"name":if family==Family::Templates{editor.text("name")}else{String::new()}},"page":{"name":page_name},"url":url.get_untracked(),"email":recipient.get_untracked(),"first_name":first.get_untracked(),"last_name":last.get_untracked(),"position":position.get_untracked()}),
                 )
             };
             match api
-                .resource("POST", path, &token.get_value(), Some(&payload), None)
+                .command("POST", path, &token.get_value(), Some(&payload), None)
                 .await
             {
                 Ok(_) => message.status(
@@ -875,10 +860,22 @@ fn test_panel(
         });
     };
     view! {<Dialog title=trs!(ui.send_a_test_email) busy=busy on_cancel=Callback::new(move |_|close())><div class="management-heading"><h2 id="test-heading">{tr!(ui.send_a_test_email)}</h2><ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|close()>{tr!(ui.close)}</ActionButton></div><p>{tr!(ui.test_the_selected_saved_content_with_one_recipient_saving_and_delivery_are_separ)}</p>
-    {(family==Family::Templates).then(||view!{<Select label=trs!(ui.sending_profile) value=selected on_change=Callback::new(move|v|selected.set(v))><option value="">{tr!(ui.choose_a_profile)}</option>{move||profiles.get().into_iter().map(|v|{let name=v["name"].as_str().unwrap_or("").to_owned();{let label=name.clone();view!{<option value=name>{label}</option>}}}).collect_view()}</Select>})}
-    <ActionButton disabled=Signal::derive(move||busy.get()) on_click=move |_|send(true)>{tr!(ui.test_connection_only)}</ActionButton><div class="resource-columns">
-    {[ (recipient,trs!(ui.recipient_email)),(first,trs!(ui.first_name)),(last,trs!(ui.last_name)),(position,trs!(ui.position)),(url,trs!(ui.public_test_url_optional)) ].into_iter().map(|(signal,label)|view!{<label>{label}<TextInput value=Signal::derive(move||signal.get()) on_input=move|e|signal.set(event_target_value(&e))/></label>}).collect_view()}
-    <Select label=trs!(ui.preview_landing_page) value=page on_change=Callback::new(move|v|page.set(v))><option value="">{tr!(ui.no_landing_page)}</option>{move||pages.get().into_iter().map(|v|{let name=v["name"].as_str().unwrap_or("").to_owned();{let label=name.clone();view!{<option value=name>{label}</option>}}}).collect_view()}</Select></div>
-    {message.view()}<ActionButton style=ButtonStyle::Primary disabled=Signal::derive(move||busy.get()||recipient.get().is_empty()) on_click=move |_|send(false)>{move||if busy.get(){leptos_i18n::t_string!(i18n, ui.working)}else if editor.draft.with(ResourceDraft::dirty)||editor.draft.with(|d|d.value()["id"].as_i64().unwrap_or(0)==0){leptos_i18n::t_string!(i18n, ui.save_and_send_test)}else{leptos_i18n::t_string!(i18n, ui.send_test_email)}}</ActionButton>
+    {profiles.map(|read| view!{
+        <QueryStatus fetching=read.fetching has_data=Signal::derive(move || read.data.with(Option::is_some)) error=read.error noun=trs!(ui.sending_profiles) refresh=read.refresh/>
+        <Select label=trs!(ui.sending_profile) value=selected disabled=Signal::derive(move || busy.get()) on_change=Callback::new(move|v|selected.set(v))>
+            <option value="">{tr!(ui.choose_a_profile)}</option>
+            {move || (!selected.get().is_empty() && profile_name.get().is_none()).then(|| view!{<option value=selected.get() selected=true disabled=true>{tr!(ui.unavailable)}</option>})}
+            {move||read.data.get().unwrap_or_default().into_iter().map(|row| { let id = row.id.to_string(); let is_selected = selected.get() == id; view!{<option value=id selected=is_selected>{row.name}</option>} }).collect_view()}
+        </Select>
+    })}
+    <ActionButton disabled=Signal::derive(move||busy.get()||!profile_ready.get()) on_click=move |_|send(true)>{tr!(ui.test_connection_only)}</ActionButton><div class="resource-columns">
+    {[ (recipient,trs!(ui.recipient_email)),(first,trs!(ui.first_name)),(last,trs!(ui.last_name)),(position,trs!(ui.position)),(url,trs!(ui.public_test_url_optional)) ].into_iter().map(|(signal,label)|view!{<label>{label}<TextInput disabled=Signal::derive(move||busy.get()) value=Signal::derive(move||signal.get()) on_input=move|e|signal.set(event_target_value(&e))/></label>}).collect_view()}
+    <div><QueryStatus fetching=pages.fetching has_data=Signal::derive(move || pages.data.with(Option::is_some)) error=pages.error noun=trs!(ui.landing_pages) refresh=pages.refresh/>
+    <Select label=trs!(ui.preview_landing_page) value=page disabled=Signal::derive(move || busy.get()) on_change=Callback::new(move|v|page.set(v))>
+        <option value="">{tr!(ui.no_landing_page)}</option>
+        {move || (!page.get().is_empty() && page_name.get().is_none()).then(|| view!{<option value=page.get() selected=true disabled=true>{tr!(ui.unavailable)}</option>})}
+        {move||pages.data.get().unwrap_or_default().into_iter().map(|row| { let id = row.id.to_string(); let is_selected = page.get() == id; view!{<option value=id selected=is_selected>{row.name}</option>} }).collect_view()}
+    </Select></div></div>
+    {message.view()}<ActionButton style=ButtonStyle::Primary disabled=Signal::derive(move||busy.get()||recipient.get().is_empty()||!profile_ready.get()||page_name.get().is_none()) on_click=move |_|send(false)>{move||if busy.get(){leptos_i18n::t_string!(i18n, ui.working)}else if editor.draft.with(ResourceDraft::dirty)||editor.draft.with(|d|d.value()["id"].as_i64().unwrap_or(0)==0){leptos_i18n::t_string!(i18n, ui.save_and_send_test)}else{leptos_i18n::t_string!(i18n, ui.send_test_email)}}</ActionButton>
     </Dialog>}
 }

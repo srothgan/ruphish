@@ -116,7 +116,7 @@ Participant interaction tracking must never collect or retain entered login info
 
 SQLite remains the default local configuration; MySQL and PostgreSQL are selected explicitly at startup. Database upgrades must preserve a recoverable original and be tested against independent legacy data. Fixtures contain synthetic credentials and must be copied before mutation. Product tests must not contact real recipients or external integration endpoints.
 
-Do not operate on GitHub, create releases/tags, publish, package for distribution, or deploy unless explicitly requested. Stop only development processes started in the current session. Report commands actually run and any unresolved checks or reachable defects honestly. Optional PERSONAL.md in this directory adds local preferences if present.
+Do not operate on GitHub, create releases/tags, publish, package for distribution, or deploy unless explicitly requested. Report commands actually run and any unresolved checks or reachable defects honestly. Optional PERSONAL.md in this directory adds local preferences if present.
 
 ## Git and commit messages
 

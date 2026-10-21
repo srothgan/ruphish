@@ -69,6 +69,21 @@ fn verified_imap_reports_survive_ack_failure_restart_and_uid_reset_without_messa
     let initialized = wait_check(&client, &base, id, 0);
     assert_eq!(initialized["code"], "passed");
     let run = initialized["history"][0]["id"].as_i64().unwrap();
+    let validated = request(
+        &client,
+        &base,
+        reqwest::Method::POST,
+        &format!("/api/reporting-mailboxes/{id}/validate"),
+        None,
+    );
+    assert_eq!(validated.status(), 200);
+    let validated: Value = validated.json().unwrap();
+    assert_eq!(validated["id"], id);
+    assert_eq!(validated["name"], "Reports");
+    assert_eq!(validated["has_password"], true);
+    assert!(validated.get("password").is_none());
+    assert!(serde_json::from_value::<ruphish_contracts::integrations::Mailbox>(validated).is_ok());
+
     {
         let mut state = peer.state.lock().unwrap();
         state
@@ -83,17 +98,19 @@ fn verified_imap_reports_survive_ack_failure_restart_and_uid_reset_without_messa
         state.messages.insert(4, b"Subject: ambiguous\r\n\r\nhttps://training.test/?rid=abc123 https://training.test/?rid=another".to_vec());
         state.reject_ack = true;
     }
-    assert_eq!(
-        request(
-            &client,
-            &base,
-            reqwest::Method::POST,
-            &format!("/api/reporting-mailboxes/{id}/check"),
-            None
-        )
-        .status(),
-        202
+    let queued = request(
+        &client,
+        &base,
+        reqwest::Method::POST,
+        &format!("/api/reporting-mailboxes/{id}/check"),
+        None,
     );
+    assert_eq!(queued.status(), 202);
+    let queued: Value = queued.json().unwrap();
+    assert_eq!(queued["id"], id);
+    assert_eq!(queued["enabled"], true);
+    assert!(queued.get("password").is_none());
+    assert!(serde_json::from_value::<ruphish_contracts::integrations::Mailbox>(queued).is_ok());
     let failed = wait_check(&client, &base, id, run);
     assert_eq!(
         failed["code"],
@@ -185,16 +202,21 @@ fn verified_imap_reports_survive_ack_failure_restart_and_uid_reset_without_messa
         recovered["history"][0]["id"].as_i64().unwrap(),
     );
     assert_eq!(reset["code"], "mailbox_uidvalidity_changed");
-    assert_eq!(
-        request(
-            &client,
-            &base,
-            reqwest::Method::POST,
-            &format!("/api/reporting-mailboxes/{id}/resume"),
-            Some(&json!({"revision":reset["revision"]}))
-        )
-        .status(),
-        200
+    let resumed_response = request(
+        &client,
+        &base,
+        reqwest::Method::POST,
+        &format!("/api/reporting-mailboxes/{id}/resume"),
+        Some(&json!({"revision":reset["revision"]})),
+    );
+    assert_eq!(resumed_response.status(), 200);
+    let resumed_response: Value = resumed_response.json().unwrap();
+    assert_eq!(resumed_response["id"], id);
+    assert_eq!(resumed_response["enabled"], true);
+    assert!(resumed_response.get("password").is_none());
+    assert!(
+        serde_json::from_value::<ruphish_contracts::integrations::Mailbox>(resumed_response)
+            .is_ok()
     );
     let resumed = wait_check(
         &client,

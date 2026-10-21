@@ -77,7 +77,7 @@ pub(crate) fn ResourceDeleteDialog(
         deletion.message.clear();
         deletion.tasks.spawn(async move {
             let result = api
-                .resource(
+                .command(
                     "DELETE",
                     &target.path,
                     &token.get_value(),

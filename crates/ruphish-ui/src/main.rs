@@ -16,6 +16,8 @@ mod campaign_delivery;
 #[cfg(target_arch = "wasm32")]
 mod campaign_drafts;
 #[cfg(target_arch = "wasm32")]
+mod campaign_queries;
+#[cfg(target_arch = "wasm32")]
 mod campaigns;
 #[cfg(target_arch = "wasm32")]
 mod domains;
@@ -25,12 +27,17 @@ mod editor;
 mod feedback;
 #[cfg(target_arch = "wasm32")]
 mod integrations;
+mod management_queries;
 #[cfg(target_arch = "wasm32")]
 mod navigation;
 #[cfg(target_arch = "wasm32")]
 mod overview;
 #[cfg(target_arch = "wasm32")]
+mod overview_queries;
+#[cfg(target_arch = "wasm32")]
 mod preferences;
+#[cfg(target_arch = "wasm32")]
+mod resource_queries;
 #[cfg(target_arch = "wasm32")]
 mod resources;
 #[cfg(target_arch = "wasm32")]

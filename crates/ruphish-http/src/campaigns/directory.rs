@@ -28,10 +28,29 @@ pub(super) async fn list(
         .directory(caller.identity, filter, after, 50)
         .await
         .map_err(error)?;
-    let items: Vec<_> = page.items.into_iter().map(|row|json!({"id":row.id,"kind":if row.revision.is_some(){"draft"}else{"campaign"},"revision":row.revision,"name":row.name,"status":row.status,"total":row.total,"launch_date":row.launch.as_deref().map(date)})).collect();
+    let items = page
+        .items
+        .into_iter()
+        .map(|row| reads::DirectoryRow {
+            id: row.id,
+            kind: if row.revision.is_some() {
+                "draft".into()
+            } else {
+                "campaign".into()
+            },
+            revision: row.revision,
+            name: row.name,
+            status: row.status,
+            total: row.total,
+            launch_date: row.launch.as_deref().map(date),
+        })
+        .collect();
     response(
         StatusCode::OK,
-        &json!({"items":items,"next_after":page.next_after}),
+        &json!(reads::Directory {
+            items,
+            next_after: page.next_after
+        }),
         None,
     )
 }

@@ -55,6 +55,7 @@ pub struct Domain {
     /// Whether a persisted verification lease is active.
     pub checking: bool,
     /// Current queued or running attempt, independent of domain validity.
+    #[serde(deserialize_with = "crate::nullable")]
     pub active_check: Option<VerificationRun>,
     /// Latest ten completed attempts, newest first; populated on detail responses.
     pub history: Vec<VerificationRun>,
@@ -98,9 +99,28 @@ pub struct VerificationRun {
     /// Earliest scheduled execution, in UTC Unix seconds.
     pub scheduled_at: i64,
     /// Actual worker start; absent for queued or imported historical checks.
+    #[serde(deserialize_with = "crate::nullable")]
     pub started_at: Option<i64>,
     /// Actual completion; absent while active.
+    #[serde(deserialize_with = "crate::nullable")]
     pub finished_at: Option<i64>,
     /// Safe application-owned result code.
     pub code: String,
+}
+
+#[cfg(test)]
+mod read_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn verification_times_require_explicit_null_for_queued_work() {
+        let complete = json!({"id":1,"state":"queued","scheduled_at":123,"started_at":null,"finished_at":null,"code":"queued"});
+        assert!(serde_json::from_value::<VerificationRun>(complete.clone()).is_ok());
+        for field in ["started_at", "finished_at"] {
+            let mut value = complete.clone();
+            value.as_object_mut().map(|v| v.remove(field));
+            assert!(serde_json::from_value::<VerificationRun>(value).is_err());
+        }
+    }
 }

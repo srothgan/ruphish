@@ -3,6 +3,7 @@ use crate::{
     account::Api,
     campaigns::{array, text},
     feedback::Message,
+    management_queries::ManagementQueries,
     resources::ResourceAccess,
     shared::components::*,
     time_display::instant,
@@ -13,7 +14,7 @@ use ruphish_ui::view_tasks::ViewTasks;
 use ruphish_ui::{tr, trs};
 use serde_json::{Value, json};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(super) enum Kind {
     Webhook,
     Mailbox,
@@ -80,10 +81,10 @@ impl Kind {
             }
         }
     }
-    fn api(self) -> String {
+    pub(crate) fn api(self) -> String {
         format!("/api{}", self.path())
     }
-    fn webhook(self) -> bool {
+    pub(crate) fn webhook(self) -> bool {
         matches!(self, Self::Webhook)
     }
 }
@@ -91,56 +92,22 @@ impl Kind {
 pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
-    let rows = RwSignal::new(Vec::<Value>::new());
-    let loading = RwSignal::new(false);
-    let loaded = RwSignal::new(false);
-    let failed = RwSignal::new(false);
+    let queries = expect_context::<ManagementQueries>();
+    let list = queries.integrations.observe(move || kind);
+    let confirmed = Signal::derive(move || list.data.with(Option::is_some));
     let search = RwSignal::new(String::new());
-    let refresh = RwSignal::new(0u64);
     let message = Message::new(String::new());
     let can_edit = use_context::<ResourceAccess>().is_some_and(|access| access.0);
     let deletion = ResourceDeletion::new();
-    let generation = StoredValue::new(0u64);
     let deleted = Callback::new(move |id| {
-        generation.update_value(|n| *n += 1);
-        loading.set(false);
-        failed.set(false);
-        rows.update(|rows| rows.retain(|row| row["id"].as_i64() != Some(id)));
+        queries.integration_deleted(kind, id);
         message.status(leptos_i18n::t_string!(i18n, ui.resource_deleted).to_owned());
-    });
-    Effect::new(move |_| {
-        refresh.get();
-        generation.update_value(|n| *n += 1);
-        let ticket = generation.get_value();
-        loading.set(true);
-        failed.set(false);
-        spawn_local(async move {
-            let result = api.get(&format!("{}/", kind.api())).await;
-            if generation.get_value() != ticket {
-                return;
-            }
-            match result {
-                Ok(value) => {
-                    if let Some(values) = value.as_array() {
-                        rows.set(values.clone());
-                        loaded.set(true);
-                        message.clear();
-                    } else {
-                        failed.set(true);
-                        message.error(leptos_i18n::t_string!(i18n, ui.the_server_returned_an_invalid_resource_list_refresh_to_try_again).to_owned());
-                    }
-                }
-                Err(error) => {
-                    failed.set(true);
-                    message.error(error);
-                }
-            }
-            loading.set(false);
-        });
     });
     let visible = Signal::derive(move || {
         let needle = search.get().to_lowercase();
-        rows.get()
+        list.data
+            .get()
+            .unwrap_or_default()
             .into_iter()
             .filter(|row| text(row, "name").to_lowercase().contains(&needle))
             .collect::<Vec<_>>()
@@ -148,13 +115,13 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
     view! {
         <ManagementPage>
             <PageHeader title=Signal::derive(move || kind.title().to_owned()) subtitle=Signal::derive(move || (if kind.webhook() { leptos_i18n::t_string!(i18n, ui.administrator_managed_event_notifications_enabled_endpoints_receive_events_acros) } else { leptos_i18n::t_string!(i18n, ui.owner_scoped_imap_resources_that_correlate_reported_campaign_messages_without_re) }).to_owned())>
-                <ActionButton on_click=move |_| refresh.update(|value| *value += 1) busy=Signal::derive(move || loading.get().to_string())>{tr!(ui.refresh)}</ActionButton>
+                <ActionButton on_click=move |_| list.refresh.run(()) disabled=list.fetching>{tr!(ui.refresh)}</ActionButton>
                 {can_edit.then(|| view! { <ActionLink style=ButtonStyle::Primary href=format!("{}/new", kind.path())>{leptos_i18n::t!(i18n, messages.create_arg0, arg0 = (kind.singular()).to_string())}</ActionLink> })}
             </PageHeader>
             {message.view()}
             <ResourceDeleteDialog deletion=deletion api=api token=token on_deleted=deleted/>
-            <ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) noun=Signal::derive(move || kind.plural().to_owned())/>
-            <Show when=move || loading.get()><p role="status">{leptos_i18n::t!(i18n, messages.loading_arg0, arg0 = (kind.plural()).to_string())}</p></Show>
+            <ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) count_known=confirmed noun=Signal::derive(move || kind.plural().to_owned())/>
+            <QueryStatus fetching=list.fetching has_data=confirmed error=list.error noun=Signal::derive(move || kind.plural().to_owned()) refresh=list.refresh/>
             <DataTable label=Signal::derive(move || kind.title().to_owned()) empty=Signal::derive(move || visible.with(Vec::is_empty)) headers=vec![trs!(ui.name), trs!(ui.destination), trs!(ui.enabled), trs!(ui.status), trs!(ui.actions)]>
                 {move || visible.get().into_iter().map(|row| {
                     let href = format!("{}/{}", kind.path(), row["id"]);
@@ -169,7 +136,7 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
                     }
                 }).collect_view()}
             </DataTable>
-            <ListEmptyState ready=Signal::derive(move || loaded.get() && !loading.get() && !failed.get()) count=Signal::derive(move || visible.with(Vec::len)) search=search title=Signal::derive(move || kind.empty_title().to_owned()) guidance=Signal::derive(move || kind.empty_guidance().to_owned())/>
+            <ListEmptyState ready=Signal::derive(move || confirmed.get() && !list.fetching.get() && list.error.get().is_none()) count=Signal::derive(move || visible.with(Vec::len)) search=search title=Signal::derive(move || kind.empty_title().to_owned()) guidance=Signal::derive(move || kind.empty_guidance().to_owned())/>
         </ManagementPage>
     }
 }
@@ -241,6 +208,7 @@ fn edit_value(kind: Kind, value: &Value) -> Value {
 fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
+    let queries = expect_context::<ManagementQueries>();
     let initial = if kind.webhook() {
         json!({"name":"","url":"","is_active":true,"revision":null})
     } else {
@@ -268,7 +236,7 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
             loading.set(true);
             load_failed.set(false);
             spawn_local(async move {
-                match api.get(&format!("{}/{id}", kind.api())).await {
+                match ManagementQueries::read_integration(api, kind, id).await {
                     Ok(value) => {
                         has_saved_secret.set(
                             value[if kind.webhook() {
@@ -319,8 +287,14 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                     None,
                 )
                 .await
-            {
+                .and_then(|(saved, revision)| {
+                    ManagementQueries::validate_integration(api, kind, saved, id)
+                        .map(|saved| (saved, revision))
+                }) {
                 Ok((saved, _)) => {
+                    if let Some(id) = saved["id"].as_i64() {
+                        queries.integration_saved(kind, id);
+                    }
                     baseline.set(draft.get_untracked());
                     busy.set(false);
                     navigate.with_value(|navigate| {
@@ -408,9 +382,10 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
 fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
-    let value = RwSignal::new(Value::Null);
-    let refresh = RwSignal::new(0u64);
-    let loading = RwSignal::new(false);
+    let queries = expect_context::<ManagementQueries>();
+    let read = queries.integration.observe(move || (kind, id));
+    let confirmed = Signal::derive(move || read.data.with(Option::is_some));
+    let value = Signal::derive(move || read.data.get().unwrap_or(Value::Null));
     let busy = RwSignal::new(false);
     let deletion = ResourceDeletion::new();
     let unavailable =
@@ -421,6 +396,7 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
     let token = StoredValue::new(token);
     let navigate = StoredValue::new(use_navigate());
     let deleted = Callback::new(move |_| {
+        queries.integration_deleted(kind, id);
         navigate.with_value(|navigate| navigate(kind.path(), Default::default()))
     });
     let select_delete = Callback::new(move |()| {
@@ -440,24 +416,13 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
         });
     });
     let editable = use_context::<ResourceAccess>().is_some_and(|access| access.0);
-    Effect::new(move |_| {
-        refresh.get();
-        if deletion.busy.get_untracked() {
-            return;
-        }
-        loading.set(true);
-        spawn_local(async move {
-            match api.get(&format!("{}/{id}", kind.api())).await {
-                Ok(data) => value.set(data),
-                Err(error) => message.error(error),
-            }
-            loading.set(false);
-        });
-    });
     let interval = set_interval_with_handle(
         move || {
-            if !loading.get_untracked() && !busy.get_untracked() && !deletion.busy.get_untracked() {
-                refresh.update(|r| *r += 1);
+            if !read.fetching.get_untracked()
+                && !busy.get_untracked()
+                && !deletion.busy.get_untracked()
+            {
+                read.refresh.run(());
             }
         },
         std::time::Duration::from_secs(5),
@@ -478,11 +443,14 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
             let path = format!("{}/{id}/{operation}", kind.api());
             let body = (operation == "resume")
                 .then(|| json!({"revision":value.get_untracked()["revision"]}));
-            match api
+            let result = api
                 .resource("POST", &path, &token.get_value(), body.as_ref(), None)
                 .await
-            {
-                Ok(_) => {
+                .and_then(|(saved, _)| {
+                    ManagementQueries::validate_integration(api, kind, saved, Some(id))
+                });
+            match result {
+                Ok(saved) => {
                     message.status(
                         if operation == "validate" {
                             leptos_i18n::t_string!(i18n, ui.connection_validated_successfully)
@@ -494,7 +462,7 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                         }
                         .into(),
                     );
-                    refresh.update(|r| *r += 1);
+                    queries.integration_command(kind, id, operation, saved);
                     resuming.set(false);
                 }
                 Err(error) => message.error(error),
@@ -505,13 +473,15 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
     view! {
         <ManagementPage><BackLink href=kind.path()>{move || kind.back_label()}</BackLink>
             <PageHeader title=Signal::derive(move || text(&value.get(), "name"))>
-                <ActionButton on_click=move |_| refresh.update(|r| *r += 1) busy=Signal::derive(move || loading.get().to_string())>{tr!(ui.refresh)}</ActionButton>
+                <ActionButton on_click=move |_| read.refresh.run(()) disabled=read.fetching>{tr!(ui.refresh)}</ActionButton>
                 {editable.then(|| view! {
                     <ActionButton disabled=unavailable on_click=move |_| action("validate")>{move || if busy.get() { leptos_i18n::t_string!(i18n, ui.working) } else { leptos_i18n::t_string!(i18n, ui.validate_connection) }}</ActionButton>
                     {(!kind.webhook()).then(|| view! { <ActionButton disabled=Signal::derive(move || unavailable.get() || value.get()["running"] == true || value.get()["enabled"] != true) on_click=move |_| action("check")>{tr!(ui.check_mailbox_now)}</ActionButton> })}
                     <ResourceActions edit_href=format!("{}/{id}/edit",kind.path()) can_edit=editable disabled=unavailable on_delete=select_delete/>
                 })}
             </PageHeader>{message.view()}
+            <QueryStatus fetching=read.fetching has_data=confirmed error=read.error noun=Signal::derive(move || kind.singular().to_owned()) refresh=read.refresh/>
+            <Show when=move || confirmed.get()>
             <Card class="integration-status">
                 <dl><dt>{tr!(ui.destination)}</dt><dd>{move || text(&value.get(), if kind.webhook() { "url" } else { "host" })}</dd>
                     <dt>{tr!(ui.enabled)}</dt><dd>{move || if value.get()[if kind.webhook() { "is_active" } else { "enabled" }] == true { leptos_i18n::t_string!(i18n, ui.yes) } else { leptos_i18n::t_string!(i18n, ui.no) }}</dd>
@@ -543,6 +513,7 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                     </tr>
                 }).collect_view()}
             </DataTable>
+            </Show>
             <ResourceDeleteDialog deletion=deletion api=api token=token.get_value() on_deleted=deleted/>
         </ManagementPage>
     }

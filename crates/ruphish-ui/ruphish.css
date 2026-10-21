@@ -631,10 +631,6 @@
 }
 
 @layer primitives {
-  .loading-state { padding: var(--s3) 0; color: var(--muted); }
-  .loading-skeleton { display: grid; gap: var(--s3); margin-top: var(--s4); }
-  .loading-skeleton span { display: block; height: var(--s4); background: var(--canvas); border-radius: var(--r-sm); }
-  .loading-skeleton span:last-child { width: 65%; }
 }
 @layer features {
   .dashboard-stack { display: grid; gap: var(--s5); }

@@ -11,8 +11,8 @@ use axum::{
     routing::get,
 };
 use ruphish_application::reporting as app;
-use ruphish_contracts::errors::ErrorCode;
 use ruphish_contracts::reporting::Filter;
+use ruphish_contracts::{campaign_reads as reads, errors::ErrorCode};
 use serde_json::json;
 fn filter(f: &Filter) -> Result<app::Filter, Rejection> {
     let recipients = if f.recipients.is_empty() {
@@ -72,60 +72,53 @@ async fn read(
         .analysis(user.identity, id, filter(&f)?)
         .await
         .map_err(error)?;
-    let recipients: Vec<_> = a
-        .recipients
-        .into_iter()
-        .map(|r| {
-            json!({
-                "id": r.id,
-                "email": r.email,
-                "name": r.name,
-                "delivery": r.delivery,
-                "counts": r.counts,
-                "historical_reported": r.historical_reported,
+    let value = reads::Analysis {
+        id: a.id,
+        name: a.name,
+        status: a.status,
+        as_of: a.as_of,
+        audience: a.audience,
+        unique: a.unique,
+        progression: a.progression,
+        totals: a.totals,
+        recipient_total: a.recipient_total,
+        event_total: a.event_total,
+        bucket_seconds: a.bucket_seconds,
+        recipients: a
+            .recipients
+            .into_iter()
+            .map(|r| reads::AnalysisRecipient {
+                id: r.id,
+                email: r.email,
+                name: r.name,
+                delivery: r.delivery,
+                counts: r.counts,
+                historical_reported: r.historical_reported,
             })
-        })
-        .collect();
-    let events: Vec<_> = a
-        .events
-        .into_iter()
-        .map(|e| {
-            json!({
-                "id": e.id,
-                "recipient_id": e.recipient_id,
-                "email": e.email,
-                "time": e.time,
-                "kind": e.kind,
-                "source": e.source,
-                "password_present": e.password_present,
+            .collect(),
+        events: a
+            .events
+            .into_iter()
+            .map(|e| reads::AnalysisEvent {
+                id: e.id,
+                recipient_id: e.recipient_id,
+                email: e.email,
+                time: e.time,
+                kind: e.kind,
+                source: e.source,
+                password_present: e.password_present,
             })
-        })
-        .collect();
-    let buckets: Vec<_> = a
-        .buckets
-        .into_iter()
-        .map(|b| json!({"time":b.time,"counts":b.counts}))
-        .collect();
-    response(
-        StatusCode::OK,
-        &json!({
-            "id": a.id,
-            "name": a.name,
-            "status": a.status,
-            "as_of": a.as_of,
-            "audience": a.audience,
-            "unique": a.unique,
-            "progression": a.progression,
-            "totals": a.totals,
-            "recipient_total": a.recipient_total,
-            "event_total": a.event_total,
-            "recipients": recipients,
-            "events": events,
-            "buckets": buckets,
-            "bucket_seconds": a.bucket_seconds,
-        }),
-        None,
-    )
+            .collect(),
+        buckets: a
+            .buckets
+            .into_iter()
+            .map(|b| reads::Bucket {
+                time: b.time,
+                counts: b.counts,
+            })
+            .collect(),
+    };
+    response(StatusCode::OK, &json!(value), None)
 }
 async fn export(
     c: Context,

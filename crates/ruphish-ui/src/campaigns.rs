@@ -1,9 +1,9 @@
 //! Campaign preparation and operational delivery views within the shared shell.
+use crate::campaign_queries::CampaignQueries;
 use crate::{account::Api, feedback::Message, resources::ResourceAccess, shared::components::*};
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use leptos_router::hooks::{use_navigate, use_params_map, use_query_map};
 use ruphish_ui::campaign_state::Draft;
-use ruphish_ui::pagination::CursorPages;
 use ruphish_ui::{tr, trs};
 use serde_json::{Value, json};
 use wasm_bindgen::prelude::*;
@@ -34,53 +34,36 @@ fn list_mode(api: Api, analysis: bool, token: String) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
     let token = StoredValue::new(token);
     let filter = RwSignal::new(String::from(if analysis { "executions" } else { "all" }));
-    let rows = RwSignal::new(Vec::<Value>::new());
+    let queries = expect_context::<CampaignQueries>();
     let cursors = RwSignal::new(vec![String::new()]);
     let after = Memo::new(move |_| cursors.with(|v| v.last().cloned().unwrap_or_default()));
-    let next = RwSignal::new(None::<String>);
-    let busy = RwSignal::new(false);
-    let loaded = RwSignal::new(false);
-    let message = Message::new(String::new());
+    let read = queries
+        .directory
+        .observe(move || (filter.get(), after.get()));
+    let rows = Signal::derive(move || {
+        read.data
+            .get()
+            .map(|page| {
+                page.items
+                    .into_iter()
+                    .map(|row| json!(row))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    });
+    let next = Signal::derive(move || {
+        read.data
+            .get()
+            .and_then(|page| page.next_after)
+            .filter(|next| *next != after.get())
+    });
+    let busy = read.fetching;
+    let loaded = Signal::derive(move || read.data.with(Option::is_some));
     let delete_message = Message::new(String::new());
     let can_edit = editable() && !analysis;
-    let refresh = RwSignal::new(0u64);
     let deleting = RwSignal::new(None::<Value>);
     let mutating = RwSignal::new(false);
     let tasks = ruphish_ui::view_tasks::ViewTasks::default();
-    Effect::new(move |_| {
-        let generation = refresh.get();
-        let selected = filter.get();
-        let cursor = after.get();
-        busy.set(true);
-        loaded.set(false);
-        next.set(None);
-        tasks.spawn(async move {
-            let result = api
-                .get(&format!(
-                    "/api/campaigns/directory?after={cursor}&filter={selected}"
-                ))
-                .await;
-            if cursor != after.get_untracked()
-                || generation != refresh.get_untracked()
-                || selected != filter.get_untracked()
-            {
-                return;
-            }
-            match result {
-                Ok(value) => {
-                    rows.set(array(&value, "items"));
-                    next.set(value["next_after"].as_str().map(str::to_owned));
-                    loaded.set(true);
-                    message.clear();
-                }
-                Err(e) => {
-                    rows.set(Vec::new());
-                    message.error(e);
-                }
-            }
-            busy.set(false);
-        });
-    });
     let confirm = Callback::new(move |()| {
         let Some(target) = deleting.get_untracked() else {
             return;
@@ -98,13 +81,11 @@ fn list_mode(api: Api, analysis: bool, token: String) -> impl IntoView {
                 format!("/api/campaigns/{id}")
             };
             match api
-                .resource("DELETE", &path, &token.get_value(), None, None)
+                .command("DELETE", &path, &token.get_value(), None, None)
                 .await
             {
                 Ok(_) => {
-                    rows.update(|v| {
-                        v.retain(|r| r["kind"] != target["kind"] || r["id"] != target["id"])
-                    });
+                    queries.deleted(&text(&target, "kind"), &id);
                     deleting.set(None);
                     // Deleting the last row on a later page returns to the previous page.
                     batch(move || {
@@ -115,7 +96,6 @@ fn list_mode(api: Api, analysis: bool, token: String) -> impl IntoView {
                                 c.pop();
                             });
                         }
-                        refresh.update(|v| *v += 1);
                     });
                 }
                 Err(e) => delete_message.error(e),
@@ -124,9 +104,9 @@ fn list_mode(api: Api, analysis: bool, token: String) -> impl IntoView {
         });
     });
     view! {<ManagementPage><PageHeader title=Signal::derive(move || (if analysis { leptos_i18n::t_string!(i18n, ui.campaign_analysis) } else { leptos_i18n::t_string!(i18n, ui.campaigns) }).to_owned()) subtitle=Signal::derive(move || (if analysis { leptos_i18n::t_string!(i18n, ui.select_a_campaign_to_inspect_its_recorded_events_and_recipient_outcomes) } else { leptos_i18n::t_string!(i18n, ui.prepare_a_simulation_and_follow_its_delivery_progress) }).to_owned())>
-        <ActionButton disabled=Signal::derive(move||busy.get()||mutating.get()) on_click=move |_|refresh.update(|v|*v+=1)>{tr!(ui.refresh)}</ActionButton>
+        <ActionButton disabled=Signal::derive(move||busy.get()||mutating.get()) on_click=move |_|read.refresh.run(())>{tr!(ui.refresh)}</ActionButton>
         <ActionLink style=ButtonStyle::Primary hidden={!can_edit} href="/campaigns/new">{tr!(ui.create_campaign)}</ActionLink>
-    </PageHeader>{message.view()}<Show when=move||busy.get()><p role="status">{tr!(ui.loading_campaigns)}</p></Show>
+    </PageHeader><QueryStatus fetching=busy has_data=loaded error=read.error noun=trs!(ui.campaigns) refresh=read.refresh/>
     <TableToolbar title=trs!(ui.campaigns)><Show when=move||!analysis><Select label=trs!(ui.campaign_filter) value=Signal::derive(move||filter.get()) on_change=Callback::new(move|v:String|batch(move||{cursors.set(vec![String::new()]);filter.set(v);}))><option value="all">{tr!(ui.all_campaigns)}</option><option value="drafts">{tr!(ui.drafts)}</option><option value="active">{tr!(ui.active_campaigns_filter)}</option><option value="completed">{tr!(ui.completed_campaigns_filter)}</option></Select></Show></TableToolbar>
     <DataTable label=trs!(ui.campaigns) empty=Signal::derive(move||rows.get().is_empty()) headers=vec![trs!(ui.campaign),trs!(ui.lifecycle),trs!(ui.recipients),trs!(ui.launch),trs!(ui.actions)]>
         {move||rows.get().into_iter().map(|r|{
@@ -146,7 +126,7 @@ fn list_mode(api: Api, analysis: bool, token: String) -> impl IntoView {
                 </ResourceActions></td></tr>}
         }).collect_view()}
     </DataTable>
-    <Show when=move||loaded.get()&&!busy.get()&&rows.get().is_empty()><EmptyState title=Signal::derive(move||if filter.get()=="drafts"{leptos_i18n::t_string!(i18n,ui.no_drafts).to_owned()}else{leptos_i18n::t_string!(i18n,ui.no_campaigns_on_this_page).to_owned()})><p>{tr!(ui.create_a_campaign_to_select_an_audience_review_content_and_choose_a_schedule)}</p></EmptyState></Show>
+    <Show when=move||loaded.get()&&!busy.get()&&read.error.get().is_none()&&rows.get().is_empty()><EmptyState title=Signal::derive(move||if filter.get()=="drafts"{leptos_i18n::t_string!(i18n,ui.no_drafts).to_owned()}else{leptos_i18n::t_string!(i18n,ui.no_campaigns_on_this_page).to_owned()})><p>{tr!(ui.create_a_campaign_to_select_an_audience_review_content_and_choose_a_schedule)}</p></EmptyState></Show>
     <PaginationControls disabled=Signal::derive(move||busy.get()||mutating.get()) has_previous=Signal::derive(move||cursors.with(|c|c.len()>1)) has_next=Signal::derive(move||next.get().is_some()) on_previous=Callback::new(move|()|cursors.update(|c|{c.pop();})) on_next=Callback::new(move|()|{if let Some(cursor)=next.get_untracked(){cursors.update(|c|c.push(cursor));}})/>
     {move||deleting.get().map(|target|{let draft=target["kind"]=="draft";view!{<DeleteConfirmation title=if draft {trs!(ui.delete_draft)}else{trs!(ui.delete_campaign)} description=if draft {trs!(ui.delete_draft_description)}else{trs!(ui.campaign_history_will_be_removed_already_submitted_mail_cannot_be_recalled)} confirm_label=trs!(ui.delete) busy=Signal::derive(move||mutating.get()) message=delete_message on_confirm=confirm on_cancel=Callback::new(move|()|deleting.set(None))/>}})}
     </ManagementPage>}
@@ -170,7 +150,7 @@ fn input(draft: RwSignal<Draft>, key: &'static str, label: Signal<String>) -> im
 }
 fn selector(
     draft: RwSignal<Draft>,
-    resources: RwSignal<Value>,
+    resources: Signal<Value>,
     kind: &'static str,
     label: Signal<String>,
 ) -> impl IntoView {
@@ -178,7 +158,7 @@ fn selector(
         <option value="0">{tr!(ui.choose_a_resource)}</option>{move||array(&resources.get(),kind).into_iter().map(|r|view!{<option value=r["id"].to_string()>{text(&r,"name")}</option>}).collect_view()}
     </Select>}
 }
-fn domain_selector(draft: RwSignal<Draft>, resources: RwSignal<Value>) -> impl IntoView {
+fn domain_selector(draft: RwSignal<Draft>, resources: Signal<Value>) -> impl IntoView {
     let selected = move || {
         let value = text(&draft.get().value, "url");
         url::Url::parse(&value)
@@ -219,7 +199,13 @@ fn load_page_defaults(
         return;
     };
     tasks.spawn(async move {
-        let result = api.get(&format!("/api/pages/{id}")).await;
+        let result = crate::resource_queries::ResourceQueries::read_detail(
+            api,
+            crate::resources::Family::Pages,
+            &id.to_string(),
+        )
+        .await
+        .map(|(value, _)| value);
         let accepted = draft
             .try_update(|d| d.page_loaded(request, result.as_ref().ok()))
             .unwrap_or(false);
@@ -246,7 +232,7 @@ fn page_selector(
     tasks: ruphish_ui::view_tasks::ViewTasks,
     api: Api,
     draft: RwSignal<Draft>,
-    resources: RwSignal<Value>,
+    resources: Signal<Value>,
     message: Message,
 ) -> impl IntoView {
     view! {<Select label=trs!(ui.landing_page) value=Signal::derive(move||draft.get().value["selection"]["page"]["id"].to_string()) on_change=Callback::new(move|v:String|load_page_defaults(tasks,api,draft,v.parse::<i64>().unwrap_or(0),message))>
@@ -277,6 +263,7 @@ pub(super) fn create(
 ) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
+    let queries = expect_context::<CampaignQueries>();
     let tasks = ruphish_ui::view_tasks::ViewTasks::default();
     let token = StoredValue::new(token);
     let navigate = use_navigate();
@@ -293,48 +280,18 @@ pub(super) fn create(
         value: initial.unwrap_or_else(||json!({"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"capture_credentials":false,"capture_passwords":false,"redirect_url":""}})),
         ..Default::default()
     });
-    let resources = RwSignal::new(json!({}));
+    let resource_read = CampaignQueries::resources(true);
+    let resources = Signal::derive(move || resource_read.data.get().unwrap_or(Value::Null));
+    let resources_known = Signal::derive(move || resource_read.data.with(Option::is_some));
     let busy = RwSignal::new(false);
-    let loading = RwSignal::new(true);
+    let loading = resource_read.fetching;
     let step = RwSignal::new(initial_step);
     let message = Message::new(String::new());
     let can_edit = editable();
     crate::navigation::protect_draft(move || {
         draft.with(|d| d.generation != persistence.saved_generation.get() || d.launch.is_some())
     });
-    let reload = RwSignal::new(0u64);
     let recipient = RwSignal::new(String::new());
-    Effect::new(move |_| {
-        let _ = reload.get();
-        loading.set(true);
-        spawn_local(async move {
-            for (family, key) in [
-                ("groups", "groups"),
-                ("templates", "template"),
-                ("pages", "page"),
-                ("smtp", "smtp"),
-            ] {
-                match api.get(&format!("/api/{family}/summary")).await {
-                    Ok(v) => resources.update(|r| {
-                        r[key] = json!(array(
-                            &v,
-                            if family == "groups" {
-                                "groups"
-                            } else {
-                                "items"
-                            }
-                        ))
-                    }),
-                    Err(e) => message.error(e),
-                }
-            }
-            match api.get("/api/domains/validated/").await {
-                Ok(v) => resources.update(|r| r["domains"] = v),
-                Err(e) => message.error(e),
-            }
-            loading.set(false);
-        });
-    });
     let retry_review = RwSignal::new(0u64);
     let review_flow = StoredValue::new(ruphish_ui::campaign_state::ReviewFlow::default());
     // Review output/loading/error updates must not retrigger their own request.
@@ -342,7 +299,7 @@ pub(super) fn create(
         (
             step.get(),
             retry_review.get(),
-            loading.get(),
+            loading.get() || !resources_known.get() || resource_read.error.get().is_some(),
             draft.with(|d| (d.generation, d.policy_ready(), d.launch.is_some())),
         )
     });
@@ -367,7 +324,11 @@ pub(super) fn create(
                     None,
                 )
                 .await
-                .map(|(value, _)| value);
+                .and_then(|(value, _)| {
+                    ruphish_contracts::campaign_workflow::validate_review(&value)
+                        .map_err(|_| api.invalid_read())?;
+                    Ok(value)
+                });
             draft.update(|state| {
                 state.reviewed(request, result);
             });
@@ -387,7 +348,7 @@ pub(super) fn create(
         busy.set(true);
         tasks.spawn(async move {
             match api
-                .resource(
+                .command(
                     "POST",
                     "/api/campaigns/test",
                     &token.get_value(),
@@ -481,6 +442,7 @@ pub(super) fn create(
             );
             match api.launch(&path, &token.get_value(), &key, &request).await {
                 Ok(v) => {
+                    queries.launched(&persistence.id.get_untracked(), &v["id"].to_string());
                     draft.update(|d| {
                         d.generation = persistence.saved_generation.get_untracked();
                         d.launch = None;
@@ -498,9 +460,9 @@ pub(super) fn create(
             busy.set(false);
         });
     };
-    view! {<ManagementPage><BackLink href="/campaigns">{tr!(ui.back_to_campaigns)}</BackLink><PageHeader title=Signal::derive(move||if persistence.revision.get().is_some(){leptos_i18n::t_string!(i18n,ui.edit_campaign_draft).to_string()}else{leptos_i18n::t_string!(i18n,ui.create_campaign).to_string()}) subtitle=trs!(ui.review_the_audience_content_and_schedule_before_launching)><span role="status">{move||if persistence.saving.get(){leptos_i18n::t_string!(i18n,ui.draft_saving).to_string()}else if draft.with(|d|d.generation!=persistence.saved_generation.get())||persistence.revision.get().is_none(){leptos_i18n::t_string!(i18n,ui.draft_unsaved).to_string()}else{format!("{}: {}",leptos_i18n::t_string!(i18n,ui.draft_saved),instant(&persistence.modified.get()))}}</span><ActionButton disabled=Signal::derive(move||busy.get()||loading.get()||draft.with(|d|d.launch.is_some())) on_click=move |_|reload.update(|v|*v+=1)>{tr!(ui.refresh_resources)}</ActionButton></PageHeader>
-        {message.view()}<Show when=move||loading.get()><p role="status">{tr!(ui.loading_resources)}</p></Show>
-        <Show when=move||!loading.get() && ["template","page","smtp","groups"].into_iter().any(|key| {
+    view! {<ManagementPage><BackLink href="/campaigns">{tr!(ui.back_to_campaigns)}</BackLink><PageHeader title=Signal::derive(move||if persistence.revision.get().is_some(){leptos_i18n::t_string!(i18n,ui.edit_campaign_draft).to_string()}else{leptos_i18n::t_string!(i18n,ui.create_campaign).to_string()}) subtitle=trs!(ui.review_the_audience_content_and_schedule_before_launching)><span role="status">{move||if persistence.saving.get(){leptos_i18n::t_string!(i18n,ui.draft_saving).to_string()}else if draft.with(|d|d.generation!=persistence.saved_generation.get())||persistence.revision.get().is_none(){leptos_i18n::t_string!(i18n,ui.draft_unsaved).to_string()}else{format!("{}: {}",leptos_i18n::t_string!(i18n,ui.draft_saved),instant(&persistence.modified.get()))}}</span><ActionButton disabled=Signal::derive(move||busy.get()||loading.get()||draft.with(|d|d.launch.is_some())) on_click=move |_|resource_read.refresh.run(())>{tr!(ui.refresh_resources)}</ActionButton></PageHeader>
+        {message.view()}<QueryStatus fetching=loading has_data=resources_known error=resource_read.error noun=trs!(ui.resources) refresh=resource_read.refresh/>
+        <Show when=move||resources_known.get() && !loading.get() && ["template","page","smtp","groups"].into_iter().any(|key| {
             let value=draft.get().value;
             let selections=if key=="groups"{array(&value["selection"],"groups")}else{vec![value["selection"][key].clone()]};
             selections.iter().any(|selected|selected["id"].as_i64().is_some_and(|id|id>0)&&!array(&resources.get(),key).iter().any(|r|r["id"]==selected["id"]))
@@ -510,7 +472,7 @@ pub(super) fn create(
         <section hidden=move||step.get()!=0><h2>{tr!(ui.audience)}</h2>{input(draft, "name", trs!(ui.campaign_name))}
         <p>{tr!(ui.choose_recipient_groups_overlaps_are_counted_once_by_exact_email_address_the_fir)}</p>
         {move||array(&resources.get(),"groups").into_iter().map(|r|{let id=r["id"].as_i64().unwrap_or(0);view!{<Checkbox label=leptos_i18n::t_string!(i18n, messages.group_count, name = text(&r,"name"), count = r["num_targets"].to_string()) checked=Signal::derive(move||draft.with(|d|array(&d.value["selection"],"groups").iter().any(|r|r["id"]==id))) on_toggle=Callback::new(move|checked|draft.update(|d|d.edit(|v|{let mut groups=array(&v["selection"],"groups");groups.retain(|r|r["id"]!=id);if checked{groups.push(json!({"id":id}));}v["selection"]["groups"]=json!(groups);})))/>}}).collect_view()}
-        {move||array(&draft.get().value["selection"],"groups").into_iter().filter(|selected|!loading.get()&&!array(&resources.get(),"groups").iter().any(|r|r["id"]==selected["id"])).map(|selected|{let id=selected["id"].as_i64().unwrap_or(0);view!{<Checkbox label=leptos_i18n::t_string!(i18n,messages.unavailable_draft_group,id=id.to_string()) checked=true on_toggle=Callback::new(move|_:bool|draft.update(|d|d.edit(|v|{let mut groups=array(&v["selection"],"groups");groups.retain(|r|r["id"]!=id);v["selection"]["groups"]=json!(groups);}))) />}}).collect_view()}
+        {move||array(&draft.get().value["selection"],"groups").into_iter().filter(|selected|resources_known.get()&&!loading.get()&&!array(&resources.get(),"groups").iter().any(|r|r["id"]==selected["id"])).map(|selected|{let id=selected["id"].as_i64().unwrap_or(0);view!{<Checkbox label=leptos_i18n::t_string!(i18n,messages.unavailable_draft_group,id=id.to_string()) checked=true on_toggle=Callback::new(move|_:bool|draft.update(|d|d.edit(|v|{let mut groups=array(&v["selection"],"groups");groups.retain(|r|r["id"]!=id);v["selection"]["groups"]=json!(groups);}))) />}}).collect_view()}
         <a href="/groups/new" target="_blank" rel="noopener">{tr!(ui.create_a_group_in_a_new_tab)}</a></section>
         <section hidden=move||step.get()!=1><h2>{tr!(ui.content_and_destination)}</h2><div class="resource-columns">{selector(draft, resources, "template", trs!(ui.email_template))}{selector(draft, resources, "smtp", trs!(ui.sending_profile))}{page_selector(tasks,api,draft,resources,message)}{domain_selector(draft,resources)}</div>
         <ul class="campaign-resource-links" aria-label=tr!(ui.create_resources_in_a_new_tab)><li><a href="/templates/new" target="_blank" rel="noopener">{tr!(ui.create_template)}</a></li><li><a href="/pages/new" target="_blank" rel="noopener">{tr!(ui.create_landing_page)}</a></li><li><a href="/smtp/new" target="_blank" rel="noopener">{tr!(ui.create_sending_profile)}</a></li></ul><p class="resource-usage">{tr!(ui.changes_to_saved_templates_or_sending_profiles_can_affect_scheduled_emails_and_r)}</p>
@@ -545,79 +507,57 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
     let token = StoredValue::new(token);
     let navigate = use_navigate();
     let can_edit = editable();
-    let data = RwSignal::new(Value::Null);
-    let pages = RwSignal::new(CursorPages::default());
-    let after = Memo::new(move |_| pages.with(CursorPages::after));
-    let refresh = RwSignal::new(0u64);
+    let queries = expect_context::<CampaignQueries>();
+    let cursors = RwSignal::new(Vec::<i64>::new());
+    let after = Memo::new(move |_| cursors.with(|v| v.last().copied().unwrap_or(0)));
+    let read = queries
+        .delivery
+        .observe(move || (id.get_value(), after.get()));
+    let data = Signal::derive(move || {
+        read.data
+            .get()
+            .map(|snapshot| snapshot.value)
+            .unwrap_or(Value::Null)
+    });
+    let confirmed = Signal::derive(move || read.data.with(Option::is_some));
+    let next = Signal::derive(move || {
+        data.get()["next_after"]
+            .as_i64()
+            .filter(|next| *next > after.get())
+    });
+    let loading = read.fetching;
     let tasks = ruphish_ui::view_tasks::ViewTasks::default();
-    let loading = RwSignal::new(false);
     let busy = RwSignal::new(false);
     let message = Message::new(String::new());
-    let updated = RwSignal::new(String::new());
-    let failures = RwSignal::new(0u32);
-    let next_poll = RwSignal::new(0f64);
+    let failures = StoredValue::new(0u32);
+    let next_poll = StoredValue::new(0f64);
+    let was_fetching = StoredValue::new(false);
     let action = RwSignal::new(None::<(String, Value)>);
     Effect::new(move |_| {
-        let generation = refresh.get();
-        let cursor = after.get();
-        if loading.get_untracked() {
-            return;
-        }
-        loading.set(true);
-        tasks.spawn(async move {
-            let result = api
-                .get(&format!(
-                    "/api/campaigns/{}/delivery?after={cursor}",
-                    id.get_value()
-                ))
-                .await;
-            if generation == refresh.get_untracked() && cursor == after.get_untracked() {
-                match result {
-                    Ok(v) => {
-                        pages.update(|p| {
-                            p.received(cursor, v["next_after"].as_i64());
-                        });
-                        data.set(v);
-                        updated.set(instant(&Value::from(
-                            ruphish_domain::datetime::now().as_second(),
-                        )));
-                        if failures.get_untracked() > 0 {
-                            message.clear();
-                        }
-                        failures.set(0);
-                    }
-                    Err(e) => {
-                        failures.update(|f| *f = (*f + 1).min(5));
-                        message.error(leptos_i18n::t_string!(
-                            i18n,
-                            messages.refresh_failed_displayed_data_may_be_stale_arg0,
-                            arg0 = (e).to_string()
-                        ));
-                    }
+        let fetching = read.fetching.get();
+        if !fetching && was_fetching.get_value() {
+            failures.update_value(|n| {
+                *n = if read.error.get_untracked().is_some() {
+                    (*n + 1).min(5)
+                } else {
+                    0
                 }
-            }
-            loading.set(false);
-            if generation != refresh.get_untracked() || cursor != after.get_untracked() {
-                refresh.update(|v| *v += 1);
-            }
+            });
             next_poll
-                .set(js_sys::Date::now() + 5000.0 * 2f64.powi(failures.get_untracked() as i32));
-        });
+                .set_value(js_sys::Date::now() + 5000.0 * 2f64.powi(failures.get_value() as i32));
+        }
+        was_fetching.set_value(fetching);
     });
-    let focus = window_event_listener(leptos::ev::focus, move |_| {
-        refresh.update(|v| *v += 1);
-    });
-    on_cleanup(move || focus.remove());
     if let Ok(timer) = set_interval_with_handle(
         move || {
             if !loading.get_untracked()
                 && !busy.get_untracked()
-                && js_sys::Date::now() >= next_poll.get_untracked()
+                && js_sys::Date::now() >= next_poll.get_value()
                 && web_sys::window()
                     .and_then(|w| w.document())
                     .is_some_and(|d| !d.hidden())
             {
-                refresh.update(|r| *r += 1);
+                read.refresh.run(());
             }
         },
         std::time::Duration::from_secs(1),
@@ -634,7 +574,11 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
             match api
                 .get(&format!("/api/campaigns/{}/draft", id.get_value()))
                 .await
-            {
+                .and_then(|value| {
+                    ruphish_contracts::campaign_workflow::validate_duplicate(&value)
+                        .map_err(|_| api.invalid_read())?;
+                    Ok(value)
+                }) {
                 Ok(value) => {
                     let inserted = drafts
                         .ok_or_else(|| {
@@ -690,16 +634,17 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
                 ),
             };
             match api
-                .resource(method, &path, &token.get_value(), body.as_ref(), None)
+                .command(method, &path, &token.get_value(), body.as_ref(), None)
                 .await
             {
                 Ok(_) => {
                     action.set(None);
                     message.status(leptos_i18n::t_string!(i18n, ui.campaign_updated).to_owned());
                     if kind == "delete" {
+                        queries.deleted("campaign", &id.get_value());
                         navigate("/campaigns", Default::default());
                     } else {
-                        refresh.update(|r| *r += 1);
+                        queries.changed(&id.get_value());
                     }
                 }
                 Err(e) => message.error(e),
@@ -707,21 +652,24 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
             busy.set(false);
         });
     });
-    view! {<ManagementPage><BackLink href="/campaigns">{tr!(ui.back_to_campaigns)}</BackLink><PageHeader title=Signal::derive(move||text(&data.get()["campaign"],"name")) subtitle=Signal::derive(move||leptos_i18n::t_string!(i18n, messages.arg0_last_refreshed_arg1, arg0 = ruphish_ui::localization::event_label(i18n, &text(&data.get()["campaign"],"status")), arg1 = (updated.get()).to_string()))>
-        <ActionLink href=format!("/analysis/{}",id.get_value())>{tr!(ui.view_analysis)}</ActionLink><ActionButton disabled=Signal::derive(move||busy.get()) busy=Signal::derive(move||loading.get().to_string()) on_click=move |_|refresh.update(|r|*r+=1)>{move||if loading.get(){leptos_i18n::t_string!(i18n, ui.refreshing)}else{leptos_i18n::t_string!(i18n, ui.refresh)}}</ActionButton><ActionButton hidden=!can_edit disabled=Signal::derive(move||busy.get()) on_click=duplicate>{tr!(ui.duplicate)}</ActionButton><ActionButton hidden=!can_edit disabled=Signal::derive(move||busy.get()||data.get()["campaign"]["status"]== "Completed") on_click=move |_|action.set(Some(("complete".into(),Value::Null)))>{tr!(ui.complete_campaign)}</ActionButton><ActionButton style=ButtonStyle::Ghost hidden=!can_edit disabled=Signal::derive(move||busy.get()) on_click=move |_|action.set(Some(("delete".into(),Value::Null)))>{tr!(ui.delete)}</ActionButton>
-    </PageHeader>{message.view()}<Show when=move||data.get()["mailer_enabled"]==false><p class="form-message error">{tr!(ui.delivery_processing_is_disabled_in_this_process)}</p></Show>
+    view! {<ManagementPage><BackLink href="/campaigns">{tr!(ui.back_to_campaigns)}</BackLink><PageHeader title=Signal::derive(move||if confirmed.get(){text(&data.get()["campaign"],"name")}else{leptos_i18n::t_string!(i18n,ui.campaign).to_owned()}) subtitle=Signal::derive(move||leptos_i18n::t_string!(i18n, messages.arg0_last_refreshed_arg1, arg0 = ruphish_ui::localization::event_label(i18n, &text(&data.get()["campaign"],"status")), arg1 = (read.data.get().map(|snapshot| instant(&json!(snapshot.refreshed_at))).unwrap_or_default()).to_string()))>
+        <ActionLink href=format!("/analysis/{}",id.get_value())>{tr!(ui.view_analysis)}</ActionLink><ActionButton disabled=Signal::derive(move||busy.get()) busy=Signal::derive(move||loading.get().to_string()) on_click=move |_|read.refresh.run(())>{move||if loading.get(){leptos_i18n::t_string!(i18n, ui.refreshing)}else{leptos_i18n::t_string!(i18n, ui.refresh)}}</ActionButton><ActionButton hidden=!can_edit disabled=Signal::derive(move||busy.get()||!confirmed.get()) on_click=duplicate>{tr!(ui.duplicate)}</ActionButton><ActionButton hidden=!can_edit disabled=Signal::derive(move||busy.get()||!confirmed.get()||data.get()["campaign"]["status"]== "Completed") on_click=move |_|action.set(Some(("complete".into(),Value::Null)))>{tr!(ui.complete_campaign)}</ActionButton><ActionButton style=ButtonStyle::Ghost hidden=!can_edit disabled=Signal::derive(move||busy.get()||!confirmed.get()) on_click=move |_|action.set(Some(("delete".into(),Value::Null)))>{tr!(ui.delete)}</ActionButton>
+    </PageHeader>{message.view()}<QueryStatus fetching=loading has_data=confirmed error=read.error noun=trs!(ui.campaign_delivery) refresh=read.refresh/><Show when=move||data.get()["mailer_enabled"]==false><p class="form-message error">{tr!(ui.delivery_processing_is_disabled_in_this_process)}</p></Show>
     <p>{tr!(ui.acceptance_means_the_smtp_server_accepted_the_message_participant_credentials_ar)}</p>
+    <Show when=move||confirmed.get()>
     {move||campaign_context(&data.get()["campaign"])}
     {delivery_progress(data)}
     <DataTable label=trs!(ui.campaign_delivery) headers=vec![trs!(ui.history), trs!(ui.recipient), trs!(ui.delivery), trs!(ui.next_last_due), trs!(ui.attempts_and_actions)]>
-        <For each=move||{array(&data.get(),"items").into_iter().filter(|_|pages.with(CursorPages::loaded)).filter_map(|r|r["id"].as_i64()).collect::<Vec<_>>()} key=|id|*id children=move|result|{crate::campaign_delivery::recipient_row(api,id,result,data,crate::campaign_delivery::Controls {busy,can_edit,action})}/>
-    </DataTable><PageControls pages=pages disabled=Signal::derive(move||loading.get()||busy.get())/>
-    <section class="resource-section"><h2>{tr!(ui.recent_activity)}</h2><p>{tr!(ui.latest_50_campaign_events_expand_a_recipient_above_for_their_timeline_and_earlie)}</p><DataTable label=trs!(ui.campaign_activity) headers=vec![trs!(ui.time),trs!(ui.recipient),trs!(ui.event)]>{move||array(&data.get(),"activity").into_iter().map(|e|view!{<tr><td>{instant(&e["time"])}</td><td>{text(&e,"email")}</td><td>{ruphish_ui::localization::event_label(i18n,&text(&e,"message"))}</td></tr>}).collect_view()}</DataTable></section>
+        <For each=move||{array(&data.get(),"items").into_iter().filter_map(|r|r["id"].as_i64()).collect::<Vec<_>>()} key=|id|*id children=move|result|{crate::campaign_delivery::recipient_row(api,id,result,data,crate::campaign_delivery::Controls {busy,can_edit,action})}/>
+    </DataTable></Show>
+    <PaginationControls disabled=Signal::derive(move||loading.get()||busy.get()) has_previous=Signal::derive(move||!cursors.with(Vec::is_empty)) has_next=Signal::derive(move||next.get().is_some()) on_previous=Callback::new(move|()|cursors.update(|v|{v.pop();})) on_next=Callback::new(move|()|{if let Some(next)=next.get_untracked(){cursors.update(|v|v.push(next));}})/>
+    <Show when=move||confirmed.get()>
+    <section class="resource-section"><h2>{tr!(ui.recent_activity)}</h2><p>{tr!(ui.latest_50_campaign_events_expand_a_recipient_above_for_their_timeline_and_earlie)}</p><DataTable label=trs!(ui.campaign_activity) headers=vec![trs!(ui.time),trs!(ui.recipient),trs!(ui.event)]>{move||array(&data.get(),"activity").into_iter().map(|e|view!{<tr><td>{instant(&e["time"])}</td><td>{text(&e,"email")}</td><td>{ruphish_ui::localization::event_label(i18n,&text(&e,"message"))}</td></tr>}).collect_view()}</DataTable></section></Show>
     {move||action.get().map(|(kind,_)|{let (title,description,label)=match kind.as_str(){"delete"=>(leptos_i18n::t_string!(i18n, ui.delete_campaign),leptos_i18n::t_string!(i18n, ui.campaign_history_will_be_removed_already_submitted_mail_cannot_be_recalled),leptos_i18n::t_string!(i18n, ui.delete_campaign_2)),"complete"=>(leptos_i18n::t_string!(i18n, ui.complete_campaign_2),leptos_i18n::t_string!(i18n, ui.pending_delivery_will_stop_already_armed_or_in_flight_submissions_may_still_fini),leptos_i18n::t_string!(i18n, ui.complete_campaign)),"resend_unknown"=>(leptos_i18n::t_string!(i18n, ui.resend_despite_an_unknown_outcome),leptos_i18n::t_string!(i18n, ui.check_your_mail_server_first_the_earlier_attempt_may_have_been_accepted_resendin),leptos_i18n::t_string!(i18n, ui.resend)),"confirm_accepted"=>(leptos_i18n::t_string!(i18n, ui.confirm_smtp_acceptance),leptos_i18n::t_string!(i18n, ui.use_the_attempt_message_id_to_verify_acceptance_in_your_mail_server_before_recor),leptos_i18n::t_string!(i18n, ui.confirm_accepted)),_=>(leptos_i18n::t_string!(i18n, ui.retry_this_delivery),leptos_i18n::t_string!(i18n, ui.correct_the_reported_content_account_or_sending_profile_problem_before_retrying),leptos_i18n::t_string!(i18n, ui.retry))};let counts=data.get_untracked();let description=if matches!(kind.as_str(),"complete"|"delete"){leptos_i18n::t_string!(i18n, messages.arg0_pending_arg1_preparing_arg2_submitting_arg3, arg0 = (description).to_string(), arg1 = (["ready","retry","blocked"].iter().map(|k|counts["counts"][*k].as_i64().unwrap_or(0)).sum::<i64>()).to_string(), arg2 = (counts["counts"]["preparing"].as_i64().unwrap_or(0)).to_string(), arg3 = (counts["counts"]["submitting"].as_i64().unwrap_or(0)).to_string())}else{description.to_owned()};view!{<DeleteConfirmation title=title description=description confirm_label=label busy=Signal::derive(move||busy.get()) on_confirm=confirm on_cancel=Callback::new(move|()|action.set(None)) message=message/>}})}
     </ManagementPage>}
 }
 
-fn delivery_progress(data: RwSignal<Value>) -> impl IntoView {
+fn delivery_progress(data: Signal<Value>) -> impl IntoView {
     let states = [
         (
             "ready",

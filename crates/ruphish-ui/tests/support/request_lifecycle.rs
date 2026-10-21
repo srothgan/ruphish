@@ -1,6 +1,6 @@
 //! Real Leptos owners/effects; no browser automation or arbitrary sleeps.
 use leptos::prelude::*;
-use ruphish_ui::{domain_state::Details, recipient_history::History, view_tasks::ViewTasks};
+use ruphish_ui::{recipient_history::History, view_tasks::ViewTasks};
 use std::{cell::Cell, rc::Rc};
 use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::JsFuture;
@@ -29,18 +29,18 @@ impl Gate {
 }
 
 #[wasm_bindgen_test]
-async fn focus_refresh_during_an_active_read_cannot_strand_page_or_domain_loading() {
+async fn effect_rerun_during_an_active_view_task_cannot_strand_loading() {
     let _ = any_spawner::Executor::init_wasm_bindgen();
     let owner = Owner::new();
     let started = Gate::new();
     let response = Gate::new();
     let rerun = Gate::new();
     let done = Gate::new();
-    let (refresh, loading, detail) = owner.with(|| {
+    let (refresh, loading, error) = owner.with(|| {
         let tasks = ViewTasks::default();
         let refresh = RwSignal::new(0);
         let loading = RwSignal::new(false);
-        let detail = RwSignal::new(Details::default());
+        let error = RwSignal::new(None::<String>);
         let (started, response, rerun, done) = (
             started.clone(),
             response.clone(),
@@ -55,18 +55,17 @@ async fn focus_refresh_during_an_active_read_cannot_strand_page_or_domain_loadin
             if loading.get_untracked() {
                 return;
             }
-            let ticket = detail.try_update(Details::refresh).flatten().unwrap();
             loading.set(true);
             let (started, response, done) = (started.clone(), response.clone(), done.clone());
             tasks.spawn(async move {
                 started.release();
                 response.wait().await;
-                detail.update(|d| d.received(ticket, Err("controlled failure".into()), false));
+                error.set(Some("controlled failure".into()));
                 loading.set(false);
                 done.release();
             });
         });
-        (refresh, loading, detail)
+        (refresh, loading, error)
     });
     started.wait().await;
     refresh.set(1); // focus/poll/mutation reruns and cleans the effect while Fetch is pending
@@ -74,11 +73,7 @@ async fn focus_refresh_during_an_active_read_cannot_strand_page_or_domain_loadin
     response.release();
     done.wait().await;
     assert!(!loading.get_untracked());
-    assert!(detail.with_untracked(|d| d.reading.is_none() && d.error.is_some()));
-    assert!(
-        detail.try_update(Details::refresh).flatten().is_some(),
-        "Retry must be admitted without reloading the document"
-    );
+    assert!(error.get_untracked().is_some());
     owner.cleanup();
 }
 

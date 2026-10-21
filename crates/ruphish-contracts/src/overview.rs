@@ -85,6 +85,7 @@ pub struct Attention {
     /// Current failed, blocked or uncertain deliveries in unfinished campaigns.
     pub delivery_problems: i64,
     /// The soonest future scheduled launch, if any.
+    #[serde(deserialize_with = "crate::nullable")]
     pub next_launch: Option<NextLaunch>,
 }
 
@@ -109,6 +110,7 @@ pub struct PostureResponse {
     /// all, 7d, 30d or 365d.
     pub window: String,
     /// Inclusive acceptance-time lower bound; absent for all time.
+    #[serde(deserialize_with = "crate::nullable")]
     pub since: Option<i64>,
     /// Inclusive server observation time in Unix seconds.
     pub as_of: i64,
@@ -116,6 +118,7 @@ pub struct PostureResponse {
     #[serde(flatten)]
     pub counts: Posture,
     /// Preceding equal-length period, absent for all time.
+    #[serde(deserialize_with = "crate::nullable")]
     pub previous: Option<PreviousPeriod>,
 }
 

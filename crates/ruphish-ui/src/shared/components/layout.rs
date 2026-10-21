@@ -36,9 +36,3 @@ pub(crate) fn FormFooter(
 pub(crate) fn EmptyState(#[prop(into)] title: Signal<String>, children: Children) -> impl IntoView {
     view! { <div class="management-empty"><h2>{move || title.get()}</h2>{children()}</div> }
 }
-
-/// Shared readable progress state with decorative, static skeleton lines.
-#[component]
-pub(crate) fn LoadingState(label: Signal<String>) -> impl IntoView {
-    view! {<div class="loading-state" role="status"><span>{label}</span><div class="loading-skeleton" aria-hidden="true"><span></span><span></span><span></span></div></div>}
-}

@@ -6,11 +6,10 @@ pub mod localization;
 pub mod analysis_state;
 pub mod campaign_state;
 pub mod deletion_state;
-pub mod domain_state;
 #[cfg(target_arch = "wasm32")]
 pub mod import_drafts;
 pub mod import_state;
-pub mod pagination;
+pub mod preference_state;
 pub mod preview_state;
 pub mod recipient_history;
 pub mod resource_state;
@@ -22,6 +21,9 @@ pub mod browser_http;
 
 #[cfg(target_arch = "wasm32")]
 pub mod view_tasks;
+
+#[cfg(target_arch = "wasm32")]
+pub mod query;
 
 /// Exported Go template fields offered by the editor.
 pub const VARIABLES: &[&str] = &[

@@ -710,6 +710,7 @@
     "the_request_failed_or_timed_out_try_again": "The request failed or timed out. Try again.",
     "the_request_failed_or_timed_out_its_outcome_is_unconfirmed_refresh_the_saved_sta": "The request failed or timed out; its outcome is unconfirmed. Refresh the saved state before retrying.",
     "invalid_transport_response": "Invalid transport response",
+    "invalid_read_response": "The server response is missing required data or contains invalid fields. Try refreshing.",
     "the_server_returned_an_invalid_json_response_refresh_before_retrying_an_operatio": "The server returned an invalid JSON response. Refresh before retrying an operation.",
     "invalid_request_method": "Invalid request method",
     "unsupported_request_method": "Unsupported request method",

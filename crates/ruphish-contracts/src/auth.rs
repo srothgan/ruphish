@@ -3,7 +3,7 @@ use crate::legacy::Timestamp;
 use serde::{Deserialize, Serialize};
 
 /// Legacy public role metadata.
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Role {
     /// Stable role name.
     pub slug: String,
@@ -29,6 +29,20 @@ pub struct User {
     pub account_locked: bool,
     /// Most recent successful login.
     pub last_login: Timestamp,
+}
+/// User-list projection excluding the API credential and unused login history.
+#[derive(Clone, Debug, Deserialize)]
+pub struct UserSummary {
+    /// Persistent identifier.
+    pub id: i64,
+    /// Exact login name.
+    pub username: String,
+    /// Role metadata.
+    pub role: Role,
+    /// Mandatory password setup.
+    pub password_change_required: bool,
+    /// Account is disabled.
+    pub account_locked: bool,
 }
 /// Full legacy create/update input; an empty update password preserves its hash.
 #[derive(Default, Serialize, Deserialize)]

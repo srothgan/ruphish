@@ -16,6 +16,8 @@ Entering the review step automatically validates current resource selections and
 
 A failed save keeps the form values. Retry after resolving the connection or validation error. Changes made after the last confirmed save remain unsaved and are subject to the shared navigation warning.
 
+Directory and saved-detail refreshes keep the last confirmed data when a read fails, show a localized stale-data message, and offer retry. Changing the directory filter or page does not display another selection's rows. A confirmed deletion removes the draft from cached directory pages before refreshing them. Background resource refreshes update the available choices without replacing unsaved draft fields.
+
 If another tab changed the draft, the server rejects a stale edit with `RESOURCE_CHANGED`. Keep the unsaved values before reloading and reconciling with the newer saved version. A deleted resource does not erase the draft; select a replacement before launch. Deleting a draft removes its configuration without affecting any existing campaign.
 
 ## Draft API

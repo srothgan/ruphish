@@ -2,6 +2,7 @@
 use crate::{
     account::Api,
     analysis_chart::{ActivityChart, Bucket, labels},
+    campaign_queries::CampaignQueries,
     campaigns::{array, text},
     feedback::Message,
     shared::components::*,
@@ -63,12 +64,13 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
     let source = RwSignal::new(String::new());
     let from = RwSignal::new(String::new());
     let until = RwSignal::new(String::new());
-    let data = RwSignal::new(Value::Null);
-    let loading = RwSignal::new(false);
-    let loaded = RwSignal::new(false);
-    let confirmed_filter = RwSignal::new(None::<Filter>);
-    let refresh = RwSignal::new(0u64);
-    let generation = RwSignal::new(0u64);
+    let queries = expect_context::<CampaignQueries>();
+    let read = queries
+        .analysis
+        .observe(move || CampaignQueries::analysis_key(id, &filters.get()));
+    let data = Signal::derive(move || read.data.get().unwrap_or(Value::Null));
+    let loading = read.fetching;
+    let loaded = Signal::derive(move || read.data.with(Option::is_some));
     let message = Message::new(String::new());
     let go = move |filter: Filter| {
         navigate.with_value(|navigate| {
@@ -92,38 +94,6 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
         from.set(local_input(filter.from));
         until.set(local_input(filter.until));
     });
-    Effect::new(move |_| {
-        let filter = filters.get();
-        refresh.get();
-        let current = generation.get_untracked() + 1;
-        generation.set(current);
-        loading.set(true);
-        if confirmed_filter.get_untracked().as_ref() != Some(&filter) {
-            loaded.set(false);
-        }
-        spawn_local(async move {
-            let result = api
-                .get(&address(
-                    &format!("/api/campaigns/{id}/analysis"),
-                    &filter,
-                    false,
-                ))
-                .await;
-            if current != generation.get_untracked() {
-                return;
-            }
-            match result {
-                Ok(value) => {
-                    data.set(value);
-                    confirmed_filter.set(Some(filter));
-                    loaded.set(true);
-                    message.clear();
-                }
-                Err(error) => message.error(error),
-            }
-            loading.set(false);
-        });
-    });
     let option_search = RwSignal::new(String::new());
     let option_state = RwSignal::new(ruphish_ui::select_options::Options::default());
     let fetch_options = move |request: ruphish_ui::select_options::Request| {
@@ -133,12 +103,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                 offset: request.offset,
                 ..Default::default()
             };
-            let result = api
-                .get(&address(
-                    &format!("/api/campaigns/{id}/analysis"),
-                    &filter,
-                    false,
-                ))
+            let result = CampaignQueries::read_analysis(api, id, &filter)
                 .await
                 .map(|value| {
                     let rows = array(&value, "recipients")
@@ -197,7 +162,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                     ..Default::default()
                 };
                 if filter == filters.get_untracked() {
-                    refresh.update(|r| *r += 1);
+                    read.refresh.run(());
                 } else {
                     go(filter);
                 }
@@ -260,7 +225,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
             })>{move || if recipient.is_some(){leptos_i18n::t_string!(i18n, ui.back_to_campaign_analysis)}else{leptos_i18n::t_string!(i18n, ui.back_to_analysis)}}</BackLink>
             <PageHeader title=Signal::derive(move || {let name=text(&data.get(),"name");if name.is_empty(){leptos_i18n::t_string!(i18n, ui.campaign).into()}else{name}})
                 subtitle=Signal::derive(move || if loaded.get(){leptos_i18n::t_string!(i18n, messages.updated_arg0, arg0 = (minute(&data.get()["as_of"])).to_string())}else if loading.get(){leptos_i18n::t_string!(i18n, ui.loading_analysis).into()}else{leptos_i18n::t_string!(i18n, ui.refresh_failed_retry_to_load_current_results).into()})>
-                <ActionButton busy=Signal::derive(move ||loading.get().to_string()) on_click=move |_|refresh.update(|r|*r+=1)>{move ||if loading.get(){leptos_i18n::t_string!(i18n, ui.refreshing)}else{leptos_i18n::t_string!(i18n, ui.refresh)}}</ActionButton>
+                <ActionButton busy=Signal::derive(move ||loading.get().to_string()) on_click=move |_|read.refresh.run(())>{move ||if loading.get(){leptos_i18n::t_string!(i18n, ui.refreshing)}else{leptos_i18n::t_string!(i18n, ui.refresh)}}</ActionButton>
                 <ActionMenu label=trs!(ui.export) style=ButtonStyle::Primary disabled=Signal::derive(move ||downloading.get()||!loaded.get())>
                     <ActionButton disabled=Signal::derive(move ||downloading.get()||!loaded.get()) on_click=move |_|export("csv","recipients")>{tr!(ui.recipients_csv)}</ActionButton>
                     <ActionButton disabled=Signal::derive(move ||downloading.get()||!loaded.get()) on_click=move |_|export("csv","events")>{tr!(ui.events_csv)}</ActionButton>
@@ -269,6 +234,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                 <ActionLink href=format!("/campaigns/{id}")>{tr!(ui.back_to_campaign)}</ActionLink>
             </PageHeader>
             {message.view()}
+            <QueryStatus fetching=loading has_data=loaded error=read.error noun=trs!(ui.campaign_analysis) refresh=read.refresh/>
             <form class="analysis-filters" on:submit=apply>
                 <div class="analysis-filter-fields">
                     {recipient.is_none().then(||view!{
@@ -324,14 +290,14 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                     </DataTable>
                 }.into_any()}}
                 <Show when=move ||total.get()==0><EmptyState title=trs!(ui.no_matching_results)><p>{tr!(ui.change_or_clear_the_filters_to_see_more_activity)}</p></EmptyState></Show>
+            </Show>
                 <div class="analysis-pagination">
-                    <span>{move ||if recipient.is_some(){leptos_i18n::t_string!(i18n, messages.count_matching_events, count = total.get())}else{leptos_i18n::t_string!(i18n, messages.count_matching_recipients, count = total.get())}}</span>
+                    <span>{move ||if !loaded.get(){"—".to_owned()}else if recipient.is_some(){leptos_i18n::t_string!(i18n, messages.count_matching_events, count = total.get())}else{leptos_i18n::t_string!(i18n, messages.count_matching_recipients, count = total.get())}}</span>
                     <div class="management-actions">
                         <ActionButton disabled=Signal::derive(move ||loading.get()||filters.get().offset==0) on_click=move |_|{let mut f=filters.get_untracked();f.offset=f.offset.saturating_sub(f.limit);go(f);}>{tr!(ui.previous_page)}</ActionButton>
-                        <ActionButton disabled=Signal::derive(move ||loading.get()||filters.get().offset.saturating_add(filters.get().limit)>=total.get()) on_click=move |_|{let mut f=filters.get_untracked();f.offset+=f.limit;go(f);}>{tr!(ui.next_page)}</ActionButton>
+                        <ActionButton disabled=Signal::derive(move ||loading.get()||!loaded.get()||filters.get().offset.saturating_add(filters.get().limit)>=total.get()) on_click=move |_|{let mut f=filters.get_untracked();f.offset+=f.limit;go(f);}>{tr!(ui.next_page)}</ActionButton>
                     </div>
                 </div>
-            </Show>
         </ManagementPage>
     }
 }

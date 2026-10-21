@@ -47,6 +47,19 @@ pub(super) struct Api {
     i18n: leptos_i18n::I18nContext<ruphish_ui::localization::Locale>,
 }
 impl Api {
+    pub(super) fn invalid_read(self) -> String {
+        leptos_i18n::t_string!(self.i18n, ui.invalid_read_response).to_owned()
+    }
+    /// Decode required wire fields before a read can enter a query cache.
+    pub(super) async fn read<T: serde::de::DeserializeOwned>(
+        self,
+        path: &str,
+    ) -> Result<T, String> {
+        let value = self.get(path).await?;
+        serde_json::from_value(value)
+            .map_err(|_| leptos_i18n::t_string!(self.i18n, ui.invalid_read_response).to_owned())
+    }
+
     pub(super) async fn launch(
         self,
         path: &str,
@@ -66,7 +79,14 @@ impl Api {
             .map_err(|e| (0, e))?;
         let response=self.send_request(path, request).await.map_err(|_|(0,leptos_i18n::t_string!(i18n, ui.launch_outcome_is_not_known_retry_uses_the_same_launch_key_do_not_create_another).into()))?;
         let status = response.status;
-        self.response(path, response).await.map_err(|e| (status, e))
+        let value = self
+            .response(path, response)
+            .await
+            .map_err(|e| (status, e))?;
+        if value["id"].as_i64().is_none_or(|id| id <= 0) {
+            return Err((0, leptos_i18n::t_string!(i18n, ui.launch_outcome_is_not_known_retry_uses_the_same_launch_key_do_not_create_another).into()));
+        }
+        Ok(value)
     }
     pub(super) async fn resource(
         self,
@@ -93,6 +113,22 @@ impl Api {
             .await
             .map(|value| (value, etag))
     }
+    /// Only explicit acknowledgements confirm actions without a resource response.
+    pub(super) async fn command(
+        self,
+        method: &str,
+        path: &str,
+        token: &str,
+        value: Option<&Value>,
+        revision: Option<&str>,
+    ) -> Result<(), String> {
+        let (value, _) = self.resource(method, path, token, value, revision).await?;
+        if value["success"] != true {
+            return Err(self.invalid_read());
+        }
+        Ok(())
+    }
+
     pub(super) async fn download(self, path: &str, filename: &str) -> Result<(), String> {
         let i18n = self.i18n;
 
@@ -258,8 +294,15 @@ impl Api {
     }
 }
 
+fn decode_session(value: serde_json::Value) -> Result<BrowserSession, ()> {
+    // Missing fields must not silently reset an account to browser defaults.
+    ruphish_ui::preference_state::decode(value.get("preferences").cloned().ok_or(())?).ok_or(())?;
+    serde_json::from_value(value).map_err(|_| ())
+}
+
 pub(super) fn app() -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
+    ruphish_ui::query::provide_client();
 
     let preferences = ruphish_ui::display_preferences::DisplayPreferences::provide();
     let session = RwSignal::new(None::<Result<BrowserSession, String>>);
@@ -269,7 +312,7 @@ pub(super) fn app() -> impl IntoView {
     };
     spawn_local(async move {
         let loaded = api.get("/auth/session").await.and_then(|v| {
-            serde_json::from_value::<BrowserSession>(v)
+            decode_session(v)
                 .map_err(|_| leptos_i18n::t_string!(i18n, ui.invalid_session_response).into())
         });
         if let Ok(value) = &loaded {
@@ -286,17 +329,28 @@ pub(super) fn app() -> impl IntoView {
             return;
         }
         checking.set(true);
+        let preference_ticket = preferences.read_ticket();
         // Global browser callbacks do not establish a Leptos owner themselves.
         owner.with_value(|owner| {
             if let Some(owner) = owner {
                 owner.with(|| {
                     spawn_local(async move {
-                        if let Ok(value) = api.get("/auth/session").await.and_then(|v| {
-                            serde_json::from_value::<BrowserSession>(v).map_err(|_| {
+                        match api.get("/auth/session").await.and_then(|v| {
+                            decode_session(v).map_err(|_| {
                                 leptos_i18n::t_string!(i18n, ui.invalid_session_response).into()
                             })
                         }) {
-                            api.monitor.update(|m| m.observe(&value));
+                            Ok(value) => {
+                                api.monitor.update(|m| m.observe(&value));
+                                if api.active() {
+                                    preferences.apply_read(
+                                        preference_ticket,
+                                        value.preferences,
+                                        i18n,
+                                    );
+                                }
+                            }
+                            Err(error) => preferences.read_failed(preference_ticket, error),
                         }
                         checking.set(false);
                     })
@@ -304,6 +358,10 @@ pub(super) fn app() -> impl IntoView {
             }
         });
     };
+    provide_context(ruphish_ui::display_preferences::PreferenceRefresh {
+        fetching: checking,
+        refresh: Callback::new(move |()| revalidate()),
+    });
     let route = leptos_router::hooks::use_location();
     Effect::new(move |_| {
         route.pathname.track();
@@ -422,6 +480,11 @@ fn login(api: Api, token: String) -> impl IntoView {
     {message.view()}<ActionButton style=ButtonStyle::Primary kind="submit" disabled=Signal::derive(move || busy.get())>{move || if busy.get() { leptos_i18n::t_string!(i18n, ui.signing_in) } else { leptos_i18n::t_string!(i18n, ui.sign_in) }}</ActionButton></form></section></main> }
 }
 fn shell(api: Api, session: BrowserSession) -> impl IntoView {
+    let queries = expect_context::<leptos_fetch::QueryClient>();
+    crate::overview_queries::OverviewQueries::provide(api, queries);
+    crate::campaign_queries::CampaignQueries::provide(api, queries);
+    crate::resource_queries::ResourceQueries::provide(api, queries);
+    crate::management_queries::ManagementQueries::provide(api, queries);
     provide_context(ruphish_ui::import_drafts::ImportDrafts::default());
     provide_context(PasswordNotice(RwSignal::new(false)));
     provide_context(users::Notice(RwSignal::new(None)));
@@ -570,7 +633,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
     <Route path=path!("/users") view=move||account_page(Some(users::Screen::List),false)/>
     <Route path=path!("/users/new") view=move||account_page(Some(users::Screen::New),false)/>
     <Route path=path!("/users/:id/edit") view=move||account_page(Some(users::Screen::Edit),false)/>
-    <Route path=path!("/") view=move||if required{password_form(api,token.get_value(),true).into_any()}else{crate::overview::page(api).into_any()}/>
+    <Route path=path!("/") view=move||if required{password_form(api,token.get_value(),true).into_any()}else{crate::overview::page().into_any()}/>
     <Route path=path!("/analysis") view=move || analysis_page(true)/>
     <Route path=path!("/analysis/:id") view=move || analysis_page(false)/>
     <Route path=path!("/analysis/:id/recipients/:recipient") view=move || analysis_page(false)/>

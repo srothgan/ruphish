@@ -18,8 +18,8 @@ use ruphish_application::{
     campaign as app,
     resources::{Error, Kind},
 };
-use ruphish_contracts::errors::ErrorCode;
 use ruphish_contracts::{campaign as wire, legacy::Timestamp};
+use ruphish_contracts::{campaign_reads as reads, errors::ErrorCode};
 use serde_json::{Value, json};
 fn now() -> i64 {
     ruphish_application::datetime::now().as_second()
@@ -362,9 +362,36 @@ struct Page {
     limit: Option<i64>,
     completed: Option<bool>,
 }
-fn encode_header(c: &app::CampaignHeader) -> Value {
-    let resource = |r: &app::CampaignResource| json!({"id":r.id,"name":r.name});
-    json!({"id":c.id,"name":c.name,"status":c.status,"launch_date":date(&c.launch),"send_by_date":date(&c.send_by),"url":c.url,"template":resource(&c.template),"page":resource(&c.page),"smtp":resource(&c.profile),"subject":c.subject,"profile_sender":c.profile_sender,"template_sender":c.template_sender,"total":c.total,"policy":c.policy.as_ref().map(policy),"domain_id":c.domain_id,"domain_block":c.domain_block})
+fn read_policy(p: &app::CapturePolicy) -> reads::Policy {
+    reads::Policy {
+        capture_credentials: p.capture_credentials,
+        capture_passwords: p.capture_passwords,
+        redirect_url: p.redirect_url.clone(),
+    }
+}
+fn encode_header(c: &app::CampaignHeader) -> reads::Header {
+    let resource = |r: &app::CampaignResource| reads::Resource {
+        id: r.id,
+        name: r.name.clone(),
+    };
+    reads::Header {
+        id: c.id,
+        name: c.name.clone(),
+        status: c.status.clone(),
+        launch_date: date(&c.launch),
+        send_by_date: date(&c.send_by),
+        url: c.url.clone(),
+        template: resource(&c.template),
+        page: resource(&c.page),
+        smtp: resource(&c.profile),
+        subject: c.subject.clone(),
+        profile_sender: c.profile_sender.clone(),
+        template_sender: c.template_sender.clone(),
+        total: c.total,
+        policy: c.policy.as_ref().map(read_policy),
+        domain_id: c.domain_id,
+        domain_block: c.domain_block.clone(),
+    }
 }
 async fn overview(context: Context, Query(page): Query<Page>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
@@ -396,17 +423,41 @@ async fn deliveries(
         .await
         .map_err(error)?;
     let campaign = &view.campaign;
-    let counts: serde_json::Map<String, Value> = view
-        .counts
-        .into_iter()
-        .map(|(state, count)| (state, json!(count)))
-        .collect();
-    let items:Vec<_>=view.items.iter().map(|r|json!({"id":r.id,"rid":r.rid,"email":r.email,"attempt_count":r.attempt_count,"state":r.state,"due":r.due,"retries":r.retries,"generation":r.generation,"code":r.code,"attempts":r.attempts.iter().map(encode_attempt).collect::<Vec<_>>()})).collect();
-    response(
-        StatusCode::OK,
-        &json!({"campaign":encode_header(campaign),"counts":counts,"items":items,"next_after":view.next_after,"policy":campaign.policy.as_ref().map(policy),"mailer_enabled":context.mailer_enabled(),"activity":view.activity.iter().map(|e|json!({"id":e.id,"time":date(&e.time),"email":e.email,"message":e.message,"details":e.details})).collect::<Vec<_>>()}),
-        None,
-    )
+    let value = reads::Delivery {
+        campaign: encode_header(campaign),
+        counts: view.counts.into_iter().collect(),
+        items: view
+            .items
+            .iter()
+            .map(|r| reads::DeliveryRow {
+                id: r.id,
+                rid: r.rid.clone(),
+                email: r.email.clone(),
+                attempt_count: r.attempt_count,
+                state: r.state.clone(),
+                due: r.due,
+                retries: r.retries,
+                generation: r.generation,
+                code: r.code.clone(),
+                attempts: r.attempts.iter().map(encode_attempt).collect(),
+            })
+            .collect(),
+        next_after: view.next_after,
+        policy: campaign.policy.as_ref().map(read_policy),
+        mailer_enabled: context.mailer_enabled(),
+        activity: view
+            .activity
+            .iter()
+            .map(|e| reads::Activity {
+                id: e.id,
+                time: date(&e.time),
+                email: e.email.clone(),
+                message: e.message.clone(),
+                details: e.details.clone(),
+            })
+            .collect(),
+    };
+    response(StatusCode::OK, &json!(value), None)
 }
 #[derive(serde::Deserialize)]
 struct HistoryPage {
@@ -432,18 +483,39 @@ async fn recipient_history(
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &json!({
-            "result_id":history.result_id,"email":history.email,
-            "attempts":history.attempts.iter().map(encode_attempt).collect::<Vec<_>>(),
-            "events":history.events.iter().map(|e|json!({"id":e.id,"time":date(&e.time),"at":datetime::parse_stored(&e.time).ok().map(|t|t.as_second()),"message":e.message,"details":e.details})).collect::<Vec<_>>(),
-            "next_attempt":history.next_attempt,"next_event":history.next_event
+        &json!(reads::History {
+            result_id: history.result_id,
+            email: history.email,
+            attempts: history.attempts.iter().map(encode_attempt).collect(),
+            events: history
+                .events
+                .iter()
+                .map(|e| reads::HistoryEvent {
+                    id: e.id,
+                    time: date(&e.time),
+                    at: datetime::parse_stored(&e.time).ok().map(|t| t.as_second()),
+                    message: e.message.clone(),
+                    details: e.details.clone()
+                })
+                .collect(),
+            next_attempt: history.next_attempt,
+            next_event: history.next_event,
         }),
         None,
     )
 }
-fn encode_attempt(a: &app::Attempt) -> Value {
-    json!({"generation":a.generation,"started":a.started,"finished":a.finished,"state":a.state,"stage":a.stage,"smtp_code":a.smtp_code,"message_id":a.message_id})
+fn encode_attempt(a: &app::Attempt) -> reads::Attempt {
+    reads::Attempt {
+        generation: a.generation,
+        started: a.started,
+        finished: a.finished,
+        state: a.state.clone(),
+        stage: a.stage.clone(),
+        smtp_code: a.smtp_code,
+        message_id: a.message_id.clone(),
+    }
 }
+
 #[derive(serde::Deserialize)]
 struct Resolve {
     generation: i64,

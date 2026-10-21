@@ -2,7 +2,7 @@
 use super::{Api, Family, ResourceAccess, download};
 use crate::feedback::Message;
 use crate::shared::components::*;
-use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
+use leptos::prelude::*;
 use ruphish_ui::preview_document;
 use ruphish_ui::{tr, trs};
 use serde_json::Value;
@@ -10,49 +10,24 @@ use serde_json::Value;
 pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
-    let data = RwSignal::new(None::<Value>);
+    let queries = expect_context::<crate::resource_queries::ResourceQueries>();
+    let read = queries.details.observe(move || (family, id.clone()));
+    let data = Signal::derive(move || read.data.get().map(|(value, _)| value));
+    let revision = Signal::derive(move || read.data.get().and_then(|(_, revision)| revision));
     let message = Message::new(String::new());
-    let loading = RwSignal::new(true);
     let can_edit = use_context::<ResourceAccess>().is_some_and(|access| access.0);
-    let reload = RwSignal::new(0u64);
     let deletion = ResourceDeletion::new();
-    let revision = RwSignal::new(None::<String>);
     let token = StoredValue::new(token);
     let navigate = leptos_router::hooks::use_navigate();
-    let deleted =
-        Callback::new(move |_| navigate(&format!("/{}", family.route()), Default::default()));
-    Effect::new(move |_| {
-        reload.get();
-        loading.set(true);
-        message.clear();
-        let id = id.clone();
-        let token = token.get_value();
-        spawn_local(async move {
-            match api
-                .resource(
-                    "GET",
-                    &format!("/api/{}/{id}", family.route()),
-                    &token,
-                    None,
-                    None,
-                )
-                .await
-            {
-                Ok((value, etag)) => {
-                    revision.set(etag);
-                    data.set(Some(value));
-                }
-                Err(error) => message.error(error),
-            }
-            loading.set(false);
-        });
+    let deleted = Callback::new(move |id| {
+        queries.deleted(family, id);
+        navigate(&format!("/{}", family.route()), Default::default());
     });
     view! {<ManagementPage>
         <BackLink href=format!("/{}",family.route())>{move || family.back_label()}</BackLink>
         {message.view()}
         <ResourceDeleteDialog deletion=deletion api=api token=token.get_value() on_deleted=deleted/>
-        <Show when=move||!loading.get()&&data.with(Option::is_none)><ActionButton on_click=move |_|reload.update(|n|*n+=1)>{tr!(ui.retry_loading_resource)}</ActionButton></Show>
-        <Show when=move||loading.get()><p role="status">{tr!(ui.loading_resource)}</p></Show>
+        <QueryStatus fetching=read.fetching has_data=Signal::derive(move || data.with(Option::is_some)) error=read.error noun=trs!(ui.resource) refresh=read.refresh/>
         {move||data.get().map(|value| {
             let id=value["id"].as_i64().unwrap_or(0);
             let name=text(&value,"name");
@@ -60,6 +35,7 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
             let export_name=name.clone();
             let delete_name=name.clone();
             view! {<PageHeader title=name subtitle=leptos_i18n::t_string!(i18n, messages.last_updated_arg0, arg0 = (crate::time_display::instant(&value["modified_date"])).to_string())>
+                <ActionButton disabled=read.fetching on_click=move |_|read.refresh.run(())>{tr!(ui.refresh)}</ActionButton>
                 <ResourceActions edit_href=format!("/{}/{id}/edit",family.route()) can_edit=can_edit disabled=deletion.busy on_delete=Callback::new(move |()| deletion.select(DeleteTarget {id,name:delete_name.clone(),path:format!("/api/{}/{id}",family.route()),revision:revision.get_untracked(),description:leptos_i18n::t_string!(i18n, ui.this_permanently_removes_the_saved_resource_resources_used_by_unfinished_campaig)}))>
                     <ActionLink hidden=!can_edit disabled=deletion.busy href=format!("/{}/new?duplicate={id}",family.route())>{tr!(ui.duplicate)}</ActionLink>
                     <ActionButton on_click=move |_|download(&export,&export_name,message)>{tr!(ui.export_json)}</ActionButton>

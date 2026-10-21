@@ -8,6 +8,7 @@ use ruphish_ui::{tr, trs};
 pub(crate) fn ListToolbar(
     search: RwSignal<String>,
     #[prop(into)] count: Signal<usize>,
+    #[prop(into, default = true.into())] count_known: Signal<bool>,
     #[prop(into, default = trs!(ui.search_by_name))] label: Signal<String>,
     #[prop(into, default = trs!(ui.resources_2))] noun: Signal<String>,
 ) -> impl IntoView {
@@ -15,8 +16,30 @@ pub(crate) fn ListToolbar(
         <div class="management-toolbar">
             <Field label=label><TextInput input_type="search" value=Signal::derive(move || search.get())
                 on_input=move |event| search.set(event_target_value(&event))/></Field>
-            <span>{move || format!("{} {}", count.get(), noun.get())}</span>
+            <span>{move || format!("{} {}", if count_known.get() {count.get().to_string()} else {"—".into()}, noun.get())}</span>
         </div>
+    }
+}
+
+/// Common query feedback derives from the cache; it owns no competing error state.
+#[component]
+pub(crate) fn QueryStatus(
+    fetching: Signal<bool>,
+    has_data: Signal<bool>,
+    error: Signal<Option<String>>,
+    noun: Signal<String>,
+    refresh: Callback<()>,
+) -> impl IntoView {
+    let i18n = ruphish_ui::localization::use_i18n();
+    view! {
+        <Show when=move || fetching.get()><p role="status">{move || leptos_i18n::t_string!(i18n, messages.loading_arg0, arg0=noun.get())}</p></Show>
+        <Show when=move || error.get().is_some()>
+            <p class="form-message error has-content" role="alert">{move || {
+                let error=error.get().unwrap_or_default();
+                if has_data.get() {leptos_i18n::t_string!(i18n, messages.refresh_failed_displayed_data_may_be_stale_arg0, arg0=error).to_string()} else {error}
+            }}</p>
+            <ActionButton disabled=fetching on_click=move |_| refresh.run(())>{move || leptos_i18n::t_string!(i18n, messages.retry_loading_arg0, arg0=noun.get())}</ActionButton>
+        </Show>
     }
 }
 
@@ -62,19 +85,6 @@ pub(crate) fn DataTable(
         <thead><tr>{headers.into_iter().map(|name| view!{<th scope="col">{move || name.get()}</th>}).collect_view()}</tr></thead>
         <tbody>{children()}</tbody>
     </table></div> }
-}
-
-#[component]
-pub(crate) fn PageControls(
-    pages: RwSignal<ruphish_ui::pagination::CursorPages>,
-    #[prop(into)] disabled: Signal<bool>,
-) -> impl IntoView {
-    use ruphish_ui::pagination::CursorPages;
-    view! { <PaginationControls disabled=disabled
-    has_previous=Signal::derive(move||pages.with(CursorPages::has_previous))
-    has_next=Signal::derive(move||pages.with(CursorPages::has_next))
-    on_previous=Callback::new(move|()|pages.update(CursorPages::previous))
-    on_next=Callback::new(move|()|pages.update(CursorPages::advance))/> }
 }
 
 /// Shared pagination presentation for numeric and opaque cursor APIs.

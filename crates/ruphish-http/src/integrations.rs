@@ -146,12 +146,20 @@ async fn read_hook(context: Context, Path(id): Path<i64>) -> Result<Response, Re
 }
 async fn read_mailbox(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
+    mailbox_response(&context, user.identity, id, StatusCode::OK).await
+}
+async fn mailbox_response(
+    context: &Context,
+    identity: ruphish_application::auth::Identity,
+    id: i64,
+    status: StatusCode,
+) -> Result<Response, Rejection> {
     response(
-        StatusCode::OK,
+        status,
         &mailbox(
             context
                 .integrations()
-                .mailbox(user.identity, id)
+                .mailbox(identity, id)
                 .await
                 .map_err(error)?,
         ),
@@ -387,7 +395,7 @@ async fn validate_mailbox(context: Context, Path(id): Path<i64>) -> Result<Respo
         .validate_mailbox(user.identity, id)
         .await
         .map_err(error)?;
-    success()
+    mailbox_response(&context, user.identity, id, StatusCode::OK).await
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -406,7 +414,7 @@ async fn resume_mailbox(
         .resume_mailbox(user.identity, id, expected.revision)
         .await
         .map_err(error)?;
-    success()
+    mailbox_response(&context, user.identity, id, StatusCode::OK).await
 }
 async fn check_mailbox(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
@@ -415,11 +423,7 @@ async fn check_mailbox(context: Context, Path(id): Path<i64>) -> Result<Response
         .check_mailbox(user.identity, id)
         .await
         .map_err(error)?;
-    response(
-        StatusCode::ACCEPTED,
-        &json!({"success":true,"message":"Mailbox check queued"}),
-        None,
-    )
+    mailbox_response(&context, user.identity, id, StatusCode::ACCEPTED).await
 }
 async fn legacy_get(context: Context) -> Result<Response, Rejection> {
     let user = context.api(None).await?;

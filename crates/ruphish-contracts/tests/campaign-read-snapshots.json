@@ -1,0 +1,253 @@
+{
+  "directory": {
+    "items": [
+      {
+        "id": "1",
+        "kind": "campaign",
+        "launch_date": "2026-10-19T13:18:42Z",
+        "name": "Browser acceptance 2026-10-19T13:18:42.755Z",
+        "revision": null,
+        "status": "Completed",
+        "total": 1
+      },
+      {
+        "id": "2",
+        "kind": "campaign",
+        "launch_date": "2026-10-19T13:18:43Z",
+        "name": "Protocol 9938716a-b0ce-4274-9c09-304f48241903",
+        "revision": null,
+        "status": "Completed",
+        "total": 1
+      },
+      {
+        "id": "3",
+        "kind": "campaign",
+        "launch_date": "2026-10-19T13:18:45Z",
+        "name": "Protocol 2a6f3f5c-bc6f-4000-bda7-f2bdc8fc01e9",
+        "revision": null,
+        "status": "Completed",
+        "total": 1
+      },
+      {
+        "id": "4",
+        "kind": "campaign",
+        "launch_date": "2026-10-19T13:48:36Z",
+        "name": "Protocol c1833bea-4263-4af7-bfd6-ec1a1fa04793",
+        "revision": null,
+        "status": "Completed",
+        "total": 1
+      }
+    ],
+    "next_after": null
+  },
+  "delivery": {
+    "activity": [
+      {
+        "details": "{\"password_present\":true}",
+        "email": "browser@example.test",
+        "id": 17,
+        "message": "Submitted Data",
+        "time": "2026-10-19T13:29:09Z"
+      },
+      {
+        "details": "",
+        "email": "browser@example.test",
+        "id": 16,
+        "message": "Clicked Link",
+        "time": "2026-10-19T13:26:28Z"
+      },
+      {
+        "details": "",
+        "email": "browser@example.test",
+        "id": 15,
+        "message": "Email Opened",
+        "time": "2026-10-19T13:24:43Z"
+      },
+      {
+        "details": "",
+        "email": "browser@example.test",
+        "id": 2,
+        "message": "Email Sent",
+        "time": "2026-10-19T13:18:43Z"
+      },
+      {
+        "details": "",
+        "email": "",
+        "id": 1,
+        "message": "Campaign Created",
+        "time": "2026-10-19T13:18:42Z"
+      }
+    ],
+    "campaign": {
+      "domain_block": null,
+      "domain_id": 1,
+      "id": 1,
+      "launch_date": "2026-10-19T13:18:42Z",
+      "name": "Browser acceptance 2026-10-19T13:18:42.755Z",
+      "page": {
+        "id": 1,
+        "name": "Local privacy page"
+      },
+      "policy": {
+        "capture_credentials": true,
+        "capture_passwords": true,
+        "redirect_url": ""
+      },
+      "profile_sender": "Training <training@example.test>",
+      "send_by_date": "0001-01-01T00:00:00Z",
+      "smtp": {
+        "id": 1,
+        "name": "Local inbox only"
+      },
+      "status": "Completed",
+      "subject": "Local exercise for {{.FirstName}}",
+      "template": {
+        "id": 1,
+        "name": "Local privacy email"
+      },
+      "template_sender": "",
+      "total": 1,
+      "url": "https://good.ruphish.test:8443"
+    },
+    "counts": {
+      "accepted": 1
+    },
+    "items": [
+      {
+        "attempt_count": 1,
+        "attempts": [
+          {
+            "finished": 1792415923,
+            "generation": 1,
+            "message_id": "79f92f4c6d14178c4fe0e14baf58272a@ruphish.local",
+            "smtp_code": null,
+            "stage": "",
+            "started": 1792415923,
+            "state": "accepted"
+          }
+        ],
+        "code": "",
+        "due": 1792415923,
+        "email": "browser@example.test",
+        "generation": 1,
+        "id": 1,
+        "retries": 0,
+        "rid": "473a0bc18865e59ac780886af399e1cb",
+        "state": "accepted"
+      }
+    ],
+    "mailer_enabled": true,
+    "next_after": null,
+    "policy": {
+      "capture_credentials": true,
+      "capture_passwords": true,
+      "redirect_url": ""
+    }
+  },
+  "analysis": {
+    "as_of": 1792612331,
+    "audience": 1,
+    "bucket_seconds": 60,
+    "buckets": [
+      {
+        "counts": [
+          1,
+          0,
+          0,
+          0,
+          0
+        ],
+        "time": 1792415880
+      }
+    ],
+    "event_total": 5,
+    "events": [
+      {
+        "email": "browser@example.test",
+        "id": 17,
+        "kind": "Submitted Data",
+        "password_present": true,
+        "recipient_id": 1,
+        "source": "legacy",
+        "time": "2026-10-19T13:29:09Z"
+      },
+      {
+        "email": "browser@example.test",
+        "id": 16,
+        "kind": "Clicked Link",
+        "password_present": null,
+        "recipient_id": 1,
+        "source": "legacy",
+        "time": "2026-10-19T13:26:28Z"
+      },
+      {
+        "email": "browser@example.test",
+        "id": 15,
+        "kind": "Email Opened",
+        "password_present": null,
+        "recipient_id": 1,
+        "source": "legacy",
+        "time": "2026-10-19T13:24:43Z"
+      },
+      {
+        "email": "browser@example.test",
+        "id": 2,
+        "kind": "Email Sent",
+        "password_present": null,
+        "recipient_id": 1,
+        "source": "legacy",
+        "time": "2026-10-19T13:18:43Z"
+      },
+      {
+        "email": "",
+        "id": 1,
+        "kind": "Campaign Created",
+        "password_present": null,
+        "recipient_id": null,
+        "source": "legacy",
+        "time": "2026-10-19T13:18:42Z"
+      }
+    ],
+    "id": 1,
+    "name": "Browser acceptance 2026-10-19T13:18:42.755Z",
+    "progression": [
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    "recipient_total": 1,
+    "recipients": [
+      {
+        "counts": [
+          1,
+          1,
+          1,
+          1,
+          0
+        ],
+        "delivery": "accepted",
+        "email": "browser@example.test",
+        "historical_reported": false,
+        "id": 1,
+        "name": "Browser Tester"
+      }
+    ],
+    "status": "Completed",
+    "totals": [
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    "unique": [
+      1,
+      1,
+      1,
+      1,
+      0
+    ]
+  }
+}

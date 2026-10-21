@@ -710,6 +710,7 @@
     "the_request_failed_or_timed_out_try_again": "Die Anfrage ist fehlgeschlagen oder hat zu lange gedauert. Versuchen Sie es erneut.",
     "the_request_failed_or_timed_out_its_outcome_is_unconfirmed_refresh_the_saved_sta": "Die Anfrage ist fehlgeschlagen oder hat zu lange gedauert; ihr Ergebnis ist unbestätigt. Aktualisieren Sie vor einem erneuten Versuch den gespeicherten Stand.",
     "invalid_transport_response": "Ungültige Transportantwort",
+    "invalid_read_response": "In der Serverantwort fehlen erforderliche Daten oder Felder sind ungültig. Versuchen Sie, die Daten zu aktualisieren.",
     "the_server_returned_an_invalid_json_response_refresh_before_retrying_an_operatio": "Der Server hat eine ungültige JSON-Antwort zurückgegeben. Aktualisieren Sie vor einem erneuten Versuch.",
     "invalid_request_method": "Ungültige Anfragemethode",
     "unsupported_request_method": "Nicht unterstützte Anfragemethode",

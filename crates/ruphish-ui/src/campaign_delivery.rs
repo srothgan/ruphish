@@ -36,7 +36,15 @@ fn fetch(
                 "/api/campaigns/{}/delivery/{result}/history{query}",
                 campaign.get_value()
             ))
-            .await;
+            .await
+            .and_then(|value| {
+                let value: ruphish_contracts::campaign_reads::History =
+                    serde_json::from_value(value).map_err(|_| api.invalid_read())?;
+                if value.result_id != result {
+                    return Err(api.invalid_read());
+                }
+                serde_json::to_value(value).map_err(|_| api.invalid_read())
+            });
         history.update(|h| h.finish(request, response));
     });
 }
@@ -45,7 +53,7 @@ pub(super) fn recipient_row(
     api: Api,
     campaign: StoredValue<String>,
     result: i64,
-    data: RwSignal<Value>,
+    data: Signal<Value>,
     controls: Controls,
 ) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
@@ -96,7 +104,7 @@ pub(super) fn recipient_row(
                     <section class="recipient-timeline"><h4>{tr!(ui.timeline)}</h4><ol class="delivery-timeline">
                         {move||entries.get().into_iter().map(|entry|view!{<li class=format!("timeline-event {}",entry.tone)><span class="timeline-marker" aria-hidden="true"></span><div><strong>{ruphish_ui::localization::timeline_title(i18n,&entry.title)}</strong><time>{entry.at.map(|at|instant(&Value::from(at))).unwrap_or_else(||leptos_i18n::t_string!(i18n, ui.time_not_recorded).into())}</time></div></li>}).collect_view()}
                         <Show when=move||matches!(text(&row.get(),"state").as_str(),"ready"|"retry")><li class="timeline-event neutral"><span class="timeline-marker pending" aria-hidden="true"></span><div><strong>{move||if text(&row.get(),"state")=="retry"{leptos_i18n::t_string!(i18n, ui.next_retry_scheduled)}else{leptos_i18n::t_string!(i18n, ui.scheduled_to_send)}}</strong><time>{move||instant(&row.get()["due"])}</time></div></li></Show>
-                    </ol><Show when=move||!history.with(History::loading)&&history.with(|h|h.events.is_empty()&&h.attempts.is_empty())><p>{tr!(ui.no_attempts_or_recipient_events_recorded_yet)}</p></Show></section>
+                    </ol><Show when=move||!history.with(History::loading)&&history.with(|h|h.error.is_none()&&h.events.is_empty()&&h.attempts.is_empty())><p>{tr!(ui.no_attempts_or_recipient_events_recorded_yet)}</p></Show></section>
                     <section class="recipient-attempts"><h4>{tr!(ui.delivery_attempts)}</h4>
                         {move||attempts.get().into_values().rev().map(|attempt|attempt_details(attempt,copy_message)).collect_view()}
                         <p class="copy-status" role="status">{move||copy_message.get()}</p>

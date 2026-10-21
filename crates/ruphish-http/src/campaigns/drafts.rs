@@ -31,9 +31,20 @@ fn decode_body<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T, Rejecti
     })
 }
 fn encode(d: &Draft) -> Value {
-    json!({"id":d.id,"revision":d.revision,"configuration":d.configuration,"step":d.step,
-        "created":datetime::utc_seconds(d.created).ok(),"modified":datetime::utc_seconds(d.modified).ok(),
-        "campaign_id":d.campaign_id,"status":if d.campaign_id.is_some(){"Launched"}else{"Draft"}})
+    json!(reads::Draft {
+        id: d.id.clone(),
+        revision: d.revision,
+        configuration: d.configuration.clone(),
+        step: d.step,
+        created: datetime::utc_seconds(d.created).ok(),
+        modified: datetime::utc_seconds(d.modified).ok(),
+        campaign_id: d.campaign_id,
+        status: if d.campaign_id.is_some() {
+            "Launched".into()
+        } else {
+            "Draft".into()
+        }
+    })
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

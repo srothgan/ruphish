@@ -1,5 +1,8 @@
 //! Domain management uses the shared resource shell, forms and confirmation dialog.
-use crate::{account::Api, feedback::Message, resources::ResourceAccess, shared::components::*};
+use crate::{
+    account::Api, feedback::Message, management_queries::ManagementQueries,
+    resources::ResourceAccess, shared::components::*,
+};
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use ruphish_contracts::domains::{Domain, Edit};
 use ruphish_ui::{tr, trs};
@@ -83,61 +86,25 @@ fn check_result(d: &Domain, kind: &str, passed: bool) -> &'static str {
         _ => leptos_i18n::t_string!(i18n, ui.not_confirmed),
     }
 }
-fn decode(value: serde_json::Value) -> Result<Domain, String> {
-    let i18n = ruphish_ui::localization::use_i18n();
-
-    serde_json::from_value(value)
-        .map_err(|_| leptos_i18n::t_string!(i18n, ui.invalid_domain_response).into())
-}
 pub(super) fn list(api: Api, token: String) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
-    let rows = RwSignal::new(Vec::<Domain>::new());
-    let failed = RwSignal::new(false);
-    let loading = RwSignal::new(false);
+    let queries = expect_context::<ManagementQueries>();
+    let list = queries.domains.observe(|| ());
+    let confirmed = Signal::derive(move || list.data.with(Option::is_some));
     let search = RwSignal::new(String::new());
-    let refresh = RwSignal::new(0u64);
     let message = Message::new(String::new());
     let can_edit = editable();
     let deletion = ResourceDeletion::new();
-    let generation = StoredValue::new(0u64);
     let deleted = Callback::new(move |id| {
-        generation.update_value(|n| *n += 1);
-        loading.set(false);
-        failed.set(false);
-        rows.update(|rows| rows.retain(|row| row.id != id));
+        queries.domain_deleted(id);
         message.status(leptos_i18n::t_string!(i18n, ui.domain_deleted).to_owned());
-    });
-    Effect::new(move |_| {
-        refresh.get();
-        generation.update_value(|n| *n += 1);
-        let ticket = generation.get_value();
-        loading.set(true);
-        failed.set(false);
-        spawn_local(async move {
-            let result = api.get("/api/domains/").await.and_then(|v| {
-                serde_json::from_value(v)
-                    .map_err(|_| leptos_i18n::t_string!(i18n, ui.invalid_domain_list).into())
-            });
-            if generation.get_value() != ticket {
-                return;
-            }
-            match result {
-                Ok(v) => {
-                    rows.set(v);
-                    message.clear();
-                }
-                Err(e) => {
-                    failed.set(true);
-                    message.error(e);
-                }
-            }
-            loading.set(false);
-        });
     });
     let visible = Signal::derive(move || {
         let query = search.get().to_lowercase();
-        rows.get()
+        list.data
+            .get()
+            .unwrap_or_default()
             .into_iter()
             .filter(|d| {
                 format!("{} {}", d.name, d.hostname)
@@ -147,13 +114,13 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
             .collect::<Vec<_>>()
     });
     view! {<ManagementPage><PageHeader title=trs!(ui.domains) subtitle=trs!(ui.verified_destinations_for_campaign_links_and_landing_pages)>
-        <ActionButton disabled=Signal::derive(move||loading.get()) on_click=move |_|refresh.update(|v|*v+=1)>{tr!(ui.refresh)}</ActionButton>
+        <ActionButton disabled=list.fetching on_click=move |_|list.refresh.run(())>{tr!(ui.refresh)}</ActionButton>
         {can_edit.then(||view!{<ActionLink style=ButtonStyle::Primary href="/domains/new">{tr!(ui.create_domain)}</ActionLink>})}
-    </PageHeader>{message.view()}<ResourceDeleteDialog deletion=deletion api=api token=token on_deleted=deleted/><ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) label=trs!(ui.search_by_name_or_hostname) noun=trs!(ui.domains_2)/>
-    <Show when=move||loading.get()><p role="status">{tr!(ui.loading_domains)}</p></Show>
+    </PageHeader>{message.view()}<ResourceDeleteDialog deletion=deletion api=api token=token on_deleted=deleted/><ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) count_known=confirmed label=trs!(ui.search_by_name_or_hostname) noun=trs!(ui.domains_2)/>
+    <QueryStatus fetching=list.fetching has_data=confirmed error=list.error noun=trs!(ui.domains_2) refresh=list.refresh/>
     <DataTable label=trs!(ui.domains) empty=Signal::derive(move || visible.with(Vec::is_empty)) headers=vec![trs!(ui.name),trs!(ui.public_origin),trs!(ui.status),trs!(ui.enabled),trs!(ui.campaigns),trs!(ui.actions)]>
-        <For each=move||visible.get() key=|d| (d.id,d.revision,d.checked_at,d.eligible,d.checking,d.status.clone(),d.code.clone(),d.campaigns) children=move|d|{let id=d.id;let label=state(&d);view!{<tr><td><a href=format!("/domains/{id}")>{d.name.clone()}</a></td><td>{d.origin.clone()}</td><td><StatusBadge tone=status_tone(&d.status)>{label}</StatusBadge></td><td>{move || if d.enabled{leptos_i18n::t_string!(i18n, ui.yes)}else{leptos_i18n::t_string!(i18n, ui.no)}}</td><td>{d.campaigns}</td><td><ResourceActions view_href=format!("/domains/{id}") edit_href=format!("/domains/{id}/edit") can_edit=can_edit size=ControlSize::Small disabled=deletion.busy delete_disabled={d.campaigns>0} delete_reason=leptos_i18n::t_string!(i18n, ui.domains_used_by_campaigns_cannot_be_deleted) on_delete=Callback::new(move |()| deletion.select(DeleteTarget {id,name:d.name.clone(),path:format!("/api/domains/{id}"),revision:Some(format!("\"{}\"",d.revision)),description:leptos_i18n::t_string!(i18n, ui.only_unused_domains_can_be_deleted_this_removes_the_domain_configuration_and_its)}))/></td></tr>}}/>
-    </DataTable><ListEmptyState ready=Signal::derive(move || !loading.get() && !failed.get()) count=Signal::derive(move || visible.with(Vec::len)) search=search title=trs!(ui.no_domains_found) guidance=trs!(ui.add_a_hostname_prove_dns_control_and_check_routing_and_https_before_using_it_in)/></ManagementPage>}
+        {move || visible.get().into_iter().map(|d|{let id=d.id;let label=state(&d);view!{<tr><td><a href=format!("/domains/{id}")>{d.name.clone()}</a></td><td>{d.origin.clone()}</td><td><StatusBadge tone=status_tone(&d.status)>{label}</StatusBadge></td><td>{move || if d.enabled{leptos_i18n::t_string!(i18n, ui.yes)}else{leptos_i18n::t_string!(i18n, ui.no)}}</td><td>{d.campaigns}</td><td><ResourceActions view_href=format!("/domains/{id}") edit_href=format!("/domains/{id}/edit") can_edit=can_edit size=ControlSize::Small disabled=deletion.busy delete_disabled={d.campaigns>0} delete_reason=leptos_i18n::t_string!(i18n, ui.domains_used_by_campaigns_cannot_be_deleted) on_delete=Callback::new(move |()| deletion.select(DeleteTarget {id,name:d.name.clone(),path:format!("/api/domains/{id}"),revision:Some(format!("\"{}\"",d.revision)),description:leptos_i18n::t_string!(i18n, ui.only_unused_domains_can_be_deleted_this_removes_the_domain_configuration_and_its)}))/></td></tr>}}).collect_view()}
+    </DataTable><ListEmptyState ready=Signal::derive(move || confirmed.get() && !list.fetching.get() && list.error.get().is_none()) count=Signal::derive(move || visible.with(Vec::len)) search=search title=trs!(ui.no_domains_found) guidance=trs!(ui.add_a_hostname_prove_dns_control_and_check_routing_and_https_before_using_it_in)/></ManagementPage>}
 }
 pub(super) fn detail(api: Api, token: String, editing: bool) -> impl IntoView {
     let params = leptos_router::hooks::use_params_map();
@@ -166,6 +133,7 @@ pub(super) fn detail(api: Api, token: String, editing: bool) -> impl IntoView {
 fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
+    let queries = expect_context::<ManagementQueries>();
     let name = RwSignal::new(String::new());
     let origin = RwSignal::new(String::new());
     let enabled = RwSignal::new(true);
@@ -188,11 +156,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
             loading.set(true);
             message.clear();
             spawn_local(async move {
-                match api
-                    .get(&format!("/api/domains/{id}"))
-                    .await
-                    .and_then(decode)
-                {
+                match ManagementQueries::read_domain(api, id).await {
                     Ok(d) => {
                         baseline.set((d.name.clone(), d.origin.clone(), d.enabled));
                         name.set(d.name);
@@ -235,9 +199,10 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                     None,
                 )
                 .await
-                .and_then(|(v, _)| decode(v))
+                .and_then(|(v, _)| ManagementQueries::validate_domain(api, v, id))
             {
                 Ok(d) => {
+                    queries.domain_saved(d.id);
                     loaded.set(false);
                     busy.set(false);
                     navigate(&format!("/domains/{}", d.id), Default::default());
@@ -261,41 +226,17 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
 fn show(api: Api, token: String, id: i64) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
-    use ruphish_ui::domain_state::Details;
+    let queries = expect_context::<ManagementQueries>();
+    let read = queries.domain.observe(move || id);
+    let domain = read.data;
     let tasks = ruphish_ui::view_tasks::ViewTasks::default();
-    let detail = RwSignal::new(Details::default());
-    let domain = Memo::new(move |_| detail.with(|s| s.domain.clone()));
+    let mutation = RwSignal::new(false);
     let deletion = ResourceDeletion::new();
-    let busy = Signal::derive(move || deletion.busy.get() || detail.with(|s| s.mutation.is_some()));
+    let busy = Signal::derive(move || deletion.busy.get() || mutation.get());
     let token = StoredValue::new(token);
     let message = Message::new(String::new());
-    let refresh = RwSignal::new(0u64);
     let clock = RwSignal::new(js_sys::Date::now() / 1000.0);
     let can_edit = editable();
-    Effect::new(move |_| {
-        refresh.get();
-        if deletion.busy.get_untracked() {
-            return;
-        }
-        let Some(ticket) = detail.try_update(Details::refresh).flatten() else {
-            return;
-        };
-        tasks.spawn(async move {
-            let result = api
-                .get(&format!("/api/domains/{id}"))
-                .await
-                .and_then(decode);
-            detail.update(|s| {
-                s.received(
-                    ticket,
-                    result.map_err(|error| {
-                        ruphish_ui::localization::verification_error(i18n, &error, false)
-                    }),
-                    false,
-                )
-            });
-        });
-    });
     let ticks = StoredValue::new(0u64);
     if let Ok(timer) = set_interval_with_handle(
         move || {
@@ -308,23 +249,28 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                 && web_sys::window()
                     .and_then(|w| w.document())
                     .is_some_and(|d| !d.hidden())
+                && !read.fetching.get_untracked()
+                && !busy.get_untracked()
             {
-                refresh.update(|v| *v += 1);
+                read.refresh.run(());
             }
         },
         std::time::Duration::from_secs(1),
     ) {
         on_cleanup(move || timer.clear());
     }
-    let focus = window_event_listener(leptos::ev::focus, move |_| refresh.update(|v| *v += 1));
-    on_cleanup(move || focus.remove());
     let check = move |_| {
         if busy.get_untracked() || !can_edit {
             return;
         }
-        let Some(ticket) = detail.try_update(Details::verify).flatten() else {
+        if domain.with_untracked(|d| {
+            d.as_ref()
+                .is_none_or(|d| !d.enabled || d.active_check.is_some())
+        }) {
             return;
-        };
+        }
+        mutation.set(true);
+        message.clear();
         tasks.spawn(async move {
             let result = api
                 .resource(
@@ -335,21 +281,23 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                     None,
                 )
                 .await
-                .and_then(|(v, _)| decode(v));
-            detail.update(|s| {
-                s.received(
-                    ticket,
-                    result.map_err(|error| {
-                        ruphish_ui::localization::verification_error(i18n, &error, true)
-                    }),
-                    true,
-                )
-            });
-            refresh.update(|v| *v += 1);
+                .and_then(|(v, _)| ManagementQueries::validate_domain(api, v, Some(id)));
+            match result {
+                Ok(value) => {
+                    queries.domain_verified(value);
+                }
+                Err(error) => message.error(ruphish_ui::localization::verification_error(
+                    i18n, &error, true,
+                )),
+            }
+            mutation.set(false);
         });
     };
     let navigate = leptos_router::hooks::use_navigate();
-    let deleted = Callback::new(move |_| navigate("/domains", Default::default()));
+    let deleted = Callback::new(move |_| {
+        queries.domain_deleted(id);
+        navigate("/domains", Default::default());
+    });
     let select_delete = Callback::new(move |()| {
         if busy.get_untracked() || !can_edit {
             return;
@@ -360,10 +308,10 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
     });
     view! {<ManagementPage><BackLink href="/domains">{tr!(ui.back_to_domains)}</BackLink>
         <PageHeader title=Signal::derive(move||domain.get().map(|d|d.name).unwrap_or_else(||leptos_i18n::t_string!(i18n, ui.domain).into())) subtitle=Signal::derive(move||domain.get().map(|d|d.origin).unwrap_or_else(||leptos_i18n::t_string!(i18n, ui.loading_domain).into()))>
-            <ActionButton disabled=Signal::derive(move||busy.get()) busy=Signal::derive(move||detail.with(|s|s.reading.is_some()).to_string()) on_click=move |_|refresh.update(|v|*v+=1)>{move||if detail.with(|s|s.reading.is_some()){leptos_i18n::t_string!(i18n, ui.refreshing)}else{leptos_i18n::t_string!(i18n, ui.refresh_status)}}</ActionButton>
-            {can_edit.then(||view!{<ActionButton style=ButtonStyle::Primary disabled=Signal::derive(move||busy.get()||domain.with(|d|d.as_ref().is_none_or(|d|!d.enabled||d.active_check.is_some()))) on_click=check>{move||if detail.with(|s|s.mutation.is_some()){leptos_i18n::t_string!(i18n, ui.requesting_verification)}else{leptos_i18n::t_string!(i18n, ui.verify_domain)}}</ActionButton><ResourceActions edit_href=format!("/domains/{id}/edit") can_edit=can_edit disabled=Signal::derive(move||busy.get()||domain.with(Option::is_none)) delete_disabled=Signal::derive(move||domain.with(|d|d.as_ref().is_none_or(|d|d.campaigns>0))) delete_reason=leptos_i18n::t_string!(i18n, ui.domains_used_by_campaigns_cannot_be_deleted) on_delete=select_delete/>})}
+            <ActionButton disabled=Signal::derive(move||busy.get()) busy=Signal::derive(move||read.fetching.get().to_string()) on_click=move |_|read.refresh.run(())>{move||if read.fetching.get(){leptos_i18n::t_string!(i18n, ui.refreshing)}else{leptos_i18n::t_string!(i18n, ui.refresh_status)}}</ActionButton>
+            {can_edit.then(||view!{<ActionButton style=ButtonStyle::Primary disabled=Signal::derive(move||busy.get()||domain.with(|d|d.as_ref().is_none_or(|d|!d.enabled||d.active_check.is_some()))) on_click=check>{move||if mutation.get(){leptos_i18n::t_string!(i18n, ui.requesting_verification)}else{leptos_i18n::t_string!(i18n, ui.verify_domain)}}</ActionButton><ResourceActions edit_href=format!("/domains/{id}/edit") can_edit=can_edit disabled=Signal::derive(move||busy.get()||domain.with(Option::is_none)) delete_disabled=Signal::derive(move||domain.with(|d|d.as_ref().is_none_or(|d|d.campaigns>0))) delete_reason=leptos_i18n::t_string!(i18n, ui.domains_used_by_campaigns_cannot_be_deleted) on_delete=select_delete/>})}
         </PageHeader>{message.view()}
-        {move||detail.with(|s|s.error.clone()).map(|error|view!{<p class="form-message error" role="alert">{error}</p>})}
+        <QueryStatus fetching=read.fetching has_data=Signal::derive(move || domain.with(Option::is_some)) error=read.error noun=trs!(ui.domain) refresh=read.refresh/>
         {move||domain.get().and_then(|d|d.active_check).map(|run|{
             let running=run.state=="running";
             let started=run.started_at.unwrap_or(run.scheduled_at);

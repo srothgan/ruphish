@@ -1,50 +1,13 @@
 //! Home dashboard: two independent reads, one existing administrative shell.
 use crate::{
-    account::Api, feedback::Message, shared::components::*, time_display::instant as minute,
+    overview_queries::OverviewQueries, shared::components::*, time_display::instant as minute,
 };
 use leptos::prelude::*;
-use ruphish_contracts::overview::{PostureResponse, Snapshot};
-use ruphish_ui::{
-    overview_state::{ChangeGoal, ReadState, count_change, percentage},
-    view_tasks::ViewTasks,
-};
+use ruphish_contracts::overview::Snapshot;
+use ruphish_ui::overview_state::{ChangeGoal, count_change, percentage};
 use ruphish_ui::{tr, trs};
 
-fn read<T: serde::de::DeserializeOwned + Clone + Send + Sync + 'static>(
-    api: Api,
-    tasks: ViewTasks,
-    state: RwSignal<ReadState<T>>,
-    message: Message,
-    key: &str,
-    path: String,
-) {
-    let i18n = ruphish_ui::localization::use_i18n();
-
-    let Some(request) = state.try_update(|state| state.begin(key)) else {
-        return;
-    };
-    message.clear();
-    tasks.spawn(async move {
-        let result = api.get(&path).await.and_then(|value| {
-            serde_json::from_value(value).map_err(|_| {
-                leptos_i18n::t_string!(
-                    i18n,
-                    ui.the_dashboard_response_could_not_be_read_try_refreshing
-                )
-                .into()
-            })
-        });
-        if let Some(true) = state.try_update(|state| state.finish(request, result)) {
-            if let Some(error) = state.with_untracked(|state| state.error.clone()) {
-                message.error(error);
-            } else {
-                message.clear();
-            }
-        }
-    });
-}
-
-pub(super) fn page(api: Api) -> impl IntoView {
+pub(super) fn page() -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
     let change = move |current, previous| {
@@ -55,45 +18,18 @@ pub(super) fn page(api: Api) -> impl IntoView {
         }
     };
 
-    let snapshot = RwSignal::new(ReadState::<Snapshot>::default());
-    let posture = RwSignal::new(ReadState::<PostureResponse>::default());
-    let snapshot_data = Memo::new(move |_| snapshot.with(|s| s.data.clone()));
-    let posture_data = Memo::new(move |_| posture.with(|s| s.data.clone()));
-    let snapshot_refresh = RwSignal::new(0u64);
-    let posture_refresh = RwSignal::new(0u64);
+    let queries = expect_context::<OverviewQueries>();
     let window = RwSignal::new("30d".to_owned());
-    let snapshot_message = Message::new(String::new());
-    let posture_message = Message::new(String::new());
-    let tasks = ViewTasks::default();
+    let snapshot = queries.snapshot.observe(|| ());
+    let posture = queries.posture.observe(move || window.get());
+    let snapshot_data = snapshot.data;
+    let posture_data = posture.data;
     let can_create =
         use_context::<crate::resources::ResourceAccess>().is_some_and(|access| access.0);
-    Effect::new(move |_| {
-        snapshot_refresh.get();
-        read(
-            api,
-            tasks,
-            snapshot,
-            snapshot_message,
-            "snapshot",
-            "/api/overview".into(),
-        );
-    });
-    Effect::new(move |_| {
-        posture_refresh.get();
-        let selected = window.get();
-        read(
-            api,
-            tasks,
-            posture,
-            posture_message,
-            &selected,
-            format!("/api/overview/posture?window={selected}"),
-        );
-    });
     view! {<ManagementPage>
         <PageHeader title=trs!(ui.dashboard) subtitle=trs!(ui.campaign_activity_recipient_outcomes_and_the_resources_behind_them)>
-            <ActionButton disabled=Signal::derive(move||snapshot.with(|s|s.loading)||posture.with(|s|s.loading)) on_click=move |_| {snapshot_refresh.update(|v|*v+=1);posture_refresh.update(|v|*v+=1);}>
-                {move||if snapshot.with(|s|s.loading)||posture.with(|s|s.loading){leptos_i18n::t_string!(i18n, ui.refreshing_2)}else{leptos_i18n::t_string!(i18n, ui.refresh)}}
+            <ActionButton disabled=Signal::derive(move||snapshot.fetching.get()||posture.fetching.get()) on_click=move |_| {snapshot.refresh.run(());posture.refresh.run(());}>
+                {move||if snapshot.fetching.get()||posture.fetching.get(){leptos_i18n::t_string!(i18n, ui.refreshing_2)}else{leptos_i18n::t_string!(i18n, ui.refresh)}}
             </ActionButton>
             <ActionLink style=ButtonStyle::Primary href="/campaigns/new" hidden=!can_create>{tr!(ui.create_campaign)}</ActionLink>
         </PageHeader>
@@ -106,8 +42,7 @@ pub(super) fn page(api: Api) -> impl IntoView {
                         <option value="all">{tr!(ui.all_time)}</option><option value="365d">{tr!(ui.last_year)}</option><option value="30d">{tr!(ui.last_30_days)}</option><option value="7d">{tr!(ui.last_7_days)}</option>
                     </Select>
                 </div>
-                {posture_message.view()}
-                <Show when=move||posture.with(|s|s.loading)&&posture_data.get().is_none()><LoadingState label=trs!(ui.updating_analysis_overview)/></Show>
+                <QueryStatus fetching=posture.fetching has_data=Signal::derive(move || posture_data.with(Option::is_some)) error=posture.error noun=trs!(ui.analysis_overview) refresh=posture.refresh/>
                 {move||posture_data.get().map(|p| {
                     let counts=p.counts;
                     let previous=p.previous.map(|previous|previous.counts);
@@ -132,11 +67,8 @@ pub(super) fn page(api: Api) -> impl IntoView {
                     </dl><p class="dashboard-updated">{leptos_i18n::t!(i18n, messages.arg0_observed_through_arg1, arg0 = (comparison).to_string(), arg1 = (minute(&p.as_of.into())).to_string())}</p>}
 
                 })}
-                <Show when=move||posture.with(|s|s.error.is_some()&&!s.loading)><ActionButton on_click=move |_|posture_refresh.update(|v|*v+=1)>{tr!(ui.retry_analysis_overview)}</ActionButton></Show>
             </Card>
-            {snapshot_message.view()}
-            <Show when=move||snapshot.with(|s|s.loading)&&snapshot_data.get().is_none()><Card><LoadingState label=trs!(ui.loading_campaigns_and_resources)/></Card></Show>
-            <Show when=move||snapshot.with(|s|s.error.is_some()&&!s.loading)><div><ActionButton on_click=move |_|snapshot_refresh.update(|v|*v+=1)>{tr!(ui.retry_campaigns_and_resources)}</ActionButton></div></Show>
+            <QueryStatus fetching=snapshot.fetching has_data=Signal::derive(move || snapshot_data.with(Option::is_some)) error=snapshot.error noun=trs!(ui.dashboard) refresh=snapshot.refresh/>
             {move||snapshot_data.get().map(snapshot_sections)}
         </div>
     </ManagementPage>}

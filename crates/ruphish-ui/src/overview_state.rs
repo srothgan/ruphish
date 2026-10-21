@@ -1,60 +1,4 @@
-//! Dashboard reads: keep confirmed data on refresh failure, never mix periods.
-
-/// A request belongs to one selection and one generation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Request(u64);
-
-/// Independent request state for either the dashboard snapshot or its metrics.
-#[derive(Clone, Debug)]
-pub struct ReadState<T> {
-    key: String,
-    generation: u64,
-    /// Last confirmed response for the current selection.
-    pub data: Option<T>,
-    /// Current request is in flight.
-    pub loading: bool,
-    /// Most recent failure for the current selection.
-    pub error: Option<String>,
-}
-impl<T> Default for ReadState<T> {
-    fn default() -> Self {
-        Self {
-            key: String::new(),
-            generation: 0,
-            data: None,
-            loading: false,
-            error: None,
-        }
-    }
-}
-impl<T> ReadState<T> {
-    /// Start a read; a different selection invalidates the previous data.
-    pub fn begin(&mut self, key: &str) -> Request {
-        if self.key != key {
-            self.data = None;
-            self.key = key.into();
-        }
-        self.generation += 1;
-        self.loading = true;
-        self.error = None;
-        Request(self.generation)
-    }
-    /// Ignore late results, including failures, from an obsolete selection.
-    pub fn finish(&mut self, request: Request, result: Result<T, String>) -> bool {
-        if request.0 != self.generation {
-            return false;
-        }
-        self.loading = false;
-        match result {
-            Ok(data) => {
-                self.data = Some(data);
-                self.error = None;
-            }
-            Err(error) => self.error = Some(error),
-        }
-        true
-    }
-}
+//! Dashboard rates and comparisons, independent of query ownership.
 
 /// Undefined rates stay visibly distinct from a measured zero.
 pub fn percentage(count: i64, sent: i64) -> String {
@@ -101,53 +45,6 @@ pub fn count_change(current: i64, previous: i64) -> String {
 mod tests {
     use super::*;
     #[test]
-    fn changing_period_ignores_old_success_and_failure_without_unlocking_new_request() {
-        let mut state = ReadState::default();
-        let old = state.begin("all");
-        let next = state.begin("7d");
-        assert!(!state.finish(old, Ok(900)));
-        assert!(!state.finish(old, Err("timeout".into())));
-        assert!(state.loading);
-        assert_eq!(state.data, None);
-        assert_eq!(state.error, None);
-        assert!(state.finish(next, Ok(3)));
-        assert_eq!(state.data, Some(3));
-        assert!(!state.loading);
-    }
-    #[test]
-    fn failed_refresh_keeps_confirmed_counts_and_allows_retry_but_new_period_does_not() {
-        let mut state = ReadState::default();
-        let first = state.begin("all");
-        state.finish(first, Ok(12));
-        let refresh = state.begin("all");
-        state.finish(refresh, Err("offline".into()));
-        assert_eq!(state.data, Some(12));
-        assert!(!state.loading);
-        assert_eq!(state.error.as_deref(), Some("offline"));
-        let retry = state.begin("all");
-        state.finish(retry, Ok(14));
-        assert_eq!(state.data, Some(14));
-        assert_eq!(state.error, None);
-        let other = state.begin("30d");
-        state.finish(other, Err("offline".into()));
-        assert_eq!(state.data, None);
-        assert!(!state.loading);
-    }
-    #[test]
-    fn metrics_filter_does_not_reload_or_clear_snapshot() {
-        let mut snapshot = ReadState::default();
-        let mut metrics = ReadState::default();
-        let request = snapshot.begin("snapshot");
-        snapshot.finish(request, Ok(5));
-        let request = metrics.begin("all");
-        metrics.finish(request, Ok(25));
-        metrics.begin("7d");
-        assert_eq!(snapshot.data, Some(5));
-        assert!(!snapshot.loading);
-        assert_eq!(metrics.data, None);
-        assert!(metrics.loading);
-    }
-    #[test]
     fn incomplete_or_null_counts_are_errors_instead_of_a_fake_empty_dashboard() {
         use ruphish_contracts::overview::PostureResponse;
         let valid = serde_json::json!({"window":"all", "since":null, "as_of":123,
@@ -169,6 +66,22 @@ mod tests {
             null[field] = serde_json::Value::Null;
             assert!(serde_json::from_value::<PostureResponse>(null).is_err());
         }
+    }
+    #[test]
+    fn nullable_dashboard_fields_must_be_present() {
+        use ruphish_contracts::overview::{PostureResponse, Snapshot};
+        let complete = serde_json::json!({"window":"all","since":null,"as_of":123,"delivered":0,"opened":0,"clicked":0,"reported":0,"credentials_entered":0,"previous":null});
+        for field in ["since", "previous"] {
+            let mut value = complete.clone();
+            value.as_object_mut().map(|v| v.remove(field));
+            assert!(serde_json::from_value::<PostureResponse>(value).is_err());
+        }
+        let mut snapshot = serde_json::to_value(Snapshot::default()).expect("fixture");
+        assert!(serde_json::from_value::<Snapshot>(snapshot.clone()).is_ok());
+        snapshot["attention"]
+            .as_object_mut()
+            .map(|v| v.remove("next_launch"));
+        assert!(serde_json::from_value::<Snapshot>(snapshot).is_err());
     }
     #[test]
     fn outcome_trends_distinguish_reporting_from_risky_interactions_and_send_volume() {

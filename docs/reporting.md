@@ -39,6 +39,8 @@ The Gophish-compatible campaign summary endpoints remain supported for existing 
 - `/api/reporting-mailboxes/` and `/api/reporting-mailboxes/{id}`: owner-scoped CRUD; POST actions `validate`, `check` and `resume`. Resume requires the current `revision`.
 - Legacy `/api/imap/` GET/POST and `/api/imap/validate` remain adapters for the owner's first mailbox. Port/frequency retain string-number encoding; passwords are not returned. Validation checks supplied settings without saving. Insecure certificate bypass is rejected.
 
+Successful webhook validation returns the complete credential-free webhook resource, preserving the Gophish response style. Reporting-mailbox `validate` and `resume` likewise return the complete credential-free mailbox resource with HTTP 200; `check` returns that resource with HTTP 202, confirming that work was accepted rather than completed. The UI applies the confirmed resource to cached views and reconciles with a fresh read. Deletion returns an explicit success acknowledgement. Legacy `/api/imap/` responses remain unchanged.
+
 New UI edits use resource revisions. Stale changes return HTTP 412; optional `If-Match` protects deletions. Invalid request structures return sanitized errors without echoing supplied values. Existing legacy webhook clients can omit revision fields. Integration requests share authentication, live permissions and session/CSRF checks with other resources.
 
 Upgrading migrates legacy IMAP settings to mailbox resources, clears old credential rows from the working database and removes imported result IP/location fields. Startup preserves the original recovery backup; protect or retire that backup under your retention policy. Legacy campaign fields retain empty/zero location values.

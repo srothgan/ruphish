@@ -1,7 +1,7 @@
 //! Separate user list and form routes; account APIs remain the authorization boundary.
 use super::{Api, navigate};
-use crate::feedback::Message;
 use crate::shared::components::*;
+use crate::{feedback::Message, management_queries::ManagementQueries};
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use ruphish_contracts::auth::{User, UserEdit};
 use ruphish_ui::{tr, trs};
@@ -47,6 +47,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
     let busy = RwSignal::new(false);
     let message = Message::new(String::new());
     let notice = use_context::<Notice>();
+    let queries = expect_context::<ManagementQueries>();
     let navigate = leptos_router::hooks::use_navigate();
     let cancel_navigation = navigate.clone();
     let dirty = Signal::derive(move || {
@@ -66,9 +67,12 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                     .get(&format!("/api/users/{id}"))
                     .await
                     .and_then(|value| {
-                        serde_json::from_value::<User>(value).map_err(|_| {
-                            leptos_i18n::t_string!(i18n, ui.invalid_user_response).to_owned()
-                        })
+                        let user: User =
+                            serde_json::from_value(value).map_err(|_| api.invalid_read())?;
+                        if user.id != id {
+                            return Err(api.invalid_read());
+                        }
+                        Ok(user)
                     }) {
                     Ok(user) => {
                         baseline.set((
@@ -115,11 +119,20 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                     &token.get_value(),
                     Some(&value),
                 )
-                .await;
+                .await
+                .and_then(|value| {
+                    let user: User =
+                        serde_json::from_value(value).map_err(|_| api.invalid_read())?;
+                    if user.id <= 0 || id.is_some_and(|id| id != user.id) {
+                        return Err(api.invalid_read());
+                    }
+                    Ok(())
+                });
             password.set(String::new());
             busy.set(false);
             match result {
                 Ok(_) => {
+                    queries.users.invalidate(());
                     baseline.set((
                         username.get_untracked(),
                         role.get_untracked(),
@@ -175,9 +188,10 @@ fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
 
     let token = StoredValue::new(token);
     let tasks = ruphish_ui::view_tasks::ViewTasks::default();
-    let list = RwSignal::new(Vec::<User>::new());
+    let queries = expect_context::<ManagementQueries>();
+    let list = queries.users.observe(|| ());
+    let confirmed = Signal::derive(move || list.data.with(Option::is_some));
     let search = RwSignal::new(String::new());
-    let failed = RwSignal::new(false);
     let message = Message::new(String::new());
     if let Some(notice) = use_context::<Notice>() {
         let mut saved = None;
@@ -187,57 +201,29 @@ fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
         }
     }
     let busy = RwSignal::new(false);
-    let loaded = RwSignal::new(false);
     let deleting = RwSignal::new(None::<(i64, String)>);
-    let generation = StoredValue::new(0u64);
-    let refresh = move || {
-        generation.update_value(|n| *n += 1);
-        let ticket = generation.get_value();
-        loaded.set(false);
-        failed.set(false);
-        tasks.spawn(async move {
-            let result = api.get("/api/users/").await.and_then(|v| {
-                serde_json::from_value::<Vec<User>>(v)
-                    .map_err(|_| leptos_i18n::t_string!(i18n, ui.invalid_user_response).into())
-            });
-            if generation.get_value() != ticket {
-                return;
-            }
-            match result {
-                Ok(users) => {
-                    list.set(users);
-                }
-                Err(error) => {
-                    failed.set(true);
-                    message.error(error);
-                }
-            }
-            loaded.set(true);
-        });
-    };
-    refresh();
     let remove = move |_| {
         if busy.get_untracked() {
             return;
         }
         if let Some((id, _)) = deleting.get_untracked() {
-            generation.update_value(|n| *n += 1);
-            loaded.set(true);
             busy.set(true);
             tasks.spawn(async move {
                 match api
-                    .json(
+                    .command(
                         "DELETE",
                         &format!("/api/users/{id}"),
                         &token.get_value(),
+                        None,
                         None,
                     )
                     .await
                 {
                     Ok(_) => {
-                        list.update(|rows| rows.retain(|user| user.id != id));
+                        queries
+                            .users
+                            .confirmed((), |rows| rows.retain(|user| user.id != id));
                         deleting.set(None);
-                        refresh();
                         message.status(
                             leptos_i18n::t_string!(i18n, ui.user_and_owned_data_deleted).to_owned(),
                         );
@@ -250,17 +236,18 @@ fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
     };
     let visible = Signal::derive(move || {
         let needle = search.get().to_lowercase();
-        list.get()
+        list.data
+            .get()
+            .unwrap_or_default()
             .into_iter()
             .filter(|user| user.username.to_lowercase().contains(&needle))
             .collect::<Vec<_>>()
     });
     view! { <ManagementPage>
-        <PageHeader title=trs!(ui.users) subtitle=trs!(ui.manage_access_roles_and_account_status)><ActionLink style=ButtonStyle::Primary href="/users/new">{tr!(ui.create_user)}</ActionLink></PageHeader>
+        <PageHeader title=trs!(ui.users) subtitle=trs!(ui.manage_access_roles_and_account_status)><ActionButton disabled=list.fetching on_click=move |_|list.refresh.run(())>{tr!(ui.refresh)}</ActionButton><ActionLink style=ButtonStyle::Primary href="/users/new">{tr!(ui.create_user)}</ActionLink></PageHeader>
         {message.view()}
-        <ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) label=trs!(ui.search_by_username) noun=trs!(ui.users_2)/>
-        <Show when=move||!loaded.get()><p role="status">{tr!(ui.loading_users)}</p></Show>
-        <Show when=move||loaded.get()&&failed.get()><ActionButton kind="button" on_click=move |_|refresh()>{tr!(ui.retry_loading_users)}</ActionButton></Show>
+        <ListToolbar search=search count=Signal::derive(move || visible.with(Vec::len)) count_known=confirmed label=trs!(ui.search_by_username) noun=trs!(ui.users_2)/>
+        <QueryStatus fetching=list.fetching has_data=confirmed error=list.error noun=trs!(ui.users_2) refresh=list.refresh/>
         <DataTable label=trs!(ui.users) empty=Signal::derive(move || visible.with(Vec::is_empty)) headers=vec![trs!(ui.user),trs!(ui.role),trs!(ui.status),trs!(ui.actions)]>
         {move || visible.get().into_iter().map(|user| { let id = user.id; let delete_name = user.username.clone(); let impersonate_name = user.username.clone(); let own_account = id == current_user; let can_impersonate = !user.account_locked && !user.password_change_required;
             view! { <tr><th scope="row"><a href=format!("/users/{id}/edit")>{user.username}</a></th><td>{ruphish_ui::localization::role_label(i18n, &user.role)}</td><td>{move || if user.account_locked { leptos_i18n::t_string!(i18n, ui.locked) } else if user.password_change_required { leptos_i18n::t_string!(i18n, ui.password_setup) } else { leptos_i18n::t_string!(i18n, ui.active) }}</td><td><div class="row-actions">
@@ -269,7 +256,7 @@ fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
                 <ActionButton style=ButtonStyle::Ghost size=ControlSize::Small disabled=Signal::derive(move||own_account||busy.get()) title=Signal::derive(move || (if own_account { leptos_i18n::t_string!(i18n, ui.you_cannot_delete_your_own_account) } else { leptos_i18n::t_string!(i18n, ui.delete_this_user) }).to_owned()) on_click=move |_| {message.clear();deleting.set(Some((id,delete_name.clone())))}>{tr!(ui.delete)}</ActionButton></div></td></tr> }
         }).collect_view()}
         </DataTable>
-        <ListEmptyState ready=Signal::derive(move || loaded.get() && !failed.get()) count=Signal::derive(move || visible.with(Vec::len)) search=search title=trs!(ui.no_users_found) guidance=trs!(ui.create_a_user_to_get_started)/>
+        <ListEmptyState ready=Signal::derive(move || confirmed.get() && !list.fetching.get() && list.error.get().is_none()) count=Signal::derive(move || visible.with(Vec::len)) search=search title=trs!(ui.no_users_found) guidance=trs!(ui.create_a_user_to_get_started)/>
         {move || deleting.get().map(|(_,name)| view! { <DeleteConfirmation title=leptos_i18n::t_string!(i18n, messages.delete_arg0, arg0 = (name).to_string()) description=trs!(ui.this_permanently_removes_the_account_and_its_owned_campaigns_templates_and_other) confirm_label=trs!(ui.delete_user_and_data) busy=busy on_confirm=Callback::new(remove) on_cancel=Callback::new(move|()|deleting.set(None)) message=message/> })}
     </ManagementPage> }
 }

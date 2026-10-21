@@ -9,6 +9,9 @@ use wasm_bindgen_test::wasm_bindgen_test;
 #[path = "support/locale_window.rs"]
 mod locale_window;
 
+#[path = "support/query_lifecycle.rs"]
+mod query_lifecycle;
+
 #[wasm_bindgen_test]
 fn language_selection_prefers_saved_choices_then_supported_browser_languages() {
     use ruphish_ui::localization::{Locale, resolve};
@@ -560,4 +563,46 @@ fn received_error_codes_translate_to_plain_text_with_a_stable_support_identifier
             "CSV_ROW_COLUMNS - Column count does not match the header."
         );
     });
+}
+
+#[wasm_bindgen_test]
+fn late_session_preferences_cannot_undo_a_confirmed_save() {
+    locale_window::install();
+    use leptos::prelude::*;
+    use ruphish_contracts::auth::Preferences;
+    use ruphish_ui::{
+        display_preferences::DisplayPreferences,
+        localization::{self, Locale},
+    };
+    let _ = any_spawner::Executor::init_wasm_bindgen();
+    let owner = Owner::new();
+    owner.with(|| {
+        let context = localization::provide(Locale::en);
+        let state = DisplayPreferences::provide();
+        let before_save = state.read_ticket();
+        let saved = Preferences {
+            language: Some("de".into()),
+            time_zone: Some("Europe/Berlin".into()),
+            show_utc_offset: false,
+            ..Default::default()
+        };
+        state.apply(saved.clone(), context);
+        state.apply_read(before_save, Preferences::default(), context);
+        state.read_failed(before_save, "obsolete failure".into());
+        assert!(state.error.get_untracked().is_none());
+        assert_eq!(state.value.get_untracked(), saved);
+        assert_eq!(context.get_locale_untracked(), Locale::de);
+        let after_save = state.read_ticket();
+        state.read_failed(after_save, "offline".into());
+        assert_eq!(state.value.get_untracked(), saved);
+        assert_eq!(state.error.get_untracked().as_deref(), Some("offline"));
+        state.apply_read(after_save, Preferences::default(), context);
+        assert_eq!(state.value.get_untracked(), Preferences::default());
+        assert!(state.error.get_untracked().is_none());
+        assert_eq!(
+            context.get_locale_untracked(),
+            localization::browser_locale()
+        );
+    });
+    owner.cleanup();
 }
