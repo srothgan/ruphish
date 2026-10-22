@@ -118,18 +118,18 @@ pub(super) fn page() -> impl IntoView {
                                         ChangeGoal::Decrease,
                                     ),
                                     (
-                                        trs!(ui.reported),
-                                        counts.reported,
-                                        previous.map(|p| p.reported),
-                                        true,
-                                        ChangeGoal::Increase,
-                                    ),
-                                    (
                                         trs!(ui.credentials_entered),
                                         counts.credentials_entered,
                                         previous.map(|p| p.credentials_entered),
                                         true,
                                         ChangeGoal::Decrease,
+                                    ),
+                                    (
+                                        trs!(ui.reported),
+                                        counts.reported,
+                                        previous.map(|p| p.reported),
+                                        true,
+                                        ChangeGoal::Increase,
                                     ),
                                 ];
                                 let comparison = match p.window.as_str() {
@@ -224,7 +224,7 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
     let clear = attention.unverified_enabled_domains == 0 && attention.delivery_problems == 0;
     view! {
         <div class="dashboard-work">
-            <Card class="dashboard-campaigns">
+            <Card class="dashboard-campaigns" label=trs!(ui.recent_campaigns) attr:tabindex="0">
                 <div class="dashboard-section-heading">
                     <h2>
                         <a href="/campaigns">{tr!(ui.recent_campaigns)}</a>
@@ -262,6 +262,7 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                     {s
                         .recent
                         .into_iter()
+                        .take(3)
                         .map(|c| {
                             let (action_href, action_label) = if c.status == "Completed" {
                                 (
