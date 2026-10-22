@@ -1,5 +1,6 @@
 name: Feature or improvement
 description: Describe a task Ruphish could make easier.
+labels: ["type: feature", "status: triage"]
 body:
   - type: markdown
     attributes:
