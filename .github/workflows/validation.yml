@@ -150,6 +150,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/toolchain
+      - name: Allow fixtures to bind the standard HTTPS port
+        run: sudo sysctl -w net.ipv4.ip_unprivileged_port_start=443
       - name: Rust formatting
         run: cargo fmt --all -- --check
       - name: Native static checks
@@ -186,6 +188,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/toolchain
+      - name: Allow fixtures to bind the standard HTTPS port
+        run: sudo sysctl -w net.ipv4.ip_unprivileged_port_start=443
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: admin-distribution
