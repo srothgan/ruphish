@@ -13,4 +13,4 @@ Initial release targeting feature parity with Gophish, with a native Rust server
 - Automate through familiar Gophish resource APIs and new Ruphish endpoints, with separate `/api/`, `/auth/`, and `/internal/` interfaces.
 - Track participant interactions and optional password presence instead of collecting entered credentials or other form values.
 
-See [differences from Gophish](docs/migration/differences-from-gophish.md) for intentional changes and migration considerations.
+See [differences from Gophish](https://ruphish.vercel.app/docs/migration/differences-from-gophish/) for intentional changes and migration considerations.

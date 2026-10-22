@@ -2,7 +2,7 @@
 
 Ruphish is a phishing-simulation application with a native Rust server and a Rust/WASM admin interface. Prepare personalized campaigns, deliver them through your SMTP service, and review delivery, participant interactions, and reported messages in one place.
 
-Ruphish aims to be a compatible, drop-in replacement for Gophish while adding a new interface, persistent campaign drafts, verified domains, richer analysis, and explicit delivery recovery. Full compatibility cannot be guaranteed for every integration or deployment; review the [documented differences](docs/migration/differences-from-gophish.md) before migrating.
+Ruphish aims to be a compatible, drop-in replacement for Gophish while adding a new interface, persistent campaign drafts, verified domains, richer analysis, and explicit delivery recovery. Full compatibility cannot be guaranteed for every integration or deployment; review the [documented differences](https://ruphish.vercel.app/docs/migration/differences-from-gophish/) before migrating.
 
 ![Ruphish dashboard showing campaign outcomes, recent campaigns, and deliveries needing review.](assets/dashboard.png)
 
@@ -16,26 +16,26 @@ Ruphish aims to be a compatible, drop-in replacement for Gophish while adding a 
 - Use English or German interface text with independent date-format and time-zone preferences.
 - Automate workflows through compatible resource endpoints and Ruphish's added APIs.
 
-Participant tracking is designed around interaction events and optional presence booleans. Entered usernames, passwords, OTPs, and arbitrary form values are outside the supported collection model. Read [participant data](docs/user-guide/participant-data.md) for behavior and verification limits.
+Participant tracking is designed around interaction events and optional presence booleans. Entered usernames, passwords, OTPs, and arbitrary form values are outside the supported collection model. Read [participant data](https://ruphish.vercel.app/docs/user-guide/participant-data/) for behavior and verification limits.
 
 ## Start here
 
 | Your goal | Guide |
 | --- | --- |
-| Try a contained exercise with a local inbox | [Your first campaign](docs/getting-started/first-campaign.md) |
-| Install a release binary or run the Docker image | [Installation](docs/getting-started/installation.md) |
-| Run campaigns and understand results | [User guide](docs/user-guide/index.md) |
-| Configure databases, TLS, accounts, or recovery | [Administration](docs/administration/index.md) |
-| Integrate with Ruphish | [HTTP API](docs/api/index.md) |
-| Bring an existing Gophish installation across | [Migration and compatibility](docs/migration/index.md) |
+| Try a contained exercise with a local inbox | [Your first campaign](https://ruphish.vercel.app/docs/getting-started/first-campaign/) |
+| Install a release binary or run the Docker image | [Installation](https://ruphish.vercel.app/docs/getting-started/installation/) |
+| Run campaigns and understand results | [User guide](https://ruphish.vercel.app/docs/user-guide/) |
+| Configure databases, TLS, accounts, or recovery | [Administration](https://ruphish.vercel.app/docs/administration/) |
+| Integrate with Ruphish | [HTTP API](https://ruphish.vercel.app/docs/api/) |
+| Bring an existing Gophish installation across | [Migration and compatibility](https://ruphish.vercel.app/docs/migration/) |
 | Change code, translations, or documentation | [Contributing](CONTRIBUTING.md) |
 | Report a suspected security vulnerability | [Security policy](SECURITY.md) |
 
-The HTTP interface separates `/api/` for public automation, `/auth/` for browser authentication/session data, and `/internal/` for browser-specific operations. See the [API overview](docs/api/index.md) before choosing an endpoint for an integration.
+The HTTP interface separates `/api/` for public automation, `/auth/` for browser authentication/session data, and `/internal/` for browser-specific operations. See the [API overview](https://ruphish.vercel.app/docs/api/) before choosing an endpoint for an integration.
 
 ## Installation
 
-The intended installation options are a release binary and a Docker image. SQLite is the default database; MySQL and PostgreSQL are also configurable. See [installation](docs/getting-started/installation.md) for setup and [database administration](docs/administration/databases/index.md) for provider requirements.
+The intended installation options are a release binary and a Docker image. SQLite is the default database; MySQL and PostgreSQL are also configurable. See [installation](https://ruphish.vercel.app/docs/getting-started/installation/) for setup and [database administration](https://ruphish.vercel.app/docs/administration/databases/) for provider requirements.
 
 > TODO before publication: Publish the release binaries and Docker image, then complete and verify their installation instructions. These distribution options are not available yet.
 
