@@ -1,9 +1,12 @@
 //! Browser-only admin application entry point.
+//!
+//! The admin UI only runs in the browser, so every module and the real entry point are gated to
+//! `wasm32`. Native commands exclude this package (`cargo ... --workspace --exclude ruphish-ui`),
+//! but compiling every binary target is unavoidable for `cargo test -p ruphish-ui --lib --tests`,
+//! so native builds produce an inert binary rather than failing to compile.
 
 #[cfg(not(target_arch = "wasm32"))]
-compile_error!(
-    "Build ruphish-ui for wasm32-unknown-unknown; native commands exclude this package."
-);
+fn main() {}
 
 #[cfg(target_arch = "wasm32")]
 mod account;
@@ -27,6 +30,7 @@ mod editor;
 mod feedback;
 #[cfg(target_arch = "wasm32")]
 mod integrations;
+#[cfg(target_arch = "wasm32")]
 mod management_queries;
 #[cfg(target_arch = "wasm32")]
 mod navigation;

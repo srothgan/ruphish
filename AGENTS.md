@@ -24,7 +24,7 @@ Native libraries are scaffolds until functionality is implemented with its tests
 
 [Validation](docs/contributing/testing/validation.md) is the single command and CI reference. Select checks by changed behavior and affected consumers, including shared contracts, configuration, build inputs and fixtures. During implementation run the focused regression; after edits settle run the applicable checks below. A local commit does not require full acceptance.
 
-CI provides the broader backstop: `pr.yml` selects main-PR checks, `nightly.yml` runs full source acceptance, and `release.yml` adds optimized-profile checks for release-target PRs or explicit manual runs. Native CI covers Linux, Windows and macOS. The shared `validation.yml` owns source-check commands. Once the repository exists, require `PR gate` on main and `Release gate` on release/prod branches. Do not copy those full matrices into agent completion work; directly affected guarantees still require focused local regressions. Single-binary shipping is a later feature, separate from this validation foundation.
+CI provides the broader backstop: `pr.yml` selects main-PR checks, `nightly.yml` runs full source acceptance, and `release.yml` adds optimized-profile checks for release-target PRs or explicit manual runs. Native CI covers Linux, Windows and macOS. The shared `validation.yml` owns source-check commands. Once the repository exists, require `PR gate` on main and `Release gate` on release. Do not copy those full matrices into agent completion work; directly affected guarantees still require focused local regressions. Single-binary shipping is a later feature, separate from this validation foundation.
 
 | Change | Agent completion checks |
 | --- | --- |

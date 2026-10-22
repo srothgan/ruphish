@@ -38,7 +38,7 @@ export function select(paths, profile = 'auto', event = 'pull_request', branch =
     if (matches.length) for (const [, filter] of matches) filters.add(filter);
     else filters.add(''); // An unclassified runtime change gets the full process suite.
   };
-  if (event === 'schedule' || profile === 'full' || branch === 'prod' || branch.startsWith('release/')) all();
+  if (event === 'schedule' || profile === 'full' || branch === 'release') all();
   else if (profile === 'native') Object.assign(selected, { native: true, smoke: true, rust_format: true });
   else if (profile === 'ui') Object.assign(selected, { ui: true, smoke: true, rust_format: true });
   else if (profile === 'databases') Object.assign(selected, { native: true, mysql: true, postgres: true, migration: true, rust_format: true });

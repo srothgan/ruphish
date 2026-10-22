@@ -60,7 +60,7 @@ test('deleted, renamed, unknown and build inputs cannot bypass acceptance', () =
   assert.equal(select(['tests/support/new-network.rs']).process_filters[0], '');
 });
 test('nightly, release branches and manual auto use complete acceptance', () => {
-  for (const [event, branch] of [['schedule', 'main'], ['pull_request', 'release/0.1'], ['pull_request', 'prod'], ['workflow_dispatch', '']]) {
+  for (const [event, branch] of [['schedule', 'main'], ['pull_request', 'release'], ['workflow_dispatch', '']]) {
     assert.equal(select([], 'auto', event, branch).full, true);
   }
 });
