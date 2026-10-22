@@ -644,7 +644,7 @@ fn campaign_workflow(
     let response = auth_process::post(
         &editor,
         base,
-        "/settings",
+        "/internal/password",
         &[
             ("current_password", "established-admin-password"),
             ("new_password", "changed-process-password"),
@@ -661,7 +661,7 @@ fn campaign_workflow(
         auth_process::post(
             &editor,
             base,
-            "/settings",
+            "/internal/password",
             &[
                 ("current_password", "changed-process-password"),
                 ("new_password", "established-admin-password"),

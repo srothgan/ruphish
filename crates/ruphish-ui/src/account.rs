@@ -1,4 +1,4 @@
-//! Account workflows over the same HTTP boundary used by external clients.
+//! Account pages using the public API and session-only browser actions.
 use crate::feedback::Message;
 use crate::shared::components::*;
 use gloo_net::http::Request;
@@ -660,11 +660,19 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
     let expand_label = trs!(ui.expand_navigation);
     let collapse_label = trs!(ui.collapse_navigation);
     let session = StoredValue::new(session);
-    let account_page = move |users_page: Option<users::Screen>, password_page: bool| {
+    enum AccountPage {
+        Overview,
+        Preferences,
+        Password,
+        Users(users::Screen),
+        CompanySettings,
+    }
+    let account_page = move |page: AccountPage| {
         if required {
-            password_form(api, token.get_value(), true).into_any()
-        } else if active {
-            view! {
+            return password_form(api, token.get_value(), true).into_any();
+        }
+        if active {
+            return view! {
                 <Card class="account-panel">
                     <h1>{tr!(ui.account_management)}</h1>
                     <p>{tr!(ui.exit_impersonation_to_manage_accounts_and_credentials)}</p>
@@ -676,29 +684,29 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
                     </ActionButton>
                 </Card>
             }
-            .into_any()
-        } else if let Some(screen) = users_page {
-            if admin {
-                users::page(
-                    api,
-                    session.with_value(|s| s.user.as_ref().map(|u| u.id).unwrap_or_default()),
-                    token.get_value(),
-                    screen,
-                )
-                .into_any()
-            } else {
-                view! {
-                    <Card class="account-panel">
-                        <h1>{tr!(ui.access_denied)}</h1>
-                        <p>{tr!(ui.user_management_requires_administrator_permissions)}</p>
-                    </Card>
-                }
-                .into_any()
+            .into_any();
+        }
+        if matches!(page, AccountPage::Users(_) | AccountPage::CompanySettings) && !admin {
+            return view! {
+                <Card class="account-panel">
+                    <h1>{tr!(ui.access_denied)}</h1>
+                    <p>{tr!(ui.administration_requires_permissions)}</p>
+                </Card>
             }
-        } else if password_page {
-            password_form(api, token.get_value(), false).into_any()
-        } else {
-            settings(api, session.get_value()).into_any()
+            .into_any();
+        }
+        match page {
+            AccountPage::Users(screen) => users::page(
+                api,
+                session.with_value(|s| s.user.as_ref().map(|u| u.id).unwrap_or_default()),
+                token.get_value(),
+                screen,
+            )
+            .into_any(),
+            AccountPage::Password => password_form(api, token.get_value(), false).into_any(),
+            AccountPage::Preferences => preferences_page(api, token.get_value()).into_any(),
+            AccountPage::CompanySettings => company_settings_page().into_any(),
+            AccountPage::Overview => account_overview(api, session.get_value()).into_any(),
         }
     };
     let resource_page = move |family: Family, screen: Screen| {
@@ -775,19 +783,27 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
                     }
                 }
             />
-            <Route path=path!("/settings") view=move || account_page(None, false) />
-            <Route path=path!("/settings/password") view=move || account_page(None, true) />
+            <Route path=path!("/user") view=move || account_page(AccountPage::Overview) />
+            <Route
+                path=path!("/user/settings")
+                view=move || account_page(AccountPage::Preferences)
+            />
+            <Route
+                path=path!("/settings")
+                view=move || account_page(AccountPage::CompanySettings)
+            />
+            <Route path=path!("/user/password") view=move || account_page(AccountPage::Password) />
             <Route
                 path=path!("/users")
-                view=move || account_page(Some(users::Screen::List), false)
+                view=move || account_page(AccountPage::Users(users::Screen::List))
             />
             <Route
                 path=path!("/users/new")
-                view=move || account_page(Some(users::Screen::New), false)
+                view=move || account_page(AccountPage::Users(users::Screen::New))
             />
             <Route
                 path=path!("/users/:id/edit")
-                view=move || account_page(Some(users::Screen::Edit), false)
+                view=move || account_page(AccountPage::Users(users::Screen::Edit))
             />
             <Route
                 path=path!("/")
@@ -902,7 +918,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
                 path=path!("/smtp/:id/edit")
                 view=move || resource_page(Family::Profiles, Screen::Edit)
             />
-            <Route path=path!("/reset_password") view=move || account_page(None, false) />
+            <Route path=path!("/reset_password") view=move || account_page(AccountPage::Overview) />
         </Routes>
     };
     view! {
@@ -1005,6 +1021,26 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         </div>
     }
 }
+fn preferences_page(api: Api, token: String) -> impl IntoView {
+    view! {
+        <section class="account-overview">
+            <div class="account-heading">
+                <h1>{tr!(ui.settings)}</h1>
+            </div>
+            <crate::preferences::DisplayPreferencesForm api=api token=token />
+        </section>
+    }
+}
+
+fn company_settings_page() -> impl IntoView {
+    view! {
+        <Card class="account-panel">
+            <h1>{tr!(ui.company_settings)}</h1>
+            <p>{tr!(ui.company_settings_deferred)}</p>
+        </Card>
+    }
+}
+
 fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
@@ -1035,7 +1071,7 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
             let path = if required {
                 "/reset_password"
             } else {
-                "/settings"
+                "/internal/password"
             };
             let fields = if required {
                 vec![
@@ -1061,7 +1097,7 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
                         notice.0.set(true);
                     }
                     navigate_account(
-                        "/settings",
+                        "/user",
                         leptos_router::NavigateOptions {
                             replace: true,
                             ..Default::default()
@@ -1076,7 +1112,7 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
         <Card class="account-panel password-page">
             {(!required)
                 .then(|| {
-                    view! { <BackLink href="/settings">{tr!(ui.back_to_my_account)}</BackLink> }
+                    view! { <BackLink href="/user">{tr!(ui.back_to_my_account)}</BackLink> }
                 })}
             <h1>
                 {move || {
@@ -1161,7 +1197,7 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
                                     current.set(String::new());
                                     candidate.set(String::new());
                                     confirm.set(String::new());
-                                    cancel_navigation("/settings", Default::default());
+                                    cancel_navigation("/user", Default::default());
                                 }
                             >
                                 {tr!(ui.cancel)}
@@ -1172,7 +1208,7 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
         </Card>
     }
 }
-fn settings(api: Api, session: BrowserSession) -> impl IntoView {
+fn account_overview(api: Api, session: BrowserSession) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
     let token = StoredValue::new(session.csrf_token.clone());
@@ -1287,7 +1323,7 @@ fn settings(api: Api, session: BrowserSession) -> impl IntoView {
         <section class="account-overview">
             <div class="account-heading">
                 <h1>{tr!(ui.my_account)}</h1>
-                <a class="button" href="/settings/password">
+                <a class="button" href="/user/password">
                     {tr!(ui.change_password)}
                 </a>
             </div>
@@ -1306,10 +1342,6 @@ fn settings(api: Api, session: BrowserSession) -> impl IntoView {
                         </div>
                     </dl>
                 </Card>
-                <crate::preferences::DisplayPreferencesForm
-                    api=api
-                    token=session.csrf_token.clone()
-                />
                 <Card class="account-panel">
                     <h2>{tr!(ui.api_access)}</h2>
                     <p>{tr!(ui.use_your_api_key_for_integrations_treat_it_like_a_password)}</p>

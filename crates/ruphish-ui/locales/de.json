@@ -4,6 +4,10 @@
     "native_name": "Deutsch"
   },
   "ui": {
+    "administration_requires_permissions": "Für diese Seite sind Administratorrechte erforderlich.",
+    "settings": "Einstellungen",
+    "company_settings": "Admin-Einstellungen",
+    "company_settings_deferred": "Unternehmensweite Einstellungen sind noch nicht verfügbar. Für die Domainverifizierung gilt weiterhin die feste Systemrichtlinie.",
     "new_group": "Neue Empfängergruppe",
     "new_template": "Neue E-Mail-Vorlage",
     "new_page": "Neue Landingpage",

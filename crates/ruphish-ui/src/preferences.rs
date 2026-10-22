@@ -133,7 +133,7 @@ pub(crate) fn DisplayPreferencesForm(api: Api, token: String) -> impl IntoView {
                 Ok(body) => api
                     .resource(
                         "PUT",
-                        "/api/user-preferences",
+                        "/internal/preferences",
                         &token.get_value(),
                         Some(&body),
                         None,

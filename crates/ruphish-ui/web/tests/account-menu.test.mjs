@@ -5,7 +5,7 @@ import {bindAccountMenu} from '../account-menu.mjs';
 import {installNavigationGuard, confirmDiscard} from '../navigation.mjs';
 
 function fixture() {
-  const dom = new JSDOM('<button id="trigger" aria-expanded="false">Alice</button><div id="panel" hidden><a href="/settings">My account</a><button>Sign out</button></div><input id="outside">', {url: 'https://admin.example.test/groups/new'});
+  const dom = new JSDOM('<button id="trigger" aria-expanded="false">Alice</button><div id="panel" hidden><a href="/user">My account</a><a href="/user/settings">Settings</a><button>Sign out</button></div><input id="outside">', {url: 'https://admin.example.test/groups/new'});
   const win = dom.window;
   const trigger = win.document.querySelector('#trigger');
   const panel = win.document.querySelector('#panel');
@@ -81,15 +81,16 @@ test('canceling dirty navigation keeps the account menu and draft; accepting rea
   });
   try {
     f.trigger.click();
-    f.panel.querySelector('a').click();
+    f.panel.querySelector('a[href="/user/settings"]').focus();
+    f.panel.querySelector('a[href="/user/settings"]').click();
     assert.equal(navigations, 0);
     assert.equal(f.panel.hidden, false);
     f.win.dispatchEvent(new f.win.KeyboardEvent('keydown', {key: 'Escape'}));
     assert.equal(f.panel.hidden, false, 'Escape belongs to the modal while it is open');
     f.dialog.dispatchEvent(new f.win.Event('cancel', {cancelable: true}));
     await Promise.resolve(); await Promise.resolve();
-    assert.equal(f.win.document.activeElement, f.panel.querySelector('a'));
-    f.panel.querySelector('a').click();
+    assert.equal(f.win.document.activeElement, f.panel.querySelector('a[href="/user/settings"]'));
+    f.panel.querySelector('a[href="/user/settings"]').click();
     f.dialog.querySelector('[data-discard="confirm"]').click();
     await Promise.resolve(); await Promise.resolve();
     assert.equal(navigations, 1);

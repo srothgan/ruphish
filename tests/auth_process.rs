@@ -101,7 +101,7 @@ fn generic_self_password_updates_require_the_dedicated_reauthenticated_flow() {
         post(
             &admin,
             &base,
-            "/settings",
+            "/internal/password",
             &[
                 ("current_password", "established-admin-password"),
                 ("new_password", "verified-replacement"),
@@ -219,6 +219,7 @@ fn dedicated_user_pages_preserve_browser_crud_and_reject_unauthorized_access() {
         "Blank update password must retain the existing credential"
     );
     for path in [
+        "/settings".to_owned(),
         "/users".to_owned(),
         "/users/new".to_owned(),
         format!("/users/{id}/edit"),
@@ -228,6 +229,34 @@ fn dedicated_user_pages_preserve_browser_crud_and_reject_unauthorized_access() {
             403
         );
     }
+    for path in [
+        "/user",
+        "/user/settings",
+        "/user/password",
+        "/internal/preferences",
+    ] {
+        assert_eq!(
+            member.get(format!("{base}{path}")).send().unwrap().status(),
+            200
+        );
+    }
+    let member_session = bootstrap(&member, &base);
+    let saved = member
+        .put(format!("{base}/internal/preferences"))
+        .header("origin", &base)
+        .header(
+            "x-csrf-token",
+            member_session["csrf_token"].as_str().unwrap(),
+        )
+        .json(&json!({"language":"de","time_zone":"Europe/Berlin"}))
+        .send()
+        .unwrap();
+    assert_eq!(saved.status(), 200);
+    assert_eq!(bootstrap(&member, &base)["preferences"]["language"], "de");
+    assert_eq!(
+        bootstrap(&admin, &base)["preferences"],
+        session["preferences"]
+    );
     assert_eq!(
         admin
             .get(format!("{base}/api/users/999999"))
@@ -271,22 +300,17 @@ fn dedicated_user_pages_preserve_browser_crud_and_reject_unauthorized_access() {
 }
 
 #[test]
-fn account_password_deep_link_preserves_setup_and_legacy_password_contract() {
+fn account_routes_preserve_setup_and_reauthenticated_password_changes() {
     let directory = workspace();
     let mut process = Process::start(directory.path(), "admin");
     let base = endpoint(&mut process);
     let client = browser();
-    let password_page = || {
-        client
-            .get(format!("{base}/settings/password"))
-            .send()
-            .unwrap()
-    };
+    let password_page = || client.get(format!("{base}/user/password")).send().unwrap();
     let anonymous = password_page();
     assert_eq!(anonymous.status(), 307);
     assert_eq!(
         anonymous.headers()["location"],
-        "/login?next=/settings/password"
+        "/login?next=/user/password"
     );
     assert_eq!(
         sign_in(&client, &base, "admin", "synthetic-bootstrap-password").status(),
@@ -296,7 +320,25 @@ fn account_password_deep_link_preserves_setup_and_legacy_password_contract() {
     assert_eq!(forced.status(), 307);
     assert_eq!(
         forced.headers()["location"],
-        "/reset_password?next=%2Fsettings%2Fpassword"
+        "/reset_password?next=%2Fuser%2Fpassword"
+    );
+    for path in ["/user", "/user/settings"] {
+        assert_eq!(
+            client.get(format!("{base}{path}")).send().unwrap().status(),
+            307
+        );
+    }
+    assert_eq!(
+        client
+            .get(format!("{base}/internal/preferences"))
+            .send()
+            .unwrap()
+            .status(),
+        403
+    );
+    assert_eq!(
+        post(&client, &base, "/internal/password", &[]).status(),
+        403
     );
     assert_eq!(
         post(
@@ -312,11 +354,36 @@ fn account_password_deep_link_preserves_setup_and_legacy_password_contract() {
         200
     );
     assert_eq!(password_page().status(), 200);
+    for path in ["/user", "/user/settings", "/settings"] {
+        let response = client.get(format!("{base}{path}")).send().unwrap();
+        assert_eq!(response.status(), 200, "{path}");
+        assert!(response.text().unwrap().contains("Ruphish"));
+        assert_eq!(post(&client, &base, path, &[]).status(), 405, "{path}");
+    }
+    for path in ["/settings/password", "/api/user-preferences"] {
+        assert_eq!(
+            client.get(format!("{base}{path}")).send().unwrap().status(),
+            404
+        );
+    }
+    for method in [reqwest::Method::GET, reqwest::Method::POST] {
+        let response = client
+            .request(method, format!("{base}/reset_password"))
+            .header(
+                "x-csrf-token",
+                bootstrap(&client, &base)["csrf_token"].as_str().unwrap(),
+            )
+            .header("origin", &base)
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), 307);
+        assert_eq!(response.headers()["location"], "/user/password");
+    }
     let change = |current: &str| {
         post(
             &client,
             &base,
-            "/settings",
+            "/internal/password",
             &[
                 ("current_password", current),
                 ("new_password", "replacement-admin-password"),
@@ -331,7 +398,7 @@ fn account_password_deep_link_preserves_setup_and_legacy_password_contract() {
     assert_eq!(password_page().status(), 200);
     assert_eq!(
         client
-            .post(format!("{base}/settings/password"))
+            .post(format!("{base}/user/password"))
             .send()
             .unwrap()
             .status(),
@@ -345,6 +412,137 @@ fn account_password_deep_link_preserves_setup_and_legacy_password_contract() {
     );
     assert_eq!(
         sign_in(&client, &base, "admin", "replacement-admin-password").status(),
+        200
+    );
+    process.stop();
+}
+
+#[test]
+fn internal_account_endpoints_require_sessions_and_reject_explicit_api_credentials() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = endpoint(&mut process);
+    let admin = browser();
+    let anonymous = browser();
+    let session = setup(&admin, &base);
+    let csrf = session["csrf_token"].as_str().unwrap();
+    let chosen =
+        json!({"language":"de","format_locale":null,"time_zone":null,"show_utc_offset":true});
+    for (method, path) in [
+        (reqwest::Method::GET, "/internal/preferences"),
+        (reqwest::Method::PUT, "/internal/preferences"),
+        (reqwest::Method::POST, "/internal/password"),
+    ] {
+        assert_eq!(
+            anonymous
+                .request(method.clone(), format!("{base}{path}"))
+                .send()
+                .unwrap()
+                .status(),
+            401
+        );
+        // Valid, invalid and empty credentials all reject, even alongside a valid session/CSRF.
+        for browser in [&anonymous, &admin] {
+            for key in [admin_key(), "invalid", ""] {
+                for query in [false, true] {
+                    let url = if query {
+                        format!("{base}{path}?api_key={key}")
+                    } else {
+                        format!("{base}{path}")
+                    };
+                    let request = browser
+                        .request(method.clone(), url)
+                        .header("origin", &base)
+                        .header("x-csrf-token", csrf);
+                    let request = if query {
+                        request
+                    } else {
+                        request.bearer_auth(key)
+                    };
+                    let response = request.send().unwrap();
+                    assert_eq!(response.status(), 401, "{path}, query={query}");
+                    assert_eq!(
+                        response.json::<Value>().unwrap()["code"],
+                        "AUTH_API_KEY_INVALID"
+                    );
+                }
+            }
+        }
+        if method != reqwest::Method::GET {
+            assert_eq!(
+                admin
+                    .request(method.clone(), format!("{base}{path}"))
+                    .header("origin", &base)
+                    .json(&chosen)
+                    .send()
+                    .unwrap()
+                    .status(),
+                403
+            );
+            assert_eq!(
+                admin
+                    .request(method, format!("{base}{path}"))
+                    .header("origin", "https://untrusted.invalid")
+                    .header("x-csrf-token", csrf)
+                    .json(&chosen)
+                    .send()
+                    .unwrap()
+                    .status(),
+                403
+            );
+        }
+    }
+    assert_eq!(
+        post(
+            &admin,
+            &base,
+            "/internal/password",
+            &[("api_key", admin_key())]
+        )
+        .status(),
+        401
+    );
+    assert_eq!(
+        bootstrap(&admin, &base)["preferences"],
+        session["preferences"]
+    );
+    assert_eq!(
+        admin
+            .get(format!("{base}/internal/preferences"))
+            .send()
+            .unwrap()
+            .json::<Value>()
+            .unwrap(),
+        session["preferences"]
+    );
+    // Programmable account APIs continue to support keys without a browser session or CSRF.
+    assert_eq!(
+        anonymous
+            .get(format!("{base}/api/users/"))
+            .bearer_auth(admin_key())
+            .send()
+            .unwrap()
+            .status(),
+        200
+    );
+    let reset = anonymous
+        .post(format!("{base}/api/reset"))
+        .bearer_auth(admin_key())
+        .send()
+        .unwrap();
+    assert_eq!(reset.status(), 200);
+    let reset: Value = reset.json().unwrap();
+    assert_eq!(
+        anonymous
+            .get(format!("{base}/api/users/1"))
+            .bearer_auth(reset["data"].as_str().unwrap())
+            .send()
+            .unwrap()
+            .status(),
+        200
+    );
+    assert_eq!(
+        sign_in(&browser(), &base, "admin", "established-admin-password").status(),
         200
     );
     process.stop();
@@ -844,6 +1042,25 @@ fn accounts_permissions_locking_impersonation_and_atomic_last_admin() {
     assert_eq!(mode["actor"], "admin");
     assert_eq!(mode["user"]["username"], "alice");
     assert_eq!(
+        admin
+            .get(format!("{base}/internal/preferences"))
+            .send()
+            .unwrap()
+            .status(),
+        403
+    );
+    assert_eq!(
+        admin
+            .put(format!("{base}/internal/preferences"))
+            .header("x-csrf-token", mode["csrf_token"].as_str().unwrap())
+            .header("origin", &base)
+            .json(&json!({"language":"de"}))
+            .send()
+            .unwrap()
+            .status(),
+        403
+    );
+    assert_eq!(
         admin.get(format!("{base}/users")).send().unwrap().status(),
         403
     );
@@ -851,7 +1068,7 @@ fn accounts_permissions_locking_impersonation_and_atomic_last_admin() {
         post(
             &admin,
             &base,
-            "/settings",
+            "/internal/password",
             &[
                 ("new_password", "unwanted-password"),
                 ("confirm_new_password", "unwanted-password")
@@ -1231,7 +1448,7 @@ fn two_processes_share_revocation_and_mixed_hashes_survive_migration() {
         post(
             &first_browser,
             &first_base,
-            "/settings",
+            "/internal/password",
             &[
                 ("current_password", "FixtureOnlyPassword42!"),
                 ("new_password", &candidate),
@@ -1868,7 +2085,7 @@ fn account_display_preferences_survive_restart_and_browser_changes_without_sessi
     let chosen = json!({"language":"de","format_locale":"zh-CN","time_zone":"Europe/Berlin","show_utc_offset":false});
     let send = |body: &Value, token: &str| {
         client
-            .put(format!("{base}/api/user-preferences"))
+            .put(format!("{base}/internal/preferences"))
             .header("origin", &base)
             .header("x-ruphish-client", "browser")
             .header("x-csrf-token", token)
@@ -1895,7 +2112,7 @@ fn account_display_preferences_survive_restart_and_browser_changes_without_sessi
     }
     assert_eq!(
         browser()
-            .get(format!("{base}/api/user-preferences"))
+            .get(format!("{base}/internal/preferences"))
             .header("x-ruphish-client", "browser")
             .send()
             .unwrap()
@@ -1918,7 +2135,7 @@ fn account_display_preferences_survive_restart_and_browser_changes_without_sessi
     );
     let session = bootstrap(&second, &base);
     let response = second
-        .put(format!("{base}/api/user-preferences"))
+        .put(format!("{base}/internal/preferences"))
         .header("origin", &base)
         .header("x-ruphish-client", "browser")
         .header("x-csrf-token", session["csrf_token"].as_str().unwrap())

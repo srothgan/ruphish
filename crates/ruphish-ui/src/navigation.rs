@@ -188,6 +188,12 @@ pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<>
                         <h2 id="nav-admin">{tr!(ui.administration)}</h2>
                         {link(
                             path,
+                            "/settings",
+                            trs!(ui.company_settings),
+                            "M4 4h16v16H4z M8 4v16 M8 9h12 M8 15h12",
+                        )}
+                        {link(
+                            path,
                             "/users",
                             trs!(ui.users),
                             "M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7l-9-4 M9 12l2 2 4-4",

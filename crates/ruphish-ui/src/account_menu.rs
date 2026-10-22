@@ -105,7 +105,8 @@ pub(super) fn menu(
                     <strong id="account-popover-name">{username}</strong>
                     <span>{move || role.get()}</span>
                 </div>
-                <a href="/settings">{tr!(ui.my_account)}</a>
+                <a href="/user">{tr!(ui.my_account)}</a>
+                <a href="/user/settings">{tr!(ui.settings)}</a>
                 <ActionButton
                     style=ButtonStyle::Ghost
                     disabled=Signal::derive(move || busy.get())

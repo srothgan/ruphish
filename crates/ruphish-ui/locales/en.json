@@ -4,6 +4,10 @@
     "native_name": "English"
   },
   "ui": {
+    "administration_requires_permissions": "Administrator permissions are required to access this page.",
+    "settings": "Settings",
+    "company_settings": "Company settings",
+    "company_settings_deferred": "Company-wide configuration is not available yet. Domain verification continues to use the fixed system policy.",
     "new_group": "New recipient group",
     "new_template": "New email template",
     "new_page": "New landing page",

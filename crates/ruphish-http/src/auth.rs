@@ -1,7 +1,7 @@
 //! Browser sessions, CSRF and legacy account API boundaries.
 use super::rate::LoginLimiter;
 use axum::{
-    Json, Router,
+    Extension, Json, Router,
     body::Body,
     extract::{ConnectInfo, DefaultBodyLimit, FromRef, FromRequestParts, Path, Request},
     http::{HeaderMap, Method, StatusCode, Uri, header, request::Parts},
@@ -110,11 +110,19 @@ pub fn router<S: SessionStore + Clone>(
         .route("/login", get(page).post(login))
         .route("/logout", get(page).post(logout))
         .route("/reset_password", get(page).post(password))
-        .route("/settings", get(page).post(password))
-        .route("/settings/password", get(page))
-        .route(
-            "/api/user-preferences",
-            get(preferences).put(save_preferences),
+        .route("/settings", get(page))
+        .route("/user", get(page))
+        .route("/user/settings", get(page))
+        .route("/user/password", get(page))
+        .nest(
+            "/internal",
+            Router::new()
+                .route("/preferences", get(preferences).put(save_preferences))
+                .route("/password", post(password))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    internal_session,
+                )),
         )
         .route("/users", get(page))
         .route("/users/new", get(page))
@@ -494,9 +502,7 @@ impl Context {
             }
         })?;
         if actor.is_some()
-            && (self.uri.path().starts_with("/api/users")
-                || self.uri.path() == "/api/reset"
-                || self.uri.path() == "/api/user-preferences")
+            && (self.uri.path().starts_with("/api/users") || self.uri.path() == "/api/reset")
         {
             return Err(failure(
                 StatusCode::FORBIDDEN,
@@ -590,9 +596,9 @@ async fn page(context: Context) -> Response {
                     );
                 }
                 if path == "/reset_password" && !user.password_change_required {
-                    return redirect(StatusCode::TEMPORARY_REDIRECT, "/settings");
+                    return redirect(StatusCode::TEMPORARY_REDIRECT, "/user/password");
                 }
-                if (path == "/users" || path.starts_with("/users/"))
+                if (path == "/settings" || path == "/users" || path.starts_with("/users/"))
                     && !user.permits("modify_system")
                 {
                     return failure(StatusCode::FORBIDDEN, ErrorCode::AuthForbidden, "Forbidden")
@@ -667,17 +673,54 @@ fn preference_wire(
     }
 }
 
-async fn preferences(
+// Every browser-only endpoint passes this boundary, including future additions.
+// Explicit API credentials must never fall back to an accompanying session.
+async fn internal_session(
     context: Context,
+    mut request: Request,
+    next: Next,
+) -> Result<Response, Rejection> {
+    reject_internal_key(context.explicit_api_key())?;
+    let (user, actor) = context.identity().await?;
+    if actor.is_some() {
+        return Err(failure(
+            StatusCode::FORBIDDEN,
+            ErrorCode::AuthImpersonationActive,
+            "Exit impersonation before managing accounts",
+        ));
+    }
+    if user.password_change_required {
+        return Err(auth_error(AccountError::ResetRequired.into()));
+    }
+    if !matches!(context.method, Method::GET | Method::HEAD | Method::OPTIONS) {
+        context.csrf(None)?;
+    }
+    request.extensions_mut().insert(user);
+    Ok(next.run(request).await)
+}
+
+fn reject_internal_key(supplied: bool) -> Result<(), Rejection> {
+    if supplied {
+        return Err(failure(
+            StatusCode::UNAUTHORIZED,
+            ErrorCode::AuthApiKeyInvalid,
+            "This endpoint requires a browser session without API credentials",
+        ));
+    }
+    Ok(())
+}
+
+async fn preferences(
+    Extension(user): Extension<Account>,
 ) -> Result<Json<ruphish_contracts::auth::Preferences>, Rejection> {
-    Ok(Json(preference_wire(context.api(None).await?.preferences)))
+    Ok(Json(preference_wire(user.preferences)))
 }
 
 async fn save_preferences(
     context: Context,
+    Extension(actor): Extension<Account>,
     request: Request,
 ) -> Result<Json<ruphish_contracts::auth::Preferences>, Rejection> {
-    let actor = context.api(None).await?;
     let bytes = tokio::time::timeout(
         std::time::Duration::from_secs(10),
         axum::body::to_bytes(request.into_body(), 4096),
@@ -822,6 +865,10 @@ async fn logout(context: Context, request: Request) -> Result<Response, Rejectio
 }
 async fn password(context: Context, request: Request) -> Result<Response, Rejection> {
     let input = form(request).await?;
+    let reset = context.uri.path() == "/reset_password";
+    if !reset {
+        reject_internal_key(input.api_key.is_some())?;
+    }
     context.csrf(Some(&input.csrf_token))?;
     let (user, actor) = context.identity().await?;
     if actor.is_some() {
@@ -831,9 +878,8 @@ async fn password(context: Context, request: Request) -> Result<Response, Reject
             "Exit impersonation before changing credentials",
         ));
     }
-    let reset = context.uri.path() == "/reset_password";
     if reset && !user.password_change_required {
-        return Ok(redirect(StatusCode::TEMPORARY_REDIRECT, "/settings"));
+        return Ok(redirect(StatusCode::TEMPORARY_REDIRECT, "/user/password"));
     }
     let changed = context
         .state

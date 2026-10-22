@@ -347,10 +347,11 @@
   .admin-nav { position: sticky; top: 0; height: 100vh; height: 100dvh; align-self: start; overflow: hidden; background: var(--nav-bg); color: var(--nav-fg); display: flex; flex-direction: column; padding: var(--s5) var(--s3) var(--s3); gap: var(--s6); transition: padding .2s ease; }
   .admin-nav .product-name { display: block; min-width: 0; padding: 0 var(--s3); }
   .admin-nav .product-name img { display: block; width: 148px; max-width: 100%; height: auto; }
-  .admin-nav nav { display: grid; align-content: start; flex: 1; min-height: 0; overflow-y: auto; gap: var(--s5); }
-  .admin-nav .nav-section { display: grid; gap: var(--s1); }
+  .admin-nav nav { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; gap: var(--s5); }
+  .admin-nav .nav-section { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: var(--s1); }
   .admin-nav .nav-section h2 { margin: 0 var(--s3) var(--s2); color: var(--nav-muted); font-size: var(--fs-xs); font-weight: var(--fw-semibold); letter-spacing: .01em; }
-  .admin-nav nav a, .admin-nav .nav-placeholder { display: flex; align-items: center; gap: var(--s3); font-size: var(--fs-sm); }
+  .admin-nav nav a, .admin-nav .nav-placeholder { display: flex; align-items: center; min-width: 0; gap: var(--s3); font-size: var(--fs-sm); }
+  .admin-nav nav a > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .admin-nav .nav-icon { width: 18px; height: 18px; flex: 0 0 18px; }
   .admin-nav nav a { color: var(--nav-fg); padding: var(--s2) var(--s3); text-decoration: none; border-radius: var(--r-md); }
   .admin-nav nav a:hover:not([aria-current=page]) { background: var(--nav-hover-bg); color: var(--nav-fg-strong); }
