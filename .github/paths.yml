@@ -1,0 +1,45 @@
+# Broad ownership groups. Each selected group runs a fixed suite in validation.yml.
+# Shared build inputs affect every product consumer; repository housekeeping does not.
+product:
+  - &build_inputs
+    - '**/Cargo.toml'
+    - 'Cargo.lock'
+    - 'rust-toolchain.toml'
+    - '.cargo/**'
+    - 'Trunk.toml'
+    - 'rustfmt.toml'
+    - 'leptosfmt.toml'
+    - 'deny.toml'
+    - '.gitattributes'
+    - '.github/workflows/**'
+    - '.github/actions/**'
+    - '.github/paths.yml'
+    - '.github/scripts/**'
+  - 'crates/**'
+  - 'tests/**'
+  - 'migrations/**'
+
+website:
+  - 'website/**'
+  - 'docs/**'
+  - 'assets/**'
+  - '.github/workflows/**'
+  - '.github/paths.yml'
+  - '.github/scripts/**'
+
+persistence:
+  - *build_inputs
+  - 'crates/ruphish-adapters/**'
+  - 'crates/ruphish-application/**'
+  - 'crates/ruphish-domain/**'
+  - 'tests/**'
+  - 'migrations/**'
+
+public:
+  - *build_inputs
+  - 'tests/acceptance/**'
+
+dependencies:
+  - *build_inputs
+  - 'crates/ruphish-ui/web/package.json'
+  - 'crates/ruphish-ui/web/package-lock.json'

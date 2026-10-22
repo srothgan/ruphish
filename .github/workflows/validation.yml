@@ -3,10 +3,10 @@ name: Shared validation
 on:
   workflow_call:
     inputs:
-      profile:
-        type: string
-        default: auto
-        description: auto, native, ui, databases or full
+      full:
+        type: boolean
+        default: false
+        description: Run every suite, including the bounded performance measurement
 
 permissions:
   contents: read
@@ -20,27 +20,16 @@ env:
   CARGO_TERM_COLOR: never
 
 jobs:
-  select:
-    name: Select checks
+  changes:
+    name: Paths and workflow checks
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
-      native: ${{ steps.selection.outputs.native }}
-      ui: ${{ steps.selection.outputs.ui }}
-      website: ${{ steps.selection.outputs.website }}
-      dependencies: ${{ steps.selection.outputs.dependencies }}
-      smoke: ${{ steps.selection.outputs.smoke }}
-      full: ${{ steps.selection.outputs.full }}
-      migration: ${{ steps.selection.outputs.migration }}
-      provider_process: ${{ steps.selection.outputs.provider_process }}
-      assets: ${{ steps.selection.outputs.assets }}
-      process: ${{ steps.selection.outputs.process }}
-      process_filters: ${{ steps.selection.outputs.process_filters }}
-      database: ${{ steps.selection.outputs.database }}
-      database_matrix: ${{ steps.selection.outputs.database_matrix }}
-      public: ${{ steps.selection.outputs.public }}
-      platform_full: ${{ steps.selection.outputs.platform_full }}
-      rust_format: ${{ steps.selection.outputs.rust_format }}
+      product: ${{ inputs.full && 'true' || steps.paths.outputs.product }}
+      website: ${{ inputs.full && 'true' || steps.paths.outputs.website }}
+      persistence: ${{ inputs.full && 'true' || steps.paths.outputs.persistence }}
+      public: ${{ inputs.full && 'true' || steps.paths.outputs.public }}
+      dependencies: ${{ inputs.full && 'true' || steps.paths.outputs.dependencies }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -50,23 +39,26 @@ jobs:
         with:
           node-version: '26.8.1'
           package-manager-cache: false
-      - name: Check selection policy
-        run: node --test .github/scripts/select.test.mjs
+      - name: Check gate behavior
+        run: node --test .github/scripts/validation.test.mjs
       - name: Lint workflows
         env:
           GOMAXPROCS: '2'
           GOFLAGS: '-p=1'
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck="" -pyflakes=""
-      - id: selection
-        name: Select from the complete PR diff
-        env:
-          VALIDATION_PROFILE: ${{ inputs.profile }}
-        run: node .github/scripts/select.mjs
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: paths
+        if: ${{ !inputs.full }}
+        with:
+          # Compare the PR merge checkout with its base, without API permissions
+          # or file-count limits. Git reports both sides of renames as changes.
+          token: ''
+          filters: .github/paths.yml
 
   website:
     name: Website and documentation
-    needs: select
-    if: needs.select.outputs.website == 'true'
+    needs: changes
+    if: needs.changes.outputs.website == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
@@ -78,7 +70,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: '26.8.1'
+          node-version-file: website/package.json
           cache: npm
           cache-dependency-path: website/package-lock.json
       - run: npm ci
@@ -89,8 +81,8 @@ jobs:
 
   assets:
     name: Browser and real assets
-    needs: select
-    if: needs.select.outputs.assets == 'true'
+    needs: changes
+    if: needs.changes.outputs.product == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -104,25 +96,20 @@ jobs:
           key: admin-assets-v1-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', '.cargo/**', 'Trunk.toml', 'crates/ruphish-ui/**', 'crates/ruphish-domain/**', 'crates/ruphish-contracts/**') }}
       - uses: ./.github/actions/toolchain
         with:
-          browser: ${{ needs.select.outputs.ui == 'true' || steps.distribution.outputs.cache-hit != 'true' }}
-          format-ui: ${{ needs.select.outputs.ui }}
+          browser: 'true'
+          format-ui: 'true'
           cache-group: browser
       - name: Install browser dependencies
-        if: needs.select.outputs.ui == 'true' || steps.distribution.outputs.cache-hit != 'true'
         run: npm ci --prefix crates/ruphish-ui/web
       - name: Browser formatting
-        if: needs.select.outputs.ui == 'true'
         run: |
           cargo fmt --all -- --check
           leptosfmt --check crates/ruphish-ui/src crates/ruphish-ui/tests
       - name: JavaScript functionality
-        if: needs.select.outputs.ui == 'true'
         run: node --test --test-concurrency=1 crates/ruphish-ui/web/tests/*.test.mjs
       - name: Generate browser inputs for direct WASM checks
-        if: needs.select.outputs.ui == 'true'
         run: node crates/ruphish-ui/web/build.mjs
       - name: Browser Rust functionality and lint
-        if: needs.select.outputs.ui == 'true'
         run: |
           cargo test -p ruphish-ui --lib --tests --locked
           cargo clippy -p ruphish-ui --lib --locked -- -D warnings
@@ -140,49 +127,11 @@ jobs:
           if-no-files-found: error
 
   native:
-    name: Native baseline
-    needs: select
-    if: needs.select.outputs.native == 'true' || needs.select.outputs.rust_format == 'true'
+    name: Linux native and executable acceptance
+    needs: [changes, assets]
+    if: needs.changes.outputs.product == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/toolchain
-      - name: Allow fixtures to bind the standard HTTPS port
-        run: sudo sysctl -w net.ipv4.ip_unprivileged_port_start=443
-      - name: Rust formatting
-        run: cargo fmt --all -- --check
-      - name: Native static checks
-        if: needs.select.outputs.native == 'true'
-        run: cargo clippy --workspace --exclude ruphish-ui --all-targets --locked -- -D warnings
-      - name: Library and HTTP functionality
-        if: needs.select.outputs.native == 'true' && needs.select.outputs.full != 'true'
-        run: |
-          cargo test --workspace --exclude ruphish --exclude ruphish-ui --lib --locked
-          cargo test -p ruphish-domain --tests --locked
-          cargo test -p ruphish-http --test transport_compatibility --locked
-          cargo test -p ruphish --bin ruphish --test workspace --test startup_cli --test compatibility_workflow --locked
-      - name: SQLite and adapter contracts
-        if: needs.select.outputs.native == 'true' && needs.select.outputs.full != 'true'
-        run: |
-          cargo test -p ruphish-adapters --test accounts --test campaign_storage --test campaign_transport --test database_facade --test legacy_auth --test legacy_templates --test overview --test public_domains --test reporting --test resource_formats --test session_store --test startup_database --test tls_files --locked
-          cargo test -p ruphish-adapters --test database_providers sqlite_ --locked
-          cargo test -p ruphish-adapters --test mysql_preflight mysql_configuration --locked
-      - name: Historical SQLite upgrades
-        if: needs.select.outputs.migration == 'true' && needs.select.outputs.full != 'true'
-        run: cargo test -p ruphish-adapters --test sqlite_upgrade --locked
-
-  process:
-    name: Executable workflows
-    needs: [select, native, assets]
-    if: >-
-      always() && needs.select.result == 'success' && needs.assets.result == 'success' &&
-      (needs.native.result == 'success' || needs.native.result == 'skipped') &&
-      (needs.select.outputs.smoke == 'true' || needs.select.outputs.process == 'true')
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 80
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -194,68 +143,37 @@ jobs:
         with:
           name: admin-distribution
           path: dist/admin
-      - name: Complete native acceptance
-        if: needs.select.outputs.full == 'true'
+      - name: Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Native static checks
+        run: cargo clippy --workspace --exclude ruphish-ui --all-targets --locked -- -D warnings
+      - name: Complete native and executable functionality
         run: cargo test --workspace --exclude ruphish-ui --locked -- --nocapture --test-threads=1
       - name: Bounded audience performance measurement
-        if: needs.select.outputs.full == 'true'
+        if: inputs.full
         run: cargo test -p ruphish-adapters --test campaign_storage measure_launch_read_claim_and_compose_at_legacy_audience_sizes --locked -- --ignored --exact --nocapture --test-threads=1
-      - name: Asset and shutdown smoke
-        if: needs.select.outputs.full != 'true' && needs.select.outputs.process_filters != '[""]'
-        run: |
-          cargo test -p ruphish --test startup_process actual_http_servers_serve_built_assets_isolate_public_routes_and_shutdown_on_real_ctrl_c --locked -- --exact --nocapture --test-threads=1
-      - name: Resource persistence smoke
-        if: needs.select.outputs.full != 'true' && needs.select.outputs.process_filters != '[""]' && !contains(fromJSON(needs.select.outputs.process_filters), 'auth_process::')
-        run: cargo test -p ruphish --test startup_process auth_process::browser_resource_create_read_edit_and_reload_routes_preserve_saved_data --locked -- --exact --nocapture --test-threads=1
-      - name: Delivery smoke
-        if: needs.select.outputs.full != 'true' && needs.select.outputs.process_filters != '[""]' && !contains(fromJSON(needs.select.outputs.process_filters), 'campaign_process::')
-        run: cargo test -p ruphish --test startup_process campaign_process::executable_launch_delivers_personalized_mail_once_and_persists_acceptance_across_restart --locked -- --exact --nocapture --test-threads=1
-      - name: Privacy smoke
-        if: needs.select.outputs.full != 'true' && needs.select.outputs.process_filters != '[""]' && !contains(fromJSON(needs.select.outputs.process_filters), 'public_process::')
-        run: cargo test -p ruphish --test startup_process public_process::verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_bypasses --locked -- --exact --nocapture --test-threads=1
-      - name: Shared or unclassified runtime changes
-        if: needs.select.outputs.full != 'true' && needs.select.outputs.process_filters == '[""]'
-        run: cargo test -p ruphish --test startup_process --locked -- --nocapture --test-threads=1
-      - name: Authentication workflows
-        if: needs.select.outputs.full != 'true' && contains(fromJSON(needs.select.outputs.process_filters), 'auth_process::')
-        run: |
-          cargo test -p ruphish --test startup_process auth_process:: --locked -- --nocapture --test-threads=1
-      - name: Campaign workflows
-        if: needs.select.outputs.full != 'true' && contains(fromJSON(needs.select.outputs.process_filters), 'campaign_process::')
-        run: |
-          cargo test -p ruphish --test startup_process campaign_process:: --locked -- --nocapture --test-threads=1
-      - name: Resource workflows
-        if: needs.select.outputs.full != 'true' && contains(fromJSON(needs.select.outputs.process_filters), 'resource_process::')
-        run: |
-          cargo test -p ruphish --test startup_process resource_process:: --locked -- --nocapture --test-threads=1
-      - name: Public workflows
-        if: needs.select.outputs.full != 'true' && contains(fromJSON(needs.select.outputs.process_filters), 'public_process::')
-        run: |
-          cargo test -p ruphish --test startup_process public_process:: --locked -- --nocapture --test-threads=1
-      - name: Proxy workflows
-        if: needs.select.outputs.full != 'true' && contains(fromJSON(needs.select.outputs.process_filters), 'campaign_process::proxy_process::') && !contains(fromJSON(needs.select.outputs.process_filters), 'campaign_process::')
-        run: |
-          cargo test -p ruphish --test startup_process campaign_process::proxy_process:: --locked -- --nocapture --test-threads=1
-      - name: Reporting workflows
-        if: needs.select.outputs.full != 'true' && contains(fromJSON(needs.select.outputs.process_filters), 'reporting_process::')
-        run: |
-          cargo test -p ruphish --test startup_process reporting_process:: --locked -- --nocapture --test-threads=1
-      - name: Overview workflows
-        if: needs.select.outputs.full != 'true' && contains(fromJSON(needs.select.outputs.process_filters), 'overview_process::')
-        run: |
-          cargo test -p ruphish --test startup_process overview_process:: --locked -- --nocapture --test-threads=1
 
   database:
     name: ${{ matrix.engine }} ${{ matrix.version }}
-    needs: [select, native, assets]
-    if: >-
-      always() && needs.select.result == 'success' && needs.native.result == 'success' &&
-      (needs.assets.result == 'success' || needs.assets.result == 'skipped') && needs.select.outputs.database == 'true'
+    needs: [changes, assets]
+    if: needs.changes.outputs.persistence == 'true'
     strategy:
       fail-fast: false
       max-parallel: 1
       matrix:
-        include: ${{ fromJSON(needs.select.outputs.database_matrix) }}
+        include:
+          - engine: mysql
+            version: '8.4'
+            image: mysql@sha256:0f51e63e537a1f176423fa03ef559aabe6fa4372a53160a44bc7e75da7d15364
+          - engine: mysql
+            version: '9.7'
+            image: mysql@sha256:e2fa358a74ac81148e7e27d9433e4c0ab62133de8ea4428b4f39a51a4ba7d07f
+          - engine: postgres
+            version: '17'
+            image: postgres@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+          - engine: postgres
+            version: '18'
+            image: postgres@sha256:afc7e2d441324c0388fa80c3d24f733b4194a4eb7f47dd8ee2b08eb1a24a647c
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -263,8 +181,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/toolchain
+        with:
+          cache-group: provider-${{ matrix.engine }}
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
-        if: needs.select.outputs.assets == 'true'
         with:
           name: admin-distribution
           path: dist/admin
@@ -290,24 +209,15 @@ jobs:
             endpoint=$(docker compose -f tests/acceptance/compose.yaml port postgres 5432)
             echo "RUPHISH_POSTGRES_TEST_PORT=${endpoint##*:}" >> "$GITHUB_ENV"
           fi
-      - name: MySQL transport and ordinary contracts
-        if: matrix.engine == 'mysql' && needs.select.outputs.migration != 'true'
-        run: |
-          cargo test -p ruphish-adapters --test mysql_preflight mysql_preflight_transport --locked -- --ignored --nocapture --test-threads=1
-          cargo test -p ruphish-adapters --test database_providers mysql_ --locked -- --ignored --nocapture --test-threads=1 --skip mysql_upgrades_every_legacy_version --skip mysql_failed_publication --skip mysql_rejects_schema_drift_dirty_history --skip mysql_legacy_queue --skip mysql_preferences_migrate
       - name: MySQL full histories and contracts
-        if: matrix.engine == 'mysql' && needs.select.outputs.migration == 'true'
+        if: matrix.engine == 'mysql'
         run: |
           cargo test -p ruphish-adapters --test mysql_preflight --locked -- --ignored --nocapture --test-threads=1
           cargo test -p ruphish-adapters --test database_providers mysql_ --locked -- --ignored --nocapture --test-threads=1
-      - name: PostgreSQL ordinary contracts
-        if: matrix.engine == 'postgres' && needs.select.outputs.migration != 'true'
-        run: cargo test -p ruphish-adapters --test database_providers postgres_ --locked -- --ignored --nocapture --test-threads=1 --skip postgres_rejects_modified_history --skip postgres_schema_drift --skip postgres_failed_ddl --skip postgres_migration_lock --skip postgres_preferences_migrate
       - name: PostgreSQL full schema and recovery contracts
-        if: matrix.engine == 'postgres' && needs.select.outputs.migration == 'true'
+        if: matrix.engine == 'postgres'
         run: cargo test -p ruphish-adapters --test database_providers postgres_ --locked -- --ignored --nocapture --test-threads=1
       - name: Complete provider executable workflow
-        if: needs.select.outputs.provider_process == 'true'
         env:
           PROCESS_FILTER: ${{ matrix.engine }}_process
         run: cargo test -p ruphish --test startup_process "$PROCESS_FILTER" --locked -- --ignored --nocapture --test-threads=1
@@ -321,11 +231,8 @@ jobs:
 
   platforms:
     name: Native acceptance on ${{ matrix.runner }}
-    needs: [select, assets]
-    if: >-
-      always() && needs.select.result == 'success' &&
-      (needs.assets.result == 'success' || needs.assets.result == 'skipped') &&
-      (needs.select.outputs.native == 'true' || needs.select.outputs.platform_full == 'true')
+    needs: [changes, assets]
+    if: needs.changes.outputs.product == 'true'
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -342,20 +249,12 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/toolchain
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
-        if: needs.select.outputs.assets == 'true'
         with:
           name: admin-distribution
           path: dist/admin
       - name: Native static checks
         run: cargo clippy --workspace --exclude ruphish-ui --all-targets --locked -- -D warnings
-      - name: Ordinary native functionality
-        if: needs.select.outputs.platform_full != 'true'
-        run: |
-          cargo test --workspace --exclude ruphish --exclude ruphish-ui --lib --locked
-          cargo test -p ruphish-domain --tests --locked
-          cargo test -p ruphish --bin ruphish --test workspace --test startup_cli --test compatibility_workflow --locked
       - name: Complete platform functionality
-        if: needs.select.outputs.platform_full == 'true'
         run: cargo test --workspace --exclude ruphish-ui --locked -- --nocapture --test-threads=1
       - name: Platform asset promotion
         run: |
@@ -364,8 +263,8 @@ jobs:
 
   dependencies:
     name: Dependency policy
-    needs: select
-    if: needs.select.outputs.dependencies == 'true'
+    needs: changes
+    if: needs.changes.outputs.dependencies == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -381,8 +280,8 @@ jobs:
 
   public:
     name: Docker DNS TLS SMTP acceptance
-    needs: [select, assets]
-    if: needs.select.outputs.public == 'true'
+    needs: [changes, assets]
+    if: needs.changes.outputs.public == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -411,7 +310,7 @@ jobs:
 
   gate:
     name: Validation gate
-    needs: [select, website, assets, native, process, database, platforms, dependencies, public]
+    needs: [changes, website, assets, native, database, platforms, dependencies, public]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -422,21 +321,22 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           const jobs = JSON.parse(process.env.RESULTS);
-          if (jobs.select.result !== 'success') throw new Error('Selection failed or was cancelled');
-          const flags = jobs.select.outputs;
-          const expected = {
-            website: flags.website === 'true',
-            assets: flags.assets === 'true',
-            native: flags.native === 'true' || flags.rust_format === 'true',
-            process: flags.smoke === 'true' || flags.process === 'true',
-            database: flags.database === 'true',
-            platforms: flags.native === 'true' || flags.platform_full === 'true',
-            dependencies: flags.dependencies === 'true',
-            public: flags.public === 'true',
+          if (jobs.changes.result !== 'success') throw new Error('Path checks failed or were cancelled');
+          const groups = jobs.changes.outputs;
+          for (const group of ['product', 'website', 'persistence', 'dependencies', 'public']) {
+            if (!['true', 'false'].includes(groups[group])) throw new Error('Missing path group: ' + group);
+          }
+          const required = {
+            website: groups.website,
+            assets: groups.product,
+            native: groups.product,
+            platforms: groups.product,
+            database: groups.persistence,
+            dependencies: groups.dependencies,
+            public: groups.public,
           };
-          for (const [job, selected] of Object.entries(expected)) {
-            const result = jobs[job].result;
-            if (selected && result !== 'success') throw new Error(job + ': selected but ' + result);
-            if (!selected && result !== 'skipped') throw new Error(job + ': unexpectedly ran (' + result + ')');
+          for (const [job, selected] of Object.entries(required)) {
+            const expected = selected === 'true' ? 'success' : 'skipped';
+            if (jobs[job].result !== expected) throw new Error(job + ': expected ' + expected + ', got ' + jobs[job].result);
           }
           NODE

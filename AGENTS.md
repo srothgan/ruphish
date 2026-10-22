@@ -37,9 +37,9 @@ CI provides the broader backstop: `pr.yml` selects main-PR checks, `nightly.yml`
 | Provider SQL/shared persistence | Relevant real-provider scenarios; shared storage covers affected engines; version-sensitive SQL/schema/driver changes cover both supported versions |
 | Migrations | Affected upgrade paths, preserved data, rollback/recovery and reopen |
 | Dependencies/toolchain | Dependency policy and affected native/browser targets |
-| Validation workflows/selection | Selector tests, workflow lint and selection/coverage inspection; no automatic product acceptance run |
+| Validation workflows/selection | Workflow gate tests, workflow lint and YAML path-group/coverage inspection; no automatic product acceptance run |
 
-- Keep direct Cargo/Node/Docker commands visible; do not add a local test-runner, Cargo alias or npm wrapper. CI selection scripts may choose jobs but must not execute checks or construct shell commands from changed paths.
+- Keep direct Cargo/Node/Docker commands visible; do not add a local test-runner, Cargo alias or npm wrapper. Keep CI path groups in `.github/paths.yml`; workflow jobs own fixed check commands and must not construct shell commands from changed paths.
 - Do not automatically run the full process suite, historical migrations, all database versions or public Docker acceptance after ordinary edits. Run these when their guarantees are affected or the task requests acceptance.
 - Never treat ignored, skipped, unavailable or unexecuted checks as passing. Report exact commands and limitations. Preserve the legacy-test map and meaningful negative guarantees.
 - Run one heavy workload at a time locally, initially one build job and test thread with bounded Tokio/Rayon workers. Investigate failures before retrying; rerun only affected checks after corrections.

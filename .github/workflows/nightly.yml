@@ -16,4 +16,4 @@ jobs:
   checks:
     uses: ./.github/workflows/validation.yml
     with:
-      profile: full
+      full: true

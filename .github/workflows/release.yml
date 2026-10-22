@@ -27,7 +27,7 @@ jobs:
   source:
     uses: ./.github/workflows/validation.yml
     with:
-      profile: full
+      full: true
 
   assets:
     name: Optimized browser distribution
