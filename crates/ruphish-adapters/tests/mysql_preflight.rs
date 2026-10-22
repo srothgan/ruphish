@@ -1,5 +1,10 @@
 //! Real MySQL metadata/transport tests. Independent connections only provision,
 //! corrupt or inspect fixtures; the operation under test always uses the facade.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "Integration setup and assertions"
+)]
 use ruphish_adapters::database::{
     Error, MySqlConfig, MySqlTls,
     migrations::{MySqlSchema, inspect_mysql},

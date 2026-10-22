@@ -3,6 +3,8 @@ updates:
   # The workspace root owns all Rust crates and Cargo.lock.
   - package-ecosystem: cargo
     directory: /
+    labels:
+      - "type: dependencies"
     schedule:
       interval: weekly
       day: monday
@@ -19,6 +21,9 @@ updates:
   # JavaScript dependencies used to build the administration interface.
   - package-ecosystem: npm
     directory: /crates/ruphish-ui/web
+    labels:
+      - "type: dependencies"
+      - "area: ui"
     schedule:
       interval: weekly
       day: monday
@@ -35,6 +40,9 @@ updates:
   # Astro, Starlight, fonts, and website development tools.
   - package-ecosystem: npm
     directory: /website
+    labels:
+      - "type: dependencies"
+      - "area: website"
     schedule:
       interval: weekly
       day: monday
@@ -50,6 +58,9 @@ updates:
 
   - package-ecosystem: github-actions
     directory: /
+    labels:
+      - "type: dependencies"
+      - "area: ci"
     schedule:
       interval: weekly
       day: monday
