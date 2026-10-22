@@ -18,7 +18,7 @@ use ruphish_application::{
     campaign as app,
     resources::{Error, Kind},
 };
-use ruphish_contracts::{campaign as wire, legacy::Timestamp};
+use ruphish_contracts::{campaign as wire, campaign_workflow as workflow, legacy::Timestamp};
 use ruphish_contracts::{campaign_reads as reads, errors::ErrorCode};
 use serde_json::{Value, json};
 fn now() -> i64 {
@@ -75,9 +75,6 @@ fn date(value: &str) -> String {
     datetime::parse_stored(value)
         .map(datetime::utc)
         .unwrap_or_else(|_| value.replacen(' ', "T", 1))
-}
-fn policy(p: &app::CapturePolicy) -> Value {
-    json!({"capture_credentials":p.capture_credentials,"capture_passwords":p.capture_passwords,"redirect_url":p.redirect_url})
 }
 fn encode_result(r: &app::RecipientResult) -> Value {
     json!({"id":r.rid,"email":r.recipient.email,"first_name":r.recipient.first_name,"last_name":r.recipient.last_name,"position":r.recipient.position,"status":r.status,"ip":r.ip,"latitude":r.latitude,"longitude":r.longitude,"reported":r.reported,"send_date":date(&r.send_date),"modified_date":date(&r.modified_date)})
@@ -228,7 +225,17 @@ async fn prepare_inner(context: Context, body: Bytes, draft: bool) -> Result<Res
         .prepare(user.identity, &input, now())
         .await
         .map_err(launch_error)?;
-    let selected = |r: &ruphish_application::resources::Resource| json!({"id":r.id,"name":r.name,"revision":r.modified_date});
+    let selected = |r: &ruphish_application::resources::Resource| workflow::ReviewedResource {
+        id: r.id,
+        name: r.name.clone(),
+        revision: r.modified_date.clone(),
+    };
+    let attributes =
+        |r: &ruphish_application::resources::Recipient| workflow::RecipientAttributes {
+            first_name: r.first_name.clone(),
+            last_name: r.last_name.clone(),
+            position: r.position.clone(),
+        };
     let total: usize = p
         .groups
         .iter()
@@ -237,16 +244,53 @@ async fn prepare_inner(context: Context, body: Bytes, draft: bool) -> Result<Res
             _ => 0,
         })
         .sum();
-    let mut value = json!({"total":p.recipients.len(),"duplicate_count":total-p.recipients.len(),"launch_date":p.launch,"send_by_date":input.send_by,"selection":{"groups":p.groups.iter().map(selected).collect::<Vec<_>>(),"template":selected(&p.template),"page":selected(&p.page),"smtp":selected(&p.profile)},"policy":policy(&p.policy),"mailer_enabled":context.mailer_enabled()});
-    value["conflict_count"] = json!(p.conflict_count);
-    value["conflicts"] = json!(p.conflicts.iter().map(|(kept,discarded)|json!({"email":kept.email,"kept":{"first_name":kept.first_name,"last_name":kept.last_name,"position":kept.position},"discarded":{"first_name":discarded.first_name,"last_name":discarded.last_name,"position":discarded.position}})).collect::<Vec<_>>());
+    let selection = workflow::Selection {
+        groups: p.groups.iter().map(selected).collect(),
+        template: selected(&p.template),
+        page: selected(&p.page),
+        smtp: selected(&p.profile),
+    };
+    let conflicts = p
+        .conflicts
+        .iter()
+        .map(|(kept, discarded)| workflow::Conflict {
+            email: kept.email.clone(),
+            kept: attributes(kept),
+            discarded: attributes(discarded),
+        })
+        .collect();
+    let count = p.recipients.len();
+    let conflict_count = p.conflict_count;
+    let launch_date = p.launch;
+    let policy = read_policy(&p.policy);
     let preview = context
         .delivery()
         .review_campaign(p, input.url)
         .map_err(error)?;
-    value["preview"] = json!({"subject":preview.subject,"html":preview.html,"text":preview.text,"visible_sender":preview.visible_sender,"transport_sender":preview.transport_sender});
-    response(StatusCode::OK, &value, None)
+    response(
+        StatusCode::OK,
+        &workflow::Review {
+            total: count,
+            duplicate_count: total - count,
+            launch_date,
+            send_by_date: input.send_by,
+            selection,
+            policy,
+            mailer_enabled: context.mailer_enabled(),
+            conflict_count,
+            conflicts,
+            preview: workflow::Preview {
+                subject: preview.subject,
+                html: preview.html,
+                text: preview.text,
+                visible_sender: preview.visible_sender,
+                transport_sender: preview.transport_sender,
+            },
+        },
+        None,
+    )
 }
+
 async fn create(context: Context, body: Bytes) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
     let input = decode(&context, &body)?;
@@ -612,19 +656,33 @@ async fn duplicate(context: Context, Path(id): Path<i64>) -> Result<Response, Re
         .get(user.identity, id)
         .await
         .map_err(error)?;
-    let mut selection = json!({"groups":campaign.groups.iter().map(|r|json!({"id":r.id})).collect::<Vec<_>>(),"template":{"id":0},"page":{"id":0},"smtp":{"id":0}});
-    for resource in campaign.resources {
-        let key = match resource.kind() {
-            Kind::Template => "template",
-            Kind::Page => "page",
-            Kind::Profile => "smtp",
+    let mut selection = workflow::Selection {
+        groups: campaign
+            .groups
+            .iter()
+            .map(|r| workflow::Reference { id: r.id })
+            .collect(),
+        template: workflow::Reference { id: 0 },
+        page: workflow::Reference { id: 0 },
+        smtp: workflow::Reference { id: 0 },
+    };
+    for resource in &campaign.resources {
+        let selected = match resource.kind() {
+            Kind::Template => &mut selection.template,
+            Kind::Page => &mut selection.page,
+            Kind::Profile => &mut selection.smtp,
             Kind::Group => continue,
         };
-        selection[key] = json!({"id":resource.id});
+        selected.id = resource.id;
     }
     response(
         StatusCode::OK,
-        &json!({"name":format!("{} (copy)",campaign.name),"url":campaign.url,"selection":selection,"policy":campaign.policy.as_ref().map(policy).unwrap_or_else(||json!({}))}),
+        &workflow::Duplicate {
+            name: format!("{} (copy)", campaign.name),
+            url: campaign.url,
+            selection,
+            policy: campaign.policy.as_ref().map(read_policy),
+        },
         None,
     )
 }

@@ -146,3 +146,31 @@ pub fn preserve_administrator(
     }
     Ok(())
 }
+
+/// Account edit after parsing, before policy and cryptographic validation.
+pub struct Edit {
+    /// Login name.
+    pub username: String,
+    /// Optional new password; empty preserves the existing hash on update.
+    pub password: String,
+    /// Persisted role slug.
+    pub role: String,
+    /// Require password setup at next access.
+    pub password_change_required: bool,
+    /// Block all authentication paths.
+    pub account_locked: bool,
+}
+
+impl Account {
+    /// Ordinary account editors cannot change privileged attributes.
+    pub fn authorize_edit(&self, existing: &Account, edit: &Edit) -> Result<(), AccountError> {
+        if !self.permits("modify_system")
+            && (edit.role != existing.role.slug
+                || edit.account_locked != existing.account_locked
+                || edit.password_change_required != existing.password_change_required)
+        {
+            return Err(AccountError::Escalation);
+        }
+        Ok(())
+    }
+}

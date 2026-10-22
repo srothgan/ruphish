@@ -289,6 +289,7 @@ fn reporting_api_rejects_cross_owner_admin_only_stale_and_malformed_requests() {
     let saved: Value = saved.json().unwrap();
     assert!(saved.get("secret").is_none());
     let id = saved["id"].as_i64().unwrap();
+    let hook_id = id;
     let mut changed = hook.clone();
     changed["revision"] = saved["revision"].clone();
     changed["name"] = json!("Updated receiver");
@@ -415,6 +416,38 @@ fn reporting_api_rejects_cross_owner_admin_only_stale_and_malformed_requests() {
     let analysis = get(&client, &base, "/api/campaigns/91/analysis");
     assert_eq!(analysis["recipients"][0]["historical_reported"], true);
     assert_eq!(analysis["unique"][4], 0);
+    let mailbox_path = format!("{base}/api/reporting-mailboxes/{id}");
+    for (key, revision, status) in [
+        ("other-key", "1", 404),
+        ("synthetic-bootstrap-token", "2", 412),
+        ("synthetic-bootstrap-token", "1", 200),
+        ("synthetic-bootstrap-token", "1", 404),
+    ] {
+        assert_eq!(
+            client
+                .delete(&mailbox_path)
+                .bearer_auth(key)
+                .header("if-match", revision)
+                .send()
+                .unwrap()
+                .status(),
+            status
+        );
+    }
+    // Legacy clients can delete without fetching or supplying a revision.
+    for status in [200, 404] {
+        assert_eq!(
+            request(
+                &client,
+                &base,
+                reqwest::Method::DELETE,
+                &format!("/api/webhooks/{hook_id}"),
+                None,
+            )
+            .status(),
+            status
+        );
+    }
     process.stop();
     let log = std::fs::read_to_string(directory.path().join("server.log")).unwrap();
     assert!(!log.contains("CANARY"));

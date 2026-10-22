@@ -685,9 +685,8 @@ pub(super) fn create(
                 )
                 .await
                 .and_then(|(value, _)| {
-                    ruphish_contracts::campaign_workflow::validate_review(&value)
-                        .map_err(|_| api.invalid_read())?;
-                    Ok(value)
+                    serde_json::from_value::<ruphish_contracts::campaign_workflow::Review>(value)
+                        .map_err(|_| api.invalid_read())
                 });
             draft.update(|state| {
                 state.reviewed(request, result);
@@ -703,8 +702,8 @@ pub(super) fn create(
             return;
         };
         let mut campaign = d.value;
-        campaign["selection"] = review["selection"].clone();
-        campaign["policy"] = review["policy"].clone();
+        campaign["selection"] = json!(review.selection);
+        campaign["policy"] = json!(review.policy);
         busy.set(true);
         tasks.spawn(async move {
             match api
@@ -1149,21 +1148,21 @@ pub(super) fn create(
                                     <div class="campaign-review">
                                         <h3>
                                             {leptos_i18n::t!(
-                                                i18n, messages.arg0_unique_recipients, arg0 = (r["total"]).to_string()
+                                                i18n, messages.arg0_unique_recipients, arg0 = (r.total).to_string()
                                             )}
                                         </h3>
                                         <p>
                                             {leptos_i18n::t!(
-                                                i18n, messages.arg0_overlapping_recipient_entries_removed, arg0 = (r["duplicate_count"]).to_string()
+                                                i18n, messages.arg0_overlapping_recipient_entries_removed, arg0 = (r.duplicate_count).to_string()
                                             )}
                                         </p>
-                                        {(r["conflict_count"].as_u64().unwrap_or(0) > 0)
+                                        {(r.conflict_count > 0)
                                             .then(|| {
                                                 view! {
                                                     <details>
                                                         <summary>
                                                             {leptos_i18n::t!(
-                                                                i18n, messages.arg0_conflicting_duplicate_entries_first_group_wins, arg0 = (r["conflict_count"]).to_string()
+                                                                i18n, messages.arg0_conflicting_duplicate_entries_first_group_wins, arg0 = (r.conflict_count).to_string()
                                                             )}
                                                         </summary>
                                                         <p>
@@ -1172,13 +1171,14 @@ pub(super) fn create(
                                                             )}
                                                         </p>
                                                         <ul>
-                                                            {array(&r, "conflicts")
+                                                            {r
+                                                                .conflicts
                                                                 .into_iter()
                                                                 .map(|c| {
                                                                     view! {
                                                                         <li>
                                                                             {leptos_i18n::t_string!(
-                                                                                i18n, messages.email_retained_kept_discarded_discarded, email = text(&c,"email"), kept = c["kept"].to_string(), discarded = c["discarded"].to_string()
+                                                                                i18n, messages.email_retained_kept_discarded_discarded, email = c.email, kept = json!(c.kept).to_string(), discarded = json!(c.discarded).to_string()
                                                                             )}
                                                                         </li>
                                                                     }
@@ -1189,9 +1189,13 @@ pub(super) fn create(
                                                 }
                                             })}
                                         <dl class="resource-facts">
-                                            {["template", "page", "smtp"]
+                                            {[
+                                                ("template", r.selection.template),
+                                                ("page", r.selection.page),
+                                                ("smtp", r.selection.smtp),
+                                            ]
                                                 .into_iter()
-                                                .map(|key| {
+                                                .map(|(key, selected)| {
                                                     view! {
                                                         <div>
                                                             <dt>
@@ -1214,10 +1218,10 @@ pub(super) fn create(
                                                                             "page" => "pages",
                                                                             _ => "smtp",
                                                                         },
-                                                                        r["selection"][key]["id"],
+                                                                        selected.id,
                                                                     )
                                                                 >
-                                                                    {text(&r["selection"][key], "name")}
+                                                                    {selected.name}
                                                                 </a>
                                                             </dd>
                                                         </div>
@@ -1225,14 +1229,16 @@ pub(super) fn create(
                                                 })
                                                 .collect_view()} <div>
                                                 <dt>{tr!(ui.launch)}</dt>
-                                                <dd class="data-value">{instant(&r["launch_date"])}</dd>
+                                                <dd class="data-value">{instant(&json!(r.launch_date))}</dd>
                                             </div><div>
                                                 <dt>{tr!(ui.distribution_end)}</dt>
-                                                <dd class="data-value">{instant(&r["send_by_date"])}</dd>
+                                                <dd class="data-value">
+                                                    {instant(&json!(r.send_by_date))}
+                                                </dd>
                                             </div><div>
                                                 <dt>{tr!(ui.submission_tracking)}</dt>
                                                 <dd>
-                                                    {if r["policy"]["capture_credentials"] == true {
+                                                    {if r.policy.capture_credentials {
                                                         leptos_i18n::t_string!(i18n, ui.yes)
                                                     } else {
                                                         leptos_i18n::t_string!(i18n, ui.no)
@@ -1241,7 +1247,7 @@ pub(super) fn create(
                                             </div><div>
                                                 <dt>{tr!(ui.password_presence_only)}</dt>
                                                 <dd>
-                                                    {if r["policy"]["capture_passwords"] == true {
+                                                    {if r.policy.capture_passwords {
                                                         leptos_i18n::t_string!(i18n, ui.yes)
                                                     } else {
                                                         leptos_i18n::t_string!(i18n, ui.no)
@@ -1249,7 +1255,7 @@ pub(super) fn create(
                                                 </dd>
                                             </div><div>
                                                 <dt>{tr!(ui.redirect)}</dt>
-                                                <dd>{text(&r["policy"], "redirect_url")}</dd>
+                                                <dd>{r.policy.redirect_url}</dd>
                                             </div>
                                         </dl>
                                         <section class="resource-section">
@@ -1262,15 +1268,15 @@ pub(super) fn create(
                                             <dl class="resource-facts">
                                                 <div>
                                                     <dt>{tr!(ui.visible_from)}</dt>
-                                                    <dd>{text(&r["preview"], "visible_sender")}</dd>
+                                                    <dd>{r.preview.visible_sender}</dd>
                                                 </div>
                                                 <div>
                                                     <dt>{tr!(ui.transport_sender)}</dt>
-                                                    <dd>{text(&r["preview"], "transport_sender")}</dd>
+                                                    <dd>{r.preview.transport_sender}</dd>
                                                 </div>
                                                 <div>
                                                     <dt>{tr!(ui.subject)}</dt>
-                                                    <dd>{text(&r["preview"], "subject")}</dd>
+                                                    <dd>{r.preview.subject}</dd>
                                                 </div>
                                             </dl>
                                             <iframe
@@ -1278,13 +1284,11 @@ pub(super) fn create(
                                                 title=trs!(ui.rendered_email_sample)
                                                 sandbox=""
                                                 referrerpolicy="no-referrer"
-                                                srcdoc=ruphish_ui::preview_document(
-                                                    &text(&r["preview"], "html"),
-                                                )
+                                                srcdoc=ruphish_ui::preview_document(&r.preview.html)
                                             ></iframe>
                                             <details>
                                                 <summary>{tr!(ui.plain_text)}</summary>
-                                                <pre>{text(&r["preview"], "text")}</pre>
+                                                <pre>{r.preview.text}</pre>
                                             </details>
                                             <Field label=trs!(ui.test_recipient_email)>
                                                 <TextInput
@@ -1302,7 +1306,7 @@ pub(super) fn create(
                                                 {tr!(ui.send_test_email)}
                                             </ActionButton>
                                         </section>
-                                        {(!r["mailer_enabled"].as_bool().unwrap_or(false))
+                                        {(!r.mailer_enabled)
                                             .then(|| {
                                                 view! {
                                                     <p class="form-message error">
@@ -1458,9 +1462,8 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
                 .get(&format!("/api/campaigns/{}/draft", id.get_value()))
                 .await
                 .and_then(|value| {
-                    ruphish_contracts::campaign_workflow::validate_duplicate(&value)
-                        .map_err(|_| api.invalid_read())?;
-                    Ok(value)
+                    serde_json::from_value::<ruphish_contracts::campaign_workflow::Duplicate>(value)
+                        .map_err(|_| api.invalid_read())
                 }) {
                 Ok(value) => {
                     let inserted = drafts
@@ -1471,7 +1474,10 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
                             store
                                 .insert(
                                     "campaigns",
-                                    ruphish_ui::resource_state::ResourceDraft::new(value, None),
+                                    ruphish_ui::resource_state::ResourceDraft::new(
+                                        json!(value),
+                                        None,
+                                    ),
                                     ruphish_ui::import_state::ImportReview {
                                         notes: vec![],
                                         rejected_rows: vec![],

@@ -334,9 +334,9 @@ fn expected(context: &Context) -> Result<Option<String>, Rejection> {
         })
         .transpose()
 }
-pub(crate) fn response(
+pub(crate) fn response<T: serde::Serialize>(
     status: StatusCode,
-    value: &Value,
+    value: &T,
     revision: Option<&str>,
 ) -> Result<Response, Rejection> {
     let bytes = wire::json(value).map_err(|_| error(app::Error::Internal))?;

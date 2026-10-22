@@ -203,6 +203,24 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         auth::Preferences::default()
     );
 
+    let listed = accounts.list(actor).await.unwrap();
+    assert!(
+        listed
+            .windows(2)
+            .all(|pair| pair[0].identity.id < pair[1].identity.id)
+    );
+    let listed_normal = listed
+        .iter()
+        .find(|a| a.identity == normal.identity)
+        .unwrap();
+    assert_eq!(listed_normal.username, normal.username);
+    assert_eq!(listed_normal.role.slug, "user");
+    assert!(listed_normal.permits("view_objects"));
+    assert!(listed_normal.permits("modify_objects"));
+    assert!(!listed_normal.permits("modify_system"));
+    assert_eq!(listed_normal.preferences, auth::Preferences::default());
+    assert!(accounts.list(normal.identity).await.is_err());
+
     let integrations = db.integrations();
     use ruphish_application::integrations::{MailboxEdit, WebhookEdit};
     let hook_edit = |revision| WebhookEdit {
@@ -720,16 +738,57 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         Some(Error::Changed)
     ));
     let hook = integrations.webhook(actor, hook.id).await.unwrap();
+    assert!(matches!(
+        integrations
+            .delete_webhook(actor, hook.id, Some(hook.revision + 1))
+            .await,
+        Err(Error::Changed)
+    ));
+    assert!(integrations.webhook(actor, hook.id).await.is_ok());
+    assert!(matches!(
+        integrations
+            .delete_mailbox(actor, mailbox.id, Some(mailbox.revision + 1))
+            .await,
+        Err(Error::Changed)
+    ));
+    assert!(integrations.mailbox(actor, mailbox.id).await.is_ok());
     integrations
-        .delete_webhook(actor, hook.id, hook.revision)
+        .delete_webhook(actor, hook.id, Some(hook.revision))
         .await
         .unwrap();
     assert!(integrations.webhook(actor, hook.id).await.is_err());
     integrations
-        .delete_mailbox(actor, mailbox.id, mailbox.revision)
+        .delete_mailbox(actor, mailbox.id, Some(mailbox.revision))
         .await
         .unwrap();
     assert!(integrations.mailbox(actor, mailbox.id).await.is_err());
+    assert!(matches!(
+        integrations
+            .delete_webhook(actor, hook.id, Some(hook.revision))
+            .await,
+        Err(Error::NotFound("Webhook"))
+    ));
+    assert!(matches!(
+        integrations.delete_mailbox(actor, mailbox.id, None).await,
+        Err(Error::NotFound("Reporting mailbox"))
+    ));
+    let legacy_hook = integrations
+        .save_webhook(actor, None, hook_edit(None))
+        .await
+        .unwrap();
+    integrations
+        .delete_webhook(actor, legacy_hook.id, None)
+        .await
+        .unwrap();
+    let legacy_mailbox = integrations
+        .save_mailbox(actor, None, mail_edit(None))
+        .await
+        .unwrap();
+    integrations
+        .delete_mailbox(actor, legacy_mailbox.id, None)
+        .await
+        .unwrap();
+
     let metrics = db
         .overview()
         .posture(actor, ruphish_application::overview::Window::All, now + 10)

@@ -32,21 +32,26 @@ pub struct Context {
 
 impl Context {
     fn value(&self) -> Value {
+        use ruphish_domain::template::Field;
         Value::Object(
-            [
-                ("From".into(), self.from.clone().into()),
-                ("URL".into(), self.url.clone().into()),
-                ("Tracker".into(), self.tracker.clone().into()),
-                ("TrackingURL".into(), self.tracking_url.clone().into()),
-                ("RId".into(), self.rid.clone().into()),
-                ("BaseURL".into(), self.base_url.clone().into()),
-                ("Email".into(), self.email.clone().into()),
-                ("FirstName".into(), self.first_name.clone().into()),
-                ("LastName".into(), self.last_name.clone().into()),
-                ("Position".into(), self.position.clone().into()),
-            ]
-            .into_iter()
-            .collect(),
+            Field::ALL
+                .iter()
+                .map(|field| {
+                    let value = match field {
+                        Field::FirstName => &self.first_name,
+                        Field::LastName => &self.last_name,
+                        Field::Email => &self.email,
+                        Field::Position => &self.position,
+                        Field::From => &self.from,
+                        Field::Url => &self.url,
+                        Field::Rid => &self.rid,
+                        Field::BaseUrl => &self.base_url,
+                        Field::TrackingUrl => &self.tracking_url,
+                        Field::Tracker => &self.tracker,
+                    };
+                    (field.name().into(), value.clone().into())
+                })
+                .collect(),
         )
     }
 }

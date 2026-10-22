@@ -238,3 +238,45 @@ fn actual_visual_editor_outputs_execute_like_go_without_breaking_saved_template_
         );
     }
 }
+
+#[test]
+fn editor_vocabulary_renders_the_exact_supported_fields() {
+    use ruphish_domain::template::Field;
+    let context = Context {
+        first_name: "Ada".into(),
+        last_name: "Lovelace".into(),
+        email: "ada@example.test".into(),
+        position: "Analyst".into(),
+        from: "Training".into(),
+        url: "https://training.example.test/path?rid=abc".into(),
+        rid: "abc".into(),
+        base_url: "https://training.example.test".into(),
+        tracking_url: "https://training.example.test/track?rid=abc".into(),
+        tracker: r#"<img src="pixel">"#.into(),
+    };
+    let names: Vec<_> = Field::ALL.iter().map(|f| f.name()).collect();
+    assert_eq!(
+        names,
+        [
+            "FirstName",
+            "LastName",
+            "Email",
+            "Position",
+            "From",
+            "URL",
+            "RId",
+            "BaseURL",
+            "TrackingURL",
+            "Tracker"
+        ]
+    );
+    let source = names
+        .iter()
+        .map(|name| format!("{{{{.{name}}}}}"))
+        .collect::<Vec<_>>()
+        .join("|");
+    assert_eq!(
+        template::render(&source, &context).unwrap(),
+        r#"Ada|Lovelace|ada@example.test|Analyst|Training|https://training.example.test/path?rid=abc|abc|https://training.example.test|https://training.example.test/track?rid=abc|<img src="pixel">"#
+    );
+}

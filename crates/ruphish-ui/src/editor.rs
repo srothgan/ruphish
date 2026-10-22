@@ -2,7 +2,7 @@
 
 use crate::feedback::Message;
 use leptos::{html, prelude::*};
-use ruphish_ui::VARIABLES;
+use ruphish_domain::template::Field;
 use wasm_bindgen::{JsCast, prelude::*};
 
 #[wasm_bindgen(module = "/web/generated/editor.js")]
@@ -120,7 +120,12 @@ pub(super) fn content_editor(
         let visual_callback = Closure::<dyn FnMut(bool)>::new(move |value| {
             let _ = visual_pending.try_set(value);
         });
-        let variables = match serde_json::to_string(VARIABLES) {
+        let variables = match serde_json::to_string(
+            &Field::ALL
+                .iter()
+                .map(|field| field.name())
+                .collect::<Vec<_>>(),
+        ) {
             Ok(v) => v,
             Err(e) => {
                 message.error(e.to_string());

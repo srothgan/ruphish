@@ -30,7 +30,7 @@ pub(super) async fn authorize(
     c: &mut MySqlConnection,
     caller: Identity,
     write: bool,
-) -> Result<(), Error> {
+) -> Result<ruphish_application::auth::Account, Error> {
     if write {
         super::locks::owner(c, caller.id).await.map_err(storage)?;
     }
@@ -43,7 +43,7 @@ pub(super) async fn authorize(
     } else {
         "view_objects"
     })?;
-    Ok(())
+    Ok(user)
 }
 fn text(row: &MySqlRow, field: &str) -> Result<String, Error> {
     Ok(row

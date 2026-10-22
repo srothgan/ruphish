@@ -368,12 +368,12 @@ async fn mailbox_edits_are_owner_scoped_revision_checked_and_secret_preserving()
     );
     assert!(
         integrations
-            .delete_mailbox(caller(), mailbox.id, mailbox.revision)
+            .delete_mailbox(caller(), mailbox.id, Some(mailbox.revision))
             .await
             .is_err()
     );
     integrations
-        .delete_mailbox(caller(), mailbox.id, updated.revision)
+        .delete_mailbox(caller(), mailbox.id, Some(updated.revision))
         .await
         .unwrap();
     assert!(integrations.mailboxes(caller()).await.unwrap().is_empty());

@@ -25,20 +25,6 @@ pub mod view_tasks;
 #[cfg(target_arch = "wasm32")]
 pub mod query;
 
-/// Exported Go template fields offered by the editor.
-pub const VARIABLES: &[&str] = &[
-    "FirstName",
-    "LastName",
-    "Email",
-    "Position",
-    "From",
-    "URL",
-    "RId",
-    "BaseURL",
-    "TrackingURL",
-    "Tracker",
-];
-
 /// Build an isolated preview document without changing the stored source.
 ///
 /// The browser also applies an empty iframe sandbox, inert interaction, and no referrer.

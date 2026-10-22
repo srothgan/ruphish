@@ -1,4 +1,5 @@
 //! Review and launch state prevents stale responses and accidental duplicate launches.
+use ruphish_contracts::campaign_workflow::Review;
 use serde_json::{Value, json};
 
 #[derive(Clone, PartialEq, Eq)]
@@ -59,7 +60,7 @@ pub struct Draft {
     /// Current form values.
     pub value: Value,
     /// Server-confirmed selection and schedule.
-    pub review: Option<Value>,
+    pub review: Option<Review>,
     /// Request identity and draft generation currently being validated.
     pub review_request: Option<(u64, u64)>,
     /// Validation/network failure for the current review only.
@@ -163,7 +164,7 @@ impl Draft {
         Some((request, self.value.clone()))
     }
     /// Only this visit's response can certify the unchanged draft or display an error.
-    pub fn reviewed(&mut self, request: (u64, u64), result: Result<Value, String>) -> bool {
+    pub fn reviewed(&mut self, request: (u64, u64), result: Result<Review, String>) -> bool {
         if self.review_request != Some(request)
             || request.1 != self.generation
             || self.launch.is_some()
@@ -184,8 +185,8 @@ impl Draft {
         }
         let review = self.review.as_ref()?;
         let mut value = self.value.clone();
-        value["selection"] = review["selection"].clone();
-        value["policy"] = review["policy"].clone();
+        value["selection"] = json!(review.selection);
+        value["policy"] = json!(review.policy);
         self.launch = Some((key, value));
         self.launch.clone()
     }
@@ -200,6 +201,23 @@ impl Draft {
 mod tests {
     use super::*;
     use serde_json::json;
+    fn review(patch: Value) -> Review {
+        fn merge(base: &mut Value, patch: Value) {
+            if let (Some(base), Some(fields)) = (base.as_object_mut(), patch.as_object()) {
+                for (key, value) in fields {
+                    merge(base.entry(key).or_insert(Value::Null), value.clone());
+                }
+            } else {
+                *base = patch;
+            }
+        }
+        let mut value = json!({"total":1,"duplicate_count":0,"launch_date":123,"send_by_date":null,
+            "selection":{"groups":[],"template":{"id":1,"name":"Template","revision":"v1"},"page":{"id":2,"name":"Page","revision":"v1"},"smtp":{"id":3,"name":"SMTP","revision":"v1"}},
+            "policy":{"capture_credentials":false,"capture_passwords":false,"redirect_url":""},"mailer_enabled":true,"conflict_count":0,"conflicts":[],
+            "preview":{"subject":"Subject","html":"<p>Preview</p>","text":"Preview","visible_sender":"Sender","transport_sender":"Sender"}});
+        merge(&mut value, patch);
+        serde_json::from_value(value).unwrap()
+    }
     fn campaign_draft() -> Draft {
         Draft {
             value: json!({"name":"Training","policy":{"capture_credentials":false,"capture_passwords":false,"redirect_url":""}}),
@@ -219,9 +237,9 @@ mod tests {
         let (first, sent) = flow.update(&mut d, true, false, true, 0).unwrap();
         assert_eq!(sent["selection"]["page"]["id"], 7);
         assert!(flow.update(&mut d, true, false, true, 0).is_none());
-        d.reviewed(first, Ok(json!({"total":1})));
+        d.reviewed(first, Ok(review(json!({"total":1}))));
         assert!(flow.update(&mut d, true, false, true, 0).is_none());
-        assert_eq!(d.review.as_ref().unwrap()["total"], 1);
+        assert_eq!(d.review.as_ref().unwrap().total, 1);
         assert!(flow.update(&mut d, false, false, true, 0).is_none());
         assert!(d.review.is_none());
         let (revisited, body) = flow.update(&mut d, true, false, true, 0).unwrap();
@@ -230,7 +248,7 @@ mod tests {
         d.edit(|v| v["name"] = json!("Edited training"));
         let (edited, body) = flow.update(&mut d, true, false, true, 0).unwrap();
         assert_eq!(body["name"], "Edited training");
-        assert!(!d.reviewed(revisited, Ok(json!({"total":100}))));
+        assert!(!d.reviewed(revisited, Ok(review(json!({"total":100})))));
         assert!(!d.reviewed(revisited, Err("Old network error".into())));
         assert_eq!(d.review_request, Some(edited));
     }
@@ -249,14 +267,14 @@ mod tests {
         d.edit(|v| v["selection"]["groups"] = json!([{"id":3}]));
         let (corrected, body) = flow.update(&mut d, true, false, true, 1).unwrap();
         assert_eq!(body["selection"]["groups"], json!([{"id":3}]));
-        d.reviewed(corrected, Ok(json!({"total":2})));
+        d.reviewed(corrected, Ok(review(json!({"total":2}))));
         assert!(flow.update(&mut d, true, false, true, 1).is_none());
         assert!(flow.update(&mut d, true, true, true, 1).is_none());
         assert!(d.review.is_none());
         assert!(d.launch("refreshing".into()).is_none());
         let (refreshed, _) = flow.update(&mut d, true, false, true, 1).unwrap();
         assert!(!d.reviewed(corrected, Err("Late failure".into())));
-        d.reviewed(refreshed, Ok(json!({"total":3})));
+        d.reviewed(refreshed, Ok(review(json!({"total":3}))));
         assert!(flow.update(&mut d, true, false, false, 1).is_none());
         assert!(
             d.review.is_none(),
@@ -268,7 +286,7 @@ mod tests {
         let mut flow = ReviewFlow::default();
         let mut d = campaign_draft();
         let (request, _) = flow.update(&mut d, true, false, true, 0).unwrap();
-        d.reviewed(request, Ok(json!({"selection":{"template":{"id":7,"revision":"v1"}},"policy":{"capture_passwords":false}})));
+        d.reviewed(request, Ok(review(json!({"selection":{"template":{"id":7,"revision":"v1"}},"policy":{"capture_passwords":false}}))));
         let original = d.launch("original".into()).unwrap();
         assert!(flow.update(&mut d, true, false, true, 0).is_none());
         assert!(flow.update(&mut d, true, true, true, 1).is_none());
@@ -277,8 +295,8 @@ mod tests {
         d.rejected();
         let (fresh, _) = flow.update(&mut d, true, false, true, 2).unwrap();
         assert!(d.launch("not-ready".into()).is_none());
-        assert!(!d.reviewed(request, Ok(json!({"total":999}))));
-        d.reviewed(fresh, Ok(json!({"selection":{"template":{"id":7,"revision":"v2"}},"policy":{"capture_passwords":false}})));
+        assert!(!d.reviewed(request, Ok(review(json!({"total":999})))));
+        d.reviewed(fresh, Ok(review(json!({"selection":{"template":{"id":7,"revision":"v2"}},"policy":{"capture_passwords":false}}))));
         let (key, body) = d.launch("new-attempt".into()).unwrap();
         assert_eq!(key, "new-attempt");
         assert_eq!(body["selection"]["template"]["revision"], "v2");
@@ -305,7 +323,9 @@ mod tests {
         let (request, _) = d.begin_review().unwrap();
         assert!(d.reviewed(
             request,
-            Ok(json!({"selection":{"page":{"id":12,"revision":"reviewed"}},"policy":explicit}))
+            Ok(review(
+                json!({"selection":{"page":{"id":12,"revision":"reviewed"}},"policy":explicit})
+            ))
         ));
         let (_, body) = d.launch("stable-key".into()).unwrap();
         assert_eq!(body["policy"], explicit);
@@ -364,10 +384,10 @@ mod tests {
         d.edit(|v| v["name"] = json!("Edited"));
         let (current, edited) = d.begin_review().unwrap();
         assert_eq!(edited["name"], "Edited");
-        assert!(!d.reviewed(old, Ok(json!({"total":500}))));
+        assert!(!d.reviewed(old, Ok(review(json!({"total":500})))));
         assert!(!d.reviewed(old, Err("Stale validation failure".into())));
         assert_eq!(d.review_request, Some(current));
-        assert!(d.reviewed(current, Ok(json!({"total":2}))));
+        assert!(d.reviewed(current, Ok(review(json!({"total":2})))));
         d.edit(|v| v["name"] = json!("New"));
         assert!(d.review.is_none());
     }
@@ -382,7 +402,7 @@ mod tests {
         d.clear_review(); // Back while the request is in flight.
         let (second, same_body) = d.begin_review().unwrap();
         assert_eq!(same_body, body);
-        assert!(!d.reviewed(first, Ok(json!({"total":100}))));
+        assert!(!d.reviewed(first, Ok(review(json!({"total":100})))));
         assert!(!d.reviewed(first, Err("Old request failed".into())));
         assert!(d.reviewed(second, Err("Template was removed".into())));
         assert!(d.review.is_none());
@@ -391,9 +411,9 @@ mod tests {
         assert!(d.launch("still-invalid".into()).is_none());
         let (retry, _) = d.begin_review().unwrap();
         assert!(d.review_error.is_none());
-        assert!(!d.reviewed(second, Ok(json!({"total":100}))));
-        assert!(d.reviewed(retry, Ok(json!({"total":2}))));
-        assert_eq!(d.review.as_ref().unwrap()["total"], 2);
+        assert!(!d.reviewed(second, Ok(review(json!({"total":100})))));
+        assert!(d.reviewed(retry, Ok(review(json!({"total":2})))));
+        assert_eq!(d.review.as_ref().unwrap().total, 2);
         d.clear_review(); // Returning again must not use the old server result.
         assert!(d.review.is_none());
         let (revisited, _) = d.begin_review().unwrap();
@@ -407,7 +427,7 @@ mod tests {
             ..Default::default()
         };
         let (request, _) = d.begin_review().unwrap();
-        d.reviewed(request,Ok(json!({"selection":{"template":{"id":7,"revision":"v1"}},"policy":{"capture_passwords":true}})));
+        d.reviewed(request,Ok(review(json!({"selection":{"template":{"id":7,"revision":"v1"}},"policy":{"capture_passwords":true}}))));
         let first = d.launch("first-key".into());
         assert!(d.begin_review().is_none());
         d.clear_review();

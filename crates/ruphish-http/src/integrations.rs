@@ -12,60 +12,58 @@ use axum::{
     routing::{get, post},
 };
 use ruphish_application::integrations as app;
-use ruphish_contracts::errors::ErrorCode;
+use ruphish_contracts::{errors::ErrorCode, integrations as wire};
 use serde::Deserialize;
-use serde_json::{Value, json};
-fn runs(history: Vec<app::Run>) -> Vec<Value> {
+use serde_json::json;
+fn runs(history: Vec<app::Run>) -> Vec<wire::Run> {
     history
         .into_iter()
-        .map(|run| {
-            json!({
-                "id": run.id,
-                "event_id": run.event_id,
-                "attempt": run.attempt,
-                "started": run.started,
-                "finished": run.finished,
-                "status": run.status,
-                "code": run.code,
-                "matched": run.matched,
-                "rejected": run.rejected,
-            })
+        .map(|run| wire::Run {
+            id: run.id,
+            event_id: run.event_id,
+            attempt: run.attempt,
+            started: run.started,
+            finished: run.finished,
+            status: run.status,
+            code: run.code,
+            matched: run.matched,
+            rejected: run.rejected,
         })
         .collect()
 }
-fn webhook(endpoint: app::Webhook) -> Value {
-    json!({
-        "id": endpoint.id,
-        "name": endpoint.name,
-        "url": endpoint.url,
-        "is_active": endpoint.active,
-        "revision": endpoint.revision,
-        "has_secret": endpoint.has_secret,
-        "history": runs(endpoint.history),
-    })
+fn webhook(endpoint: app::Webhook) -> wire::Webhook {
+    wire::Webhook {
+        id: endpoint.id,
+        name: endpoint.name,
+        url: endpoint.url,
+        is_active: endpoint.active,
+        revision: endpoint.revision,
+        has_secret: endpoint.has_secret,
+        history: runs(endpoint.history),
+    }
 }
-fn mailbox(mailbox: app::Mailbox) -> Value {
-    json!({
-        "id": mailbox.id,
-        "name": mailbox.name,
-        "enabled": mailbox.enabled,
-        "host": mailbox.host,
-        "port": mailbox.port,
-        "username": mailbox.username,
-        "has_password": mailbox.has_password,
-        "tls": mailbox.tls,
-        "folder": mailbox.folder,
-        "restrict_domain": mailbox.restrict_domain,
-        "delete_reported": mailbox.delete_reported,
-        "frequency": mailbox.frequency,
-        "revision": mailbox.revision,
-        "last_check": mailbox.last_check,
-        "last_success": mailbox.last_success,
-        "next_check": mailbox.next_check,
-        "running": mailbox.running,
-        "code": mailbox.code,
-        "history": runs(mailbox.history),
-    })
+fn mailbox(mailbox: app::Mailbox) -> wire::Mailbox {
+    wire::Mailbox {
+        id: mailbox.id,
+        name: mailbox.name,
+        enabled: mailbox.enabled,
+        host: mailbox.host,
+        port: mailbox.port,
+        username: mailbox.username,
+        has_password: mailbox.has_password,
+        tls: mailbox.tls,
+        folder: mailbox.folder,
+        restrict_domain: mailbox.restrict_domain,
+        delete_reported: mailbox.delete_reported,
+        frequency: i64::from(mailbox.frequency),
+        revision: mailbox.revision,
+        last_check: mailbox.last_check,
+        last_success: mailbox.last_success,
+        next_check: mailbox.next_check,
+        running: mailbox.running,
+        code: mailbox.code,
+        history: runs(mailbox.history),
+    }
 }
 pub(crate) fn routes() -> Router<AuthState> {
     Router::new()
@@ -335,13 +333,7 @@ async fn delete_hook(
     headers: HeaderMap,
 ) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
-    let revision = context
-        .integrations()
-        .webhook(user.identity, id)
-        .await
-        .map_err(error)?
-        .revision;
-    let revision = expected_revision(&headers)?.unwrap_or(revision);
+    let revision = expected_revision(&headers)?;
     context
         .integrations()
         .delete_webhook(user.identity, id, revision)
@@ -355,13 +347,7 @@ async fn delete_mailbox(
     headers: HeaderMap,
 ) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
-    let revision = context
-        .integrations()
-        .mailbox(user.identity, id)
-        .await
-        .map_err(error)?
-        .revision;
-    let revision = expected_revision(&headers)?.unwrap_or(revision);
+    let revision = expected_revision(&headers)?;
     context
         .integrations()
         .delete_mailbox(user.identity, id, revision)

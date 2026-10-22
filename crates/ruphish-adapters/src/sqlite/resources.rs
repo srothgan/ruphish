@@ -29,7 +29,7 @@ pub(super) async fn authorize(
     c: &mut SqliteConnection,
     caller: Identity,
     write: bool,
-) -> Result<(), Error> {
+) -> Result<ruphish_application::auth::Account, Error> {
     let user = super::accounts::account(c, caller.id)
         .await
         .map_err(Error::from)?;
@@ -39,7 +39,7 @@ pub(super) async fn authorize(
     } else {
         "view_objects"
     })?;
-    Ok(())
+    Ok(user)
 }
 fn text(row: &SqliteRow, field: &str) -> Result<String, Error> {
     Ok(row

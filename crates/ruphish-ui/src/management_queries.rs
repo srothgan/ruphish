@@ -1,6 +1,8 @@
 //! Shared domain and integration reads and their mutation dependencies.
 use crate::{
-    account::Api, campaign_queries::CampaignQueries, integrations::Kind,
+    account::Api,
+    campaign_queries::CampaignQueries,
+    integrations::{Kind, Record},
     overview_queries::OverviewQueries,
 };
 use leptos::prelude::*;
@@ -21,8 +23,8 @@ pub(crate) struct ManagementQueries {
     pub domains: Query<(), Vec<Domain>>,
     pub validated_domains: Query<(), Vec<Domain>>,
     pub domain: Query<i64, Domain>,
-    pub integrations: Query<Kind, Vec<Value>>,
-    pub integration: Query<(Kind, i64), Value>,
+    pub integrations: Query<Kind, Vec<Record>>,
+    pub integration: Query<(Kind, i64), Record>,
 }
 
 impl ManagementQueries {
@@ -49,10 +51,10 @@ impl ManagementQueries {
                 let path = format!("{}/", kind.api());
                 if kind.webhook() {
                     let rows: Vec<Webhook> = api.read(&path).await?;
-                    rows.into_iter().map(|row| encoded(api, row)).collect()
+                    Ok(rows.into_iter().map(Record::Webhook).collect())
                 } else {
                     let rows: Vec<Mailbox> = api.read(&path).await?;
-                    rows.into_iter().map(|row| encoded(api, row)).collect()
+                    Ok(rows.into_iter().map(Record::Mailbox).collect())
                 }
             }),
             integration: Query::new(client, move |(kind, id): (Kind, i64)| async move {
@@ -78,7 +80,7 @@ impl ManagementQueries {
         Ok(value)
     }
 
-    pub async fn read_integration(api: Api, kind: Kind, id: i64) -> Result<Value, String> {
+    pub async fn read_integration(api: Api, kind: Kind, id: i64) -> Result<Record, String> {
         let path = format!("{}/{id}", kind.api());
         let value = api.get(&path).await?;
         Self::validate_integration(api, kind, value, Some(id))
@@ -89,7 +91,7 @@ impl ManagementQueries {
         kind: Kind,
         value: Value,
         expected_id: Option<i64>,
-    ) -> Result<Value, String> {
+    ) -> Result<Record, String> {
         if value["id"]
             .as_i64()
             .is_none_or(|id| id <= 0 || expected_id.is_some_and(|expected| expected != id))
@@ -97,15 +99,13 @@ impl ManagementQueries {
             return Err(api.invalid_read());
         }
         if kind.webhook() {
-            encoded(
-                api,
-                serde_json::from_value::<Webhook>(value).map_err(|_| api.invalid_read())?,
-            )
+            serde_json::from_value::<Webhook>(value)
+                .map(Record::Webhook)
+                .map_err(|_| api.invalid_read())
         } else {
-            encoded(
-                api,
-                serde_json::from_value::<Mailbox>(value).map_err(|_| api.invalid_read())?,
-            )
+            serde_json::from_value::<Mailbox>(value)
+                .map(Record::Mailbox)
+                .map_err(|_| api.invalid_read())
         }
     }
 
@@ -137,12 +137,12 @@ impl ManagementQueries {
             .confirmed((), |rows| rows.retain(|row| row.id != id));
     }
 
-    pub fn integration_command(self, kind: Kind, id: i64, operation: &str, saved: Value) {
+    pub fn integration_command(self, kind: Kind, id: i64, operation: &str, saved: Record) {
         if !kind.webhook() {
             self.overview.inventory_changed();
         }
         self.integrations.confirmed(kind, |rows| {
-            if let Some(row) = rows.iter_mut().find(|row| row["id"].as_i64() == Some(id)) {
+            if let Some(row) = rows.iter_mut().find(|row| row.id() == id) {
                 *row = saved.clone();
             }
         });
@@ -167,13 +167,8 @@ impl ManagementQueries {
         if !kind.webhook() {
             self.overview.inventory_changed();
         }
-        self.integrations.confirmed(kind, |rows| {
-            rows.retain(|row| row["id"].as_i64() != Some(id))
-        });
+        self.integrations
+            .confirmed(kind, |rows| rows.retain(|row| row.id() != id));
         self.integration.forget((kind, id));
     }
-}
-
-fn encoded(api: Api, value: impl serde::Serialize) -> Result<Value, String> {
-    serde_json::to_value(value).map_err(|_| api.invalid_read())
 }

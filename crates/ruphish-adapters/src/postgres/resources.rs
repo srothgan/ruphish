@@ -30,11 +30,14 @@ pub(super) async fn authorize(
     c: &mut PgConnection,
     caller: Identity,
     write: bool,
-) -> Result<(), Error> {
+) -> Result<ruphish_application::auth::Account, Error> {
     authorize_with_lock(c, caller, write, write).await
 }
 /// Review needs modify permission but is a consistent read, not a write transaction.
-pub(super) async fn authorize_review(c: &mut PgConnection, caller: Identity) -> Result<(), Error> {
+pub(super) async fn authorize_review(
+    c: &mut PgConnection,
+    caller: Identity,
+) -> Result<ruphish_application::auth::Account, Error> {
     authorize_with_lock(c, caller, true, false).await
 }
 async fn authorize_with_lock(
@@ -42,7 +45,7 @@ async fn authorize_with_lock(
     caller: Identity,
     write: bool,
     lock: bool,
-) -> Result<(), Error> {
+) -> Result<ruphish_application::auth::Account, Error> {
     if lock {
         super::locks::owner(c, caller.id).await.map_err(storage)?;
     }
@@ -55,7 +58,7 @@ async fn authorize_with_lock(
     } else {
         "view_objects"
     })?;
-    Ok(())
+    Ok(user)
 }
 fn text(row: &PgRow, field: &str) -> Result<String, Error> {
     Ok(row

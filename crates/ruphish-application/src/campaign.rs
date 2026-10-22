@@ -55,6 +55,8 @@ pub struct Create {
 }
 /// Resolved, reviewable resource input and unique audience.
 pub struct Prepared {
+    /// Verified domain resolved in the same resource-selection transaction.
+    pub domain_id: i64,
     /// Number of overlapping entries whose recipient attributes conflict.
     pub conflict_count: usize,
     /// First one hundred conflicting pairs, with retained attributes first.

@@ -3,91 +3,137 @@ use crate::{campaign_reads::Policy, nullable};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Deserialize, Serialize)]
-struct Selection<T> {
-    groups: Vec<T>,
-    template: T,
-    page: T,
-    smtp: T,
+#[derive(Clone, Debug, Deserialize, Serialize)]
+/// Complete resource selections for a review or editable copy.
+pub struct Selection<T> {
+    /// Ordered audience selections.
+    pub groups: Vec<T>,
+    /// Email template selection.
+    pub template: T,
+    /// Landing-page selection.
+    pub page: T,
+    /// Sending-profile selection.
+    pub smtp: T,
 }
 
-#[derive(Deserialize, Serialize)]
-struct Reference {
-    id: i64,
+#[derive(Clone, Debug, Deserialize, Serialize)]
+/// Resource identity retained when duplicating a campaign.
+pub struct Reference {
+    /// Persistent resource identifier.
+    pub id: i64,
 }
 
-#[derive(Deserialize, Serialize)]
-struct ReviewedResource {
-    id: i64,
-    name: String,
-    revision: String,
+#[derive(Clone, Debug, Deserialize, Serialize)]
+/// Resource identity and revision observed during review.
+pub struct ReviewedResource {
+    /// Persistent resource identifier.
+    pub id: i64,
+    /// Display name.
+    pub name: String,
+    /// Server revision used for conditional launch.
+    pub revision: String,
 }
 
-#[derive(Deserialize, Serialize)]
-struct RecipientAttributes {
-    first_name: String,
-    last_name: String,
-    position: String,
+#[derive(Clone, Debug, Deserialize, Serialize)]
+/// Recipient attributes used to explain a duplicate conflict.
+pub struct RecipientAttributes {
+    /// Recipient given name.
+    pub first_name: String,
+    /// Recipient family name.
+    pub last_name: String,
+    /// Recipient position.
+    pub position: String,
 }
 
-#[derive(Deserialize, Serialize)]
-struct Conflict {
-    email: String,
-    kept: RecipientAttributes,
-    discarded: RecipientAttributes,
+#[derive(Clone, Debug, Deserialize, Serialize)]
+/// Conflicting audience records, preserving first-record precedence.
+pub struct Conflict {
+    /// Recipient mailbox identity.
+    pub email: String,
+    /// Attributes retained from the first occurrence.
+    pub kept: RecipientAttributes,
+    /// Conflicting attributes from a later occurrence.
+    pub discarded: RecipientAttributes,
 }
 
-#[derive(Deserialize, Serialize)]
-struct Preview {
-    subject: String,
-    html: String,
-    text: String,
-    visible_sender: String,
-    transport_sender: String,
+#[derive(Clone, Debug, Deserialize, Serialize)]
+/// Rendered sample of the reviewed email.
+pub struct Preview {
+    /// Rendered subject.
+    pub subject: String,
+    /// Rendered HTML body.
+    pub html: String,
+    /// Rendered plain-text body.
+    pub text: String,
+    /// Rendered visible From address.
+    pub visible_sender: String,
+    /// SMTP envelope sender.
+    pub transport_sender: String,
 }
 
-#[derive(Deserialize, Serialize)]
-struct Review {
-    total: usize,
-    duplicate_count: usize,
-    launch_date: i64,
+#[derive(Clone, Debug, Deserialize, Serialize)]
+/// Complete server-confirmed launch review.
+pub struct Review {
+    /// Number of unique recipients.
+    pub total: usize,
+    /// Number of discarded duplicate entries.
+    pub duplicate_count: usize,
+    /// Resolved launch time in UTC seconds.
+    pub launch_date: i64,
     #[serde(deserialize_with = "nullable")]
-    send_by_date: Option<i64>,
-    selection: Selection<ReviewedResource>,
-    policy: Policy,
-    mailer_enabled: bool,
-    conflict_count: usize,
-    conflicts: Vec<Conflict>,
-    preview: Preview,
+    /// Optional distribution end in UTC seconds.
+    pub send_by_date: Option<i64>,
+    /// Resolved resource selections.
+    pub selection: Selection<ReviewedResource>,
+    /// Effective tracking policy confirmed by review.
+    pub policy: Policy,
+    /// Whether delivery is enabled by startup configuration.
+    pub mailer_enabled: bool,
+    /// Total conflicts including those beyond the displayed sample.
+    pub conflict_count: usize,
+    /// Bounded conflicting recipient sample.
+    pub conflicts: Vec<Conflict>,
+    /// Rendered sample using the first recipient.
+    pub preview: Preview,
 }
 
-#[derive(Deserialize, Serialize)]
-struct Duplicate {
-    name: String,
-    url: String,
-    selection: Selection<Reference>,
-    #[serde(deserialize_with = "duplicate_policy")]
-    policy: Value,
+#[derive(Clone, Debug, Deserialize, Serialize)]
+/// Editable campaign copy; an empty policy means the legacy policy is unknown.
+pub struct Duplicate {
+    /// Display name.
+    pub name: String,
+    /// Authored campaign URL.
+    pub url: String,
+    /// Resolved resource selections.
+    pub selection: Selection<Reference>,
+    #[serde(
+        deserialize_with = "duplicate_policy",
+        serialize_with = "serialize_duplicate_policy"
+    )]
+    /// Effective tracking policy, or unknown legacy policy for a copy.
+    pub policy: Option<Policy>,
 }
 
-fn duplicate_policy<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Value, D::Error> {
+fn duplicate_policy<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Policy>, D::Error> {
     let value = Value::deserialize(deserializer)?;
-    // An explicit empty object is the preserved legacy unknown-policy response.
-    // Missing, null or partially populated policies are incomplete responses.
-    if !value.as_object().is_some_and(serde_json::Map::is_empty) {
-        serde_json::from_value::<Policy>(value.clone()).map_err(serde::de::Error::custom)?;
+    if value.as_object().is_some_and(serde_json::Map::is_empty) {
+        return Ok(None);
     }
-    Ok(value)
+    serde_json::from_value(value)
+        .map(Some)
+        .map_err(serde::de::Error::custom)
 }
-
-/// Reject incomplete preparation before it can authorize launch or replace a review.
-pub fn validate_review(value: &Value) -> Result<(), serde_json::Error> {
-    serde_json::from_value::<Review>(value.clone()).map(|_| ())
-}
-
-/// Reject incomplete duplicate input instead of silently initializing blank fields.
-pub fn validate_duplicate(value: &Value) -> Result<(), serde_json::Error> {
-    serde_json::from_value::<Duplicate>(value.clone()).map(|_| ())
+fn serialize_duplicate_policy<S: serde::Serializer>(
+    value: &Option<Policy>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    use serde::ser::SerializeMap;
+    match value {
+        Some(policy) => policy.serialize(serializer),
+        None => serializer.serialize_map(Some(0))?.end(),
+    }
 }
 
 #[cfg(test)]
@@ -101,11 +147,14 @@ mod tests {
             "selection":{"groups":[{"id":1,"name":"Audience","revision":"v1"}],"template":{"id":2,"name":"Email","revision":"v2"},"page":{"id":3,"name":"Page","revision":"v3"},"smtp":{"id":4,"name":"SMTP","revision":"v4"}},
             "policy":{"capture_credentials":false,"capture_passwords":false,"redirect_url":""},"mailer_enabled":true,"conflict_count":0,"conflicts":[],
             "preview":{"subject":"Subject","html":"<p>Preview</p>","text":"Preview","visible_sender":"Sender <sender@example.test>","transport_sender":"bounce@example.test"}});
-        assert!(validate_review(&value).is_ok());
+        assert!(serde_json::from_value::<Review>(value.clone()).is_ok());
         for field in value.as_object().expect("fixture").keys() {
             let mut missing = value.clone();
             missing.as_object_mut().map(|v| v.remove(field));
-            assert!(validate_review(&missing).is_err(), "{field}");
+            assert!(
+                serde_json::from_value::<Review>(missing.clone()).is_err(),
+                "{field}"
+            );
         }
         for pointer in [
             "/selection/template",
@@ -115,28 +164,38 @@ mod tests {
         ] {
             let mut missing = value.clone();
             *missing.pointer_mut(pointer).expect("fixture") = json!({});
-            assert!(validate_review(&missing).is_err(), "{pointer}");
+            assert!(
+                serde_json::from_value::<Review>(missing.clone()).is_err(),
+                "{pointer}"
+            );
         }
     }
 
     #[test]
     fn duplication_preserves_explicit_unknown_policy_but_rejects_lost_selections() {
         let value = json!({"name":"Copy","url":"https://example.test","selection":{"groups":[{"id":1}],"template":{"id":2},"page":{"id":0},"smtp":{"id":4}},"policy":{}});
-        assert!(validate_duplicate(&value).is_ok());
+        let decoded = serde_json::from_value::<Duplicate>(value.clone()).expect("fixture");
+        assert!(decoded.policy.is_none());
+        assert_eq!(serde_json::to_value(decoded).expect("wire response"), value);
+        let mut known = value.clone();
+        known["policy"] = json!({"capture_credentials":false,"capture_passwords":false,"redirect_url":"https://example.test/after"});
+        let decoded = serde_json::from_value::<Duplicate>(known.clone()).expect("known policy");
+        assert!(decoded.policy.is_some());
+        assert_eq!(serde_json::to_value(decoded).expect("wire response"), known);
         for field in ["name", "url", "selection", "policy"] {
             let mut missing = value.clone();
             missing.as_object_mut().map(|v| v.remove(field));
-            assert!(validate_duplicate(&missing).is_err());
+            assert!(serde_json::from_value::<Duplicate>(missing.clone()).is_err());
         }
         for pointer in ["/selection/template", "/selection/groups/0"] {
             let mut missing = value.clone();
             *missing.pointer_mut(pointer).expect("fixture") = json!({});
-            assert!(validate_duplicate(&missing).is_err());
+            assert!(serde_json::from_value::<Duplicate>(missing.clone()).is_err());
         }
         for policy in [Value::Null, json!({"capture_credentials":false})] {
             let mut missing = value.clone();
             missing["policy"] = policy;
-            assert!(validate_duplicate(&missing).is_err());
+            assert!(serde_json::from_value::<Duplicate>(missing.clone()).is_err());
         }
     }
 }

@@ -1,12 +1,7 @@
 //! Webhook administration and reporting mailbox resources share presentation primitives.
 use crate::{
-    account::Api,
-    campaigns::{array, text},
-    feedback::Message,
-    management_queries::ManagementQueries,
-    resources::ResourceAccess,
-    shared::components::*,
-    time_display::instant,
+    account::Api, campaigns::text, feedback::Message, management_queries::ManagementQueries,
+    resources::ResourceAccess, shared::components::*, time_display::instant,
 };
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use leptos_router::hooks::{use_navigate, use_params_map};
@@ -89,6 +84,76 @@ impl Kind {
     }
 }
 
+/// Confirmed server records stay typed; only editable form inputs use JSON.
+#[derive(Clone, Debug)]
+pub(crate) enum Record {
+    Webhook(ruphish_contracts::integrations::Webhook),
+    Mailbox(ruphish_contracts::integrations::Mailbox),
+}
+impl Record {
+    pub fn id(&self) -> i64 {
+        match self {
+            Self::Webhook(v) => v.id,
+            Self::Mailbox(v) => v.id,
+        }
+    }
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Webhook(v) => &v.name,
+            Self::Mailbox(v) => &v.name,
+        }
+    }
+    pub fn revision(&self) -> i64 {
+        match self {
+            Self::Webhook(v) => v.revision,
+            Self::Mailbox(v) => v.revision,
+        }
+    }
+    fn destination(&self) -> &str {
+        match self {
+            Self::Webhook(v) => &v.url,
+            Self::Mailbox(v) => &v.host,
+        }
+    }
+    fn enabled(&self) -> bool {
+        match self {
+            Self::Webhook(v) => v.is_active,
+            Self::Mailbox(v) => v.enabled,
+        }
+    }
+    fn has_secret(&self) -> bool {
+        match self {
+            Self::Webhook(v) => v.has_secret,
+            Self::Mailbox(v) => v.has_password,
+        }
+    }
+    fn running(&self) -> bool {
+        matches!(self, Self::Mailbox(v) if v.running)
+    }
+    fn code(&self) -> &str {
+        match self {
+            Self::Webhook(_) => "",
+            Self::Mailbox(v) => &v.code,
+        }
+    }
+    fn history(self) -> Vec<ruphish_contracts::integrations::Run> {
+        match self {
+            Self::Webhook(v) => v.history,
+            Self::Mailbox(v) => v.history,
+        }
+    }
+    fn edit_value(&self) -> Value {
+        match self {
+            Self::Webhook(v) => {
+                json!({"name":v.name,"url":v.url,"is_active":v.is_active,"revision":v.revision})
+            }
+            Self::Mailbox(v) => {
+                json!({"name":v.name,"enabled":v.enabled,"host":v.host,"port":v.port,"username":v.username,"tls":v.tls,"folder":v.folder,"restrict_domain":v.restrict_domain,"delete_reported":v.delete_reported,"frequency":v.frequency,"revision":v.revision})
+            }
+        }
+    }
+}
+
 pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
@@ -109,7 +174,7 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
             .get()
             .unwrap_or_default()
             .into_iter()
-            .filter(|row| text(row, "name").to_lowercase().contains(&needle))
+            .filter(|row| row.name().to_lowercase().contains(&needle))
             .collect::<Vec<_>>()
     });
     view! {
@@ -177,12 +242,12 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
                         .get()
                         .into_iter()
                         .map(|row| {
-                            let href = format!("{}/{}", kind.path(), row["id"]);
+                            let href = format!("{}/{}", kind.path(), row.id());
                             let target = DeleteTarget {
-                                id: row["id"].as_i64().unwrap_or(0),
-                                name: text(&row, "name"),
-                                path: format!("{}/{}", kind.api(), row["id"]),
-                                revision: row["revision"].as_i64().map(|v| v.to_string()),
+                                id: row.id(),
+                                name: row.name().to_owned(),
+                                path: format!("{}/{}", kind.api(), row.id()),
+                                revision: Some(row.revision().to_string()),
                                 description: leptos_i18n::t_string!(
                                     i18n, ui.this_removes_the_configuration_and_its_processing_history_already_dispatched_req
                                 ),
@@ -190,30 +255,21 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
                             view! {
                                 <tr>
                                     <th scope="row">
-                                        <a href=href.clone()>{text(&row, "name")}</a>
+                                        <a href=href.clone()>{row.name().to_owned()}</a>
                                     </th>
+                                    <td>{row.destination().to_owned()}</td>
                                     <td>
-                                        {text(&row, if kind.webhook() { "url" } else { "host" })}
-                                    </td>
-                                    <td>
-                                        {if row[if kind.webhook() {
-                                                "is_active"
-                                            } else {
-                                                "enabled"
-                                            }]
-                                            .as_bool()
-                                            .unwrap_or(false)
-                                        {
+                                        {if row.enabled() {
                                             leptos_i18n::t_string!(i18n, ui.yes)
                                         } else {
                                             leptos_i18n::t_string!(i18n, ui.no)
                                         }}
                                     </td>
                                     <td>
-                                        {if row["running"] == true {
+                                        {if row.running() {
                                             leptos_i18n::t_string!(i18n, ui.checking).into()
                                         } else {
-                                            text(&row, "code")
+                                            row.code().to_owned()
                                         }}
                                     </td>
                                     <td>
@@ -318,31 +374,6 @@ fn checkbox(draft: RwSignal<Value>, key: &'static str, label: Signal<String>) ->
     }
 }
 
-fn edit_value(kind: Kind, value: &Value) -> Value {
-    let keys: &[&str] = if kind.webhook() {
-        &["name", "url", "is_active", "revision"]
-    } else {
-        &[
-            "name",
-            "enabled",
-            "host",
-            "port",
-            "username",
-            "tls",
-            "folder",
-            "restrict_domain",
-            "delete_reported",
-            "frequency",
-            "revision",
-        ]
-    };
-    let mut edit = serde_json::Map::new();
-    for key in keys {
-        edit.insert((*key).into(), value[*key].clone());
-    }
-    Value::Object(edit)
-}
-
 fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
@@ -376,16 +407,8 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
             spawn_local(async move {
                 match ManagementQueries::read_integration(api, kind, id).await {
                     Ok(value) => {
-                        has_saved_secret.set(
-                            value[if kind.webhook() {
-                                "has_secret"
-                            } else {
-                                "has_password"
-                            }]
-                            .as_bool()
-                            .unwrap_or(false),
-                        );
-                        let value = edit_value(kind, &value);
+                        has_saved_secret.set(value.has_secret());
+                        let value = value.edit_value();
                         baseline.set(value.clone());
                         draft.set(value);
                         loaded.set(true);
@@ -430,14 +453,12 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                         .map(|saved| (saved, revision))
                 }) {
                 Ok((saved, _)) => {
-                    if let Some(id) = saved["id"].as_i64() {
-                        queries.integration_saved(kind, id);
-                    }
+                    queries.integration_saved(kind, saved.id());
                     baseline.set(draft.get_untracked());
                     busy.set(false);
                     navigate.with_value(|navigate| {
                         navigate(
-                            &format!("{}/{}", kind.path(), saved["id"]),
+                            &format!("{}/{}", kind.path(), saved.id()),
                             Default::default(),
                         )
                     });
@@ -634,11 +655,16 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
     let queries = expect_context::<ManagementQueries>();
     let read = queries.integration.observe(move || (kind, id));
     let confirmed = Signal::derive(move || read.data.with(Option::is_some));
-    let value = Signal::derive(move || read.data.get().unwrap_or(Value::Null));
+    let value = read.data;
+    let mailbox = Signal::derive(move || {
+        value.get().and_then(|v| match v {
+            Record::Mailbox(v) => Some(v),
+            Record::Webhook(_) => None,
+        })
+    });
     let busy = RwSignal::new(false);
     let deletion = ResourceDeletion::new();
-    let unavailable =
-        Signal::derive(move || busy.get() || deletion.busy.get() || !value.with(Value::is_object));
+    let unavailable = Signal::derive(move || busy.get() || deletion.busy.get() || !confirmed.get());
     let resuming = RwSignal::new(false);
     let message = Message::new(String::new());
     let tasks = ViewTasks::default();
@@ -652,12 +678,14 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
         if unavailable.get_untracked() {
             return;
         }
-        let data = value.get_untracked();
+        let Some(data) = value.get_untracked() else {
+            return;
+        };
         deletion.select(DeleteTarget {
             id,
-            name: text(&data, "name"),
+            name: data.name().to_owned(),
             path: format!("{}/{id}", kind.api()),
-            revision: data["revision"].as_i64().map(|v| v.to_string()),
+            revision: Some(data.revision().to_string()),
             description: leptos_i18n::t_string!(
                 i18n,
                 ui.this_removes_the_configuration_and_its_processing_history_already_dispatched_req
@@ -691,7 +719,7 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
         tasks.spawn(async move {
             let path = format!("{}/{id}/{operation}", kind.api());
             let body = (operation == "resume")
-                .then(|| json!({"revision":value.get_untracked()["revision"]}));
+                .then(|| json!({"revision":value.get_untracked().map(|v| v.revision())}));
             let result = api
                 .resource("POST", &path, &token.get_value(), body.as_ref(), None)
                 .await
@@ -722,7 +750,9 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
     view! {
         <ManagementPage>
             <BackLink href=kind.path()>{move || kind.back_label()}</BackLink>
-            <PageHeader title=Signal::derive(move || text(&value.get(), "name"))>
+            <PageHeader title=Signal::derive(move || {
+                value.get().map(|v| v.name().to_owned()).unwrap_or_default()
+            })>
                 <ActionButton on_click=move |_| read.refresh.run(()) disabled=read.fetching>
                     {tr!(ui.refresh)}
                 </ActionButton>
@@ -743,8 +773,9 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                                     view! {
                                         <ActionButton
                                             disabled=Signal::derive(move || {
-                                                unavailable.get() || value.get()["running"] == true
-                                                    || value.get()["enabled"] != true
+                                                unavailable.get()
+                                                    || value.get().is_some_and(|v| v.running())
+                                                    || !value.get().is_some_and(|v| v.enabled())
                                             })
                                             on_click=move |_| action("check")
                                         >
@@ -774,17 +805,14 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                     <dl>
                         <dt>{tr!(ui.destination)}</dt>
                         <dd>
-                            {move || text(
-                                &value.get(),
-                                if kind.webhook() { "url" } else { "host" },
-                            )}
+                            {move || {
+                                value.get().map(|v| v.destination().to_owned()).unwrap_or_default()
+                            }}
                         </dd>
                         <dt>{tr!(ui.enabled)}</dt>
                         <dd>
                             {move || {
-                                if value.get()[if kind.webhook() { "is_active" } else { "enabled" }]
-                                    == true
-                                {
+                                if value.get().is_some_and(|v| v.enabled()) {
                                     leptos_i18n::t_string!(i18n, ui.yes)
                                 } else {
                                     leptos_i18n::t_string!(i18n, ui.no)
@@ -794,13 +822,7 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                         <dt>{tr!(ui.credential_configured)}</dt>
                         <dd>
                             {move || {
-                                if value
-                                    .get()[if kind.webhook() {
-                                    "has_secret"
-                                } else {
-                                    "has_password"
-                                }] == true
-                                {
+                                if value.get().is_some_and(|v| v.has_secret()) {
                                     leptos_i18n::t_string!(i18n, ui.yes)
                                 } else {
                                     leptos_i18n::t_string!(i18n, ui.no)
@@ -811,14 +833,22 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                             .then(|| {
                                 view! {
                                     <dt>{tr!(ui.account)}</dt>
-                                    <dd>{move || text(&value.get(), "username")}</dd>
+                                    <dd>
+                                        {move || {
+                                            mailbox.get().map(|v| v.username).unwrap_or_default()
+                                        }}
+                                    </dd>
                                     <dt>{tr!(ui.folder)}</dt>
-                                    <dd>{move || text(&value.get(), "folder")}</dd>
+                                    <dd>
+                                        {move || {
+                                            mailbox.get().map(|v| v.folder).unwrap_or_default()
+                                        }}
+                                    </dd>
                                     <dt>{tr!(ui.transport)}</dt>
                                     <dd>
                                         {move || {
                                             leptos_i18n::t_string!(
-                                                i18n, messages.transport_port, transport = if value.get()["tls"] == true { "TLS" } else { "STARTTLS" }, port = value.get()["port"].to_string()
+                                                i18n, messages.transport_port, transport = if mailbox.get().is_some_and(|v| v.tls) { "TLS" } else { "STARTTLS" }, port = mailbox.get().map(|v| v.port.to_string()).unwrap_or_default()
                                             )
                                         }}
                                     </dd>
@@ -826,45 +856,50 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                                     <dd>
                                         {move || {
                                             leptos_i18n::t_string!(
-                                                i18n, messages.count_seconds, count = value.get()["frequency"].to_string()
+                                                i18n, messages.count_seconds, count = mailbox.get().map(|v| v.frequency.to_string()).unwrap_or_default()
                                             )
                                         }}
                                     </dd>
                                     <dt>{tr!(ui.last_outcome)}</dt>
-                                    <dd>{move || text(&value.get(), "code")}</dd>
+                                    <dd>
+                                        {move || {
+                                            value.get().map(|v| v.code().to_owned()).unwrap_or_default()
+                                        }}
+                                    </dd>
                                     <dt>{tr!(ui.last_successful_check)}</dt>
                                     <dd>
                                         {move || {
-                                            if value.get()["last_success"] == 0 {
+                                            if mailbox.get().is_some_and(|v| v.last_success == 0) {
                                                 leptos_i18n::t_string!(i18n, ui.not_recorded).into()
                                             } else {
-                                                instant(&value.get()["last_success"])
+                                                instant(&json!(mailbox.get().map(|v| v.last_success)))
                                             }
                                         }}
                                     </dd>
                                     <dt>{tr!(ui.next_check)}</dt>
                                     <dd>
                                         {move || {
-                                            if value.get()["enabled"] != true {
+                                            if !value.get().is_some_and(|v| v.enabled()) {
                                                 leptos_i18n::t_string!(i18n, ui.disabled).into()
-                                            } else if value.get()["next_check"] == 0 {
+                                            } else if mailbox.get().is_some_and(|v| v.next_check == 0) {
                                                 leptos_i18n::t_string!(i18n, ui.queued).into()
                                             } else {
-                                                instant(&value.get()["next_check"])
+                                                instant(&json!(mailbox.get().map(|v| v.next_check)))
                                             }
                                         }}
                                     </dd>
                                 }
                             })}
                     </dl>
-                    <Show when=move || value.get()["running"] == true>
+                    <Show when=move || value.get().is_some_and(|v| v.running())>
                         <p role="status" aria-busy="true">
                             {tr!(ui.checking_reporting_mailbox)}
                         </p>
                     </Show>
                 </Card>
                 <Show when=move || {
-                    !kind.webhook() && value.get()["code"] == "mailbox_uidvalidity_changed"
+                    !kind.webhook()
+                        && value.get().is_some_and(|v| v.code() == "mailbox_uidvalidity_changed")
                 }>
                     <p role="alert">
                         {tr!(
@@ -927,46 +962,40 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                     }
                 >
                     {move || {
-                        array(&value.get(), "history")
+                        value
+                            .get()
+                            .map(Record::history)
+                            .unwrap_or_default()
                             .into_iter()
                             .map(|run| {
                                 view! {
                                     <tr>
-                                        <td class="data-value">{instant(&run["started"])}</td>
+                                        <td class="data-value">{instant(&json!(run.started))}</td>
                                         <td>
-                                            {if run["finished"].is_null() {
+                                            {if run.finished.is_none() {
                                                 leptos_i18n::t_string!(i18n, ui.running).into()
                                             } else {
-                                                instant(&run["finished"])
+                                                instant(&json!(run.finished))
                                             }}
                                         </td>
-                                        <td>{text(&run, "code")}</td>
+                                        <td>{run.code}</td>
                                         {if kind.webhook() {
                                             view! {
                                                 <td>
-                                                    {run["status"]
-                                                        .as_i64()
-                                                        .map(|s| s.to_string())
-                                                        .unwrap_or_default()}
+                                                    {run.status.map(|s| s.to_string()).unwrap_or_default()}
                                                 </td>
                                                 <td>
-                                                    {run["event_id"]
-                                                        .as_i64()
-                                                        .map(|s| s.to_string())
-                                                        .unwrap_or_default()}
+                                                    {run.event_id.map(|s| s.to_string()).unwrap_or_default()}
                                                 </td>
                                                 <td>
-                                                    {run["attempt"]
-                                                        .as_i64()
-                                                        .map(|s| s.to_string())
-                                                        .unwrap_or_default()}
+                                                    {run.attempt.map(|s| s.to_string()).unwrap_or_default()}
                                                 </td>
                                             }
                                                 .into_any()
                                         } else {
                                             view! {
-                                                <td>{run["matched"].as_i64().unwrap_or(0)}</td>
-                                                <td>{run["rejected"].as_i64().unwrap_or(0)}</td>
+                                                <td>{run.matched}</td>
+                                                <td>{run.rejected}</td>
                                             }
                                                 .into_any()
                                         }}

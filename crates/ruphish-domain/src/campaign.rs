@@ -179,3 +179,17 @@ pub fn delivery_update(
         status,
     })
 }
+
+/// The requested reconciliation cannot apply to the current delivery state.
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[error("This action does not apply to the current delivery state")]
+pub struct ResolutionError;
+
+/// Manual recovery is separate from automatic transport outcome processing.
+pub fn resolve_delivery(state: &str, action: &str) -> Result<&'static str, ResolutionError> {
+    match (state, action) {
+        ("unknown", "confirm_accepted") => Ok("accepted"),
+        ("unknown", "resend_unknown") | ("failed" | "blocked", "retry") => Ok("ready"),
+        _ => Err(ResolutionError),
+    }
+}

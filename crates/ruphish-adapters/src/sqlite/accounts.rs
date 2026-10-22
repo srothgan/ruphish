@@ -1,5 +1,5 @@
 //! Account transactions over the preserved Gophish schema.
-use ruphish_application::auth::{Account, AccountError, Error, Identity, Repository, Role, Write};
+use ruphish_application::auth::{Account, Error, Identity, Repository, Role, Write};
 use ruphish_domain::account::preserve_administrator;
 use sqlx::{Row, SqliteConnection, SqlitePool, sqlite::SqliteRow};
 
@@ -37,6 +37,9 @@ pub(super) async fn account(connection: &mut SqliteConnection, id: i64) -> Resul
         .map_err(storage)?
         .ok_or(Error::RoleNotFound)?;
     let permissions = sqlx::query_scalar("SELECT p.slug FROM permissions p JOIN role_permissions rp ON rp.permission_id=p.id WHERE rp.role_id=? ORDER BY p.slug").bind(role_id).fetch_all(&mut *connection).await.map_err(storage)?;
+    decode_account(row, role(role_row, permissions)?)
+}
+fn decode_account(row: SqliteRow, role: Role) -> Result<Account, Error> {
     let text = |name: &str| -> Result<String, Error> {
         Ok(row
             .try_get::<Option<String>, _>(name)
@@ -54,13 +57,13 @@ pub(super) async fn account(connection: &mut SqliteConnection, id: i64) -> Resul
                 .unwrap_or(true),
         },
         identity: Identity {
-            id,
+            id: row.try_get("id").map_err(storage)?,
             epoch: row.try_get("epoch").map_err(storage)?,
         },
         username: text("username")?,
         hash: text("hash")?,
         api_key: text("api_key")?,
-        role: role(role_row, permissions)?,
+        role,
         password_change_required: row
             .try_get::<Option<bool>, _>("password_change_required")
             .map_err(storage)?
@@ -127,13 +130,29 @@ impl Repository for Accounts {
         let actor = account(&mut tx, caller.id).await?;
         actor.authenticate(caller)?;
         actor.require("modify_system")?;
-        let ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM users ORDER BY id")
-            .fetch_all(&mut *tx)
-            .await
-            .map_err(storage)?;
-        let mut users = Vec::with_capacity(ids.len());
-        for id in ids {
-            users.push(account(&mut tx, id).await?);
+        let rows = sqlx::query("SELECT u.*,COALESCE(a.epoch,0) AS epoch,p.language,p.format_locale,p.time_zone,p.show_utc_offset FROM users u LEFT JOIN ruphish_auth_state a ON a.user_id=u.id LEFT JOIN ruphish_user_preferences p ON p.user_id=u.id ORDER BY u.id")
+            .fetch_all(&mut *tx).await.map_err(storage)?;
+        let role_rows = sqlx::query("SELECT id,slug,name,description FROM roles WHERE EXISTS(SELECT 1 FROM users WHERE users.role_id=roles.id)")
+            .fetch_all(&mut *tx).await.map_err(storage)?;
+        let permission_rows = sqlx::query("SELECT rp.role_id,p.slug FROM permissions p JOIN role_permissions rp ON rp.permission_id=p.id WHERE EXISTS(SELECT 1 FROM users WHERE users.role_id=rp.role_id) ORDER BY p.slug")
+            .fetch_all(&mut *tx).await.map_err(storage)?;
+        let mut permissions = std::collections::BTreeMap::<i64, Vec<String>>::new();
+        for row in permission_rows {
+            permissions
+                .entry(row.try_get("role_id").map_err(storage)?)
+                .or_default()
+                .push(row.try_get("slug").map_err(storage)?);
+        }
+        let mut roles = std::collections::BTreeMap::new();
+        for row in role_rows {
+            let id: i64 = row.try_get("id").map_err(storage)?;
+            roles.insert(id, role(row, permissions.remove(&id).unwrap_or_default())?);
+        }
+        let mut users = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role_id: i64 = row.try_get("role_id").map_err(storage)?;
+            let role = roles.get(&role_id).ok_or(Error::RoleNotFound)?.clone();
+            users.push(decode_account(row, role)?);
         }
         tx.commit().await.map_err(storage)?;
         Ok(users)
@@ -201,13 +220,7 @@ impl Repository for Accounts {
                     if existing.identity != target {
                         return Err(Error::Changed);
                     }
-                    if !actor.permits("modify_system")
-                        && (edit.role != existing.role.slug
-                            || edit.account_locked != existing.account_locked
-                            || edit.password_change_required != existing.password_change_required)
-                    {
-                        return Err(AccountError::Escalation.into());
-                    }
+                    actor.authorize_edit(&existing, &edit)?;
                     Some(existing)
                 } else {
                     actor.require("modify_system")?;

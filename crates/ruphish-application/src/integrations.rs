@@ -1,18 +1,6 @@
 //! Configuration, safe observations and commands for outbound integrations.
 use crate::{auth::Identity, resources::Error};
-/// An endpoint edit; deliberately not printable or serializable.
-pub struct WebhookEdit {
-    /// Human-readable name.
-    pub name: String,
-    /// Destination URL.
-    pub url: String,
-    /// None preserves the existing secret.
-    pub secret: Option<String>,
-    /// Receive newly committed events.
-    pub active: bool,
-    /// Required optimistic revision for edits.
-    pub revision: Option<i64>,
-}
+pub use ruphish_domain::integrations::{MailboxEdit, WebhookEdit};
 /// Safe endpoint details.
 pub struct Webhook {
     /// Persistent identifier.
@@ -29,33 +17,6 @@ pub struct Webhook {
     pub has_secret: bool,
     /// Recent delivery attempts.
     pub history: Vec<Run>,
-}
-/// A mailbox edit; secrets never appear in debug output.
-pub struct MailboxEdit {
-    /// Resource display name.
-    pub name: String,
-    /// Enable scheduled polling.
-    pub enabled: bool,
-    /// IMAP host without scheme or port.
-    pub host: String,
-    /// IMAP port.
-    pub port: u16,
-    /// Configured service account.
-    pub username: String,
-    /// None preserves existing password.
-    pub password: Option<String>,
-    /// Implicit TLS; false requires STARTTLS.
-    pub tls: bool,
-    /// Folder to monitor.
-    pub folder: String,
-    /// Optional From-domain matching filter, not authenticated identity.
-    pub restrict_domain: String,
-    /// Remove successfully correlated reports when safe UID deletion is supported.
-    pub delete_reported: bool,
-    /// Poll interval in seconds.
-    pub frequency: u32,
-    /// Expected resource revision.
-    pub revision: Option<i64>,
 }
 /// Public mailbox view, with no service password or raw message content.
 pub struct Mailbox {
@@ -138,7 +99,12 @@ pub trait Repository: Send + Sync {
         edit: WebhookEdit,
     ) -> Result<Webhook, Error>;
     /// Remove endpoint and cancel jobs.
-    async fn delete_webhook(&self, caller: Identity, id: i64, revision: i64) -> Result<(), Error>;
+    async fn delete_webhook(
+        &self,
+        caller: Identity,
+        id: i64,
+        revision: Option<i64>,
+    ) -> Result<(), Error>;
     /// Send signed validation payload without creating a campaign event.
     async fn validate_webhook(&self, caller: Identity, id: i64) -> Result<(), Error>;
     /// Owner-scoped reporting mailbox list.
@@ -153,7 +119,12 @@ pub trait Repository: Send + Sync {
         edit: MailboxEdit,
     ) -> Result<Mailbox, Error>;
     /// Remove configuration, checkpoints and run history.
-    async fn delete_mailbox(&self, caller: Identity, id: i64, revision: i64) -> Result<(), Error>;
+    async fn delete_mailbox(
+        &self,
+        caller: Identity,
+        id: i64,
+        revision: Option<i64>,
+    ) -> Result<(), Error>;
     /// Validate connection and folder without ingesting messages.
     async fn validate_mailbox(&self, caller: Identity, id: i64) -> Result<(), Error>;
     /// Validate supplied legacy settings without saving or ingesting messages.

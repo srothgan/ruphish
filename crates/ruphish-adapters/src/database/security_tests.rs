@@ -86,7 +86,7 @@ async fn stale_mailbox_claims_cannot_initialize_replacements_even_for_the_same_o
             .unwrap();
         let claim = worker.claim_mailbox(1_800_000_000).await.unwrap().unwrap();
         assert_eq!(claim.config.id, original.id);
-        repo.delete_mailbox(admin(), original.id, original.revision)
+        repo.delete_mailbox(admin(), original.id, Some(original.revision))
             .await
             .unwrap();
         let replacement = repo
@@ -111,7 +111,7 @@ async fn stale_mailbox_claims_cannot_initialize_replacements_even_for_the_same_o
         .await
         .unwrap();
         assert_eq!(state, (owner.id, 0, 0, 0));
-        repo.delete_mailbox(owner, replacement.id, replacement.revision)
+        repo.delete_mailbox(owner, replacement.id, Some(replacement.revision))
             .await
             .unwrap();
     }
@@ -130,7 +130,7 @@ impl WebhookQueue for CancelBeforeSend {
         let claim = self.repo.claim_webhook(now).await?;
         if claim.is_some() {
             self.repo
-                .delete_webhook(admin(), self.id, self.revision)
+                .delete_webhook(admin(), self.id, Some(self.revision))
                 .await?;
         }
         Ok(claim)
@@ -343,12 +343,12 @@ async fn integration_identity_upgrade_preserves_populated_version_nine_and_resta
     );
     upgraded
         .integrations()
-        .delete_webhook(admin(), hook.id, hook.revision)
+        .delete_webhook(admin(), hook.id, Some(hook.revision))
         .await
         .unwrap();
     upgraded
         .integrations()
-        .delete_mailbox(admin(), original.id, original.revision)
+        .delete_mailbox(admin(), original.id, Some(original.revision))
         .await
         .unwrap();
     upgraded.close().await;

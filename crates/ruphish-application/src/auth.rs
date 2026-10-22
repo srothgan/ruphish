@@ -1,5 +1,5 @@
 //! Authentication and account use cases, independent of HTTP and SQL.
-pub use ruphish_domain::account::{Account, AccountError, Identity, Role};
+pub use ruphish_domain::account::{Account, AccountError, Edit, Identity, Role};
 pub use ruphish_domain::password::PasswordError;
 pub use ruphish_domain::preferences::Preferences;
 use ruphish_domain::{account, password};
@@ -44,20 +44,6 @@ pub enum Error {
     /// Persistence or cryptographic failure, with details restricted to safe diagnostics.
     #[error("Account operation could not be completed")]
     Internal,
-}
-
-/// Account edit after parsing, before policy and cryptographic validation.
-pub struct Edit {
-    /// Login name.
-    pub username: String,
-    /// Optional new password; empty preserves the existing hash on update.
-    pub password: String,
-    /// Persisted role slug.
-    pub role: String,
-    /// Require password setup at next access.
-    pub password_change_required: bool,
-    /// Block all authentication paths.
-    pub account_locked: bool,
 }
 
 /// Prepared write executed atomically with current authorization checks.

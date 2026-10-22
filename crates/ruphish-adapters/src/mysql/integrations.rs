@@ -36,12 +36,9 @@ async fn authorize(
     write: bool,
     admin: bool,
 ) -> Result<(), Error> {
-    super::resources::authorize(c, who, write).await?;
+    let account = super::resources::authorize(c, who, write).await?;
     if admin {
-        super::accounts::account(c, who.id)
-            .await
-            .map_err(Error::from)?
-            .require("modify_system")?;
+        account.require("modify_system")?;
     }
     Ok(())
 }
@@ -157,7 +154,7 @@ impl Repository for Integrations {
         id: Option<i64>,
         e: WebhookEdit,
     ) -> Result<Webhook, Error> {
-        crate::integration_work::validate_webhook_edit(&e)?;
+        e.validate().map_err(|error| invalid(&error.to_string()))?;
         let mut tx = crate::mysql::locks::write(&self.pool).await.map_err(db)?;
         authorize(&mut tx, who, true, true).await?;
         let id = if let Some(id) = id {
@@ -232,7 +229,12 @@ impl Repository for Integrations {
             .map_err(|e| Error::Storage(crate::mysql::commit_error(e)))?;
         self.webhook(who, id).await
     }
-    async fn delete_webhook(&self, who: Identity, id: i64, revision: i64) -> Result<(), Error> {
+    async fn delete_webhook(
+        &self,
+        who: Identity,
+        id: i64,
+        revision: Option<i64>,
+    ) -> Result<(), Error> {
         let mut tx = crate::mysql::locks::write(&self.pool).await.map_err(db)?;
         authorize(&mut tx, who, true, true).await?;
         sqlx::query("SELECT id FROM webhooks WHERE id=? FOR UPDATE")
@@ -240,6 +242,11 @@ impl Repository for Integrations {
             .fetch_optional(&mut *tx)
             .await
             .map_err(db)?;
+        let revision = match revision {
+            Some(revision) => revision,
+            None => sqlx::query_scalar::<_, i64>("SELECT s.revision FROM webhooks w JOIN ruphish_webhook_state s ON s.webhook_id=w.id WHERE w.id=?")
+                .bind(id).fetch_optional(&mut *tx).await.map_err(db)?.ok_or(Error::NotFound("Webhook"))?,
+        };
         if sqlx::query("DELETE FROM ruphish_webhook_state WHERE webhook_id=? AND revision=?")
             .bind(id)
             .bind(revision)
@@ -249,7 +256,17 @@ impl Repository for Integrations {
             .rows_affected()
             != 1
         {
-            return Err(Error::Changed);
+            let exists: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM webhooks WHERE id=?)")
+                    .bind(id)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(db)?;
+            return Err(if exists {
+                Error::Changed
+            } else {
+                Error::NotFound("Webhook")
+            });
         }
         sqlx::query(
             r#"
@@ -351,7 +368,7 @@ impl Repository for Integrations {
         id: Option<i64>,
         e: MailboxEdit,
     ) -> Result<Mailbox, Error> {
-        crate::integration_work::validate_mailbox_edit(&e)?;
+        e.validate().map_err(|error| invalid(&error.to_string()))?;
         let mut tx = crate::mysql::locks::write(&self.pool).await.map_err(db)?;
         authorize(&mut tx, who, true, false).await?;
         let duplicate: bool = sqlx::query_scalar(
@@ -378,10 +395,12 @@ impl Repository for Integrations {
             if e.revision != Some(r.try_get("revision").map_err(db)?) {
                 return Err(Error::Changed);
             }
-            let changed = text(&r, "host")? != e.host
-                || text(&r, "folder")? != e.folder
-                || text(&r, "username")? != e.username
-                || r.try_get::<i64, _>("port").map_err(db)? != i64::from(e.port);
+            let changed = e.resets_checkpoint(
+                &text(&r, "host")?,
+                r.try_get("port").map_err(db)?,
+                &text(&r, "username")?,
+                &text(&r, "folder")?,
+            );
             let password = e.password.unwrap_or(text(&r, "password")?);
             if password.is_empty() {
                 return Err(invalid("mailbox_password_required"));
@@ -454,9 +473,26 @@ impl Repository for Integrations {
             .map_err(|e| Error::Storage(crate::mysql::commit_error(e)))?;
         self.mailbox(who, id).await
     }
-    async fn delete_mailbox(&self, who: Identity, id: i64, revision: i64) -> Result<(), Error> {
+    async fn delete_mailbox(
+        &self,
+        who: Identity,
+        id: i64,
+        revision: Option<i64>,
+    ) -> Result<(), Error> {
         let mut tx = crate::mysql::locks::write(&self.pool).await.map_err(db)?;
         authorize(&mut tx, who, true, false).await?;
+        let revision = match revision {
+            Some(revision) => revision,
+            None => sqlx::query_scalar::<_, i64>(
+                "SELECT revision FROM ruphish_mailboxes WHERE id=? AND owner_id=?",
+            )
+            .bind(id)
+            .bind(who.id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(db)?
+            .ok_or(Error::NotFound("Reporting mailbox"))?,
+        };
         if sqlx::query("DELETE FROM ruphish_mailboxes WHERE id=? AND owner_id=? AND revision=?")
             .bind(id)
             .bind(who.id)
@@ -467,7 +503,19 @@ impl Repository for Integrations {
             .rows_affected()
             != 1
         {
-            return Err(Error::Changed);
+            let exists: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM ruphish_mailboxes WHERE id=? AND owner_id=?)",
+            )
+            .bind(id)
+            .bind(who.id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(db)?;
+            return Err(if exists {
+                Error::Changed
+            } else {
+                Error::NotFound("Reporting mailbox")
+            });
         }
         for table in ["ruphish_mailbox_messages", "ruphish_mailbox_runs"] {
             sqlx::query(sqlx::AssertSqlSafe(format!(
@@ -503,7 +551,8 @@ impl Repository for Integrations {
         who: Identity,
         edit: MailboxEdit,
     ) -> Result<(), Error> {
-        crate::integration_work::validate_mailbox_edit(&edit)?;
+        edit.validate()
+            .map_err(|error| invalid(&error.to_string()))?;
         let mut tx = crate::mysql::locks::write(&self.pool).await.map_err(db)?;
         authorize(&mut tx, who, true, false).await?;
         // Only reuse the saved secret for the same account and endpoint.

@@ -42,31 +42,19 @@ async fn webhook(store: &dyn WebhookQueue, policy: &Policy) -> Result<(), Error>
         },
     )
     .await;
-    let retry = outcome.code != "accepted"
-        && !matches!(
-            outcome.code,
-            "webhook_invalid_url" | "webhook_signing_failed" | "configuration_changed"
-        )
-        && ruphish_domain::reporting::retryable(outcome.status)
-        && claim.attempt < 8;
-    let state = if outcome.code == "accepted" {
-        "accepted"
-    } else if retry {
-        "retry"
-    } else {
-        "failed"
-    };
+    let decision = ruphish_domain::integrations::webhook_decision(
+        outcome.code,
+        outcome.status,
+        claim.attempt,
+        (claim.id as u32).wrapping_add(claim.attempt as u32),
+    );
     let done = now();
-    let due = done
-        + ruphish_domain::reporting::retry_delay(
-            claim.attempt as u32,
-            (claim.id as u32).wrapping_add(claim.attempt as u32),
-        );
+    let due = done + decision.delay;
     store
         .finish_webhook(
             &claim,
             WebhookCompletion {
-                state,
+                state: decision.state,
                 code: outcome.code,
                 status: outcome.status,
                 due,
@@ -93,11 +81,11 @@ async fn mailbox(store: &dyn MailboxQueue, policy: &Policy) -> Result<(), Error>
     .unwrap_or(Err("mailbox_timeout"));
     let code = result.err().unwrap_or("passed");
     let done = now();
-    let delay = if code == "passed" {
-        i64::from(claim.frequency)
-    } else {
-        (60_i64 << claim.failures.min(6)).min(3600)
-    };
+    let delay = ruphish_domain::integrations::mailbox_delay(
+        code == "passed",
+        claim.frequency,
+        claim.failures,
+    );
     store.finish_mailbox(&claim, code, done + delay, done).await
 }
 async fn poll_mailbox(
@@ -167,56 +155,4 @@ pub(crate) async fn validate_webhook(
     } else {
         Err(Error::Invalid(result.code.into()))
     }
-}
-
-fn invalid(code: &str) -> Error {
-    Error::Invalid(code.into())
-}
-fn label(s: &str) -> bool {
-    !s.trim().is_empty() && s.len() <= 255 && !s.chars().any(char::is_control)
-}
-pub(crate) fn validate_mailbox_edit(
-    e: &ruphish_application::integrations::MailboxEdit,
-) -> Result<(), Error> {
-    if !label(&e.name)
-        || !label(&e.host)
-        || (e.host.parse::<std::net::IpAddr>().is_err()
-            && (e.host.contains(['/', ':', '@', ' ', '?', '#'])
-                || url::Host::parse(&e.host).is_err()))
-        || e.port == 0
-        || !label(&e.username)
-        || !label(&e.folder)
-        || !(30..=31540000).contains(&e.frequency)
-        || e.password
-            .as_ref()
-            .is_some_and(|s| s.is_empty() || s.len() > 4096)
-        || e.restrict_domain.len() > 253
-        || e.restrict_domain.chars().any(char::is_control)
-    {
-        return Err(invalid("mailbox_invalid_configuration"));
-    }
-    Ok(())
-}
-
-pub(crate) fn validate_webhook_edit(
-    e: &ruphish_application::integrations::WebhookEdit,
-) -> Result<(), Error> {
-    let url = url::Url::parse(&e.url).map_err(|_| invalid("webhook_invalid_url"))?;
-    if !label(&e.name)
-        || e.url.len() > 1000
-        || !matches!(url.scheme(), "https" | "http")
-        || url.host_str().is_none()
-        || !url.username().is_empty()
-        || url.password().is_some()
-        || url.fragment().is_some()
-    {
-        return Err(invalid("webhook_invalid_configuration"));
-    }
-    if e.secret
-        .as_ref()
-        .is_some_and(|s| s.len() > 1024 || s.is_empty())
-    {
-        return Err(invalid("webhook_secret_required"));
-    }
-    Ok(())
 }

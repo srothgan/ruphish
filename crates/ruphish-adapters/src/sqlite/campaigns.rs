@@ -73,13 +73,12 @@ async fn selection(
     }
     Ok(resource)
 }
-async fn prepare(
+async fn prepare_authorized(
     c: &mut SqliteConnection,
     caller: Identity,
     input: &Create,
     now: i64,
 ) -> Result<Prepared, Error> {
-    super::resources::authorize(c, caller, true).await?;
     let launch = ruphish_application::campaign::preparation::validate(input, now)?;
     let mut groups = Vec::new();
     for s in &input.groups {
@@ -98,9 +97,10 @@ async fn prepare(
     // checked before every individual submission.
     let sample = crate::resources::sample();
     let url = crate::campaign_preparation::url(&input.url)?;
-    super::domains::eligible(c, caller.id, &url, now).await?;
+    let domain_id = super::domains::eligible(c, caller.id, &url, now).await?;
     crate::resources::render(&policy.redirect_url, &sample)?;
     Ok(Prepared {
+        domain_id,
         conflicts,
         conflict_count,
         groups,
@@ -366,7 +366,8 @@ impl Repository for Campaigns {
 
     async fn prepare(&self, caller: Identity, input: &Create, now: i64) -> Result<Prepared, Error> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
-        let value = prepare(&mut tx, caller, input, now).await?;
+        super::resources::authorize(&mut tx, caller, true).await?;
+        let value = prepare_authorized(&mut tx, caller, input, now).await?;
         tx.commit().await.map_err(storage)?;
         Ok(value)
     }
@@ -612,16 +613,8 @@ impl Repository for Campaigns {
             return Err(Error::Changed);
         }
         let state = text(&row, "state")?;
-        let target = match (state.as_str(), action) {
-            ("unknown", "confirm_accepted") => "accepted",
-            ("unknown", "resend_unknown") => "ready",
-            ("failed" | "blocked", "retry") => "ready",
-            _ => {
-                return Err(Error::Invalid(
-                    "This action does not apply to the current delivery state".into(),
-                ));
-            }
-        };
+        let target =
+            resolve_delivery(&state, action).map_err(|error| Error::Invalid(error.to_string()))?;
         sqlx::query("UPDATE ruphish_delivery SET state=?,generation=generation+1,lease_until=0,due=?,retries=0,code='' WHERE result_id=?").bind(target).bind(now).bind(result).execute(&mut *tx).await.map_err(storage)?;
         sqlx::query("DELETE FROM ruphish_profile_cooldown WHERE profile_id=?")
             .bind(row.try_get::<i64, _>("smtp_id").map_err(storage)?)
@@ -686,7 +679,7 @@ impl Campaigns {
                 return load(&mut tx,caller.id,row.try_get("campaign_id").map_err(storage)?).await;
             }
         }
-        let p = prepare(&mut tx, caller, &input, now).await?;
+        let p = prepare_authorized(&mut tx, caller, &input, now).await?;
         let created = stamp(now)?;
         let launch = stamp(p.launch)?;
         let end = input.send_by.map(stamp).transpose()?.unwrap_or(ZERO.into());
@@ -696,10 +689,9 @@ impl Campaigns {
             "Queued"
         };
         let id=sqlx::query("INSERT INTO campaigns(user_id,name,created_date,launch_date,send_by_date,completed_date,template_id,page_id,status,smtp_id,url) VALUES(?,?,?,?,?,?,?,?,?,?,?)").bind(caller.id).bind(&input.name).bind(&created).bind(&launch).bind(end).bind(ZERO).bind(p.template.id).bind(p.page.id).bind(status).bind(p.profile.id).bind(&input.url).execute(&mut *tx).await.map_err(storage)?.last_insert_rowid();
-        let domain_id = super::domains::eligible(&mut tx, caller.id, &input.url, now).await?;
         sqlx::query("INSERT INTO ruphish_campaign_domains VALUES(?,?)")
             .bind(id)
-            .bind(domain_id)
+            .bind(p.domain_id)
             .execute(&mut *tx)
             .await
             .map_err(storage)?;

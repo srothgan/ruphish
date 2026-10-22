@@ -12,3 +12,7 @@ pub mod resources;
 pub mod datetime;
 
 pub mod campaign_draft;
+
+pub mod integrations;
+
+pub mod template;
