@@ -4,12 +4,6 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      profile:
-        description: Manual check selection; PRs always select from their diff
-        type: choice
-        options: [auto, native, ui, databases, full]
-        default: auto
 
 permissions:
   contents: read
@@ -22,7 +16,7 @@ jobs:
   checks:
     uses: ./.github/workflows/validation.yml
     with:
-      profile: ${{ github.event_name == 'pull_request' && 'auto' || inputs.profile }}
+      full: ${{ github.event_name == 'workflow_dispatch' }}
   gate:
     name: PR gate
     needs: checks
