@@ -1,5 +1,7 @@
 //! Transactional account workflows against real SQLite, including failure injection.
 #![allow(clippy::unwrap_used, reason = "Integration setup and assertions")]
+#[path = "../../../tests/support/sqlite_versions.rs"]
+mod sqlite_versions;
 mod support;
 use ruphish_adapters::password_worker::{self, PasswordWorker};
 use ruphish_application::auth::{Edit, Error, Service};
@@ -365,6 +367,9 @@ async fn preferences_upgrade_keeps_a_recoverable_original_and_failed_writes_pres
     );
     sqlx::raw_sql("DROP TRIGGER fail_preferences")
         .execute(&pool)
+        .await
+        .unwrap();
+    sqlite_versions::restore_version_nine_tables(&pool)
         .await
         .unwrap();
     sqlx::raw_sql("DROP TABLE ruphish_campaign_drafts; ALTER TABLE ruphish_user_preferences DROP COLUMN show_utc_offset; DELETE FROM ruphish_schema WHERE version>=8;").execute(&pool).await.unwrap();

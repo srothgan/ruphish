@@ -24,6 +24,8 @@ If another tab changed the draft, the server rejects a stale edit with `RESOURCE
 
 These additive endpoints require the same authenticated ownership and resource permissions as campaigns. Browser mutations require the normal CSRF and origin checks. The legacy `/api/campaigns/` API retains its existing immediate-create behavior and does not return drafts.
 
+The legacy `GET /api/campaigns/` aggregate retains its successful response shape but rejects collections whose conservative SQL weight exceeds 32 MiB before loading their payloads. At most two aggregate response bodies are admitted per process; saturation returns 503. Use `/api/campaigns/directory` and per-campaign routes when the aggregate exceeds its limit. This weight is an admission estimate, not an exact process-memory limit.
+
 | Method and path | Behavior |
 | --- | --- |
 | `GET /api/campaigns/directory?filter=all&after=<cursor>` | Combined management metadata with one 50-row page; filters are `all`, `drafts`, `active`, `completed`, and execution-only `executions`. Use the returned opaque `next_after` unchanged. |

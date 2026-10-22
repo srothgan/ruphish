@@ -21,6 +21,17 @@ pub(crate) async fn send(
     body: &[u8],
     event: &str,
 ) -> Outcome {
+    send_checked(policy, url, secret, body, event, async { Ok(true) }).await
+}
+
+pub(crate) async fn send_checked(
+    policy: &Policy,
+    url: &str,
+    secret: &str,
+    body: &[u8],
+    event: &str,
+    authorize: impl std::future::Future<Output = Result<bool, &'static str>>,
+) -> Outcome {
     let attempt = async {
         let url = url::Url::parse(url).map_err(|_| "webhook_invalid_url")?;
         let host = url.host_str().ok_or("webhook_invalid_url")?;
@@ -37,6 +48,9 @@ pub(crate) async fn send(
             .build()
             .map_err(|_| "webhook_transport_unavailable")?;
         let signature = signature(secret, body).map_err(|_| "webhook_signing_failed")?;
+        if !authorize.await? {
+            return Err("configuration_changed");
+        }
         let response = client
             .post(url)
             .header("content-type", "application/json")
@@ -101,7 +115,7 @@ mod tests {
                 assert!(bytes.len() < 8192);
             }
         };
-        let policy = crate::outbound::Policy::default();
+        let policy = crate::outbound::Policy::new(&["127.0.0.1".into()])?;
         let (received, outcome) = tokio::time::timeout(std::time::Duration::from_secs(5), async {
             tokio::join!(
                 receiver,

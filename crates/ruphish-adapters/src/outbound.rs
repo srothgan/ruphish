@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-/// Legacy opt-in internal-host allowlist with link-local protection by default.
+/// Internal destinations require an explicit administrator allowlist entry.
 #[derive(Clone, Default)]
 pub struct Policy {
     allowed: Vec<IpNet>,
@@ -41,25 +41,21 @@ impl Policy {
         if self.allowed.iter().any(|n| n.contains(&ip)) {
             return true;
         }
-        let denied: &[&str] = if self.allowed.is_empty() {
-            &["169.254.0.0/16", "fe80::/10"]
-        } else {
-            &[
-                "0.0.0.0/8",
-                "127.0.0.0/8",
-                "10.0.0.0/8",
-                "100.64.0.0/10",
-                "172.16.0.0/12",
-                "169.254.0.0/16",
-                "192.88.99.0/24",
-                "192.168.0.0/16",
-                "198.51.100.0/24",
-                "203.0.113.0/24",
-                "224.0.0.0/4",
-                "240.0.0.0/4",
-                "::/0",
-            ]
-        };
+        let denied: &[&str] = &[
+            "0.0.0.0/8",
+            "127.0.0.0/8",
+            "10.0.0.0/8",
+            "100.64.0.0/10",
+            "172.16.0.0/12",
+            "169.254.0.0/16",
+            "192.88.99.0/24",
+            "192.168.0.0/16",
+            "198.51.100.0/24",
+            "203.0.113.0/24",
+            "224.0.0.0/4",
+            "240.0.0.0/4",
+            "::/0",
+        ];
         !denied
             .iter()
             .any(|n| n.parse::<IpNet>().is_ok_and(|n| n.contains(&ip)))

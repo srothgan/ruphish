@@ -28,18 +28,24 @@ async fn webhook(store: &dyn WebhookQueue, policy: &Policy) -> Result<(), Error>
     let Some(claim) = store.claim_webhook(now()).await? else {
         return Ok(());
     };
-    let outcome = webhook_delivery::send(
+    let outcome = webhook_delivery::send_checked(
         policy,
         &claim.url,
         &claim.secret,
         &claim.body,
         &claim.event.to_string(),
+        async {
+            store
+                .webhook_current(&claim, now())
+                .await
+                .map_err(|_| "webhook_storage_failed")
+        },
     )
     .await;
     let retry = outcome.code != "accepted"
         && !matches!(
             outcome.code,
-            "webhook_invalid_url" | "webhook_signing_failed"
+            "webhook_invalid_url" | "webhook_signing_failed" | "configuration_changed"
         )
         && ruphish_domain::reporting::retryable(outcome.status)
         && claim.attempt < 8;

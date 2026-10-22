@@ -21,7 +21,7 @@ pub(super) fn bootstrap(client: &Client, base: &str) -> Value {
     assert_eq!(response.headers()["cache-control"], "no-store");
     response.json().unwrap()
 }
-fn post(client: &Client, base: &str, path: &str, fields: &[(&str, &str)]) -> Response {
+pub(super) fn post(client: &Client, base: &str, path: &str, fields: &[(&str, &str)]) -> Response {
     let token = bootstrap(client, base)["csrf_token"]
         .as_str()
         .unwrap()
@@ -64,6 +64,58 @@ pub(super) fn setup(client: &Client, base: &str) -> Value {
 }
 fn admin_key() -> &'static str {
     "synthetic-bootstrap-token"
+}
+
+#[test]
+fn generic_self_password_updates_require_the_dedicated_reauthenticated_flow() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = endpoint(&mut process);
+    let admin = browser();
+    let session = setup(&admin, &base);
+    let edit = json!({"username":"admin","password":"unauthorized-replacement","role":"admin","password_change_required":false,"account_locked":false});
+    let response = admin
+        .put(format!("{base}/api/users/1"))
+        .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
+        .header("origin", &base)
+        .json(&edit)
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), 401);
+    let response = client()
+        .put(format!("{base}/api/users/1"))
+        .bearer_auth(admin_key())
+        .json(&edit)
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), 401);
+    assert_eq!(
+        sign_in(&browser(), &base, "admin", "established-admin-password").status(),
+        200
+    );
+    assert_eq!(
+        sign_in(&browser(), &base, "admin", "unauthorized-replacement").status(),
+        401
+    );
+    assert_eq!(
+        post(
+            &admin,
+            &base,
+            "/settings",
+            &[
+                ("current_password", "established-admin-password"),
+                ("new_password", "verified-replacement"),
+                ("confirm_new_password", "verified-replacement")
+            ]
+        )
+        .status(),
+        200
+    );
+    assert_eq!(
+        sign_in(&browser(), &base, "admin", "verified-replacement").status(),
+        200
+    );
+    process.stop();
 }
 
 #[test]
@@ -996,7 +1048,7 @@ fn malformed_credentials_rate_limits_and_storage_failures_fail_closed() {
 }
 
 #[test]
-fn go_account_observations_match_except_approved_self_deletion_policy() {
+fn go_account_observations_match_except_approved_account_security_policies() {
     let directory = workspace();
     let source = fixture("authentication/legacy-accounts.sqlite3");
     let original = std::fs::read(&source).unwrap();
@@ -1043,11 +1095,43 @@ fn go_account_observations_match_except_approved_self_deletion_policy() {
             "unknown-role" => Some("ROLE_NOT_FOUND"),
             "forbidden-list" | "forbidden-get" | "forbidden-role" => Some("AUTH_FORBIDDEN"),
             "delete-last-admin" => Some("SELF_DELETION"),
+            "self-update" => Some("AUTH_INVALID_CREDENTIALS"),
             _ => None,
         };
         if let Some(expected_code) = expected_code {
             let code = value.as_object_mut().unwrap().remove("code");
             assert_eq!(code, Some(json!(expected_code)), "{}", case["id"]);
+        }
+        // DEC-043 rejects the credential-changing part of the original self-edit.
+        // Keep the independent Go fixture, and separately retain harmless self-edits.
+        if case["id"] == "self-update" {
+            assert_eq!(case["status"], 200);
+            assert_eq!(status, 401);
+            assert_eq!(
+                value,
+                json!({"success":false,"message":"Invalid Username/Password","data":null})
+            );
+            let unchanged: Value = client
+                .get(format!("{base}/api/users/2"))
+                .bearer_auth(&user_key)
+                .send()
+                .unwrap()
+                .json()
+                .unwrap();
+            assert_eq!(unchanged["username"], "alice");
+            let mut edit: Value = serde_json::from_str(case["body"].as_str().unwrap()).unwrap();
+            edit.as_object_mut().unwrap().remove("password");
+            let renamed = client
+                .put(format!("{base}/api/users/2"))
+                .bearer_auth(&user_key)
+                .json(&edit)
+                .send()
+                .unwrap();
+            assert_eq!(renamed.status(), 200);
+            let mut renamed: Value = renamed.json().unwrap();
+            normalize_key(&mut renamed);
+            assert_eq!(renamed, case["json"]);
+            continue;
         }
         // Account policy rejects all self-deletion, including the last admin.
         // Preserve and verify the independent Go observation rather than rewriting it.

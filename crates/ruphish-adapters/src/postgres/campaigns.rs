@@ -137,6 +137,14 @@ async fn missing_resource(
     }
 }
 async fn load(c: &mut PgConnection, owner: i64, id: i64) -> Result<Campaign, Error> {
+    load_aggregate(c, owner, id, true).await
+}
+async fn load_aggregate(
+    c: &mut PgConnection,
+    owner: i64,
+    id: i64,
+    include_groups: bool,
+) -> Result<Campaign, Error> {
     let row = sqlx::query("SELECT * FROM campaigns WHERE id=$1 AND user_id=$2")
         .bind(id)
         .bind(owner)
@@ -218,18 +226,20 @@ async fn load(c: &mut PgConnection, owner: i64, id: i64) -> Result<Campaign, Err
         })
         .transpose()?;
     let mut groups = Vec::new();
-    let group_ids: Vec<i64> = sqlx::query_scalar(
-        "SELECT group_id FROM ruphish_campaign_groups WHERE campaign_id=$1 ORDER BY ordinal",
-    )
-    .bind(id)
-    .fetch_all(&mut *c)
-    .await
-    .map_err(storage)?;
-    for group_id in group_ids {
-        match super::resources::load(c, owner, Kind::Group, group_id).await {
-            Ok(r) => groups.push(r),
-            Err(Error::NotFound(_)) => {}
-            Err(e) => return Err(e),
+    if include_groups {
+        let group_ids: Vec<i64> = sqlx::query_scalar(
+            "SELECT group_id FROM ruphish_campaign_groups WHERE campaign_id=$1 ORDER BY ordinal",
+        )
+        .bind(id)
+        .fetch_all(&mut *c)
+        .await
+        .map_err(storage)?;
+        for group_id in group_ids {
+            match super::resources::load(c, owner, Kind::Group, group_id).await {
+                Ok(r) => groups.push(r),
+                Err(Error::NotFound(_)) => {}
+                Err(e) => return Err(e),
+            }
         }
     }
     Ok(Campaign {
@@ -389,6 +399,14 @@ impl Repository for Campaigns {
             .await
             .map_err(storage)?;
         super::resources::authorize(&mut tx, caller, false).await?;
+        let weight: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(
+            crate::campaign_listing::QUERY.replace('?', "$1"),
+        ))
+        .bind(caller.id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(storage)?;
+        crate::campaign_listing::check(weight)?;
         let ids: Vec<i64> =
             sqlx::query_scalar("SELECT id FROM campaigns WHERE user_id=$1 ORDER BY id")
                 .bind(caller.id)
@@ -397,7 +415,7 @@ impl Repository for Campaigns {
                 .map_err(storage)?;
         let mut values = Vec::new();
         for id in ids {
-            values.push(load(&mut tx, caller.id, id).await?);
+            values.push(load_aggregate(&mut tx, caller.id, id, false).await?);
         }
         tx.commit()
             .await

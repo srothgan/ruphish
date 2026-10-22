@@ -21,7 +21,7 @@ impl DatabaseFixture {
                 path: path.to_owned(),
                 migrations_prefix: migrations_prefix.to_owned(),
             },
-            Policy::default(),
+            Policy::new(&["127.0.0.1".into()]).map_err(|_| Error::Unavailable)?,
         )
         .await?;
         let inspection = SqlitePoolOptions::new()

@@ -102,6 +102,11 @@ impl WebhookQueue for Integrations {
             body,
         }))
     }
+    async fn webhook_current(&self, claim: &WebhookClaim, now: i64) -> Result<bool, Error> {
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ruphish_webhook_jobs j JOIN webhooks w ON w.id=j.webhook_id JOIN ruphish_webhook_state s ON s.webhook_id=w.id AND s.revision=j.revision JOIN ruphish_webhook_attempts a ON a.job_id=j.id AND a.attempt=j.attempt WHERE j.id=? AND j.attempt=? AND a.id=? AND a.finished IS NULL AND j.state='running' AND j.lease>? AND w.is_active=1)")
+            .bind(claim.id).bind(claim.attempt).bind(claim.run).bind(now)
+            .fetch_one(&self.pool).await.map_err(db)
+    }
     async fn finish_webhook(
         &self,
         claim: &WebhookClaim,

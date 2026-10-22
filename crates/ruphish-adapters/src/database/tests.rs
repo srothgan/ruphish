@@ -34,6 +34,9 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
         "invalid_url",
         "invalid_redirect",
         "submit_complete",
+        "revoke",
+        "submit_revoke",
+        "expired",
     ] {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -79,7 +82,7 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
             ready.await.unwrap();
             let operation = public.clone();
             let request = tokio::spawn(async move {
-                let action = if scenario == "submit_complete" {
+                let action = if scenario.starts_with("submit_") {
                     Action::Submit { event_id: "a".repeat(32), password_present: true }
                 } else { Action::View };
                 operation.interact("training.example.test", "zSDu57f", action, now).await
@@ -99,6 +102,8 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
                 let change = match scenario {
                     "complete" | "submit_complete" => "UPDATE campaigns SET status='Completed'",
                     "disable" => "UPDATE ruphish_domains SET enabled=0",
+                    "revoke" | "submit_revoke" => "UPDATE ruphish_domains SET verified_until=0",
+                    "expired" => "UPDATE ruphish_domains SET verified_until=1",
                     _ => "UPDATE results SET first_name='Bob'",
                 };
                 sqlx::query(change).execute(&inspection_pool).await.unwrap();
@@ -113,7 +118,7 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
                 drop(release);
                 worker.await.unwrap();
                 let result = request.await.unwrap();
-                if scenario == "snapshot" {
+                if matches!(scenario, "snapshot" | "expired") {
                     let Output::Html { html, csp } = result.unwrap() else { unreachable!() };
                     assert!(html.contains("Hello Alice"));
                     assert!(!html.contains("Bob"));
@@ -127,7 +132,7 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
             let permits = tokio::time::timeout(Duration::from_secs(20), db.rendering.acquire_many(8)).await.unwrap().unwrap();
             drop(permits);
             let after: i64 = sqlx::query_scalar("SELECT count(*) FROM events").fetch_one(&inspection_pool).await.unwrap();
-            assert_eq!(after, before + i64::from(scenario == "snapshot"), "{scenario}");
+            assert_eq!(after, before + i64::from(matches!(scenario, "snapshot" | "expired")), "{scenario}");
             assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM ruphish_submission_ids").fetch_one(&inspection_pool).await.unwrap(), 0);
             db.close().await;
         });

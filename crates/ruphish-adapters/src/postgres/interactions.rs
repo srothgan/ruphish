@@ -146,7 +146,7 @@ impl Persistence for Interactions {
             .await
             .map_err(storage)?;
         // Completion and disabling must win over a render that started earlier.
-        let active:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM campaigns c JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id WHERE c.id=$1 AND c.status!='Completed' AND d.enabled=TRUE AND d.origin=$2)").bind(campaign_id).bind(origin).fetch_one(&mut *tx).await.map_err(storage)?;
+        let active:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM campaigns c JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id WHERE c.id=$1 AND c.status!='Completed' AND d.enabled=TRUE AND d.verified_until>0 AND d.origin=$2)").bind(campaign_id).bind(origin).fetch_one(&mut *tx).await.map_err(storage)?;
         if !active {
             return Err(missing());
         }

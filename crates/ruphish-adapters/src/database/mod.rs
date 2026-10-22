@@ -24,6 +24,8 @@ use std::{
 };
 mod mysql_config;
 mod postgres_config;
+#[cfg(test)]
+mod security_tests;
 pub use postgres_config::{PostgresConfig, PostgresTls};
 mod errors;
 mod sessions;

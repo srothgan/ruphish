@@ -8,6 +8,7 @@ mod domain_schema;
 pub mod domains;
 mod draft_schema;
 mod engagement;
+mod identity_schema;
 pub mod integrations;
 pub mod interactions;
 pub(crate) mod mailbox_worker;
@@ -290,6 +291,9 @@ async fn validate_schema(
     }
     if auth_schema::version(connection).await? >= 9 {
         draft_schema::migrate(&mut expected).await?;
+    }
+    if auth_schema::version(connection).await? >= 10 {
+        identity_schema::migrate(&mut expected).await?;
     }
     if schema(connection).await? != schema(&mut expected).await? {
         return Err(UpgradeError::Unrecognized(

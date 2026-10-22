@@ -434,10 +434,21 @@ fn attachment_failures_do_not_produce_partial_output() {
 #[test]
 fn destination_policy_cannot_be_bypassed_with_mapped_ipv4() {
     let policy = Policy::default();
-    for ip in ["169.254.169.254", "::ffff:169.254.169.254", "fe80::1"] {
+    for ip in [
+        "127.0.0.1",
+        "10.0.0.1",
+        "172.16.0.1",
+        "192.168.0.1",
+        "::1",
+        "fc00::1",
+        "::ffff:127.0.0.1",
+        "169.254.169.254",
+        "::ffff:169.254.169.254",
+        "fe80::1",
+    ] {
         assert!(!policy.permits(ip.parse().unwrap()));
     }
-    assert!(policy.permits("127.0.0.1".parse().unwrap()));
+    assert!(!policy.permits("127.0.0.1".parse().unwrap()));
     let restricted = Policy::new(&["10.1.0.0/16".into()]).unwrap();
     assert!(restricted.permits("10.1.2.3".parse().unwrap()));
     assert!(!restricted.permits("::ffff:10.2.2.3".parse().unwrap()));

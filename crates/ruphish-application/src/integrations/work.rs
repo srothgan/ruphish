@@ -83,6 +83,9 @@ pub struct MailboxClaim {
 pub trait WebhookQueue: Send + Sync {
     /// Recover expired claims and reserve one eligible attempt.
     async fn claim_webhook(&self, now: i64) -> Result<Option<WebhookClaim>, Error>;
+    /// Authorize transmission after preparation. Cancellation committed before this
+    /// check wins; once authorized, the external request may already be in flight.
+    async fn webhook_current(&self, claim: &WebhookClaim, now: i64) -> Result<bool, Error>;
     /// Commit the result only for the current attempt; finalize history atomically.
     async fn finish_webhook(
         &self,

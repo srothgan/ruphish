@@ -107,8 +107,12 @@ pub(crate) fn identify(bytes: &[u8], restrict: &str) -> Result<(String, String),
         }
     }
     let mut candidates = BTreeSet::new();
-    let mut parts = 0;
-    scan(&message, 0, &mut parts, &mut candidates)?;
+    let mut budget = ScanBudget {
+        parts: 0,
+        bytes: 4 * MAX_MESSAGE,
+        attempts: 256,
+    };
+    scan(&message, 0, &mut budget, &mut candidates)?;
     if candidates.len() != 1 {
         return Err(if candidates.is_empty() {
             "mailbox_unmatched"
@@ -118,18 +122,24 @@ pub(crate) fn identify(bytes: &[u8], restrict: &str) -> Result<(String, String),
     }
     candidates.into_iter().next().ok_or("mailbox_unmatched")
 }
+// Shared across nested MIME parts, including URL suffixes without any valid RID.
+struct ScanBudget {
+    parts: usize,
+    bytes: usize,
+    attempts: usize,
+}
 fn scan(
     m: &mail_parser::Message<'_>,
     depth: usize,
-    count: &mut usize,
+    budget: &mut ScanBudget,
     found: &mut BTreeSet<(String, String)>,
 ) -> Result<(), &'static str> {
     if depth > 8 {
         return Err("mailbox_nesting_limit");
     }
     for part in &m.parts {
-        *count += 1;
-        if *count > 256 {
+        budget.parts += 1;
+        if budget.parts > 256 {
             return Err("mailbox_part_limit");
         }
         match &part.body {
@@ -150,6 +160,12 @@ fn scan(
                 {
                     for (start, _) in token.match_indices("http") {
                         let candidate = token[start..].trim_end_matches(['.', ',', ')', ']', ';']);
+                        budget.attempts =
+                            budget.attempts.checked_sub(1).ok_or("mailbox_scan_limit")?;
+                        budget.bytes = budget
+                            .bytes
+                            .checked_sub(candidate.len())
+                            .ok_or("mailbox_scan_limit")?;
                         if let Ok(url) = url::Url::parse(candidate) {
                             if !matches!(url.scheme(), "https" | "http") {
                                 continue;
@@ -175,7 +191,7 @@ fn scan(
                     }
                 }
             }
-            mail_parser::PartType::Message(child) => scan(child, depth + 1, count, found)?,
+            mail_parser::PartType::Message(child) => scan(child, depth + 1, budget, found)?,
             mail_parser::PartType::Binary(bytes) | mail_parser::PartType::InlineBinary(bytes)
                 if part
                     .attachment_name()
@@ -184,7 +200,7 @@ fn scan(
                 let child = mail_parser::MessageParser::default()
                     .parse(bytes.as_ref())
                     .ok_or("mailbox_invalid_message")?;
-                scan(&child, depth + 1, count, found)?;
+                scan(&child, depth + 1, budget, found)?;
             }
             _ => {}
         }
@@ -339,6 +355,16 @@ async fn session_command(session: &mut Session, command: String) -> Result<(), &
 #[cfg(test)]
 mod tests {
     use super::identify;
+    #[test]
+    fn overlapping_urls_consume_a_message_wide_budget_without_needing_a_rid() {
+        let message = format!("Subject: report\r\n\r\n{}", "https://x/".repeat(2048));
+        assert_eq!(identify(message.as_bytes(), ""), Err("mailbox_scan_limit"));
+        let wrapped = b"Subject: wrapped\r\n\r\nhttps://filter.example.test/?url=https%3A%2F%2Ftraining.test%2F%3Frid%3Dabc123";
+        assert_eq!(
+            identify(wrapped, ""),
+            Ok(("abc123".into(), "https://training.test".into()))
+        );
+    }
     #[test]
     fn mime_correlation_decodes_forwarded_messages_and_rejects_ambiguity() {
         let plain = b"From: User <employee@example.test>\r\nContent-Type: text/plain\r\n\r\nReported https://training.test/?rid=abc123\r\nhttps://training.test/track?rid=abc123";

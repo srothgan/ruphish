@@ -195,6 +195,12 @@ impl Service {
         edit: Edit,
     ) -> Result<Account, Error> {
         let actor = self.session(caller).await?;
+        // Credential replacement for oneself belongs to change_password, which
+        // verifies the current credential (or the mandatory setup state).
+        // Keep administrator resets of other accounts as a distinct permission.
+        if id == Some(actor.identity.id) && !edit.password.is_empty() {
+            return Err(Error::InvalidCredentials);
+        }
         let target = if let Some(id) = id {
             actor.access_account(id, true)?;
             Some(self.repository.by_id(id).await?.identity)

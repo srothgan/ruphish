@@ -99,7 +99,7 @@ async fn explicit_rejections_and_lost_acceptance_have_different_retry_guarantees
         ),
     ] {
         let (profile, received, thread) = server(reply, false);
-        let smtp = Smtp::new(Policy::default(), String::new());
+        let smtp = Smtp::new(Policy::new(&["127.0.0.1".into()]).unwrap(), String::new());
         let pending = smtp.prepare(&profile, mail()).await.unwrap();
         assert!(
             received.try_recv().is_err(),
@@ -124,7 +124,7 @@ async fn recipient_rejection_is_known_before_the_durable_submission_boundary() {
         "450 synthetic-secret should never enter diagnostics\r\n",
         true,
     );
-    let smtp = Smtp::new(Policy::default(), String::new());
+    let smtp = Smtp::new(Policy::new(&["127.0.0.1".into()]).unwrap(), String::new());
     let error = match smtp.prepare(&profile, mail()).await {
         Ok(_) => panic!("expected rejection"),
         Err(error) => error,
@@ -139,7 +139,7 @@ async fn recipient_rejection_is_known_before_the_durable_submission_boundary() {
 #[tokio::test]
 async fn cancellation_after_preparation_closes_without_sending_content() {
     let (profile, received, thread) = server("250 Accepted\r\n", false);
-    let smtp = Smtp::new(Policy::default(), String::new());
+    let smtp = Smtp::new(Policy::new(&["127.0.0.1".into()]).unwrap(), String::new());
     let pending = smtp.prepare(&profile, mail()).await.unwrap();
     drop(pending);
     thread.join().unwrap();
@@ -190,7 +190,7 @@ async fn every_pre_content_smtp_phase_rejects_without_transmitting_a_body() {
                 }
                 commands
             });
-            let smtp = Smtp::new(Policy::default(), String::new());
+            let smtp = Smtp::new(Policy::new(&["127.0.0.1".into()]).unwrap(), String::new());
             let error = match smtp.prepare(&profile, mail()).await {
                 Ok(_) => panic!("expected rejection"),
                 Err(e) => e,
@@ -222,7 +222,7 @@ async fn unreachable_transport_is_retryable_without_retaining_host_diagnostics()
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let host = listener.local_addr().unwrap().to_string();
     drop(listener);
-    let smtp = Smtp::new(Policy::default(), String::new());
+    let smtp = Smtp::new(Policy::new(&["127.0.0.1".into()]).unwrap(), String::new());
     let profile = Profile {
         host,
         from_address: "training@example.test".into(),

@@ -37,6 +37,7 @@ pub(crate) struct AuthState {
     resources: ruphish_application::resources::Service,
     delivery: ruphish_application::delivery::Service,
     campaigns: Arc<dyn ruphish_application::campaign::Repository>,
+    campaign_list_slots: Arc<tokio::sync::Semaphore>,
     domains: Arc<dyn ruphish_application::domains::Repository>,
     reporting: Arc<dyn ruphish_application::reporting::Repository>,
     overview: Arc<dyn ruphish_application::overview::Repository>,
@@ -69,6 +70,7 @@ pub fn router<S: SessionStore + Clone>(
         resources: services.resources,
         delivery: services.delivery,
         campaigns: services.campaigns,
+        campaign_list_slots: Arc::new(tokio::sync::Semaphore::new(2)),
         domains: services.domains,
         reporting: services.reporting,
         overview: services.overview,
@@ -162,7 +164,16 @@ pub fn router<S: SessionStore + Clone>(
         .layer(middleware::from_fn(security_headers))
         .with_state(state)
         .layer(session);
-    super::server::finish(assets.router.merge(routes))
+    let admission = std::sync::Arc::new(tokio::sync::Semaphore::new(64));
+    super::server::finish(
+        assets
+            .router
+            .merge(routes)
+            .layer(middleware::from_fn_with_state(
+                admission,
+                super::server::admin_admission,
+            )),
+    )
 }
 
 // Only these small identity values are stored in the server-side session.
@@ -236,6 +247,21 @@ impl FromRequestParts<AuthState> for Context {
     }
 }
 impl Context {
+    pub(crate) fn campaign_list_permit(
+        &self,
+    ) -> Result<tokio::sync::OwnedSemaphorePermit, Rejection> {
+        self.state
+            .campaign_list_slots
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| {
+                failure(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    ErrorCode::ServiceBusy,
+                    "Campaign listing is busy; retry shortly",
+                )
+            })
+    }
     pub(crate) fn integrations(&self) -> &dyn ruphish_application::integrations::Repository {
         self.state.integrations.as_ref()
     }

@@ -32,7 +32,14 @@ impl ContentTools for Tools {
                 "position".into(),
             ]
         });
-        let indexes = keys.map(|key| headers.iter().position(|s| normalize(s) == normalize(&key)));
+        if headers.len() > 1024 || keys.iter().any(|key| key.len() > 1024) {
+            return Err(invalid("CSV column mapping exceeds limits"));
+        }
+        let normalized_headers: Vec<_> = headers.iter().map(normalize).collect();
+        let indexes = keys.map(|key| {
+            let key = normalize(&key);
+            normalized_headers.iter().position(|header| *header == key)
+        });
         if indexes[0].is_none() {
             return Err(invalid(
                 "CSV requires an Email column; choose the email column in import review",
@@ -242,7 +249,7 @@ fn rewrite<'a>(
     if source.len() > MAX_DOCUMENT {
         return Err(invalid("HTML exceeds 8 MiB"));
     }
-    let (shielded, tokens) = shield(source)?;
+    let (shielded, prefix, tokens) = shield(source)?;
     let mut settings = Settings::new()
         .with_memory_settings(MemorySettings::new().with_max_allowed_memory_usage(MAX_DOCUMENT));
     for handler in handlers {
@@ -268,16 +275,36 @@ fn rewrite<'a>(
     if exceeded {
         return Err(invalid("Transformed HTML exceeds 8 MiB"));
     }
-    let mut result =
-        String::from_utf8(output).map_err(|_| invalid("Transformed HTML is not UTF-8"))?;
-    for (token, source) in tokens {
-        result = result.replace(&token, &source);
+    let result = String::from_utf8(output).map_err(|_| invalid("Transformed HTML is not UTF-8"))?;
+    let mut restored = String::with_capacity(result.len());
+    let mut rest = result.as_str();
+    while let Some(start) = rest.find(&prefix) {
+        restored.push_str(&rest[..start]);
+        let after = &rest[start + prefix.len()..];
+        let digits = after.bytes().take_while(u8::is_ascii_digit).count();
+        let index = after[..digits].parse::<usize>().ok();
+        if let Some(source) = index.and_then(|i| tokens.get(i))
+            && after[digits..].starts_with("end")
+        {
+            restored.push_str(source);
+            rest = &after[digits + 3..];
+        } else {
+            restored.push_str(&prefix);
+            rest = after;
+        }
+        if restored.len() > MAX_DOCUMENT {
+            return Err(invalid("Restored HTML exceeds 8 MiB"));
+        }
     }
-    Ok(result)
+    restored.push_str(rest);
+    if restored.len() > MAX_DOCUMENT {
+        return Err(invalid("Restored HTML exceeds 8 MiB"));
+    }
+    Ok(restored)
 }
 
 // Shield complete template actions from the HTML parser, including quoted delimiters.
-fn shield(source: &str) -> Result<(String, Vec<(String, String)>), Error> {
+fn shield(source: &str) -> Result<(String, String, Vec<String>), Error> {
     let mut nonce = [0; 16];
     getrandom::fill(&mut nonce).map_err(|_| Error::Internal)?;
     let prefix = format!("ruphish{}token", hex::encode(nonce));
@@ -285,6 +312,9 @@ fn shield(source: &str) -> Result<(String, Vec<(String, String)>), Error> {
     let mut tokens = Vec::new();
     let mut rest = source;
     while let Some(start) = rest.find("{{") {
+        if tokens.len() >= 65_536 {
+            return Err(invalid("HTML has too many template expressions"));
+        }
         result.push_str(&rest[..start]);
         let action = &rest[start..];
         let bytes = action.as_bytes();
@@ -314,15 +344,66 @@ fn shield(source: &str) -> Result<(String, Vec<(String, String)>), Error> {
         let end = i + 2;
         let token = format!("{prefix}{}end", tokens.len());
         result.push_str(&token);
-        tokens.push((token, action[..end].to_owned()));
+        tokens.push(action[..end].to_owned());
+        if result.len() > MAX_DOCUMENT {
+            return Err(invalid("Shielded HTML exceeds 8 MiB"));
+        }
         rest = &action[end..];
     }
     result.push_str(rest);
-    Ok((result, tokens))
+    if result.len() > MAX_DOCUMENT {
+        return Err(invalid("Shielded HTML exceeds 8 MiB"));
+    }
+    Ok((result, prefix, tokens))
 }
 
 /// Apply the shared landing policy to an already rendered preview.
 /// The response must also carry the preview CSP; authored source is never modified.
 pub fn landing_html(page: &Page) -> Result<String, Error> {
     Ok(crate::landing::render(&page.html, None)?.html)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn many_actions_restore_exactly_and_excessive_actions_are_rejected() -> Result<(), Error> {
+        let source = "<p>{{.FirstName}}{{if .Email}}{{.Email}}{{end}}</p>".repeat(4096);
+        assert_eq!(rewrite(&source, vec![])?, source);
+        assert!(rewrite(&"{{.FirstName}}".repeat(65_537), vec![]).is_err());
+        assert!(
+            rewrite("{{if}}", vec![]).is_ok(),
+            "rewriting must preserve legacy expressions, not reinterpret them"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn csv_mapping_is_bounded_and_keeps_normalization_semantics() -> Result<(), Error> {
+        let tools = Tools {
+            policy: Policy::default(),
+        };
+        let report = tools.csv(b" EMAIL ,First_Name\na@example.test,Ada", None)?;
+        assert_eq!(report.recipients[0].first_name, "Ada");
+        assert!(
+            tools
+                .csv(
+                    b"email\na@example.test",
+                    Some([
+                        "x".repeat(1025),
+                        String::new(),
+                        String::new(),
+                        String::new()
+                    ])
+                )
+                .is_err()
+        );
+        assert!(
+            tools
+                .csv(format!("email{}", ",".repeat(1024)).as_bytes(), None)
+                .is_err()
+        );
+        Ok(())
+    }
 }

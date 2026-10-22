@@ -264,16 +264,29 @@ async fn create(context: Context, body: Bytes) -> Result<Response, Rejection> {
 }
 async fn list(context: Context) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
+    let permit = context.campaign_list_permit()?;
     let rows = context
         .campaigns()
         .list(user.identity)
         .await
         .map_err(error)?;
-    response(
+    let response = response(
         StatusCode::OK,
         &json!(rows.iter().map(encode_campaign).collect::<Vec<_>>()),
         None,
-    )
+    )?;
+    // Retain admission until the body is consumed or the client disconnects.
+    // Slow readers must not accumulate unlimited already-serialized lists.
+    use futures_util::StreamExt;
+    let (parts, body) = response.into_parts();
+    let stream = body.into_data_stream().map(move |frame| {
+        let _keep_alive = &permit;
+        frame
+    });
+    Ok(Response::from_parts(
+        parts,
+        axum::body::Body::from_stream(stream),
+    ))
 }
 async fn read(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;

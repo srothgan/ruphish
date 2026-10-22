@@ -174,6 +174,9 @@ pub fn attachment(a: &Attachment, context: &Context) -> Result<Vec<u8>, Error> {
                     return Err(invalid("Office archive exceeds expanded size limit"));
                 }
                 if name.ends_with(".xml") || name.ends_with(".rels") {
+                    if body.len() > MAX_DOCUMENT {
+                        return Err(invalid("Office XML exceeds 8 MiB"));
+                    }
                     let source = std::str::from_utf8(&body)
                         .map_err(|_| invalid("Office XML is not UTF-8"))?;
                     body = render(&office_expressions(source), context)?.into_bytes();
@@ -208,19 +211,35 @@ fn office_expressions(source: &str) -> String {
     while let Some(start) = rest.find("%7b%7b.") {
         output.push_str(&rest[..start]);
         let after = &rest[start + 7..];
-        if let Some(end) = after.find("%7d%7d") {
+        let end = after.bytes().take_while(u8::is_ascii_alphabetic).count();
+        if end > 0 && after[end..].starts_with("%7d%7d") {
             let name = &after[..end];
-            if !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphabetic()) {
-                output.push_str("{{.");
-                output.push_str(name);
-                output.push_str("}}");
-                rest = &after[end + 6..];
-                continue;
-            }
+            output.push_str("{{.");
+            output.push_str(name);
+            output.push_str("}}");
+            rest = &after[end + 6..];
+            continue;
         }
         output.push_str("%7b%7b.");
         rest = after;
     }
     output.push_str(rest);
     output
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn malformed_office_markers_do_not_hide_later_valid_markers() {
+        let malformed = "%7b%7b.".repeat(65_536);
+        assert_eq!(super::office_expressions(&malformed), malformed);
+        assert_eq!(
+            super::office_expressions("%7b%7b.12%7b%7b.FirstName%7d%7d%20"),
+            "%7b%7b.12{{.FirstName}}%20"
+        );
+        assert_eq!(
+            super::office_expressions("%7b%7b.First_Name%7d%7d"),
+            "%7b%7b.First_Name%7d%7d"
+        );
+    }
 }

@@ -3,7 +3,7 @@ use super::*;
 use serde_json::{Value, json};
 
 #[test]
-fn unchanged_go_configuration_observations_preserve_merges_nulls_types_and_defaults() {
+fn go_configuration_observations_preserve_merges_except_rejected_unknown_fields() {
     let observations: Vec<Value> =
         serde_json::from_str(include_str!("fixtures/startup/config.json")).unwrap();
     let directory = tempfile::tempdir().unwrap();
@@ -12,9 +12,11 @@ fn unchanged_go_configuration_observations_preserve_merges_nulls_types_and_defau
         let body = observation["body"].as_str().unwrap();
         std::fs::write(&path, body).unwrap();
         let result = load(&path);
+        // Security deviation: legacy ignored unknown root/listener fields.
+        let unknown = body.contains("unknown") || body.contains("csrf_key\":12");
         assert_eq!(
             result.is_ok(),
-            observation["accepted"].as_bool().unwrap(),
+            observation["accepted"].as_bool().unwrap() && !unknown,
             "{body}"
         );
         if let Ok(config) = result {
@@ -44,4 +46,27 @@ fn unchanged_go_configuration_observations_preserve_merges_nulls_types_and_defau
         }
     }
     assert!(load(&directory.path().join("missing")).is_err());
+}
+
+#[test]
+fn selected_listeners_require_explicit_addresses_and_typos_are_rejected() {
+    for body in [
+        r#"{"admin_sever":{}}"#,
+        r#"{"admin_server":{"listen_ur":"127.0.0.1:0"}}"#,
+        r#"{"admin_server":{"use_tsl":true}}"#,
+        r#"{"logging":{"levle":"info"}}"#,
+    ] {
+        assert!(merge(&mut Config::default(), body.as_bytes()).is_err());
+    }
+    let mut config = Config {
+        db_name: "sqlite3".into(),
+        db_path: "unused.sqlite3".into(),
+        ..Default::default()
+    };
+    assert!(config.validate(Mode::Admin).is_err());
+    config.admin.listen_url = "127.0.0.1:0".into();
+    assert!(config.validate(Mode::Admin).is_ok());
+    assert!(config.validate(Mode::All).is_err());
+    config.phish.listen_url = "127.0.0.1:0".into();
+    assert!(config.validate(Mode::All).is_ok());
 }

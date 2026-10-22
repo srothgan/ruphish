@@ -636,24 +636,37 @@ fn campaign_workflow(
         auth_process::sign_in(&session, &peer_base, "admin", "established-admin-password").status(),
         200
     );
-    let mut edit = json!({"username":"admin","role":"admin","password":"changed-process-password","account_locked":false,"password_change_required":false});
-    let response = request(
-        &auth_process::browser(),
+    let editor = auth_process::browser();
+    assert_eq!(
+        auth_process::sign_in(&editor, base, "admin", "established-admin-password").status(),
+        200
+    );
+    let response = auth_process::post(
+        &editor,
         base,
-        reqwest::Method::PUT,
-        "/api/users/1",
-        Some(&edit),
+        "/settings",
+        &[
+            ("current_password", "established-admin-password"),
+            ("new_password", "changed-process-password"),
+            ("confirm_new_password", "changed-process-password"),
+        ],
     );
     assert_eq!(response.status(), 200, "{}", response.text().unwrap());
     assert!(auth_process::bootstrap(&session, &peer_base)["user"].is_null());
-    edit["password"] = json!("established-admin-password");
     assert_eq!(
-        request(
-            &auth_process::browser(),
+        auth_process::sign_in(&editor, base, "admin", "changed-process-password").status(),
+        200
+    );
+    assert_eq!(
+        auth_process::post(
+            &editor,
             base,
-            reqwest::Method::PUT,
-            "/api/users/1",
-            Some(&edit)
+            "/settings",
+            &[
+                ("current_password", "changed-process-password"),
+                ("new_password", "established-admin-password"),
+                ("confirm_new_password", "established-admin-password"),
+            ],
         )
         .status(),
         200

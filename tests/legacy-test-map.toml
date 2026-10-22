@@ -41,11 +41,11 @@ source_test = "TestLoadConfig"
 source_receiver = ""
 source_body_sha256 = "8db086765e99b50e1c13dab7afcdafacd8909f8dbb152b9368ece36d0e72a1fc"
 guarantee = "Load valid config and preserve validation/error behavior for missing/malformed configuration and derived migration path."
-strategy = "Translate the existing scenario and independent expected values; use real boundary effects where the original only mocked internals. Preserve all original table cases."
+strategy = "Retain independent Go configuration observations, including merges, nulls and types. DEC-043 deliberately rejects unknown keys and missing selected-listener addresses; the original observations are not rewritten."
 target_crate = "ruphish"
 target_path = "tests/startup_config.rs"
 status = "implemented"
-target_test = "unchanged_go_configuration_observations_preserve_merges_nulls_types_and_defaults"
+target_test = "go_configuration_observations_preserve_merges_except_rejected_unknown_fields"
 source_subtests = []
 
 [[tests]]
@@ -120,7 +120,7 @@ strategy = "Exercise the inherited observable guarantee through real HTTP/proces
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
-target_test = "go_account_observations_match_except_approved_self_deletion_policy"
+target_test = "go_account_observations_match_except_approved_account_security_policies"
 source_subtests = []
 
 [[tests]]
@@ -135,7 +135,7 @@ strategy = "Exercise the inherited observable guarantee through real HTTP/proces
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
-target_test = "go_account_observations_match_except_approved_self_deletion_policy"
+target_test = "go_account_observations_match_except_approved_account_security_policies"
 source_subtests = []
 
 [[tests]]
@@ -150,7 +150,7 @@ strategy = "Exercise the inherited observable guarantee through real HTTP/proces
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
-target_test = "go_account_observations_match_except_approved_self_deletion_policy"
+target_test = "go_account_observations_match_except_approved_account_security_policies"
 source_subtests = []
 
 [[tests]]
@@ -165,7 +165,7 @@ strategy = "Exercise the inherited observable guarantee through real HTTP/proces
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
-target_test = "go_account_observations_match_except_approved_self_deletion_policy"
+target_test = "go_account_observations_match_except_approved_account_security_policies"
 source_subtests = []
 
 [[tests]]
@@ -180,7 +180,7 @@ strategy = "Exercise the inherited observable guarantee through real HTTP/proces
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
-target_test = "go_account_observations_match_except_approved_self_deletion_policy"
+target_test = "go_account_observations_match_except_approved_account_security_policies"
 source_subtests = []
 
 [[tests]]
@@ -195,7 +195,7 @@ strategy = "Exercise the inherited observable guarantee through real HTTP/proces
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
-target_test = "go_account_observations_match_except_approved_self_deletion_policy"
+target_test = "go_account_observations_match_except_approved_account_security_policies"
 source_subtests = []
 
 [[tests]]
@@ -210,7 +210,7 @@ strategy = "Exercise the inherited observable guarantee through real HTTP/proces
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
-target_test = "go_account_observations_match_except_approved_self_deletion_policy"
+target_test = "go_account_observations_match_except_approved_account_security_policies"
 source_subtests = []
 
 [[tests]]
@@ -506,7 +506,7 @@ source_test = "TestDefaultAllow"
 source_receiver = ""
 source_body_sha256 = "a2fbd8f15443fa29b05b5abd013068acb8b1676b0ab842df58de050a58c23876"
 guarantee = "The default dial policy permits designated allowed destinations."
-strategy = "Translate the existing scenario and independent expected values; use real boundary effects where the original only mocked internals. Preserve all original table cases."
+strategy = "Retain the independent destination cases and explicit exceptions. DEC-043 removes the empty-allowlist bypass: internal destinations now require an explicit exception even when no allow entries are configured."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/resource_formats.rs"
 status = "implemented"
@@ -690,7 +690,7 @@ strategy = "Exercise the inherited observable guarantee through real HTTP/proces
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
-target_test = "go_account_observations_match_except_approved_self_deletion_policy"
+target_test = "go_account_observations_match_except_approved_account_security_policies"
 source_subtests = []
 
 [[tests]]
@@ -735,7 +735,7 @@ strategy = "Exercise the inherited observable guarantee through real HTTP/proces
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
-target_test = "go_account_observations_match_except_approved_self_deletion_policy"
+target_test = "go_account_observations_match_except_approved_account_security_policies"
 source_subtests = []
 
 [[tests]]
@@ -1815,7 +1815,7 @@ strategy = "Exercise the inherited observable guarantee through real HTTP/proces
 target_crate = "ruphish"
 target_path = "tests/auth_process.rs"
 status = "implemented"
-target_test = "go_account_observations_match_except_approved_self_deletion_policy"
+target_test = "go_account_observations_match_except_approved_account_security_policies"
 source_subtests = []
 
 [[tests]]

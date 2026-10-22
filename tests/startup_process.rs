@@ -381,7 +381,7 @@ fn copy(source: &Path, destination: &Path) {
     }
 }
 fn configuration() -> Value {
-    json!({"db_name":"sqlite3","db_path":"installation.sqlite3","admin_server":{"listen_url":"127.0.0.1:0","use_tls":false,"cert_path":"admin.crt","key_path":"admin.key"},"phish_server":{"listen_url":"127.0.0.1:0","use_tls":false,"cert_path":"public.crt","key_path":"public.key"},"logging":{"level":"info","filename":"server.log"}})
+    json!({"db_name":"sqlite3","db_path":"installation.sqlite3","admin_server":{"listen_url":"127.0.0.1:0","allowed_internal_hosts":["127.0.0.1"],"use_tls":false,"cert_path":"admin.crt","key_path":"admin.key"},"phish_server":{"listen_url":"127.0.0.1:0","use_tls":false,"cert_path":"public.crt","key_path":"public.key"},"logging":{"level":"info","filename":"server.log"}})
 }
 fn write_config(directory: &Path, config: &Value) {
     std::fs::write(
@@ -575,6 +575,52 @@ fn incomplete_http_headers_and_tls_handshakes_have_real_deadlines() {
         ),
     }
     assert!(start.elapsed() < Duration::from_secs(13));
+    process.stop();
+}
+
+#[test]
+fn slow_anonymous_bodies_are_closed_and_validated_assets_remain_immutable() {
+    let directory = workspace();
+    let root = directory.path().join("dist/admin");
+    let original = std::fs::read(root.join("visual-frame.js")).unwrap();
+    let mut process = Process::start(directory.path(), "admin");
+    let ready = process.ready();
+    let address = ready["admin"].as_str().unwrap();
+    let base = format!("http://{address}");
+    std::fs::write(root.join("visual-frame.js"), b"changed-after-startup").unwrap();
+    assert_eq!(
+        client()
+            .get(format!("{base}/visual-frame.js"))
+            .send()
+            .unwrap()
+            .bytes()
+            .unwrap()
+            .as_ref(),
+        original
+    );
+    let partial = client()
+        .get(format!("{base}/visual-frame.js"))
+        .header("Range", "bytes=0-7")
+        .send()
+        .unwrap();
+    assert_eq!(partial.status(), 206);
+    assert_eq!(partial.bytes().unwrap().as_ref(), &original[..8]);
+    let mut socket = std::net::TcpStream::connect(address).unwrap();
+    socket
+        .set_read_timeout(Some(Duration::from_secs(35)))
+        .unwrap();
+    socket.write_all(b"POST /api/import/group/review HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{").unwrap();
+    let mut response = String::new();
+    socket.read_to_string(&mut response).unwrap();
+    assert!(response.starts_with("HTTP/1.1 408"), "{response}");
+    assert_eq!(
+        client()
+            .get(format!("{base}/auth/session"))
+            .send()
+            .unwrap()
+            .status(),
+        200
+    );
     process.stop();
 }
 

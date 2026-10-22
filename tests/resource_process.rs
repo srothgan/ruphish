@@ -1207,7 +1207,7 @@ fn legacy_site_import_allow_deny_and_base_href_cases_use_controlled_servers() {
         unlock(directory.path());
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
-        let allowed = hosts.is_empty() || hosts[0] == "127.0.0.1";
+        let allowed = hosts.first() == Some(&"127.0.0.1");
         let target = format!("http://{address}/fixture");
         let body = "<html><head></head><body><img src=\"/test.png\"/></body></html>";
         let handle = allowed.then(||std::thread::spawn(move||{

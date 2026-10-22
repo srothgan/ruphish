@@ -65,6 +65,11 @@ impl Config {
             (mode.admin(), "admin_server", &self.admin),
             (mode.phish(), "phish_server", &self.phish),
         ] {
+            if selected && server.listen_url.trim().is_empty() {
+                return Err(ConfigError::Invalid(format!(
+                    "{name} requires an explicit listen_url"
+                )));
+            }
             if selected
                 && server.use_tls
                 && (server.cert_path.as_os_str().is_empty()
@@ -230,7 +235,7 @@ impl Apply for Config {
                 let mut flag = false;
                 scalar(&mut flag, value)
             }
-            _ => Ok(()),
+            _ => Err(de::Error::custom("Unknown configuration field")),
         }
     }
 }
@@ -252,7 +257,7 @@ impl Apply for Server {
                     serde_json::from_str::<Option<Vec<String>>>(value.get())?.unwrap_or_default();
                 Ok(())
             }
-            _ => Ok(()),
+            _ => Err(de::Error::custom("Unknown listener configuration field")),
         }
     }
 }
@@ -261,7 +266,7 @@ impl Apply for Logging {
         match name {
             "filename" => scalar(&mut self.filename, value),
             "level" => scalar(&mut self.level, value),
-            _ => Ok(()),
+            _ => Err(de::Error::custom("Unknown logging configuration field")),
         }
     }
 }
@@ -271,7 +276,9 @@ impl Apply for Public<'_> {
     fn apply(&mut self, name: &str, value: &RawValue) -> Result<(), serde_json::Error> {
         match name {
             "listen_url" | "use_tls" | "cert_path" | "key_path" => self.0.apply(name, value),
-            _ => Ok(()),
+            _ => Err(de::Error::custom(
+                "Unknown public listener configuration field",
+            )),
         }
     }
 }
