@@ -1,0 +1,30 @@
+name: Feature or improvement
+description: Describe a task Ruphish could make easier.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tell us what you want to accomplish. You do not need an implementation plan. If you find an existing request, add your use case there; otherwise, a short description is enough to start a discussion.
+
+        Use dummy examples and omit credentials or personal data. For a suspected vulnerability, follow the [security policy](https://github.com/srothgan/ruphish/security/policy).
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe who would use this and what is difficult or missing today.
+      placeholder: When reviewing several campaigns, I need to ... Currently I have to ...
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What would a useful result look like?
+      description: Describe the outcome you need. A concrete feature idea is welcome, but not required.
+      placeholder: I would like to be able to ... so that ...
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Workarounds or examples (optional)
+      description: Add a current workaround, alternative approach, sketch, or relevant Gophish behavior if it helps explain the request.

@@ -1,0 +1,63 @@
+version: 2
+updates:
+  # The workspace root owns all Rust crates and Cargo.lock.
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      rust-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # JavaScript dependencies used to build the administration interface.
+  - package-ecosystem: npm
+    directory: /crates/ruphish-ui/web
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      browser-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # Astro, Starlight, fonts, and website development tools.
+  - package-ecosystem: npm
+    directory: /website
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      website-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci
+    groups:
+      actions-minor-patch:
+        update-types:
+          - minor
+          - patch

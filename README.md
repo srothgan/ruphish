@@ -1,32 +1,48 @@
 # Ruphish
 
-Ruphish is a Rust backend and Rust/WASM admin application being built to preserve Gophish's supported external contracts while modernizing its implementation and interface.
+Ruphish is a phishing-simulation application with a native Rust server and a Rust/WASM admin interface. Prepare personalized campaigns, deliver them through your SMTP service, and review delivery, participant interactions, and reported messages in one place.
 
-The native application loads legacy configuration, initializes the configured SQLite, MySQL or PostgreSQL database, preserving supported legacy SQLite/MySQL upgrades, bootstraps the administrator, serves the Rust/WASM admin UI over HTTP/TLS, and shuts down on native signals. Authentication includes browser sessions, forced password changes, account administration, permissions, API keys and explicit impersonation. [Resource management](docs/resources.md) includes groups, templates, landing pages, sending profiles, imports, attachments, previews and test email. The CodeMirror/Jodit editor is integrated into resource drafts. [Persistent campaign drafts](docs/campaign-drafts.md), preparation, scheduling, durable delivery and reconciliation are implemented locally. [Verified domains and public interactions](docs/domains-and-interactions.md) add host-bound pages, interaction events and presence-only submissions. [Campaign analysis and reporting](docs/reporting.md) provide observed-event charts, recipient timelines, CSV/XLSX exports, durable signed webhooks and dedicated reporting mailboxes. Browser layout and interaction checks are performed manually. See [authentication](docs/authentication.md) and [startup](docs/startup.md).
+Ruphish aims to be a compatible, drop-in replacement for Gophish while adding a new interface, persistent campaign drafts, verified domains, richer analysis, and explicit delivery recovery. Full compatibility cannot be guaranteed for every integration or deployment; review the [documented differences](docs/migration/differences-from-gophish.md) before migrating.
 
-## Getting started
+![Ruphish dashboard showing campaign outcomes, recent campaigns, and deliveries needing review.](assets/dashboard.png)
 
-Rustup reads the exact compiler/components/browser target from rust-toolchain.toml. Install dependencies/tools through CLI commands rather than writing dependency versions into manifests:
+## What you can do
 
-```sh
-rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
-cargo install trunk --version 0.21.14 --locked
-cargo install cargo-deny --version 0.19.9 --locked
-cargo install leptosfmt --version 0.1.33 --locked --profile dev
-cargo fetch --locked
-npm ci --prefix crates/ruphish-ui/web
-trunk build --locked
-cargo build --workspace --exclude ruphish-ui --locked
-cargo test --workspace --exclude ruphish-ui --locked
-cargo run -p ruphish --locked -- --help
-```
+- Manage recipient groups, email templates, landing pages, attachments, and sending profiles.
+- Save campaign drafts, review the audience and content, and launch immediately or schedule delivery.
+- Inspect delivery attempts and resolve uncertain outcomes without assuming a failed connection means a message was never sent.
+- Explore campaign and recipient timelines, distinguish observed events from summary metrics, and export CSV or XLSX reports.
+- Process reported messages through multiple IMAP mailboxes and deliver signed events to webhooks.
+- Use English or German interface text with independent date-format and time-zone preferences.
+- Automate workflows through compatible resource endpoints and Ruphish's added APIs.
 
-Windows native compilation requires the Visual Studio C++ build tools and the Windows SDK; other hosts require their normal Rust native linker. Dependencies are resolved in Cargo.lock. The declared supported compiler is Rust 1.99; older versions have not been verified. Node and npm are required to install, test and bundle the CodeMirror browser component.
+Participant tracking is designed around interaction events and optional presence booleans. Entered usernames, passwords, OTPs, and arbitrary form values are outside the supported collection model. Read [participant data](docs/user-guide/participant-data.md) for behavior and verification limits.
 
-Select relevant direct commands in [Validation](docs/validation.md); [AGENTS.md](AGENTS.md) defines the concise agent completion policy. No PowerShell/Node task runner or Cargo alias layer is required. Copy config.example.json to config.json before starting listeners; see [startup and database recovery](docs/startup.md). See [development](docs/development.md) for details and [architecture](docs/architecture.md) for boundaries. If your environment exports NO_COLOR=1, set its process value to true before invoking Trunk, as documented there.
+## Start here
 
-## Source and generated files
+| Your goal | Guide |
+| --- | --- |
+| Try a contained exercise with a local inbox | [Your first campaign](docs/getting-started/first-campaign.md) |
+| Install a release binary or run the Docker image | [Installation](docs/getting-started/installation.md) |
+| Run campaigns and understand results | [User guide](docs/user-guide/index.md) |
+| Configure databases, TLS, accounts, or recovery | [Administration](docs/administration/index.md) |
+| Integrate with Ruphish | [HTTP API](docs/api/index.md) |
+| Bring an existing Gophish installation across | [Migration and compatibility](docs/migration/index.md) |
+| Change code, translations, or documentation | [Contributing](CONTRIBUTING.md) |
+| Report a suspected security vulnerability | [Security policy](SECURITY.md) |
 
-Seven crates live in crates/. Regression data and legacy-case obligations live in tests/. Product tooling and documentation live in tools/ and docs/. Build output in target/ and browser output in dist/admin are generated and ignored; rebuild them from source.
+The HTTP interface separates `/api/` for public automation, `/auth/` for browser authentication/session data, and `/internal/` for browser-specific operations. See the [API overview](docs/api/index.md) before choosing an endpoint for an integration.
 
-Ruphish is licensed under [MIT](LICENSE), copyright (c) 2026 Simon Peter Rothgang. Attribution and the original license for reused Gophish material are preserved in [third-party notices](docs/third-party-notices.md). The compatibility corpus contains synthetic data derived from Gophish 0.12.1; never use fixture credentials for an actual installation. SQLite remains the local default; MySQL and PostgreSQL are selectable through the same [database facade](docs/database.md). Publishing, releases, distribution packaging, and deployment are outside the current implementation scope.
+## Installation
+
+The intended installation options are a release binary and a Docker image. SQLite is the default database; MySQL and PostgreSQL are also configurable. See [installation](docs/getting-started/installation.md) for setup and [database administration](docs/administration/databases/index.md) for provider requirements.
+
+> TODO before publication: Publish the release binaries and Docker image, then complete and verify their installation instructions. These distribution options are not available yet.
+
+For development, follow [contributing](CONTRIBUTING.md) for setup, architecture, and validation.
+
+Read the [changelog](CHANGELOG.md) for user-visible changes and the [Code of Conduct](CODE_OF_CONDUCT.md) for community expectations and private conduct reporting.
+
+## License and attribution
+
+Ruphish is licensed under [MIT](LICENSE), copyright (c) 2026 Simon Peter Rothgang. Reused Gophish material and dependency notices are preserved in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Fixture credentials and recipient data are synthetic and must not be reused for an actual installation.

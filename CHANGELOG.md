@@ -1,0 +1,16 @@
+# Changelog
+
+## 0.1.0 (Unreleased)
+
+Initial release targeting feature parity with Gophish, with a native Rust server and a new Rust/WASM administration interface.
+
+- Manage recipient groups, email templates, landing pages, attachments, and sending profiles.
+- Save campaign drafts, review campaigns before launch, and schedule delivery with explicit recovery for uncertain sends.
+- Review dashboards and campaign/recipient timelines, with CSV and XLSX exports.
+- Verify campaign domains, process reports through multiple IMAP mailboxes, and deliver signed webhooks.
+- Use English or German interface text with independent date-format and time-zone preferences.
+- Run with SQLite, MySQL, or PostgreSQL, with migration support for recognized Gophish SQLite and MySQL histories.
+- Automate through familiar Gophish resource APIs and new Ruphish endpoints, with separate `/api/`, `/auth/`, and `/internal/` interfaces.
+- Track participant interactions and optional password presence instead of collecting entered credentials or other form values.
+
+See [differences from Gophish](docs/migration/differences-from-gophish.md) for intentional changes and migration considerations.

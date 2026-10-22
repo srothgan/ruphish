@@ -1,0 +1,44 @@
+name: Bug report
+description: Tell us about something that is not working as expected.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Ruphish. A short report is welcome; share what you know, and we can ask for more detail if needed. If you find an existing report, add your details there.
+
+        For a suspected vulnerability, follow the [security policy](https://github.com/srothgan/ruphish/security/policy) instead of posting details here. Before attaching anything, remove credentials, API keys, session cookies, recipient information, and participant data. Do not upload a live database.
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened, and what did you expect?
+      description: Describe the task you were trying to complete and the unexpected result.
+      placeholder: I expected the filtered campaign list to stay on the selected page, but it returned to the first page after refresh.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How can we reproduce it?
+      description: Give the shortest steps you know, using dummy data. If it happens intermittently or you cannot reproduce it, tell us what happened just before it.
+      placeholder: |
+        1. Open ...
+        2. Choose ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Version and environment
+      description: Include the Ruphish version or commit and how you run it. Add OS, browser, or database details where relevant. It is fine to say if a detail is unknown.
+      placeholder: |
+        Ruphish version or commit:
+        Installation (binary, Docker, or source):
+        OS; browser or database if relevant:
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Errors, screenshots, or other context (optional)
+      description: A short redacted error, screenshot, or workaround can help. Review attachments for sensitive information before sharing them.

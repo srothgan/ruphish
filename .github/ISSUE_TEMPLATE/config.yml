@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/srothgan/ruphish/security/policy
+    about: Read the private reporting instructions before sharing vulnerability details.
+  - name: Report a Code of Conduct concern
+    url: https://github.com/srothgan/ruphish/blob/main/CODE_OF_CONDUCT.md#reporting-a-violation
+    about: Find the private contact for conduct reports.
