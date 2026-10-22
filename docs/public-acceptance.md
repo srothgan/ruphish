@@ -6,7 +6,7 @@ This fixture runs a separate Ruphish installation, authoritative test DNS, trust
 
 ## Start the fixture
 
-Requirements: Docker with Linux containers and Compose v2, Node with native Fetch and `Headers.getSetCookie()`, and the toolchain documented in AGENTS.md. Run commands from the product root. Build the admin distribution first if `dist/admin/` is absent or stale: `npm ci --prefix crates/ruphish-ui/web`, then `trunk build --release --locked` (PowerShell: set `$env:NO_COLOR = 'true'` first).
+Requirements: Docker with Linux containers and Compose v2, Node with native Fetch and `Headers.getSetCookie()`, and the toolchain documented in AGENTS.md. Run commands from the product root. Build the admin distribution first if `dist/admin/` is absent or stale: `npm ci --prefix crates/ruphish-ui/web`, then `trunk build --locked` (PowerShell: set `$env:NO_COLOR = 'true'` first).
 
 ```sh
 node tests/acceptance/lab.mjs init
@@ -64,7 +64,7 @@ Keep the admin campaign view open alongside DevTools Network on the public page.
 
 ## Repeat, stop and future CI
 
-Local manual testing retains the fixture database between runs. Future GitHub Actions jobs should use this same definition with a fresh checkout and disposable data, run the tests, then remove their containers and test state. Production uses the built application with deployment-specific configuration, real services and separately managed secrets/storage. Test accounts, local certificates, CoreDNS and Mailpit are test dependencies and must not be promoted into production. GitHub environments can later gate deployment credentials and approvals; they do not require a second copy of this test suite.
+Local manual testing retains the fixture database between runs. The [validation workflow](../.github/workflows/validation.yml) uses this same definition with a fresh checkout and disposable runner state. The [validation policy](validation.md) places this suite on fixture changes and full nightly/release source acceptance. Production uses the built application with deployment-specific configuration, real services and separately managed secrets/storage. Test accounts, local certificates, CoreDNS and Mailpit are test dependencies and must not be promoted into production. GitHub environments can later gate deployment credentials and approvals; they do not require a second copy of this test suite.
 
 ```sh
 docker compose -f tests/acceptance/compose.yaml logs --tail 60 app dns inbox

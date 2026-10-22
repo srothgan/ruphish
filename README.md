@@ -23,7 +23,7 @@ cargo run -p ruphish --locked -- --help
 
 Windows native compilation requires the Visual Studio C++ build tools and the Windows SDK; other hosts require their normal Rust native linker. Dependencies are resolved in Cargo.lock. The declared supported compiler is Rust 1.99; older versions have not been verified. Node and npm are required to install, test and bundle the CodeMirror browser component.
 
-Run the direct commands listed in [AGENTS.md](AGENTS.md) for formatting, Clippy, tests, native/WASM builds, and dependency checks. No PowerShell/Node task runner or Cargo alias layer is required. Copy config.example.json to config.json before starting listeners; see [startup and database recovery](docs/startup.md). See [development](docs/development.md) for details and [architecture](docs/architecture.md) for boundaries. If your environment exports NO_COLOR=1, set its process value to true before invoking Trunk, as documented there.
+Select relevant direct commands in [Validation](docs/validation.md); [AGENTS.md](AGENTS.md) defines the concise agent completion policy. No PowerShell/Node task runner or Cargo alias layer is required. Copy config.example.json to config.json before starting listeners; see [startup and database recovery](docs/startup.md). See [development](docs/development.md) for details and [architecture](docs/architecture.md) for boundaries. If your environment exports NO_COLOR=1, set its process value to true before invoking Trunk, as documented there.
 
 ## Source and generated files
 

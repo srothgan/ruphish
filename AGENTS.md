@@ -20,100 +20,39 @@ Native libraries are scaffolds until functionality is implemented with its tests
 - Reuse management UI from `crates/ruphish-ui/src/shared/components/`: page/table/form primitives, list search and empty states, action buttons/links and dialogs. Shared styles live in `crates/ruphish-ui/ruphish.css`; the palette lives in `crates/ruphish-ui/theme.css` and is shared with the isolated visual editor. Feature modules own their fields, permissions, API calls and state; they must not recreate generic controls or inline replacement empty states. Specialized editor tabs, disclosure controls and JavaScript-bound controls retain their specific accessibility behavior.
 - Never manually hard-wrap Markdown paragraphs or list items. Use one source line per paragraph or list item.
 
-## Toolchain and verification
+## Validation after changes
 
-Use development builds for routine implementation, local UI review, and functional/process verification: `trunk build --locked` for the UI and `cargo build --workspace --exclude ruphish-ui --locked` for native code. Run optimized release builds, including `trunk build --release --locked` and `cargo build --release`, only when the user explicitly requests final release-profile verification. Finishing a feature or preparing a commit does not authorize a release build. Development builds must still generate the real assets and distribution manifest; retain all relevant tests, linting, and asset-integrity checks.
+[Validation](docs/validation.md) is the single command and CI reference. Select checks by changed behavior and affected consumers, including shared contracts, configuration, build inputs and fixtures. During implementation run the focused regression; after edits settle run the applicable checks below. A local commit does not require full acceptance.
 
-`rust-toolchain.toml` pins Rust 1.99.1, rustfmt, Clippy, and wasm32-unknown-unknown. Manifests inherit edition 2024 and supported Rust 1.99. Lower compiler versions have not been validated. Keep the application Cargo.lock and use locked checks. Native default members exclude the browser binary deliberately; native success is not WASM verification.
+CI provides the broader backstop: `pr.yml` selects main-PR checks, `nightly.yml` runs full source acceptance, and `release.yml` adds optimized-profile checks for release-target PRs or explicit manual runs. Native CI covers Linux, Windows and macOS. The shared `validation.yml` owns source-check commands. Once the repository exists, require `PR gate` on main and `Release gate` on release/prod branches. Do not copy those full matrices into agent completion work; directly affected guarantees still require focused local regressions. Single-binary shipping is a later feature, separate from this validation foundation.
 
-Build the real admin distribution before running the native process suite: npm ci --prefix crates/ruphish-ui/web, then trunk build --locked. Process tests intentionally use the real generated WASM/JavaScript assets and fail if they are absent. Run checks directly from this directory. Do not add a task runner, check script, Cargo alias layer, or npm wrapper around these commands. Keep the actual commands visible here and report their individual results.
+| Change | Agent completion checks |
+| --- | --- |
+| Prose documentation | Relevant links, examples and consistency; no product builds |
+| Native Rust | Rustfmt, affected-target Clippy and relevant unit/integration tests |
+| Rust UI or browser-shared domain/contracts | Rustfmt, Leptos formatting where markup changes, affected functional tests and WASM Clippy/tests |
+| JavaScript | Relevant functional tests; syntax checks for files not parsed by those tests or the build |
+| UI output/assets | Development UI build; user owns visual/manual browser review |
+| HTTP/authentication/privacy | Rejection and legitimate-use cases plus the affected executable workflow |
+| Provider SQL/shared persistence | Relevant real-provider scenarios; shared storage covers affected engines; version-sensitive SQL/schema/driver changes cover both supported versions |
+| Migrations | Affected upgrade paths, preserved data, rollback/recovery and reopen |
+| Dependencies/toolchain | Dependency policy and affected native/browser targets |
+| Validation workflows/selection | Selector tests, workflow lint and selection/coverage inspection; no automatic product acceptance run |
 
-Formatting is required before a commit: `cargo fmt --all -- --check` and `leptosfmt --check crates/ruphish-ui/src crates/ruphish-ui/tests` must both pass. `rustfmt.toml` owns ordinary Rust layout; `leptosfmt.toml` owns Leptos markup. Both use 100-column target width, four spaces and LF endings. Rustfmt alone cannot verify `view!` readability. Keep substantial callbacks and transformations outside markup when a named function or variable makes their behavior clearer. Do not use formatter skips to preserve compressed code.
+- Keep direct Cargo/Node/Docker commands visible; do not add a local test-runner, Cargo alias or npm wrapper. CI selection scripts may choose jobs but must not execute checks or construct shell commands from changed paths.
+- Do not automatically run the full process suite, historical migrations, all database versions or public Docker acceptance after ordinary edits. Run these when their guarantees are affected or the task requests acceptance.
+- Never treat ignored, skipped, unavailable or unexecuted checks as passing. Report exact commands and limitations. Preserve the legacy-test map and meaningful negative guarantees.
+- Run one heavy workload at a time locally, initially one build job and test thread with bounded Tokio/Rayon workers. Investigate failures before retrying; rerun only affected checks after corrections.
+- Run rustfmt for Rust changes and Leptos formatting for markup changes. Preserve the pinned formatters, 100-column Rust/markup style and LF endings. Review formatter edits; do not blanket-skip formatting.
+- Use Clippy for static compilation/lint feedback; avoid duplicate cargo check for identical targets. Build when an executable, changed distribution or artifact test requires it. Native success does not prove WASM compatibility.
+- Run npm ci on fresh installations or changed dependency inputs. Reuse unchanged valid assets. Trunk runs the JS/CSS generator; do not repeat it immediately before Trunk. Standalone WASM checks may require prior generation.
+- Use development builds normally; release builds require an explicit release task. Keep Trunk staging at dist/.stage and the completed distribution at dist/admin. Never hand-edit generated files or weaken manifest/path checks.
+- Keep one canonical Docker fixture under tests/acceptance. Use disposable server databases, preserve application-lab data and never contact real recipients/integration endpoints during tests.
+- Local PR, nightly and manual validation workflows are authorized. Remote branch protection, publishing and deployments remain separate explicit actions. Source acceptance does not validate untested release artifacts.
 
-Install the pinned formatter with `cargo install leptosfmt --version 0.1.33 --locked --profile dev`; its required version is recorded in Cargo.toml workspace metadata. To apply formatting, run `leptosfmt crates/ruphish-ui/src crates/ruphish-ui/tests`, then `cargo fmt --all`. Review the diff, especially comments inside macro expressions and authored text. `rust-analyzer.toml` enables the same formatter pipeline for supporting editors. See [formatting and editor setup](docs/development.md#formatting-and-editor-setup).
+## Toolchain
 
-After native Rust changes, run:
-
-```sh
-cargo fmt --all -- --check
-cargo clippy --workspace --exclude ruphish-ui --all-targets --locked -- -D warnings
-cargo test --workspace --exclude ruphish-ui --locked
-cargo build --workspace --exclude ruphish-ui --locked
-```
-
-After browser/contract changes, install browser dependencies, run functional tests, generate the editor modules and admin stylesheet, then separately check, lint, and build the browser target. Run each command directly from the product root:
-
-```sh
-leptosfmt --check crates/ruphish-ui/src crates/ruphish-ui/tests
-npm ci --prefix crates/ruphish-ui/web
-node --check crates/ruphish-adapters/src/landing-collector.js
-node --check crates/ruphish-ui/web/build.mjs
-node --check crates/ruphish-ui/web/state.mjs
-node --check crates/ruphish-ui/web/http.mjs
-node --check crates/ruphish-ui/web/editor.mjs
-node --check crates/ruphish-ui/web/navigation.mjs
-node --check crates/ruphish-ui/web/account-menu.mjs
-node --check crates/ruphish-ui/web/analysis-time.mjs
-node --check crates/ruphish-ui/web/datetime.mjs
-node --check crates/ruphish-ui/web/anchored-panel.mjs
-node --check crates/ruphish-ui/web/template-html.mjs
-node --check crates/ruphish-ui/web/visual-session.mjs
-node --check crates/ruphish-ui/web/visual-frame.mjs
-node --check crates/ruphish-ui/web/visual-shell.mjs
-node --check crates/ruphish-ui/web/visual-controller.mjs
-node --test crates/ruphish-ui/web/tests/*.test.mjs
-cargo test -p ruphish-ui --lib --locked
-cargo test -p ruphish-ui --test browser_requests --target wasm32-unknown-unknown --locked
-cargo clippy -p ruphish-ui --lib --locked -- -D warnings
-node crates/ruphish-ui/web/build.mjs
-cargo check -p ruphish-ui --target wasm32-unknown-unknown --locked
-cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --locked -- -D warnings
-cargo clippy -p ruphish-ui --test browser_requests --target wasm32-unknown-unknown --locked -- -D warnings
-trunk build --locked
-```
-
-Trunk 0.21.14 expects NO_COLOR to be a boolean. If the invoking environment has NO_COLOR=1, set the process value to true before direct Trunk commands: `$env:NO_COLOR = 'true'` in PowerShell, or `NO_COLOR=true trunk build --locked` in a POSIX shell. Do not change persistent user/system environment settings.
-
-The WASM request tests execute the production Fetch request builder in Node using wasm-bindgen-test-runner. Install the matching runner with cargo install wasm-bindgen-cli --version 0.2.129 --locked; keep its version aligned with the locked wasm-bindgen crate. The target runner in .cargo/config.toml is the Cargo test runtime, not a check wrapper. These tests require Node with native Fetch support and do not launch or automate a browser.
-
-For dependency changes and the full workspace acceptance pass, run:
-
-```sh
-npm audit --prefix crates/ruphish-ui/web
-cargo deny --version
-cargo deny check bans licenses sources advisories
-```
-
-The required cargo-deny version is recorded in Cargo.toml workspace metadata; Trunk enforces its own exact version from Trunk.toml. Do not silently skip unavailable tools or failed checks. No application feature flags exist yet; document and check supported combinations as features are introduced.
-
-CodeMirror, Jodit and their browser dependencies are pinned in crates/ruphish-ui/web/package-lock.json. Node/npm are build/test tools, not server dependencies. Run node crates/ruphish-ui/web/build.mjs before direct WASM checks. Trunk.toml explicitly runs that build-only generator before each Trunk build and writes a SHA-256 distribution manifest afterward; the server rejects mismatched assets. This generator bundles the admin stylesheet (including its shared palette), editor modules and isolated visual-editor styles; it builds assets only; all checks remain separate direct commands. Review npm package licenses and preserve runtime notices in web/THIRD-PARTY-NOTICES.txt when dependencies change; cargo-deny only checks Rust dependencies.
-
-Browser output is generated in dist/admin. Do not hand-edit or check in target/ or dist/, and rebuild after UI changes.
-
-Shared lints must be inherited by every member. Native and browser dependency graphs are checked separately. Dependency policy allows reviewed permissive licenses and crates.io sources, rejects unknown Git/registry sources and advisories/yanked packages, and reports duplicate versions for review. Do not silence a finding with broad exemptions; record narrow, reasoned exceptions only where necessary.
-
-The UI build workspace and the server asset root must remain separate. Trunk owns `dist/` and stages under `dist/.stage/`; the post-build hook arranges completed assets under `admin/`, producing the server distribution at `dist/admin/`. Never configure Trunk to stage inside the served directory or teach the server to ignore build artifacts. The server continues to reject hidden/unexpected paths and mismatched manifests.
-
-Public transport/proxy changes also require the executable `startup_process` tests. For actual DNS/TLS/SMTP acceptance, use the independent Compose fixture and direct commands in [docs/public-acceptance.md](docs/public-acceptance.md), including `node --test tests/acceptance/public.test.mjs`. This opt-in fixture is separate from ordinary Cargo checks and manual browser acceptance. Its generated keys, credentials, database and mailbox contents are local test state, never committed artifacts.
-
-Maintain one canonical Docker test fixture under `tests/acceptance/`. Extend its services and scenarios in place; adding tests does not justify another persistent lab, alternate login, port set or duplicated setup tooling. Preserve local state during fixture changes. Future CI uses the same fixture with disposable per-job state; production configuration and secrets remain separate from test infrastructure.
-
-MySQL changes also require real-server verification on both pinned LTS images using the same fixture service. Follow [MySQL verification](docs/mysql-verification.md), set `RUPHISH_MYSQL_TEST_PORT` from the published service port, and run these direct commands. Ordinary Cargo checks report opt-in server scenarios as ignored; that is not MySQL verification.
-
-```sh
-cargo test -p ruphish-adapters --test mysql_preflight --locked -- --ignored --nocapture
-cargo test -p ruphish-adapters --test database_providers mysql_ --locked -- --ignored --nocapture
-cargo test -p ruphish --test startup_process mysql_process --locked -- --ignored --nocapture
-```
-
-PostgreSQL changes require the same canonical fixture and real-server checks on both pinned supported majors, following [PostgreSQL verification](docs/postgresql-verification.md). Set `RUPHISH_POSTGRES_TEST_PORT` to its published service port and run:
-
-```sh
-cargo test -p ruphish-adapters --test database_providers postgres_ --locked -- --ignored --nocapture
-cargo test -p ruphish --test startup_process postgres_process --locked -- --ignored --nocapture
-```
-
-Provider filters keep opt-in suites independent of which service is running; ordinary workspace tests still exercise the shared SQLite workflow. Do not run every ignored provider case with only one server configured. Driver connections in tests are restricted to fixture setup, independent assertions and fault injection; operations under test always use the facade or executable HTTP boundary.
+`rust-toolchain.toml` owns Rust/components/targets. `Cargo.toml` workspace metadata owns leptosfmt and cargo-deny versions; `Trunk.toml` owns Trunk. Use Cargo/rustup CLI installation and dependency commands. See [development setup](docs/development.md) and [validation prerequisites](docs/validation.md#prerequisites). Keep dependency exceptions narrow and source/license notices intact.
 
 ## Data and side effects
 

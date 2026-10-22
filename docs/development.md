@@ -4,35 +4,7 @@ Run commands from this product directory. rust-toolchain.toml selects Rust 1.99.
 
 ## Direct checks
 
-Run each command directly and report its result. AGENTS.md is the canonical command list. Do not introduce a script, Cargo alias layer, or npm task wrapper around these checks. Node and npm install, test and bundle the CodeMirror browser component; Node is not a server runtime dependency.
-
-```sh
-cargo fmt --all -- --check
-leptosfmt --check crates/ruphish-ui/src crates/ruphish-ui/tests
-cargo clippy --workspace --exclude ruphish-ui --all-targets --locked -- -D warnings
-cargo test --workspace --exclude ruphish-ui --locked
-cargo build --workspace --exclude ruphish-ui --locked
-npm ci --prefix crates/ruphish-ui/web
-node --check crates/ruphish-ui/web/build.mjs
-node --check crates/ruphish-ui/web/state.mjs
-node --check crates/ruphish-ui/web/editor.mjs
-node --check crates/ruphish-ui/web/template-html.mjs
-node --check crates/ruphish-ui/web/visual-session.mjs
-node --check crates/ruphish-ui/web/visual-frame.mjs
-node --check crates/ruphish-ui/web/visual-shell.mjs
-node --check crates/ruphish-ui/web/visual-controller.mjs
-node --test crates/ruphish-ui/web/tests/*.test.mjs
-cargo test -p ruphish-ui --lib --locked
-cargo clippy -p ruphish-ui --lib --locked -- -D warnings
-node crates/ruphish-ui/web/build.mjs
-cargo check -p ruphish-ui --target wasm32-unknown-unknown --locked
-cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --locked -- -D warnings
-trunk build --locked
-npm audit --prefix crates/ruphish-ui/web
-cargo deny check bans licenses sources advisories
-```
-
-No application feature flags exist yet, so these commands cover the current supported combinations. The same binary supports SQLite, MySQL and PostgreSQL through startup configuration. Introduce future feature combinations with an explicit verification matrix; do not enable incompatible combinations with a blanket --all-features.
+[Validation](validation.md) owns the change-specific catalog, direct commands, CI selection and nightly/release policy. [AGENTS.md](../AGENTS.md) provides completion rules. Run relevant commands directly; no local task runner is required. Node/npm are browser build/test tools, not server runtime dependencies.
 
 ## Formatting and editor setup
 
@@ -43,7 +15,7 @@ cargo install leptosfmt --version 0.1.33 --locked --profile dev
 leptosfmt --version
 ```
 
-The tool version must match `[workspace.metadata.tools]` in Cargo.toml. The formatter is a development executable, not an application dependency. Rustfmt is supplied by the pinned Rust toolchain. Both formatting checks are required before committing; these commands apply formatting and then check the result:
+The tool version must match `[workspace.metadata.tools]` in Cargo.toml. The formatter is a development executable, not an application dependency. Rustfmt is supplied by the pinned Rust toolchain. Check Rust formatting after Rust changes and Leptos formatting after markup changes; these commands apply formatting and then check the result:
 
 ```sh
 leptosfmt crates/ruphish-ui/src crates/ruphish-ui/tests
@@ -82,7 +54,7 @@ Trunk 0.21.14 parses NO_COLOR as a boolean in both root and subcommand options, 
 
 ## Dependency policy
 
-deny.toml evaluates Windows/Linux native and browser graphs, explicitly allows reviewed permissive licenses and crates.io, rejects unknown registry/Git sources, and checks advisories/yanked packages. Duplicate versions are reported for review rather than globally denied because third-party version splits do not necessarily imply an actionable conflict. Avoid broad suppressions. No advisory ignore entries are configured. Network access is required for initial dependency/tool downloads and current advisory information; a network failure is a failed/unavailable check, not a clean audit.
+deny.toml evaluates Windows/Linux/macOS native and browser graphs, explicitly allows reviewed permissive licenses and crates.io, rejects unknown registry/Git sources, and checks advisories/yanked packages. Duplicate versions are reported for review rather than globally denied because third-party version splits do not necessarily imply an actionable conflict. Avoid broad suppressions. No advisory ignore entries are configured. Network access is required for initial dependency/tool downloads and current advisory information; a network failure is a failed/unavailable check, not a clean audit.
 
 Exact-version license exceptions in deny.toml identify the reviewed dependencies and reasons; do not broaden the general allowlist to silence a finding. TLS trust-data agreements and resource-parser notices are retained in [resource dependency notices](resource-dependencies.md). CodeMirror and Jodit runtime packages are MIT; their notices are preserved in the browser output. cargo-deny does not inspect npm dependencies; npm audit checks their advisory graph separately.
 

@@ -1,0 +1,95 @@
+name: Release checks
+
+# TODO: Add single-binary and Docker image shipping in a separate feature step.
+# Embed the required runtime assets, verify the shipped binary and image, and add
+# checksums, signing and explicitly controlled publication after validation passes.
+
+on:
+  pull_request:
+    branches: ['release/**', prod]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_BUILD_JOBS: '1'
+  RUST_TEST_THREADS: '1'
+  TOKIO_WORKER_THREADS: '2'
+  RAYON_NUM_THREADS: '2'
+  NO_COLOR: 'true'
+
+jobs:
+  source:
+    uses: ./.github/workflows/validation.yml
+    with:
+      profile: full
+
+  assets:
+    name: Optimized browser distribution
+    needs: source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/toolchain
+        with:
+          browser: 'true'
+          cache-group: release-browser
+      - run: npm ci --prefix crates/ruphish-ui/web
+      - run: trunk build --release --locked
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release-admin
+          path: dist/admin/
+          if-no-files-found: error
+          retention-days: 7
+
+  native:
+    name: Release profile on ${{ matrix.runner }}
+    needs: assets
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        runner: [ubuntu-24.04, windows-2025, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/toolchain
+        with:
+          cache-group: release-native
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: release-admin
+          path: dist/admin
+      - name: Optimized native and executable behavior
+        run: cargo test --release --workspace --exclude ruphish-ui --locked -- --nocapture --test-threads=1
+
+  gate:
+    name: Release gate
+    needs: [source, assets, native]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node --input-type=module <<'NODE'
+          for (const [name, job] of Object.entries(JSON.parse(process.env.RESULTS))) {
+            if (job.result !== 'success') throw new Error(name + ': ' + job.result);
+          }
+          NODE

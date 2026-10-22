@@ -1,4 +1,5 @@
 /target/
+/.ci-tools/
 /dist/
 /data/
 /tests/acceptance/data/

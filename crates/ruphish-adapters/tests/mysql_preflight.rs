@@ -45,9 +45,16 @@ fn mysql_configuration_and_legacy_dsn_reject_ambiguous_or_unsafe_inputs() {
     assert!(serde_json::from_str::<MySqlConfig>(source).is_err());
 }
 
-#[tokio::test]
-#[ignore = "Requires the canonical acceptance mysql service; run explicitly with RUPHISH_MYSQL_TEST_PORT"]
-async fn mysql_preflight_validates_transport_all_legacy_versions_and_rejects_mutated_histories() {
+struct PreflightFixture {
+    inspector: MySqlConnection,
+    options: MySqlConnectOptions,
+    config: MySqlConfig,
+    root: PathBuf,
+    name: String,
+    lock: String,
+}
+
+async fn fixture() -> PreflightFixture {
     let port: u16 = std::env::var("RUPHISH_MYSQL_TEST_PORT")
         .expect("Set RUPHISH_MYSQL_TEST_PORT from docker compose port mysql 3306")
         .parse()
@@ -89,6 +96,39 @@ async fn mysql_preflight_validates_transport_all_legacy_versions_and_rejects_mut
     config.port = port;
     config.ca_path = Some(ca);
     config.lock_timeout_seconds = 1;
+    let lock = format!(
+        "ruphish:migrate:{}",
+        &hex::encode(Sha256::digest(name.as_bytes()))[..40]
+    );
+    PreflightFixture {
+        inspector,
+        options,
+        config,
+        root,
+        name,
+        lock,
+    }
+}
+
+async fn cleanup(mut inspector: MySqlConnection, name: &str) {
+    // Only the random database created by this test is removed.
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!("DROP DATABASE `{name}`")))
+        .execute(&mut inspector)
+        .await
+        .unwrap();
+    inspector.close().await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires the canonical acceptance mysql service; run explicitly with RUPHISH_MYSQL_TEST_PORT"]
+async fn mysql_preflight_transport_credentials_and_bounded_ownership() {
+    let PreflightFixture {
+        mut inspector,
+        config,
+        name,
+        lock,
+        ..
+    } = fixture().await;
     assert_eq!(
         inspect_mysql(&config).await.unwrap().schema,
         MySqlSchema::Empty
@@ -108,10 +148,6 @@ async fn mysql_preflight_validates_transport_all_legacy_versions_and_rejects_mut
     assert!(
         inspect_mysql(&missing).await.is_err(),
         "must not provision a missing database"
-    );
-    let lock = format!(
-        "ruphish:migrate:{}",
-        &hex::encode(Sha256::digest(name.as_bytes()))[..40]
     );
     let owned: i64 = sqlx::query_scalar("SELECT GET_LOCK(?,1)")
         .bind(&lock)
@@ -134,6 +170,20 @@ async fn mysql_preflight_validates_transport_all_legacy_versions_and_rejects_mut
         inspect_mysql(&config).await.unwrap().schema,
         MySqlSchema::Empty
     );
+    cleanup(inspector, &name).await;
+}
+
+#[tokio::test]
+#[ignore = "Requires the canonical acceptance mysql service; run explicitly with RUPHISH_MYSQL_TEST_PORT"]
+async fn mysql_preflight_all_legacy_versions_cancellation_and_mutated_histories() {
+    let PreflightFixture {
+        mut inspector,
+        options,
+        config,
+        root,
+        name,
+        lock,
+    } = fixture().await;
     sqlx::raw_sql("CREATE TABLE goose_db_version(id BIGINT AUTO_INCREMENT PRIMARY KEY,version_id BIGINT NOT NULL,is_applied BOOLEAN NOT NULL,tstamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP); INSERT INTO goose_db_version(version_id,is_applied) VALUES(0,1);").execute(&mut inspector).await.unwrap();
     let fixtures = root.join("tests/fixtures/mysql-legacy");
     let mut scripts: Vec<_> = std::fs::read_dir(&fixtures)
@@ -239,10 +289,5 @@ async fn mysql_preflight_validates_transport_all_legacy_versions_and_rejects_mut
         inspect_mysql(&config).await,
         Err(Error::UnsupportedSchema)
     ));
-    // Only the random database created by this test is removed.
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!("DROP DATABASE `{name}`")))
-        .execute(&mut inspector)
-        .await
-        .unwrap();
-    inspector.close().await.unwrap();
+    cleanup(inspector, &name).await;
 }

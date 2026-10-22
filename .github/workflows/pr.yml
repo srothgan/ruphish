@@ -1,0 +1,35 @@
+name: PR checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Manual check selection; PRs always select from their diff
+        type: choice
+        options: [auto, native, ui, databases, full]
+        default: auto
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    uses: ./.github/workflows/validation.yml
+    with:
+      profile: ${{ github.event_name == 'pull_request' && 'auto' || inputs.profile }}
+  gate:
+    name: PR gate
+    needs: checks
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - env:
+          RESULT: ${{ needs.checks.result }}
+        run: test "$RESULT" = success

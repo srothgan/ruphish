@@ -1,0 +1,53 @@
+name: Validation toolchain
+description: Restore cached compilation and install pinned tools; does not run checks.
+inputs:
+  browser:
+    description: Install Trunk and the WASM test runner
+    default: 'false'
+  format-ui:
+    description: Install Leptos formatter
+    default: 'false'
+  dependencies:
+    description: Install cargo-deny
+    default: 'false'
+  cache-group:
+    description: Separate native and browser compilation caches
+    default: native
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+      with:
+        node-version: '26.8.1'
+        package-manager-cache: false
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+          .ci-tools
+        key: validation-${{ runner.os }}-${{ runner.arch }}-${{ inputs.cache-group }}-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', 'Trunk.toml', '.github/actions/toolchain/action.yml') }}-${{ github.sha }}
+        restore-keys: |
+          validation-${{ runner.os }}-${{ runner.arch }}-${{ inputs.cache-group }}-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', 'Trunk.toml', '.github/actions/toolchain/action.yml') }}-
+    - name: Select pinned Rust toolchain
+      shell: bash
+      run: |
+        rustup show
+        echo "$GITHUB_WORKSPACE/.ci-tools/bin" >> "$GITHUB_PATH"
+    - name: Install browser tools if missing
+      if: inputs.browser == 'true'
+      shell: bash
+      run: |
+        if ! command -v trunk >/dev/null; then cargo install trunk --version 0.21.14 --locked --profile dev --root .ci-tools; fi
+        if ! command -v wasm-bindgen-test-runner >/dev/null; then cargo install wasm-bindgen-cli --version 0.2.129 --locked --profile dev --root .ci-tools; fi
+    - name: Install formatter if missing
+      if: inputs.format-ui == 'true'
+      shell: bash
+      run: |
+        if ! command -v leptosfmt >/dev/null; then cargo install leptosfmt --version 0.1.33 --locked --profile dev --root .ci-tools; fi
+    - name: Install dependency checker if missing
+      if: inputs.dependencies == 'true'
+      shell: bash
+      run: |
+        if ! command -v cargo-deny >/dev/null; then cargo install cargo-deny --version 0.19.9 --locked --profile dev --root .ci-tools; fi
