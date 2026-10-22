@@ -1,0 +1,46 @@
+:root {
+  --sl-font: 'IBM Plex Sans', sans-serif;
+  --sl-font-mono: 'IBM Plex Mono', monospace;
+  --sl-color-accent-low: #103f39;
+  --sl-color-accent: #5cc8bb;
+  --sl-color-accent-high: #cfe9e5;
+  --sl-color-black: #0c2421;
+  --sl-color-gray-6: #12312c;
+  --sl-color-gray-5: #284a43;
+  --sl-color-gray-4: #60857a;
+  --sl-color-gray-3: #9bb9b1;
+  --sl-color-gray-2: #cfe0dc;
+  --sl-color-gray-1: #eef4f2;
+  --sl-content-width: 49rem;
+  --sl-text-body: 1rem;
+  --sl-nav-height: 4.5rem;
+}
+:root[data-theme='light'] {
+  --sl-color-accent-low: #e9f5f3;
+  --sl-color-accent: #0b6b63;
+  --sl-color-accent-high: #0a534d;
+  --sl-color-white: #13302c;
+  --sl-color-gray-1: #23433c;
+  --sl-color-gray-2: #39574f;
+  --sl-color-gray-3: #5b716e;
+  --sl-color-gray-4: #8ba49e;
+  --sl-color-gray-5: #dde5e3;
+  --sl-color-gray-6: #f4f7f6;
+  --sl-color-gray-7: #f8faf9;
+  --sl-color-black: #fff;
+}
+.site-title img { max-height: 2.35rem; }
+header.header { background: #0c2f2b; border-bottom-color: #28534c; color: #eef4f2; }
+header.header .social-icons a, header.header starlight-theme-select label { color: #eef4f2; }
+header.header .social-icons::after { border-color: #60857a; }
+header.header select option { background: #0c2f2b; color: #eef4f2; }
+header.header [data-open-modal] { background: #17473f; border-color: #60857a; color: #eef4f2; }
+header.header [data-open-modal] kbd { background: #0c2f2b; color: #eef4f2; }
+.sl-menu-button { background: #eef4f2; color: #0c2f2b; }
+.sl-markdown-content { line-height: 1.75; }
+.sl-markdown-content :is(h2, h3) { font-weight: 600; letter-spacing: -0.025em; }
+.sl-markdown-content table { font-size: 0.925rem; }
+.sl-markdown-content :is(th, td) { padding: 0.75rem 1rem; }
+.sl-markdown-content img { border-radius: 0.625rem; }
+a:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid var(--sl-color-text-accent); outline-offset: 4px; }
+@media (min-width: 72rem) { .right-sidebar { font-size: 0.875rem; } }

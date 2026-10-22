@@ -1,0 +1,39 @@
+---
+import whiteWordmark from '../assets/ruphish-wordmark-white.svg';
+import { repository } from '../site';
+interface Props { compact?: boolean; }
+const { compact = false } = Astro.props;
+---
+<footer class:list={['project-footer', { compact }]} aria-label="Ruphish project">
+  <div class="footer-content">
+    {!compact && <div class="footer-brand"><a href="/"><img src={whiteWordmark.src} alt="Ruphish home" width="137" height="45" /></a><p>Phishing simulations.<br />A clearer picture.</p></div>}
+    <nav aria-label="Getting started"><h2>Start here</h2><a href="/docs/getting-started/">Getting started</a><a href="/docs/getting-started/first-campaign/">Your first campaign</a><a href="/docs/">Documentation</a></nav>
+    <nav aria-label="Project links"><h2>Project</h2><a href="/about/">About Ruphish</a><a href={repository}>Source code</a><a href={`${repository}/issues`}>Issues & ideas</a></nav>
+    <nav aria-label="Acknowledgments and license"><h2>Built on open source</h2><a href="https://getgophish.com/">Gophish</a><a href={`${repository}/blob/main/LICENSE`}>MIT license</a><a href="/font-licenses.txt">Font notices</a></nav>
+  </div>
+  <div class="footer-bottom"><span>© 2026 Simon Peter Rothgang</span><p>An independent project inspired by Gophish. Not affiliated with its maintainers.</p></div>
+</footer>
+<style>
+  .project-footer { --footer-text: #eef4f2; --footer-heading: #fff; background: #0c2f2b; color: var(--footer-text); padding: 56px max(32px, calc((100% - 1320px) / 2)) 24px; font-family: 'IBM Plex Sans', sans-serif; }
+  .footer-content { display: grid; grid-template-columns: 1.4fr repeat(3, 1fr); gap: 36px; align-items: start; }
+  img { display: block; max-width: 100%; height: auto; }
+  .footer-brand p { font-size: 0.9375rem; margin-top: 16px; line-height: 1.6; }
+  nav { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+  .project-footer nav h2 { color: var(--footer-heading); font-size: 1rem; letter-spacing: normal; line-height: 1.5; margin: 0 0 4px; font-weight: 600; }
+  .project-footer a { color: var(--footer-text); font-size: 0.9375rem; text-decoration: none; text-underline-offset: 0.2em; }
+  .project-footer p { color: var(--footer-text); }
+  .project-footer a:hover { text-decoration: underline; color: var(--footer-heading); }
+  a:focus-visible { outline: 2px solid #5cc8bb; outline-offset: 4px; }
+  .footer-bottom { margin-top: 40px; padding-top: 20px; border-top: 1px solid #28534c; display: flex; flex-wrap: wrap; gap: 12px 32px; justify-content: space-between; font-size: 0.75rem; }
+  .footer-bottom p { margin: 0; font-size: inherit; line-height: 1.6; max-width: 490px; }
+  .compact { --footer-text: var(--sl-color-text); --footer-heading: var(--sl-color-white); background: transparent; padding: 32px 0 0; margin-top: 32px; border-top: 1px solid var(--sl-color-hairline); }
+  .compact .footer-content { grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .compact .footer-bottom { border-color: var(--sl-color-hairline); }
+  @media (max-width: 800px) { .footer-content { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 480px) {
+    .project-footer { padding: 40px 16px 24px; }
+    .compact { padding: 24px 0 0; }
+    .compact .footer-content { grid-template-columns: 1fr; }
+    .footer-content { gap: 32px 20px; }
+  }
+</style>

@@ -3,11 +3,21 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { select, smokeFilters, ordinaryAdapterTargets } from './select.mjs';
 
-test('documentation does not start builds or databases', () => {
+test('documentation checks the website without starting product builds or databases', () => {
   const result = select(['docs/startup.md', 'AGENTS.md']);
   assert.equal(result.native, false);
   assert.equal(result.assets, false);
   assert.equal(result.database, false);
+  assert.equal(result.website, true);
+});
+
+test('website dependencies and assets remain independent of Rust and databases', () => {
+  for (const path of ['website/package-lock.json', 'assets/dashboard.png', 'website/astro.config.mjs', 'docs/api/index.md']) {
+    const result = select([path]);
+    assert.equal(result.website, true, path);
+    assert.equal(result.native || result.ui || result.assets || result.database, false, path);
+  }
+  assert.equal(select(['crates/ruphish-ui/src/overview.rs']).website, false);
 });
 test('UI work checks browser consumers without starting databases', () => {
   const result = select(['crates/ruphish-ui/src/account.rs']);

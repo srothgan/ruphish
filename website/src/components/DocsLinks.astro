@@ -1,0 +1,9 @@
+---
+import SocialIcons from '@astrojs/starlight/components/SocialIcons.astro';
+---
+<a class="about-link" href="/about/">About</a>
+<SocialIcons><slot /></SocialIcons>
+<style>
+  .about-link { color: var(--sl-color-text); font-size: var(--sl-text-sm); text-decoration: none; }
+  .about-link:hover { text-decoration: underline; }
+</style>

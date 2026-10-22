@@ -1,0 +1,31 @@
+---
+import { Image } from 'astro:assets';
+import Site from '../layouts/Site.astro';
+import dashboard from '../assets/dashboard.png';
+import { repository } from '../site';
+---
+<Site title="Ruphish — Phishing simulations. A clearer picture.">
+  <section class="hero shell" aria-labelledby="hero-title">
+    <h1 id="hero-title">Phishing simulations.<br />A clearer picture.</h1>
+    <p class="hero-intro">From the first campaign to the next improvement. Prepare your exercises, follow delivery, and understand how people respond.</p>
+    <div class="actions"><a class="button primary" href="/docs/getting-started/">Get started</a><a class="button secondary" href={repository}>View source</a></div>
+    <figure class="dashboard-showcase">
+      <a href={dashboard.src} aria-label="Open the full dashboard screenshot">
+        <Image src={dashboard} alt="Ruphish dashboard showing campaign outcomes, changes from the previous month, and recent campaigns using synthetic data." widths={[640, 960, 1440, 1920, 3024]} sizes="(max-width: 1400px) 94vw, 1320px" loading="eager" fetchpriority="high" format="webp" />
+      </a>
+      <figcaption>The Ruphish dashboard. Example campaigns and synthetic data.</figcaption>
+    </figure>
+  </section>
+  <section class="shell workflow" aria-labelledby="workflow-title">
+    <div class="section-intro"><h2 id="workflow-title">The whole exercise,<br />in one place.</h2><p>Keep the context from preparation through reporting, with the details close at hand.</p></div>
+    <div class="capabilities">
+      <article><h3>Prepare with confidence</h3><p>Bring together recipients, email templates, landing pages, and sending profiles. Save a draft and review it before launch.</p><a href="/docs/user-guide/campaigns/drafts/">Preparing a campaign</a></article>
+      <article><h3>Know what happened</h3><p>Follow delivery status and recorded interactions. Move from the overview to an individual campaign and its recipient timeline.</p><a href="/docs/user-guide/results/dashboard/">Reading the dashboard</a></article>
+      <article><h3>Make results useful</h3><p>Compare observations, review reported messages, and export results for your own analysis. Understand what each metric can tell you.</p><a href="/docs/user-guide/results/metrics/">Understanding the metrics</a></article>
+    </div>
+  </section>
+  <section class="project-story">
+    <div class="shell story-inner"><h2>A familiar idea.<br />A new chapter.</h2><div><p>Ruphish grew out of using Gophish during a master’s thesis. It carries those useful workflows forward with a Rust backend, a new administration interface, and ideas from hands-on experience and the community.</p><a class="text-link" href="/about/">Why I’m building Ruphish</a></div></div>
+  </section>
+  <section class="shell start-section"><div><h2>Start with a local exercise.</h2><p>Build from source and try a campaign in the contained Docker fixture.</p></div><a class="button primary" href="/docs/getting-started/first-campaign/">Follow the tutorial</a></section>
+</Site>

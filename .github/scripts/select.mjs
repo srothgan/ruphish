@@ -26,7 +26,7 @@ export const ordinaryAdapterTargets = new Set(['accounts', 'campaign_storage', '
 
 export function select(paths, profile = 'auto', event = 'pull_request', branch = 'main') {
   if (!['auto', 'native', 'ui', 'databases', 'full'].includes(profile)) throw new Error('Unknown validation profile');
-  const selected = { native: false, ui: false, dependencies: false, smoke: false, mysql: false, postgres: false, migration: false, provider_process: false, full: false, public: false, platform_full: false, rust_format: false };
+  const selected = { native: false, ui: false, website: false, dependencies: false, smoke: false, mysql: false, postgres: false, migration: false, provider_process: false, full: false, public: false, platform_full: false, rust_format: false };
   const filters = new Set();
   const all = () => {
     for (const key of Object.keys(selected)) selected[key] = true;
@@ -45,6 +45,7 @@ export function select(paths, profile = 'auto', event = 'pull_request', branch =
   else if (event === 'workflow_dispatch') all(); // Manual auto has no PR diff: never guess from HEAD~1.
   else for (const original of paths) {
     const path = original.replaceAll('\\', '/');
+    if (path.startsWith('website/') || path.startsWith('docs/') || path.startsWith('assets/')) { selected.website = true; continue; }
     if (path.startsWith('.github/') || /(^|\/)(Cargo\.(toml|lock)|rust-toolchain\.toml)$/.test(path) || path.startsWith('.cargo/') || path === 'deny.toml') {
       all();
       break;

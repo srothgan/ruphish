@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "astro",
+  "installCommand": "npm ci",
+  "buildCommand": "npx astro build && node tools/check-site.mjs",
+  "outputDirectory": "dist",
+  "ignoreCommand": "node tools/ignore-build.mjs"
+}

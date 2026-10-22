@@ -1,0 +1,22 @@
+---
+import Site from '../layouts/Site.astro';
+import { repository } from '../site';
+---
+<Site title="About Ruphish" description="Why Simon Peter Rothgang is building Ruphish: a project inspired by using Gophish during an Information Systems master’s thesis in Münster, Germany.">
+  <article class="about shell">
+    <header class="about-heading"><h1>A project I valued.<br />An idea worth continuing.</h1><p class="lead">Ruphish began with my master’s thesis, a tool I enjoyed using, and the wish to keep improving it.</p></header>
+    <div class="about-body">
+      <h2>Where it started</h2>
+      <p>I’m Simon Peter Rothgang, an Information Systems master’s student from Münster, Germany. I used <a href="https://getgophish.com/">Gophish</a> during my master’s thesis and really appreciated the project and what it made possible.</p>
+      <p>I was disappointed by the lack of ongoing maintenance. There were things I wanted to improve from my own experience, and ideas in the Gophish issue tracker that I wanted to explore. I decided to build on the workflows I liked and give the project a new direction.</p>
+      <h2>What I’m building</h2>
+      <p>Ruphish is my independently maintained successor: a native Rust backend and a new Rust/WASM administration interface. Its direction comes from practical experience, features I wished I had during my thesis, and requests raised by the Gophish community.</p>
+      <p>The focus is on understandable campaign workflows, useful reporting, and careful handling of participant data. The supported tracking model records interaction events and optional presence indicators. It does not offer collection of participant-entered credentials or arbitrary form values. The <a href="/docs/user-guide/participant-data/">participant-data guide</a> explains the model and its implications.</p>
+      <h2>Built on a contribution I respect</h2>
+      <p>Gophish made phishing simulation accessible to many people, including me. Ruphish acknowledges that foundation and preserves attribution for reused material. This is an independent project, without an official affiliation with the Gophish maintainers.</p>
+      <h2>Follow the work</h2>
+      <p>Ruphish is under active development. The current starting point is a source build and a local Docker exercise; downloadable releases are not yet the documented installation path. The docs describe the current source and distinguish supported workflows from compatibility differences.</p>
+      <p>You can <a href={repository}>explore the source</a>, <a href={`${repository}/issues`}>share an issue or a feature idea</a>, or <a href="/docs/getting-started/">try Ruphish locally</a>.</p>
+    </div>
+  </article>
+</Site>
