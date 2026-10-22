@@ -1,0 +1,38 @@
+---
+title: Metric definitions
+description: Understand observed events, progression counts, denominators, and reporting limitations.
+sidebar:
+  order: 2
+---
+
+Ruphish separates recorded observations from summary progression. That distinction explains why a summary can show an opened recipient even when their timeline has no separate open event.
+
+| Observation | What was recorded |
+| --- | --- |
+| Accepted/sent | SMTP acceptance |
+| Opened | A tracking-image request |
+| Clicked | A campaign landing-page visit |
+| Submitted | A supported presence-only form event |
+| Reported | A report notification |
+
+## Counts and progression
+
+Raw event totals include repeated observations. Unique counts include each attributable recipient once for the selected event type. Progression counts infer that a clicked or submitted recipient has reached the opened stage, and a submitted recipient has reached the clicked stage. Acceptance and reports are never inferred.
+
+Those inferences do not add timeline events or invent timestamps. Charts, event tables, and event exports retain recorded observations. Password presence requires an explicit positive boolean; submission alone does not mean credentials were entered.
+
+## Dashboard scope
+
+The dashboard selects recipients by their first recorded SMTP acceptance in the chosen period. Subsequent observations count through the server's snapshot time. A repeated send does not move a recipient into a later cohort. The same address in different campaigns counts separately.
+
+Opened, clicked, reported, and credentials-entered percentages divide by the selected sent-recipient count. A zero denominator displays a dash. The 7/30/365-day views compare absolute interaction counts with the preceding equal-length cohort, whose observations stop before the current period begins. All time has no preceding-period comparison.
+
+## Campaign-analysis scope
+
+Analysis applies its recipient, event, source, and time filters before aggregation and pagination. Its lower time bound is inclusive; its upper bound is exclusive. These filtered observations can differ from the dashboard's acceptance cohort. Don't compare the two counts without matching their scopes.
+
+## Historical and automated activity
+
+An imported reported flag without a corresponding report event is shown separately; no report timestamp is invented. Ambiguous legacy records cannot be assigned to a recipient by guesswork, so unique-recipient statistics exclude unresolved attribution while event exports can retain those observations.
+
+Scanners, proxies, remote-image settings, and caching can create or suppress requests. Treat rates as observations under these constraints, not as a measurement of a person's intentions or password validity.
