@@ -29,7 +29,7 @@ Cost describes the work performed, not a promised duration. Compilation, tool in
 | Bounded audience measurement | Existing ignored launch/read/claim/compose workload at legacy audience sizes | Measurement, not a wall-clock assertion. Full nightly/release acceptance; not an agent completion check |
 | Workflow lint and gate tests | YAML/Actions expressions and failure/skip handling | Small compared with product builds. Every PR and after workflow edits; inspect representative path groups when their patterns change |
 
-Executable campaign tests use an isolated DNS/HTTPS fixture on ordinary loopback and an allocated port. The fixture belongs to the test workspace, so its origin remains stable across application restarts. No privileged-port configuration is needed. Migration-only process tests omit UI assets; tests that serve or modify the administration distribution retain their own asset copies.
+Executable campaign tests use an isolated DNS/HTTPS fixture on ordinary loopback and an allocated port. The fixture belongs to the test workspace, so its origin remains stable across application restarts. No privileged-port configuration is needed. API and lifecycle process tests use small synthetic assets with a valid manifest; they exercise the real server without loading the full UI on each startup. Dedicated distribution-serving, immutability, traversal/integrity and symlink tests retain copies of the real built UI. Migration-only tests omit UI assets and inspect preserved data after shutdown; dedicated shared-database scenarios retain concurrent access. Process failures include bounded OS process observations and workspace file metadata, without dumping configuration or database contents.
 
 ## Prerequisites
 
@@ -81,7 +81,7 @@ cargo test -p ruphish --test startup_process reporting_process:: --locked -- --n
 cargo test -p ruphish --test startup_process overview_process:: --locked -- --nocapture --test-threads=1
 ```
 
-`campaign_process::proxy_process::` selects just proxy scenarios. Check the number of executed tests: a misspelled Rust filter can succeed with zero tests. For exact test names add `--exact` after `--`. These process tests require the real current `dist/admin` distribution. CI runs the complete non-ignored process suite for the product group; these filters remain useful for focused local regressions.
+`campaign_process::proxy_process::` selects just proxy scenarios. Check the number of executed tests: a misspelled Rust filter can succeed with zero tests. For exact test names add `--exact` after `--`. These focused API/workflow scenarios use synthetic assets and do not require a UI build. The dedicated distribution tests and the complete process suite require the real current `dist/admin` distribution. CI runs the complete non-ignored process suite for the product group; these filters remain useful for focused local regressions.
 
 For SQL changes select the corresponding real-provider test in `database_providers`; use the fixture setup and direct commands in [MySQL verification](database-providers.md#mysql) or [PostgreSQL verification](database-providers.md#postgresql). MySQL transport/credentials/lock-timeout checks can now run independently of historical migrations:
 
