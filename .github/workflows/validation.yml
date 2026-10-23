@@ -43,9 +43,10 @@ jobs:
         id: paths
         if: ${{ !inputs.full }}
         with:
-          # Compare the PR merge checkout with its base, without API permissions
-          # or file-count limits. Git reports both sides of renames as changes.
+          # PRs compare with their base; pushes compare with the branch before the push.
+          # Use Git without API permissions or file-count limits, including rename paths.
           token: ''
+          base: ${{ github.base_ref || github.ref_name }}
           filters: .github/paths.yml
 
   website:
