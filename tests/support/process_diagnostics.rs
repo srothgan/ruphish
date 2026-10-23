@@ -64,7 +64,10 @@ fn process_status(pid: u32) -> String {
         ]);
         command
     };
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(error) => return format!("status command unavailable: {error}"),

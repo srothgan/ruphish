@@ -242,6 +242,11 @@ jobs:
       - name: Native static checks
         run: cargo clippy --workspace --exclude ruphish-ui --all-targets --locked -- -D warnings
       - name: Complete platform functionality
+        # Keep disposable fixtures on job storage, not Windows' user-profile disk.
+        env:
+          TMPDIR: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
         run: cargo test --workspace --exclude ruphish-ui --locked -- --nocapture
       - name: Install platform asset dependencies
         run: npm ci --prefix crates/ruphish-ui/web

@@ -150,6 +150,8 @@ Linux native Clippy, library/integration tests, SQLite histories and executable 
 
 CI uses the tools' default build, test and worker parallelism. Provider and platform matrices have no repository-imposed parallel-job cap; GitHub schedules them within its hosted-runner limits. The bounded commands above are for local work. macOS CI covers Apple Silicon (ARM64); Intel macOS is no longer a supported validation target. Superseded runs for the same PR or scheduled ref are cancelled. Matching UI inputs can reuse development assets; tests still run. Optimized UI is built only in the release workflow. The final gates reject failed/cancelled checks, missing group outputs and unexpectedly skipped selected jobs.
 
+Native platform and release test steps point `TMPDIR`, `TMP` and `TEMP` at GitHub's `runner.temp` directory. This keeps disposable databases and other fixtures in the job's temporary storage instead of the Windows user-profile directory. OS process metrics are optional failure diagnostics; an unavailable or timed-out metrics command does not itself fail a product test.
+
 Actions use pinned commits, read-only repository permissions and checkout without persisted credentials. These workflows neither receive deployment secrets nor publish releases. Validate workflow edits locally with:
 
 ```sh

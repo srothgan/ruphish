@@ -69,6 +69,11 @@ jobs:
           name: release-admin
           path: dist/admin
       - name: Optimized native and executable behavior
+        # Keep disposable fixtures on job storage, not Windows' user-profile disk.
+        env:
+          TMPDIR: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
         run: cargo test --release --workspace --exclude ruphish-ui --locked -- --nocapture
 
   gate:
