@@ -7,9 +7,9 @@ sidebar:
 
 The authenticated home page shows your account's analysis metrics, recent campaigns, resource inventory, and operational attention items. Administrators still see their own campaign data; impersonation follows the selected account.
 
-![Ruphish dashboard with a period selector, five outcome metrics, three recent campaigns, and attention items.](../../../assets/dashboard.png)
+![Ruphish dashboard with a period selector, five outcome metrics, three recent campaigns, and attention items.](/dashboard.png)
 
-This screenshot uses synthetic demonstration data, captured on 22 October 2026. Its counts illustrate the layout, not campaign effectiveness or results you should expect. The period applies to the analysis overview; recent-campaign rates cover each campaign's recorded sends independently.
+This screenshot uses synthetic demonstration data, captured on 23 October 2026. Its counts illustrate the layout, not campaign effectiveness or results you should expect. The period applies to the analysis overview; recent-campaign rates cover each campaign's recorded sends independently.
 
 Choose **All time**, **Last year**, **Last 30 days**, or **Last 7 days**. Last year is a rolling 365 days, and the default is Last 30 days. The period affects the analysis overview; recent-campaign rates use each campaign's complete recorded history.
 

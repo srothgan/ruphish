@@ -136,7 +136,7 @@ The PR workflow always starts, including for documentation and repository housek
 
 | Group | Main paths | Fixed checks |
 | --- | --- | --- |
-| Website | `website/**`, `docs/**`, `assets/**` | Website tests, Astro checks/build and site validation |
+| Website | `website/**`, `docs/**` | Website tests, Astro checks/build and site validation |
 | Product | `crates/**`, `tests/**`, `migrations/**` and shared build inputs | Browser tests/lint/formatting and development assets; complete native Clippy/tests on Linux x64, Windows x64 and macOS ARM64; platform asset promotion |
 | Persistence | Adapter/application/domain crates, `tests/**`, `migrations/**` and shared build inputs | Both supported MySQL and PostgreSQL versions, complete histories/schema recovery, transport checks and provider executable scenarios |
 | Public | `tests/acceptance/**` and shared build inputs | Canonical Docker DNS/TLS/SMTP/privacy fixture |

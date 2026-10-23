@@ -1,17 +1,15 @@
 ---
-import { Image } from 'astro:assets';
 import Site from '../layouts/Site.astro';
-import dashboard from '../assets/dashboard.png';
 import { repository } from '../site';
 ---
-<Site title="Ruphish — Phishing simulations. A clearer picture.">
+<Site title="Ruphish - Phishing simulations. A clearer picture.">
   <section class="hero shell" aria-labelledby="hero-title">
     <h1 id="hero-title">Phishing simulations.<br />A clearer picture.</h1>
     <p class="hero-intro">From the first campaign to the next improvement. Prepare your exercises, follow delivery, and understand how people respond.</p>
     <div class="actions"><a class="button primary" href="/docs/getting-started/">Get started</a><a class="button secondary" href={repository}>View source</a></div>
     <figure class="dashboard-showcase">
-      <a href={dashboard.src} aria-label="Open the full dashboard screenshot">
-        <Image src={dashboard} alt="Ruphish dashboard showing campaign outcomes, changes from the previous month, and recent campaigns using synthetic data." widths={[640, 960, 1440, 1920, 3024]} sizes="(max-width: 1400px) 94vw, 1320px" loading="eager" fetchpriority="high" format="webp" />
+      <a href="/dashboard.png" aria-label="Open the full dashboard screenshot">
+        <img src="/dashboard.png" alt="Ruphish dashboard showing campaign outcomes, changes from the previous month, and recent campaigns using synthetic data." width="3024" height="1964" loading="eager" fetchpriority="high" />
       </a>
       <figcaption>The Ruphish dashboard. Example campaigns and synthetic data.</figcaption>
     </figure>

@@ -16,7 +16,7 @@ test('relative links retain queries and anchors and point at real published page
   const source = resolve(sourceRoot, 'getting-started/index.md');
   assert.equal(resolveDocLink('installation.md#build', source), '/docs/getting-started/installation/#build');
   assert.equal(resolveDocLink('../index.md?view=full#start', source), '/docs/?view=full#start');
-  assert.equal(resolveDocLink('../../assets/dashboard.png', source), '/assets/dashboard.png');
+  assert.equal(resolveDocLink('../../README.md', source), 'https://github.com/srothgan/ruphish/blob/main/README.md');
   for (const url of ['#build', 'https://example.test/', 'mailto:author@example.test', '/about/']) assert.equal(resolveDocLink(url, source), url);
   assert.throws(() => resolveDocLink('missing.md', source), /Missing/);
   assert.throws(() => resolveDocLink('../old/startup.md', source), /unpublished/);
