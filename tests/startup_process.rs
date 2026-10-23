@@ -974,9 +974,9 @@ fn preflight_failures_never_publish_readiness_or_create_a_database_and_release_r
         let mut config = configuration();
         let reserved = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = reserved.local_addr().unwrap();
-        drop(reserved);
-        config["admin_server"]["listen_url"] = json!(port.to_string());
+        // Keep the admin port reserved until the conflicting listener has its own port.
         let occupied = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        config["admin_server"]["listen_url"] = json!(port.to_string());
         match case {
             "second-port" => {
                 config["phish_server"]["listen_url"] =
@@ -1024,13 +1024,18 @@ fn preflight_failures_never_publish_readiness_or_create_a_database_and_release_r
             _ => unreachable!(),
         }
         write_config(directory.path(), &config);
+        drop(reserved);
         let mut process = Process::start(directory.path(), "all");
         process.fail();
         assert!(
             !directory.path().join("installation.sqlite3").exists(),
             "{case}"
         );
-        assert!(std::net::TcpListener::bind(port).is_ok(), "{case}");
+        let rebound = std::net::TcpListener::bind(port);
+        assert!(
+            rebound.is_ok(),
+            "{case}: could not rebind {port}: {rebound:?}"
+        );
     }
 }
 
