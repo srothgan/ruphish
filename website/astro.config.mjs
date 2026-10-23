@@ -31,7 +31,7 @@ export default defineConfig({
       favicon: '/favicon.svg',
       social: [{ icon: 'github', label: 'Ruphish on GitHub', href: 'https://github.com/srothgan/ruphish' }],
       customCss: ['./src/styles/fonts.css', './src/styles/docs.css'],
-      components: { SocialIcons: './src/components/DocsLinks.astro', Footer: './src/components/DocsFooter.astro' },
+      components: { Head: './src/components/DocsHead.astro', SocialIcons: './src/components/DocsLinks.astro', Footer: './src/components/DocsFooter.astro' },
       routeMiddleware: './src/docs-middleware.ts',
       sidebar: [
         { label: 'Documentation', slug: 'docs' },

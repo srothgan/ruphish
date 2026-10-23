@@ -127,16 +127,16 @@ Three entry points own schedules and branch rules. The reusable [validation work
 
 | File | Trigger | Validation | Required status |
 | --- | --- | --- | --- |
-| [pr.yml](../../../.github/workflows/pr.yml) | PR to main; manual full run | YAML path groups select fixed suites; a manual run selects all suites | PR gate on main |
+| [pr.yml](../../../.github/workflows/pr.yml) | PR to main; push to main; manual full run | YAML path groups select fixed suites; a manual run selects all suites | PR gate on main |
 | [nightly.yml](../../../.github/workflows/nightly.yml) | Daily at 02:23 UTC; manual | Full development-profile source acceptance, all provider versions and native platforms, histories/recovery, dependency policy and bounded performance measurement | Monitoring; does not replace PR gates |
 | [release.yml](../../../.github/workflows/release.yml) | PR to release; manual | Full source acceptance, then optimized UI and native/executable tests on Linux x64, Windows x64 and macOS ARM64 | Release gate on release |
 | [validation.yml](../../../.github/workflows/validation.yml) | Called by the three entry points | One implementation of source checks and an internal Validation gate | Internal prerequisite of the caller's gate |
 
-The PR workflow always starts, including for documentation and repository housekeeping, so its required gate is reported. A commit-pinned `dorny/paths-filter` action reads the YAML groups and compares the checked-out PR merge commit against its base using Git. Full checkout history avoids API file-count limits and extra permissions; deleted paths and both sides of renames participate. Nightly, release and manual runs pass `full: true` and bypass path filtering.
+The CI workflow always starts for PRs to main and pushes to main, including documentation and repository housekeeping, so its gate is reported. A commit-pinned `dorny/paths-filter` action reads the YAML groups and compares the checked-out PR merge commit against its base using Git. Pushes compare main against its revision before the push, including all commits in that push. Full checkout history avoids API file-count limits and extra permissions; deleted paths and both sides of renames participate. Nightly, release and manual runs pass `full: true` and bypass path filtering. The README CI badge tracks push runs on main: it reports the checks applicable to the latest push, while nightly runs cover the full suite.
 
 | Group | Main paths | Fixed checks |
 | --- | --- | --- |
-| Website | `website/**`, `docs/**`, `assets/**` | Website tests, Astro checks/build and site validation |
+| Website | `website/**`, `docs/**` | Website tests, Astro checks/build and site validation |
 | Product | `crates/**`, `tests/**`, `migrations/**` and shared build inputs | Browser tests/lint/formatting and development assets; complete native Clippy/tests on Linux x64, Windows x64 and macOS ARM64; platform asset promotion |
 | Persistence | Adapter/application/domain crates, `tests/**`, `migrations/**` and shared build inputs | Both supported MySQL and PostgreSQL versions, complete histories/schema recovery, transport checks and provider executable scenarios |
 | Public | `tests/acceptance/**` and shared build inputs | Canonical Docker DNS/TLS/SMTP/privacy fixture |

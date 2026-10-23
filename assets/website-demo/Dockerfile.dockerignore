@@ -1,0 +1,20 @@
+# Only build sources enter the image; never local binaries, databases or credentials.
+**
+!Cargo.toml
+!Cargo.lock
+!rust-toolchain.toml
+!Trunk.toml
+!.cargo/
+!.cargo/config.toml
+!crates/
+!crates/**
+!assets/
+!assets/website-demo/
+!assets/website-demo/**
+**/node_modules
+**/generated
+**/target
+**/data
+**/*.db
+**/*.sqlite3
+**/*.log

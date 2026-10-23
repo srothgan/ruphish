@@ -8,8 +8,6 @@ export const contentRoot = fileURLToPath(new URL('../src/content/docs/', import.
 export const generatedRoot = resolve(contentRoot, 'docs');
 const assetsRoot = fileURLToPath(new URL('../public/docs-files/', import.meta.url));
 const repositoryRoot = resolve(sourceRoot, '..');
-const sharedSource = resolve(repositoryRoot, 'assets');
-const sharedOutput = fileURLToPath(new URL('../public/assets/', import.meta.url));
 const repository = 'https://github.com/srothgan/ruphish';
 const slash = (value) => value.split(sep).join('/');
 export const isPublished = (path) => !slash(path).split('/').some((part) => part === 'old' || part.startsWith('.') || part.startsWith('_'));
@@ -46,18 +44,7 @@ export function syncDocs() {
     const bytes = readFileSync(source);
     if (!existsSync(destination) || !bytes.equals(readFileSync(destination))) writeFileSync(destination, bytes);
   }
-  if (existsSync(sharedSource)) {
-    for (const source of filesBelow(sharedSource)) {
-      const name = relative(sharedSource, source);
-      if (!isPublished(name)) continue;
-      const destination = resolve(sharedOutput, name);
-      expected.add(destination);
-      mkdirSync(dirname(destination), { recursive: true });
-      const bytes = readFileSync(source);
-      if (!existsSync(destination) || !bytes.equals(readFileSync(destination))) writeFileSync(destination, bytes);
-    }
-  }
-  for (const generated of [generatedRoot, assetsRoot, sharedOutput]) {
+  for (const generated of [generatedRoot, assetsRoot]) {
     if (!existsSync(generated)) continue;
     for (const obsolete of filesBelow(generated)) {
       if (!expected.has(obsolete)) rmSync(obsolete);
@@ -75,10 +62,6 @@ export function resolveDocLink(url, source) {
   if (within.startsWith('..') || within.startsWith(sep)) {
     const repoPath = relative(repositoryRoot, target);
     if (repoPath.startsWith('..') || !existsSync(target)) throw new Error(`Missing source link: ${url} in ${source}`);
-    if (slash(repoPath).startsWith('assets/')) {
-      if (!isPublished(repoPath)) throw new Error(`Unpublished shared asset: ${url} in ${source}`);
-      return `/${slash(repoPath).split('/').map(encodeURIComponent).join('/')}${suffix}`;
-    }
     return `${repository}/blob/main/${slash(repoPath).split('/').map(encodeURIComponent).join('/')}${suffix}`;
   }
   if (!isPublished(within) || !existsSync(target)) throw new Error(`Missing or unpublished documentation link: ${url} in ${source}`);
@@ -106,9 +89,9 @@ export function documentationIntegration() {
     hooks: {
       'astro:config:setup': () => syncDocs(),
       'astro:server:setup': ({ server }) => {
-        server.watcher.add([sourceRoot, sharedSource]);
+        server.watcher.add([sourceRoot]);
         const changed = (path) => {
-          if (![sourceRoot, sharedSource].some((root) => resolve(path).startsWith(root + sep))) return;
+          if (!resolve(path).startsWith(sourceRoot + sep)) return;
           clearTimeout(timer);
           timer = setTimeout(() => {
             try { syncDocs(); }

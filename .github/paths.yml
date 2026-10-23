@@ -22,7 +22,6 @@ product:
 website:
   - 'website/**'
   - 'docs/**'
-  - 'assets/**'
   - '.github/workflows/**'
   - '.github/paths.yml'
   - '.github/scripts/**'

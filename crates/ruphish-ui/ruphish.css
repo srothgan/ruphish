@@ -204,7 +204,7 @@
   .action-menu-panel { position: fixed; z-index: 1100; overflow-y: auto; padding: var(--s1); display: flex; flex-direction: column; background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow-pop); }
   .account-app .action-menu-panel button { justify-content: flex-start; min-height: auto; padding: var(--s2) var(--s3); border: 0; background: transparent; border-radius: var(--r-sm); font-weight: var(--fw-regular); }
   .account-app .action-menu-panel button:hover:not(:disabled) { background: var(--teal-50); border: 0; }
-  @media(prefers-reduced-motion: reduce) { .action-menu-chevron { transition: none; } }
+  @media(prefers-reduced-motion: reduce) { .action-menu-chevron, .nav-group-chevron { transition: none; } }
 
   /* Checkbox fields and compact search options share one control owner. */
   .account-app .checkbox-label { display: flex; gap: var(--s3); align-items: center; font-weight: var(--fw-medium); margin: var(--s4) 0; }
@@ -349,13 +349,24 @@
   .admin-nav .product-name img { display: block; width: 148px; max-width: 100%; height: auto; }
   .admin-nav nav { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; gap: var(--s5); }
   .admin-nav .nav-section { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: var(--s1); }
-  .admin-nav .nav-section h2 { margin: 0 var(--s3) var(--s2); color: var(--nav-muted); font-size: var(--fs-xs); font-weight: var(--fw-semibold); letter-spacing: .01em; }
+  /* Collapsible group: a heading button with a trailing chevron toggles the link list. */
+  .admin-nav .nav-section .nav-group-heading { margin: 0; }
+  .admin-nav .nav-group-toggle { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); width: 100%; margin: 0; padding: var(--s1) var(--s3); background: transparent; border: 0; border-radius: var(--r-md); cursor: pointer; text-align: left; color: var(--nav-muted); font-size: var(--fs-xs); font-weight: var(--fw-semibold); letter-spacing: .01em; }
+  .admin-nav .nav-group-toggle:hover { color: var(--nav-fg-strong); }
+  .admin-nav .nav-group-toggle > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .admin-nav .nav-group-chevron { width: 14px; height: 14px; flex: 0 0 14px; transition: transform .15s ease; }
+  .admin-nav .nav-section[data-collapsed] .nav-group-chevron { transform: rotate(-90deg); }
+  .admin-nav .nav-group-body { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: var(--s1); }
+  .admin-nav .nav-section[data-collapsed] .nav-group-body { display: none; }
   .admin-nav nav a, .admin-nav .nav-placeholder { display: flex; align-items: center; min-width: 0; gap: var(--s3); font-size: var(--fs-sm); }
   .admin-nav nav a > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .admin-nav .nav-icon { width: 18px; height: 18px; flex: 0 0 18px; }
   .admin-nav nav a { color: var(--nav-fg); padding: var(--s2) var(--s3); text-decoration: none; border-radius: var(--r-md); }
   .admin-nav nav a:hover:not([aria-current=page]) { background: var(--nav-hover-bg); color: var(--nav-fg-strong); }
   .admin-nav nav a[aria-current=page] { background: var(--nav-active-bg); color: var(--nav-fg-strong); font-weight: var(--fw-semibold); }
+  /* External link: section icon and label like a normal link, plus a trailing out-of-app icon pushed right by the flexing span. */
+  .admin-nav nav a.nav-external .nav-external-icon { width: 16px; height: 16px; flex: 0 0 16px; color: var(--nav-muted); }
+  .admin-nav nav a.nav-external:hover .nav-external-icon { color: var(--nav-fg-strong); }
   .admin-nav .nav-placeholder { color: var(--nav-muted); padding: var(--s2) var(--s3); }
   .admin-nav .nav-placeholder small { display: block; font-size: 11px; color: var(--nav-muted); margin-top: 2px; }
   .account-footer { flex-shrink: 0; padding-top: var(--s4); border-top: 1px solid var(--nav-hover-bg); }
@@ -379,8 +390,12 @@
   .admin-shell[data-nav-collapsed] .product-name { display: none; }
   .admin-shell[data-nav-collapsed] .nav-section { border-top: 1px solid var(--nav-hover-bg); padding-top: var(--s4); }
   .admin-shell[data-nav-collapsed] .nav-section h2 { display: none; }
+  /* The rail has no headings, so a group's open/closed state is ignored and every icon stays reachable. */
+  .admin-shell[data-nav-collapsed] .nav-section[data-collapsed] .nav-group-body { display: grid; }
   .admin-shell[data-nav-collapsed] nav a { justify-content: center; }
   .admin-shell[data-nav-collapsed] nav a span { display: none; }
+  /* The rail keeps the section icon centered like every other link; the external marker drops out. */
+  .admin-shell[data-nav-collapsed] .nav-external-icon { display: none; }
   .admin-shell[data-nav-collapsed] .account-trigger { justify-content: center; }
   .admin-shell[data-nav-collapsed] .account-trigger span, .admin-shell[data-nav-collapsed] .account-chevron { display: none; }
 
@@ -438,10 +453,12 @@
     .admin-shell[data-nav-open] .nav-scrim { opacity: 1; visibility: visible; }
     /* The drawer always shows full labels, even if the desktop rail was left collapsed. */
     .admin-shell[data-nav-collapsed] .admin-nav { padding: var(--s5) var(--s3) var(--s3); }
-    .admin-shell[data-nav-collapsed] .product-name, .admin-shell[data-nav-collapsed] .nav-section h2, .admin-shell[data-nav-collapsed] nav a span, .admin-shell[data-nav-collapsed] .account-trigger span, .admin-shell[data-nav-collapsed] .account-chevron { display: revert; }
+    .admin-shell[data-nav-collapsed] .product-name, .admin-shell[data-nav-collapsed] .nav-section h2, .admin-shell[data-nav-collapsed] nav a span, .admin-shell[data-nav-collapsed] .nav-external-icon, .admin-shell[data-nav-collapsed] .account-trigger span, .admin-shell[data-nav-collapsed] .account-chevron { display: revert; }
     .admin-shell[data-nav-collapsed] .nav-header { justify-content: space-between; }
     .admin-shell[data-nav-collapsed] nav a, .admin-shell[data-nav-collapsed] .account-trigger { justify-content: flex-start; }
     .admin-shell[data-nav-collapsed] .nav-section { border-top: 0; padding-top: 0; }
+    /* With full labels back, the drawer respects each group's open/closed state again. */
+    .admin-shell[data-nav-collapsed] .nav-section[data-collapsed] .nav-group-body { display: none; }
     .admin-content { padding: var(--s5) var(--s4); padding-top: calc(44px + var(--s5)); }
     .account-panel { padding: var(--s5); }
     .impersonation { align-items: start; flex-direction: column; gap: var(--s3); }

@@ -4,6 +4,11 @@ use leptos::prelude::*;
 use ruphish_ui::{tr, trs};
 use wasm_bindgen::{JsCast, closure::Closure, prelude::*};
 
+/// `local_storage` keys for each collapsible group's open/closed state.
+const CAMPAIGNS_GROUP_KEY: &str = "nav-group-campaigns";
+const RESOURCES_GROUP_KEY: &str = "nav-group-resources";
+const ADMIN_GROUP_KEY: &str = "nav-group-admin";
+
 #[wasm_bindgen(module = "/web/navigation.mjs")]
 extern "C" {
     #[wasm_bindgen(js_name = installNavigationGuard)]
@@ -124,6 +129,7 @@ fn link(
     };
     view! {
         <a
+            class="nav-link"
             href=href
             aria-current=move || active().then_some("page")
             title=move || label.get()
@@ -134,6 +140,97 @@ fn link(
         </a>
     }
 }
+/// A sidebar link to an off-site page: the section icon and label match the normal
+/// links, with a trailing external-link icon marking the new-tab destination. It
+/// stays outside the SPA router and draft guard via its other origin and
+/// `rel="external"`.
+fn external_link(
+    href: &'static str,
+    label: Signal<String>,
+    drawing: &'static str,
+) -> impl IntoView + use<> {
+    view! {
+        <a
+            class="nav-external"
+            href=href
+            target="_blank"
+            rel="noopener noreferrer external"
+            title=move || label.get()
+            aria-label=move || label.get()
+        >
+            {icon(drawing)}
+            <span>{move || label.get()}</span>
+            <svg
+                class="nav-external-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                focusable="false"
+            >
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6 M15 3h6v6 M10 14 21 3" />
+            </svg>
+        </a>
+    }
+}
+/// The disclosure chevron: points down when its group is open, right when closed
+/// (the closed state is driven from CSS via the section's `data-collapsed`).
+fn group_chevron() -> impl IntoView + use<> {
+    view! {
+        <svg
+            class="nav-group-chevron"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            focusable="false"
+        >
+            <path d="M6 9 12 15 18 9" />
+        </svg>
+    }
+}
+/// A collapsible sidebar group: a heading button with a trailing chevron toggles the
+/// list of links. The open state lives in one signal, persisted per group under
+/// `storage_key` so a reload restores the user's choice; it is mirrored to
+/// `aria-expanded` for assistive tech and to `data-collapsed` for styling. In the
+/// collapsed icon-rail the heading hides and CSS always shows the links, so no
+/// destination becomes unreachable.
+fn nav_group<C: IntoView + 'static>(
+    heading_id: &'static str,
+    storage_key: &'static str,
+    heading: Signal<String>,
+    default_open: bool,
+    children: C,
+) -> impl IntoView + use<C> {
+    let open = ruphish_ui::local_storage::persistent(storage_key, default_open);
+    view! {
+        <section
+            class="nav-section"
+            aria-labelledby=heading_id
+            data-collapsed=move || (!open.get()).then_some("")
+        >
+            <h2 class="nav-group-heading">
+                <button
+                    type="button"
+                    id=heading_id
+                    class="nav-group-toggle"
+                    aria-expanded=move || if open.get() { "true" } else { "false" }
+                    on:click=move |_| open.update(|value| *value = !*value)
+                >
+                    <span>{move || heading.get()}</span>
+                    {group_chevron()}
+                </button>
+            </h2>
+            <div class="nav-group-body">{children}</div>
+        </section>
+    }
+}
 pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<> {
     view! {
         {link(
@@ -142,50 +239,78 @@ pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<>
             trs!(ui.dashboard),
             "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
         )}
-        <section class="nav-section" aria-labelledby="nav-campaigns">
-            <h2 id="nav-campaigns">{tr!(ui.campaigns)}</h2>
-            {link(path, "/analysis", trs!(ui.analysis), "M3 3v18h18 M7 17v-5 M12 17V7 M17 17v-9")}
-            {link(
-                path,
-                "/campaigns",
-                trs!(ui.campaigns),
-                "M4 21V3 M4 4c5-4 10 4 16 0v10c-6 4-11-4-16 0",
-            )}
-        </section>
-        <section class="nav-section" aria-labelledby="nav-resources">
-            <h2 id="nav-resources">{tr!(ui.resources)}</h2>
-            {link(
-                path,
-                "/domains",
-                trs!(ui.domains),
-                "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M3 12h18 M12 3c5 5 5 13 0 18-5-5-5-13 0-18",
-            )}
-            {link(path, "/templates", trs!(ui.email_templates), "M3 5h18v14H3z M3 5l9 7 9-7")}
-            {link(
-                path,
-                "/pages",
-                trs!(ui.landing_pages),
-                "M3 3h18v18H3z M3 8h18 M7 5.5h.01 M11 5.5h.01 M7 12h10 M7 16h6",
-            )}
-            {link(
-                path,
-                "/groups",
-                trs!(ui.recipient_groups),
-                "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75 M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0",
-            )}
-            {link(
-                path,
-                "/reporting-mailboxes",
-                trs!(ui.reporting_mailboxes),
-                "M3 5h18v14H3z M3 5l9 7 9-7 M9 16h6",
-            )}
-            {link(path, "/smtp", trs!(ui.sending_profiles), "M22 2 9 15 M22 2l-7 20-4-9-9-4 20-7")}
-        </section>
+        {nav_group(
+            "nav-campaigns",
+            CAMPAIGNS_GROUP_KEY,
+            trs!(ui.campaigns),
+            true,
+            view! {
+                {link(
+                    path,
+                    "/analysis",
+                    trs!(ui.analysis),
+                    "M3 3v18h18 M7 17v-5 M12 17V7 M17 17v-9",
+                )}
+                {link(
+                    path,
+                    "/campaigns",
+                    trs!(ui.campaigns),
+                    "M4 21V3 M4 4c5-4 10 4 16 0v10c-6 4-11-4-16 0",
+                )}
+            },
+        )}
+        {nav_group(
+            "nav-resources",
+            RESOURCES_GROUP_KEY,
+            trs!(ui.resources),
+            true,
+            view! {
+                {link(
+                    path,
+                    "/domains",
+                    trs!(ui.domains),
+                    "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M3 12h18 M12 3c5 5 5 13 0 18-5-5-5-13 0-18",
+                )}
+                {link(path, "/templates", trs!(ui.email_templates), "M3 5h18v14H3z M3 5l9 7 9-7")}
+                {link(
+                    path,
+                    "/pages",
+                    trs!(ui.landing_pages),
+                    "M3 3h18v18H3z M3 8h18 M7 5.5h.01 M11 5.5h.01 M7 12h10 M7 16h6",
+                )}
+                {link(
+                    path,
+                    "/groups",
+                    trs!(ui.recipient_groups),
+                    "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75 M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0",
+                )}
+                {link(
+                    path,
+                    "/reporting-mailboxes",
+                    trs!(ui.reporting_mailboxes),
+                    "M3 5h18v14H3z M3 5l9 7 9-7 M9 16h6",
+                )}
+                {link(
+                    path,
+                    "/smtp",
+                    trs!(ui.sending_profiles),
+                    "M22 2 9 15 M22 2l-7 20-4-9-9-4 20-7",
+                )}
+            },
+        )}
+        {external_link(
+            "https://ruphish.vercel.app/docs/",
+            trs!(ui.documentation),
+            "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 0 3-3h7z",
+        )}
         {admin
             .then(|| {
-                view! {
-                    <section class="nav-section" aria-labelledby="nav-admin">
-                        <h2 id="nav-admin">{tr!(ui.administration)}</h2>
+                nav_group(
+                    "nav-admin",
+                    ADMIN_GROUP_KEY,
+                    trs!(ui.administration),
+                    false,
+                    view! {
                         {link(
                             path,
                             "/settings",
@@ -204,8 +329,8 @@ pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<>
                             trs!(ui.webhooks),
                             "M7 12a4 4 0 1 1 0-8 M17 12a4 4 0 1 1 0 8 M7 8l10 8 M7 16a4 4 0 1 1 0 4 M7 16h10",
                         )}
-                    </section>
-                }
+                    },
+                )
             })}
     }
 }
