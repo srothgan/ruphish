@@ -61,9 +61,7 @@ jobs:
         runner: [ubuntu-24.04, windows-2025, macos-15, macos-15-intel]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
-    defaults:
-      run:
-        shell: bash
+    # Use the native shell: Git Bash makes Windows children ignore Ctrl+C.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

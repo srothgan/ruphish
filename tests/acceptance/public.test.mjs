@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { request } from 'node:https';
 import { randomUUID } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const data = new URL('./data/', import.meta.url);
@@ -125,10 +127,16 @@ test('verified domain -> SMTP inbox -> public events -> completion, without part
     const completed = await api(campaignPath);
     assert.equal((await publicRequest(`/?rid=${rid}`, { body: JSON.stringify({ ...event, event_id: 'b'.repeat(32) }) })).status, 404);
     assert.deepEqual(await api(campaignPath), completed);
-    // Include live SQLite WAL, not merely the checkpointed database file.
+    // Inspect restricted files as their container owner, including the live SQLite WAL.
     for (const file of await readdir(data)) {
         if (file.startsWith('ruphish.db') || file === 'ruphish.log') {
-            assert(!(await readFile(new URL(file, data))).includes(Buffer.from(canary)), `Canary retained in ${file}`);
+            const scan = spawnSync('docker', [
+                'compose', '-f', fileURLToPath(new URL('./compose.yaml', import.meta.url)),
+                'exec', '-T', 'app', 'sh', '-c',
+                'grep -aFq -- "$1" "$2"; test "$?" -eq 1', 'sh', canary, `/lab/data/${file}`,
+            ], { encoding: 'utf8', timeout: 10_000 });
+            // Only grep's "absent" result succeeds; read and Docker errors fail.
+            assert.equal(scan.status, 0, `Privacy scan failed for ${file}: ${scan.error ?? (scan.stderr || 'canary retained')}`);
         }
     }
 });
