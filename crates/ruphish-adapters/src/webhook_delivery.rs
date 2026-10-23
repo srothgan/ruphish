@@ -1,6 +1,6 @@
 //! Signed, destination-checked HTTP delivery with closed diagnostics.
 use crate::outbound::Policy;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 pub(crate) struct Outcome {
     pub status: Option<u16>,
