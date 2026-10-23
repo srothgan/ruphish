@@ -1,4 +1,6 @@
 //! Local DNS and HTTPS endpoints for actual domain verification in workflow fixtures.
+#[path = "tls.rs"]
+pub(super) mod tls_fixture;
 use hickory_proto::{
     op::{Message, OpCode},
     rr::{
@@ -9,7 +11,7 @@ use hickory_proto::{
 use std::{
     collections::HashMap,
     io::{Read, Write},
-    net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream, UdpSocket},
+    net::{SocketAddr, TcpListener, TcpStream, UdpSocket},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -34,23 +36,13 @@ impl Network {
         handler: impl Fn(&str, &str) -> Option<String> + Send + Sync + 'static,
     ) -> Self {
         let _ = rustls::crypto::ring::default_provider().install_default();
-        // Use a distinct loopback address per fixture so ordinary HTTPS origins can
-        // retain port 443 and legacy URL fixtures remain unchanged under parallel tests.
-        let listener = (0..32)
-            .find_map(|_| {
-                let reservation = TcpListener::bind("127.0.0.1:0").unwrap();
-                let port = reservation.local_addr().unwrap().port();
-                let address =
-                    SocketAddr::from((Ipv4Addr::new(127, 2, (port >> 8) as u8, port as u8), 443));
-                TcpListener::bind(address).ok()
-            })
+        // Keep this listener for the entire test, including application restarts.
+        // No privileged ports or platform-specific loopback aliases are needed.
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .map_err(|error| format!("Bind domain HTTPS fixture: {error}"))
             .unwrap();
         let address = listener.local_addr().unwrap();
-        let material = rcgen::generate_simple_self_signed(vec![
-            "training.example.test".into(),
-            "example.test".into(),
-        ])
-        .unwrap();
+        let material = tls_fixture::server_certificate(&["training.example.test", "example.test"]);
         let certificate = material.cert.pem();
         let key = rustls::pki_types::PrivatePkcs8KeyDer::from(material.signing_key.serialize_der());
         let config = Arc::new(
@@ -61,7 +53,6 @@ impl Network {
         );
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = stop.clone();
-        let handler = Arc::new(handler);
         let https = std::thread::spawn(move || {
             for connection in listener.incoming() {
                 if stopping.load(Ordering::Relaxed) {
@@ -176,6 +167,9 @@ impl Network {
             stop,
             threads: vec![https, dns],
         }
+    }
+    pub fn origin(&self, host: &str) -> String {
+        format!("https://{host}:{}", self.address.port())
     }
     pub fn publish(&self, hostname: &str, challenge: &str) {
         self.records.lock().unwrap().insert(

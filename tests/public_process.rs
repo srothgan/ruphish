@@ -146,8 +146,7 @@ fn wait_verified(base: &str, id: i64, process: &Process) -> Value {
     }
 }
 fn configure(directory: &Path, dns: &Dns) -> Vec<u8> {
-    let material =
-        rcgen::generate_simple_self_signed(vec!["training.example.test".into()]).unwrap();
+    let material = tls_fixture::server_certificate(&["training.example.test"]);
     let cert = material.cert.pem();
     std::fs::write(directory.join("public.crt"), &cert).unwrap();
     std::fs::write(

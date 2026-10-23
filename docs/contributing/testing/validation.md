@@ -23,11 +23,13 @@ Cost describes the work performed, not a promised duration. Compilation, tool in
 | Server-provider contracts | Real MySQL/PostgreSQL SQL, locking, transactions, TLS and recovery | Docker setup plus compilation plus server execution. The persistence group runs both engines and both supported versions with a fixed matrix |
 | Historical migrations and schema integrity | Independent legacy fixtures, preservation, drift rejection, rollback/reopen | Replays many schemas and costs substantially more. SQLite histories run with product checks; server histories run with persistence checks. Full nightly and release acceptance include both |
 | Full provider executable workflows | Combined HTTP, delivery, cross-process ownership and recovery on each engine | Long integration scenarios. The persistence group includes these scenarios on both supported versions, including when shared helpers change |
-| Windows/macOS native acceptance | Platform-specific compilation, unit/CLI and asset-promotion behavior | The product group runs complete native acceptance on Windows x64, macOS ARM64 and macOS x64, including platform asset promotion; Linux runs native and executable checks together |
+| Windows/macOS native acceptance | Platform-specific compilation, unit/CLI and asset-promotion behavior | The product group runs complete native acceptance on Windows x64 and macOS ARM64, including platform asset promotion; Linux runs native and executable checks together |
 | Public Docker acceptance | Controlled DNS/TLS/SMTP and privacy through the canonical fixture | Container startup and a Linux development build. Public fixture or shared build/workflow changes and full nightly/release acceptance |
 | Dependency policy | Rust advisories/licenses/sources/bans and npm advisories | Tool install and advisory download are separate. Dependency/policy changes plus nightly; cached test success does not replace fresh advisory data |
 | Bounded audience measurement | Existing ignored launch/read/claim/compose workload at legacy audience sizes | Measurement, not a wall-clock assertion. Full nightly/release acceptance; not an agent completion check |
 | Workflow lint and gate tests | YAML/Actions expressions and failure/skip handling | Small compared with product builds. Every PR and after workflow edits; inspect representative path groups when their patterns change |
+
+Executable campaign tests use an isolated DNS/HTTPS fixture on ordinary loopback and an allocated port. The fixture belongs to the test workspace, so its origin remains stable across application restarts. No privileged-port configuration is needed. API and lifecycle process tests use small synthetic assets with a valid manifest; they exercise the real server without loading the full UI on each startup. Dedicated distribution-serving, immutability, traversal/integrity and symlink tests retain copies of the real built UI. Migration-only tests omit UI assets and inspect preserved data after shutdown; dedicated shared-database scenarios retain concurrent access. Process failures include bounded OS process observations and workspace file metadata, without dumping configuration or database contents.
 
 ## Prerequisites
 
@@ -79,7 +81,7 @@ cargo test -p ruphish --test startup_process reporting_process:: --locked -- --n
 cargo test -p ruphish --test startup_process overview_process:: --locked -- --nocapture --test-threads=1
 ```
 
-`campaign_process::proxy_process::` selects just proxy scenarios. Check the number of executed tests: a misspelled Rust filter can succeed with zero tests. For exact test names add `--exact` after `--`. These process tests require the real current `dist/admin` distribution. CI runs the complete non-ignored process suite for the product group; these filters remain useful for focused local regressions.
+`campaign_process::proxy_process::` selects just proxy scenarios. Check the number of executed tests: a misspelled Rust filter can succeed with zero tests. For exact test names add `--exact` after `--`. These focused API/workflow scenarios use synthetic assets and do not require a UI build. The dedicated distribution tests and the complete process suite require the real current `dist/admin` distribution. CI runs the complete non-ignored process suite for the product group; these filters remain useful for focused local regressions.
 
 For SQL changes select the corresponding real-provider test in `database_providers`; use the fixture setup and direct commands in [MySQL verification](database-providers.md#mysql) or [PostgreSQL verification](database-providers.md#postgresql). MySQL transport/credentials/lock-timeout checks can now run independently of historical migrations:
 
@@ -127,7 +129,7 @@ Three entry points own schedules and branch rules. The reusable [validation work
 | --- | --- | --- | --- |
 | [pr.yml](../../../.github/workflows/pr.yml) | PR to main; manual full run | YAML path groups select fixed suites; a manual run selects all suites | PR gate on main |
 | [nightly.yml](../../../.github/workflows/nightly.yml) | Daily at 02:23 UTC; manual | Full development-profile source acceptance, all provider versions and native platforms, histories/recovery, dependency policy and bounded performance measurement | Monitoring; does not replace PR gates |
-| [release.yml](../../../.github/workflows/release.yml) | PR to release; manual | Full source acceptance, then optimized UI and native/executable tests on Linux x64, Windows x64, macOS ARM64 and macOS x64 | Release gate on release |
+| [release.yml](../../../.github/workflows/release.yml) | PR to release; manual | Full source acceptance, then optimized UI and native/executable tests on Linux x64, Windows x64 and macOS ARM64 | Release gate on release |
 | [validation.yml](../../../.github/workflows/validation.yml) | Called by the three entry points | One implementation of source checks and an internal Validation gate | Internal prerequisite of the caller's gate |
 
 The PR workflow always starts, including for documentation and repository housekeeping, so its required gate is reported. A commit-pinned `dorny/paths-filter` action reads the YAML groups and compares the checked-out PR merge commit against its base using Git. Full checkout history avoids API file-count limits and extra permissions; deleted paths and both sides of renames participate. Nightly, release and manual runs pass `full: true` and bypass path filtering.
@@ -135,7 +137,7 @@ The PR workflow always starts, including for documentation and repository housek
 | Group | Main paths | Fixed checks |
 | --- | --- | --- |
 | Website | `website/**`, `docs/**`, `assets/**` | Website tests, Astro checks/build and site validation |
-| Product | `crates/**`, `tests/**`, `migrations/**` and shared build inputs | Browser tests/lint/formatting and development assets; complete native Clippy/tests on Linux, Windows and both macOS architectures; platform asset promotion |
+| Product | `crates/**`, `tests/**`, `migrations/**` and shared build inputs | Browser tests/lint/formatting and development assets; complete native Clippy/tests on Linux x64, Windows x64 and macOS ARM64; platform asset promotion |
 | Persistence | Adapter/application/domain crates, `tests/**`, `migrations/**` and shared build inputs | Both supported MySQL and PostgreSQL versions, complete histories/schema recovery, transport checks and provider executable scenarios |
 | Public | `tests/acceptance/**` and shared build inputs | Canonical Docker DNS/TLS/SMTP/privacy fixture |
 | Dependencies | Shared build inputs and browser npm manifests/lockfile | Cargo dependency policy and browser npm audit |
@@ -146,7 +148,9 @@ These groups intentionally trade some extra execution for predictable coverage. 
 
 Linux native Clippy, library/integration tests, SQLite histories and executable scenarios share one job and Cargo target directory. Database jobs run independently of that job once browser assets are available; their fixed suite includes provider executable scenarios that consume those assets. Provider caches are separate from the Linux native cache so concurrent jobs cannot prevent its final test outputs from being saved. Browser compilation and each additional native platform still require their own compilation; this is not a single portable build artifact.
 
-CI limits Cargo to one build job and Rust tests to one thread. Provider matrices run one entry at a time; platform matrices run at most two. Independent jobs use separate hosted runners and do not consume the developer's CPU. Superseded runs for the same PR or scheduled ref are cancelled. Matching UI inputs can reuse development assets; tests still run. Optimized UI is built only in the release workflow. The final gates reject failed/cancelled checks, missing group outputs and unexpectedly skipped selected jobs.
+CI uses the tools' default build, test and worker parallelism. Provider and platform matrices have no repository-imposed parallel-job cap; GitHub schedules them within its hosted-runner limits. The bounded commands above are for local work. macOS CI covers Apple Silicon (ARM64); Intel macOS is no longer a supported validation target. Superseded runs for the same PR or scheduled ref are cancelled. Matching UI inputs can reuse development assets; tests still run. Optimized UI is built only in the release workflow. The final gates reject failed/cancelled checks, missing group outputs and unexpectedly skipped selected jobs.
+
+Native platform and release test steps point `TMPDIR`, `TMP` and `TEMP` at GitHub's `runner.temp` directory. This keeps disposable databases and other fixtures in the job's temporary storage instead of the Windows user-profile directory. OS process metrics are optional failure diagnostics; an unavailable or timed-out metrics command does not itself fail a product test.
 
 Actions use pinned commits, read-only repository permissions and checkout without persisted credentials. These workflows neither receive deployment secrets nor publish releases. Validate workflow edits locally with:
 

@@ -12,10 +12,6 @@ permissions:
   contents: read
 
 env:
-  CARGO_BUILD_JOBS: '1'
-  RUST_TEST_THREADS: '1'
-  TOKIO_WORKER_THREADS: '2'
-  RAYON_NUM_THREADS: '2'
   NO_COLOR: 'true'
   CARGO_TERM_COLOR: never
 
@@ -42,9 +38,6 @@ jobs:
       - name: Check gate behavior
         run: node --test .github/scripts/validation.test.mjs
       - name: Lint workflows
-        env:
-          GOMAXPROCS: '2'
-          GOFLAGS: '-p=1'
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck="" -pyflakes=""
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: paths
@@ -106,7 +99,7 @@ jobs:
           cargo fmt --all -- --check
           leptosfmt --check crates/ruphish-ui/src crates/ruphish-ui/tests
       - name: JavaScript functionality
-        run: node --test --test-concurrency=1 crates/ruphish-ui/web/tests/*.test.mjs
+        run: node --test crates/ruphish-ui/web/tests/*.test.mjs
       - name: Generate browser inputs for direct WASM checks
         run: node crates/ruphish-ui/web/build.mjs
       - name: Browser Rust functionality and lint
@@ -137,8 +130,6 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/toolchain
-      - name: Allow fixtures to bind the standard HTTPS port
-        run: sudo sysctl -w net.ipv4.ip_unprivileged_port_start=443
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: admin-distribution
@@ -148,10 +139,10 @@ jobs:
       - name: Native static checks
         run: cargo clippy --workspace --exclude ruphish-ui --all-targets --locked -- -D warnings
       - name: Complete native and executable functionality
-        run: cargo test --workspace --exclude ruphish-ui --locked -- --nocapture --test-threads=1
+        run: cargo test --workspace --exclude ruphish-ui --locked -- --nocapture
       - name: Bounded audience performance measurement
         if: inputs.full
-        run: cargo test -p ruphish-adapters --test campaign_storage measure_launch_read_claim_and_compose_at_legacy_audience_sizes --locked -- --ignored --exact --nocapture --test-threads=1
+        run: cargo test -p ruphish-adapters --test campaign_storage measure_launch_read_claim_and_compose_at_legacy_audience_sizes --locked -- --ignored --exact --nocapture
 
   database:
     name: ${{ matrix.engine }} ${{ matrix.version }}
@@ -159,7 +150,6 @@ jobs:
     if: needs.changes.outputs.persistence == 'true'
     strategy:
       fail-fast: false
-      max-parallel: 1
       matrix:
         include:
           - engine: mysql
@@ -212,15 +202,15 @@ jobs:
       - name: MySQL full histories and contracts
         if: matrix.engine == 'mysql'
         run: |
-          cargo test -p ruphish-adapters --test mysql_preflight --locked -- --ignored --nocapture --test-threads=1
-          cargo test -p ruphish-adapters --test database_providers mysql_ --locked -- --ignored --nocapture --test-threads=1
+          cargo test -p ruphish-adapters --test mysql_preflight --locked -- --ignored --nocapture
+          cargo test -p ruphish-adapters --test database_providers mysql_ --locked -- --ignored --nocapture
       - name: PostgreSQL full schema and recovery contracts
         if: matrix.engine == 'postgres'
-        run: cargo test -p ruphish-adapters --test database_providers postgres_ --locked -- --ignored --nocapture --test-threads=1
+        run: cargo test -p ruphish-adapters --test database_providers postgres_ --locked -- --ignored --nocapture
       - name: Complete provider executable workflow
         env:
           PROCESS_FILTER: ${{ matrix.engine }}_process
-        run: cargo test -p ruphish --test startup_process "$PROCESS_FILTER" --locked -- --ignored --nocapture --test-threads=1
+        run: cargo test -p ruphish --test startup_process "$PROCESS_FILTER" --locked -- --ignored --nocapture
       - name: Remove only the disposable database service
         if: always()
         env:
@@ -235,14 +225,11 @@ jobs:
     if: needs.changes.outputs.product == 'true'
     strategy:
       fail-fast: false
-      max-parallel: 2
       matrix:
-        runner: [windows-2025, macos-15, macos-15-intel]
+        runner: [windows-2025, macos-15]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
-    defaults:
-      run:
-        shell: bash
+    # Use the native shell: Git Bash makes Windows children ignore Ctrl+C.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -255,11 +242,16 @@ jobs:
       - name: Native static checks
         run: cargo clippy --workspace --exclude ruphish-ui --all-targets --locked -- -D warnings
       - name: Complete platform functionality
-        run: cargo test --workspace --exclude ruphish-ui --locked -- --nocapture --test-threads=1
+        # Keep disposable fixtures on job storage, not Windows' user-profile disk.
+        env:
+          TMPDIR: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
+        run: cargo test --workspace --exclude ruphish-ui --locked -- --nocapture
+      - name: Install platform asset dependencies
+        run: npm ci --prefix crates/ruphish-ui/web
       - name: Platform asset promotion
-        run: |
-          npm ci --prefix crates/ruphish-ui/web
-          node --test crates/ruphish-ui/web/tests/distribution.test.mjs
+        run: node --test crates/ruphish-ui/web/tests/distribution.test.mjs
 
   dependencies:
     name: Dependency policy
@@ -299,11 +291,11 @@ jobs:
       - name: Canonical public fixture
         run: |
           node tests/acceptance/lab.mjs init
-          docker compose -f tests/acceptance/compose.yaml --profile setup run --rm -e CARGO_BUILD_JOBS=1 prepare
+          docker compose -f tests/acceptance/compose.yaml --profile setup run --rm prepare
           docker compose -f tests/acceptance/compose.yaml up -d dns inbox app
           node tests/acceptance/lab.mjs demo
           node tests/acceptance/lab.mjs seed
-          node --test --test-concurrency=1 tests/acceptance/public.test.mjs
+          node --test tests/acceptance/public.test.mjs
       - name: Stop fixture without deleting persistent application data
         if: always()
         run: docker compose -f tests/acceptance/compose.yaml stop app dns inbox

@@ -9,8 +9,8 @@ use serde_json::{Value, json};
 use std::{
     collections::VecDeque,
     io::{Read, Write},
-    path::Path,
-    sync::{Arc, Condvar, Mutex},
+    path::{Path, PathBuf},
+    sync::{Arc, Condvar, Mutex, OnceLock},
     time::{Duration, Instant},
 };
 
@@ -30,6 +30,8 @@ mod mysql_process;
 mod overview_process;
 #[path = "postgres_process.rs"]
 mod postgres_process;
+#[path = "support/process_diagnostics.rs"]
+mod process_diagnostics;
 #[path = "public_process.rs"]
 mod public_process;
 #[path = "reporting_process.rs"]
@@ -38,11 +40,14 @@ mod reporting_process;
 mod resource_process;
 #[path = "server_database_process.rs"]
 mod server_database_process;
+use domain_network::tls_fixture;
 #[path = "support/webhook_receiver.rs"]
 mod webhook_receiver;
 
 struct Process {
-    domain_network: Option<domain_network::Network>,
+    directory: PathBuf,
+    mode: String,
+    started: Instant,
     child: Box<dyn portable_pty::Child + Send + Sync>,
     writer: Option<Box<dyn Write + Send>>,
     master: Option<Box<dyn portable_pty::MasterPty + Send>>,
@@ -76,6 +81,7 @@ impl Process {
         token: Option<&str>,
         options: &[&str],
     ) -> Self {
+        let started = Instant::now();
         let pair = native_pty_system()
             .openpty(PtySize {
                 rows: 40,
@@ -134,7 +140,9 @@ impl Process {
             }
         });
         Self {
-            domain_network: None,
+            directory: directory.to_owned(),
+            mode: mode.to_owned(),
+            started,
             child,
             writer: Some(writer),
             master: Some(pair.master),
@@ -159,10 +167,15 @@ impl Process {
             }
             assert!(
                 self.child.try_wait().unwrap().is_none(),
-                "Exited before ready: {buffer:?}"
+                "Exited before ready: {buffer:?}\n{}",
+                self.diagnostics()
             );
             let remaining = deadline.saturating_duration_since(Instant::now());
-            assert!(!remaining.is_zero(), "Readiness deadline: {buffer:?}");
+            assert!(
+                !remaining.is_zero(),
+                "Readiness deadline: {buffer:?}\n{}",
+                self.diagnostics()
+            );
             drop(
                 changed
                     .wait_timeout(buffer, remaining.min(Duration::from_millis(100)))
@@ -181,15 +194,17 @@ impl Process {
                 assert_eq!(
                     status.success(),
                     success,
-                    "Unexpected exit {status:?}: {:?}",
-                    self.output.0.lock().unwrap()
+                    "Unexpected exit {status:?}: {:?}\n{}",
+                    self.output.0.lock().unwrap(),
+                    self.diagnostics()
                 );
                 return;
             }
             assert!(
                 Instant::now() < deadline,
-                "Process exit deadline: {:?}",
-                self.output.0.lock().unwrap()
+                "Process exit deadline: {:?}\n{}",
+                self.output.0.lock().unwrap(),
+                self.diagnostics()
             );
             let lock = self.output.0.lock().unwrap();
             drop(
@@ -206,6 +221,15 @@ impl Process {
         self.wait(true);
     }
 
+    fn diagnostics(&self) -> String {
+        process_diagnostics::snapshot(
+            &self.directory,
+            self.child.process_id(),
+            &self.mode,
+            self.started,
+        )
+    }
+
     fn drain_output(&mut self) {
         self.writer.take();
         self.master.take();
@@ -215,7 +239,13 @@ impl Process {
     }
 
     fn interrupt(&mut self) {
-        self.writer.as_mut().unwrap().write_all(&[3]).unwrap();
+        // ConPTY requests win32-input-mode. Encode the actual Ctrl+C key event,
+        // as we already do for Ctrl+Break, rather than relying on ETX translation.
+        #[cfg(windows)]
+        let input = b"\x1b[67;46;3;1;8;1_\x1b[67;46;3;0;8;1_".as_slice();
+        #[cfg(unix)]
+        let input = &[3];
+        self.writer.as_mut().unwrap().write_all(input).unwrap();
         self.writer.as_mut().unwrap().flush().unwrap();
     }
 
@@ -291,7 +321,7 @@ fn terminal_text(raw: &str) -> String {
 
 #[test]
 fn killing_a_process_during_migration_leaves_the_old_database_recoverable_and_restartable() {
-    let directory = workspace();
+    let directory = workspace_without_assets();
     std::fs::copy(
         fixture("compatibility/20160118194630.sqlite3"),
         directory.path().join("installation.sqlite3"),
@@ -352,19 +382,76 @@ impl Drop for Process {
     }
 }
 
-fn workspace() -> tempfile::TempDir {
+struct Workspace {
+    // Drop network threads before removing the directory they serve.
+    network: OnceLock<campaign_process::CampaignNetwork>,
+    directory: tempfile::TempDir,
+}
+
+impl Workspace {
+    fn path(&self) -> &Path {
+        self.directory.path()
+    }
+}
+
+impl std::ops::Deref for Workspace {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+        self.path()
+    }
+}
+
+fn workspace_without_assets() -> Workspace {
     let _ = rustls::crypto::ring::default_provider().install_default();
     let directory = tempfile::Builder::new()
         .prefix("ruphish process é ")
         .tempdir()
         .unwrap();
+    write_config(directory.path(), &configuration());
+    Workspace {
+        network: OnceLock::new(),
+        directory,
+    }
+}
+
+fn workspace() -> Workspace {
+    let directory = workspace_without_assets();
+    let root = directory.path().join("dist/admin");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("asset-manifest.json"), b"{}").unwrap();
+    // These assets exercise the server's real manifest and HTTP handling, not the UI.
+    // Tests of the built distribution explicitly use workspace_with_built_assets().
+    for (name, bytes) in [
+        (
+            "index.html",
+            b"<!doctype html><title>Ruphish process fixture</title>".as_slice(),
+        ),
+        (
+            "visual-frame.js",
+            b"export const fixture = true;".as_slice(),
+        ),
+        ("visual-frame.css", b"body { margin: 0; }".as_slice()),
+        (
+            "THIRD-PARTY-NOTICES.txt",
+            b"Synthetic process-test assets.".as_slice(),
+        ),
+        // Valid empty WebAssembly module: magic number followed by version 1.
+        ("fixture.wasm", b"\0asm\x01\0\0\0".as_slice()),
+    ] {
+        update_manifest(directory.path(), name, bytes);
+    }
+    directory
+}
+
+fn workspace_with_built_assets() -> Workspace {
+    let directory = workspace_without_assets();
     let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../dist/admin");
     assert!(
         assets.join("index.html").is_file(),
         "Build the actual admin distribution with trunk build before process tests"
     );
     copy(&assets, &directory.path().join("dist/admin"));
-    write_config(directory.path(), &configuration());
     directory
 }
 
@@ -443,8 +530,33 @@ fn backups(directory: &Path) -> Vec<std::path::PathBuf> {
 }
 
 #[test]
+fn process_diagnostics_observe_the_child_without_disclosing_workspace_contents() {
+    let directory = workspace_without_assets();
+    let mut process = Process::start(directory.path(), "phish");
+    process.ready();
+    let secret = "synthetic-diagnostic-secret-canary";
+    std::fs::write(directory.path().join("admin.key"), secret).unwrap();
+    let diagnostics = process.diagnostics();
+    // OS metrics are best-effort diagnostics, not a process correctness requirement.
+    // Keep the observation in CI logs even when the optional command times out.
+    eprintln!("{diagnostics}");
+    assert!(diagnostics.contains(&format!("pid={:?}", process.child.process_id())));
+    assert!(diagnostics.contains("mode=phish"));
+    assert!(diagnostics.contains("installation.sqlite3: "));
+    assert!(diagnostics.contains(&format!("admin.key: {} bytes", secret.len())));
+    for value in [
+        secret,
+        "synthetic-bootstrap-password",
+        "synthetic-bootstrap-token",
+    ] {
+        assert!(!diagnostics.contains(value));
+    }
+    process.stop();
+}
+
+#[test]
 fn actual_http_servers_serve_built_assets_isolate_public_routes_and_shutdown_on_real_ctrl_c() {
-    let directory = workspace();
+    let directory = workspace_with_built_assets();
     let mut process = Process::start(directory.path(), "all");
     let ready = process.ready();
     let admin = ready["admin"].as_str().unwrap();
@@ -580,7 +692,7 @@ fn incomplete_http_headers_and_tls_handshakes_have_real_deadlines() {
 
 #[test]
 fn slow_anonymous_bodies_are_closed_and_validated_assets_remain_immutable() {
-    let directory = workspace();
+    let directory = workspace_with_built_assets();
     let root = directory.path().join("dist/admin");
     let original = std::fs::read(root.join("visual-frame.js")).unwrap();
     let mut process = Process::start(directory.path(), "admin");
@@ -626,7 +738,7 @@ fn slow_anonymous_bodies_are_closed_and_validated_assets_remain_immutable() {
 
 #[test]
 fn raw_traversal_requests_cannot_escape_assets_and_modified_distributions_fail_preflight() {
-    let directory = workspace();
+    let directory = workspace_with_built_assets();
     std::fs::write(directory.path().join("private.txt"), "outside-asset-secret").unwrap();
     let mut process = Process::start(directory.path(), "admin");
     let ready = process.ready();
@@ -666,7 +778,7 @@ fn raw_traversal_requests_cannot_escape_assets_and_modified_distributions_fail_p
 #[cfg(unix)]
 #[test]
 fn asset_symlinks_outside_the_distribution_are_rejected_before_startup() {
-    let directory = workspace();
+    let directory = workspace_with_built_assets();
     let outside = tempfile::tempdir().unwrap();
     std::fs::write(outside.path().join("secret.js"), "outside-secret").unwrap();
     std::os::unix::fs::symlink(
@@ -685,12 +797,15 @@ fn every_populated_goose_version_starts_in_place_with_a_verified_recoverable_sna
     let versions: Vec<i64> =
         serde_json::from_str(include_str!("fixtures/compatibility/versions.json")).unwrap();
     for old in versions {
-        let directory = workspace();
+        let directory = workspace_without_assets();
         let source = fixture(&format!("compatibility/{old}.sqlite3"));
         let original = std::fs::read(&source).unwrap();
         std::fs::copy(&source, directory.path().join("installation.sqlite3")).unwrap();
         let mut process = Process::start(directory.path(), "phish");
         process.ready();
+        // Preservation is an offline assertion. Background workers may write after
+        // readiness; concurrent access is covered by the dedicated shared-DB tests.
+        process.stop();
         assert_eq!(
             version(directory.path()),
             ruphish_adapters::database::migrations::LATEST_LEGACY_VERSION,
@@ -714,7 +829,6 @@ fn every_populated_goose_version_starts_in_place_with_a_verified_recoverable_sna
             .get::<String, _>("r_id"),
             "preserved-rid"
         );
-        process.stop();
         let snapshots = backups(directory.path());
         assert_eq!(
             snapshots.len(),
@@ -941,9 +1055,9 @@ fn preflight_failures_never_publish_readiness_or_create_a_database_and_release_r
         let mut config = configuration();
         let reserved = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = reserved.local_addr().unwrap();
-        drop(reserved);
-        config["admin_server"]["listen_url"] = json!(port.to_string());
+        // Keep the admin port reserved until the conflicting listener has its own port.
         let occupied = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        config["admin_server"]["listen_url"] = json!(port.to_string());
         match case {
             "second-port" => {
                 config["phish_server"]["listen_url"] =
@@ -991,13 +1105,18 @@ fn preflight_failures_never_publish_readiness_or_create_a_database_and_release_r
             _ => unreachable!(),
         }
         write_config(directory.path(), &config);
+        drop(reserved);
         let mut process = Process::start(directory.path(), "all");
         process.fail();
         assert!(
             !directory.path().join("installation.sqlite3").exists(),
             "{case}"
         );
-        assert!(std::net::TcpListener::bind(port).is_ok(), "{case}");
+        let rebound = std::net::TcpListener::bind(port);
+        assert!(
+            rebound.is_ok(),
+            "{case}: could not rebind {port}: {rebound:?}"
+        );
     }
 }
 
@@ -1255,7 +1374,7 @@ fn existing_go_rsa_pkcs1_material_serves_verified_tls_without_rewriting_files() 
     let ready = process.ready();
     let trusted = reqwest::blocking::Client::builder()
         .no_proxy()
-        .add_root_certificate(reqwest::Certificate::from_pem(&cert).unwrap())
+        .tls_certs_only([reqwest::Certificate::from_pem(&cert).unwrap()])
         .timeout(Duration::from_secs(3))
         .build()
         .unwrap();

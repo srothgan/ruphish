@@ -9,14 +9,30 @@ use ruphish_application::{
     campaign::{Create, DeliveryFailure, FailureKind, Selection, Stage},
 };
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
-use std::path::Path;
+use std::{
+    path::Path,
+    sync::{Arc, Mutex},
+};
 use support::DatabaseFixture;
 #[path = "../../../tests/support/domain_network.rs"]
 mod domain_network;
 
+struct Fixture {
+    network: domain_network::Network,
+    routing: Arc<Mutex<Option<Routing>>>,
+    directory: tempfile::TempDir,
+}
+
+#[derive(Clone)]
+struct Routing {
+    repository: Arc<dyn ruphish_application::domains::Repository>,
+    runtime: tokio::runtime::Handle,
+    now: i64,
+}
+
 // Delivery scenarios retain their independent logical clock. Actual DNS and HTTPS
 // verification runs before using their origin; no verified database flag is seeded.
-async fn verify_domain(db: &DatabaseFixture, now: i64) {
+async fn verify_domain(db: &DatabaseFixture, fixture: &Fixture, now: i64) {
     use ruphish_application::domains::Verifier as _;
     let domains = db.domains();
     let existing = domains.list(caller()).await.unwrap().remove(0);
@@ -25,21 +41,18 @@ async fn verify_domain(db: &DatabaseFixture, now: i64) {
     {
         return;
     }
-    let directory = tempfile::tempdir().unwrap();
-    let routing = db.domains();
-    let runtime = tokio::runtime::Handle::current();
-    let network = domain_network::Network::new(move |host, path| {
-        let challenge = path.strip_prefix("/.well-known/ruphish/")?;
-        runtime
-            .block_on(routing.routing_proof(host, challenge, now))
-            .unwrap()
+    *fixture.routing.lock().unwrap() = Some(Routing {
+        repository: db.domains(),
+        runtime: tokio::runtime::Handle::current(),
+        now,
     });
+    let network = &fixture.network;
     let domain = domains
         .request_check(caller(), existing.id, now)
         .await
         .unwrap();
     network.publish(&domain.hostname, &domain.challenge);
-    let ca = directory.path().join("ca.pem");
+    let ca = fixture.directory.path().join("ca.pem");
     std::fs::write(&ca, &network.certificate).unwrap();
     let verifier = ruphish_adapters::domain_verification::DnsHttps::new(
         ruphish_adapters::domain_verification::Config {
@@ -54,17 +67,18 @@ async fn verify_domain(db: &DatabaseFixture, now: i64) {
     let observation = verifier.verify(&check).await;
     assert_eq!(observation.code, "verified");
     domains.finish(&check, observation, now).await.unwrap();
+    *fixture.routing.lock().unwrap() = None;
 }
 
-async fn prepared_database(path: &Path) -> DatabaseFixture {
+async fn prepared_database(path: &Path, fixture: &Fixture) -> DatabaseFixture {
     let db = DatabaseFixture::open(path, "").await.unwrap();
-    verify_domain(&db, 1_900_000_000).await;
+    verify_domain(&db, fixture, 1_900_000_000).await;
     db
 }
 fn caller() -> Identity {
     Identity { id: 1, epoch: 0 }
 }
-fn input() -> Create {
+fn input(fixture: &Fixture) -> Create {
     let select = |name: &str| Selection {
         name: name.into(),
         ..Default::default()
@@ -75,11 +89,11 @@ fn input() -> Create {
         template: select("Mail"),
         page: select("Page"),
         profile: select("Local"),
-        url: "https://training.example.test".into(),
+        url: fixture.network.origin("training.example.test"),
         ..Default::default()
     }
 }
-fn fixture() -> (tempfile::TempDir, std::path::PathBuf) {
+async fn fixture() -> (Fixture, std::path::PathBuf) {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("state.db");
     std::fs::copy(
@@ -87,11 +101,43 @@ fn fixture() -> (tempfile::TempDir, std::path::PathBuf) {
         &path,
     )
     .unwrap();
-    (directory, path)
+    let routing = Arc::new(Mutex::new(None::<Routing>));
+    let destination = routing.clone();
+    let network = domain_network::Network::new(move |host, path| {
+        let challenge = path.strip_prefix("/.well-known/ruphish/")?;
+        let routing = destination.lock().unwrap().clone()?;
+        routing
+            .runtime
+            .block_on(
+                routing
+                    .repository
+                    .routing_proof(host, challenge, routing.now),
+            )
+            .unwrap()
+    });
+    // Adapt only the copied fixture's transport endpoint before migration. The original
+    // corpus remains unchanged, and the listener stays alive across database reopens.
+    let mut raw = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&path))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE campaigns SET url=? WHERE url='https://training.example.test'")
+        .bind(network.origin("training.example.test"))
+        .execute(&mut raw)
+        .await
+        .unwrap();
+    raw.close().await.unwrap();
+    (
+        Fixture {
+            network,
+            routing,
+            directory,
+        },
+        path,
+    )
 }
 #[tokio::test]
 async fn participant_privacy_removes_legacy_payloads_and_never_exposes_injected_values() {
-    let (_directory, path) = fixture();
+    let (fixture, path) = fixture().await;
     let secret = "synthetic-participant-login-canary-731";
     let mut raw = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&path))
         .await
@@ -104,7 +150,7 @@ async fn participant_privacy_removes_legacy_payloads_and_never_exposes_injected_
         .await
         .unwrap();
     raw.close().await.unwrap();
-    let db = prepared_database(&path).await;
+    let db = prepared_database(&path, &fixture).await;
     let backup = db.backup_path().unwrap().to_path_buf();
     let mut original = SqliteConnection::connect_with(
         &SqliteConnectOptions::new().filename(backup).read_only(true),
@@ -154,8 +200,8 @@ async fn participant_privacy_removes_legacy_payloads_and_never_exposes_injected_
 }
 #[tokio::test]
 async fn named_zone_schedule_uses_calendar_rules_for_folds_gaps_and_non_hour_changes() {
-    let (_directory, path) = fixture();
-    let db = prepared_database(&path).await;
+    let (fixture, path) = fixture().await;
+    let db = prepared_database(&path, &fixture).await;
     let store = db.campaigns();
     // Independent expected UTC instants; do not derive them with the resolver.
     for (local, zone, expected) in [
@@ -240,7 +286,7 @@ async fn named_zone_schedule_uses_calendar_rules_for_folds_gaps_and_non_hour_cha
 }
 #[tokio::test]
 async fn legacy_upgrade_preserves_unknown_work_and_effective_capture_policy() {
-    let (_directory, path) = fixture();
+    let (fixture, path) = fixture().await;
     let mut raw = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&path))
         .await
         .unwrap();
@@ -249,10 +295,10 @@ async fn legacy_upgrade_preserves_unknown_work_and_effective_capture_policy() {
         .await
         .unwrap();
     raw.close().await.unwrap();
-    let db = prepared_database(&path).await;
+    let db = prepared_database(&path, &fixture).await;
     assert!(db.backup_path().is_some());
     let store = db.campaigns();
-    verify_domain(&db, 2_100_000_000).await;
+    verify_domain(&db, &fixture, 2_100_000_000).await;
     assert!(store.claim(2_100_000_000).await.unwrap().is_none());
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
@@ -279,17 +325,17 @@ async fn legacy_upgrade_preserves_unknown_work_and_effective_capture_policy() {
             .capture_credentials
     );
     db.close().await;
-    let db = prepared_database(&path).await;
+    let db = prepared_database(&path, &fixture).await;
     assert!(db.backup_path().is_none());
     assert!(db.campaigns().claim(2_100_000_000).await.unwrap().is_none());
     db.close().await;
 }
 #[tokio::test]
 async fn creation_is_atomic_deduplicated_and_idempotent_with_stable_policy() {
-    let (_directory, path) = fixture();
-    let db = prepared_database(&path).await;
+    let (fixture, path) = fixture().await;
+    let db = prepared_database(&path, &fixture).await;
     let store = db.campaigns();
-    let mut request = input();
+    let mut request = input(&fixture);
     request.send_by = Some(1_900_000_600);
     request.idempotency = Some(("review-123".into(), "independent-body-fingerprint".into()));
     request.policy.capture_credentials = Some(false);
@@ -331,7 +377,7 @@ async fn creation_is_atomic_deduplicated_and_idempotent_with_stable_policy() {
     sqlx::raw_sql("CREATE TRIGGER reject_queue BEFORE INSERT ON ruphish_delivery BEGIN SELECT RAISE(ABORT,'synthetic failure'); END;").execute(&db.inspection_pool()).await.unwrap();
     assert!(
         store
-            .create(caller(), input(), 1_900_000_000)
+            .create(caller(), input(&fixture), 1_900_000_000)
             .await
             .is_err()
     );
@@ -356,19 +402,22 @@ async fn creation_is_atomic_deduplicated_and_idempotent_with_stable_policy() {
         .await
         .unwrap();
     store.delete(caller(), campaign.id).await.unwrap();
-    let mut replay = input();
+    let mut replay = input(&fixture);
     replay.idempotency = Some(("review-123".into(), "independent-body-fingerprint".into()));
     assert!(store.create(caller(), replay, 1_900_000_000).await.is_err());
     db.close().await;
 }
 #[tokio::test]
 async fn competing_claims_recover_preparation_but_never_resend_expired_submission() {
-    let (_directory, path) = fixture();
-    let db = prepared_database(&path).await;
-    let second = prepared_database(&path).await;
+    let (fixture, path) = fixture().await;
+    let db = prepared_database(&path, &fixture).await;
+    let second = prepared_database(&path, &fixture).await;
     let a = db.campaigns();
     let b = second.campaigns();
-    let campaign = a.create(caller(), input(), 1_900_000_000).await.unwrap();
+    let campaign = a
+        .create(caller(), input(&fixture), 1_900_000_000)
+        .await
+        .unwrap();
     let (x, y) = tokio::join!(a.claim(1_900_000_000), b.claim(1_900_000_000));
     let claims: Vec<_> = [x.unwrap(), y.unwrap()].into_iter().flatten().collect();
     assert_eq!(
@@ -407,14 +456,14 @@ async fn competing_claims_recover_preparation_but_never_resend_expired_submissio
 }
 #[tokio::test]
 async fn retries_use_failure_time_and_failed_outcome_commit_never_changes_queue_partially() {
-    let (_directory, path) = fixture();
-    let db = prepared_database(&path).await;
+    let (fixture, path) = fixture().await;
+    let db = prepared_database(&path, &fixture).await;
     let store = db.campaigns();
     store
-        .create(caller(), input(), 1_900_000_000)
+        .create(caller(), input(&fixture), 1_900_000_000)
         .await
         .unwrap();
-    verify_domain(&db, 1_900_010_000).await;
+    verify_domain(&db, &fixture, 1_900_010_000).await;
     let claim = store.claim(1_900_010_000).await.unwrap().unwrap();
     assert!(store.arm(&claim, 1_900_010_000).await.unwrap());
     let failure = DeliveryFailure::new(FailureKind::Retryable, Stage::Acceptance, Some(451));
@@ -467,8 +516,8 @@ async fn retries_use_failure_time_and_failed_outcome_commit_never_changes_queue_
 
 #[tokio::test]
 async fn schedule_and_result_snapshots_cover_immediate_future_mixed_and_overlap_cases() {
-    let (_directory, path) = fixture();
-    let db = prepared_database(&path).await;
+    let (fixture, path) = fixture().await;
+    let db = prepared_database(&path, &fixture).await;
     let store = db.campaigns();
     let now = 1_900_000_000;
     for (launch, end, expected) in [
@@ -477,7 +526,7 @@ async fn schedule_and_result_snapshots_cover_immediate_future_mixed_and_overlap_
         (None, Some(now + 600), vec!["Sending", "Scheduled"]),
         (Some(now), Some(now), vec!["Sending", "Sending"]),
     ] {
-        let mut request = input();
+        let mut request = input(&fixture);
         request.launch = launch;
         request.send_by = end;
         let campaign = store.create(caller(), request, now).await.unwrap();
@@ -518,7 +567,7 @@ async fn schedule_and_result_snapshots_cover_immediate_future_mixed_and_overlap_
             .unwrap();
     }
     for (launch, end) in [(None, Some(now - 1)), (Some(now + 1), Some(now))] {
-        let mut request = input();
+        let mut request = input(&fixture);
         request.launch = launch;
         request.send_by = end;
         assert!(store.create(caller(), request, now).await.is_err());
@@ -527,8 +576,8 @@ async fn schedule_and_result_snapshots_cover_immediate_future_mixed_and_overlap_
 }
 #[tokio::test]
 async fn every_creation_write_boundary_rolls_back_the_whole_launch() {
-    let (_directory, path) = fixture();
-    let db = prepared_database(&path).await;
+    let (fixture, path) = fixture().await;
+    let db = prepared_database(&path, &fixture).await;
     let store = db.campaigns();
     for table in [
         "campaigns",
@@ -544,7 +593,7 @@ async fn every_creation_write_boundary_rolls_back_the_whole_launch() {
             .await
             .unwrap();
         sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE TRIGGER reject_write BEFORE INSERT ON {table} BEGIN SELECT RAISE(ABORT,'injected'); END;"))).execute(&db.inspection_pool()).await.unwrap();
-        let mut request = input();
+        let mut request = input(&fixture);
         request.idempotency = Some(("atomic".into(), "digest".into()));
         assert!(
             store
@@ -589,17 +638,17 @@ async fn every_creation_write_boundary_rolls_back_the_whole_launch() {
 }
 #[tokio::test]
 async fn persisted_retry_budget_exhausts_and_cannot_resurrect_after_restart() {
-    let (_directory, path) = fixture();
-    let db = prepared_database(&path).await;
+    let (fixture, path) = fixture().await;
+    let db = prepared_database(&path, &fixture).await;
     let store = db.campaigns();
     let created = store
-        .create(caller(), input(), 1_900_000_000)
+        .create(caller(), input(&fixture), 1_900_000_000)
         .await
         .unwrap();
     sqlx::query("UPDATE ruphish_delivery SET state='cancelled' WHERE campaign_id=? AND result_id!=(SELECT min(result_id) FROM ruphish_delivery WHERE campaign_id=?)").bind(created.id).bind(created.id).execute(&db.inspection_pool()).await.unwrap();
     let mut now = 1_900_000_000;
     for attempt in 0..=8u32 {
-        verify_domain(&db, now).await;
+        verify_domain(&db, &fixture, now).await;
         let claim = store.claim(now).await.unwrap().unwrap();
         assert_eq!(claim.campaign_id, created.id);
         store
@@ -634,17 +683,17 @@ async fn persisted_retry_budget_exhausts_and_cannot_resurrect_after_restart() {
         }
     }
     db.close().await;
-    let db = prepared_database(&path).await;
+    let db = prepared_database(&path, &fixture).await;
     assert!(db.campaigns().claim(now + 10_000).await.unwrap().is_none());
     db.close().await;
 }
 #[tokio::test]
 async fn resource_changes_owner_lock_and_completion_fence_unsubmitted_work() {
-    let (_directory, path) = fixture();
-    let db = prepared_database(&path).await;
+    let (fixture, path) = fixture().await;
+    let db = prepared_database(&path, &fixture).await;
     let store = db.campaigns();
     let campaign = store
-        .create(caller(), input(), 1_900_000_000)
+        .create(caller(), input(&fixture), 1_900_000_000)
         .await
         .unwrap();
     let claim = store.claim(1_900_000_000).await.unwrap().unwrap();
@@ -676,7 +725,7 @@ async fn resource_changes_owner_lock_and_completion_fence_unsubmitted_work() {
             .all(|a| a.state == "cancelled")
     );
     let second = store
-        .create(caller(), input(), 1_900_000_010)
+        .create(caller(), input(&fixture), 1_900_000_010)
         .await
         .unwrap();
     sqlx::query("UPDATE users SET account_locked=1 WHERE id=1")
@@ -698,13 +747,13 @@ async fn resource_changes_owner_lock_and_completion_fence_unsubmitted_work() {
 }
 #[tokio::test]
 async fn migration_quarantines_global_rid_collisions_instead_of_choosing_an_owner() {
-    let (_directory, path) = fixture();
+    let (fixture, path) = fixture().await;
     let mut raw = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&path))
         .await
         .unwrap();
     sqlx::raw_sql("INSERT INTO results(campaign_id,user_id,r_id,email,status) SELECT campaign_id,999,r_id,'other@example.test','Scheduled' FROM results LIMIT 1").execute(&mut raw).await.unwrap();
     raw.close().await.unwrap();
-    let db = prepared_database(&path).await;
+    let db = prepared_database(&path, &fixture).await;
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM ruphish_legacy_queue_issues")
             .fetch_one(&db.inspection_pool())
@@ -725,8 +774,8 @@ async fn migration_quarantines_global_rid_collisions_instead_of_choosing_an_owne
 #[tokio::test]
 async fn ten_campaigns_keep_resources_and_credentials_isolated_under_bounded_fair_claims() {
     use ruphish_application::delivery::Sender;
-    let (_directory, path) = fixture();
-    let db = prepared_database(&path).await;
+    let (fixture, path) = fixture().await;
+    let db = prepared_database(&path, &fixture).await;
     let store = db.campaigns();
     let sender =
         ruphish_adapters::smtp::Smtp::new(Default::default(), "contact@example.test".into());
@@ -734,7 +783,7 @@ async fn ten_campaigns_keep_resources_and_credentials_isolated_under_bounded_fai
     for index in 0..10i64 {
         let template=sqlx::query("INSERT INTO templates(user_id,name,subject,text,html,modified_date,envelope_sender) VALUES(1,?,'{{.RId}} - Subject',?,'{{.RId}} - HTML','2030-01-01T00:00:00Z','visible@example.test')").bind(format!("Template {index}")).bind(format!("Content {index}: {{{{.RId}}}}" )).execute(&db.inspection_pool()).await.unwrap().last_insert_rowid();
         let profile=sqlx::query("INSERT INTO smtp(user_id,name,host,username,password,from_address,modified_date,ignore_cert_errors) VALUES(1,?,'127.0.0.1:25',?,?,?,'2030-01-01T00:00:00Z',0)").bind(format!("Profile {index}")).bind(format!("account-{index}")).bind(format!("service-secret-{index}")).bind(format!("transport-{index}@example.test")).execute(&db.inspection_pool()).await.unwrap().last_insert_rowid();
-        let mut request = input();
+        let mut request = input(&fixture);
         request.template = Selection {
             id: Some(template),
             ..Default::default()
@@ -811,11 +860,11 @@ async fn ten_campaigns_keep_resources_and_credentials_isolated_under_bounded_fai
 }
 #[tokio::test]
 async fn outcome_projection_preserves_engagement_and_deleted_campaigns_cannot_be_recreated() {
-    let (_directory, path) = fixture();
-    let db = prepared_database(&path).await;
+    let (fixture, path) = fixture().await;
+    let db = prepared_database(&path, &fixture).await;
     let store = db.campaigns();
     let c = store
-        .create(caller(), input(), 1_900_000_000)
+        .create(caller(), input(&fixture), 1_900_000_000)
         .await
         .unwrap();
     let claim = store.claim(1_900_000_000).await.unwrap().unwrap();
@@ -860,12 +909,12 @@ async fn outcome_projection_preserves_engagement_and_deleted_campaigns_cannot_be
 async fn measure_launch_read_claim_and_compose_at_legacy_audience_sizes() {
     use ruphish_application::delivery::Sender;
     for size in [100, 1_000, 5_000, 10_000] {
-        let (_directory, path) = fixture();
-        let db = prepared_database(&path).await;
+        let (fixture, path) = fixture().await;
+        let db = prepared_database(&path, &fixture).await;
         let store = db.campaigns();
         sqlx::raw_sql("DELETE FROM group_targets WHERE group_id=1; WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<10000) INSERT INTO targets(first_name,last_name,email,position) SELECT 'Sample',printf('Recipient %d',x),printf('performance-%d@example.test',x),'' FROM n;").execute(&db.inspection_pool()).await.unwrap();
         sqlx::query("INSERT INTO group_targets(group_id,target_id) SELECT 1,id FROM targets WHERE email LIKE 'performance-%' ORDER BY id LIMIT ?").bind(size).execute(&db.inspection_pool()).await.unwrap();
-        let mut request = input();
+        let mut request = input(&fixture);
         request.groups.truncate(1);
         let clock = std::time::Instant::now();
         let campaign = store
@@ -913,11 +962,11 @@ async fn measure_launch_read_claim_and_compose_at_legacy_audience_sizes() {
 
 #[tokio::test]
 async fn duplicate_attributes_are_reviewable_and_first_recipient_wins_within_a_group() {
-    let (_directory, path) = fixture();
-    let db = prepared_database(&path).await;
+    let (fixture, path) = fixture().await;
+    let db = prepared_database(&path, &fixture).await;
     let store = db.campaigns();
     sqlx::raw_sql("INSERT INTO targets(id,email,first_name,last_name,position) VALUES(999,'alice@example.test','Duplicate','Discarded','Different'); INSERT INTO group_targets VALUES(1,999);").execute(&db.inspection_pool()).await.unwrap();
-    let request = input();
+    let request = input(&fixture);
     let review = store
         .prepare(caller(), &request, 1_900_000_000)
         .await

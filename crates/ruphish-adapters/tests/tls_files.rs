@@ -2,6 +2,56 @@
 use ruphish_adapters::tls;
 
 #[test]
+fn generated_certificate_verifies_its_host_and_expires_within_a_year() {
+    use rustls::pki_types::{CertificateDer, ServerName, UnixTime, pem::PemObject};
+    use std::{sync::Arc, time::Duration};
+
+    let directory = tempfile::tempdir().unwrap();
+    let material = tls::load_or_generate(
+        &directory.path().join("admin.crt"),
+        &directory.path().join("admin.key"),
+        "admin.example.test",
+    )
+    .unwrap();
+    let certificate = CertificateDer::from_pem_slice(&material.certificate).unwrap();
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(certificate.clone()).unwrap();
+    let verifier = rustls::client::WebPkiServerVerifier::builder_with_provider(
+        Arc::new(roots),
+        Arc::new(rustls::crypto::ring::default_provider()),
+    )
+    .build()
+    .unwrap();
+    use rustls::client::danger::ServerCertVerifier;
+    let now = UnixTime::now();
+    for host in ["localhost", "127.0.0.1", "::1", "admin.example.test"] {
+        let name = ServerName::try_from(host).unwrap();
+        verifier
+            .verify_server_cert(&certificate, &[], &name, &[], now)
+            .unwrap();
+    }
+    let name = ServerName::try_from("admin.example.test").unwrap();
+    let later = UnixTime::since_unix_epoch(Duration::from_secs(now.as_secs() + 366 * 86400));
+    assert!(matches!(
+        verifier.verify_server_cert(&certificate, &[], &name, &[], later),
+        Err(rustls::Error::InvalidCertificate(
+            rustls::CertificateError::Expired | rustls::CertificateError::ExpiredContext { .. }
+        ))
+    ));
+    assert!(
+        verifier
+            .verify_server_cert(
+                &certificate,
+                &[],
+                &ServerName::try_from("other.example.test").unwrap(),
+                &[],
+                now
+            )
+            .is_err()
+    );
+}
+
+#[test]
 fn generated_private_key_is_restricted_and_existing_pair_is_loaded_byte_for_byte() {
     let directory = tempfile::tempdir().unwrap();
     let certificate = directory.path().join("admin.crt");

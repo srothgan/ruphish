@@ -25,34 +25,38 @@ fn sql(directory: &Path, query: &str) {
         pool.close().await;
     });
 }
-fn start(directory: &Path, options: &[&str]) -> (Process, String) {
+fn start(directory: &Workspace, options: &[&str]) -> (Process, String) {
     start_verified(directory, options, |_| {
         sql(directory, "UPDATE users SET password_change_required=0");
     })
 }
 
-pub(super) fn start_verified(
-    directory: &Path,
-    options: &[&str],
-    prepare: impl FnOnce(&str),
-) -> (Process, String) {
-    // Use real DNS/TLS proofs for the delivery suite's existing fixed URL fixtures.
-    let upstream = Arc::new(Mutex::new(None::<String>));
-    let destination = upstream.clone();
-    let network = domain_network::Network::new(move |host, path| {
-        let address = destination.lock().unwrap().clone()?;
-        let response = client()
-            .get(format!("http://{address}{path}"))
-            .header("x-forwarded-host", host)
-            .header("x-forwarded-proto", "https")
-            .send()
-            .ok()?;
-        response
-            .status()
-            .is_success()
-            .then(|| response.text().ok())
-            .flatten()
+pub(super) struct CampaignNetwork {
+    network: domain_network::Network,
+    upstream: Arc<Mutex<Option<String>>>,
+}
+
+fn start_with_network(directory: &Workspace, options: &[&str]) -> (Process, String) {
+    let fixture = directory.network.get_or_init(|| {
+        let upstream = Arc::new(Mutex::new(None::<String>));
+        let destination = upstream.clone();
+        let network = domain_network::Network::new(move |host, path| {
+            let address = destination.lock().unwrap().clone()?;
+            let response = client()
+                .get(format!("http://{address}{path}"))
+                .header("x-forwarded-host", host)
+                .header("x-forwarded-proto", "https")
+                .send()
+                .ok()?;
+            response
+                .status()
+                .is_success()
+                .then(|| response.text().ok())
+                .flatten()
+        });
+        CampaignNetwork { network, upstream }
     });
+    let network = &fixture.network;
     std::fs::write(directory.join("verification-ca.pem"), &network.certificate).unwrap();
     let mut config: Value =
         serde_json::from_slice(&std::fs::read(directory.join("config.json")).unwrap()).unwrap();
@@ -67,7 +71,17 @@ pub(super) fn start_verified(
     );
     let ready = process.ready();
     let base = format!("http://{}", ready["admin"].as_str().unwrap());
-    *upstream.lock().unwrap() = Some(ready["phish"].as_str().unwrap().into());
+    *fixture.upstream.lock().unwrap() = Some(ready["phish"].as_str().unwrap().into());
+    (process, base)
+}
+
+pub(super) fn start_verified(
+    directory: &Workspace,
+    options: &[&str],
+    prepare: impl FnOnce(&str),
+) -> (Process, String) {
+    let (process, base) = start_with_network(directory, options);
+    let network = &directory.network.get().unwrap().network;
     prepare(&base);
     for host in ["training.example.test", "example.test"] {
         let items = read(&base, "/api/domains/");
@@ -77,7 +91,13 @@ pub(super) fn start_verified(
             .iter()
             .find(|d| d["hostname"] == host)
             .cloned();
-        let domain=existing.unwrap_or_else(||post(&base,"/api/domains/",&json!({"name":host,"origin":format!("https://{host}"),"enabled":true,"revision":null})));
+        let domain = existing.unwrap_or_else(|| {
+            post(
+                &base,
+                "/api/domains/",
+                &json!({"name":host,"origin":network.origin(host),"enabled":true,"revision":null}),
+            )
+        });
         network.publish(
             host,
             domain["txt_value"]
@@ -108,7 +128,6 @@ pub(super) fn start_verified(
             );
         }
     }
-    process.domain_network = Some(network);
     (process, base)
 }
 fn post(base: &str, path: &str, body: &Value) -> Value {
@@ -158,7 +177,7 @@ fn normalize(value: &mut Value) {
 #[test]
 fn captured_go_campaign_api_cases_run_against_the_new_executable() {
     let directory = workspace();
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let cases: Vec<Value> =
         serde_json::from_slice(include_bytes!("fixtures/campaigns/http.json")).unwrap();
     for case in cases {
@@ -171,7 +190,12 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
             )
             .bearer_auth("synthetic-bootstrap-token")
             .header("content-type", "application/json")
-            .body(case["body"].as_str().unwrap().to_owned())
+            // Only the fixture's transport port changes; recorded wire expectations
+            // remain independent and are checked after restoring the recorded origin.
+            .body(case["body"].as_str().unwrap().replace(
+                "https://training.example.test",
+                &origin(&base, "training.example.test"),
+            ))
             .send()
             .unwrap();
         assert_eq!(
@@ -180,6 +204,11 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
             "{id}"
         );
         let mut actual: Value = response.json().unwrap();
+        actual = serde_json::from_str(&serde_json::to_string(&actual).unwrap().replace(
+            &origin(&base, "training.example.test"),
+            "https://training.example.test",
+        ))
+        .unwrap();
         // Assert the additive error code without changing the recorded Go response.
         let expected_code = match id {
             "missing" | "deleted" => Some("RESOURCE_NOT_FOUND"),
@@ -288,6 +317,18 @@ pub(super) fn probe_many(count: usize) -> Probe {
         thread,
     }
 }
+pub(super) fn origin(base: &str, host: &str) -> String {
+    read(base, "/api/domains/")
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|domain| domain["hostname"] == host)
+        .unwrap()["origin"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
 fn resources(base: &str, address: &str) -> Value {
     post(
         base,
@@ -309,7 +350,7 @@ fn resources(base: &str, address: &str) -> Value {
         "/api/smtp/",
         &json!({"name":"Local","host":address,"from_address":"Training <training@example.test>"}),
     );
-    json!({"name":"Training","groups":[{"name":"Audience"}],"template":{"name":"Mail"},"page":{"name":"Page"},"smtp":{"name":"Local"},"url":"https://training.example.test"})
+    json!({"name":"Training","groups":[{"name":"Audience"}],"template":{"name":"Mail"},"page":{"name":"Page"},"smtp":{"name":"Local"},"url":origin(base, "training.example.test")})
 }
 fn wait_state(base: &str, id: i64, state: &str) -> Value {
     let deadline = Instant::now() + Duration::from_secs(15);
@@ -325,7 +366,7 @@ fn wait_state(base: &str, id: i64, state: &str) -> Value {
 #[test]
 fn executable_launch_delivers_personalized_mail_once_and_persists_acceptance_across_restart() {
     let directory = workspace();
-    let (mut process, base) = start(directory.path(), &[]);
+    let (mut process, base) = start(&directory, &[]);
     let smtp = probe();
     let mut body = resources(&base, &smtp.address);
     // Unknown input must not leak into the persistent launch fingerprint.
@@ -349,7 +390,7 @@ fn executable_launch_delivers_personalized_mail_once_and_persists_acceptance_acr
     let mail = smtp.received.recv_timeout(Duration::from_secs(15)).unwrap();
     assert!(mail.contains("Subject: Hello Alice"));
     assert!(mail.contains("alice@example.test"));
-    assert!(mail.contains("https://training.example.test?rid="));
+    assert!(mail.contains(&format!("{}?rid=", origin(&base, "training.example.test"))));
     assert!(!mail.contains("synthetic-launch-secret-canary"));
     smtp.reply.send(Some("250 Accepted\r\n")).unwrap();
     smtp.thread.join().unwrap();
@@ -371,7 +412,7 @@ fn executable_launch_delivers_personalized_mail_once_and_persists_acceptance_acr
         1
     );
     process.stop();
-    let (mut restarted, base) = start(directory.path(), &[]);
+    let (mut restarted, base) = start(&directory, &[]);
     assert_eq!(
         read(&base, &format!("/api/campaigns/{id}/delivery"))["counts"]["accepted"],
         1
@@ -387,7 +428,7 @@ fn executable_launch_delivers_personalized_mail_once_and_persists_acceptance_acr
 #[test]
 fn killed_after_data_is_unknown_after_restart_and_requires_explicit_reconciliation() {
     let directory = workspace();
-    let (mut process, base) = start(directory.path(), &[]);
+    let (mut process, base) = start(&directory, &[]);
     let smtp = probe();
     let body = resources(&base, &smtp.address);
     let campaign = post(&base, "/api/campaigns/", &body);
@@ -400,7 +441,7 @@ fn killed_after_data_is_unknown_after_restart_and_requires_explicit_reconciliati
         directory.path(),
         "UPDATE ruphish_delivery SET lease_until=0",
     );
-    let (mut restarted, base) = start(directory.path(), &[]);
+    let (mut restarted, base) = start(&directory, &[]);
     let state = wait_state(&base, id, "unknown");
     let row = &state["items"][0];
     assert_eq!(row["code"], "delivery_outcome_unknown");
@@ -424,7 +465,9 @@ fn executable_campaign_reads_never_return_legacy_participant_credentials() {
         directory.path(),
         "UPDATE events SET details='{\"payload\":{\"username\":\"private-login-canary\",\"password\":\"private-login-canary\"},\"error\":\"private-login-canary\"}'",
     );
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    // Reading migrated campaigns must not require verifying or changing their original URLs.
+    let (mut process, base) = start_with_network(&directory, &["--disable-mailer"]);
+    sql(&directory, "UPDATE users SET password_change_required=0");
     for path in [
         "/api/campaigns/",
         "/api/campaigns/1",
@@ -448,7 +491,7 @@ fn debug_and_trace_logs_exclude_credentials_from_every_request_location_and_smtp
         let mut config = configuration();
         config["logging"]["level"] = json!(level);
         write_config(directory.path(), &config);
-        let (mut process, base) = start(directory.path(), &[]);
+        let (mut process, base) = start(&directory, &[]);
         let canary = "synthetic-secret-log-canary-994";
         let public = format!("http://{}", process.ready()["phish"].as_str().unwrap());
         for origin in [&base, &public] {
@@ -518,13 +561,13 @@ fn debug_and_trace_logs_exclude_credentials_from_every_request_location_and_smtp
 fn startup_database_diagnostics_and_cli_arguments_cannot_leak_credentials() {
     let secret = "synthetic-startup-secret-canary-991";
     let directory = workspace();
-    let (mut process, _) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, _) = start(&directory, &["--disable-mailer"]);
     process.stop();
     sql(
         directory.path(),
         "UPDATE users SET password_change_required=1; CREATE TRIGGER fail_bootstrap BEFORE UPDATE ON users BEGIN SELECT RAISE(ABORT,'synthetic-startup-secret-canary-991'); END;",
     );
-    let mut rejected = Process::start(directory.path(), "admin");
+    let mut rejected = Process::start(&directory, "admin");
     rejected.fail();
     assert!(!rejected.output().contains(secret));
     assert!(
@@ -543,7 +586,7 @@ fn startup_database_diagnostics_and_cli_arguments_cannot_leak_credentials() {
 #[test]
 fn reviewed_campaign_preview_test_and_duplicate_use_exact_owned_resources_without_launching() {
     let directory = workspace();
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let smtp = probe();
     let mut input = resources(&base, &smtp.address);
     sql(
@@ -632,7 +675,7 @@ fn worker_continues_other_recipients_after_temporary_permanent_and_unknown_failu
         (None, "unknown"),
     ] {
         let directory = workspace();
-        let (mut process, base) = start(directory.path(), &[]);
+        let (mut process, base) = start(&directory, &[]);
         let smtp = probe_many(2);
         let body = resources(&base, &smtp.address);
         let update=client().put(format!("{base}/api/groups/1")).bearer_auth("synthetic-bootstrap-token").json(&json!({"id":1,"name":"Audience","targets":[{"email":"alice@example.test"},{"email":"bob@example.test"}]})).send().unwrap();
@@ -656,7 +699,7 @@ fn worker_continues_other_recipients_after_temporary_permanent_and_unknown_failu
 #[test]
 fn campaign_ownership_read_only_and_locked_owners_hold_at_real_http_boundaries() {
     let directory = workspace();
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let body = resources(&base, "127.0.0.1:25");
     let campaign = post(&base, "/api/campaigns/", &body);
     let id = campaign["id"].as_i64().unwrap();
@@ -733,14 +776,14 @@ fn campaign_ownership_read_only_and_locked_owners_hold_at_real_http_boundaries()
 #[test]
 fn campaign_json_preserves_go_field_case_duplicate_merging_and_null_semantics() {
     let directory = workspace();
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let _ = resources(&base, "127.0.0.1:25");
     let raw = r#"{"NaMe":"Training","name":null,"groups":[{"NAME":"Audience"}],"template":{"NAME":"Mail"},"template":{},"page":{"name":"Page"},"smtp":{"name":"Local"},"url":"https://example.test"}"#;
     let response = client()
         .post(format!("{base}/api/campaigns/"))
         .bearer_auth("synthetic-bootstrap-token")
         .header("content-type", "application/json")
-        .body(raw)
+        .body(raw.replace("https://example.test", &origin(&base, "example.test")))
         .send()
         .unwrap();
     assert_eq!(response.status(), 201);
@@ -766,7 +809,7 @@ fn campaign_json_preserves_go_field_case_duplicate_merging_and_null_semantics() 
 #[test]
 fn local_campaign_times_resolve_on_server_and_survive_review_launch_and_restart() {
     let directory = workspace();
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let input = resources(&base, "127.0.0.1:1");
     let mut saved = Vec::new();
     for (local, end, expected, expected_end) in [
@@ -851,7 +894,7 @@ fn local_campaign_times_resolve_on_server_and_survive_review_launch_and_restart(
     let campaign = post(&base, "/api/campaigns/", &exact);
     assert_eq!(campaign["launch_date"], "2030-10-27T01:30:00Z");
     process.stop();
-    let (mut restarted, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut restarted, base) = start(&directory, &["--disable-mailer"]);
     for (id, expected, expected_end, due) in saved {
         let campaign = read(&base, &format!("/api/campaigns/{id}"));
         assert_eq!(campaign["launch_date"], expected);
@@ -866,7 +909,7 @@ fn local_campaign_times_resolve_on_server_and_survive_review_launch_and_restart(
 #[test]
 fn repeated_campaign_review_recovers_after_validation_failure_without_creating_work() {
     let directory = workspace();
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let valid = resources(&base, "127.0.0.1:1");
     for field in ["name", "groups", "template"] {
         let mut invalid = valid.clone();
@@ -915,7 +958,7 @@ fn repeated_campaign_review_recovers_after_validation_failure_without_creating_w
 #[test]
 fn campaign_pages_only_offer_next_when_another_owned_row_exists() {
     let directory = workspace();
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let empty = read(&base, "/api/campaigns/overview");
     assert_eq!(empty["items"], json!([]));
     assert!(empty["next_after"].is_null());
@@ -1042,7 +1085,7 @@ fn campaign_pages_only_offer_next_when_another_owned_row_exists() {
 #[test]
 fn campaign_context_and_recipient_history_are_complete_bounded_and_owner_scoped() {
     let directory = workspace();
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let mut body = resources(&base, "127.0.0.1:1");
     post(
         &base,
@@ -1080,7 +1123,7 @@ fn campaign_context_and_recipient_history_are_complete_bounded_and_owner_scoped(
     assert_eq!(metadata["template_sender"], "Notice <notice@example.test>");
     assert_eq!(metadata["launch_date"], "2030-05-01T09:25:00Z");
     assert_eq!(metadata["send_by_date"], "2030-05-01T10:25:00Z");
-    assert_eq!(metadata["url"], "https://training.example.test");
+    assert_eq!(metadata["url"], origin(&base, "training.example.test"));
     for value in [&view, &read(&base, "/api/campaigns/overview")] {
         let encoded = value.to_string();
         for secret in [

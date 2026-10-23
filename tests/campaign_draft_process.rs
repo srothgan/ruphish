@@ -50,7 +50,7 @@ fn configuration_for(base: &str) -> Value {
     let legacy = resources(base, "127.0.0.1:9");
     let review = post(base, "/api/campaigns/prepare", &legacy);
     let reference = |key: &str| json!({"id":review["selection"][key]["id"]});
-    json!({"name":"Saved training","url":"https://training.example.test","selection":{"groups":review["selection"]["groups"].as_array().unwrap().iter().map(|g|json!({"id":g["id"]})).collect::<Vec<_>>(),"template":reference("template"),"page":reference("page"),"smtp":reference("smtp")},"policy":review["policy"]})
+    json!({"name":"Saved training","url":legacy["url"],"selection":{"groups":review["selection"]["groups"].as_array().unwrap().iter().map(|g|json!({"id":g["id"]})).collect::<Vec<_>>(),"template":reference("template"),"page":reference("page"),"smtp":reference("smtp")},"policy":review["policy"]})
 }
 fn launch_body(base: &str, configuration: &Value, revision: &Value) -> Value {
     let review = post(base, "/api/campaigns/prepare", configuration);
@@ -63,7 +63,7 @@ fn launch_body(base: &str, configuration: &Value, revision: &Value) -> Value {
 #[test]
 fn campaign_draft_survives_restart_rejects_bad_input_and_launches_once_after_rollback() {
     let directory = workspace();
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let path = "/api/campaign-drafts/functional-draft-000001";
     let before = counts(directory.path());
     let incomplete =
@@ -104,7 +104,7 @@ fn campaign_draft_survives_restart_rejects_bad_input_and_launches_once_after_rol
     }
     process.stop();
     assert!(!process.output().contains("participant-secret-canary-9031"));
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
     assert_eq!(
         read(&base, path),
         saved,
@@ -165,7 +165,7 @@ fn campaign_draft_survives_restart_rejects_bad_input_and_launches_once_after_rol
         412
     );
     process.stop();
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let replay: Value = request(&base, "POST", &format!("{path}/launch"), &body)
         .error_for_status()
         .unwrap()
@@ -207,7 +207,7 @@ fn campaign_draft_survives_restart_rejects_bad_input_and_launches_once_after_rol
 #[test]
 fn campaign_draft_missing_resource_and_past_schedule_preserve_work_until_corrected() {
     let directory = workspace();
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let path = "/api/campaign-drafts/functional-draft-000002";
     let mut config = configuration_for(&base);
     config["launch_local"] = json!({"local":"2000-01-01T12:00","time_zone":"UTC"});
@@ -280,7 +280,7 @@ fn campaign_draft_missing_resource_and_past_schedule_preserve_work_until_correct
 #[test]
 fn campaign_draft_additive_upgrade_preserves_existing_campaign_and_is_repeatable() {
     let directory = workspace();
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let input = resources(&base, "127.0.0.1:9");
     let campaign = post(&base, "/api/campaigns/", &input);
     let path = format!("/api/campaigns/{}", campaign["id"]);
@@ -304,7 +304,7 @@ fn campaign_draft_additive_upgrade_preserves_existing_campaign_and_is_repeatable
         directory.path(),
         "DROP TABLE ruphish_campaign_drafts; DELETE FROM ruphish_schema WHERE version>=9;",
     );
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
     assert_eq!(read(&base, &path), existing);
     assert_eq!(counts(directory.path()), before);
     let draft = save(
@@ -315,7 +315,7 @@ fn campaign_draft_additive_upgrade_preserves_existing_campaign_and_is_repeatable
         1,
     );
     process.stop();
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
     assert_eq!(
         read(&base, "/api/campaign-drafts/upgrade-persistence-001"),
         draft
@@ -328,7 +328,7 @@ fn campaign_draft_additive_upgrade_preserves_existing_campaign_and_is_repeatable
 #[test]
 fn campaign_draft_pagination_permissions_and_invalid_queries_use_real_http_contracts() {
     let directory = workspace();
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let before = counts(directory.path());
     for index in 0..51 {
         save(
@@ -403,7 +403,7 @@ fn campaign_draft_pagination_permissions_and_invalid_queries_use_real_http_contr
 #[test]
 fn campaign_directory_pages_across_drafts_and_executions_and_refreshes_after_delete() {
     let directory = workspace();
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
     for n in 0..49 {
         save(
             &base,

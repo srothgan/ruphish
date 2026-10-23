@@ -17,10 +17,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CARGO_BUILD_JOBS: '1'
-  RUST_TEST_THREADS: '1'
-  TOKIO_WORKER_THREADS: '2'
-  RAYON_NUM_THREADS: '2'
   NO_COLOR: 'true'
 
 jobs:
@@ -56,14 +52,11 @@ jobs:
     needs: assets
     strategy:
       fail-fast: false
-      max-parallel: 2
       matrix:
-        runner: [ubuntu-24.04, windows-2025, macos-15, macos-15-intel]
+        runner: [ubuntu-24.04, windows-2025, macos-15]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
-    defaults:
-      run:
-        shell: bash
+    # Use the native shell: Git Bash makes Windows children ignore Ctrl+C.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -76,7 +69,12 @@ jobs:
           name: release-admin
           path: dist/admin
       - name: Optimized native and executable behavior
-        run: cargo test --release --workspace --exclude ruphish-ui --locked -- --nocapture --test-threads=1
+        # Keep disposable fixtures on job storage, not Windows' user-profile disk.
+        env:
+          TMPDIR: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
+        run: cargo test --release --workspace --exclude ruphish-ui --locked -- --nocapture
 
   gate:
     name: Release gate
