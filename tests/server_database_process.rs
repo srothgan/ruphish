@@ -63,7 +63,7 @@ pub(super) fn exercise(mut database_config: Value, mut fault: impl FnMut(&Path, 
     config["logging"]["level"] = json!("trace");
     write_config(directory.path(), &config);
     let browser = auth_process::browser();
-    let (mut process, mut base) = campaign_process::start_verified(directory.path(), &[], |base| {
+    let (mut process, mut base) = campaign_process::start_verified(&directory, &[], |base| {
         auth_process::setup(&browser, base);
     });
     let client = client();
@@ -100,7 +100,7 @@ pub(super) fn exercise(mut database_config: Value, mut fault: impl FnMut(&Path, 
         "/api/webhooks/",
         &json!({"name":"Local receiver","url":hooks.url,"secret":"HOOK-SECRET-CANARY","is_active":true}),
     );
-    let (campaign_id, rid) = campaign_workflow(directory.path(), &mut process, &base, &mut fault);
+    let (campaign_id, rid) = campaign_workflow(&directory, &mut process, &base, &mut fault);
     let first_hook = hooks
         .requests
         .recv_timeout(Duration::from_secs(15))
@@ -137,7 +137,14 @@ pub(super) fn exercise(mut database_config: Value, mut fault: impl FnMut(&Path, 
     let run = initial["history"][0]["id"].as_i64().unwrap();
     {
         let mut state = peer.state.lock().unwrap();
-        state.messages.insert(1,format!("Subject: report\r\n\r\nhttps://training.example.test/?rid={rid}\r\npassword=PARTICIPANT-CANARY").into_bytes());
+        state.messages.insert(
+            1,
+            format!(
+                "Subject: report\r\n\r\n{}/?rid={rid}\r\npassword=PARTICIPANT-CANARY",
+                campaign_process::origin(&base, "training.example.test")
+            )
+            .into_bytes(),
+        );
         state.messages.insert(
             2,
             format!("Subject: forged origin\r\n\r\nhttps://other.test/?rid={rid}").into_bytes(),
@@ -172,7 +179,7 @@ pub(super) fn exercise(mut database_config: Value, mut fault: impl FnMut(&Path, 
     while hooks.requests.try_recv().is_ok() {}
     hooks.status.store(204, std::sync::atomic::Ordering::SeqCst);
     fault(directory.path(), Fault::DueWebhooks);
-    (process, base) = campaign_process::start_verified(directory.path(), &[], |_| {});
+    (process, base) = campaign_process::start_verified(&directory, &[], |_| {});
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
         let received = hooks
@@ -308,7 +315,7 @@ pub(super) fn exercise(mut database_config: Value, mut fault: impl FnMut(&Path, 
             std::thread::sleep(Duration::from_millis(25));
         }
     }
-    uncertain_delivery(directory.path(), &mut process, &mut base, &mut fault);
+    uncertain_delivery(&directory, &mut process, &mut base, &mut fault);
     assert_eq!(
         request(
             &client,
@@ -416,7 +423,7 @@ fn post(base: &str, path: &str, value: &Value) -> Value {
 }
 
 fn uncertain_delivery(
-    directory: &Path,
+    directory: &Workspace,
     process: &mut Process,
     base: &mut String,
     fault: &mut impl FnMut(&Path, Fault<'_>),
@@ -435,7 +442,7 @@ fn uncertain_delivery(
     let campaign = post(
         base,
         "/api/campaigns/",
-        &json!({"name":"Uncertain acceptance","url":"https://training.example.test","groups":[{"name":"Recovery audience"}],"template":{"name":"Personalized"},"page":{"name":"Private page"},"smtp":{"name":"Recovery SMTP"}}),
+        &json!({"name":"Uncertain acceptance","url":campaign_process::origin(base, "training.example.test"),"groups":[{"name":"Recovery audience"}],"template":{"name":"Personalized"},"page":{"name":"Private page"},"smtp":{"name":"Recovery SMTP"}}),
     );
     let id = campaign["id"].as_i64().unwrap();
     let message = smtp.received.recv_timeout(Duration::from_secs(20)).unwrap();
@@ -524,7 +531,7 @@ fn uncertain_delivery(
 }
 
 fn campaign_workflow(
-    directory: &Path,
+    directory: &Workspace,
     process: &mut Process,
     base: &str,
     fault: &mut impl FnMut(&Path, Fault<'_>),
@@ -550,7 +557,7 @@ fn campaign_workflow(
         "/api/smtp/",
         &json!({"name":"Loopback SMTP","host":smtp.address,"from_address":"Training <training@example.test>"}),
     );
-    let draft = json!({"name":"Provider delivery","url":"https://training.example.test","groups":[{"name":"Delivery audience"}],"template":{"name":"Personalized"},"page":{"name":"Private page"},"smtp":{"name":"Loopback SMTP"}});
+    let draft = json!({"name":"Provider delivery","url":campaign_process::origin(base, "training.example.test"),"groups":[{"name":"Delivery audience"}],"template":{"name":"Personalized"},"page":{"name":"Private page"},"smtp":{"name":"Loopback SMTP"}});
     // Every write boundary must roll back, including children written before the injected failure.
     for table in [
         "campaigns",
@@ -683,7 +690,11 @@ fn campaign_workflow(
         client()
             .request(method, format!("{public}{path}"))
             .header("host", "training.example.test")
-            .header("x-forwarded-host", "training.example.test")
+            .header(
+                "x-forwarded-host",
+                campaign_process::origin(base, "training.example.test")
+                    .trim_start_matches("https://"),
+            )
             .header("x-forwarded-proto", "https")
     };
     let url = format!("/?rid={rid}");

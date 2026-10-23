@@ -31,7 +31,7 @@ impl Mailbox {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
-        let material = rcgen::generate_simple_self_signed(vec!["127.0.0.1".into()]).unwrap();
+        let material = super::tls_fixture::server_certificate(&["127.0.0.1"]);
         let certificate = material.cert.pem();
         let key = rustls::pki_types::PrivatePkcs8KeyDer::from(material.signing_key.serialize_der());
         let config = Arc::new(

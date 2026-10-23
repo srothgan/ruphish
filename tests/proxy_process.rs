@@ -8,75 +8,86 @@ fn request(address: &str, path: &str, headers: &str, body: Option<&str>) -> u16 
         .unwrap();
     let method = if body.is_some() { "POST" } else { "GET" };
     let body = body.unwrap_or("");
-    write!(stream, "{method} {path} HTTP/1.1\r\nHost: internal.invalid\r\nConnection: close\r\n{headers}Content-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len()).unwrap();
+    let request = format!(
+        "{method} {path} HTTP/1.1\r\nHost: internal.invalid\r\nConnection: close\r\n{headers}Content-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+        body.len()
+    );
+    stream.write_all(request.as_bytes()).unwrap();
     let mut response = String::new();
-    BufReader::new(stream).read_line(&mut response).unwrap();
+    BufReader::new(stream)
+        .read_line(&mut response)
+        .map_err(|error| format!("Read response to {method} {path}, headers {headers:?}: {error}"))
+        .unwrap();
     response.split_whitespace().nth(1).unwrap().parse().unwrap()
 }
 
 #[test]
 fn proxy_authority_rejects_ambiguous_or_untrusted_headers_without_tracking() {
     let directory = workspace();
-    let (mut process, base) = start(directory.path(), &["--disable-mailer"]);
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let public = process.ready()["phish"].as_str().unwrap().to_owned();
     let campaign = post(&base, "/api/campaigns/", &resources(&base, "127.0.0.1:1"));
     let path = format!("/api/campaigns/{}", campaign["id"]);
     let rid = campaign["results"][0]["id"].as_str().unwrap();
-    let valid = "X-Forwarded-Host: training.example.test\r\nX-Forwarded-Proto: https\r\n";
+    let origin = origin(&base, "training.example.test");
+    let authority = origin.trim_start_matches("https://");
+    let other = super::origin(&base, "example.test");
+    let other = other.trim_start_matches("https://");
+    let valid = format!("X-Forwarded-Host: {authority}\r\nX-Forwarded-Proto: https\r\n");
     let cases = [
         ("missing both", ""),
         ("missing host", "X-Forwarded-Proto: https\r\n"),
-        (
-            "missing protocol",
-            "X-Forwarded-Host: training.example.test\r\n",
-        ),
+        ("missing protocol", "X-Forwarded-Host: {training}\r\n"),
         (
             "http",
-            "X-Forwarded-Host: training.example.test\r\nX-Forwarded-Proto: http\r\n",
+            "X-Forwarded-Host: {training}\r\nX-Forwarded-Proto: http\r\n",
         ),
         (
             "duplicate host",
-            "X-Forwarded-Host: training.example.test\r\nX-Forwarded-Host: training.example.test\r\nX-Forwarded-Proto: https\r\n",
+            "X-Forwarded-Host: {training}\r\nX-Forwarded-Host: {training}\r\nX-Forwarded-Proto: https\r\n",
         ),
         (
             "conflicting hosts",
-            "X-Forwarded-Host: training.example.test\r\nX-Forwarded-Host: example.test\r\nX-Forwarded-Proto: https\r\n",
+            "X-Forwarded-Host: {training}\r\nX-Forwarded-Host: {other}\r\nX-Forwarded-Proto: https\r\n",
         ),
         (
             "duplicate protocol",
-            "X-Forwarded-Host: training.example.test\r\nX-Forwarded-Proto: https\r\nX-Forwarded-Proto: https\r\n",
+            "X-Forwarded-Host: {training}\r\nX-Forwarded-Proto: https\r\nX-Forwarded-Proto: https\r\n",
         ),
         (
             "host list",
-            "X-Forwarded-Host: training.example.test, example.test\r\nX-Forwarded-Proto: https\r\n",
+            "X-Forwarded-Host: {training}, {other}\r\nX-Forwarded-Proto: https\r\n",
         ),
         (
             "conflicting protocols",
-            "X-Forwarded-Host: training.example.test\r\nX-Forwarded-Proto: https\r\nX-Forwarded-Proto: http\r\n",
+            "X-Forwarded-Host: {training}\r\nX-Forwarded-Proto: https\r\nX-Forwarded-Proto: http\r\n",
         ),
         (
             "protocol list",
-            "X-Forwarded-Host: training.example.test\r\nX-Forwarded-Proto: https, http\r\n",
+            "X-Forwarded-Host: {training}\r\nX-Forwarded-Proto: https, http\r\n",
         ),
         (
             "unknown domain",
-            "X-Forwarded-Host: unknown.example.test\r\nX-Forwarded-Proto: https\r\n",
+            "X-Forwarded-Host: unknown.{other}\r\nX-Forwarded-Proto: https\r\n",
         ),
         (
             "different verified domain",
-            "X-Forwarded-Host: example.test\r\nX-Forwarded-Proto: https\r\n",
+            "X-Forwarded-Host: {other}\r\nX-Forwarded-Proto: https\r\n",
         ),
         (
             "wrong port",
-            "X-Forwarded-Host: training.example.test:8443\r\nX-Forwarded-Proto: https\r\n",
+            "X-Forwarded-Host: training.example.test:443\r\nX-Forwarded-Proto: https\r\n",
         ),
     ];
     let submission = r#"{"event_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","password_present":true}"#;
     let before = read(&base, &path);
     for (name, headers) in cases {
+        let headers = headers
+            .replace("{training}", authority)
+            .replace("{other}", other);
         for (endpoint, body) in [("/track", None), ("/", None), ("/", Some(submission))] {
             assert_eq!(
-                request(&public, &format!("{endpoint}?rid={rid}"), headers, body),
+                request(&public, &format!("{endpoint}?rid={rid}"), &headers, body),
                 404,
                 "{name} {endpoint}"
             );
@@ -88,13 +99,13 @@ fn proxy_authority_rejects_ambiguous_or_untrusted_headers_without_tracking() {
         }
     }
     assert_eq!(
-        request(&public, &format!("/track?rid={rid}"), valid, None),
+        request(&public, &format!("/track?rid={rid}"), &valid, None),
         200
     );
     assert_ne!(read(&base, &path)["timeline"], before["timeline"]);
-    assert_eq!(request(&public, &format!("/?rid={rid}"), valid, None), 200);
+    assert_eq!(request(&public, &format!("/?rid={rid}"), &valid, None), 200);
     assert_eq!(
-        request(&public, &format!("/?rid={rid}"), valid, Some(submission)),
+        request(&public, &format!("/?rid={rid}"), &valid, Some(submission)),
         200
     );
     let accepted = read(&base, &path);
@@ -125,7 +136,7 @@ fn proxy_authority_rejects_ambiguous_or_untrusted_headers_without_tracking() {
     let public = ready["phish"].as_str().unwrap();
     for (endpoint, body) in [("/track", None), ("/", None), ("/", Some(submission))] {
         assert_eq!(
-            request(public, &format!("{endpoint}?rid={rid}"), valid, body),
+            request(public, &format!("{endpoint}?rid={rid}"), &valid, body),
             404
         );
         assert_eq!(

@@ -57,7 +57,9 @@ pub fn load_or_generate(
     }
     let mut params = rcgen::CertificateParams::new(names)?;
     params.not_before = time::OffsetDateTime::now_utc() - time::Duration::minutes(5);
-    params.not_after = time::OffsetDateTime::now_utc() + time::Duration::days(3650);
+    // Development certificates still need to satisfy native TLS verifiers.
+    // Keep validity comfortably below Apple's server-certificate lifetime limit.
+    params.not_after = time::OffsetDateTime::now_utc() + time::Duration::days(365);
     params
         .distinguished_name
         .push(rcgen::DnType::OrganizationName, "Ruphish");

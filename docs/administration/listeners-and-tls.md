@@ -11,7 +11,7 @@ The administration listener serves accounts, the UI, and management APIs. The pu
 
 Set `use_tls: true` and provide `cert_path` and `key_path` for the selected listener. The certificate must cover the hostname clients use. For public campaigns, it must also satisfy the server's domain-verification trust checks.
 
-If both configured files are absent, startup can generate a development certificate/key pair. If only one is absent or the pair does not match, startup fails. Development self-signed certificates need explicit local trust; they do not establish public trust for arbitrary campaign domains. Supplied certificate/key bytes are not rewritten.
+If both configured files are absent, startup can generate a development certificate/key pair valid for one year. This replaces the previous ten-year lifetime for newly generated certificates; existing files are preserved. If only one is absent or the pair does not match, startup fails. Development self-signed certificates need explicit local trust; they do not establish public trust for arbitrary campaign domains. Supplied certificate/key bytes are not rewritten.
 
 TLS uses modern TLS 1.2/1.3. Built-in ACME, automatic per-host certificates, and DNS-provider provisioning are not implemented. Use a suitable certificate covering your hostnames or a reverse proxy that manages them.
 

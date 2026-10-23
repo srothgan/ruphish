@@ -10,7 +10,7 @@ use std::{
     collections::VecDeque,
     io::{Read, Write},
     path::Path,
-    sync::{Arc, Condvar, Mutex},
+    sync::{Arc, Condvar, Mutex, OnceLock},
     time::{Duration, Instant},
 };
 
@@ -38,11 +38,12 @@ mod reporting_process;
 mod resource_process;
 #[path = "server_database_process.rs"]
 mod server_database_process;
+#[path = "support/tls.rs"]
+mod tls_fixture;
 #[path = "support/webhook_receiver.rs"]
 mod webhook_receiver;
 
 struct Process {
-    domain_network: Option<domain_network::Network>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
     writer: Option<Box<dyn Write + Send>>,
     master: Option<Box<dyn portable_pty::MasterPty + Send>>,
@@ -134,7 +135,6 @@ impl Process {
             }
         });
         Self {
-            domain_network: None,
             child,
             writer: Some(writer),
             master: Some(pair.master),
@@ -215,7 +215,13 @@ impl Process {
     }
 
     fn interrupt(&mut self) {
-        self.writer.as_mut().unwrap().write_all(&[3]).unwrap();
+        // ConPTY requests win32-input-mode. Encode the actual Ctrl+C key event,
+        // as we already do for Ctrl+Break, rather than relying on ETX translation.
+        #[cfg(windows)]
+        let input = b"\x1b[67;46;3;1;8;1_\x1b[67;46;3;0;8;1_".as_slice();
+        #[cfg(unix)]
+        let input = &[3];
+        self.writer.as_mut().unwrap().write_all(input).unwrap();
         self.writer.as_mut().unwrap().flush().unwrap();
     }
 
@@ -291,7 +297,7 @@ fn terminal_text(raw: &str) -> String {
 
 #[test]
 fn killing_a_process_during_migration_leaves_the_old_database_recoverable_and_restartable() {
-    let directory = workspace();
+    let directory = workspace_without_assets();
     std::fs::copy(
         fixture("compatibility/20160118194630.sqlite3"),
         directory.path().join("installation.sqlite3"),
@@ -352,19 +358,47 @@ impl Drop for Process {
     }
 }
 
-fn workspace() -> tempfile::TempDir {
+struct Workspace {
+    // Drop network threads before removing the directory they serve.
+    network: OnceLock<domain_network::Network>,
+    directory: tempfile::TempDir,
+}
+
+impl Workspace {
+    fn path(&self) -> &Path {
+        self.directory.path()
+    }
+}
+
+impl std::ops::Deref for Workspace {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+        self.path()
+    }
+}
+
+fn workspace_without_assets() -> Workspace {
     let _ = rustls::crypto::ring::default_provider().install_default();
     let directory = tempfile::Builder::new()
         .prefix("ruphish process é ")
         .tempdir()
         .unwrap();
+    write_config(directory.path(), &configuration());
+    Workspace {
+        network: OnceLock::new(),
+        directory,
+    }
+}
+
+fn workspace() -> Workspace {
+    let directory = workspace_without_assets();
     let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../dist/admin");
     assert!(
         assets.join("index.html").is_file(),
         "Build the actual admin distribution with trunk build before process tests"
     );
     copy(&assets, &directory.path().join("dist/admin"));
-    write_config(directory.path(), &configuration());
     directory
 }
 
@@ -685,7 +719,7 @@ fn every_populated_goose_version_starts_in_place_with_a_verified_recoverable_sna
     let versions: Vec<i64> =
         serde_json::from_str(include_str!("fixtures/compatibility/versions.json")).unwrap();
     for old in versions {
-        let directory = workspace();
+        let directory = workspace_without_assets();
         let source = fixture(&format!("compatibility/{old}.sqlite3"));
         let original = std::fs::read(&source).unwrap();
         std::fs::copy(&source, directory.path().join("installation.sqlite3")).unwrap();
@@ -1255,7 +1289,7 @@ fn existing_go_rsa_pkcs1_material_serves_verified_tls_without_rewriting_files() 
     let ready = process.ready();
     let trusted = reqwest::blocking::Client::builder()
         .no_proxy()
-        .add_root_certificate(reqwest::Certificate::from_pem(&cert).unwrap())
+        .tls_certs_only([reqwest::Certificate::from_pem(&cert).unwrap()])
         .timeout(Duration::from_secs(3))
         .build()
         .unwrap();

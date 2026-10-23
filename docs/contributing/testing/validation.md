@@ -29,6 +29,8 @@ Cost describes the work performed, not a promised duration. Compilation, tool in
 | Bounded audience measurement | Existing ignored launch/read/claim/compose workload at legacy audience sizes | Measurement, not a wall-clock assertion. Full nightly/release acceptance; not an agent completion check |
 | Workflow lint and gate tests | YAML/Actions expressions and failure/skip handling | Small compared with product builds. Every PR and after workflow edits; inspect representative path groups when their patterns change |
 
+Executable campaign tests use an isolated DNS/HTTPS fixture on ordinary loopback and an allocated port. The fixture belongs to the test workspace, so its origin remains stable across application restarts. No privileged-port configuration is needed. Migration-only process tests omit UI assets; tests that serve or modify the administration distribution retain their own asset copies.
+
 ## Prerequisites
 
 Use the Rust toolchain/components/target in [rust-toolchain.toml](../../../rust-toolchain.toml). Tool versions are owned by [Cargo.toml](../../../Cargo.toml) workspace metadata and [Trunk.toml](../../../Trunk.toml); [development setup](../setup.md) explains formatting, generation and editor configuration. CI additionally pins product Node and tool installers in the [toolchain action](../../../.github/actions/toolchain/action.yml). The website job reads its Node version from [website/package.json](../../../website/package.json).
