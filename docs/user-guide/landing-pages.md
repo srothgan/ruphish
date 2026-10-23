@@ -15,18 +15,20 @@ To reuse existing content, choose **Import** from the landing-page list. Provide
 
 Review the imported draft and save it explicitly. Saved authored HTML and the served page are distinct: the public representation applies content restrictions after template rendering. An import can therefore succeed while some of its styling, scripts, or remote resources are absent from the preview/public page.
 
-## Forms and tracking defaults
+## Forms and submission tracking
 
-Submission tracking and password-presence tracking are optional campaign defaults. Selecting a landing page supplies those defaults to campaign review, where you can change them. Launch saves the effective policy for that campaign.
+Every supported submission is recorded, together with password presence. A separate submission creates a separate event; retrying an unconfirmed delivery does not.
 
-These controls never enable participant-value capture. The supported collector submits an event identity and a presence boolean; it does not submit named form values. Keep authored labels and controls usable, but do not rely on a custom `action`, external form endpoint, event handler, or script to process them. See [participant data](participant-data.md).
+Ruphish never captures participant-entered values. The supported collector submits an event identity and a presence boolean; it does not submit named form values. Keep authored labels and controls usable, but do not rely on a custom `action`, external form endpoint, event handler, or script to process them. See [participant data](participant-data.md).
 
 A redirect can be an HTTP(S) or relative destination, including supported template expressions. It runs after an acknowledged submission. Leave it empty to stay on the page. Do not place entered values into a redirect URL.
 
-## Preview and test
+## Page checks, preview, and testing
+
+Use **Check landing page** to inspect the current source. Saving, loading, previewing, and campaign review also return advisory warnings from the processed sample page. Checks flag disabled or unnamed password controls, missing form association, duplicate IDs, repaired HTML, removed authored execution, and forms with no usable submission control. Warnings do not prevent saving. Verify template-dependent forms with representative recipients.
 
 Preview uses the restricted representation with submission tracking disabled. Scripts, remote resources, and submissions are blocked; preview does not create campaign results.
 
 Before launch, inspect the page's layout, labels, keyboard access, and expected redirect using a synthetic local campaign. Embedded PNG/JPEG/GIF data images are supported. Publishing a file under `/static/` does not exempt it from the page's resource restrictions.
 
-Editing a page changes its current consumers, while the launched campaign's saved tracking policy remains its own. Duplicate a page when you need an independent content version. A page referenced by an unfinished campaign cannot be deleted.
+Editing a page changes its current consumers, while the launched campaign's saved redirect remains its own. Duplicate a page when you need an independent content version. A page referenced by an unfinished campaign cannot be deleted.

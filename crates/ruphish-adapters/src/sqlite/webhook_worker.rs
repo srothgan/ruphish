@@ -51,7 +51,7 @@ impl WebhookQueue for Integrations {
                 JOIN webhooks w ON w.id=j.webhook_id
                 JOIN ruphish_webhook_state s ON s.webhook_id=w.id
                 AND s.revision=j.revision
-                JOIN events e ON e.id=j.event_id
+                JOIN event_history e ON e.id=j.event_id
                 WHERE j.state IN ('queued','retry')
                 AND j.due<=?
                 AND w.is_active=1

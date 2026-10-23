@@ -325,9 +325,9 @@ pub struct LandingPage {
     pub name: String,
     /// Authored document source.
     pub html: String,
-    /// Legacy flag: record submission events only.
+    /// Ignored legacy input; true in responses because submissions are always tracked.
     pub capture_credentials: bool,
-    /// Legacy flag: record password presence only; implies capture_credentials.
+    /// Ignored legacy input; true in responses because password presence is always tracked.
     pub capture_passwords: bool,
     /// Templated destination after submission.
     pub redirect_url: String,

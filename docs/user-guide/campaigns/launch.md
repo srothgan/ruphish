@@ -21,7 +21,7 @@ Resource revisions are checked at launch. If a selected resource changed after r
 
 ## Check the policy
 
-Landing-page tracking settings supply defaults, but review shows the campaign's effective policy. Submission tracking records events; optional password tracking records presence only. A launch does not enable entered-value capture. See [participant data](../participant-data.md).
+Submission and password-presence tracking are always enabled. Review shows the campaign's redirect and advisory page warnings. A launch does not enable entered-value capture. See [participant data](../participant-data.md).
 
 ## If the response is lost
 

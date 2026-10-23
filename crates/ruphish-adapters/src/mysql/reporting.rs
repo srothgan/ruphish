@@ -15,19 +15,15 @@ impl Reports {
 fn storage(error: sqlx::Error) -> Error {
     crate::mysql::resource_error(error)
 }
-const CTE: &str = r#"WITH parameters AS (SELECT ? AS campaign, ? AS since, ? AS until_time, ? AS recipient, CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_0900_bin AS event_kind, CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_0900_bin AS search, CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_0900_bin AS source_filter, CAST(? AS JSON) AS ids), identities AS (
- SELECT email, CASE WHEN count(*)=1 THEN min(id) END AS id FROM results WHERE campaign_id=(SELECT campaign FROM parameters) GROUP BY email
-), audience AS (
+const CTE: &str = r#"WITH parameters AS (SELECT ? AS campaign, ? AS since, ? AS until_time, ? AS recipient, CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_0900_bin AS event_kind, CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_0900_bin AS search, CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_0900_bin AS source_filter, CAST(? AS JSON) AS ids), audience AS (
  SELECT r.*,COALESCE(d.state,'historical') AS delivery FROM results r LEFT JOIN ruphish_delivery d ON d.result_id=r.id
  WHERE r.campaign_id=(SELECT campaign FROM parameters) AND ((SELECT recipient FROM parameters) IS NULL OR r.id=(SELECT recipient FROM parameters)) AND ((SELECT search FROM parameters)='' OR instr(lower(CONCAT(r.email,' ',COALESCE(r.first_name,''),' ',COALESCE(r.last_name,''))),lower((SELECT search FROM parameters)))>0)
  AND (JSON_LENGTH((SELECT ids FROM parameters))=0 OR r.id IN (SELECT selected_ids.value FROM parameters p JOIN JSON_TABLE(p.ids,'$[*]' COLUMNS(value BIGINT PATH '$')) selected_ids ON TRUE))
 ), observed AS (
- SELECT e.*,a.id AS recipient_id,COALESCE(s.source,'legacy') AS source FROM events e
- LEFT JOIN identities i ON i.email=e.email
- LEFT JOIN audience a ON a.id=i.id
- LEFT JOIN ruphish_event_sources s ON s.event_id=e.id
+ SELECT e.* FROM event_history e
+ LEFT JOIN audience a ON a.id=e.recipient_id
  WHERE e.campaign_id=(SELECT campaign FROM parameters) AND ((SELECT since FROM parameters) IS NULL OR (CASE WHEN e.time>='1000' THEN TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',CAST(REPLACE(LEFT(e.time,19),'T',' ') AS DATETIME)) END)>=(SELECT since FROM parameters)) AND ((SELECT until_time FROM parameters) IS NULL OR (CASE WHEN e.time>='1000' THEN TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',CAST(REPLACE(LEFT(e.time,19),'T',' ') AS DATETIME)) END)<(SELECT until_time FROM parameters))
- AND ((SELECT event_kind FROM parameters)='' OR e.message=(SELECT event_kind FROM parameters)) AND ((SELECT source_filter FROM parameters)='' OR COALESCE(s.source,'legacy')=(SELECT source_filter FROM parameters))
+ AND ((SELECT event_kind FROM parameters)='' OR e.message=(SELECT event_kind FROM parameters)) AND ((SELECT source_filter FROM parameters)='' OR e.source=(SELECT source_filter FROM parameters))
  AND (((SELECT recipient FROM parameters) IS NULL AND (SELECT search FROM parameters)='' AND JSON_LENGTH((SELECT ids FROM parameters))=0) OR a.id IS NOT NULL)
 ), selected AS (SELECT * FROM audience a WHERE ((SELECT event_kind FROM parameters)='' AND (SELECT source_filter FROM parameters)='') OR EXISTS(SELECT 1 FROM observed o WHERE o.recipient_id=a.id))
 "#;
@@ -202,9 +198,9 @@ impl Snapshots for Reports {
                     CAST(sum(CASE WHEN e.message='Submitted Data' THEN 1 ELSE 0 END) AS SIGNED) AS submitted,
                     CAST(sum(CASE WHEN e.message='Email Reported' THEN 1 ELSE 0 END) AS SIGNED) AS reports,
                     NOT EXISTS(SELECT 1
-                FROM events h
+                FROM event_history h
                 WHERE h.campaign_id=(SELECT campaign FROM parameters)
-                AND h.email=a.email
+                AND h.recipient_id=a.id
                 AND h.message='Email Reported') AS missing_report
                 FROM selected a
                 LEFT JOIN observed e ON e.recipient_id=a.id

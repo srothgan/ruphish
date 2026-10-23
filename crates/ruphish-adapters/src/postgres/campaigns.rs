@@ -101,7 +101,11 @@ async fn prepare_authorized(
     let sample = crate::resources::sample();
     let url = crate::campaign_preparation::url(&input.url)?;
     let domain_id = super::domains::eligible(c, caller.id, &url, now, lock_domain).await?;
-    crate::resources::render(&policy.redirect_url, &sample)?;
+    let redirect = crate::resources::render(&policy.redirect_url, &sample)?;
+    crate::landing::redirect(&redirect, &url)?;
+    if let Content::Page(page) = &page.content {
+        crate::landing::render(&crate::resources::render(&page.html, &sample)?, None)?;
+    }
     Ok(Prepared {
         domain_id,
         conflicts,
@@ -179,6 +183,7 @@ async fn load_aggregate(
         .map_err(storage)?
     {
         results.push(RecipientResult {
+            id: r.try_get("id").map_err(storage)?,
             rid: text(&r, "r_id")?,
             recipient: Recipient {
                 email: text(&r, "email")?,
@@ -199,13 +204,14 @@ async fn load_aggregate(
         });
     }
     let mut events = Vec::new();
-    for e in sqlx::query("SELECT * FROM events WHERE campaign_id=$1 ORDER BY id")
+    for e in sqlx::query("SELECT * FROM event_history WHERE campaign_id=$1 ORDER BY id")
         .bind(id)
         .fetch_all(&mut *c)
         .await
         .map_err(storage)?
     {
         events.push(Event {
+            recipient_id: e.try_get("recipient_id").map_err(storage)?,
             id: e.try_get("id").map_err(storage)?,
             email: text(&e, "email")?,
             time: text(&e, "time")?,
@@ -219,9 +225,7 @@ async fn load_aggregate(
         .await
         .map_err(storage)?
         .map(|p| {
-            Ok::<_, Error>(CapturePolicy {
-                capture_credentials: p.try_get("capture_credentials").map_err(storage)?,
-                capture_passwords: p.try_get("capture_passwords").map_err(storage)?,
+            Ok::<_, Error>(InteractionPolicy {
                 redirect_url: text(&p, "redirect_url")?,
             })
         })
@@ -260,8 +264,8 @@ async fn load_aggregate(
     })
 }
 async fn header(c: &mut PgConnection, owner: i64, id: i64) -> Result<CampaignHeader, Error> {
-    let row=sqlx::query("SELECT c.id,c.name,c.status,c.launch_date,c.send_by_date,c.url,c.template_id,c.page_id,c.smtp_id,t.name AS template_name,t.subject,t.envelope_sender,s.name AS profile_name,s.from_address,l.name AS page_name,(SELECT count(*) FROM results r WHERE r.campaign_id=c.id) AS total,p.capture_credentials,p.capture_passwords,p.redirect_url FROM campaigns c LEFT JOIN ruphish_campaign_policy p ON p.campaign_id=c.id LEFT JOIN templates t ON t.id=c.template_id AND t.user_id=c.user_id LEFT JOIN pages l ON l.id=c.page_id AND l.user_id=c.user_id LEFT JOIN smtp s ON s.id=c.smtp_id AND s.user_id=c.user_id WHERE c.id=$1 AND c.user_id=$2").bind(id).bind(owner).fetch_optional(&mut *c).await.map_err(storage)?.ok_or(Error::NotFound("Campaign"))?;
-    let credentials: Option<bool> = row.try_get("capture_credentials").map_err(storage)?;
+    let row=sqlx::query("SELECT c.id,c.name,c.status,c.launch_date,c.send_by_date,c.url,c.template_id,c.page_id,c.smtp_id,t.name AS template_name,t.subject,t.envelope_sender,s.name AS profile_name,s.from_address,l.name AS page_name,(SELECT count(*) FROM results r WHERE r.campaign_id=c.id) AS total,p.campaign_id AS policy_id,p.redirect_url FROM campaigns c LEFT JOIN ruphish_campaign_policy p ON p.campaign_id=c.id LEFT JOIN templates t ON t.id=c.template_id AND t.user_id=c.user_id LEFT JOIN pages l ON l.id=c.page_id AND l.user_id=c.user_id LEFT JOIN smtp s ON s.id=c.smtp_id AND s.user_id=c.user_id WHERE c.id=$1 AND c.user_id=$2").bind(id).bind(owner).fetch_optional(&mut *c).await.map_err(storage)?.ok_or(Error::NotFound("Campaign"))?;
+    let policy_id: Option<i64> = row.try_get("policy_id").map_err(storage)?;
     let domain: Option<(i64,bool,i64)> = sqlx::query_as("SELECT d.id,d.enabled,d.verified_until FROM ruphish_campaign_domains cd JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=$1 WHERE cd.campaign_id=$2").bind(owner).bind(id).fetch_optional(&mut *c).await.map_err(storage)?;
     let domain_id = domain.map(|d| d.0);
     let domain_block = domain
@@ -308,11 +312,9 @@ async fn header(c: &mut PgConnection, owner: i64, id: i64) -> Result<CampaignHea
         profile_sender: row.try_get("from_address").map_err(storage)?,
         template_sender: row.try_get("envelope_sender").map_err(storage)?,
         total: row.try_get("total").map_err(storage)?,
-        policy: credentials
-            .map(|capture_credentials| {
-                Ok::<_, Error>(CapturePolicy {
-                    capture_credentials,
-                    capture_passwords: row.try_get("capture_passwords").map_err(storage)?,
+        policy: policy_id
+            .map(|_| {
+                Ok::<_, Error>(InteractionPolicy {
                     redirect_url: text(&row, "redirect_url")?,
                 })
             })
@@ -484,7 +486,7 @@ impl Repository for Campaigns {
             "DELETE FROM ruphish_legacy_queue_issues WHERE mail_log_id IN (SELECT id FROM mail_logs WHERE campaign_id=$1)",
             "DELETE FROM ruphish_delivery_attempt WHERE result_id IN (SELECT id FROM results WHERE campaign_id=$1)",
             "DELETE FROM ruphish_delivery WHERE campaign_id=$1",
-            "DELETE FROM ruphish_submission_ids WHERE result_id IN (SELECT id FROM results WHERE campaign_id=$1)",
+            "DELETE FROM ruphish_event_receipts WHERE result_id IN (SELECT id FROM results WHERE campaign_id=$1)",
             "DELETE FROM ruphish_campaign_domains WHERE campaign_id=$1",
             "DELETE FROM ruphish_campaign_policy WHERE campaign_id=$1",
             "DELETE FROM ruphish_campaign_groups WHERE campaign_id=$1",
@@ -559,13 +561,16 @@ impl Repository for Campaigns {
             });
         }
         let mut activity = Vec::new();
-        for e in sqlx::query("SELECT * FROM events WHERE campaign_id=$1 ORDER BY id DESC LIMIT 50")
-            .bind(id)
-            .fetch_all(&mut *tx)
-            .await
-            .map_err(storage)?
+        for e in sqlx::query(
+            "SELECT * FROM event_history WHERE campaign_id=$1 ORDER BY id DESC LIMIT 50",
+        )
+        .bind(id)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(storage)?
         {
             activity.push(Event {
+                recipient_id: e.try_get("recipient_id").map_err(storage)?,
                 id: e.try_get("id").map_err(storage)?,
                 email: text(&e, "email")?,
                 time: text(&e, "time")?,
@@ -606,13 +611,14 @@ impl Repository for Campaigns {
         for a in rows {
             attempts.push(decode_attempt(a)?);
         }
-        let mut rows = sqlx::query("SELECT * FROM events WHERE campaign_id=$1 AND email=$2 AND ($3::bigint IS NULL OR id<$4) ORDER BY id DESC LIMIT 101")
-            .bind(campaign).bind(&email).bind(before_event).bind(before_event).fetch_all(&mut *tx).await.map_err(storage)?;
+        let mut rows = sqlx::query("SELECT * FROM event_history WHERE campaign_id=$1 AND recipient_id=$2 AND ($3::bigint IS NULL OR id<$4) ORDER BY id DESC LIMIT 101")
+            .bind(campaign).bind(result).bind(before_event).bind(before_event).fetch_all(&mut *tx).await.map_err(storage)?;
         let more_events = rows.len() > 100;
         rows.truncate(100);
         let mut events = Vec::new();
         for e in rows {
             events.push(Event {
+                recipient_id: e.try_get("recipient_id").map_err(storage)?,
                 id: e.try_get("id").map_err(storage)?,
                 email: text(&e, "email")?,
                 time: text(&e, "time")?,
@@ -669,7 +675,7 @@ impl Repository for Campaigns {
             .map_err(storage)?;
         sqlx::query("UPDATE results SET status=CASE WHEN status IN ('Email Opened','Clicked Link','Submitted Data') THEN status ELSE $1 END,send_date=$2,modified_date=$3 WHERE id=$4").bind(if target=="accepted" {"Email Sent"} else {"Sending"}).bind(stamp(now)?).bind(stamp(now)?).bind(result).execute(&mut *tx).await.map_err(storage)?;
         if target == "accepted" {
-            let inserted = sqlx::query("INSERT INTO events(campaign_id,email,time,message,details) SELECT r.campaign_id,r.email,$1,'Email Sent',$2 FROM results r WHERE r.id=$3 AND NOT EXISTS(SELECT 1 FROM events e WHERE e.campaign_id=r.campaign_id AND e.email=r.email AND e.message='Email Sent') RETURNING id")
+            let inserted = sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id) SELECT r.campaign_id,r.email,$1,'email_sent',$2,r.id FROM results r WHERE r.id=$3 AND NOT EXISTS(SELECT 1 FROM event_history e WHERE e.campaign_id=r.campaign_id AND e.recipient_id=r.id AND e.message='Email Sent') RETURNING id")
                 .bind(stamp(now)?)
                 .bind(serde_json::json!({"action":action,"actor":caller.id}).to_string())
                 .bind(result).fetch_optional(&mut *tx).await.map_err(storage)?;
@@ -683,7 +689,7 @@ impl Repository for Campaigns {
                 .map_err(storage)?;
             }
         }
-        let inserted=sqlx::query("INSERT INTO events(campaign_id,email,time,message,details) SELECT campaign_id,email,$1,'Delivery reconciled',$2 FROM results WHERE id=$3 RETURNING id").bind(stamp(now)?).bind(serde_json::json!({"action":action,"actor":caller.id,"previous_state":state}).to_string()).bind(result).fetch_one(&mut *tx).await.map_err(storage)?;
+        let inserted=sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id) SELECT campaign_id,email,$1,'delivery_reconciled',$2,id FROM results WHERE id=$3 RETURNING id").bind(stamp(now)?).bind(serde_json::json!({"action":action,"actor":caller.id}).to_string()).bind(result).fetch_one(&mut *tx).await.map_err(storage)?;
         super::events::publish(
             &mut tx,
             inserted.insert_id().map_err(storage)?,
@@ -757,15 +763,13 @@ impl Campaigns {
             .execute(&mut *tx)
             .await
             .map_err(storage)?;
-        sqlx::query("INSERT INTO ruphish_campaign_policy VALUES($1,$2,$3,$4)")
+        sqlx::query("INSERT INTO ruphish_campaign_policy(campaign_id,redirect_url) VALUES($1,$2)")
             .bind(id)
-            .bind(p.policy.capture_credentials)
-            .bind(p.policy.capture_passwords)
             .bind(&p.policy.redirect_url)
             .execute(&mut *tx)
             .await
             .map_err(storage)?;
-        let inserted=sqlx::query("INSERT INTO events(campaign_id,email,time,message,details) VALUES($1,'',$2,'Campaign Created','') RETURNING id").bind(id).bind(&created).fetch_one(&mut *tx).await.map_err(storage)?;
+        let inserted=sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata) VALUES($1,'',$2,'campaign_created','') RETURNING id").bind(id).bind(&created).fetch_one(&mut *tx).await.map_err(storage)?;
         super::events::publish(
             &mut tx,
             inserted.insert_id().map_err(storage)?,

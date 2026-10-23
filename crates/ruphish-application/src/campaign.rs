@@ -19,12 +19,12 @@ pub struct Selection {
     /// Reviewed modification timestamp, checked again in the launch transaction.
     pub revision: Option<String>,
 }
-/// Capture settings resolved once per campaign; omission inherits the page default.
+/// Compatibility inputs and a redirect override resolved once per campaign.
 #[derive(Clone, Default)]
 pub struct Overrides {
-    /// Explicit false disables submission tracking.
+    /// Deprecated compatibility input, ignored; submissions are always tracked.
     pub capture_credentials: Option<bool>,
-    /// Explicit false disables password-presence tracking.
+    /// Deprecated compatibility input, ignored; password presence is always tracked.
     pub capture_passwords: Option<bool>,
     /// Explicit empty string clears the default redirect.
     pub redirect_url: Option<String>,
@@ -72,12 +72,14 @@ pub struct Prepared {
     /// Actual unique recipients in first-encounter order.
     pub recipients: Vec<crate::resources::Recipient>,
     /// Effective campaign settings, independent of later page changes.
-    pub policy: CapturePolicy,
+    pub policy: InteractionPolicy,
     /// Effective first due time.
     pub launch: i64,
 }
 /// Persistent recipient outcome, preserving the legacy result shape.
 pub struct RecipientResult {
+    /// Stable campaign-recipient identity.
+    pub id: i64,
     /// Public opaque recipient identifier.
     pub rid: String,
     /// Immutable campaign recipient attributes.
@@ -99,6 +101,8 @@ pub struct RecipientResult {
 }
 /// Committed campaign history, with string-encoded legacy detail JSON.
 pub struct Event {
+    /// Stable recipient identity; unknown for ambiguous historical observations.
+    pub recipient_id: Option<i64>,
     /// Stable internal cursor.
     pub id: i64,
     /// Recipient mailbox or empty campaign-wide event.
@@ -137,28 +141,25 @@ pub struct Campaign {
     /// Ordered committed history.
     pub events: Vec<Event>,
     /// Effective immutable capture defaults/overrides.
-    pub policy: Option<CapturePolicy>,
+    pub policy: Option<InteractionPolicy>,
 }
 impl Campaign {
     /// Derive summary counts from recorded events, never the lossy latest status.
     /// Ambiguous historical addresses remain unassigned, as in analysis.
     pub fn progression(&self) -> [i64; 5] {
         use ruphish_domain::reporting::{Observations, Progression};
-        let mut recipients = std::collections::HashMap::new();
-        for result in &self.results {
-            recipients
-                .entry(result.recipient.email.as_str())
-                .and_modify(|entry| *entry = None)
-                .or_insert(Some(Observations::default()));
-        }
+        let mut recipients: std::collections::HashMap<_, _> = self
+            .results
+            .iter()
+            .map(|result| (result.id, Observations::default()))
+            .collect();
         for event in &self.events {
-            if let Some(Some(evidence)) = recipients.get_mut(event.email.as_str()) {
-                // This legacy response has no password-presence metric.
+            if let Some(evidence) = event.recipient_id.and_then(|id| recipients.get_mut(&id)) {
                 evidence.record(&event.message, false);
             }
         }
         let mut summary = Progression::default();
-        for evidence in recipients.into_values().flatten() {
+        for evidence in recipients.into_values() {
             summary.include(evidence, 1);
         }
         summary.counts
@@ -230,7 +231,7 @@ pub struct CampaignHeader {
     /// Recipient count including migrated historical results.
     pub total: i64,
     /// Effective event-only tracking and redirect policy.
-    pub policy: Option<CapturePolicy>,
+    pub policy: Option<InteractionPolicy>,
 }
 /// Resource identity preserves missing references without exposing another owner's data.
 pub struct CampaignResource {

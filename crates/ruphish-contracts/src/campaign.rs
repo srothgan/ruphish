@@ -29,13 +29,13 @@ pub struct Selections {
     /// Sending profile.
     pub smtp: ReviewedResource,
 }
-/// Optional defaults distinguish omission from explicit false/empty.
+/// Compatibility inputs and optional redirect defaults.
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Policy {
-    /// Record submission events without field values.
+    /// Deprecated input, ignored; submissions are always tracked.
     pub capture_credentials: Option<bool>,
-    /// Record password-presence booleans without values.
+    /// Deprecated input, ignored; password presence is always tracked.
     pub capture_passwords: Option<bool>,
     /// Post-submission redirect override.
     pub redirect_url: Option<String>,

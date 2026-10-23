@@ -37,9 +37,9 @@ pub struct LocalTime {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Policy {
-    /// Record a submission event.
+    /// Inert legacy draft input; submissions are always tracked.
     pub capture_credentials: bool,
-    /// Record password presence.
+    /// Inert legacy draft input; presence is always tracked.
     pub capture_passwords: bool,
     /// Optional redirect expression.
     pub redirect_url: String,

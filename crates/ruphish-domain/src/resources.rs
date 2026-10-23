@@ -72,10 +72,6 @@ pub struct Template {
 pub struct Page {
     /// Authoritative authored HTML source.
     pub html: String,
-    /// Legacy flag: record submission events, never entered values.
-    pub capture_credentials: bool,
-    /// Legacy flag: record password presence only; implies submission tracking.
-    pub capture_passwords: bool,
     /// Templated destination after submission.
     pub redirect_url: String,
 }
@@ -153,11 +149,10 @@ impl Resource {
                     return Err("Need to specify at least plaintext or HTML content");
                 }
             }
-            Content::Page(p) => {
+            Content::Page(_) => {
                 if self.name.is_empty() {
                     return Err("Page Name not specified");
                 }
-                p.capture_credentials |= p.capture_passwords;
             }
             Content::Profile(p) => {
                 if p.from_address.is_empty() {
@@ -192,4 +187,13 @@ pub struct Summary {
     pub num_targets: i64,
     /// Number of unfinished campaigns referencing this resource.
     pub active_campaigns: i64,
+}
+
+/// Safe advisory code and optional one-based input position, never authored field values.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct PageWarning {
+    /// Stable code translated by the admin UI.
+    pub code: &'static str,
+    /// Input position in the processed document, when applicable.
+    pub control: Option<usize>,
 }

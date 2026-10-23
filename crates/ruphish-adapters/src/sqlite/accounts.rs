@@ -260,7 +260,7 @@ impl Repository for Accounts {
                 // Shared target rows and system-level webhooks have no exclusive account ownership.
                 for statement in [
                     "DELETE FROM ruphish_delivery_attempt WHERE result_id IN (SELECT id FROM results WHERE user_id=?)",
-                    "DELETE FROM ruphish_submission_ids WHERE result_id IN (SELECT id FROM results WHERE user_id=?)",
+                    "DELETE FROM ruphish_event_receipts WHERE result_id IN (SELECT id FROM results WHERE user_id=?)",
                     "DELETE FROM ruphish_campaign_domains WHERE campaign_id IN (SELECT id FROM campaigns WHERE user_id=?)",
                     "DELETE FROM ruphish_domain_claims WHERE owner_id=?",
                     "DELETE FROM ruphish_domain_checks WHERE domain_id IN (SELECT id FROM ruphish_domains WHERE owner_id=?)",

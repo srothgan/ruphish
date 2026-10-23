@@ -50,6 +50,9 @@ HTML rewriting uses lol_html and its unmodified selector/CSS parser dependencies
 - `selectors-0.37.0`: source-file MPL-2.0 notices and [license text](#cssparser-0360-license); unmodified source: https://docs.rs/crate/selectors/0.37.0/source/.
 
 - `cssparser-0.38.0`: [LICENSE](#cssparser-0380-license); unmodified Ammonia dependency, source: https://docs.rs/crate/cssparser/0.38.0/source/.
+- `cssparser-0.37.0`: [LICENSE](#cssparser-0360-license); unmodified landing-page diagnostics dependency, source: https://docs.rs/crate/cssparser/0.37.0/source/.
+- `cssparser-macros-0.7.1`: [LICENSE](#cssparser-0360-license); unmodified source: https://docs.rs/crate/cssparser-macros/0.7.1/source/.
+- `selectors-0.38.0`: source-file MPL-2.0 notices and [license text](#cssparser-0360-license); unmodified source: https://docs.rs/crate/selectors/0.38.0/source/.
 
 ## Dependency license texts
 

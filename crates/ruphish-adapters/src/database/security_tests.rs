@@ -11,6 +11,8 @@ use ruphish_application::{
     resources::Error,
 };
 use std::sync::Arc;
+#[path = "../../../../tests/support/sqlite_versions.rs"]
+mod sqlite_versions;
 
 fn admin() -> Identity {
     Identity { id: 1, epoch: 0 }
@@ -169,7 +171,7 @@ async fn deleted_webhooks_do_not_connect_after_claiming() {
         )
         .await
         .unwrap();
-    sqlx::query("INSERT INTO events(campaign_id,email,time,message,details) SELECT campaign_id,email,'2026-10-22T00:00:00Z','Clicked Link','{}' FROM results LIMIT 1").execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id) SELECT campaign_id,email,'2026-10-22T00:00:00Z','link_clicked','{}',id FROM results LIMIT 1").execute(&pool).await.unwrap();
     let policy = Policy::new(&["127.0.0.1".into()]).unwrap();
     let queue = CancelBeforeSend {
         repo: Integrations::new(pool.clone(), policy.clone()),
@@ -249,7 +251,7 @@ async fn integration_identity_upgrade_preserves_populated_version_nine_and_resta
         )
         .await
         .unwrap();
-    sqlx::query("INSERT INTO events(campaign_id,email,time,message,details) SELECT campaign_id,email,'2026-10-22T00:00:00Z','Clicked Link','{}' FROM results LIMIT 1").execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id) SELECT campaign_id,email,'2026-10-22T00:00:00Z','link_clicked','{}',id FROM results LIMIT 1").execute(&pool).await.unwrap();
     let delivery = worker.claim_webhook(1_800_000_000).await.unwrap().unwrap();
     let tables = [
         "ruphish_mailboxes",
@@ -259,20 +261,7 @@ async fn integration_identity_upgrade_preserves_populated_version_nine_and_resta
     ];
     let mut snapshots = Vec::new();
     let mut tx = pool.begin().await.unwrap();
-    // Reconstruct version-nine table definitions without AUTOINCREMENT. All existing
-    // rows, including running work, stay populated while the actual upgrade is tested.
-    let triggers: Vec<String> = sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE type='trigger' AND name IN ('ruphish_event_insert','ruphish_event_delete') ORDER BY name").fetch_all(&mut *tx).await.unwrap();
-    sqlx::raw_sql("DROP TRIGGER ruphish_event_insert; DROP TRIGGER ruphish_event_delete;")
-        .execute(&mut *tx)
-        .await
-        .unwrap();
     for table in tables {
-        let schema: String =
-            sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE type='table' AND name=?")
-                .bind(table)
-                .fetch_one(&mut *tx)
-                .await
-                .unwrap();
         let columns: Vec<String> =
             sqlx::query_scalar("SELECT name FROM pragma_table_info(?) ORDER BY cid")
                 .bind(table)
@@ -292,20 +281,15 @@ async fn integration_identity_upgrade_preserves_populated_version_nine_and_resta
             .await
             .unwrap();
         snapshots.push((snapshot, before));
-        let old_schema =
-            schema
-                .replace("AUTOINCREMENT", "")
-                .replacen(table, &format!("{table}_v9"), 1);
-        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("{old_schema}; INSERT INTO {table}_v9 SELECT * FROM {table}; DROP TABLE {table}; ALTER TABLE {table}_v9 RENAME TO {table};"))).execute(&mut *tx).await.unwrap();
     }
-    for trigger in triggers {
-        sqlx::raw_sql(sqlx::AssertSqlSafe(trigger))
-            .execute(&mut *tx)
-            .await
-            .unwrap();
-    }
-    sqlx::raw_sql("CREATE INDEX ruphish_webhook_due ON ruphish_webhook_jobs(state,due,lease); DELETE FROM ruphish_schema WHERE version=10;").execute(&mut *tx).await.unwrap();
     tx.commit().await.unwrap();
+    sqlite_versions::restore_version_nine_tables(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM ruphish_schema WHERE version=10")
+        .execute(&pool)
+        .await
+        .unwrap();
     db.close().await;
     pool.close().await;
 

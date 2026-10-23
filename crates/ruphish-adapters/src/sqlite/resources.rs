@@ -119,8 +119,6 @@ pub(super) async fn load(
         }
         Kind::Page => Content::Page(Page {
             html: text(&row, "html")?,
-            capture_credentials: boolean(&row, "capture_credentials")?,
-            capture_passwords: boolean(&row, "capture_passwords")?,
             redirect_url: text(&row, "redirect_url")?,
         }),
         Kind::Profile => {
@@ -415,7 +413,13 @@ impl Repository for Resources {
                 }
             }
             Content::Page(p) => {
-                sqlx::query("UPDATE pages SET html=?,capture_credentials=?,capture_passwords=?,redirect_url=? WHERE id=?").bind(&p.html).bind(p.capture_credentials).bind(p.capture_passwords).bind(&p.redirect_url).bind(id).execute(&mut *tx).await.map_err(storage)?;
+                sqlx::query("UPDATE pages SET html=?,redirect_url=? WHERE id=?")
+                    .bind(&p.html)
+                    .bind(&p.redirect_url)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(storage)?;
             }
             Content::Profile(p) => {
                 sqlx::query("UPDATE smtp SET interface_type=?,host=?,username=?,password=?,from_address=?,ignore_cert_errors=? WHERE id=?").bind(&p.interface_type).bind(&p.host).bind(&p.username).bind(&p.password).bind(&p.from_address).bind(p.ignore_cert_errors).bind(id).execute(&mut *tx).await.map_err(storage)?;

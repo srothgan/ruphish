@@ -1,204 +1,156 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { JSDOM } from 'jsdom';
-
+import {readFile} from 'node:fs/promises';
+import {JSDOM} from 'jsdom';
 const messages = await readFile(new URL('../../../ruphish-adapters/src/landing-locales.json', import.meta.url), 'utf8');
 const source = await readFile(new URL('../../../ruphish-adapters/src/landing-collector.js', import.meta.url), 'utf8');
-const collector = `const messages=${messages};${source}`;
-
-function page() {
-    const dom = new JSDOM(`<form id="training"><input name="username" value="username-canary"><input id="pw" name="password" type="password" value="password-canary"><input name="otp" value="otp-canary"><textarea name="notes">notes-canary</textarea><button name="button" value="button-canary">Continue</button></form><input form="training" type="password" value="associated-canary">`, { url: 'https://training.example.test/', runScripts: 'outside-only' });
-    return dom;
+const tick = () => new Promise(resolve => setImmediate(resolve));
+const ok = () => ({ok: true, json: async () => ({success: true})});
+function page(html = '<form id="f"><input name="password" type="password" value="PASSWORD-CANARY"><input name="username" value="USERNAME-CANARY"><textarea name="notes">NOTES-CANARY</textarea><button>Submit</button></form>', setup = () => {}) {
+    const dom = new JSDOM(html, {url: 'https://training.example.test/', runScripts: 'outside-only'});
+    const requests = [];
+    dom.window.fetch = async (url, options) => { requests.push({url, options, payload: JSON.parse(options.body)}); return ok(); };
+    setup(dom.window, requests);
+    dom.window.eval('(()=>{const endpoint="https://training.example.test/?rid=recipient";const messages=' + messages + ';' + source + '})()');
+    return {dom, window: dom.window, requests, form: dom.window.document.querySelector('form')};
 }
-
-test('actual collector preserves controls, emits only presence and deduplicates successful submission', async () => {
-    const dom = page();
-    const { window } = dom;
-    const requests = [];
-    let received;
-    const arrived = new Promise(resolve => { received = resolve; });
-    window.fetch = async (url, options) => {
-        requests.push({ url, options });
-        received();
-        return { ok: true, json: async () => ({ success: true, redirect: null }) };
-    };
-    window.eval(`(()=>{ const endpoint='https://training.example.test/?rid=recipient'; ${collector} })()`);
-    window.document.querySelector('#pw').type = 'text'; // Revealing a password retains its designated role.
-    const form = window.document.querySelector('form');
-    const event = new window.Event('submit', { bubbles: true, cancelable: true });
-    form.dispatchEvent(event);
-    assert.equal(event.defaultPrevented, true);
-    await arrived;
-    await new Promise(resolve => setImmediate(resolve));
-    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
-    assert.equal(requests.length, 1);
-    const { options } = requests[0];
-    const payload = JSON.parse(options.body);
-    assert.deepEqual(Object.keys(payload).sort(), ['event_id', 'password_present']);
-    assert.match(payload.event_id, /^[0-9a-f]{32}$/);
-    assert.equal(payload.password_present, true);
-    assert.equal(options.credentials, 'omit');
-    assert.equal(options.redirect, 'error');
-    assert.ok(!JSON.stringify(requests).includes('canary'));
-    assert.equal(window.document.querySelector('#pw').name, 'password');
-    dom.window.close();
-});
-
-test('failed submission retains the same event identity on retry without retaining entered values', async () => {
-    const dom = page();
-    const { window } = dom;
-    const requests = [];
-    window.fetch = async (_url, options) => {
-        requests.push(JSON.parse(options.body));
-        if (requests.length === 1) throw new Error('simulated connection loss');
-        return { ok: true, json: async () => ({ success: true, redirect: null }) };
-    };
-    window.eval(`(()=>{ const endpoint='https://training.example.test/?rid=recipient'; ${collector} })()`);
-    const form = window.document.querySelector('form');
-    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
-    await new Promise(resolve => setImmediate(resolve));
-    assert.match(form.textContent, /Please try again/);
-    for (const input of window.document.querySelectorAll('input')) input.value = '';
-    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
-    await new Promise(resolve => setImmediate(resolve));
-    assert.deepEqual(requests[0], requests[1]);
-    assert.equal(requests[1].password_present, true);
-    assert.ok(!JSON.stringify(requests).includes('canary'));
-    dom.window.close();
-});
-
-test('empty controls produce false and ordinary typing produces no network requests', async () => {
-    const dom = page();
-    const { window } = dom;
-    const requests = [];
-    window.fetch = async (_url, options) => { requests.push(JSON.parse(options.body)); return { ok: true, json: async () => ({ success: true, redirect: null }) }; };
-    window.eval(`(()=>{ const endpoint='https://training.example.test/?rid=recipient'; ${collector} })()`);
-    for (const input of window.document.querySelectorAll('input')) {
-        input.value = '';
-        input.dispatchEvent(new window.Event('input', { bubbles: true }));
+function submit(p) { p.form.requestSubmit(); }
+function safe(requests) {
+    assert.ok(!JSON.stringify(requests).includes('CANARY'));
+    for (const {payload, options} of requests) {
+        assert.deepEqual(Object.keys(payload).sort(), ['event_id', 'password_present']);
+        assert.match(payload.event_id, /^[0-9a-f]{32}$/);
+        assert.equal(options.credentials, 'omit');
+        assert.equal(options.redirect, 'error');
     }
-    assert.equal(requests.length, 0);
-    window.document.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
-    await new Promise(resolve => setImmediate(resolve));
-    assert.equal(requests.length, 1);
-    assert.equal(requests[0].password_present, false);
-    dom.window.close();
-});
-
-// Drive the actual collector's deadline without wall-clock sleeps. Fetch/body
-// doubles reproduce browser AbortSignal rejection at each network boundary.
-for (const phase of ['headers', 'body']) {
-    test(`a stalled ${phase} response times out and retries the same submission once`, async () => {
-        const dom = page();
-        try {
-            const { window } = dom;
-            const timers = new Map();
-            let timerId = 0;
-            window.setTimeout = (callback, delay) => {
-                assert.equal(delay, 15_000);
-                timers.set(++timerId, callback);
-                return timerId;
-            };
-            window.clearTimeout = id => timers.delete(id);
-            const requests = [];
-            const committed = new Set();
-            window.fetch = async (_url, options) => {
-                const payload = JSON.parse(options.body);
-                requests.push({ payload, signal: options.signal });
-                committed.add(payload.event_id); // Server committed before its response stalled.
-                if (requests.length > 1) return { ok: true, json: async () => ({ success: true, redirect: null }) };
-                const stalled = () => new Promise((_, reject) => {
-                    options.signal.addEventListener('abort', () => reject(new window.DOMException('Aborted', 'AbortError')), { once: true });
-                });
-                return phase === 'headers' ? stalled() : { ok: true, json: stalled };
-            };
-            window.eval(`(()=>{ const endpoint='https://training.example.test/?rid=recipient'; ${collector} })()`);
-            const form = window.document.querySelector('form');
-            const submit = () => form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
-            submit();
-            await new Promise(resolve => setImmediate(resolve));
-            submit();
-            assert.equal(requests.length, 1, 'in-flight repeats must not submit again');
-            assert.equal(timers.size, 1);
-            timers.values().next().value();
-            await new Promise(resolve => setImmediate(resolve));
-            assert.equal(requests[0].signal.aborted, true);
-            assert.match(form.textContent, /could not be confirmed/);
-            assert.equal(timers.size, 0);
-            for (const input of window.document.querySelectorAll('input')) input.value = '';
-            submit();
-            await new Promise(resolve => setImmediate(resolve));
-            assert.deepEqual(requests[0].payload, requests[1].payload);
-            assert.equal(requests[1].payload.password_present, true);
-            assert.equal(committed.size, 1);
-            assert.equal(requests[1].signal.aborted, false);
-            assert.equal(form.querySelectorAll('[role="status"]').length, 1);
-            assert.equal(form.querySelector('[role="status"]').textContent, 'Submitted.');
-            assert.equal(timers.size, 0, 'success must cancel its deadline');
-            assert.ok(!JSON.stringify(requests).includes('canary'));
-            submit();
-            assert.equal(requests.length, 2);
-        } finally {
-            dom.window.close();
-        }
-    });
 }
-
-test('an expired response cannot mark success and an invalid acknowledgement remains retryable', async () => {
-    const dom = page();
+test('three distinct submissions on one form produce three independent observations, including while delivery is pending', async () => {
+    const completions = [];
+    const p = page(undefined, (w, requests) => { w.fetch = (_url, options) => {
+        requests.push({options, payload: JSON.parse(options.body)});
+        return new Promise(resolve => completions.push(resolve));
+    }; });
     try {
-        const { window } = dom;
-        let expire;
-        let completeBody;
+        submit(p);
+        p.form.querySelector('input').value = '';
+        submit(p);
+        assert.equal(p.requests.length, 2);
+        completions[1](ok()); completions[0](ok()); await tick();
+        p.form.querySelector('input').value = 'AUTOFILL-CANARY';
+        submit(p); completions[2](ok()); await tick();
+        assert.deepEqual(p.requests.map(r => r.payload.password_present), [true, false, true]);
+        assert.equal(new Set(p.requests.map(r => r.payload.event_id)).size, 3);
+        assert.equal(p.form.querySelectorAll('[role="status"]').length, 3);
+        safe(p.requests);
+    } finally { p.dom.window.close(); }
+});
+test('retrying an unconfirmed observation preserves identity and evidence; submitting again creates a new observation', async () => {
+    const p = page(undefined, (w, requests) => { w.fetch = async (_url, options) => {
+        requests.push({options, payload: JSON.parse(options.body)});
+        if (requests.length === 1) throw new Error('lost acknowledgement');
+        return ok();
+    }; });
+    try {
+        submit(p); await tick();
+        p.form.querySelector('input').value = '';
+        p.form.querySelector('[role="status"] button').click(); await tick();
+        assert.deepEqual(p.requests[0].payload, p.requests[1].payload);
+        submit(p); await tick();
+        assert.equal(p.requests[2].payload.password_present, false);
+        assert.notEqual(p.requests[2].payload.event_id, p.requests[0].payload.event_id);
+        safe(p.requests);
+    } finally { p.dom.window.close(); }
+});
+test('form submissions respect enabled, named, associated password controls and preserve autofill, readonly and reveal behavior', async () => {
+    const cases = [
+        ['<input type="password" name="p" value="PREFILL-CANARY">', true],
+        ['<input type="password" name="p" readonly value="READONLY-CANARY">', true],
+        ['<input type="password" name="p" disabled value="DISABLED-CANARY">', false],
+        ['<fieldset disabled><input type="password" name="p" value="FIELDSET-CANARY"></fieldset>', false],
+        ['<fieldset disabled><legend><input type="password" name="p" value="LEGEND-CANARY"></legend></fieldset>', true],
+        ['<fieldset disabled><legend>First</legend><legend><input type="password" name="p" value="SECOND-CANARY"></legend></fieldset>', false],
+        ['<input type="password" value="UNNAMED-CANARY">', false],
+        ['<input type="text" name="password" value="TEXT-CANARY">', false],
+        ['<input type="password" name="p" value="">', false],
+        ['<input name="username" value="USER-CANARY">', false],
+        ['<input type="password" name="p" form="other" value="OTHER-CANARY">', false],
+    ];
+    for (const [controls, expected] of cases) {
+        const p = page('<form id="f">'+controls+'<button>Submit</button></form>');
+        try { submit(p); await tick(); assert.equal(p.requests[0].payload.password_present, expected, controls); safe(p.requests); }
+        finally { p.dom.window.close(); }
+    }
+    const p = page('<form id="f"><button>Submit</button></form><input form="f" name="p" type="password">');
+    try {
+        const control = p.window.document.querySelector('input');
+        control.value = 'MANAGER-CANARY'; control.type = 'text';
+        submit(p); await tick(); assert.equal(p.requests[0].payload.password_present, true); safe(p.requests);
+    } finally { p.dom.window.close(); }
+});
+test('typing and failed native validation do not create submissions; dynamically added password controls are observed', async () => {
+    const p = page('<form id="f"><input required name="email" type="email"><button>Submit</button></form>');
+    try {
+        submit(p); await tick(); assert.equal(p.requests.length, 0);
+        p.form.querySelector('input').value = 'synthetic@example.test';
+        p.form.querySelector('input').dispatchEvent(new p.window.Event('input', {bubbles:true}));
+        const password = p.window.document.createElement('input');
+        password.type='password'; password.name='p'; password.value='DYNAMIC-CANARY'; p.form.append(password);
+        await tick(); password.type='text';
+        assert.equal(p.requests.length, 0);
+        submit(p); await tick(); assert.equal(p.requests[0].payload.password_present,true); safe(p.requests);
+    } finally { p.dom.window.close(); }
+});
+for (const phase of ['headers','body']) test('stalled '+phase+' delivery can be retried without duplicating its identity', async () => {
+    let expire;
+    const p = page(undefined, (w,requests) => {
+        w.setTimeout = callback => { expire=callback; return 1; }; w.clearTimeout=()=>{};
+        w.fetch=async (_url,options)=>{
+            requests.push({options,payload:JSON.parse(options.body)});
+            if(requests.length>1)return ok();
+            const stalled=()=>new Promise((_,reject)=>options.signal.addEventListener('abort',()=>reject(new Error('timeout'))));
+            return phase==='headers'?stalled():{ok:true,json:stalled};
+        };
+    });
+    try {
+        submit(p); await tick(); expire(); await tick();
+        const retry=p.form.querySelector('[role="status"] button'); assert.equal(retry.hidden,false);
+        retry.click(); retry.click(); await tick();
+        assert.equal(p.requests.length,2); assert.deepEqual(p.requests[0].payload,p.requests[1].payload);
+        assert.equal(p.form.querySelector('[role="status"] span').textContent,'Submitted.'); safe(p.requests);
+    } finally { p.dom.window.close(); }
+});
+test('an acknowledgement arriving after the deadline remains unconfirmed until retried', async () => {
+    let expire, acknowledge;
+    const p = page(undefined, (window, requests) => {
         window.setTimeout = callback => { expire = callback; return 1; };
         window.clearTimeout = () => {};
-        const requests = [];
         window.fetch = async (_url, options) => {
-            requests.push(JSON.parse(options.body));
-            if (requests.length === 1) return { ok: true, json: () => new Promise(resolve => { completeBody = resolve; }) };
-            return { ok: true, json: async () => ({ success: requests.length > 2, redirect: null }) };
+            requests.push({options, payload: JSON.parse(options.body)});
+            return requests.length === 1
+                ? {ok: true, json: () => new Promise(resolve => { acknowledge = resolve; })}
+                : ok();
         };
-        window.eval(`(()=>{ const endpoint='https://training.example.test/?rid=recipient'; ${collector} })()`);
-        const form = window.document.querySelector('form');
-        const submit = () => form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
-        submit();
-        await new Promise(resolve => setImmediate(resolve));
-        expire();
-        completeBody({ success: true, redirect: null });
-        await new Promise(resolve => setImmediate(resolve));
-        assert.match(form.textContent, /could not be confirmed/);
-        submit();
-        await new Promise(resolve => setImmediate(resolve));
-        assert.match(form.textContent, /could not be confirmed/);
-        submit();
-        await new Promise(resolve => setImmediate(resolve));
-        assert.equal(form.querySelector('[role="status"]').textContent, 'Submitted.');
-        assert.equal(new Set(requests.map(request => request.event_id)).size, 1);
-    } finally {
-        dom.window.close();
-    }
+    });
+    try {
+        submit(p); await tick(); expire(); acknowledge({success: true}); await tick();
+        const retry = p.form.querySelector('[role="status"] button');
+        assert.equal(retry.hidden, false);
+        assert.notEqual(p.form.querySelector('[role="status"] span').textContent, 'Submitted.');
+        retry.click(); await tick();
+        assert.deepEqual(p.requests[0].payload, p.requests[1].payload);
+        assert.equal(p.form.querySelector('[role="status"] span').textContent, 'Submitted.');
+    } finally { p.dom.window.close(); }
 });
 
-test('public feedback uses the document language, then browser language, then English without changing authored content', async () => {
-    for (const [documentLanguage, languages, expected] of [
-        ['de-DE', ['en-US'], 'Übermittelt.'],
-        ['en', ['de-DE'], 'Submitted.'],
-        ['', ['de-AT'], 'Übermittelt.'],
-        ['fr', ['zh-CN'], 'Submitted.'],
-    ]) {
-        const dom = page();
-        const {window} = dom;
-        window.document.documentElement.lang = documentLanguage;
-        Object.defineProperty(window.navigator, 'languages', {value: languages});
-        window.fetch = async () => ({ok: true, json: async () => ({success: true})});
-        window.eval(`(()=>{const endpoint='https://training.example.test/'; ${collector}})()`);
-        const form = window.document.querySelector('form');
-        form.dispatchEvent(new window.Event('submit', {bubbles: true, cancelable: true}));
-        await new Promise(resolve => setImmediate(resolve));
-        assert.equal(form.querySelector('[role="status"]').textContent, expected);
-        assert.equal(form.querySelector('button').textContent, 'Continue');
-        assert.equal(form.querySelector('input').value, 'username-canary');
-        dom.window.close();
+test('an invalid acknowledgement remains unconfirmed and retryable',async()=>{
+    const p=page(undefined,(w,requests)=>{w.fetch=async(_url,options)=>{requests.push({options,payload:JSON.parse(options.body)});return {ok:true,json:async()=>({success:requests.length>1})};};});
+    try { submit(p);await tick();const retry=p.form.querySelector('[role="status"] button');assert.equal(retry.hidden,false);retry.click();await tick();assert.deepEqual(p.requests[0].payload,p.requests[1].payload); }
+    finally { p.dom.window.close(); }
+});
+test('submission feedback follows document and browser language without changing authored controls',async()=>{
+    for(const [lang,languages,expected]of [['de-DE',['en'],'Übermittelt.'],['en',['de'],'Submitted.'],['',['de'],'Übermittelt.'],['fr',['zh'],'Submitted.']]){
+        const p=page(undefined,w=>{w.document.documentElement.lang=lang;Object.defineProperty(w.navigator,'languages',{value:languages});});
+        try {submit(p);await tick();assert.equal(p.form.querySelector('[role="status"] span').textContent,expected);assert.equal(p.form.querySelector('input').value,'PASSWORD-CANARY');}
+        finally{p.dom.window.close();}
     }
 });

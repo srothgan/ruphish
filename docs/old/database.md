@@ -16,7 +16,7 @@ MySQL 9.7 LTS is the primary server line and 8.4 LTS is the compatibility floor.
 
 ## MySQL configuration
 
-Operators create the database and service account. Grant database-scoped `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `ALTER`, `DROP` and `INDEX` permissions for automatic migrations. The application does not require server-wide privileges, triggers or permission to create databases or accounts. Use InnoDB and `utf8mb4`; the application baseline uses exact binary comparison for keys and identities.
+Operators create the database and service account. Grant database-scoped `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `ALTER`, `DROP`, `INDEX`, `CREATE VIEW` and `SHOW VIEW` permissions for automatic migrations. The application does not require server-wide privileges, triggers or permission to create databases or accounts. Use InnoDB and `utf8mb4`; the application baseline uses exact binary comparison for keys and identities.
 
 Replace the SQLite database fields in your configuration with:
 

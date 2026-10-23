@@ -38,12 +38,12 @@ fn dashboard_supports_authenticated_browser_and_api_reads_restart_and_revocation
         dir.path(),
         r#"INSERT INTO campaigns(id,user_id,name,status,launch_date) VALUES(1,1,'Dashboard campaign','Completed',datetime('now','-1 day'));
         INSERT INTO results(id,campaign_id,user_id,r_id,email,status) VALUES(1,1,1,'dashboard-rid','private@example.test','Email Sent');
-        INSERT INTO events(campaign_id,email,message,time,details) VALUES(1,'private@example.test','Email Sent',datetime('now','-1 day'),''),(1,'private@example.test','Email Opened',datetime('now'),''),(1,'private@example.test','Email Opened',datetime('now'),''),(1,'private@example.test','Submitted Data',datetime('now'),'{"password_present":true,"password":"DASHBOARD-SECRET-CANARY"}');"#,
+        INSERT INTO events(campaign_id,email,kind,time,metadata) VALUES(1,'private@example.test','email_sent',datetime('now','-1 day'),''),(1,'private@example.test','email_opened',datetime('now'),''),(1,'private@example.test','email_opened',datetime('now'),''),(1,'private@example.test','form_submitted',datetime('now'),'{"password_present":true,"password":"DASHBOARD-SECRET-CANARY"}'); UPDATE events SET recipient_id=(SELECT min(r.id) FROM results r WHERE r.campaign_id=events.campaign_id AND r.email=events.email HAVING count(*)=1) WHERE recipient_id IS NULL;"#,
     );
     database(
         dir.path(),
         r#"INSERT INTO results(id,campaign_id,user_id,r_id,email,status) VALUES(2,1,1,'previous-rid','previous@example.test','Email Sent');
-        INSERT INTO events(campaign_id,email,message,time,details) VALUES(1,'previous@example.test','Email Sent',datetime('now','-10 days'),''),(1,'previous@example.test','Email Opened',datetime('now','-9 days'),''),(1,'previous@example.test','Email Reported',datetime('now'),'');"#,
+        INSERT INTO events(campaign_id,email,kind,time,metadata) VALUES(1,'previous@example.test','email_sent',datetime('now','-10 days'),''),(1,'previous@example.test','email_opened',datetime('now','-9 days'),''),(1,'previous@example.test','email_reported',datetime('now'),''); UPDATE events SET recipient_id=(SELECT min(r.id) FROM results r WHERE r.campaign_id=events.campaign_id AND r.email=events.email HAVING count(*)=1) WHERE recipient_id IS NULL;"#,
     );
     let snapshot: Snapshot = read(&base, "/api/overview", key).json().unwrap();
     assert_eq!(snapshot.campaigns.completed, 1);
@@ -235,16 +235,16 @@ fn progression_is_shared_across_summaries_without_inventing_recorded_events() {
         (5,1,1,'rid-5','presence@test','Email Sent'),
         (6,1,1,'rid-6','report@test','Email Sent');
         WITH fixture(email,kind,details) AS (VALUES
-            ('open@test','Email Opened',''),
-            ('click@test','Clicked Link',''),
-            ('submit@test','Submitted Data','{"password_present":false}'),
-            ('presence@test','Submitted Data','{"password_present":true}'),
-            ('report@test','Email Reported','')
-        ) INSERT INTO events(campaign_id,email,message,time,details)
+            ('open@test','email_opened',''),
+            ('click@test','link_clicked',''),
+            ('submit@test','form_submitted','{"password_present":false}'),
+            ('presence@test','form_submitted','{"password_present":true}'),
+            ('report@test','email_reported','')
+        ) INSERT INTO events(campaign_id,email,kind,time,metadata)
           SELECT 1,email,kind,datetime('now','-2 hours'),details FROM fixture CROSS JOIN (SELECT 1 UNION ALL SELECT 2);
-        INSERT INTO events(campaign_id,email,message,time,details)
-          SELECT 1,email,'Email Sent',datetime('now','-1 hour'),'' FROM results CROSS JOIN (SELECT 1 UNION ALL SELECT 2);
-    "#,
+        INSERT INTO events(campaign_id,email,kind,time,metadata)
+          SELECT 1,email,'email_sent',datetime('now','-1 hour'),'' FROM results CROSS JOIN (SELECT 1 UNION ALL SELECT 2);
+     UPDATE events SET recipient_id=(SELECT min(r.id) FROM results r WHERE r.campaign_id=events.campaign_id AND r.email=events.email HAVING count(*)=1) WHERE recipient_id IS NULL;"#,
     );
     database(
         dir.path(),
@@ -255,15 +255,15 @@ fn progression_is_shared_across_summaries_without_inventing_recorded_events() {
         (9,1,1,'state-only','state@test','Submitted Data',1),
         (10,2,1,'unsent','presence@test','Submitted Data',0),
         (11,3,2,'other','presence@test','Submitted Data',0);
-        INSERT INTO events(campaign_id,email,message,time,details) VALUES
-        (1,'ambiguous@test','Email Sent',datetime('now','-1 hour'),''),
-        (1,'ambiguous@test','Submitted Data',datetime('now','-1 hour'),'{"password_present":true}'),
-        (1,'orphan@test','Email Sent',datetime('now','-1 hour'),''),
-        (1,'orphan@test','Clicked Link',datetime('now','-1 hour'),''),
-        (2,'presence@test','Submitted Data',datetime('now','-1 hour'),'{"password_present":true}'),
-        (3,'presence@test','Email Sent',datetime('now','-1 hour'),''),
-        (3,'presence@test','Submitted Data',datetime('now','-1 hour'),'{"password_present":true}');
-    "#,
+        INSERT INTO events(campaign_id,email,kind,time,metadata) VALUES
+        (1,'ambiguous@test','email_sent',datetime('now','-1 hour'),''),
+        (1,'ambiguous@test','form_submitted',datetime('now','-1 hour'),'{"password_present":true}'),
+        (1,'orphan@test','email_sent',datetime('now','-1 hour'),''),
+        (1,'orphan@test','link_clicked',datetime('now','-1 hour'),''),
+        (2,'presence@test','form_submitted',datetime('now','-1 hour'),'{"password_present":true}'),
+        (3,'presence@test','email_sent',datetime('now','-1 hour'),''),
+        (3,'presence@test','form_submitted',datetime('now','-1 hour'),'{"password_present":true}');
+     UPDATE events SET recipient_id=(SELECT min(r.id) FROM results r WHERE r.campaign_id=events.campaign_id AND r.email=events.email HAVING count(*)=1) WHERE recipient_id IS NULL;"#,
     );
     for pass in 0..2 {
         let base = format!("http://{}", process.ready()["admin"].as_str().unwrap());
@@ -355,7 +355,7 @@ fn progression_is_shared_across_summaries_without_inventing_recorded_events() {
             2
         );
         assert_eq!(
-            database(dir.path(), "SELECT count(*) AS n FROM events")[0].get::<i64, _>("n"),
+            database(dir.path(), "SELECT count(*) AS n FROM event_history")[0].get::<i64, _>("n"),
             29
         );
         process.stop();

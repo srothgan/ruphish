@@ -1,5 +1,7 @@
 //! Final rendered HTML policy and the sole participant submission implementation.
 use ruphish_application::resources::Error;
+#[path = "landing_diagnostics.rs"]
+mod diagnostics;
 
 /// Safe document plus its matching response policy. Nonces are response-specific.
 pub struct Document {
@@ -7,6 +9,8 @@ pub struct Document {
     pub html: String,
     /// Policy that must accompany this document on every serving path.
     pub csp: String,
+    /// Advisory findings in the final processed form; no entered values.
+    pub warnings: Vec<ruphish_application::resources::PageWarning>,
 }
 
 /// Preserve form semantics while removing executable authored content and network resources.
@@ -106,6 +110,7 @@ pub fn render(source: &str, endpoint: Option<&str>) -> Result<Document, Error> {
             Some(value.into())
         });
     let body = cleaner.clean(source).to_string();
+    let warnings = diagnostics::inspect(source, &body)?;
     let [html_attributes, body_attributes] = root_attributes(source)?;
     let mut bytes = [0; 24];
     getrandom::fill(&mut bytes).map_err(|_| Error::Internal)?;
@@ -126,6 +131,7 @@ pub fn render(source: &str, endpoint: Option<&str>) -> Result<Document, Error> {
     html.push_str("</body></html>");
     Ok(Document {
         html,
+        warnings,
         csp: format!(
             "default-src 'none'; script-src 'nonce-{nonce}'; script-src-attr 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'"
         ),

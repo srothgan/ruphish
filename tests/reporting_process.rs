@@ -235,7 +235,7 @@ fn verified_imap_reports_survive_ack_failure_restart_and_uid_reset_without_messa
         assert!(!log.contains(secret));
         assert!(!process.output().contains(secret));
     }
-    for row in database(directory.path(), "SELECT details FROM events") {
+    for row in database(directory.path(), "SELECT details FROM event_history") {
         assert!(
             !row.get::<String, _>("details")
                 .contains("PARTICIPANT-CANARY")
@@ -463,11 +463,11 @@ fn analysis_multiselect_filters_chart_pages_and_exports_and_rejects_invalid_iden
         INSERT INTO campaigns(id,user_id,name,url,status) VALUES(91,1,'Analysis selection','https://training.test','Completed'),(92,1,'Other campaign','https://training.test','Completed');
         INSERT INTO results(id,campaign_id,user_id,r_id,email,status,reported) VALUES
         (91,91,1,'r91','a@example.test','Email Sent',0),(92,91,1,'r92','b@example.test','Email Sent',0),(93,91,1,'r93','c@example.test','Email Sent',0),(94,92,1,'r94','outside@example.test','Email Sent',0);
-        INSERT INTO events(campaign_id,email,time,message,details) VALUES
-        (91,'a@example.test','2026-10-01T12:00:01Z','Email Opened','{}'),
-        (91,'b@example.test','2026-10-02T12:00:42Z','Clicked Link','{}'),
-        (91,'c@example.test','2026-10-03T12:00:59Z','Email Opened','{}'),
-        (91,'a@example.test','2026-10-31T12:00:01Z','Email Reported','{}');");
+        INSERT INTO events(campaign_id,email,time,kind,metadata) VALUES
+        (91,'a@example.test','2026-10-01T12:00:01Z','email_opened','{}'),
+        (91,'b@example.test','2026-10-02T12:00:42Z','link_clicked','{}'),
+        (91,'c@example.test','2026-10-03T12:00:59Z','email_opened','{}'),
+        (91,'a@example.test','2026-10-31T12:00:01Z','email_reported','{}'); UPDATE events SET recipient_id=(SELECT min(r.id) FROM results r WHERE r.campaign_id=events.campaign_id AND r.email=events.email HAVING count(*)=1) WHERE recipient_id IS NULL;");
     database(
         directory.path(),
         "UPDATE results SET first_name='Alice',last_name='Example' WHERE id=91",

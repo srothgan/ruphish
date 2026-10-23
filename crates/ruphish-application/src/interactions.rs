@@ -2,6 +2,7 @@
 use crate::resources::Error;
 
 /// Public request purpose, independently of delivery status.
+#[derive(Clone)]
 pub enum Action {
     /// Render and observe a landing visit.
     View,
@@ -68,10 +69,6 @@ pub struct Snapshot {
     pub email: String,
     /// Saved send timestamp for transparency.
     pub send_date: String,
-    /// Whether this campaign records submissions.
-    pub captures: bool,
-    /// Whether submissions may record password presence.
-    pub passwords: bool,
     /// Recipient-specific rendering input, present only when needed.
     pub rendering: Option<RenderInput>,
 }
@@ -100,11 +97,34 @@ pub trait Persistence: Send + Sync {
 }
 
 /// Bound event growth without rejecting an idempotent replay of a submission.
-pub fn check_event_capacity(count: i64, submission: bool, duplicate: bool) -> Result<(), Error> {
-    let limit = if submission { 1_000 } else { 10_000 };
+pub fn check_event_capacity(count: i64, duplicate: bool) -> Result<(), Error> {
+    let limit = 10_000;
     if count >= limit && !duplicate {
         Err(Error::Invalid("interaction_limit_reached".into()))
     } else {
+        Ok(())
+    }
+}
+
+impl Action {
+    /// Shared observation classification; persistence never infers an event from a status.
+    pub fn kind(&self) -> Option<ruphish_domain::events::Kind> {
+        use ruphish_domain::events::Kind;
+        match self {
+            Self::View => Some(Kind::LinkClicked),
+            Self::Open => Some(Kind::EmailOpened),
+            Self::Report => Some(Kind::EmailReported),
+            Self::Submit { .. } => Some(Kind::FormSubmitted),
+            Self::Inspect | Self::Head => None,
+        }
+    }
+    /// Retry identities are opaque random bytes, never participant values.
+    pub fn validate(&self) -> Result<(), Error> {
+        if let Self::Submit { event_id, .. } = self
+            && (event_id.len() != 32 || !event_id.bytes().all(|c| c.is_ascii_hexdigit()))
+        {
+            return Err(Error::Invalid("submission_invalid_id".into()));
+        }
         Ok(())
     }
 }

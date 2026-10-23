@@ -58,14 +58,14 @@ async fn observations_filters_and_exports_preserve_evidence_without_credentials_
         .await
         .unwrap();
     for (kind, time) in [
-        ("Clicked Link", "2026-10-19T12:00:00Z"),
-        ("Submitted Data", "2026-10-19T12:01:00Z"),
-        ("Email Reported", "2026-10-19T12:02:00Z"),
-        ("Email Reported", "2026-10-19T12:02:00Z"),
+        ("link_clicked", "2026-10-19T12:00:00Z"),
+        ("form_submitted", "2026-10-19T12:01:00Z"),
+        ("email_reported", "2026-10-19T12:02:00Z"),
+        ("email_reported", "2026-10-19T12:02:00Z"),
     ] {
-        sqlx::query("INSERT INTO events(campaign_id,email,time,message,details) VALUES(?,?,?,?,?)")
+        sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id) VALUES(?,?,?,?,?,?)")
             .bind(campaign).bind(&email).bind(time).bind(kind)
-            .bind(r#"{"password_present":true,"payload":{"password":"PRIVATE-CANARY"},"ip":"192.0.2.42"}"#)
+            .bind(r#"{"password_present":true,"payload":{"password":"PRIVATE-CANARY"},"ip":"192.0.2.42"}"#).bind(id)
             .execute(&pool).await.unwrap();
     }
     let reports = database.reporting();
@@ -194,8 +194,9 @@ async fn observations_filters_and_exports_preserve_evidence_without_credentials_
         "ambiguous legacy recipient identity must not multiply events"
     );
     assert_eq!(
-        ambiguous.unique, [0; 5],
-        "do not guess which duplicated legacy result owns an event"
+        ambiguous.unique,
+        [0, 0, 1, 1, 1],
+        "a later duplicate address must not detach events from their recorded recipient"
     );
     database.close().await;
 }
@@ -258,14 +259,14 @@ async fn committed_events_retry_after_receiver_failure_and_rollback_never_sends(
         .await
         .unwrap();
     let mut transaction = pool.begin().await.unwrap();
-    sqlx::query("INSERT INTO events(campaign_id,email,time,message,details) VALUES(1,'','2026-10-19T12:00:00Z','Email Reported','')").execute(&mut *transaction).await.unwrap();
+    sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata) VALUES(1,'','2026-10-19T12:00:00Z','email_reported','')").execute(&mut *transaction).await.unwrap();
     transaction.rollback().await.unwrap();
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM ruphish_webhook_jobs")
         .fetch_one(&pool)
         .await
         .unwrap();
     assert_eq!(count, 0);
-    sqlx::query("INSERT INTO events(campaign_id,email,time,message,details) VALUES(1,'recipient@example.test','2026-10-19T12:00:00Z','Email Reported','{\"password\":\"CANARY\"}')").execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata) VALUES(1,'recipient@example.test','2026-10-19T12:00:00Z','email_reported','{\"password\":\"CANARY\"}')").execute(&pool).await.unwrap();
     integrations.tick().await.unwrap();
     let first = requests.recv().await.unwrap();
     assert!(!String::from_utf8_lossy(&first).contains("CANARY"));
@@ -494,7 +495,7 @@ async fn changing_webhook_during_delivery_preserves_cancellation_and_releases_da
         )
         .await
         .unwrap();
-    sqlx::query("INSERT INTO events(campaign_id,email,time,message,details) VALUES(1,'recipient@example.test','2026-10-19T12:00:00Z','Email Reported','{\"password\":\"MUST-NOT-SEND\"}')")
+    sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata) VALUES(1,'recipient@example.test','2026-10-19T12:00:00Z','email_reported','{\"password\":\"MUST-NOT-SEND\"}')")
         .execute(&database.inspection_pool()).await.unwrap();
     let worker = integrations.clone();
     let operation = tokio::spawn(async move { worker.deliver_webhooks().await });

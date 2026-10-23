@@ -19,6 +19,8 @@ Ruphish separates recorded observations from summary progression. That distincti
 
 Raw event totals include repeated observations. Unique counts include each attributable recipient once for the selected event type. Progression counts infer that a clicked or submitted recipient has reached the opened stage, and a submitted recipient has reached the clicked stage. Acceptance and reports are never inferred.
 
+Campaign analysis summary cards, the dashboard, and the campaign execution overview count each recipient at most once per category within a campaign. Recipient analysis cards and event history count all recorded observations, including repeats. A retry of the same submission delivery is deduplicated. Campaign analysis retains separately labelled event totals and activity charts.
+
 Those inferences do not add timeline events or invent timestamps. Charts, event tables, and event exports retain recorded observations. Password presence requires an explicit positive boolean; submission alone does not mean credentials were entered.
 
 ## Dashboard scope

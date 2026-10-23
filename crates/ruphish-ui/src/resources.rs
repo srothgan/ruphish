@@ -208,7 +208,7 @@ impl Family {
                 json!({"id":0,"name":"","subject":"","envelope_sender":"","html":"","text":"","attachments":[]})
             }
             Self::Pages => {
-                json!({"id":0,"name":"","html":"","capture_credentials":false,"capture_passwords":false,"redirect_url":""})
+                json!({"id":0,"name":"","html":"","redirect_url":""})
             }
             Self::Profiles => {
                 json!({"id":0,"name":"","host":"","from_address":"","username":"","password":"","ignore_cert_errors":false,"interface_type":"SMTP","headers":[]})
@@ -416,6 +416,12 @@ struct Editor {
     epoch: RwSignal<u64>,
     busy: RwSignal<bool>,
     visual_pending: RwSignal<bool>,
+    diagnostics: RwSignal<
+        Option<(
+            String,
+            Vec<ruphish_contracts::resource_details::PageWarning>,
+        )>,
+    >,
     readonly: bool,
     replace_url: Callback<String>,
     import_review: Option<RwSignal<ImportReview>>,
@@ -486,6 +492,7 @@ fn edit(
         epoch: RwSignal::new(0),
         busy: RwSignal::new(false),
         visual_pending: RwSignal::new(false),
+        diagnostics: RwSignal::new(None),
         readonly: !use_context::<ResourceAccess>().is_some_and(|access| access.0),
         replace_url,
     };
@@ -531,6 +538,7 @@ fn edit(
                         } else {
                             ResourceDraft::new(value, revision)
                         };
+                        editor.diagnostics.set(warnings_for(loaded.value()));
                         editor.draft.set(loaded);
                         editor.epoch.update(|v| *v += 1);
                     }
@@ -723,6 +731,7 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
     editor.busy.set(false);
     match result {
         Ok((value, revision)) => {
+            editor.diagnostics.set(warnings_for(&value));
             if let Some(id) = value["id"].as_i64() {
                 queries.saved(family, id);
             }
@@ -895,6 +904,14 @@ fn content_workspace(
                 )
                 .await
                 .and_then(|(value, _)| {
+                    if family == Family::Pages && editor.text("html") == source {
+                        let warnings =
+                            serde_json::from_value(value["warnings"].clone()).map_err(|_| {
+                                leptos_i18n::t_string!(i18n, ui.validation_response_invalid)
+                                    .to_string()
+                            })?;
+                        editor.diagnostics.set(Some((source.clone(), warnings)));
+                    }
                     value["html"].as_str().map(str::to_owned).ok_or_else(|| {
                         leptos_i18n::t_string!(i18n, ui.the_preview_response_did_not_contain_html)
                             .into()
@@ -1131,19 +1148,73 @@ fn content_fields(
                 .then(|| {
                     view! {
                         <section class="resource-section">
-                            <h2>{tr!(ui.optional_campaign_defaults)}</h2>
+                            <h2>{tr!(ui.landing_page_checks)}</h2>
+                            <ActionButton
+                                kind="button"
+                                disabled=editor.visual_pending
+                                on_click=move |_| {
+                                    let source = editor.text("html");
+                                    spawn_local(async move {
+                                        let body = json!({"html":source});
+                                        match api
+                                            .resource(
+                                                "POST",
+                                                "/api/pages/validate",
+                                                &token.get_value(),
+                                                Some(&body),
+                                                None,
+                                            )
+                                            .await
+                                        {
+                                            Ok((value, _)) if editor.text("html") == source => {
+                                                match serde_json::from_value(value["warnings"].clone()) {
+                                                    Ok(warnings) => {
+                                                        editor.diagnostics.set(Some((source, warnings)))
+                                                    }
+                                                    Err(_) => {
+                                                        editor
+                                                            .message
+                                                            .error(
+                                                                leptos_i18n::t_string!(i18n, ui.validation_response_invalid)
+                                                                    .into(),
+                                                            )
+                                                    }
+                                                }
+                                            }
+                                            Err(error) => editor.message.error(error),
+                                            _ => {}
+                                        }
+                                    });
+                                }
+                            >
+                                {tr!(ui.check_landing_page)}
+                            </ActionButton>
+                            {page_warnings(
+                                Signal::derive(move || {
+                                    editor
+                                        .diagnostics
+                                        .get()
+                                        .filter(|(source, _)| *source == editor.text("html"))
+                                        .map(|(_, warnings)| warnings)
+                                        .unwrap_or_default()
+                                }),
+                            )}
+                            <Show when=move || {
+                                editor
+                                    .diagnostics
+                                    .get()
+                                    .is_some_and(|(source, warnings)| {
+                                        source == editor.text("html") && warnings.is_empty()
+                                    })
+                            }>
+                                <p role="status">{tr!(ui.no_landing_page_warnings)}</p>
+                            </Show>
                             <p>
                                 {tr!(
                                     ui.public_pages_preserve_field_names_and_styling_but_block_authored_scripts_embedde
                                 )}
                             </p>
-                            <p>
-                                {tr!(
-                                    ui.suggested_submission_settings_for_campaigns_using_this_page_leave_tracking_off_a
-                                )}
-                            </p>
-                            {editor.flag("capture_credentials", trs!(ui.record_form_submission))}
-                            {editor.flag("capture_passwords", trs!(ui.record_password_presence))}
+                            <p>{tr!(ui.all_submissions_recorded)}</p>
                             {editor
                                 .field(
                                     "redirect_url",
@@ -1879,5 +1950,72 @@ fn test_panel(
                 }}
             </ActionButton>
         </Dialog>
+    }
+}
+
+fn warnings_for(
+    value: &Value,
+) -> Option<(
+    String,
+    Vec<ruphish_contracts::resource_details::PageWarning>,
+)> {
+    Some((
+        value["html"].as_str()?.into(),
+        serde_json::from_value(value["warnings"].clone()).ok()?,
+    ))
+}
+
+pub(super) fn page_warnings(
+    warnings: Signal<Vec<ruphish_contracts::resource_details::PageWarning>>,
+) -> impl IntoView {
+    let i18n = ruphish_ui::localization::use_i18n();
+    view! {
+        <Show when=move || !warnings.get().is_empty()>
+            <div class="form-message" role="status">
+                <p>{tr!(ui.landing_page_warnings)}</p>
+                <ul>
+                    {move || {
+                        warnings
+                            .get()
+                            .into_iter()
+                            .map(|warning| {
+                                let text = match warning.code.as_str() {
+                                    "password_disabled" => {
+                                        leptos_i18n::t_string!(i18n, ui.warning_password_disabled)
+                                    }
+                                    "password_unnamed" => {
+                                        leptos_i18n::t_string!(i18n, ui.warning_password_unnamed)
+                                    }
+                                    "password_without_form" => {
+                                        leptos_i18n::t_string!(
+                                            i18n, ui.warning_password_without_form
+                                        )
+                                    }
+                                    "form_without_submit" => {
+                                        leptos_i18n::t_string!(i18n, ui.warning_form_without_submit)
+                                    }
+                                    "authored_execution_removed" => {
+                                        leptos_i18n::t_string!(
+                                            i18n, ui.warning_authored_execution_removed
+                                        )
+                                    }
+                                    "duplicate_control_id" => {
+                                        leptos_i18n::t_string!(
+                                            i18n, ui.warning_duplicate_control_id
+                                        )
+                                    }
+                                    _ => leptos_i18n::t_string!(i18n, ui.warning_html_repaired),
+                                };
+                                view! {
+                                    <li>
+                                        {text}{warning.control.map(|index| format!(" (#{index})"))}
+                                    </li>
+                                }
+                            })
+                            .collect_view()
+                    }}
+                </ul>
+            </div>
+        </Show>
     }
 }

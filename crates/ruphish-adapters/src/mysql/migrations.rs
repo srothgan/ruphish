@@ -49,6 +49,13 @@ fn migrator() -> Migrator {
                 include_str!("../../migrations/mysql/4_campaign_drafts.sql").into_sql_str(),
                 false,
             ),
+            Migration::new(
+                5,
+                Cow::Borrowed("observations"),
+                MigrationType::Simple,
+                include_str!("../../migrations/mysql/5_observations.sql").into_sql_str(),
+                false,
+            ),
         ]),
         locking: false,
         ..Migrator::DEFAULT
@@ -150,7 +157,9 @@ async fn resume(c: &mut MySqlConnection, _config: &MySqlConfig) -> Result<(), Er
     let published = source
         .iter()
         .all(|name| actual.contains(&format!("{ORIGINAL}{name}")))
-        && expected.iter().all(|name| actual.contains(name))
+        // Later application migrations replace baseline source/receipt tables.
+        // Their history and exact schema are still checked below by SQLx and inventory.
+        && (expected.is_subset(&actual) || current_tables().is_subset(&actual))
         && !actual.iter().any(|name| name.starts_with(STAGE));
     if !published {
         if !matches!(phase.as_str(), "preparing" | "copied")
@@ -258,9 +267,17 @@ pub(super) async fn statement(c: &mut MySqlConnection, sql: String) -> Result<()
     Ok(())
 }
 
+fn current_tables() -> BTreeSet<String> {
+    let mut tables = tables();
+    tables.remove("ruphish_event_sources");
+    tables.remove("ruphish_submission_ids");
+    tables.insert("ruphish_event_receipts".into());
+    tables.insert("event_history".into());
+    tables
+}
 async fn validate_current(c: &mut MySqlConnection) -> Result<(), Error> {
     let actual = names(c).await?;
-    let mut expected = tables();
+    let mut expected = current_tables();
     expected.insert("ruphish_user_preferences".into());
     expected.insert("ruphish_campaign_drafts".into());
     if !expected.is_subset(&actual) {
@@ -286,11 +303,23 @@ async fn validate_current(c: &mut MySqlConnection) -> Result<(), Error> {
     if actual != allowed {
         return Err(Error::UnsupportedSchema);
     }
-    let customized:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE()) OR EXISTS(SELECT 1 FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE()) OR EXISTS(SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND (ENGINE<>'InnoDB' OR TABLE_TYPE<>'BASE TABLE'))").fetch_one(&mut *c).await.map_err(storage_error)?;
+    let customized:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE()) OR EXISTS(SELECT 1 FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE()) OR EXISTS(SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND (ENGINE<>'InnoDB' OR (TABLE_TYPE<>'BASE TABLE' AND TABLE_NAME<>'event_history')))").fetch_one(&mut *c).await.map_err(storage_error)?;
     if customized {
         return Err(Error::UnsupportedSchema);
     }
     validate_columns(c).await?;
+    let definition: String = sqlx::query_scalar("SELECT VIEW_DEFINITION FROM information_schema.VIEWS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='event_history'").fetch_one(&mut *c).await.map_err(storage_error)?;
+    let schema: String = sqlx::query_scalar("SELECT DATABASE()")
+        .fetch_one(&mut *c)
+        .await
+        .map_err(storage_error)?;
+    if !crate::observation_schema::matches(
+        &definition,
+        include_str!("../../migrations/mysql/5_observations.sql"),
+        &schema,
+    ) {
+        return Err(Error::UnsupportedSchema);
+    }
     Ok(())
 }
 
@@ -303,7 +332,8 @@ async fn validate_columns(c: &mut MySqlConnection) -> Result<(), Error> {
         .fetch_all(c)
         .await
         .map_err(storage_error)?;
-    let mut application = tables();
+    let mut application = current_tables();
+    application.remove("event_history");
     application.insert("ruphish_user_preferences".into());
     application.insert("ruphish_campaign_drafts".into());
     let mut actual = Vec::new();

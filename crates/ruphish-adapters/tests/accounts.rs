@@ -326,6 +326,9 @@ async fn preferences_upgrade_keeps_a_recoverable_original_and_failed_writes_pres
     .await
     .unwrap();
     let pool = db.inspection_pool();
+    sqlite_versions::restore_version_nine_tables(&pool)
+        .await
+        .unwrap();
     sqlx::raw_sql("UPDATE users SET password_change_required=0; DROP TABLE ruphish_campaign_drafts; DROP TABLE ruphish_user_preferences; DELETE FROM ruphish_schema WHERE version>=7;").execute(&pool).await.unwrap();
     pool.close().await;
     db.close().await;

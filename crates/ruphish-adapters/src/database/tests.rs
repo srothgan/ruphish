@@ -59,7 +59,7 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
             domains.finish(&check, Observation {
                 control: true, dns: true, routing: true, tls: true, code: "verified",
             }, now).await.unwrap();
-            sqlx::raw_sql("UPDATE results SET first_name='Alice<script>injectedCanary()</script>'; UPDATE pages SET html='<h1>Hello {{.FirstName}}</h1><form><input name=\"password\" type=\"password\"></form>'; UPDATE ruphish_campaign_policy SET capture_credentials=1,redirect_url='https://training.example.test/finished';")
+            sqlx::raw_sql("UPDATE results SET first_name='Alice<script>injectedCanary()</script>'; UPDATE pages SET html='<h1>Hello {{.FirstName}}</h1><form><input name=\"password\" type=\"password\"></form>'; UPDATE ruphish_campaign_policy SET redirect_url='https://training.example.test/finished';")
                 .execute(&inspection_pool).await.unwrap();
             match scenario {
                 "invalid_page" => { sqlx::query("UPDATE pages SET html='{{if}}'").execute(&inspection_pool).await.unwrap(); }
@@ -67,7 +67,7 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
                 "invalid_redirect" => { sqlx::query("UPDATE ruphish_campaign_policy SET redirect_url='{{if}}'").execute(&inspection_pool).await.unwrap(); }
                 _ => {}
             }
-            let before: i64 = sqlx::query_scalar("SELECT count(*) FROM events").fetch_one(&inspection_pool).await.unwrap();
+            let before: i64 = sqlx::query_scalar("SELECT count(*) FROM event_history").fetch_one(&inspection_pool).await.unwrap();
             let public = db.interactions();
 
             // Occupy the sole blocking worker. The production operation can finish
@@ -98,7 +98,7 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
             // This is the same single-connection pool the request uses. A read AND
             // write must finish while its blocking job remains queued.
             tokio::time::timeout(Duration::from_secs(20), async {
-                assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM events").fetch_one(&inspection_pool).await.unwrap(), before);
+                assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM event_history").fetch_one(&inspection_pool).await.unwrap(), before);
                 let change = match scenario {
                     "complete" | "submit_complete" => "UPDATE campaigns SET status='Completed'",
                     "disable" => "UPDATE ruphish_domains SET enabled=0",
@@ -131,9 +131,9 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
             }
             let permits = tokio::time::timeout(Duration::from_secs(20), db.rendering.acquire_many(8)).await.unwrap().unwrap();
             drop(permits);
-            let after: i64 = sqlx::query_scalar("SELECT count(*) FROM events").fetch_one(&inspection_pool).await.unwrap();
+            let after: i64 = sqlx::query_scalar("SELECT count(*) FROM event_history").fetch_one(&inspection_pool).await.unwrap();
             assert_eq!(after, before + i64::from(matches!(scenario, "snapshot" | "expired")), "{scenario}");
-            assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM ruphish_submission_ids").fetch_one(&inspection_pool).await.unwrap(), 0);
+            assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM ruphish_event_receipts").fetch_one(&inspection_pool).await.unwrap(), 0);
             db.close().await;
         });
     }
@@ -162,7 +162,7 @@ fn preview_rendering_releases_connection_and_preserves_owned_snapshot() {
                 .execute(&inspection_pool).await.unwrap();
             sqlx::query("INSERT INTO email_requests(user_id,page_id,first_name,last_name,email,position,url,r_id,from_address) SELECT user_id,id,'Alice','','alice@example.test','','https://training.example.test','preview-isolation','sender@example.test' FROM pages LIMIT 1")
                 .execute(&inspection_pool).await.unwrap();
-            let before: i64 = sqlx::query_scalar("SELECT count(*) FROM events").fetch_one(&inspection_pool).await.unwrap();
+            let before: i64 = sqlx::query_scalar("SELECT count(*) FROM event_history").fetch_one(&inspection_pool).await.unwrap();
             let previews = db.previews();
             assert!(previews.contains("preview-isolation").await.unwrap());
             assert!(!previews.contains("not-a-preview").await.unwrap());
@@ -211,7 +211,7 @@ fn preview_rendering_releases_connection_and_preserves_owned_snapshot() {
             }
             let permits = tokio::time::timeout(Duration::from_secs(20), db.rendering.acquire_many(8)).await.unwrap().unwrap();
             drop(permits);
-            assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM events").fetch_one(&inspection_pool).await.unwrap(), before, "previews must not record campaign events");
+            assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM event_history").fetch_one(&inspection_pool).await.unwrap(), before, "previews must not record campaign events");
             db.close().await;
         });
     }

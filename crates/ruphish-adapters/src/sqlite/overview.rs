@@ -205,20 +205,19 @@ async fn aggregate(
     let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
         r#"
         WITH identities AS (
-            SELECT r.campaign_id,r.email,min(r.id) AS id
+            SELECT r.campaign_id,r.email,r.id
             FROM results r JOIN campaigns c ON c.id=r.campaign_id
             WHERE c.user_id=?1 AND (?4 IS NULL OR c.id=?4)
-            GROUP BY r.campaign_id,r.email HAVING count(*)=1
         ), accepted AS (
             SELECT i.*,min(unixepoch(e.time)) AS first_sent
-            FROM identities i JOIN events e ON e.campaign_id=i.campaign_id AND e.email=i.email
+            FROM identities i JOIN event_history e ON e.campaign_id=i.campaign_id AND e.recipient_id=i.id
             WHERE e.message='Email Sent' AND unixepoch(e.time)<=?3
             GROUP BY i.id
         ), cohort AS (
             SELECT * FROM accepted WHERE (?2 IS NULL OR first_sent>=?2)
         ), outcomes AS (
             SELECT c.id, {flags}
-            FROM cohort c LEFT JOIN events e ON e.campaign_id=c.campaign_id AND e.email=c.email
+            FROM cohort c LEFT JOIN event_history e ON e.campaign_id=c.campaign_id AND e.recipient_id=c.id
                 AND unixepoch(e.time)<=?3
             GROUP BY c.id
         )

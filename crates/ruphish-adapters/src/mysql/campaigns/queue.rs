@@ -255,17 +255,18 @@ impl Queue for Campaigns {
             .map(|e| serde_json::json!({"error":e.to_string(),"code":code}).to_string())
             .unwrap_or_default();
         let inserted = sqlx::query(
-            "INSERT INTO events(campaign_id,email,time,message,details) VALUES(?,?,?,?,?)",
+            "INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id) VALUES(?,?,?,?,?,?)",
         )
         .bind(claim.campaign_id)
         .bind(&claim.message.recipient.email)
         .bind(stamp(now)?)
         .bind(if outcome.is_ok() {
-            "Email Sent"
+            "email_sent"
         } else {
-            "Error Sending Email"
+            "email_error"
         })
-        .bind(details)
+        .bind(crate::participant_privacy::details(&details))
+        .bind(claim.result_id)
         .execute(&mut *tx)
         .await
         .map_err(storage)?;
@@ -296,9 +297,9 @@ async fn recover(pool: &MySqlPool, now: i64) -> Result<(), Error> {
         sqlx::query("UPDATE ruphish_delivery_attempt SET state='abandoned',finished=? WHERE state='preparing' AND EXISTS(SELECT 1 FROM ruphish_delivery d WHERE d.result_id=ruphish_delivery_attempt.result_id AND d.generation=ruphish_delivery_attempt.generation AND d.state='preparing' AND d.lease_until<=? AND d.campaign_id=?)").bind(now).bind(now).bind(campaign).execute(&mut *tx).await.map_err(storage)?;
         sqlx::query("UPDATE ruphish_delivery SET state='ready',lease_until=0 WHERE state='preparing' AND lease_until<=? AND campaign_id=?").bind(now).bind(campaign).execute(&mut *tx).await.map_err(storage)?;
         sqlx::query("UPDATE ruphish_delivery_attempt SET state='unknown',finished=? WHERE state='submitting' AND EXISTS(SELECT 1 FROM ruphish_delivery d WHERE d.result_id=ruphish_delivery_attempt.result_id AND d.generation=ruphish_delivery_attempt.generation AND d.state='submitting' AND d.lease_until<=? AND d.campaign_id=?)").bind(now).bind(now).bind(campaign).execute(&mut *tx).await.map_err(storage)?;
-        let emails:Vec<String>=sqlx::query_scalar("SELECT r.email FROM ruphish_delivery d JOIN results r ON r.id=d.result_id WHERE d.state='submitting' AND d.lease_until<=? AND d.campaign_id=?").bind(now).bind(campaign).fetch_all(&mut *tx).await.map_err(storage)?;
-        for email in emails {
-            let inserted=sqlx::query("INSERT INTO events(campaign_id,email,time,message,details) VALUES(?,?,?,'Error Sending Email','{\"code\":\"delivery_outcome_unknown\"}')").bind(campaign).bind(email).bind(stamp(now)?).execute(&mut *tx).await.map_err(storage)?;
+        let recipients:Vec<(i64,String)>=sqlx::query_as("SELECT r.id,r.email FROM ruphish_delivery d JOIN results r ON r.id=d.result_id WHERE d.state='submitting' AND d.lease_until<=? AND d.campaign_id=?").bind(now).bind(campaign).fetch_all(&mut *tx).await.map_err(storage)?;
+        for (result_id, email) in recipients {
+            let inserted=sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id) VALUES(?,?,?,'email_error','{\"code\":\"delivery_outcome_unknown\"}',?)").bind(campaign).bind(email).bind(stamp(now)?).bind(result_id).execute(&mut *tx).await.map_err(storage)?;
             super::super::events::publish(
                 &mut tx,
                 inserted.insert_id().map_err(storage)?,

@@ -760,7 +760,21 @@
     "schedule_campaign": "Schedule campaign",
     "draft_step": "Editing step",
     "public_url": "Public URL",
-    "edit_campaign_draft": "Edit campaign draft"
+    "edit_campaign_draft": "Edit campaign draft",
+    "all_submissions_recorded": "Every form submission is recorded. Password presence is recorded without collecting entered values.",
+    "landing_page_checks": "Landing page checks",
+    "check_landing_page": "Check landing page",
+    "no_landing_page_warnings": "No warnings found in the processed sample. Review the preview before use.",
+    "landing_page_warnings": "Landing page warnings",
+    "validation_response_invalid": "The validation response could not be read.",
+    "warning_password_disabled": "This password field is disabled and will not count toward password presence.",
+    "warning_password_unnamed": "This password field has no name and will not participate in submission.",
+    "warning_password_without_form": "This password field is not associated with a usable form.",
+    "warning_form_without_submit": "This form has no enabled submit control or reliable implicit submission path.",
+    "warning_authored_execution_removed": "Authored scripts and event handlers are removed. Check that the processed form still works.",
+    "warning_duplicate_control_id": "Duplicate element IDs can change which form owns a control.",
+    "warning_html_repaired": "The browser parser repaired the HTML structure. Review the processed preview.",
+    "recipient_observation_counts": "Every recorded observation for this recipient is counted, including repeats. Retrying the same submission delivery does not add an event."
   },
   "messages": {
     "the_request_failed_arg0_try_again": "The request failed ({{ arg0 }}). Try again.",

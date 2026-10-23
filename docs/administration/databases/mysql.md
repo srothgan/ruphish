@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-Provision an InnoDB/UTF-8 database and a dedicated service account. Grant database-scoped `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `ALTER`, `DROP`, and `INDEX` for runtime operations and automatic migrations. Server-wide privileges, triggers, and database/account creation permissions are not required.
+Provision an InnoDB/UTF-8 database and a dedicated service account. Grant database-scoped `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `ALTER`, `DROP`, `INDEX`, `CREATE VIEW`, and `SHOW VIEW` for runtime operations and automatic migrations. Observation migration v5 introduces the `event_history` compatibility view and requires the two view privileges before upgrade. Server-wide privileges, triggers, and database/account creation permissions are not required.
 
 Replace the SQLite fields with this configuration fragment:
 

@@ -55,13 +55,9 @@ impl DeliveryFailure {
 }
 /// Eight retries after the initial attempt, preserving the supported retry budget.
 pub const MAX_RETRIES: u32 = 8;
-/// Effective capture policy is owned by the campaign, not its live page reference.
+/// The campaign owns its redirect independently of its live page reference.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct CapturePolicy {
-    /// Record submission events without entered field values.
-    pub capture_credentials: bool,
-    /// Record password-presence booleans only, never the password.
-    pub capture_passwords: bool,
+pub struct InteractionPolicy {
     /// Post-submission redirect template, empty for no redirect.
     pub redirect_url: String,
 }

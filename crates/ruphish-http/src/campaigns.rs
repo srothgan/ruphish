@@ -153,8 +153,8 @@ fn decode(context: &Context, bytes: &[u8]) -> Result<app::Create, Rejection> {
         launch: timestamp(input.launch_date),
         send_by: timestamp(input.send_by_date),
         policy: app::Overrides {
-            capture_credentials: p.capture_credentials,
-            capture_passwords: p.capture_passwords,
+            capture_credentials: Some(true),
+            capture_passwords: Some(true),
             redirect_url: p.redirect_url,
         },
         idempotency: None,
@@ -263,6 +263,20 @@ async fn prepare_inner(context: Context, body: Bytes, draft: bool) -> Result<Res
     let conflict_count = p.conflict_count;
     let launch_date = p.launch;
     let policy = read_policy(&p.policy);
+    let warnings = if let ruphish_application::resources::Content::Page(page) = &p.page.content {
+        context
+            .resources()
+            .page_warnings(&page.html)
+            .map_err(error)?
+            .into_iter()
+            .map(|warning| ruphish_contracts::resource_details::PageWarning {
+                code: warning.code.into(),
+                control: warning.control,
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
     let preview = context
         .delivery()
         .review_campaign(p, input.url)
@@ -270,6 +284,7 @@ async fn prepare_inner(context: Context, body: Bytes, draft: bool) -> Result<Res
     response(
         StatusCode::OK,
         &workflow::Review {
+            warnings,
             total: count,
             duplicate_count: total - count,
             launch_date,
@@ -419,10 +434,10 @@ struct Page {
     limit: Option<i64>,
     completed: Option<bool>,
 }
-fn read_policy(p: &app::CapturePolicy) -> reads::Policy {
+fn read_policy(p: &app::InteractionPolicy) -> reads::Policy {
     reads::Policy {
-        capture_credentials: p.capture_credentials,
-        capture_passwords: p.capture_passwords,
+        capture_credentials: true,
+        capture_passwords: true,
         redirect_url: p.redirect_url.clone(),
     }
 }

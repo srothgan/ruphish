@@ -1,0 +1,8 @@
+{
+  "source_commit": "8e279051539993453f2144ce8b76f56900307a89",
+  "reference_commit": "95618469799295e2c0fec980805a2dfbb818816b",
+  "schema_version": 10,
+  "source": "queued.sqlite3 plus the unchanged SQLite schemas from the source commit, versions 1 through 10. Synthetic domain id 1 links campaign 1. No v11 migration code was used to construct this fixture.",
+  "file": "ruphish-v10.sqlite3",
+  "sha256": "5e3ef96d1803aa1461b67d5f5a0cd5c55ded6647844dbf4ec0aeb934e8e4082b"
+}

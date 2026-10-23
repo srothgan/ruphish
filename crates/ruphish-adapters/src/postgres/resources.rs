@@ -138,8 +138,6 @@ pub(super) async fn load(
         }
         Kind::Page => Content::Page(Page {
             html: text(&row, "html")?,
-            capture_credentials: boolean(&row, "capture_credentials")?,
-            capture_passwords: boolean(&row, "capture_passwords")?,
             redirect_url: text(&row, "redirect_url")?,
         }),
         Kind::Profile => {
@@ -451,7 +449,13 @@ impl Repository for Resources {
                 }
             }
             Content::Page(p) => {
-                sqlx::query("UPDATE pages SET html=$1,capture_credentials=$2,capture_passwords=$3,redirect_url=$4 WHERE id=$5").bind(&p.html).bind(p.capture_credentials).bind(p.capture_passwords).bind(&p.redirect_url).bind(id).execute(&mut *tx).await.map_err(storage)?;
+                sqlx::query("UPDATE pages SET html=$1,redirect_url=$2 WHERE id=$3")
+                    .bind(&p.html)
+                    .bind(&p.redirect_url)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(storage)?;
             }
             Content::Profile(p) => {
                 sqlx::query("UPDATE smtp SET interface_type=$1,host=$2,username=$3,password=$4,from_address=$5,ignore_cert_errors=$6 WHERE id=$7").bind(&p.interface_type).bind(&p.host).bind(&p.username).bind(&p.password).bind(&p.from_address).bind(p.ignore_cert_errors).bind(id).execute(&mut *tx).await.map_err(storage)?;

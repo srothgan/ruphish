@@ -74,6 +74,9 @@ pub struct Preview {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 /// Complete server-confirmed launch review.
 pub struct Review {
+    /// Advisory findings on the processed landing page.
+    #[serde(default)]
+    pub warnings: Vec<crate::resource_details::PageWarning>,
     /// Number of unique recipients.
     pub total: usize,
     /// Number of discarded duplicate entries.

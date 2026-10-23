@@ -463,7 +463,7 @@ fn executable_campaign_reads_never_return_legacy_participant_credentials() {
     .unwrap();
     sql(
         directory.path(),
-        "UPDATE events SET details='{\"payload\":{\"username\":\"private-login-canary\",\"password\":\"private-login-canary\"},\"error\":\"private-login-canary\"}'",
+        "UPDATE events SET metadata='{\"payload\":{\"username\":\"private-login-canary\",\"password\":\"private-login-canary\"},\"error\":\"private-login-canary\"}'",
     );
     // Reading migrated campaigns must not require verifying or changing their original URLs.
     let (mut process, base) = start_with_network(&directory, &["--disable-mailer"]);
@@ -591,7 +591,7 @@ fn reviewed_campaign_preview_test_and_duplicate_use_exact_owned_resources_withou
     let mut input = resources(&base, &smtp.address);
     sql(
         directory.path(),
-        "UPDATE pages SET capture_credentials=1,capture_passwords=1,redirect_url='https://training.example.test/finish'",
+        "UPDATE pages SET redirect_url='https://training.example.test/finish'",
     );
     let inherited = post(&base, "/api/campaigns/prepare", &input);
     let page_url = format!("/api/pages/{}", inherited["selection"]["page"]["id"]);
@@ -603,11 +603,15 @@ fn reviewed_campaign_preview_test_and_duplicate_use_exact_owned_resources_withou
         "https://training.example.test/finish"
     );
     assert_eq!(inherited["policy"]["capture_passwords"], true);
-    // The editable UI sends concrete values, including explicit false and empty.
+    // Legacy false flags are inert; explicit empty still clears the redirect.
     input["policy"] =
         json!({"capture_credentials":false,"capture_passwords":false,"redirect_url":""});
     let review = post(&base, "/api/campaigns/prepare", &input);
-    assert_eq!(review["policy"], input["policy"]);
+    assert_eq!(
+        review["policy"],
+        json!({"capture_credentials":true,"capture_passwords":true,"redirect_url":""})
+    );
+    assert!(review["warnings"].is_array());
     assert_eq!(review["total"], 1);
     assert!(
         review["preview"]["subject"]
@@ -657,7 +661,7 @@ fn reviewed_campaign_preview_test_and_duplicate_use_exact_owned_resources_withou
     );
     let created = post(&base, "/api/campaigns/", &campaign);
     let draft = read(&base, &format!("/api/campaigns/{}/draft", created["id"]));
-    assert_eq!(draft["policy"], input["policy"]);
+    assert_eq!(draft["policy"], review["policy"]);
     assert_eq!(read(&base, &page_url), defaults);
     assert_eq!(draft["selection"]["groups"].as_array().unwrap().len(), 1);
     assert!(draft.get("id").is_none());
@@ -1144,12 +1148,12 @@ fn campaign_context_and_recipient_history_are_complete_bounded_and_owner_scoped(
         INSERT INTO ruphish_delivery_attempt(result_id,generation,started,finished,state,message_id)
         SELECT {a},x,1900000000+x,1900000001+x,'accepted','attempt-'||x||'@example.test' FROM n;
         WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<105)
-        INSERT INTO events(campaign_id,email,time,message,details)
-        SELECT {id},'alice@example.test','2030-05-01T09:25:00Z','Email Sent','{{"password":"participant-secret-canary","password_present":true}}' FROM n;
+        INSERT INTO events(campaign_id,email,time,kind,metadata)
+        SELECT {id},'alice@example.test','2030-05-01T09:25:00Z','email_sent','{{"password":"participant-secret-canary","password_present":true}}' FROM n;
         WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<150)
-        INSERT INTO events(campaign_id,email,time,message,details)
-        SELECT {id},'bob@example.test','2030-05-01T10:25:00Z','Email Opened','' FROM n;
-    "#
+        INSERT INTO events(campaign_id,email,time,kind,metadata)
+        SELECT {id},'bob@example.test','2030-05-01T10:25:00Z','email_opened','' FROM n;
+     UPDATE events SET recipient_id=(SELECT min(r.id) FROM results r WHERE r.campaign_id=events.campaign_id AND r.email=events.email HAVING count(*)=1) WHERE recipient_id IS NULL;"#
         ),
     );
     let first = read(&base, &history_path);

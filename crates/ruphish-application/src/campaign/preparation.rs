@@ -1,6 +1,6 @@
 //! Campaign preparation rules shared by all persistence providers.
 use crate::{
-    campaign::{CapturePolicy, Create},
+    campaign::{Create, InteractionPolicy},
     resources::{Content, Error, Recipient, Resource},
 };
 use std::collections::HashMap;
@@ -79,26 +79,11 @@ pub fn audience(groups: &[Resource]) -> Result<Audience, Error> {
     })
 }
 /// Resolve optional page defaults while enforcing presence-only tracking dependencies.
-pub fn policy(input: &Create, page: &Resource) -> Result<CapturePolicy, Error> {
+pub fn policy(input: &Create, page: &Resource) -> Result<InteractionPolicy, Error> {
     let Content::Page(defaults) = &page.content else {
         return Err(Error::Internal);
     };
-    let passwords = input
-        .policy
-        .capture_passwords
-        .unwrap_or(defaults.capture_passwords);
-    let credentials = input
-        .policy
-        .capture_credentials
-        .unwrap_or(defaults.capture_credentials);
-    if passwords && input.policy.capture_credentials == Some(false) {
-        return Err(Error::Invalid(
-            "Password-presence tracking requires submission tracking".into(),
-        ));
-    }
-    let policy = CapturePolicy {
-        capture_credentials: credentials || passwords,
-        capture_passwords: passwords,
+    let policy = InteractionPolicy {
         redirect_url: input
             .policy
             .redirect_url

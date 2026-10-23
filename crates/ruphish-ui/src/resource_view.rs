@@ -231,11 +231,9 @@ fn body(value: Value, family: Family) -> AnyView {
         }
         Family::Pages => view! {
             <section class="resource-section">
-                <h2>{tr!(ui.optional_campaign_defaults)}</h2>
-                <p>{tr!(ui.suggested_submission_settings_for_campaigns_using_this_page)}</p>
+                <h2>{tr!(ui.submission_tracking)}</h2>
+                <p>{tr!(ui.all_submissions_recorded)}</p>
                 <dl class="resource-facts">
-                    {field(trs!(ui.record_form_submission), yes_no(&value, "capture_credentials"))}
-                    {field(trs!(ui.record_password_presence), yes_no(&value, "capture_passwords"))}
                     {field(trs!(ui.redirect_after_submission), text(&value, "redirect_url"))}
                 </dl>
             </section>

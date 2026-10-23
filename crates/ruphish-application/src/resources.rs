@@ -84,6 +84,8 @@ pub trait Repository: Send + Sync {
 pub trait Validator: Send + Sync {
     /// Check content rules without persisting or performing delivery.
     fn validate(&self, resource: &Resource) -> Result<(), Error>;
+    /// Inspect the processed landing document without storing diagnostic state.
+    fn page_warnings(&self, html: &str) -> Result<Vec<PageWarning>, Error>;
 }
 /// Coordinates authoritative rules, parsing and guarded atomic persistence.
 #[derive(Clone)]
@@ -198,6 +200,10 @@ impl Service {
     pub fn validate(&self, value: &mut Resource) -> Result<(), Error> {
         value.validate().map_err(|s| Error::Invalid(s.into()))?;
         self.validator.validate(value)
+    }
+    /// Reuse serving-time form diagnostics for save, preview and campaign review.
+    pub fn page_warnings(&self, html: &str) -> Result<Vec<PageWarning>, Error> {
+        self.validator.page_warnings(html)
     }
     /// Delete only after ownership, revision and live-usage checks.
     pub async fn delete(

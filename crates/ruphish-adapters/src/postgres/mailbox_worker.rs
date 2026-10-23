@@ -313,12 +313,13 @@ impl MailboxQueue for Integrations {
                     ruphish_application::datetime::utc(ruphish_application::datetime::now());
                 let event = sqlx::query(
                     r#"
-                INSERT INTO events(campaign_id,email,time,message,details)
-                VALUES($1,$2,$3,'Email Reported','') RETURNING id"#,
+                INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id)
+                VALUES($1,$2,$3,'email_reported','',$4) RETURNING id"#,
                 )
                 .bind(campaign)
                 .bind(email)
                 .bind(&stamp)
+                .bind(result)
                 .fetch_one(&mut *tx)
                 .await
                 .map_err(|_| "mailbox_storage_failed")?

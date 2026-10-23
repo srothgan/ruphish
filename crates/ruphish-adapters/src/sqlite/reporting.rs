@@ -15,19 +15,15 @@ impl Reports {
 fn storage(error: sqlx::Error) -> Error {
     crate::sqlite::resource_error(error)
 }
-const CTE: &str = r#"WITH identities AS (
- SELECT email, CASE WHEN count(*)=1 THEN min(id) END AS id FROM results WHERE campaign_id=?1 GROUP BY email
-), audience AS (
+const CTE: &str = r#"WITH audience AS (
  SELECT r.*,COALESCE(d.state,'historical') AS delivery FROM results r LEFT JOIN ruphish_delivery d ON d.result_id=r.id
  WHERE r.campaign_id=?1 AND (?4 IS NULL OR r.id=?4) AND (?6='' OR instr(lower(r.email||' '||COALESCE(r.first_name,'')||' '||COALESCE(r.last_name,'')),lower(?6))>0)
  AND (?8='[]' OR r.id IN (SELECT value FROM json_each(?8)))
 ), observed AS (
- SELECT e.*,a.id AS recipient_id,COALESCE(s.source,'legacy') AS source FROM events e
- LEFT JOIN identities i ON i.email=e.email
- LEFT JOIN audience a ON a.id=i.id
- LEFT JOIN ruphish_event_sources s ON s.event_id=e.id
+ SELECT e.* FROM event_history e
+ LEFT JOIN audience a ON a.id=e.recipient_id
  WHERE e.campaign_id=?1 AND (?2 IS NULL OR unixepoch(e.time)>=?2) AND (?3 IS NULL OR unixepoch(e.time)<?3)
- AND (?5='' OR e.message=?5) AND (?7='' OR COALESCE(s.source,'legacy')=?7)
+ AND (?5='' OR e.message=?5) AND (?7='' OR e.source=?7)
  AND ((?4 IS NULL AND ?6='' AND ?8='[]') OR a.id IS NOT NULL)
 ), selected AS (SELECT * FROM audience a WHERE (?5='' AND ?7='') OR EXISTS(SELECT 1 FROM observed o WHERE o.recipient_id=a.id))
 "#;
@@ -200,9 +196,9 @@ impl Snapshots for Reports {
                     sum(CASE WHEN e.message='Submitted Data' THEN 1 ELSE 0 END) AS submitted,
                     sum(CASE WHEN e.message='Email Reported' THEN 1 ELSE 0 END) AS reports,
                     NOT EXISTS(SELECT 1
-                FROM events h
+                FROM event_history h
                 WHERE h.campaign_id=?1
-                AND h.email=a.email
+                AND h.recipient_id=a.id
                 AND h.message='Email Reported') AS missing_report
                 FROM selected a
                 LEFT JOIN observed e ON e.recipient_id=a.id
