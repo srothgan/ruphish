@@ -31,6 +31,8 @@ Cost describes the work performed, not a promised duration. Compilation, tool in
 
 Executable campaign tests use an isolated DNS/HTTPS fixture on ordinary loopback and an allocated port. The fixture belongs to the test workspace, so its origin remains stable across application restarts. No privileged-port configuration is needed. API and lifecycle process tests use small synthetic assets with a valid manifest; they exercise the real server without loading the full UI on each startup. Dedicated distribution-serving, immutability, traversal/integrity and symlink tests retain copies of the real built UI. Migration-only tests omit UI assets and inspect preserved data after shutdown; dedicated shared-database scenarios retain concurrent access. Process failures include bounded OS process observations and workspace file metadata, without dumping configuration or database contents.
 
+The executable participant-privacy workflow runs the served JavaScript collector with Node and JSDOM. Run `npm ci --prefix crates/ruphish-ui/web` before executable tests on a fresh checkout, including jobs that download a prebuilt UI distribution; that distribution does not contain test dependencies.
+
 ## Prerequisites
 
 Use the Rust toolchain/components/target in [rust-toolchain.toml](../../../rust-toolchain.toml). Tool versions are owned by [Cargo.toml](../../../Cargo.toml) workspace metadata and [Trunk.toml](../../../Trunk.toml); [development setup](../setup.md) explains formatting, generation and editor configuration. CI additionally pins product Node and tool installers in the [toolchain action](../../../.github/actions/toolchain/action.yml). The website job reads its Node version from [website/package.json](../../../website/package.json).

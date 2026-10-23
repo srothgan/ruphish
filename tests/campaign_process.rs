@@ -222,6 +222,11 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
             assert_eq!(code, Some(json!(expected_code)), "Go case {id}");
         }
         let mut expected = case["json"].clone();
+        if id == "page-create" {
+            // Diagnostics are additive; their behavior has dedicated HTTP coverage.
+            assert!(actual["warnings"].is_array());
+            actual.as_object_mut().unwrap().remove("warnings");
+        }
         // Landing pages retain authored HTML. Go's wrapper insertion is incidental formatting.
         fn exceptions(v: &mut Value) {
             match v {
@@ -234,6 +239,10 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
                             *v = json!("<p>Training</p>");
                         } else if k == "send_date" && v == "2035-01-01T12:03:00Z" {
                             *v = json!("2035-01-01T12:05:00Z");
+                        } else if matches!(k.as_str(), "capture_credentials" | "capture_passwords")
+                        {
+                            // Approved presence-only tracking ignores the legacy capture flags.
+                            *v = json!(true);
                         } else {
                             exceptions(v)
                         }
@@ -463,7 +472,8 @@ fn executable_campaign_reads_never_return_legacy_participant_credentials() {
     .unwrap();
     sql(
         directory.path(),
-        "UPDATE events SET metadata='{\"payload\":{\"username\":\"private-login-canary\",\"password\":\"private-login-canary\"},\"error\":\"private-login-canary\"}'",
+        // This independently recorded fixture still has the pre-upgrade schema.
+        "UPDATE events SET details='{\"payload\":{\"username\":\"private-login-canary\",\"password\":\"private-login-canary\"},\"error\":\"private-login-canary\"}'",
     );
     // Reading migrated campaigns must not require verifying or changing their original URLs.
     let (mut process, base) = start_with_network(&directory, &["--disable-mailer"]);

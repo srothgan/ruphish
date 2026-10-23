@@ -137,6 +137,8 @@ jobs:
           path: dist/admin
       - name: Rust formatting
         run: cargo fmt --all -- --check
+      - name: Install collector test dependencies
+        run: npm ci --prefix crates/ruphish-ui/web
       - name: Native static checks
         run: cargo clippy --workspace --exclude ruphish-ui --all-targets --locked -- -D warnings
       - name: Complete native and executable functionality
@@ -240,6 +242,8 @@ jobs:
         with:
           name: admin-distribution
           path: dist/admin
+      - name: Install collector and platform asset dependencies
+        run: npm ci --prefix crates/ruphish-ui/web
       - name: Native static checks
         run: cargo clippy --workspace --exclude ruphish-ui --all-targets --locked -- -D warnings
       - name: Complete platform functionality
@@ -249,8 +253,6 @@ jobs:
           TMP: ${{ runner.temp }}
           TEMP: ${{ runner.temp }}
         run: cargo test --workspace --exclude ruphish-ui --locked -- --nocapture
-      - name: Install platform asset dependencies
-        run: npm ci --prefix crates/ruphish-ui/web
       - name: Platform asset promotion
         run: node --test crates/ruphish-ui/web/tests/distribution.test.mjs
 

@@ -68,6 +68,8 @@ jobs:
         with:
           name: release-admin
           path: dist/admin
+      - name: Install collector test dependencies
+        run: npm ci --prefix crates/ruphish-ui/web
       - name: Optimized native and executable behavior
         # Keep disposable fixtures on job storage, not Windows' user-profile disk.
         env:
