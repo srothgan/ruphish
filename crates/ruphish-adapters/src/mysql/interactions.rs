@@ -28,7 +28,7 @@ impl Persistence for Interactions {
         let mut tx = crate::mysql::locks::snapshot(&self.pool)
             .await
             .map_err(storage)?;
-        let row=sqlx::query("SELECT r.id AS result_id,r.campaign_id,r.user_id,r.email,r.first_name,r.last_name,r.position,r.send_date,c.url,c.page_id,c.smtp_id,c.template_id,cp.capture_credentials,cp.capture_passwords,cp.redirect_url FROM results r JOIN campaigns c ON c.id=r.campaign_id AND c.user_id=r.user_id JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=c.user_id JOIN ruphish_campaign_policy cp ON cp.campaign_id=c.id WHERE r.r_id=? AND c.status!='Completed' AND d.origin=? AND d.enabled=1 AND d.verified_until>0").bind(rid).bind(origin).fetch_all(&mut *tx).await.map_err(storage)?;
+        let row=sqlx::query("SELECT r.id AS result_id,r.campaign_id,r.user_id,r.email,r.first_name,r.last_name,r.position,r.send_date,c.url,c.page_id,c.smtp_id,c.template_id,cp.redirect_url FROM results r JOIN campaigns c ON c.id=r.campaign_id AND c.user_id=r.user_id JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=c.user_id JOIN ruphish_campaign_policy cp ON cp.campaign_id=c.id WHERE r.r_id=? AND c.status!='Completed' AND d.origin=? AND d.enabled=1 AND d.verified_until>0").bind(rid).bind(origin).fetch_all(&mut *tx).await.map_err(storage)?;
         if row.len() != 1 {
             return Err(missing());
         }
@@ -42,8 +42,6 @@ impl Persistence for Interactions {
                 .map_err(storage)
         };
         let email = text("email")?;
-        let captures: bool = row.try_get("capture_credentials").map_err(storage)?;
-        let passwords: bool = row.try_get("capture_passwords").map_err(storage)?;
         let mut rendering = None;
         if matches!(action, Action::View | Action::Submit { .. }) {
             let resource = super::resources::load(
@@ -107,8 +105,6 @@ impl Persistence for Interactions {
             campaign_id,
             email,
             send_date,
-            captures,
-            passwords,
             rendering,
         })
     }
@@ -123,12 +119,9 @@ impl Persistence for Interactions {
             result_id,
             campaign_id,
             email,
-            captures,
-            passwords,
             ..
         } = snapshot;
-        let (result_id, campaign_id, captures, passwords) =
-            (*result_id, *campaign_id, *captures, *passwords);
+        let (result_id, campaign_id) = (*result_id, *campaign_id);
         let mut tx = crate::mysql::locks::write(&self.pool)
             .await
             .map_err(storage)?;
@@ -150,87 +143,57 @@ impl Persistence for Interactions {
         if !active {
             return Err(missing());
         }
-        let mut details = String::new();
-        let message = match action {
-            Action::View => Some("Clicked Link"),
-            Action::Open => Some("Email Opened"),
-            Action::Report => Some("Email Reported"),
-            Action::Submit {
-                event_id,
-                password_present,
-            } => {
-                if event_id.len() != 32 || !event_id.bytes().all(|c| c.is_ascii_hexdigit()) {
-                    return Err(Error::Invalid("submission_invalid_id".into()));
-                }
-                if captures {
-                    let count: i64 = sqlx::query_scalar(
-                        "SELECT count(*) FROM ruphish_submission_ids WHERE result_id=?",
-                    )
-                    .bind(result_id)
-                    .fetch_one(&mut *tx)
-                    .await
-                    .map_err(storage)?;
-                    let duplicate: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ruphish_submission_ids WHERE result_id=? AND event_id=?)")
-                        .bind(result_id).bind(event_id).fetch_one(&mut *tx).await.map_err(storage)?;
-                    check_event_capacity(count, true, duplicate)?;
-                    let inserted = if duplicate {
-                        false
-                    } else {
-                        sqlx::query(
-                            "INSERT INTO ruphish_submission_ids(result_id,event_id) VALUES(?,?)",
-                        )
-                        .bind(result_id)
-                        .bind(event_id)
-                        .execute(&mut *tx)
-                        .await
-                        .map_err(storage)?
-                        .rows_affected()
-                            == 1
-                    };
-                    if passwords {
-                        details =
-                            serde_json::json!({"password_present":password_present}).to_string();
-                    }
-                    if inserted {
-                        Some("Submitted Data")
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            }
+        let Some(kind) = action.kind() else {
+            return Ok(());
+        };
+        let message = kind.label();
+        let request_id = match action {
+            Action::Submit { event_id, .. } => Some(event_id.as_str()),
             _ => None,
         };
-        if let Some(message) = message {
-            // Bound repeated scanner requests without retaining addresses or user agents.
-            let count: i64 =
-                sqlx::query_scalar("SELECT count(*) FROM events WHERE campaign_id=? AND email=?")
-                    .bind(campaign_id)
-                    .bind(email)
-                    .fetch_one(&mut *tx)
-                    .await
-                    .map_err(storage)?;
-            check_event_capacity(count, false, false)?;
-            {
-                let stamp = datetime::utc_seconds(now).map_err(|_| Error::Internal)?;
-                let inserted = sqlx::query(
-                    "INSERT INTO events(campaign_id,email,time,message,details) VALUES(?,?,?,?,?)",
-                )
-                .bind(campaign_id)
-                .bind(email)
-                .bind(&stamp)
-                .bind(message)
-                .bind(details)
-                .execute(&mut *tx)
-                .await
-                .map_err(storage)?;
-                super::events::publish(&mut tx, inserted.insert_id().map_err(storage)?, "public")
-                    .await
-                    .map_err(storage)?;
-                sqlx::query("UPDATE results SET reported=CASE WHEN ?='Email Reported' THEN 1 ELSE reported END,status=CASE WHEN ?='Email Reported' THEN status WHEN status='Submitted Data' THEN status WHEN ?='Submitted Data' THEN ? WHEN status='Clicked Link' THEN status ELSE ? END,modified_date=? WHERE id=?").bind(message).bind(message).bind(message).bind(message).bind(message).bind(stamp).bind(result_id).execute(&mut *tx).await.map_err(storage)?;
+        if let Some(request_id) = request_id {
+            let duplicate: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ruphish_event_receipts WHERE result_id=? AND request_id=?)")
+                .bind(result_id).bind(request_id).fetch_one(&mut *tx).await.map_err(storage)?;
+            if duplicate {
+                return Ok(());
             }
         }
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM events WHERE recipient_id=?")
+            .bind(result_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(storage)?;
+        check_event_capacity(count, false)?;
+        let details = match action {
+            Action::Submit {
+                password_present, ..
+            } => serde_json::to_string(&ruphish_domain::events::Metadata {
+                password_present: Some(*password_present),
+                ..Default::default()
+            })
+            .map_err(|_| Error::Internal)?,
+            _ => String::new(),
+        };
+        let stamp = datetime::utc_seconds(now).map_err(|_| Error::Internal)?;
+        let inserted = sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id,source) VALUES(?,?,?,?,?,?,'public')")
+            .bind(campaign_id).bind(email).bind(&stamp).bind(kind.key()).bind(details).bind(result_id)
+            .execute(&mut *tx).await.map_err(storage)?;
+        let event_id = inserted.insert_id().map_err(storage)?;
+        super::events::publish(&mut tx, event_id, "public")
+            .await
+            .map_err(storage)?;
+        if let Some(request_id) = request_id {
+            sqlx::query(
+                "INSERT INTO ruphish_event_receipts(result_id,request_id,event_id) VALUES(?,?,?)",
+            )
+            .bind(result_id)
+            .bind(request_id)
+            .bind(event_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+        }
+        sqlx::query("UPDATE results SET reported=CASE WHEN ?='Email Reported' THEN 1 ELSE reported END,status=CASE WHEN ?='Email Reported' THEN status WHEN status='Submitted Data' THEN status WHEN ?='Submitted Data' THEN ? WHEN status='Clicked Link' THEN status ELSE ? END,modified_date=? WHERE id=?").bind(message).bind(message).bind(message).bind(message).bind(message).bind(stamp).bind(result_id).execute(&mut *tx).await.map_err(storage)?;
         tx.commit()
             .await
             .map_err(|e| Error::Storage(crate::mysql::commit_error(e)))?;

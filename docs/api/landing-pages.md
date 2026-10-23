@@ -10,6 +10,7 @@ sidebar:
 | GET, POST | `/api/pages/` | List or create landing pages |
 | GET, PUT, DELETE | `/api/pages/{id}` | Read, replace, or delete a page |
 | GET | `/api/pages/summary` | `total` and resource `items` |
+| POST | `/api/pages/validate` | Advisory `warnings` for supplied `html` |
 
 ## Create a page
 
@@ -23,12 +24,16 @@ sidebar:
 }
 ```
 
-The saved object adds `id` and `modified_date`. Updates require the matching body ID and support an ETag precondition.
+The saved object adds `id`, `modified_date`, and `warnings`. Updates require the matching body ID and support an ETag precondition.
 
 ## Legacy flags do not enable value capture
 
-The field names remain for compatibility. `capture_credentials` controls submission-event tracking; `capture_passwords` permits a password-presence boolean. Neither flag permits stored usernames, passwords, OTPs, arbitrary field values, or value derivatives. Campaign policy can override these choices for an execution.
+The field names remain for compatibility. Both flags are ignored on input and returned as `true`; every supported submission records an event and password presence. Neither pages nor campaign overrides can disable tracking or enable stored usernames, passwords, OTPs, arbitrary field values, or value derivatives.
 
 The authored HTML and the served participant page are different representations. Ruphish applies restrictions to served content and uses a controlled event submission path. Imported scripts, external resources, and form behavior may therefore differ from the source website. Read [landing pages](../user-guide/landing-pages.md) and [participant data](../user-guide/participant-data.md), including the current verification limits.
 
 `redirect_url` controls the destination after a tracked submission. Use a supported HTTP(S) or relative destination. An empty value leaves the participant on the page. This API is for administrative page management; participant interaction endpoints are not a general-purpose form collection API.
+
+## Advisory validation
+
+`POST /api/pages/validate` accepts `{"html":"<form>...</form>"}` and requires the same authenticated editing permission as saving a page. It returns `{"warnings":[{"code":"password_disabled","control":1}]}`. `control` is an optional one-based input index, never a field value. Codes are `password_disabled`, `password_unnamed`, `password_without_form`, `form_without_submit`, `duplicate_control_id`, `html_repaired`, and `authored_execution_removed`. Invalid template syntax still rejects the request; advisory findings do not block saving. Page reads, saves, `POST /api/util/preview`, and campaign review include warnings. Diagnostics use a rendered sample and do not replace representative recipient/manual browser checks.

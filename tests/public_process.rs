@@ -282,7 +282,7 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
     post(
         &admin,
         "/api/pages/",
-        json!({"name":"Page","html":"<form><label>Password<input name='password' type='password' autocomplete='current-password'></label><button>Continue</button></form><script>authoredCanary()</script>","capture_credentials":true,"capture_passwords":true,"redirect_url":"http://example.test/finished/{{.FirstName}}"}),
+        json!({"name":"Page","html":"<form><label>Password<input name='password' type='password' autocomplete='current-password'></label><button>Continue</button></form><script>authoredCanary()</script>","capture_credentials":false,"capture_passwords":false,"redirect_url":"http://example.test/finished/{{.FirstName}}"}),
     );
     post(
         &admin,
@@ -558,6 +558,35 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
         .json()
         .unwrap();
     assert_eq!(transparency["server"], "gophish");
+    database(
+        directory.path(),
+        "UPDATE ruphish_campaign_policy SET redirect_url=''",
+    );
+    let collector = std::process::Command::new("node")
+        .arg(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../ruphish-ui/web/tests/support/public-submissions.mjs"),
+        )
+        .arg(&url)
+        .arg(directory.path().join("public.crt"))
+        .output()
+        .expect("Node is required for the executable collector workflow");
+    assert!(
+        collector.status.success(),
+        "collector workflow failed: {}",
+        String::from_utf8_lossy(&collector.stderr)
+    );
+    for _ in 0..2 {
+        assert_eq!(browser.get(&url).send().unwrap().status(), 200);
+        assert_eq!(
+            browser
+                .get(format!("{origin}/track?rid={rid}"))
+                .send()
+                .unwrap()
+                .status(),
+            200
+        );
+    }
     let current = get(&admin, &format!("/api/campaigns/{}", campaign["id"]));
     assert_eq!(current["results"][0]["status"], "Submitted Data");
     assert_eq!(current["results"][0]["reported"], true);
@@ -568,7 +597,7 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
             .iter()
             .filter(|e| e["message"] == "Submitted Data")
             .count(),
-        1
+        4
     );
     // Actual public requests above must feed the dashboard, without inflating
     // unique counts on repeated opens/clicks/submissions. The disabled mailer
@@ -586,7 +615,39 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
     // Supply the independent SMTP acceptance fixture at the delivery boundary.
     database(
         directory.path(),
-        "INSERT INTO events(campaign_id,email,message,time,details) SELECT r.campaign_id,r.email,'Email Sent',datetime('now','-1 minute'),'' FROM results r JOIN campaigns c ON c.id=r.campaign_id WHERE c.name='Private campaign' AND c.user_id=1",
+        "INSERT INTO events(campaign_id,email,kind,time,metadata,recipient_id) SELECT r.campaign_id,r.email,'email_sent',datetime('now','-1 minute'),'',r.id FROM results r JOIN campaigns c ON c.id=r.campaign_id WHERE c.name='Private campaign' AND c.user_id=1",
+    );
+    let analysis = get(
+        &admin,
+        &format!("/api/campaigns/{}/analysis?limit=100", campaign["id"]),
+    );
+    assert_eq!(analysis["unique"][3], 1);
+    assert_eq!(analysis["progression"][3], 1);
+    assert_eq!(analysis["totals"][3], 4);
+    assert_eq!(
+        get(
+            &admin,
+            &format!("/api/campaigns/{}/summary", campaign["id"])
+        )["stats"]["submitted_data"],
+        1
+    );
+    let recipient_id = analysis["recipients"][0]["id"].as_i64().unwrap();
+    let recipient_analysis = get(
+        &admin,
+        &format!(
+            "/api/campaigns/{}/analysis?recipient={recipient_id}&limit=100",
+            campaign["id"]
+        ),
+    );
+    assert_eq!(recipient_analysis["totals"][3], 4);
+    assert_eq!(
+        recipient_analysis["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|event| event["kind"] == "Submitted Data")
+            .count(),
+        4
     );
     let observed = get(&admin, "/api/overview/posture?window=7d");
     for field in [

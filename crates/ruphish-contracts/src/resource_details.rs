@@ -102,3 +102,12 @@ mod tests {
         }
     }
 }
+
+/// Advisory landing-page finding; no participant values or authored markup.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PageWarning {
+    /// Stable diagnostic code translated by the UI.
+    pub code: String,
+    /// One-based input position in the processed document.
+    pub control: Option<usize>,
+}

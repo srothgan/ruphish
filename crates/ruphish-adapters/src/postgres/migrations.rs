@@ -38,6 +38,13 @@ fn migrator() -> Migrator {
                 include_str!("../../migrations/postgres/4_campaign_drafts.sql").into_sql_str(),
                 false,
             ),
+            Migration::new(
+                5,
+                Cow::Borrowed("observations"),
+                MigrationType::Simple,
+                include_str!("../../migrations/postgres/5_observations.sql").into_sql_str(),
+                false,
+            ),
         ]),
         locking: false,
         ..Migrator::DEFAULT
@@ -125,6 +132,18 @@ SELECT jsonb_build_object(
 )::text
 "#;
 async fn verify(c: &mut PgConnection) -> Result<(), Error> {
+    let definition: String =
+        sqlx::query_scalar("SELECT pg_get_viewdef('ruphish.event_history'::regclass)")
+            .fetch_one(&mut *c)
+            .await
+            .map_err(storage_error)?;
+    if !crate::observation_schema::matches(
+        &definition,
+        include_str!("../../migrations/postgres/5_observations.sql"),
+        "ruphish",
+    ) {
+        return Err(Error::UnsupportedSchema);
+    }
     let expected: serde_json::Value =
         serde_json::from_str(include_str!("schema.json")).map_err(|_| Error::UnsupportedSchema)?;
     let actual: String = sqlx::query_scalar(INVENTORY)

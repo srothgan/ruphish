@@ -79,3 +79,15 @@ allow = ["CDLA-Permissive-2.0"]
 [[licenses.exceptions]]
 crate = "cssparser@=0.38.0"
 allow = ["MPL-2.0"]
+
+# Unmodified scraper diagnostics dependencies. Bundled CSS licenses are byte-identical
+# to the retained MPL text; selectors retains its upstream file notices/source link.
+[[licenses.exceptions]]
+crate = "cssparser@=0.37.0"
+allow = ["MPL-2.0"]
+[[licenses.exceptions]]
+crate = "cssparser-macros@=0.7.1"
+allow = ["MPL-2.0"]
+[[licenses.exceptions]]
+crate = "selectors@=0.38.0"
+allow = ["MPL-2.0"]

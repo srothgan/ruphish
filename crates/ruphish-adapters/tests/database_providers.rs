@@ -20,6 +20,84 @@ use std::path::PathBuf;
 mod campaign_drafts;
 #[path = "support/mysql_proxy.rs"]
 mod mysql_proxy;
+#[path = "support/observation_versions.rs"]
+mod observation_versions;
+
+#[tokio::test]
+#[ignore = "Requires canonical MySQL fixture and RUPHISH_MYSQL_TEST_PORT"]
+async fn mysql_observation_upgrade_preserves_populated_v4_history_and_retry_tombstones() {
+    let (mut inspect, config) = fixture().await;
+    let db = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    db.close().await;
+    observation_versions::mysql(&mut inspect).await;
+    sqlx::raw_sql(observation_versions::HISTORY)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    for _ in 0..2 {
+        let db = database::open(Config::MySql(config.clone()), Policy::default())
+            .await
+            .unwrap();
+        observation_versions::verify_history(
+            sqlx::query_as(observation_versions::READ_HISTORY)
+                .fetch_all(&mut inspect)
+                .await
+                .unwrap(),
+        );
+        let receipt: (i64, String, Option<i64>) =
+            sqlx::query_as("SELECT result_id,request_id,event_id FROM ruphish_event_receipts")
+                .fetch_one(&mut inspect)
+                .await
+                .unwrap();
+        assert_eq!(receipt, (11, "a".repeat(32), None));
+        db.close().await;
+    }
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE `{}`",
+        config.database
+    )))
+    .execute(&mut inspect)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires canonical PostgreSQL fixture and RUPHISH_POSTGRES_TEST_PORT"]
+async fn postgres_observation_upgrade_preserves_populated_v4_history_and_retry_tombstones() {
+    let (mut admin, config) = postgres_fixture().await;
+    let db = database::open(Config::Postgres(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    db.close().await;
+    let mut inspect = postgres_inspect(&config).await;
+    observation_versions::postgres(&mut inspect).await;
+    sqlx::raw_sql(observation_versions::HISTORY)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    for _ in 0..2 {
+        let db = database::open(Config::Postgres(config.clone()), Policy::default())
+            .await
+            .unwrap();
+        observation_versions::verify_history(
+            sqlx::query_as(observation_versions::READ_HISTORY)
+                .fetch_all(&mut inspect)
+                .await
+                .unwrap(),
+        );
+        let receipt: (i64, String, Option<i64>) =
+            sqlx::query_as("SELECT result_id,request_id,event_id FROM ruphish_event_receipts")
+                .fetch_one(&mut inspect)
+                .await
+                .unwrap();
+        assert_eq!(receipt, (11, "a".repeat(32), None));
+        db.close().await;
+    }
+    inspect.close().await.unwrap();
+    postgres_cleanup(&mut admin, &config).await;
+}
 #[path = "support/postgres_proxy.rs"]
 mod postgres_proxy;
 #[path = "support/provider_regressions.rs"]
@@ -400,7 +478,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         .await
         .unwrap();
     let page = resources.save(actor,resource("Welcome",Content::Page(Page {
-        html:"<h1>Hello {{.FirstName}}</h1><form><input name='password' type='password'></form>".into(),capture_credentials:true,capture_passwords:true,..Page::default()
+        html:"<h1>Hello {{.FirstName}}</h1><form><input name='password' type='password'></form>".into(),..Page::default()
     })),None,None).await.unwrap();
     let profile = resources
         .save(
@@ -663,7 +741,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     assert_eq!(
         analysis.totals,
         [1, 1, 1, 1, 0],
-        "repeated submissions are acknowledged without duplicating events"
+        "transport retries are acknowledged without duplicating events"
     );
     assert_eq!(analysis.progression, [1, 1, 1, 1, 0]);
     assert_eq!(analysis.recipients.len(), 1);
@@ -713,6 +791,64 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         .await
         .unwrap();
     assert!(excel.bytes.starts_with(b"PK"));
+    for action in [
+        interactions::Action::Open,
+        interactions::Action::View,
+        interactions::Action::Submit {
+            event_id: "b".repeat(32),
+            password_present: false,
+        },
+        interactions::Action::Submit {
+            event_id: "c".repeat(32),
+            password_present: true,
+        },
+    ] {
+        public
+            .interact("training.example.test", rid, action, now + 5)
+            .await
+            .unwrap();
+    }
+    let repeated = db
+        .reporting()
+        .analysis(
+            actor,
+            campaign.id,
+            reporting::Filter {
+                limit: 50,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(repeated.totals, [1, 2, 2, 3, 0]);
+    assert_eq!(repeated.unique, [1, 1, 1, 1, 0]);
+    assert_eq!(repeated.progression, [1, 1, 1, 1, 0]);
+    let recipient = db
+        .reporting()
+        .analysis(
+            actor,
+            campaign.id,
+            reporting::Filter {
+                recipient: Some(claim.result_id),
+                limit: 50,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(recipient.totals, [1, 2, 2, 3, 0]);
+    let history = campaigns
+        .recipient_history(actor, campaign.id, claim.result_id, None, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        history
+            .events
+            .iter()
+            .filter(|event| event.message == "Submitted Data")
+            .count(),
+        3
+    );
     let window = db
         .overview()
         .posture(
@@ -833,7 +969,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
             .await
             .unwrap()
             .totals,
-        [1, 1, 1, 1, 0]
+        [1, 2, 2, 3, 0]
     );
     let mut uncertain_input = input;
     uncertain_input.name = "Uncertain submission".into();
@@ -1457,7 +1593,7 @@ async fn mysql_failed_publication_resumes_without_losing_or_duplicating_legacy_d
     latest_legacy(&mut inspector).await;
     sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id) VALUES(17,'legacy','hash-preserved','key-preserved',1); INSERT INTO `groups`(id,user_id,name,modified_date) VALUES(21,17,'Recovered group','2020-01-01 00:00:00')").execute(&mut inspector).await.unwrap();
     let username = format!("u_{}", &config.database[17..]);
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE USER '{username}'@'%' IDENTIFIED BY 'fixture-migration-only'; GRANT SELECT,INSERT,UPDATE,DELETE,CREATE,DROP,INDEX ON `{}`.* TO '{username}'@'%'",config.database))).execute(&mut inspector).await.unwrap();
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE USER '{username}'@'%' IDENTIFIED BY 'fixture-migration-only'; GRANT SELECT,INSERT,UPDATE,DELETE,CREATE,DROP,INDEX,CREATE VIEW,SHOW VIEW ON `{}`.* TO '{username}'@'%'",config.database))).execute(&mut inspector).await.unwrap();
     config.username = username.clone();
     config.password = Some("fixture-migration-only".into());
     assert!(
@@ -1576,8 +1712,8 @@ async fn mysql_rejects_schema_drift_dirty_history_and_unknown_versions_without_r
             "ALTER TABLE ruphish_delivery ADD CONSTRAINT ruphish_delivery_chk_2 CHECK (retries BETWEEN 0 AND 8)",
         ),
         (
-            "ALTER TABLE ruphish_submission_ids DROP PRIMARY KEY",
-            "ALTER TABLE ruphish_submission_ids ADD PRIMARY KEY(result_id,event_id)",
+            "ALTER TABLE ruphish_event_receipts DROP PRIMARY KEY",
+            "ALTER TABLE ruphish_event_receipts ADD PRIMARY KEY(result_id,request_id)",
         ),
         (
             "ALTER TABLE users MODIFY api_key VARCHAR(255) COLLATE utf8mb4_0900_ai_ci NOT NULL",
@@ -2358,6 +2494,7 @@ async fn mysql_preferences_migrate_existing_accounts_and_survive_reopen() {
     .unwrap();
     let original = db.accounts().by_name("admin").await.unwrap();
     db.close().await;
+    observation_versions::mysql(&mut inspect).await;
     sqlx::raw_sql("DROP TABLE ruphish_campaign_drafts; DROP TABLE ruphish_user_preferences; DELETE FROM _sqlx_migrations WHERE version>=2; UPDATE users SET password_change_required=FALSE").execute(&mut inspect).await.unwrap();
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
@@ -2377,6 +2514,7 @@ async fn mysql_preferences_migrate_existing_accounts_and_survive_reopen() {
         .await
         .unwrap();
     db.close().await;
+    observation_versions::mysql(&mut inspect).await;
     sqlx::raw_sql("DROP TABLE ruphish_campaign_drafts; ALTER TABLE ruphish_user_preferences DROP COLUMN show_utc_offset; DELETE FROM _sqlx_migrations WHERE version>=3;").execute(&mut inspect).await.unwrap();
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
@@ -2434,6 +2572,7 @@ async fn postgres_preferences_migrate_existing_accounts_and_survive_reopen() {
     let original = db.accounts().by_name("admin").await.unwrap();
     db.close().await;
     let mut connection = postgres_inspect(&config).await;
+    observation_versions::postgres(&mut connection).await;
     sqlx::raw_sql("DROP TABLE ruphish_campaign_drafts; DROP TABLE ruphish_user_preferences; DELETE FROM _sqlx_migrations WHERE version>=2; UPDATE users SET password_change_required=FALSE").execute(&mut connection).await.unwrap();
     connection.close().await.unwrap();
     let db = database::open(Config::Postgres(config.clone()), Policy::default())
@@ -2455,6 +2594,7 @@ async fn postgres_preferences_migrate_existing_accounts_and_survive_reopen() {
         .unwrap();
     db.close().await;
     let mut connection = postgres_inspect(&config).await;
+    observation_versions::postgres(&mut connection).await;
     sqlx::raw_sql("DROP TABLE ruphish_campaign_drafts; ALTER TABLE ruphish_user_preferences DROP COLUMN show_utc_offset; DELETE FROM _sqlx_migrations WHERE version>=3;").execute(&mut connection).await.unwrap();
     connection.close().await.unwrap();
     let db = database::open(Config::Postgres(config.clone()), Policy::default())

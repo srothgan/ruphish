@@ -131,8 +131,8 @@ pub(super) async fn exercise(
     ));
     let review = store.prepare(actor, &input, now).await.unwrap();
     input.policy = campaign::Overrides {
-        capture_credentials: Some(review.policy.capture_credentials),
-        capture_passwords: Some(review.policy.capture_passwords),
+        capture_credentials: Some(true),
+        capture_passwords: Some(true),
         redirect_url: Some(review.policy.redirect_url.clone()),
     };
     let configuration = Configuration {
@@ -155,8 +155,8 @@ pub(super) async fn exercise(
             },
         },
         policy: Some(DraftPolicy {
-            capture_credentials: review.policy.capture_credentials,
-            capture_passwords: review.policy.capture_passwords,
+            capture_credentials: true,
+            capture_passwords: true,
             redirect_url: review.policy.redirect_url,
         }),
         ..Default::default()

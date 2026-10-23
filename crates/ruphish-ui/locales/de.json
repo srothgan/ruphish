@@ -760,7 +760,21 @@
     "schedule_campaign": "Kampagne planen",
     "draft_step": "Bearbeitungsschritt",
     "public_url": "Öffentliche URL",
-    "edit_campaign_draft": "Kampagnenentwurf bearbeiten"
+    "edit_campaign_draft": "Kampagnenentwurf bearbeiten",
+    "all_submissions_recorded": "Jede Formularübermittlung wird erfasst. Die Passwortpräsenz wird ohne eingegebene Werte gespeichert.",
+    "landing_page_checks": "Prüfung der Landingpage",
+    "check_landing_page": "Landingpage prüfen",
+    "no_landing_page_warnings": "Keine Warnungen im verarbeiteten Beispiel. Prüfen Sie die Vorschau vor der Verwendung.",
+    "landing_page_warnings": "Warnungen zur Landingpage",
+    "validation_response_invalid": "Die Prüfantwort konnte nicht gelesen werden.",
+    "warning_password_disabled": "Dieses Passwortfeld ist deaktiviert und zählt nicht zur Passwortpräsenz.",
+    "warning_password_unnamed": "Dieses Passwortfeld hat keinen Namen und nimmt nicht an der Übermittlung teil.",
+    "warning_password_without_form": "Dieses Passwortfeld ist keinem verwendbaren Formular zugeordnet.",
+    "warning_form_without_submit": "Dieses Formular hat kein aktives Sendeelement und keinen zuverlässigen impliziten Sendeweg.",
+    "warning_authored_execution_removed": "Eigene Skripte und Ereignishandler werden entfernt. Prüfen Sie das verarbeitete Formular.",
+    "warning_duplicate_control_id": "Doppelte Element-IDs können die Formularzuordnung verändern.",
+    "warning_html_repaired": "Der Browserparser hat die HTML-Struktur korrigiert. Prüfen Sie die verarbeitete Vorschau.",
+    "recipient_observation_counts": "Jede erfasste Beobachtung für diesen Empfänger wird gezählt, auch Wiederholungen. Die erneute Zustellung derselben Übermittlung fügt kein Ereignis hinzu."
   },
   "messages": {
     "the_request_failed_arg0_try_again": "Die Anfrage ist fehlgeschlagen ({{ arg0 }}). Versuchen Sie es erneut.",

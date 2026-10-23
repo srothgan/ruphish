@@ -82,6 +82,10 @@ pub fn smtp_address(value: &str) -> Result<(String, u16), Error> {
     Ok((host, port))
 }
 impl Validator for Validate {
+    fn page_warnings(&self, html: &str) -> Result<Vec<PageWarning>, Error> {
+        let rendered = render(html, &sample())?;
+        Ok(crate::landing::render(&rendered, None)?.warnings)
+    }
     fn validate(&self, resource: &Resource) -> Result<(), Error> {
         let context = sample();
         match &resource.content {
@@ -107,8 +111,9 @@ impl Validator for Validate {
                 }
             }
             Content::Page(p) => {
-                render(&p.html, &context)?;
-                render(&p.redirect_url, &context)?;
+                self.page_warnings(&p.html)?;
+                let redirect = render(&p.redirect_url, &context)?;
+                crate::landing::redirect(&redirect, "https://example.test")?;
             }
             Content::Profile(p) => {
                 mailbox(&p.from_address)?;

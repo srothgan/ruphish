@@ -2,11 +2,13 @@
   "en": {
     "submitting": "Submitting…",
     "submitted": "Submitted.",
-    "unconfirmed": "Submission could not be confirmed. Please try again."
+    "unconfirmed": "Submission could not be confirmed. Please try again.",
+    "retry": "Retry this submission"
   },
   "de": {
     "submitting": "Wird übermittelt…",
     "submitted": "Übermittelt.",
-    "unconfirmed": "Übermittlung nicht bestätigt. Bitte erneut versuchen."
+    "unconfirmed": "Übermittlung nicht bestätigt. Bitte erneut versuchen.",
+    "retry": "Diese Übermittlung erneut versuchen"
   }
 }

@@ -290,31 +290,23 @@ fn final_page_policy_preserves_names_and_rendered_expressions_without_changing_a
     let source =
         ruphish_adapters::resources::render(authored, &ruphish_adapters::resources::sample())
             .unwrap();
-    for credentials in [false, true] {
-        for passwords in [false, true] {
-            let page = Page {
-                html: source.clone(),
-                capture_credentials: credentials,
-                capture_passwords: passwords,
-                ..Default::default()
-            };
-            let html = landing_html(&page).unwrap();
-            assert!(html.contains("name=\"user\""));
-            assert!(html.contains("name=\"secret\""));
-            assert!(html.contains("<b>Alice</b>"));
-            assert!(!html.contains("action="));
-            assert_eq!(page.html, source);
-        }
-    }
+    let page = Page {
+        html: source.clone(),
+        ..Default::default()
+    };
+    let html = landing_html(&page).unwrap();
+    assert!(html.contains("name=\"user\""));
+    assert!(html.contains("name=\"secret\""));
+    assert!(html.contains("<b>Alice</b>"));
+    assert!(!html.contains("action="));
+    assert_eq!(page.html, source);
 }
 
 #[test]
-fn legacy_capture_flags_do_not_restore_form_actions_or_executable_authored_content() {
+fn processed_pages_remove_form_actions_and_executable_authored_content() {
     let source = "<form id='training' action='/outside'><input name='username'><input type='password' name='password'><textarea name='secret' dirname='direction'></textarea><button formaction='https://outside.test'>Submit</button></form><input form='training' name='associated'><object name='embedded'></object>";
     let page = Page {
         html: source.into(),
-        capture_credentials: true,
-        capture_passwords: true,
         ..Default::default()
     };
     let html = landing_html(&page).unwrap();

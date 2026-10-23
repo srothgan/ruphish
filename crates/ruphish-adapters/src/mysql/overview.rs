@@ -213,20 +213,19 @@ async fn aggregate(
     let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
         r#"
         WITH parameters AS (SELECT ? AS owner, ? AS since, ? AS now_time, ? AS campaign), identities AS (
-            SELECT r.campaign_id,r.email,min(r.id) AS id
+            SELECT r.campaign_id,r.email,r.id
             FROM results r JOIN campaigns c ON c.id=r.campaign_id
             WHERE c.user_id=(SELECT owner FROM parameters) AND ((SELECT campaign FROM parameters) IS NULL OR c.id=(SELECT campaign FROM parameters))
-            GROUP BY r.campaign_id,r.email HAVING count(*)=1
         ), accepted AS (
             SELECT i.*,min((CASE WHEN e.time>='1000' THEN TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',CAST(REPLACE(LEFT(e.time,19),'T',' ') AS DATETIME)) END)) AS first_sent
-            FROM identities i JOIN events e ON e.campaign_id=i.campaign_id AND e.email=i.email
+            FROM identities i JOIN event_history e ON e.campaign_id=i.campaign_id AND e.recipient_id=i.id
             WHERE e.message='Email Sent' AND (CASE WHEN e.time>='1000' THEN TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',CAST(REPLACE(LEFT(e.time,19),'T',' ') AS DATETIME)) END)<=(SELECT now_time FROM parameters)
             GROUP BY i.id,i.campaign_id,i.email
         ), cohort AS (
             SELECT * FROM accepted WHERE ((SELECT since FROM parameters) IS NULL OR first_sent>=(SELECT since FROM parameters))
         ), outcomes AS (
             SELECT c.id, {flags}
-            FROM cohort c LEFT JOIN events e ON e.campaign_id=c.campaign_id AND e.email=c.email
+            FROM cohort c LEFT JOIN event_history e ON e.campaign_id=c.campaign_id AND e.recipient_id=c.id
                 AND (CASE WHEN e.time>='1000' THEN TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',CAST(REPLACE(LEFT(e.time,19),'T',' ') AS DATETIME)) END)<=(SELECT now_time FROM parameters)
             GROUP BY c.id
         )

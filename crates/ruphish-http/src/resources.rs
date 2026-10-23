@@ -26,6 +26,7 @@ pub(crate) fn routes() -> Router<AuthState> {
             );
     }
     routes
+        .route("/api/pages/validate", axum::routing::post(validate_page))
         .route("/api/groups/{id}/summary", get(group_summary))
         .route("/api/import/group", axum::routing::post(import_group))
         .route(
@@ -163,6 +164,15 @@ struct PreviewRequest {
     #[serde(default)]
     recipient: wire::Recipient,
 }
+async fn validate_page(context: Context, body: Bytes) -> Result<Response, Rejection> {
+    editor_identity(&context).await?;
+    let request: PreviewRequest = parse(&body)?;
+    let warnings = context
+        .resources()
+        .page_warnings(&request.html)
+        .map_err(error)?;
+    response(StatusCode::OK, &json!({"warnings":warnings}), None)
+}
 async fn preview(context: Context, body: Bytes) -> Result<Response, Rejection> {
     editor_identity(&context).await?;
     let request: PreviewRequest = parse(&body)?;
@@ -180,7 +190,15 @@ async fn preview(context: Context, body: Bytes) -> Result<Response, Rejection> {
             },
         )
         .map_err(error)?;
-    response(StatusCode::OK, &json!({"html":html}), None)
+    let warnings = context
+        .resources()
+        .page_warnings(&request.html)
+        .map_err(error)?;
+    response(
+        StatusCode::OK,
+        &json!({"html":html,"warnings":warnings}),
+        None,
+    )
 }
 #[derive(serde::Deserialize, Default)]
 #[serde(default)]
@@ -362,7 +380,7 @@ pub(crate) fn encode(r: &Resource) -> Value {
             json!({"subject":t.subject,"text":t.text,"html":t.html,"envelope_sender":t.envelope_sender,"attachments":t.attachments.iter().map(|a|json!({"name":a.name,"type":a.mime_type,"content":a.content})).collect::<Vec<_>>()})
         }
         Content::Page(p) => {
-            json!({"html":p.html,"capture_credentials":p.capture_credentials,"capture_passwords":p.capture_passwords,"redirect_url":p.redirect_url})
+            json!({"html":p.html,"capture_credentials":true,"capture_passwords":true,"redirect_url":p.redirect_url})
         }
         Content::Profile(p) => {
             let mut v = json!({"interface_type":p.interface_type,"host":p.host,"from_address":p.from_address,"ignore_cert_errors":p.ignore_cert_errors,"headers":p.headers.iter().map(|h|json!({"key":h.key,"value":h.value})).collect::<Vec<_>>()});
@@ -441,8 +459,6 @@ fn decode(kind: Kind, bytes: &[u8]) -> Result<Resource, Rejection> {
                 modified_date: String::new(),
                 content: Content::Page(app::Page {
                     html: v.html,
-                    capture_credentials: v.capture_credentials,
-                    capture_passwords: v.capture_passwords,
                     redirect_url: v.redirect_url,
                 }),
             })
@@ -513,7 +529,16 @@ async fn read(context: Context, Path(id): Path<i64>) -> Result<Response, Rejecti
         .get(user.identity, kind(&context)?, id)
         .await
         .map_err(error)?;
-    response(StatusCode::OK, &encode(&value), Some(&value.modified_date))
+    let mut wire = encode(&value);
+    if let Content::Page(page) = &value.content {
+        wire["warnings"] = json!(
+            context
+                .resources()
+                .page_warnings(&page.html)
+                .map_err(error)?
+        );
+    }
+    response(StatusCode::OK, &wire, Some(&value.modified_date))
 }
 async fn create(context: Context, body: Bytes) -> Result<Response, Rejection> {
     save(context, None, body).await
@@ -558,12 +583,25 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
             },
         ));
     }
+    let warnings = if let Content::Page(page) = &value.content {
+        Some(
+            context
+                .resources()
+                .page_warnings(&page.html)
+                .map_err(error)?,
+        )
+    } else {
+        None
+    };
     let saved = context
         .resources()
         .save(user.identity, value, id, expected(&context)?)
         .await
         .map_err(error)?;
     let mut wire = encode(&saved);
+    if let Some(warnings) = warnings {
+        wire["warnings"] = json!(warnings);
+    }
     if preserve_nil && let Some(field) = nullable {
         wire[field] = Value::Null;
     }

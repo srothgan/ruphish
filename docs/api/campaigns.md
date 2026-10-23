@@ -61,7 +61,7 @@ This body is illustrative: the named resources must exist under the caller, and 
 
 New clients should use `selection` with explicit resource references: `groups` is an array, and `template`, `page`, and `smtp` are objects with `id` and an optional revision string. Preparation returns resolved selections, `total`, `duplicate_count`, `conflict_count`, conflicting recipient details, resolved policy and schedule, `mailer_enabled`, and a rendered `preview`. Carry its selected revisions into launch so changed content is detected.
 
-The optional `policy` contains `capture_credentials`, `capture_passwords`, and `redirect_url`. These flags have the [presence-only meaning](landing-pages.md) described for landing pages.
+The optional `policy` contains `capture_credentials`, `capture_passwords`, and `redirect_url`. The flags are ignored compatibility inputs; every supported submission records an event and password presence. Only `redirect_url` changes effective policy. See [landing pages](landing-pages.md).
 
 `launch_date` and `send_by_date` accept timestamp values. A missing or zero launch date means immediate launch. Alternatively, `launch_local` and `send_by_local` each contain `local` and `time_zone`. Local inputs are resolved through that IANA zone and checked for ambiguous or nonexistent civil times. Read [scheduling](../user-guide/campaigns/scheduling.md) before relying on distribution timing.
 

@@ -22,6 +22,7 @@ impl Public for Interactions {
         action: Action,
         now: i64,
     ) -> Result<Output, Error> {
+        action.validate()?;
         if rid.is_empty()
             || rid.len() > 128
             || !rid.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-')

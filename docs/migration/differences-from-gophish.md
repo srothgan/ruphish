@@ -21,7 +21,7 @@ The comparison baseline is Gophish 0.12.1, commit `95618469799295e2c0fec980805a2
 | Reporting | Legacy result state and event history | Separate observed counts, progression, filtered analysis, and defined exports | Recheck denominators and raw-versus-derived comparisons |
 | Webhook consumers | Signed event payload concept | Durable attempts, stable event identity, bounded retries, no ordering guarantee | Verify exact-body signatures and deduplicate by installation/event |
 
-Familiar wire names are not always current UI labels: `smtp` means sending profiles, `pages` means landing pages, and group `targets` are recipients. `capture_credentials` means submission tracking, while `capture_passwords` permits password presence. The template field `envelope_sender` is a visible-sender override. These wire names remain; do not rename JSON fields to match a translated label.
+Familiar wire names are not always current UI labels: `smtp` means sending profiles, `pages` means landing pages, and group `targets` are recipients. `capture_credentials` and `capture_passwords` are ignored compatibility inputs; page and effective campaign responses return both as true. The template field `envelope_sender` is a visible-sender override. These wire names remain; do not rename JSON fields to match a translated label.
 
 ## A broader administration interface
 
@@ -37,7 +37,7 @@ New revision and generation checks prevent stale edits or delivery decisions fro
 
 ## Participant data and page behavior
 
-Legacy capture flags no longer authorize collecting entered values. They represent submission events and optional password presence. The served page restricts authored active content and uses a closed event schema; importing a website does not preserve all scripts, forms, or externally hosted assets. Read [participant data](../user-guide/participant-data.md), including its verification limits.
+Legacy capture flags no longer authorize collecting entered values. Submission events and password presence are always recorded. The served page restricts authored active content and uses a closed event schema; importing a website does not preserve all scripts, forms, or externally hosted assets. Read [participant data](../user-guide/participant-data.md), including its verification limits.
 
 An event is an observation, not proof that a particular person acted. New reporting distinguishes observed event totals, unique recipients, inferred progression, and delivery state. Old summary counts and new analysis counts are not interchangeable.
 

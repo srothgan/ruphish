@@ -1,6 +1,12 @@
-# Ruphish
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/ruphish-wordmark-white.svg">
+  <img alt="Ruphish" src="assets/ruphish-wordmark.svg" width="320">
+</picture>
 
+[![Version](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsrothgan%2Fruphish%2Fmain%2FCargo.toml&query=%24.workspace.package.version&label=version&color=blue)](https://github.com/srothgan/ruphish/blob/main/Cargo.toml)
 [![CI](https://github.com/srothgan/ruphish/actions/workflows/pr.yml/badge.svg?branch=main&event=push)](https://github.com/srothgan/ruphish/actions/workflows/pr.yml?query=branch%3Amain+event%3Apush)
+[![Docs](https://img.shields.io/badge/docs-website-blueviolet)](https://ruphish.vercel.app/docs/)
+[![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/srothgan/ruphish/blob/main/LICENSE)
 
 Ruphish is a phishing-simulation application with a native Rust server and a Rust/WASM admin interface. Prepare personalized campaigns, deliver them through your SMTP service, and review delivery, participant interactions, and reported messages in one place.
 

@@ -49,9 +49,9 @@ pub struct Resource {
 /// Confirmed presence-only tracking and redirect policy.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Policy {
-    /// Record submission events without values.
+    /// Compatibility output, always true; values are never collected.
     pub capture_credentials: bool,
-    /// Record password presence without values.
+    /// Compatibility output, always true; only presence is observed.
     pub capture_passwords: bool,
     /// Post-submission redirect.
     pub redirect_url: String,

@@ -545,19 +545,6 @@ fn page_selector(
         </Select>
     }
 }
-fn flag(draft: RwSignal<Draft>, key: &'static str, label: Signal<String>) -> impl IntoView {
-    view! {
-        <Checkbox
-            label=label
-            checked=Signal::derive(move || {
-                draft.get().value["policy"][key].as_bool().unwrap_or(false)
-            })
-            on_toggle=Callback::new(move |checked| {
-                draft.update(|d| d.set_tracking(key == "capture_passwords", checked))
-            })
-        />
-    }
-}
 fn schedule(
     draft: RwSignal<Draft>,
     key: &'static str,
@@ -637,7 +624,7 @@ pub(super) fn create(
         .min(3) as usize;
     let draft = RwSignal::new(Draft {
         generation,
-        value: initial.unwrap_or_else(||json!({"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"capture_credentials":false,"capture_passwords":false,"redirect_url":""}})),
+        value: initial.unwrap_or_else(||json!({"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"redirect_url":""}})),
         ..Default::default()
     });
     let resource_read = CampaignQueries::resources(true);
@@ -1061,8 +1048,7 @@ pub(super) fn create(
                         <FormFields disabled=Signal::derive(move || {
                             !draft.with(Draft::policy_ready)
                         })>
-                            {flag(draft, "capture_credentials", trs!(ui.record_form_submission))}
-                            {flag(draft, "capture_passwords", trs!(ui.record_password_presence))}
+                            <p>{tr!(ui.all_submissions_recorded)}</p>
                             <Field label=trs!(ui.redirect_url_optional_leave_empty_for_no_redirect)>
                                 <TextInput
                                     value=Signal::derive(move || text(
@@ -1146,6 +1132,9 @@ pub(super) fn create(
                             .map(|r| {
                                 view! {
                                     <div class="campaign-review">
+                                        {crate::resources::page_warnings(
+                                            Signal::derive(move || r.warnings.clone()),
+                                        )}
                                         <h3>
                                             {leptos_i18n::t!(
                                                 i18n, messages.arg0_unique_recipients, arg0 = (r.total).to_string()
@@ -1237,28 +1226,15 @@ pub(super) fn create(
                                                 </dd>
                                             </div><div>
                                                 <dt>{tr!(ui.submission_tracking)}</dt>
-                                                <dd>
-                                                    {if r.policy.capture_credentials {
-                                                        leptos_i18n::t_string!(i18n, ui.yes)
-                                                    } else {
-                                                        leptos_i18n::t_string!(i18n, ui.no)
-                                                    }}
-                                                </dd>
+                                                <dd>{tr!(ui.yes)}</dd>
                                             </div><div>
                                                 <dt>{tr!(ui.password_presence_only)}</dt>
-                                                <dd>
-                                                    {if r.policy.capture_passwords {
-                                                        leptos_i18n::t_string!(i18n, ui.yes)
-                                                    } else {
-                                                        leptos_i18n::t_string!(i18n, ui.no)
-                                                    }}
-                                                </dd>
+                                                <dd>{tr!(ui.yes)}</dd>
                                             </div><div>
                                                 <dt>{tr!(ui.redirect)}</dt>
                                                 <dd>{r.policy.redirect_url}</dd>
                                             </div>
-                                        </dl>
-                                        <section class="resource-section">
+                                        </dl> <section class="resource-section">
                                             <h3>{tr!(ui.rendered_sample)}</h3>
                                             <p>
                                                 {tr!(

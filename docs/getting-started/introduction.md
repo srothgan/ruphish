@@ -23,7 +23,7 @@ Ruphish separates application accounts from campaign recipients. A recipient doe
 
 ## Participant data
 
-The tracking model is designed around interaction events and optional password-presence booleans. Participant-entered usernames, passwords, and arbitrary form values are outside the supported collection model. This also changes which authored landing-page content can run. Read [participant data](../user-guide/participant-data.md) before importing a page or choosing tracking options.
+The tracking model is designed around interaction events and password-presence booleans. Participant-entered usernames, passwords, and arbitrary form values are outside the supported collection model. This also changes which authored landing-page content can run. Read [participant data](../user-guide/participant-data.md) before importing a page or launching a campaign.
 
 An open or click is a recorded request. Mail scanners, image proxies, and automated clients can produce those requests too. Use the [metric definitions](../user-guide/results/metrics.md) when interpreting results.
 

@@ -39,8 +39,8 @@ async fn event(
     time: i64,
     details: &str,
 ) {
-    sqlx::query("INSERT INTO events(campaign_id,email,message,time,details) VALUES(?,?,?,datetime(?,'unixepoch'),?)")
-        .bind(campaign).bind(email).bind(kind).bind(time).bind(details).execute(pool).await.unwrap();
+    sqlx::query("INSERT INTO events(campaign_id,email,kind,time,metadata,recipient_id) VALUES(?,?,?,datetime(?,'unixepoch'),?,(SELECT min(id) FROM results WHERE campaign_id=? AND email=? HAVING count(*)=1))")
+        .bind(campaign).bind(email).bind(match kind { "Email Sent"=>"email_sent", "Email Opened"=>"email_opened", "Clicked Link"=>"link_clicked", "Submitted Data"=>"form_submitted", "Email Reported"=>"email_reported", other=>other }).bind(time).bind(details).bind(campaign).bind(email).execute(pool).await.unwrap();
 }
 #[tokio::test]
 async fn acceptance_cohorts_deduplicate_isolate_owners_and_reject_untrusted_presence_values() {
@@ -129,11 +129,12 @@ async fn acceptance_cohorts_deduplicate_isolate_owners_and_reject_untrusted_pres
         Posture::default()
     );
     // Reading never sanitizes by rewriting history or emits another event.
-    let n: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM events WHERE details LIKE '%PRIVATE-CANARY%'")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let n: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM event_history WHERE details LIKE '%PRIVATE-CANARY%'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(n, 4);
     db.close().await;
 }
@@ -291,12 +292,12 @@ async fn the_same_address_in_two_campaigns_counts_separately_without_fabricated_
             ..Default::default()
         }
     );
-    let before: i64 = sqlx::query_scalar("SELECT count(*) FROM events")
+    let before: i64 = sqlx::query_scalar("SELECT count(*) FROM event_history")
         .fetch_one(&pool)
         .await
         .unwrap();
     repo.snapshot(OWNER, NOW).await.unwrap();
-    let after: i64 = sqlx::query_scalar("SELECT count(*) FROM events")
+    let after: i64 = sqlx::query_scalar("SELECT count(*) FROM event_history")
         .fetch_one(&pool)
         .await
         .unwrap();

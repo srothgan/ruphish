@@ -166,7 +166,7 @@ async fn participant_privacy_removes_legacy_payloads_and_never_exposes_injected_
         "recovery original is preserved, not falsely described as sanitized"
     );
     original.close().await.unwrap();
-    let details: Vec<String> = sqlx::query_scalar("SELECT details FROM events")
+    let details: Vec<String> = sqlx::query_scalar("SELECT details FROM event_history")
         .fetch_all(&db.inspection_pool())
         .await
         .unwrap();
@@ -179,7 +179,7 @@ async fn participant_privacy_removes_legacy_payloads_and_never_exposes_injected_
         format!(r#"{{"password_present":"{secret}","username_present":{{"value":"{secret}"}}}}"#),
         secret.into(),
     ] {
-        sqlx::query("UPDATE events SET details=?")
+        sqlx::query("UPDATE events SET metadata=?")
             .bind(payload)
             .execute(&db.inspection_pool())
             .await
@@ -310,19 +310,20 @@ async fn legacy_upgrade_preserves_unknown_work_and_effective_capture_policy() {
         2
     );
     let before = store.get(caller(), 1).await.unwrap();
-    assert!(before.policy.unwrap().capture_credentials);
-    sqlx::query("UPDATE pages SET capture_credentials=0")
+    let redirect = before.policy.unwrap().redirect_url;
+    sqlx::query("UPDATE pages SET redirect_url='https://changed.example.test/'")
         .execute(&db.inspection_pool())
         .await
         .unwrap();
-    assert!(
+    assert_eq!(
         store
             .get(caller(), 1)
             .await
             .unwrap()
             .policy
             .unwrap()
-            .capture_credentials
+            .redirect_url,
+        redirect
     );
     db.close().await;
     let db = prepared_database(&path, &fixture).await;
@@ -346,7 +347,7 @@ async fn creation_is_atomic_deduplicated_and_idempotent_with_stable_policy() {
         .unwrap();
     assert_eq!(campaign.results.len(), 2);
     assert_eq!(campaign.results[0].recipient.first_name, "Alice");
-    assert!(!campaign.policy.unwrap().capture_credentials);
+    assert_eq!(campaign.policy.unwrap().redirect_url, "");
     let due: Vec<i64> = sqlx::query_scalar(
         "SELECT due FROM ruphish_delivery WHERE campaign_id=? ORDER BY result_id",
     )
@@ -496,15 +497,16 @@ async fn retries_use_failure_time_and_failed_outcome_commit_never_changes_queue_
         .await
         .unwrap();
     assert!((1_900_010_121..=1_900_010_133).contains(&due));
-    let events: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM events WHERE message='Error Sending Email'")
-            .fetch_one(&db.inspection_pool())
-            .await
-            .unwrap();
+    let events: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM event_history WHERE message='Error Sending Email'",
+    )
+    .fetch_one(&db.inspection_pool())
+    .await
+    .unwrap();
     store.finish(&claim, Ok(()), 1_900_010_005).await.unwrap();
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM events WHERE message='Error Sending Email'"
+            "SELECT count(*) FROM event_history WHERE message='Error Sending Email'"
         )
         .fetch_one(&db.inspection_pool())
         .await

@@ -511,6 +511,11 @@ fn independent_go_resource_observations_run_against_the_executable() {
             "pages-empty-html" | "pages-capture" | "pages-no-capture" => {
                 let input: Value = serde_json::from_str(case["body"].as_str().unwrap()).unwrap();
                 expected["html"] = input.get("html").cloned().unwrap_or(json!(""));
+                // Approved presence-only tracking is unconditional; legacy flags are ignored.
+                expected["capture_credentials"] = json!(true);
+                expected["capture_passwords"] = json!(true);
+                assert!(observed["warnings"].is_array());
+                observed.as_object_mut().unwrap().remove("warnings");
             }
             // Engine diagnostics are not identical; both reject the invalid expression before persistence.
             "templates-unknown-field" => {
@@ -981,8 +986,8 @@ fn legacy_resource_validation_and_page_policy_survive_round_trip_and_restart() {
             .unwrap();
         assert_eq!(page["html"], html);
         assert_eq!(page["redirect_url"], "");
-        assert_eq!(page["capture_credentials"], credentials);
-        assert_eq!(page["capture_passwords"], passwords);
+        assert_eq!(page["capture_credentials"], true);
+        assert_eq!(page["capture_passwords"], true);
     }
     process.stop();
     let mut restarted = Process::start(directory.path(), "admin");
@@ -998,6 +1003,102 @@ fn legacy_resource_validation_and_page_policy_survive_round_trip_and_restart() {
         .unwrap();
     assert_eq!(reopened, page);
     restarted.stop();
+}
+
+#[test]
+fn landing_diagnostics_warn_without_blocking_save_and_preserve_correct_form_semantics() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = ready(&mut process);
+    unlock(directory.path());
+    let client = client();
+    assert_eq!(
+        client
+            .post(format!("{base}/api/pages/validate"))
+            .json(&json!({"html":""}))
+            .send()
+            .unwrap()
+            .status(),
+        401
+    );
+    for (index, html, expected, absent) in [
+        (
+            0,
+            "<!doctype html><form><input type=password name=p disabled value=prefilled><button>Submit</button></form>",
+            "password_disabled",
+            "password_without_form",
+        ),
+        (
+            1,
+            "<!doctype html><form><fieldset disabled><legend><input type=password name=allowed></legend><input type=password name=blocked></fieldset><button>Submit</button></form>",
+            "password_disabled",
+            "password_unnamed",
+        ),
+        (
+            2,
+            "<!doctype html><form><input type=password><button>Submit</button></form>",
+            "password_unnamed",
+            "password_disabled",
+        ),
+        (
+            3,
+            "<!doctype html><input type=password name=p>",
+            "password_without_form",
+            "password_disabled",
+        ),
+        (
+            4,
+            "<!doctype html><form><input name=u><input type=password name=p></form>",
+            "form_without_submit",
+            "password_without_form",
+        ),
+    ] {
+        let read_warnings = |path: &str| -> Value {
+            client
+                .post(format!("{base}{path}"))
+                .bearer_auth("synthetic-bootstrap-token")
+                .json(&json!({"html":html}))
+                .send()
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .unwrap()
+        };
+        let validation = read_warnings("/api/pages/validate");
+        let codes: Vec<_> = validation["warnings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|w| w["code"].as_str().unwrap())
+            .collect();
+        assert!(codes.contains(&expected), "{index}: {validation}");
+        assert!(!codes.contains(&absent), "{index}: {validation}");
+        if index == 1 {
+            assert_eq!(
+                codes
+                    .iter()
+                    .filter(|code| **code == "password_disabled")
+                    .count(),
+                1
+            );
+        }
+        let saved: Value = client.post(format!("{base}/api/pages/")).bearer_auth("synthetic-bootstrap-token")
+            .json(&json!({"name":format!("Warning {index}"),"html":html,"capture_passwords":false,"capture_credentials":false}))
+            .send().unwrap().error_for_status().unwrap().json().unwrap();
+        assert_eq!(saved["html"], html);
+        assert_eq!(saved["warnings"], validation["warnings"]);
+        assert_eq!(saved["capture_passwords"], true);
+        assert_eq!(
+            read_warnings("/api/util/preview")["warnings"],
+            validation["warnings"]
+        );
+    }
+    let good: Value = client.post(format!("{base}/api/pages/validate")).bearer_auth("synthetic-bootstrap-token")
+        .json(&json!({"html":"<!doctype html><html><head><title>Sign in</title></head><body><form id=f><fieldset disabled><legend><input type=password name=p value=prefilled readonly></legend></fieldset><button>Submit</button></form><input form=f type=password name=external autocomplete=current-password></body></html>"}))
+        .send().unwrap().error_for_status().unwrap().json().unwrap();
+    assert!(good["warnings"].as_array().unwrap().is_empty(), "{good}");
+    process.stop();
 }
 
 #[test]

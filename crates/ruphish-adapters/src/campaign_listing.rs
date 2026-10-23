@@ -6,7 +6,7 @@ SELECT 1024+4*(LENGTH(COALESCE(c.name,''))+LENGTH(COALESCE(c.url,''))+LENGTH(COA
 UNION ALL
 SELECT 1024+4*(LENGTH(COALESCE(r.r_id,''))+LENGTH(COALESCE(r.email,''))+LENGTH(COALESCE(r.first_name,''))+LENGTH(COALESCE(r.last_name,''))+LENGTH(COALESCE(r.position,''))+LENGTH(COALESCE(r.status,''))+LENGTH(COALESCE(r.send_date,''))+LENGTH(COALESCE(r.modified_date,''))) AS weight FROM results r JOIN selected c ON c.id=r.campaign_id
 UNION ALL
-SELECT 1024+4*(LENGTH(COALESCE(e.email,''))+LENGTH(COALESCE(e.time,''))+LENGTH(COALESCE(e.message,''))+LENGTH(COALESCE(e.details,''))) AS weight FROM events e JOIN selected c ON c.id=e.campaign_id
+SELECT 1024+4*(LENGTH(COALESCE(e.email,''))+LENGTH(COALESCE(e.time,''))+LENGTH(COALESCE(e.message,''))+LENGTH(COALESCE(e.details,''))) AS weight FROM event_history e JOIN selected c ON c.id=e.campaign_id
 UNION ALL
 SELECT 1024+4*(LENGTH(COALESCE(t.name,''))+LENGTH(COALESCE(t.modified_date,''))+LENGTH(COALESCE(t.subject,''))+LENGTH(COALESCE(t.text,''))+LENGTH(COALESCE(t.html,''))+LENGTH(COALESCE(t.envelope_sender,''))) AS weight FROM templates t JOIN selected c ON c.template_id=t.id AND c.user_id=t.user_id
 UNION ALL

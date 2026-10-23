@@ -22,6 +22,7 @@ mod webhook_delivery;
 
 mod campaign_preparation;
 mod integration_work;
+mod observation_schema;
 mod participant_privacy;
 mod previews;
 mod public_interactions;

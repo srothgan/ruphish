@@ -443,27 +443,40 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                                 <Card class="analysis-metric">
                                     <span>{move || label.get()}</span>
                                     <strong>
-                                        {move || data.get()["progression"][i].as_i64().unwrap_or(0)}
-                                    </strong>
-                                    <small>
                                         {move || {
-                                            leptos_i18n::t_string!(
-                                                i18n, messages.arg0_recorded_events, arg0 = (data.get()["totals"][i].as_i64().unwrap_or(0)).to_string()
-                                            )
+                                            data.get()[if recipient.is_some() {
+                                                    "totals"
+                                                } else {
+                                                    "progression"
+                                                }][i]
+                                                .as_i64()
+                                                .unwrap_or(0)
                                         }}
-                                    </small>
+                                    </strong>
+                                    <Show when=move || recipient.is_none()>
+                                        <small>
+                                            {move || {
+                                                leptos_i18n::t_string!(
+                                                    i18n, messages.arg0_recorded_events, arg0 = (data.get()["totals"][i].as_i64().unwrap_or(0)).to_string()
+                                                )
+                                            }}
+                                        </small>
+                                    </Show>
                                 </Card>
                             }
                         })
                         .collect_view()}
-                </div>
-                <p class="analysis-context">
-                    {move || {
-                        leptos_i18n::t_string!(
-                            i18n, messages.recipient_progression_within_the_selected_filters_opens_include_clicks_and_submi, arg0 = (data.get()["audience"]).to_string()
-                        )
-                    }}
-                </p>
+                </div> <Show when=move || recipient.is_some()>
+                    <p class="analysis-context">{tr!(ui.recipient_observation_counts)}</p>
+                </Show> <Show when=move || recipient.is_none()>
+                    <p class="analysis-context">
+                        {move || {
+                            leptos_i18n::t_string!(
+                                i18n, messages.recipient_progression_within_the_selected_filters_opens_include_clicks_and_submi, arg0 = (data.get()["audience"]).to_string()
+                            )
+                        }}
+                    </p>
+                </Show>
                 <ActivityChart
                     data=chart
                     interval=Signal::derive(move || {

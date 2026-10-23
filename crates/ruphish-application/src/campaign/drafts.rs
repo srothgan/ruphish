@@ -108,8 +108,6 @@ pub fn validate_launch(
         || Some(c.selection.template.id) != input.template.id
         || Some(c.selection.page.id) != input.page.id
         || Some(c.selection.smtp.id) != input.profile.id
-        || Some(policy.capture_credentials) != input.policy.capture_credentials
-        || Some(policy.capture_passwords) != input.policy.capture_passwords
         || Some(&policy.redirect_url) != input.policy.redirect_url.as_ref()
     {
         return Err(Error::Changed);

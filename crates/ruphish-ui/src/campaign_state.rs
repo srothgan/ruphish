@@ -83,7 +83,7 @@ impl Draft {
         self.edit(|v| {
             v["selection"]["page"] = json!({"id":id});
             v["policy"] = if id == 0 {
-                json!({"capture_credentials":false,"capture_passwords":false,"redirect_url":""})
+                json!({"redirect_url":""})
             } else {
                 Value::Null
             };
@@ -98,15 +98,10 @@ impl Draft {
         }
         self.page_request = None;
         if let Some(page) = page.filter(|page| {
-            page["id"].as_i64() == Some(request.0)
-                && page["capture_credentials"].is_boolean()
-                && page["capture_passwords"].is_boolean()
-                && page["redirect_url"].is_string()
+            page["id"].as_i64() == Some(request.0) && page["redirect_url"].is_string()
         }) {
             self.edit(|v| {
                 v["policy"] = json!({
-                    "capture_credentials":page["capture_credentials"] == true || page["capture_passwords"] == true,
-                    "capture_passwords":page["capture_passwords"],
                     "redirect_url":page["redirect_url"]
                 });
             });
@@ -115,26 +110,7 @@ impl Draft {
     }
     /// The operator must see concrete policy values before requesting a review.
     pub fn policy_ready(&self) -> bool {
-        self.page_request.is_none()
-            && self.value["policy"]["capture_credentials"].is_boolean()
-            && self.value["policy"]["capture_passwords"].is_boolean()
-            && self.value["policy"]["redirect_url"].is_string()
-    }
-    /// Keep dependent tracking controls consistent with the effective server policy.
-    pub fn set_tracking(&mut self, password_presence: bool, checked: bool) {
-        self.edit(|v| {
-            if password_presence {
-                v["policy"]["capture_passwords"] = json!(checked);
-                if checked {
-                    v["policy"]["capture_credentials"] = json!(true);
-                }
-            } else {
-                v["policy"]["capture_credentials"] = json!(checked);
-                if !checked {
-                    v["policy"]["capture_passwords"] = json!(false);
-                }
-            }
-        });
+        self.page_request.is_none() && self.value["policy"]["redirect_url"].is_string()
     }
     /// Refuse edits while the outcome of a launch may be unknown.
     pub fn edit(&mut self, update: impl FnOnce(&mut Value)) {
@@ -213,14 +189,14 @@ mod tests {
         }
         let mut value = json!({"total":1,"duplicate_count":0,"launch_date":123,"send_by_date":null,
             "selection":{"groups":[],"template":{"id":1,"name":"Template","revision":"v1"},"page":{"id":2,"name":"Page","revision":"v1"},"smtp":{"id":3,"name":"SMTP","revision":"v1"}},
-            "policy":{"capture_credentials":false,"capture_passwords":false,"redirect_url":""},"mailer_enabled":true,"conflict_count":0,"conflicts":[],
+            "policy":{"capture_credentials":true,"capture_passwords":true,"redirect_url":""},"mailer_enabled":true,"conflict_count":0,"conflicts":[],
             "preview":{"subject":"Subject","html":"<p>Preview</p>","text":"Preview","visible_sender":"Sender","transport_sender":"Sender"}});
         merge(&mut value, patch);
         serde_json::from_value(value).unwrap()
     }
     fn campaign_draft() -> Draft {
         Draft {
-            value: json!({"name":"Training","policy":{"capture_credentials":false,"capture_passwords":false,"redirect_url":""}}),
+            value: json!({"name":"Training","policy":{"redirect_url":""}}),
             ..Default::default()
         }
     }
@@ -233,7 +209,7 @@ mod tests {
         let page = d.select_page(7).unwrap();
         assert!(flow.update(&mut d, true, false, true, 0).is_none());
         assert!(d.launch("premature".into()).is_none());
-        d.page_loaded(page, Some(&json!({"id":7,"capture_credentials":false,"capture_passwords":false,"redirect_url":""})));
+        d.page_loaded(page, Some(&json!({"id":7,"redirect_url":""})));
         let (first, sent) = flow.update(&mut d, true, false, true, 0).unwrap();
         assert_eq!(sent["selection"]["page"]["id"], 7);
         assert!(flow.update(&mut d, true, false, true, 0).is_none());
@@ -309,16 +285,17 @@ mod tests {
         };
         let request = d.select_page(12).unwrap();
         assert!(!d.policy_ready());
-        assert!(d.page_loaded(request, Some(&json!({"id":12,"capture_credentials":true,"capture_passwords":true,"redirect_url":"https://training.example.test/finish"}))));
+        assert!(d.page_loaded(
+            request,
+            Some(&json!({"id":12,"redirect_url":"https://training.example.test/finish"}))
+        ));
         assert_eq!(
             d.value["policy"],
-            json!({"capture_credentials":true,"capture_passwords":true,"redirect_url":"https://training.example.test/finish"})
+            json!({"redirect_url":"https://training.example.test/finish"})
         );
         assert!(d.policy_ready());
-        d.set_tracking(false, false);
         d.edit(|v| v["policy"]["redirect_url"] = json!(""));
-        let explicit =
-            json!({"capture_credentials":false,"capture_passwords":false,"redirect_url":""});
+        let explicit = json!({"redirect_url":""});
         assert_eq!(d.value["policy"], explicit);
         let (request, _) = d.begin_review().unwrap();
         assert!(d.reviewed(
@@ -328,7 +305,10 @@ mod tests {
             ))
         ));
         let (_, body) = d.launch("stable-key".into()).unwrap();
-        assert_eq!(body["policy"], explicit);
+        assert_eq!(
+            body["policy"],
+            json!({"capture_credentials":true,"capture_passwords":true,"redirect_url":""})
+        );
         assert!(d.select_page(13).is_none());
         assert_eq!(d.launch("different-key".into()).unwrap().1, body);
     }
@@ -343,35 +323,24 @@ mod tests {
         d.edit(|v| v["name"] = json!("Keep this campaign name"));
         assert!(!d.page_loaded(old, None));
         assert_eq!(d.page_request, Some(current));
-        assert!(!d.page_loaded(old, Some(&json!({"id":1,"capture_credentials":true,"capture_passwords":true,"redirect_url":"old"}))));
-        assert!(d.page_loaded(current, Some(&json!({"id":2,"capture_credentials":false,"capture_passwords":false,"redirect_url":""}))));
+        assert!(!d.page_loaded(old, Some(&json!({"id":1,"redirect_url":"old"}))));
+        assert!(d.page_loaded(current, Some(&json!({"id":2,"redirect_url":""}))));
         assert_eq!(d.value["name"], "Keep this campaign name");
-        assert_eq!(
-            d.value["policy"],
-            json!({"capture_credentials":false,"capture_passwords":false,"redirect_url":""})
-        );
-        d.set_tracking(true, true);
-        assert_eq!(d.value["policy"]["capture_credentials"], true);
+        assert_eq!(d.value["policy"], json!({"redirect_url":""}));
         let retry = d.select_page(2).unwrap();
         assert!(!d.page_loaded(current, None));
         assert!(d.page_loaded(retry, None));
         assert!(!d.policy_ready());
-        for response in [
-            json!({"id":2}),
-            json!({"id":3,"capture_credentials":true,"capture_passwords":false,"redirect_url":"wrong page"}),
-        ] {
+        for response in [json!({"id":2}), json!({"id":3,"redirect_url":"wrong page"})] {
             let retry = d.select_page(2).unwrap();
             assert!(d.page_loaded(retry, Some(&response)));
             assert!(!d.policy_ready());
         }
         let retry = d.select_page(2).unwrap();
         assert!(d.select_page(0).is_none());
-        assert!(!d.page_loaded(retry, Some(&json!({"id":2,"capture_credentials":true,"capture_passwords":true,"redirect_url":"late"}))));
+        assert!(!d.page_loaded(retry, Some(&json!({"id":2,"redirect_url":"late"}))));
         assert!(d.policy_ready());
-        assert_eq!(
-            d.value["policy"],
-            json!({"capture_credentials":false,"capture_passwords":false,"redirect_url":""})
-        );
+        assert_eq!(d.value["policy"], json!({"redirect_url":""}));
     }
     #[test]
     fn editing_invalidates_review_and_discards_a_late_response() {

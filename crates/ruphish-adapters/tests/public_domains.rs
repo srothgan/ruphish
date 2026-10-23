@@ -14,6 +14,172 @@ use support::DatabaseFixture;
 fn caller() -> Identity {
     Identity { id: 1, epoch: 0 }
 }
+
+#[tokio::test]
+async fn observation_upgrade_preserves_history_retry_tombstones_and_repeated_events_across_restart()
+{
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("observations.db");
+    std::fs::copy(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/observations/ruphish-v10.sqlite3"),
+        &path,
+    )
+    .unwrap();
+    let raw =
+        sqlx::SqlitePool::connect_with(sqlx::sqlite::SqliteConnectOptions::new().filename(&path))
+            .await
+            .unwrap();
+    sqlx::raw_sql(r#"
+        INSERT INTO webhooks(id,name,url,secret,is_active) VALUES(7,'Observation fixture','http://127.0.0.1:1/unused','',1);
+        INSERT INTO ruphish_webhook_state(webhook_id,revision) VALUES(7,1);
+        INSERT INTO results(id,campaign_id,user_id,email,r_id,status) VALUES(3,1,1,'bob@example.test','ambiguous-bob','Email Sent');
+        INSERT INTO events(id,campaign_id,email,time,message,details) VALUES
+        (40,1,'alice@example.test','2026-10-20T12:00:00Z','Submitted Data','{"password_present":true,"password":"HISTORICAL-PRIVATE-CANARY"}'),
+        (41,1,'missing@example.test','2026-10-20T12:00:00Z','Email Opened',''),
+        (42,1,'bob@example.test','2026-10-20T12:00:00Z','Email Opened','');
+        INSERT INTO ruphish_submission_ids VALUES(1,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+        UPDATE ruphish_event_sources SET source='public' WHERE event_id=40;
+        UPDATE ruphish_domains SET verified_until=9999999999;
+    "#).execute(&raw).await.unwrap();
+    raw.close().await;
+    let db = DatabaseFixture::open(&path, "").await.unwrap();
+    assert!(db.backup_path().is_some());
+    let pool = db.inspection_pool();
+    let historical: (String, String, Option<i64>, String) =
+        sqlx::query_as("SELECT kind,metadata,recipient_id,source FROM events WHERE id=40")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        historical,
+        (
+            "form_submitted".into(),
+            "{\"password_present\":true}".into(),
+            Some(1),
+            "public".into()
+        )
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, Option<i64>>("SELECT recipient_id FROM events WHERE id=42")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, Option<i64>>("SELECT event_id FROM ruphish_event_receipts")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        None
+    );
+    let public = db.interactions();
+    let now = 1_900_000_000;
+    public
+        .interact(
+            "training.example.test",
+            "zSDu57f",
+            Action::Submit {
+                event_id: "a".repeat(32),
+                password_present: true,
+            },
+            now,
+        )
+        .await
+        .unwrap();
+    for key in ["b", "c"] {
+        let action = Action::Submit {
+            event_id: key.repeat(32),
+            password_present: false,
+        };
+        let (first, retry) = tokio::join!(
+            public.interact("training.example.test", "zSDu57f", action.clone(), now),
+            public.interact("training.example.test", "zSDu57f", action, now)
+        );
+        first.unwrap();
+        retry.unwrap();
+        public
+            .interact("training.example.test", "zSDu57f", Action::Open, now)
+            .await
+            .unwrap();
+        public
+            .interact("training.example.test", "zSDu57f", Action::View, now)
+            .await
+            .unwrap();
+    }
+    let analysis = db
+        .reporting()
+        .analysis(
+            caller(),
+            1,
+            ruphish_application::reporting::Filter {
+                limit: 100,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(analysis.totals, [0, 4, 2, 3, 0]);
+    assert_eq!(analysis.unique, [0, 1, 1, 1, 0]);
+    assert_eq!(analysis.progression[3], 1);
+    let links: i64 = sqlx::query_scalar("SELECT count(*) FROM ruphish_event_receipts r JOIN events e ON e.id=r.event_id AND e.recipient_id=r.result_id WHERE e.kind='form_submitted'").fetch_one(&pool).await.unwrap();
+    assert_eq!(links, 2);
+    let jobs: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM ruphish_webhook_jobs WHERE webhook_id=7")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        jobs, 9,
+        "historical and new events enqueue once, retries enqueue nothing"
+    );
+    drop(public);
+    db.close().await;
+    let active = std::fs::read(&path).unwrap();
+    assert!(
+        !active
+            .windows(b"HISTORICAL-PRIVATE-CANARY".len())
+            .any(|bytes| bytes == b"HISTORICAL-PRIVATE-CANARY")
+    );
+    let db = DatabaseFixture::open(&path, "").await.unwrap();
+    assert!(db.backup_path().is_none());
+    db.interactions()
+        .interact(
+            "training.example.test",
+            "zSDu57f",
+            Action::Submit {
+                event_id: "b".repeat(32),
+                password_present: false,
+            },
+            now,
+        )
+        .await
+        .unwrap();
+    let recipient = db
+        .reporting()
+        .analysis(
+            caller(),
+            1,
+            ruphish_application::reporting::Filter {
+                recipient: Some(1),
+                limit: 100,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(recipient.totals, [0, 2, 2, 3, 0]);
+    assert_eq!(
+        recipient
+            .events
+            .iter()
+            .filter(|event| event.kind == "Submitted Data")
+            .count(),
+        3
+    );
+    db.close().await;
+}
 fn proof() -> Observation {
     Observation {
         control: true,
@@ -124,7 +290,12 @@ async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_on
     );
     let check = store.claim(now).await.unwrap().unwrap();
     store.finish(&check, proof(), now + 1).await.unwrap();
-    sqlx::query("UPDATE ruphish_campaign_policy SET capture_credentials=1,capture_passwords=1,redirect_url='https://training.example.test/finished'").execute(&db.inspection_pool()).await.unwrap();
+    sqlx::query(
+        "UPDATE ruphish_campaign_policy SET redirect_url='https://training.example.test/finished'",
+    )
+    .execute(&db.inspection_pool())
+    .await
+    .unwrap();
     sqlx::query("UPDATE pages SET html=?").bind("<style>.form { color: navy }</style><form id='form'><label for='pw'>Password</label><input id='pw' name='password' type='password' autocomplete='current-password'><button>Continue</button></form><script>fetch('https://outside.invalid')</script>").execute(&db.inspection_pool()).await.unwrap();
     assert!(
         public
@@ -176,7 +347,7 @@ async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_on
             .unwrap();
     assert_eq!(row, ("Submitted Data".into(), true));
     let values: Vec<String> =
-        sqlx::query_scalar("SELECT details FROM events WHERE message='Submitted Data'")
+        sqlx::query_scalar("SELECT details FROM event_history WHERE message='Submitted Data'")
             .fetch_all(&db.inspection_pool())
             .await
             .unwrap();
@@ -200,7 +371,7 @@ async fn failed_event_write_rolls_back_submission_deduplication_and_result_state
     let store = db.domains();
     let check = store.claim(now).await.unwrap().unwrap();
     store.finish(&check, proof(), now + 1).await.unwrap();
-    sqlx::raw_sql("UPDATE ruphish_campaign_policy SET capture_credentials=1; CREATE TRIGGER reject_event BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT,'synthetic private trigger canary'); END;").execute(&db.inspection_pool()).await.unwrap();
+    sqlx::raw_sql("CREATE TRIGGER reject_event BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT,'synthetic private trigger canary'); END;").execute(&db.inspection_pool()).await.unwrap();
     let public = db.interactions();
     let error = public
         .interact(
@@ -216,7 +387,7 @@ async fn failed_event_write_rolls_back_submission_deduplication_and_result_state
         .err()
         .unwrap();
     assert!(!error.to_string().contains("canary"));
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM ruphish_submission_ids")
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM ruphish_event_receipts")
         .fetch_one(&db.inspection_pool())
         .await
         .unwrap();
@@ -365,10 +536,6 @@ async fn event_limits_preserve_retry_idempotency_and_roll_back_unrecorded_submis
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     let check = store.claim(now).await.unwrap().unwrap();
     store.finish(&check, proof(), now + 1).await.unwrap();
-    sqlx::query("UPDATE ruphish_campaign_policy SET capture_credentials=1,capture_passwords=0")
-        .execute(&db.inspection_pool())
-        .await
-        .unwrap();
     let public = db.interactions();
     let id = "a".repeat(32);
     let submit = || Action::Submit {
@@ -380,13 +547,16 @@ async fn event_limits_preserve_retry_idempotency_and_roll_back_unrecorded_submis
         .await
         .unwrap();
     let details: String = sqlx::query_scalar(
-        "SELECT details FROM events WHERE message='Submitted Data' ORDER BY id DESC LIMIT 1",
+        "SELECT details FROM event_history WHERE message='Submitted Data' ORDER BY id DESC LIMIT 1",
     )
     .fetch_one(&db.inspection_pool())
     .await
     .unwrap();
-    assert_eq!(details, "");
-    sqlx::query("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<999) INSERT INTO ruphish_submission_ids SELECT (SELECT id FROM results WHERE r_id='zSDu57f'),printf('%032x',x) FROM n").execute(&db.inspection_pool()).await.unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&details).unwrap(),
+        serde_json::json!({"password_present":true})
+    );
+    sqlx::query("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<10000) INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id) SELECT r.campaign_id,r.email,'2030-01-01T00:00:00Z','email_opened','',r.id FROM n JOIN results r ON r.r_id='zSDu57f' WHERE n.x <= 10000-(SELECT count(*) FROM events WHERE recipient_id=r.id)").execute(&db.inspection_pool()).await.unwrap();
     public
         .interact("training.example.test", "zSDu57f", submit(), now + 3)
         .await
@@ -406,7 +576,7 @@ async fn event_limits_preserve_retry_idempotency_and_roll_back_unrecorded_submis
             .is_err()
     );
     let count: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM events WHERE message='Submitted Data'")
+        sqlx::query_scalar("SELECT count(*) FROM event_history WHERE message='Submitted Data'")
             .fetch_one(&db.inspection_pool())
             .await
             .unwrap();
@@ -765,15 +935,25 @@ async fn queued_and_running_checks_survive_reopen_and_expired_workers_cannot_pub
 #[tokio::test]
 async fn version_four_upgrade_preserves_known_history_without_inventing_duration_or_trusting_a_failed_recheck()
  {
-    let (dir, db) = fixture().await;
-    let original = db.domains().list(caller()).await.unwrap().remove(0);
-    sqlx::raw_sql("DROP TRIGGER ruphish_event_insert; DROP TRIGGER ruphish_event_delete; DROP INDEX ruphish_events_campaign_time; DROP INDEX ruphish_events_recipient; CREATE INDEX ruphish_events_recipient ON events(campaign_id,email); DROP TABLE ruphish_event_sources; DROP TABLE ruphish_webhook_state; DROP TABLE ruphish_webhook_jobs; DROP TABLE ruphish_webhook_attempts; DROP TABLE ruphish_mailbox_messages; DROP TABLE ruphish_mailbox_runs; DROP TABLE ruphish_mailboxes; DROP TABLE ruphish_domain_checks; DROP TABLE ruphish_campaign_drafts; DROP TABLE ruphish_user_preferences; DELETE FROM ruphish_schema WHERE version>=5; UPDATE ruphish_domains SET checked_at=200,verified_until=9999999999,code='domain_txt_mismatch',lease_until=9999999999;").execute(&db.inspection_pool()).await.unwrap();
-    db.close().await;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("state.db");
+    std::fs::copy(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/observations/ruphish-v10.sqlite3"),
+        &path,
+    )
+    .unwrap();
+    let raw =
+        sqlx::SqlitePool::connect_with(sqlx::sqlite::SqliteConnectOptions::new().filename(&path))
+            .await
+            .unwrap();
+    sqlx::raw_sql("DROP TRIGGER ruphish_event_insert; DROP TRIGGER ruphish_event_delete; DROP INDEX ruphish_events_campaign_time; DROP INDEX ruphish_events_recipient; CREATE INDEX ruphish_events_recipient ON events(campaign_id,email); DROP TABLE ruphish_event_sources; DROP TABLE ruphish_webhook_state; DROP TABLE ruphish_webhook_jobs; DROP TABLE ruphish_webhook_attempts; DROP TABLE ruphish_mailbox_messages; DROP TABLE ruphish_mailbox_runs; DROP TABLE ruphish_mailboxes; DROP TABLE ruphish_domain_checks; DROP TABLE ruphish_campaign_drafts; DROP TABLE ruphish_user_preferences; DELETE FROM ruphish_schema WHERE version>=5; UPDATE ruphish_domains SET checked_at=200,verified_until=9999999999,code='domain_txt_mismatch',lease_until=9999999999;").execute(&raw).await.unwrap();
+    raw.close().await;
     let db = DatabaseFixture::open(&dir.path().join("state.db"), "")
         .await
         .unwrap();
-    let upgraded = db.domains().get(caller(), original.id).await.unwrap();
-    assert_eq!(upgraded.challenge, original.challenge);
+    let upgraded = db.domains().get(caller(), 1).await.unwrap();
+    assert_eq!(upgraded.challenge, "synthetic-challenge");
     assert_eq!(upgraded.verified_until, 0);
     assert_eq!(upgraded.history.len(), 1);
     assert_eq!(upgraded.history[0].finished_at, Some(200));
@@ -785,7 +965,7 @@ async fn version_four_upgrade_preserves_known_history_without_inventing_duration
     let db = DatabaseFixture::open(&dir.path().join("state.db"), "")
         .await
         .unwrap();
-    let again = db.domains().get(caller(), original.id).await.unwrap();
+    let again = db.domains().get(caller(), 1).await.unwrap();
     assert_eq!(again.history.len(), 1);
     assert_eq!(again.history[0].id, first_id);
     db.close().await;

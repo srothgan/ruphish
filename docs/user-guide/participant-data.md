@@ -11,7 +11,7 @@ Ruphish's supported tracking contract is event-based. You supply recipient detai
 | --- | --- |
 | Operator-supplied recipient email/name/position | Used for personalization and recipient records |
 | Delivery, open, click, submission, and report observations | Used for event history and reporting |
-| Password presence | Optional boolean indicating that a designated password control was nonempty |
+| Password presence | Boolean indicating that an eligible password control was nonempty when submitted |
 | Entered usernames, passwords, OTPs, or arbitrary field values | Not accepted as tracking data |
 | Hashes, lengths, or samples of entered values | Not supported substitutes for value capture |
 | Participant IP address, location, or user-agent | Not added to campaign event records |
@@ -20,13 +20,15 @@ Ruphish's supported tracking contract is event-based. You supply recipient detai
 
 Forms retain useful labels, names, IDs, autocomplete attributes, and presentation. Authored scripts, event handlers, frames, objects, form destinations, external images/fonts/stylesheets, and automatic refresh are removed or blocked in the public representation. Templates run before those restrictions are applied.
 
-The application-controlled collector sends only `event_id` and `password_present`. It waits for an explicit acknowledgement and reuses the event identity if a retry is needed. Without the collector, the page policy blocks native submission. The server rejects extra fields, form-encoded bodies, and multipart submissions instead of interpreting them as captured content.
+The application-controlled collector sends only `event_id` and `password_present`. Each form submission creates a new event, including repeated submissions before or after an acknowledgement. The separate retry button retries an unconfirmed delivery with its original identity and presence boolean; that retry does not add another event. Without the collector, the page policy blocks native submission. The server rejects extra fields, form-encoded bodies, and multipart submissions instead of interpreting them as captured content.
 
 These are implementation and protocol boundaries, not a claim that every browser, password manager, reverse proxy, or imported page has completed end-to-end acceptance. The project's [manual UI/privacy checks](../contributing/testing/manual-ui.md) remain necessary for browser behavior. Check the page and network activity with synthetic values before relying on an installation's complete path.
 
+Password presence is true when the submitted form has at least one named, enabled password control with a nonempty value. Prefilled, password-manager-filled, read-only, revealed-password, and externally form-associated controls count when otherwise eligible. Disabled controls (including disabled fieldsets outside their first legend), unnamed controls, and controls belonging to another form do not count. This observes attempted submission, not whether a password was valid.
+
 ## Legacy names and historical data
 
-The API retains `capture_credentials` and `capture_passwords` for compatibility. Their meanings are submission-event tracking and optional password presence; they cannot enable raw-value collection.
+The API retains `capture_credentials` and `capture_passwords` for compatibility. Both flags are ignored on input and returned as `true` for pages and effective campaign policies. Submissions and password presence are always tracked; the flags cannot enable raw-value collection.
 
 Supported upgrades remove legacy opaque captured details and location data from active application records. Recovery copies deliberately preserve the original and can still contain data captured by Gophish. Old backups, old logs, reverse proxies, and external copies are not sanitized by upgrading Ruphish. Handle them through your own retention and access controls.
 
