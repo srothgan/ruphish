@@ -4591,7 +4591,7 @@ dependencies = [
  "hex",
  "hickory-proto",
  "hickory-resolver",
- "hmac 0.12.1",
+ "hmac 0.13.0",
  "ipnet",
  "jiff",
  "lettre",
