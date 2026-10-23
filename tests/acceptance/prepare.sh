@@ -53,6 +53,8 @@ else
         -out server.pem -days 365 -sha256 -extfile server.ext
 fi
 cd /workspace
+# Host-side HTTPS clients need the public certificates, never the private keys.
+chmod 644 /lab/data/ca.pem /lab/data/server.pem
 cargo build -p ruphish --locked
 cp /target/debug/ruphish /lab/data/ruphish
 echo 'Local Linux executable and certificates prepared. No system CA store was changed.'

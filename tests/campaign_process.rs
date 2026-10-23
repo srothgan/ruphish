@@ -31,8 +31,32 @@ fn start(directory: &Workspace, options: &[&str]) -> (Process, String) {
     })
 }
 
+pub(super) struct CampaignNetwork {
+    network: domain_network::Network,
+    upstream: Arc<Mutex<Option<String>>>,
+}
+
 fn start_with_network(directory: &Workspace, options: &[&str]) -> (Process, String) {
-    let network = directory.network.get_or_init(domain_network::Network::new);
+    let fixture = directory.network.get_or_init(|| {
+        let upstream = Arc::new(Mutex::new(None::<String>));
+        let destination = upstream.clone();
+        let network = domain_network::Network::new(move |host, path| {
+            let address = destination.lock().unwrap().clone()?;
+            let response = client()
+                .get(format!("http://{address}{path}"))
+                .header("x-forwarded-host", host)
+                .header("x-forwarded-proto", "https")
+                .send()
+                .ok()?;
+            response
+                .status()
+                .is_success()
+                .then(|| response.text().ok())
+                .flatten()
+        });
+        CampaignNetwork { network, upstream }
+    });
+    let network = &fixture.network;
     std::fs::write(directory.join("verification-ca.pem"), &network.certificate).unwrap();
     let mut config: Value =
         serde_json::from_slice(&std::fs::read(directory.join("config.json")).unwrap()).unwrap();
@@ -47,7 +71,7 @@ fn start_with_network(directory: &Workspace, options: &[&str]) -> (Process, Stri
     );
     let ready = process.ready();
     let base = format!("http://{}", ready["admin"].as_str().unwrap());
-    *network.upstream.lock().unwrap() = Some(ready["phish"].as_str().unwrap().into());
+    *fixture.upstream.lock().unwrap() = Some(ready["phish"].as_str().unwrap().into());
     (process, base)
 }
 
@@ -57,7 +81,7 @@ pub(super) fn start_verified(
     prepare: impl FnOnce(&str),
 ) -> (Process, String) {
     let (process, base) = start_with_network(directory, options);
-    let network = directory.network.get().unwrap();
+    let network = &directory.network.get().unwrap().network;
     prepare(&base);
     for host in ["training.example.test", "example.test"] {
         let items = read(&base, "/api/domains/");

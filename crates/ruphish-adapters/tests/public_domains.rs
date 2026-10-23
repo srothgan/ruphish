@@ -261,10 +261,11 @@ async fn actual_dns_and_https_require_exact_control_trust_routing_and_permitted_
     let observed = hits.clone();
     let network = domain_network::Network::new(move |host, path| {
         observed.fetch_add(1, Ordering::SeqCst);
-        assert_eq!(host, "training.example.test");
+        assert_eq!(host.split_once(':').unwrap().0, "training.example.test");
         assert!(path.starts_with("/.well-known/ruphish/"));
         Some(expected.clone())
     });
+    check.domain.origin = network.origin("training.example.test");
     let ca = dir.path().join("ca.pem");
     std::fs::write(&ca, &network.certificate).unwrap();
     let config = Config {
@@ -291,12 +292,12 @@ async fn actual_dns_and_https_require_exact_control_trust_routing_and_permitted_
     assert_eq!(observation.code, "domain_https_unavailable");
     assert!(!observation.tls);
     assert_eq!(hits.load(Ordering::SeqCst), 0);
-    check.domain.origin = "https://wrong.example.test".into();
+    check.domain.origin = network.origin("wrong.example.test");
     network.publish("wrong.example.test", &check.domain.challenge);
     let observation = DnsHttps::new(config.clone()).unwrap().verify(&check).await;
     assert_eq!(observation.code, "domain_https_unavailable");
     assert_eq!(hits.load(Ordering::SeqCst), 0);
-    check.domain.origin = "https://training.example.test".into();
+    check.domain.origin = network.origin("training.example.test");
     let observation = DnsHttps::new(config.clone()).unwrap().verify(&check).await;
     assert_eq!(observation.code, "verified");
     assert!(observation.control && observation.dns && observation.routing && observation.tls);
@@ -330,7 +331,7 @@ async fn domain_probe_does_not_follow_redirects_or_accept_oversized_proofs() {
     let (dir, db) = fixture().await;
     let store = db.domains();
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
-    let check = store.claim(now).await.unwrap().unwrap();
+    let mut check = store.claim(now).await.unwrap().unwrap();
     for (status, body) in [(302, check.routing_proof.clone()), (200, "x".repeat(129))] {
         let hits = Arc::new(AtomicUsize::new(0));
         let observed = hits.clone();
@@ -338,6 +339,7 @@ async fn domain_probe_does_not_follow_redirects_or_accept_oversized_proofs() {
             observed.fetch_add(1, Ordering::SeqCst);
             Some(body.clone())
         });
+        check.domain.origin = network.origin("training.example.test");
         network.publish("training.example.test", &check.domain.challenge);
         let ca = dir.path().join("ca.pem");
         std::fs::write(&ca, &network.certificate).unwrap();

@@ -38,8 +38,7 @@ mod reporting_process;
 mod resource_process;
 #[path = "server_database_process.rs"]
 mod server_database_process;
-#[path = "support/tls.rs"]
-mod tls_fixture;
+use domain_network::tls_fixture;
 #[path = "support/webhook_receiver.rs"]
 mod webhook_receiver;
 
@@ -360,7 +359,7 @@ impl Drop for Process {
 
 struct Workspace {
     // Drop network threads before removing the directory they serve.
-    network: OnceLock<domain_network::Network>,
+    network: OnceLock<campaign_process::CampaignNetwork>,
     directory: tempfile::TempDir,
 }
 

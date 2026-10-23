@@ -1,4 +1,6 @@
 //! Local DNS and HTTPS endpoints for actual domain verification in workflow fixtures.
+#[path = "tls.rs"]
+pub(super) mod tls_fixture;
 use hickory_proto::{
     op::{Message, OpCode},
     rr::{
@@ -22,12 +24,17 @@ pub struct Network {
     pub address: SocketAddr,
     pub certificate: String,
     pub records: Arc<Mutex<HashMap<String, String>>>,
-    pub upstream: Arc<Mutex<Option<String>>>,
     stop: Arc<AtomicBool>,
     threads: Vec<std::thread::JoinHandle<()>>,
 }
 impl Network {
-    pub fn new() -> Self {
+    pub fn new(handler: impl Fn(&str, &str) -> Option<String> + Send + Sync + 'static) -> Self {
+        Self::with_status(200, handler)
+    }
+    pub fn with_status(
+        status: u16,
+        handler: impl Fn(&str, &str) -> Option<String> + Send + Sync + 'static,
+    ) -> Self {
         let _ = rustls::crypto::ring::default_provider().install_default();
         // Keep this listener for the entire test, including application restarts.
         // No privileged ports or platform-specific loopback aliases are needed.
@@ -35,8 +42,7 @@ impl Network {
             .map_err(|error| format!("Bind domain HTTPS fixture: {error}"))
             .unwrap();
         let address = listener.local_addr().unwrap();
-        let material =
-            super::tls_fixture::server_certificate(&["training.example.test", "example.test"]);
+        let material = tls_fixture::server_certificate(&["training.example.test", "example.test"]);
         let certificate = material.cert.pem();
         let key = rustls::pki_types::PrivatePkcs8KeyDer::from(material.signing_key.serialize_der());
         let config = Arc::new(
@@ -47,8 +53,6 @@ impl Network {
         );
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = stop.clone();
-        let upstream = Arc::new(Mutex::new(None::<String>));
-        let destination = upstream.clone();
         let https = std::thread::spawn(move || {
             for connection in listener.incoming() {
                 if stopping.load(Ordering::Relaxed) {
@@ -90,23 +94,11 @@ impl Network {
                             .map(|(_, value)| value.trim())
                     })
                     .unwrap_or("");
-                let result = destination.lock().unwrap().clone().and_then(|address| {
-                    let response = super::client()
-                        .get(format!("http://{address}{path}"))
-                        .header("x-forwarded-host", host)
-                        .header("x-forwarded-proto", "https")
-                        .send()
-                        .ok()?;
-                    response
-                        .status()
-                        .is_success()
-                        .then(|| response.text().ok())
-                        .flatten()
-                });
+                let result = handler(host, path);
                 let status = if result.is_some() {
-                    "200 Fixture"
+                    format!("{status} Fixture")
                 } else {
-                    "404 Not Found"
+                    "404 Not Found".into()
                 };
                 let body = result.unwrap_or_default();
                 let response = format!(
@@ -172,7 +164,6 @@ impl Network {
             address,
             certificate,
             records,
-            upstream,
             stop,
             threads: vec![https, dns],
         }
