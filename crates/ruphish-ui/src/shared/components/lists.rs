@@ -119,6 +119,7 @@ pub(crate) fn DataTable(
     headers: Vec<Signal<String>>,
     children: Children,
     #[prop(default = "")] class: &'static str,
+    #[prop(default = false)] compact: bool,
     /// Hide the column headers when there are no rows, so their full-width rule
     /// does not overhang a rounded empty-state card rendered below.
     #[prop(into, optional)]
@@ -128,6 +129,7 @@ pub(crate) fn DataTable(
         <div class="management-table-wrap">
             <table
                 class=format!("management-table {class}")
+                class:compact=compact
                 class:is-empty=move || empty.get()
                 aria-label=move || label.get()
             >

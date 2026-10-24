@@ -33,7 +33,7 @@ export function prepareLanding(source, prefill, brandingJson, logo) {
 
 export function validateLogoFile(file) {
   if (!file || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type) ||
-      file.size <= 0 || file.size > 512 * 1024) throw new Error('starter_logo_invalid');
+      file.size <= 0 || file.size > 5 * 1024 * 1024) throw new Error('starter_logo_invalid');
 }
 
 export async function readLogo(input) {

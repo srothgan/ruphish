@@ -78,11 +78,11 @@ test('transformations fail closed on changed structures and preserve quoted Go s
 });
 
 test('upload validation rejects missing, oversized, empty and non-raster files', () => {
-  for (const file of [null, {type:'image/png',size:0}, {type:'image/png',size:524289},
+  for (const file of [null, {type:'image/png',size:0}, {type:'image/png',size:5242881},
     {type:'image/svg+xml',size:20}, {type:'text/html',size:20}, {type:'',size:20}]) {
     assert.throws(()=>validateLogoFile(file),/starter_logo_invalid/);
   }
-  for (const type of ['image/png','image/jpeg','image/webp']) validateLogoFile({type,size:524288});
+  for (const type of ['image/png','image/jpeg','image/webp']) validateLogoFile({type,size:5242880});
 });
 
 test('logo decode errors and excessive dimensions never return content; object URLs are released', async () => {
