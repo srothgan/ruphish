@@ -306,6 +306,7 @@ impl Repository for Integrations {
             .await
             .map_err(db)?;
         authorize(&mut tx, who, true, true).await?;
+        super::settings::require_integration(&mut tx, false).await?;
         let r = sqlx::query("SELECT url,secret FROM webhooks WHERE id=$1")
             .bind(id)
             .fetch_optional(&mut *tx)
@@ -547,6 +548,7 @@ impl Repository for Integrations {
             .await
             .map_err(db)?;
         authorize(&mut tx, who, true, false).await?;
+        super::settings::require_integration(&mut tx, true).await?;
         let r =
             sqlx::query("SELECT * FROM ruphish_mailboxes WHERE id=$1 AND owner_id=$2 FOR UPDATE")
                 .bind(id)
@@ -572,6 +574,7 @@ impl Repository for Integrations {
             .await
             .map_err(db)?;
         authorize(&mut tx, who, true, false).await?;
+        super::settings::require_integration(&mut tx, true).await?;
         // Only reuse the saved secret for the same account and endpoint.
         let password = match edit.password {
             Some(password) => password,
@@ -621,6 +624,7 @@ impl Repository for Integrations {
             .await
             .map_err(db)?;
         authorize(&mut tx, who, true, false).await?;
+        super::settings::require_integration(&mut tx, true).await?;
         let changed = sqlx::query(r#"
                 UPDATE ruphish_mailboxes
                 SET initialized=FALSE,uidvalidity=0,last_uid=0,next_check=0,lease=0,revision=revision+1,code=''
@@ -647,6 +651,7 @@ impl Repository for Integrations {
             .await
             .map_err(db)?;
         authorize(&mut tx, who, true, false).await?;
+        super::settings::require_integration(&mut tx, true).await?;
         let row = sqlx::query("SELECT enabled FROM ruphish_mailboxes WHERE id=$1 AND owner_id=$2")
             .bind(id)
             .bind(who.id)

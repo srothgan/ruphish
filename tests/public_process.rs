@@ -181,7 +181,7 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
     let public: SocketAddr = ready["phish"].as_str().unwrap().parse().unwrap();
     database(
         directory.path(),
-        "UPDATE users SET password_change_required=0",
+        "UPDATE users SET password_change_required=0; UPDATE ruphish_settings SET verification_enabled=1,webhooks_enabled=1",
     );
     let origin = format!("https://training.example.test:{}", public.port());
     let domain = post(
@@ -730,7 +730,7 @@ fn domain_check_queue_and_history_survive_real_restart_and_latest_failure_revoke
     let public: SocketAddr = ready["phish"].as_str().unwrap().parse().unwrap();
     database(
         directory.path(),
-        "UPDATE users SET password_change_required=0",
+        "UPDATE users SET password_change_required=0; UPDATE ruphish_settings SET verification_enabled=1,webhooks_enabled=1",
     );
     let origin = format!("https://training.example.test:{}", public.port());
     let domain = post(

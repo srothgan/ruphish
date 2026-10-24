@@ -5,12 +5,12 @@ sidebar:
   order: 12
 ---
 
-Domain records prove control of the public origin used in campaign links. Adding a record alone does not make it eligible for launch.
+Domain records register the public origin used in campaign links. When installation policy requires verification, adding a record alone does not make it eligible for launch. With verification off, an owned, enabled HTTPS origin is eligible without verification evidence.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET, POST | `/api/domains/` | List or create owned origins |
-| GET | `/api/domains/validated/` | List eligible verified origins |
+| GET | `/api/domains/validated/` | List origins eligible under current policy |
 | GET, PUT, DELETE | `/api/domains/{id}` | Read, edit, or delete an origin |
 | POST | `/api/domains/{id}/verify` | Queue verification; returns `202` |
 
@@ -35,3 +35,7 @@ The returned resource contains `id`, `name`, `origin`, `hostname`, `enabled`, `r
 PUT accepts the editable name/enabled state, the unchanged origin, and the expected `revision`. Read responses also provide an ETag. DELETE requires `If-Match` containing the revision; missing preconditions return `428`, and stale revisions return `412`. Referenced origins may be ineligible for deletion.
 
 Disabling or failing verification affects campaign delivery and participant-link behavior. See [domain operation](../user-guide/domains.md) for rechecks, expiry, and recovery; see [outbound connections](../administration/outbound-connections.md) when a permitted test network or trust root is needed.
+
+## Effective verification policy
+
+Domain responses add a `verification` object containing `required`, `status`, `expires_at`, and `next_check_at`. When verification is off, `status` is `not_required` and both timestamps are null. Existing observation fields, including legacy `status` and `verified_until`, remain unchanged; a historical `not_verified` status may coexist with `eligible: true`. Consumers should use `eligible` for campaign availability and `verification` for policy-aware presentation. Manual verification requests return `409` with `FEATURE_DISABLED` while disabled. See [settings](settings.md).

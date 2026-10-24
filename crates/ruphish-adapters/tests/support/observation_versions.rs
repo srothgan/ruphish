@@ -39,7 +39,7 @@ fn definitions(baseline: &str) -> String {
         "ruphish_event_sources",
     ];
     let mut sql = String::from(
-        "DROP VIEW event_history; DROP TABLE events; DROP TABLE pages; DROP TABLE ruphish_campaign_policy; DROP TABLE ruphish_event_receipts;",
+        "DROP VIEW ruphish_domain_policy; DROP TABLE ruphish_campaign_closures; DROP TABLE ruphish_settings; DROP VIEW event_history; DROP TABLE events; DROP TABLE pages; DROP TABLE ruphish_campaign_policy; DROP TABLE ruphish_event_receipts;",
     );
     for statement in baseline.split(';') {
         let start = statement
@@ -59,7 +59,7 @@ fn definitions(baseline: &str) -> String {
             sql.push(';');
         }
     }
-    sql.push_str("DELETE FROM _sqlx_migrations WHERE version=5;");
+    sql.push_str("DELETE FROM _sqlx_migrations WHERE version>=5;");
     sql
 }
 

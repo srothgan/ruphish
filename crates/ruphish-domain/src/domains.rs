@@ -70,10 +70,6 @@ pub fn eligibility(enabled: bool, verified_until: i64, now: i64) -> Result<(), &
     }
 }
 
-/// Evidence lifetime and refresh/retry policy are owned here, not by campaign forms.
-pub const EVIDENCE_LIFETIME: i64 = 24 * 3600;
-/// Refresh before evidence expires, leaving room for transient DNS failures.
-pub const REFRESH_INTERVAL: i64 = 6 * 3600;
 /// A newly issued proof must be verified within this period.
 pub const CHALLENGE_LIFETIME: i64 = 7 * 24 * 3600;
 
@@ -93,9 +89,4 @@ pub fn verification_status(verified_until: i64, checked_at: i64, now: i64) -> &'
     } else {
         "not_verified"
     }
-}
-
-/// Stable spreading of periodic work, within five minutes of the six-hour cadence.
-pub fn refresh_delay(domain_id: i64) -> i64 {
-    REFRESH_INTERVAL + domain_id.wrapping_mul(97).rem_euclid(601) - 300
 }

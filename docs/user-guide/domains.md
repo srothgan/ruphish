@@ -5,7 +5,7 @@ sidebar:
   order: 10
 ---
 
-Campaign links use an owned, enabled, verified HTTPS origin. Verification checks both your DNS proof and whether requests reach this Ruphish installation over trusted HTTPS.
+Campaign links use an owned, enabled HTTPS origin. Administrators can require verification in [company settings](../administration/settings.md); it is off on fresh installations. When required, verification checks both your DNS proof and whether requests reach this Ruphish installation over trusted HTTPS. With verification off, add and enable the domain; verification controls and checks are inactive.
 
 ## Add and verify
 
@@ -21,7 +21,7 @@ The TXT name is `_ruphish-verify.<hostname>` and its value starts with `ruphish-
 
 Verification and enablement are separate. A verified but disabled domain is not available for a new campaign. **Refresh status** reads the result; **Verify domain** requests work. The page shows queued/running work and the latest ten completed attempts.
 
-Successful evidence lasts 24 hours. Rechecks normally run every six hours with jitter. The latest completed check is authoritative: a failed check revokes verification immediately. Expired evidence pauses new delivery without consuming SMTP retries. Expiry alone does not stop existing links, but a failed recheck or disabling the domain stops new public interactions.
+By default, when verification is required, successful evidence lasts 24 hours and rechecks run every six hours with jitter. Administrators can change these intervals or disable expiry. The latest completed check is authoritative: a failed check revokes verification immediately. Expired evidence pauses new delivery without consuming SMTP retries. Expiry alone does not stop existing links, but a failed recheck or disabling the domain stops new public interactions.
 
 | Diagnostic | What to check |
 | --- | --- |
@@ -35,6 +35,6 @@ Successful evidence lasts 24 hours. Rechecks normally run every six hours with j
 
 The hostname is immutable. Create a new domain for a different host. One account can claim a hostname, including its different ports; creating a second account's duplicate does not grant access.
 
-Disabling stops future delivery/public handling, but cannot recall mail already submitted. Delete only an unreferenced domain. Imported Gophish domains are not approved automatically; old HTTP/IP/dynamic-host campaigns keep their history but require a replacement campaign with a verified HTTPS origin for new delivery.
+Disabling stops future delivery/public handling, but cannot recall mail already submitted. Delete only an unreferenced domain. Imported Gophish domains are not approved automatically; old HTTP/IP/dynamic-host campaigns keep their history but require a replacement campaign with an eligible HTTPS origin for new delivery.
 
 Ask the installation operator to configure [listeners, certificates, and proxy trust](../administration/listeners-and-tls.md). Built-in ACME and DNS-provider automation are not provided.

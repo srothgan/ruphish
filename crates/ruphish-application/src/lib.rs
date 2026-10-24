@@ -11,6 +11,7 @@ pub mod interactions;
 pub mod overview;
 pub mod reporting;
 pub mod resources;
+pub mod settings;
 pub mod storage;
 
 /// Shared date/time rules used by application consumers.

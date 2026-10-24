@@ -9,7 +9,7 @@ Reporting a suspicious message is a useful outcome. Ruphish can monitor a dedica
 
 ## Configure and validate
 
-Open **Resources → Reporting mailboxes**. Enter a name, host, port, service username/password, folder, and polling interval. Implicit TLS is the default; disabling it requires STARTTLS, not plaintext authentication. Standard username/password IMAP is supported; OAuth onboarding is not provided.
+If reporting mailboxes are disabled in company settings, an administrator must enable the feature first. Open **Resources → Reporting mailboxes**. Enter a name, host, port, service username/password, folder, and polling interval. Implicit TLS is the default; disabling it requires STARTTLS, not plaintext authentication. Standard username/password IMAP is supported; OAuth onboarding is not provided.
 
 Save, then choose **Validate connection**. Saving alone does not test the credentials. Validation checks TLS, authentication, and folder access without importing reports. Enable polling and use **Check mailbox now** to queue a check; an accepted check is not a completed poll.
 
@@ -32,3 +32,5 @@ Reports are committed before the message is marked seen. If acknowledgement fail
 If the server changes UIDVALIDITY, processing stops. **Resume with new arrivals** establishes a new checkpoint and leaves existing messages untouched; campaign history remains.
 
 Optional deletion uses UID-scoped removal only when the server supports UIDPLUS; it never issues mailbox-wide expunge. Raw message bodies, subjects, and reporter addresses are not stored in reporting history. Check the [API reference](../api/reporting-mailboxes.md) for automation and legacy IMAP settings behavior.
+
+Installation administrators can disable this feature in [company settings](../administration/settings.md). Disabled features disappear from navigation, while direct page visits explain the disabled state. Configurations and history are retained; network actions return `409` with `FEATURE_DISABLED`.

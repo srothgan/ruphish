@@ -16,3 +16,5 @@ mod resources;
 pub mod response;
 pub mod server;
 mod starter_templates;
+
+mod settings;

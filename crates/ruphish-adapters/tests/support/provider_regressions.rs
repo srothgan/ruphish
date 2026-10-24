@@ -323,6 +323,14 @@ fn passed() -> domains::Observation {
 }
 async fn deletion_fixture(db: &Database) -> (auth::Identity, auth::Identity, domains::Check) {
     let (admin, _) = replacement_fixture(db).await;
+    let settings = db.settings().get(admin).await.unwrap();
+    let mut policy = settings.policy;
+    policy.verification_enabled = true;
+    db.settings()
+        .save(admin, settings.revision, policy, 100)
+        .await
+        .unwrap();
+
     let target = db
         .accounts()
         .write(

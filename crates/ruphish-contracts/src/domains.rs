@@ -16,6 +16,8 @@ pub fn decode_request<T: serde::de::DeserializeOwned>(
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 /// Owner-visible domain resource and derived readiness.
 pub struct Domain {
+    /// Effective policy, separate from historical observations.
+    pub verification: Verification,
     /// Persistent resource identifier.
     pub id: i64,
     /// Operator-visible display name.
@@ -123,4 +125,17 @@ mod read_tests {
             assert!(serde_json::from_value::<VerificationRun>(value).is_err());
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+/// Effective verification under the current company policy.
+pub struct Verification {
+    /// Whether the installation currently requires verification.
+    pub required: bool,
+    /// Effective verification state under current policy.
+    pub status: String,
+    /// UTC Unix deadline, absent for unrestricted evidence validity.
+    pub expires_at: Option<i64>,
+    /// Next verification check, absent while verification is disabled.
+    pub next_check_at: Option<i64>,
 }

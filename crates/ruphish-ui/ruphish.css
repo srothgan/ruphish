@@ -730,3 +730,13 @@
   @media (max-width: 1000px) { .dashboard-inventory { grid-template-columns: repeat(2,minmax(0,1fr)); } }
   @media (max-width: 600px) { .dashboard-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } .dashboard-inventory { grid-template-columns: minmax(0,1fr); } }
 }
+
+@layer features {
+  .settings-sections { display: grid; gap: var(--s6); }
+  .settings-section { min-width: 0; }
+  .settings-section > h2 { margin: 0 0 var(--s4); }
+  .settings-section > p { color: var(--muted); max-width: 70ch; }
+  .settings-fields { display: flex; flex-wrap: wrap; gap: var(--s4); align-items: end; }
+  .settings-fields > .form-field { flex: 0 1 14rem; min-width: 0; margin: 0; }
+  .settings-danger { border-color: var(--danger); }
+}

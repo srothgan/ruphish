@@ -110,7 +110,7 @@ impl Repository for Overview {
                 .await
                 .map_err(storage)?,
             domains_verified: sqlx::query_scalar(
-                "SELECT count(*) FROM ruphish_domains WHERE owner_id=$1 AND verified_until>$2",
+                "SELECT count(*) FROM ruphish_domains WHERE owner_id=$1 AND (SELECT verification_required FROM ruphish_domain_policy WHERE id=ruphish_domains.id) AND (SELECT eligible_until FROM ruphish_domain_policy WHERE id=ruphish_domains.id)>$2",
             )
             .bind(owner)
             .bind(now)
@@ -121,7 +121,7 @@ impl Repository for Overview {
 
         // Attention items.
         let unverified_enabled_domains: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM ruphish_domains WHERE owner_id=$1 AND enabled=TRUE AND verified_until<=$2",
+            "SELECT count(*) FROM ruphish_domains WHERE owner_id=$1 AND enabled=TRUE AND (SELECT verification_required FROM ruphish_domain_policy WHERE id=ruphish_domains.id) AND (SELECT eligible_until FROM ruphish_domain_policy WHERE id=ruphish_domains.id)<=$2",
         )
         .bind(owner)
         .bind(now)

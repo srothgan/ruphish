@@ -30,7 +30,7 @@ impl MailboxQueue for Integrations {
         let mut tx = crate::postgres::locks::write(&self.pool)
             .await
             .map_err(db)?;
-        let owner:Option<i64> = sqlx::query_scalar("SELECT m.owner_id FROM ruphish_mailboxes m WHERE m.enabled=TRUE AND m.next_check<=$1 AND m.lease<=$2 AND EXISTS(SELECT 1 FROM users u WHERE u.id=m.owner_id AND COALESCE(u.account_locked,FALSE)=FALSE AND EXISTS(SELECT 1 FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=u.role_id AND p.slug='modify_objects')) ORDER BY m.next_check,m.id LIMIT 1").bind(clock).bind(clock).fetch_optional(&mut *tx).await.map_err(db)?;
+        let owner:Option<i64> = sqlx::query_scalar("SELECT m.owner_id FROM ruphish_mailboxes m WHERE m.enabled=TRUE AND (SELECT reporting_mailboxes_enabled FROM ruphish_settings WHERE id=1) AND m.next_check<=$1 AND m.lease<=$2 AND EXISTS(SELECT 1 FROM users u WHERE u.id=m.owner_id AND COALESCE(u.account_locked,FALSE)=FALSE AND EXISTS(SELECT 1 FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=u.role_id AND p.slug='modify_objects')) ORDER BY m.next_check,m.id LIMIT 1").bind(clock).bind(clock).fetch_optional(&mut *tx).await.map_err(db)?;
         let Some(owner) = owner else {
             tx.commit()
                 .await
@@ -46,7 +46,7 @@ impl MailboxQueue for Integrations {
             r#"
                 SELECT m.*
                 FROM ruphish_mailboxes m
-                WHERE m.owner_id=$1 AND m.enabled=TRUE
+                WHERE m.owner_id=$1 AND m.enabled=TRUE AND (SELECT reporting_mailboxes_enabled FROM ruphish_settings WHERE id=1)
                 AND m.next_check<=$2
                 AND m.lease<=$3
                 AND EXISTS(SELECT 1 FROM users u WHERE u.id=m.owner_id AND COALESCE(u.account_locked,FALSE)=FALSE AND EXISTS(SELECT 1 FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=u.role_id AND p.slug='modify_objects'))
@@ -237,7 +237,7 @@ impl MailboxQueue for Integrations {
                 JOIN users u ON u.id=m.owner_id
                 WHERE m.id=$1
                 AND m.revision=$2
-                AND m.enabled=TRUE
+                AND m.enabled=TRUE AND (SELECT reporting_mailboxes_enabled FROM ruphish_settings WHERE id=1)
                 AND COALESCE(u.account_locked,FALSE)=FALSE AND EXISTS(SELECT 1 FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=u.role_id AND p.slug='modify_objects'))
             "#,
             )
@@ -380,7 +380,7 @@ impl MailboxQueue for Integrations {
                 JOIN users u ON u.id=m.owner_id
                 WHERE m.id=$1
                 AND m.revision=$2
-                AND m.enabled=TRUE
+                AND m.enabled=TRUE AND (SELECT reporting_mailboxes_enabled FROM ruphish_settings WHERE id=1)
                 AND COALESCE(u.account_locked,FALSE)=FALSE AND EXISTS(SELECT 1 FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=u.role_id AND p.slug='modify_objects'))
             "#,
         )

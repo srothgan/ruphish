@@ -18,6 +18,8 @@ use std::path::PathBuf;
 
 #[path = "support/campaign_drafts.rs"]
 mod campaign_drafts;
+#[path = "support/company_settings.rs"]
+mod company_settings;
 #[path = "support/mysql_proxy.rs"]
 mod mysql_proxy;
 #[path = "support/observation_versions.rs"]
@@ -137,6 +139,15 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         .unwrap()
         .unwrap();
     let actor = admin.identity;
+    let settings = db.settings().get(actor).await.unwrap();
+    let mut policy = settings.policy;
+    policy.verification_enabled = true;
+    policy.webhooks_enabled = true;
+    policy.reporting_mailboxes_enabled = true;
+    db.settings()
+        .save(actor, settings.revision, policy, 0)
+        .await
+        .unwrap();
     assert_eq!(
         accounts.by_key("fixture-api-key").await.unwrap().identity,
         actor

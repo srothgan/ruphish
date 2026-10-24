@@ -28,6 +28,15 @@ async fn fixture() -> (tempfile::TempDir, DatabaseFixture) {
     )
     .unwrap();
     let database = DatabaseFixture::open(&path, "").await.unwrap();
+    let settings = database.settings().get(caller()).await.unwrap();
+    let mut policy = settings.policy;
+    policy.webhooks_enabled = true;
+    policy.reporting_mailboxes_enabled = true;
+    database
+        .settings()
+        .save(caller(), settings.revision, policy, 0)
+        .await
+        .unwrap();
     (directory, database)
 }
 fn filter() -> Filter {
@@ -446,6 +455,15 @@ async fn legacy_mailbox_and_location_migration_is_recoverable_and_idempotent() {
 
 #[tokio::test]
 async fn changing_webhook_during_delivery_preserves_cancellation_and_releases_database() {
+    webhook_cancellation(false).await;
+}
+
+#[tokio::test]
+async fn disabling_webhooks_fences_a_late_network_success_without_changing_configuration() {
+    webhook_cancellation(true).await;
+}
+
+async fn webhook_cancellation(global: bool) {
     let (_directory, database) = fixture().await;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}/events", listener.local_addr().unwrap());
@@ -515,20 +533,31 @@ async fn changing_webhook_during_delivery_preserves_cancellation_and_releases_da
                 .finished
                 .is_none()
         );
-        integrations
-            .save_webhook(
-                caller(),
-                Some(hook.id),
-                WebhookEdit {
-                    name: "Disabled while sending".into(),
-                    url,
-                    secret: None,
-                    active: false,
-                    revision: Some(hook.revision),
-                },
-            )
-            .await
-            .unwrap();
+        if global {
+            let settings = database.settings();
+            let saved = settings.get(caller()).await.unwrap();
+            let mut policy = saved.policy;
+            policy.webhooks_enabled = false;
+            settings
+                .save(caller(), saved.revision, policy, 100)
+                .await
+                .unwrap();
+        } else {
+            integrations
+                .save_webhook(
+                    caller(),
+                    Some(hook.id),
+                    WebhookEdit {
+                        name: "Disabled while sending".into(),
+                        url,
+                        secret: None,
+                        active: false,
+                        revision: Some(hook.revision),
+                    },
+                )
+                .await
+                .unwrap();
+        }
     })
     .await
     .unwrap();
@@ -536,7 +565,10 @@ async fn changing_webhook_during_delivery_preserves_cancellation_and_releases_da
     operation.await.unwrap().unwrap();
     receiver.await.unwrap();
     let detail = integrations.webhook(caller(), hook.id).await.unwrap();
-    assert!(!detail.active);
+    assert_eq!(
+        detail.active, global,
+        "global disablement retains the individual configuration"
+    );
     assert_eq!(detail.history.len(), 1);
     assert_eq!(detail.history[0].code, "configuration_changed");
     let state: String =
@@ -654,5 +686,117 @@ async fn mailbox_disconnects_back_off_across_restart_and_invalid_claims_do_not_c
         assert!(!result.running);
     }
     receiver.await.unwrap();
+    database.close().await;
+}
+
+#[tokio::test]
+async fn disabled_webhooks_cancel_backlog_and_reenable_only_delivers_new_events() {
+    let (_directory, database) = fixture().await;
+    let pool = database.inspection_pool();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let hook = database
+        .integrations()
+        .save_webhook(
+            caller(),
+            None,
+            WebhookEdit {
+                name: "Policy receiver".into(),
+                url: format!("http://{}/events", listener.local_addr().unwrap()),
+                secret: Some("policy-secret".into()),
+                active: true,
+                revision: None,
+            },
+        )
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata) VALUES(1,'','2026-10-24T12:00:00Z','email_reported','')").execute(&pool).await.unwrap();
+    let settings = database.settings();
+    let before = settings.get(caller()).await.unwrap();
+    let mut policy = before.policy;
+    policy.webhooks_enabled = false;
+    let off = settings
+        .save(caller(), before.revision, policy.clone(), 100)
+        .await
+        .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, String>(
+            "SELECT state FROM ruphish_webhook_jobs WHERE webhook_id=?"
+        )
+        .bind(hook.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        "cancelled"
+    );
+    sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata) VALUES(1,'','2026-10-24T12:01:00Z','email_reported','')").execute(&pool).await.unwrap();
+    policy.webhooks_enabled = true;
+    settings
+        .save(caller(), off.revision, policy, 101)
+        .await
+        .unwrap();
+    database.integrations().deliver_webhooks().await.unwrap();
+    assert!(
+        database
+            .integrations()
+            .webhook(caller(), hook.id)
+            .await
+            .unwrap()
+            .history
+            .is_empty()
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM ruphish_webhook_jobs WHERE webhook_id=?"
+        )
+        .bind(hook.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
+    let receiver = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut bytes = Vec::new();
+        let mut buffer = [0; 4096];
+        loop {
+            let n = stream.read(&mut buffer).await.unwrap();
+            assert_ne!(n, 0);
+            bytes.extend_from_slice(&buffer[..n]);
+            if let Some(end) = bytes.windows(4).position(|s| s == b"\r\n\r\n") {
+                let headers = String::from_utf8_lossy(&bytes[..end]).to_lowercase();
+                let length = headers
+                    .lines()
+                    .find_map(|line| {
+                        line.strip_prefix("content-length:")
+                            .and_then(|v| v.trim().parse::<usize>().ok())
+                    })
+                    .unwrap();
+                if bytes.len() >= end + 4 + length {
+                    break;
+                }
+            }
+        }
+        stream
+            .write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .await
+            .unwrap();
+    });
+    sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata) VALUES(1,'','2026-10-24T12:02:00Z','email_reported','')").execute(&pool).await.unwrap();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        database.integrations().deliver_webhooks(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    receiver.await.unwrap();
+    let history = database
+        .integrations()
+        .webhook(caller(), hook.id)
+        .await
+        .unwrap()
+        .history;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].code, "accepted");
     database.close().await;
 }

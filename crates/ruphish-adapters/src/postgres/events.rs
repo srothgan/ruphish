@@ -11,7 +11,7 @@ pub(super) async fn publish(
         .bind(event)
         .execute(&mut *c)
         .await?;
-    sqlx::query("INSERT INTO ruphish_webhook_jobs(webhook_id,revision,event_id) SELECT w.id,s.revision,$1 FROM webhooks w JOIN ruphish_webhook_state s ON s.webhook_id=w.id WHERE w.is_active=TRUE").bind(event).execute(c).await?;
+    sqlx::query("INSERT INTO ruphish_webhook_jobs(webhook_id,revision,event_id) SELECT w.id,s.revision,$1 FROM webhooks w JOIN ruphish_webhook_state s ON s.webhook_id=w.id WHERE w.is_active=TRUE AND (SELECT webhooks_enabled FROM ruphish_settings WHERE id=1)").bind(event).execute(c).await?;
     Ok(())
 }
 

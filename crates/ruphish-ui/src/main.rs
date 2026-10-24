@@ -23,6 +23,8 @@ mod campaign_queries;
 #[cfg(target_arch = "wasm32")]
 mod campaigns;
 #[cfg(target_arch = "wasm32")]
+mod company_settings;
+#[cfg(target_arch = "wasm32")]
 mod domains;
 #[cfg(target_arch = "wasm32")]
 mod editor;

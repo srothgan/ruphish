@@ -25,7 +25,7 @@ fn missing() -> Error {
 impl Persistence for Interactions {
     async fn snapshot(&self, origin: &str, rid: &str, action: &Action) -> Result<Snapshot, Error> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
-        let row=sqlx::query("SELECT r.id AS result_id,r.campaign_id,r.user_id,r.email,r.first_name,r.last_name,r.position,r.send_date,c.url,c.page_id,c.smtp_id,c.template_id,cp.redirect_url FROM results r JOIN campaigns c ON c.id=r.campaign_id AND c.user_id=r.user_id JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=c.user_id JOIN ruphish_campaign_policy cp ON cp.campaign_id=c.id WHERE r.r_id=? AND c.status!='Completed' AND d.origin=? AND d.enabled=1 AND d.verified_until>0").bind(rid).bind(origin).fetch_all(&mut *tx).await.map_err(storage)?;
+        let row=sqlx::query("SELECT r.id AS result_id,r.campaign_id,r.user_id,r.email,r.first_name,r.last_name,r.position,r.send_date,c.url,c.page_id,c.smtp_id,c.template_id,cp.redirect_url FROM results r JOIN campaigns c ON c.id=r.campaign_id AND c.user_id=r.user_id JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=c.user_id JOIN ruphish_campaign_policy cp ON cp.campaign_id=c.id WHERE r.r_id=? AND c.status!='Completed' AND d.origin=? AND d.enabled=1 AND (SELECT serves FROM ruphish_domain_policy WHERE id=d.id)").bind(rid).bind(origin).fetch_all(&mut *tx).await.map_err(storage)?;
         if row.len() != 1 {
             return Err(missing());
         }
@@ -123,7 +123,7 @@ impl Persistence for Interactions {
             .await
             .map_err(storage)?;
         // Completion and disabling must win over a render that started earlier.
-        let active:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM campaigns c JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id WHERE c.id=? AND c.status!='Completed' AND d.enabled=1 AND d.verified_until>0 AND d.origin=?)").bind(campaign_id).bind(origin).fetch_one(&mut *tx).await.map_err(storage)?;
+        let active:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM campaigns c JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id WHERE c.id=? AND c.status!='Completed' AND d.enabled=1 AND (SELECT serves FROM ruphish_domain_policy WHERE id=d.id) AND d.origin=?)").bind(campaign_id).bind(origin).fetch_one(&mut *tx).await.map_err(storage)?;
         if !active {
             return Err(missing());
         }

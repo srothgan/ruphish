@@ -57,7 +57,7 @@ The familiar request selects resources by name:
 }
 ```
 
-This body is illustrative: the named resources must exist under the caller, and the URL must be an eligible verified campaign origin. Posting it to `/api/campaigns/` schedules real sending. Use the [local fixture](../getting-started/first-campaign.md) for a contained trial.
+This body is illustrative: the named resources must exist under the caller, and the URL must be an eligible campaign origin under the current [verification policy](settings.md). Posting it to `/api/campaigns/` schedules real sending. Use the [local fixture](../getting-started/first-campaign.md) for a contained trial.
 
 New clients should use `selection` with explicit resource references: `groups` is an array, and `template`, `page`, and `smtp` are objects with `id` and an optional revision string. Preparation returns resolved selections, `total`, `duplicate_count`, `conflict_count`, conflicting recipient details, resolved policy and schedule, `mailer_enabled`, and a rendered `preview`. Carry its selected revisions into launch so changed content is detected.
 

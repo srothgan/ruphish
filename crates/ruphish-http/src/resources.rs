@@ -305,6 +305,7 @@ pub(crate) fn resource_code(error: &app::Error) -> ErrorCode {
         app::Error::InUse => ErrorCode::ResourceInUse,
         app::Error::Invalid(_) => ErrorCode::ResourceInvalid,
         app::Error::DraftSchedulePast => ErrorCode::DraftSchedulePast,
+        app::Error::FeatureDisabled(_) => ErrorCode::FeatureDisabled,
         app::Error::Delivery(_) => ErrorCode::DeliveryFailed,
         app::Error::Storage(_) | app::Error::Internal => ErrorCode::InternalError,
     }
@@ -314,6 +315,7 @@ pub(crate) fn error(error: app::Error) -> Rejection {
         app::Error::NotFound(_) => StatusCode::NOT_FOUND,
         app::Error::Conflict(_) | app::Error::InUse => StatusCode::CONFLICT,
         app::Error::Changed => StatusCode::PRECONDITION_FAILED,
+        app::Error::FeatureDisabled(_) => StatusCode::CONFLICT,
         app::Error::Internal | app::Error::Storage(_) | app::Error::Delivery(_) => {
             StatusCode::INTERNAL_SERVER_ERROR
         }

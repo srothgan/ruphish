@@ -266,7 +266,7 @@ async fn load_aggregate(
 async fn header(c: &mut PgConnection, owner: i64, id: i64) -> Result<CampaignHeader, Error> {
     let row=sqlx::query("SELECT c.id,c.name,c.status,c.launch_date,c.send_by_date,c.url,c.template_id,c.page_id,c.smtp_id,t.name AS template_name,t.subject,t.envelope_sender,s.name AS profile_name,s.from_address,l.name AS page_name,(SELECT count(*) FROM results r WHERE r.campaign_id=c.id) AS total,p.campaign_id AS policy_id,p.redirect_url FROM campaigns c LEFT JOIN ruphish_campaign_policy p ON p.campaign_id=c.id LEFT JOIN templates t ON t.id=c.template_id AND t.user_id=c.user_id LEFT JOIN pages l ON l.id=c.page_id AND l.user_id=c.user_id LEFT JOIN smtp s ON s.id=c.smtp_id AND s.user_id=c.user_id WHERE c.id=$1 AND c.user_id=$2").bind(id).bind(owner).fetch_optional(&mut *c).await.map_err(storage)?.ok_or(Error::NotFound("Campaign"))?;
     let policy_id: Option<i64> = row.try_get("policy_id").map_err(storage)?;
-    let domain: Option<(i64,bool,i64)> = sqlx::query_as("SELECT d.id,d.enabled,d.verified_until FROM ruphish_campaign_domains cd JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=$1 WHERE cd.campaign_id=$2").bind(owner).bind(id).fetch_optional(&mut *c).await.map_err(storage)?;
+    let domain: Option<(i64,bool,i64)> = sqlx::query_as("SELECT d.id,d.enabled,(SELECT eligible_until FROM ruphish_domain_policy WHERE id=d.id) FROM ruphish_campaign_domains cd JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=$1 WHERE cd.campaign_id=$2").bind(owner).bind(id).fetch_optional(&mut *c).await.map_err(storage)?;
     let domain_id = domain.map(|d| d.0);
     let domain_block = domain
         .map_or(Err("domain_not_verified"), |(_, enabled, until)| {
@@ -446,14 +446,7 @@ impl Repository for Campaigns {
         if !exists {
             return Err(Error::NotFound("Campaign"));
         }
-        sqlx::query("UPDATE campaigns SET status='Completed',completed_date=$1 WHERE id=$2 AND status!='Completed'").bind(stamp(now)?).bind(id).execute(&mut *tx).await.map_err(storage)?;
-        sqlx::query("UPDATE ruphish_delivery_attempt SET state='cancelled',finished=$1 WHERE state='preparing' AND result_id IN (SELECT result_id FROM ruphish_delivery WHERE campaign_id=$2 AND state='preparing')").bind(now).bind(id).execute(&mut *tx).await.map_err(storage)?;
-        sqlx::query("UPDATE ruphish_delivery SET state='cancelled',generation=generation+1,lease_until=0 WHERE campaign_id=$1 AND state IN ('ready','retry','preparing','blocked')").bind(id).execute(&mut *tx).await.map_err(storage)?;
-        sqlx::query("DELETE FROM mail_logs WHERE campaign_id=$1")
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .map_err(storage)?;
+        complete_transaction(&mut tx, id, now).await?;
         tx.commit()
             .await
             .map_err(|e| Error::Storage(crate::postgres::commit_error(e)))?;
@@ -818,4 +811,21 @@ impl Campaigns {
             .map_err(|e| Error::Storage(crate::postgres::commit_error(e)))?;
         Ok(campaign)
     }
+}
+
+/// Shared completion transition for owner-scoped and installation-wide actions.
+pub(super) async fn complete_transaction(
+    c: &mut PgConnection,
+    id: i64,
+    now: i64,
+) -> Result<(), Error> {
+    sqlx::query("UPDATE campaigns SET status='Completed',completed_date=$1 WHERE id=$2 AND (status IS NULL OR status!='Completed')").bind(stamp(now)?).bind(id).execute(&mut *c).await.map_err(storage)?;
+    sqlx::query("UPDATE ruphish_delivery_attempt SET state='cancelled',finished=$1 WHERE state='preparing' AND result_id IN (SELECT result_id FROM ruphish_delivery WHERE campaign_id=$2 AND state='preparing')").bind(now).bind(id).execute(&mut *c).await.map_err(storage)?;
+    sqlx::query("UPDATE ruphish_delivery SET state='cancelled',generation=generation+1,lease_until=0 WHERE campaign_id=$1 AND state IN ('ready','retry','preparing','blocked')").bind(id).execute(&mut *c).await.map_err(storage)?;
+    sqlx::query("DELETE FROM mail_logs WHERE campaign_id=$1")
+        .bind(id)
+        .execute(&mut *c)
+        .await
+        .map_err(storage)?;
+    Ok(())
 }

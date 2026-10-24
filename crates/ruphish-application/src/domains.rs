@@ -5,6 +5,12 @@ pub use ruphish_domain::domains::*;
 /// Owner-visible configuration and observations. No network diagnostics are retained.
 #[derive(Clone, Debug)]
 pub struct Domain {
+    /// Current installation policy, projected in the same database snapshot.
+    pub verification_required: bool,
+    /// Effective deadline for selection; never written back as an observation.
+    pub eligible_until: i64,
+    /// Effective expiry, absent when verification or expiry is disabled.
+    pub expires_at: Option<i64>,
     /// Persistent resource identifier.
     pub id: i64,
     /// Operator-visible display name.

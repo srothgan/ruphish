@@ -41,11 +41,11 @@ async function publish(host, value) {
     await writeFile(join(data, 'records.json'), `${JSON.stringify(records, null, 2)}\n`);
     console.log(`Published TXT for ${host}; CoreDNS reloads the zone automatically.`);
 }
-async function api(path, method = 'GET', body) {
+async function api(path, method = 'GET', body, headers = {}) {
     const env = await credentials();
     const response = await fetch(`${base}${path}`, {
         method, signal: AbortSignal.timeout(10_000),
-        headers: { Authorization: `Bearer ${env.GOPHISH_INITIAL_ADMIN_API_TOKEN}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${env.GOPHISH_INITIAL_ADMIN_API_TOKEN}`, 'Content-Type': 'application/json', ...headers },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok) throw new Error(`Lab API ${method} ${path}: HTTP ${response.status}`);
@@ -82,6 +82,10 @@ async function demo() {
         await delay(250);
     }
     await establishAccount();
+    const settings = await api('/api/settings');
+    if (!settings.policy.verification_enabled) {
+        await api('/api/settings', 'PUT', { policy: { ...settings.policy, verification_enabled: true } }, { 'If-Match': String(settings.revision) });
+    }
     const existing = await api('/api/domains/');
     if (existing.some(domain => domain.hostname === hosts[1] && domain.verified_until > 0)) {
         throw new Error('The bad example has already been verified. Keep it, or delete that unused domain in the UI before resetting this demonstration.');

@@ -217,6 +217,7 @@ pub(super) fn page() -> impl IntoView {
 }
 
 fn snapshot_sections(s: Snapshot) -> impl IntoView {
+    let api = expect_context::<crate::account::Api>();
     let i18n = ruphish_ui::localization::use_i18n();
 
     let inventory = s.inventory;
@@ -401,7 +402,10 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                     .into_iter()
                     .map(|(label, href, count)| {
                         view! {
-                            <li>
+                            <li hidden=move || {
+                                href == "/reporting-mailboxes"
+                                    && !api.features.get().reporting_mailboxes_enabled
+                            }>
                                 <strong class="data-value">{count}</strong>
                                 <a href=href>{label}</a>
                             </li>
@@ -409,7 +413,7 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                     })
                     .collect_view()}
             </ul>
-            <p class="dashboard-updated">
+            <p class="dashboard-updated" hidden=move || !api.features.get().verification_enabled>
                 {leptos_i18n::t!(
                     i18n, messages.arg0_of_arg1_domains_verified_updated_arg2, arg0 = (inventory.domains_verified).to_string(), arg1 = (inventory.domains).to_string(), arg2 = (minute(&s.as_of.into())).to_string()
                 )}

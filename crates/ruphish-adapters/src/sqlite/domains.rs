@@ -23,6 +23,9 @@ fn token() -> Result<String, Error> {
 }
 fn decode(r: SqliteRow) -> Result<Domain, Error> {
     Ok(Domain {
+        verification_required: r.try_get("verification_required").map_err(storage)?,
+        eligible_until: r.try_get("eligible_until").map_err(storage)?,
+        expires_at: r.try_get("expires_at").map_err(storage)?,
         id: r.try_get("id").map_err(storage)?,
         name: r.try_get("name").map_err(storage)?,
         origin: r.try_get("origin").map_err(storage)?,
@@ -66,7 +69,7 @@ fn decode(r: SqliteRow) -> Result<Domain, Error> {
         campaigns: r.try_get("campaigns").map_err(storage)?,
     })
 }
-const SELECT: &str = "SELECT d.*,a.id AS active_id,a.started_at AS active_started_at,a.scheduled_at AS active_scheduled_at,(SELECT count(*) FROM ruphish_campaign_domains cd JOIN campaigns c ON c.id=cd.campaign_id WHERE cd.domain_id=d.id) AS campaigns FROM ruphish_domains d LEFT JOIN ruphish_domain_checks a ON a.domain_id=d.id AND a.finished_at IS NULL";
+const SELECT: &str = "SELECT d.*,(SELECT verification_required FROM ruphish_domain_policy WHERE id=d.id) AS verification_required,(SELECT eligible_until FROM ruphish_domain_policy WHERE id=d.id) AS eligible_until,(SELECT expires_at FROM ruphish_domain_policy WHERE id=d.id) AS expires_at,a.id AS active_id,a.started_at AS active_started_at,a.scheduled_at AS active_scheduled_at,(SELECT count(*) FROM ruphish_campaign_domains cd JOIN campaigns c ON c.id=cd.campaign_id WHERE cd.domain_id=d.id) AS campaigns FROM ruphish_domains d LEFT JOIN ruphish_domain_checks a ON a.domain_id=d.id AND a.finished_at IS NULL";
 async fn load(c: &mut SqliteConnection, owner: i64, id: i64) -> Result<Domain, Error> {
     let mut result = decode(
         sqlx::query(sqlx::AssertSqlSafe(format!(
@@ -83,6 +86,9 @@ async fn load(c: &mut SqliteConnection, owner: i64, id: i64) -> Result<Domain, E
     Ok(result)
 }
 async fn enqueue(c: &mut SqliteConnection, id: i64, now: i64) -> Result<(), Error> {
+    if !super::settings::load(c).await?.policy.verification_enabled {
+        return Ok(());
+    }
     sqlx::query("INSERT INTO ruphish_domain_checks(domain_id,queued_at,scheduled_at) SELECT id,?,due FROM ruphish_domains WHERE id=? AND enabled=1 AND NOT EXISTS(SELECT 1 FROM ruphish_domain_checks WHERE domain_id=? AND finished_at IS NULL)").bind(now).bind(id).bind(id).execute(c).await.map_err(storage)?;
     Ok(())
 }
@@ -100,7 +106,7 @@ pub(super) async fn eligible(
 ) -> Result<i64, Error> {
     let origin = origin(value, true).map_err(|code| Error::Invalid(code.into()))?;
     let row = sqlx::query(
-        "SELECT id,enabled,verified_until FROM ruphish_domains WHERE owner_id=? AND origin=?",
+        "SELECT id,enabled,(SELECT eligible_until FROM ruphish_domain_policy WHERE id=ruphish_domains.id) AS verified_until FROM ruphish_domains WHERE owner_id=? AND origin=?",
     )
     .bind(owner)
     .bind(origin.value)
@@ -236,6 +242,7 @@ impl Repository for Domains {
             .await
             .map_err(storage)?;
         super::resources::authorize(&mut tx, caller, true).await?;
+        super::settings::require_verification(&mut tx).await?;
         let old = load(&mut tx, caller.id, id).await?;
         if !old.enabled {
             return Err(Error::Invalid("domain_disabled".into()));
@@ -271,6 +278,13 @@ impl Repository for Domains {
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(storage)?;
+        if !super::settings::load(&mut tx)
+            .await?
+            .policy
+            .verification_enabled
+        {
+            return Ok(None);
+        }
         let row=sqlx::query(sqlx::AssertSqlSafe(format!("{SELECT} WHERE d.enabled=1 AND d.due<=? AND d.lease_until<=? ORDER BY d.due,d.id LIMIT 1"))).bind(now).bind(now).fetch_optional(&mut *tx).await.map_err(storage)?;
         let Some(row) = row else {
             tx.commit().await.map_err(storage)?;
@@ -315,6 +329,10 @@ impl Repository for Domains {
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(storage)?;
+        let policy = super::settings::load(&mut tx).await?.policy;
+        if !policy.verification_enabled {
+            return Ok(());
+        }
         let row=sqlx::query("SELECT owner_id,failures FROM ruphish_domains WHERE id=? AND revision=? AND generation=? AND lease_until>? AND enabled=1").bind(check.domain.id).bind(check.domain.revision).bind(check.generation).bind(now).fetch_optional(&mut *tx).await.map_err(storage)?;
         let Some(row) = row else { return Ok(()) };
         let owner: i64 = row.try_get("owner_id").map_err(storage)?;
@@ -349,11 +367,11 @@ impl Repository for Domains {
         };
         let due = now
             + if success {
-                refresh_delay(check.domain.id)
+                policy.refresh_delay(check.domain.id)
             } else {
                 retry_delay(failures as u32)
             };
-        sqlx::query("UPDATE ruphish_domains SET checked_at=?,verified_until=CASE WHEN ? THEN ? ELSE 0 END,control=?,dns=?,routing=?,tls=?,code=?,lease_until=0,routing_proof='',due=?,failures=?,challenge_expires=CASE WHEN ? THEN ? ELSE challenge_expires END WHERE id=?").bind(now).bind(success).bind(now+EVIDENCE_LIFETIME).bind(o.control).bind(o.dns).bind(o.routing).bind(o.tls).bind(if success{"verified"}else{o.code}).bind(due).bind(failures).bind(success).bind(now+CHALLENGE_LIFETIME).bind(check.domain.id).execute(&mut *tx).await.map_err(storage)?;
+        sqlx::query("UPDATE ruphish_domains SET checked_at=?,verified_until=CASE WHEN ? THEN ? ELSE 0 END,control=?,dns=?,routing=?,tls=?,code=?,lease_until=0,routing_proof='',due=?,failures=?,challenge_expires=CASE WHEN ? THEN ? ELSE challenge_expires END WHERE id=?").bind(now).bind(success).bind(now+policy.verification_validity_seconds).bind(o.control).bind(o.dns).bind(o.routing).bind(o.tls).bind(if success{"verified"}else{o.code}).bind(due).bind(failures).bind(success).bind(now+CHALLENGE_LIFETIME).bind(check.domain.id).execute(&mut *tx).await.map_err(storage)?;
         sqlx::query("UPDATE ruphish_domain_checks SET finished_at=?,outcome=?,code=? WHERE domain_id=? AND finished_at IS NULL").bind(now).bind(if success {"passed"}else if o.code=="domain_check_timeout" {"timed_out"}else{"failed"}).bind(if success {"verified"}else{o.code}).bind(check.domain.id).execute(&mut *tx).await.map_err(storage)?;
         prune(&mut tx, check.domain.id).await?;
         tx.commit().await.map_err(storage)?;
@@ -363,7 +381,7 @@ impl Repository for Domains {
         let Ok(origin) = origin(&format!("https://{authority}"), false) else {
             return Ok(false);
         };
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ruphish_domains WHERE origin=? AND enabled=1 AND verified_until>0)").bind(origin.value).fetch_one(&self.pool).await.map_err(storage)
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ruphish_domains WHERE origin=? AND enabled=1 AND (SELECT serves FROM ruphish_domain_policy WHERE id=ruphish_domains.id))").bind(origin.value).fetch_one(&self.pool).await.map_err(storage)
     }
     async fn routing_proof(
         &self,
