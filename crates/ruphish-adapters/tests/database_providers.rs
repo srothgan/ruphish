@@ -1798,6 +1798,14 @@ async fn mysql_legacy_queue_quarantines_ambiguity_and_retains_service_configurat
         .await
         .unwrap();
     let actor = db.accounts().by_name("legacy").await.unwrap().identity;
+    let settings = db.settings().get(actor).await.unwrap();
+    assert!(!settings.policy.verification_enabled);
+    let mut policy = settings.policy;
+    policy.verification_enabled = true;
+    db.settings()
+        .save(actor, settings.revision, policy, 1767236400)
+        .await
+        .unwrap();
     let deliveries = db.campaigns().deliveries(actor, 13, 0, 50).await.unwrap();
     assert_eq!(deliveries.items.len(), 2);
     assert_eq!(
