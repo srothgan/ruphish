@@ -1,0 +1,15 @@
+Amazon Business
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+The invoice for your recent business order is now available. Sign in to your Amazon Business account to view the order details and invoice.
+
+Business order invoice
+Amazon Business · Order documents
+
+View invoice:
+{{.URL}}
+
+Use the account associated with the business order.
+
+Sent to {{.Email}}

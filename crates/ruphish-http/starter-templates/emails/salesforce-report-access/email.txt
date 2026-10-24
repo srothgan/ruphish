@@ -1,0 +1,15 @@
+Salesforce
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+The Revenue Operations team has shared a Salesforce report with you. Open the report to review opportunities by stage and prepare for the next pipeline discussion.
+
+Pipeline overview
+Salesforce · Shared report
+
+View report:
+{{.URL}}
+
+Use the Salesforce account associated with your work email.
+
+Sent to {{.Email}}

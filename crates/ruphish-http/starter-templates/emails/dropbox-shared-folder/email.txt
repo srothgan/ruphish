@@ -1,0 +1,15 @@
+Dropbox
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+The project team has shared a folder with you on Dropbox. The latest brief, delivery schedule, and review notes are ready in one place.
+
+Project documents
+Shared folder · Can view
+
+View folder:
+{{.URL}}
+
+Access is available to the email address that received the invitation.
+
+Sent to {{.Email}}

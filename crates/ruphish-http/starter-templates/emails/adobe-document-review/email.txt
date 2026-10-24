@@ -1,0 +1,15 @@
+Adobe Acrobat
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+The Project team has shared a PDF for review in Adobe Acrobat. Open the proposal to read the document and add your comments.
+
+Project proposal.pdf
+Adobe Acrobat · Shared for review
+
+Open review:
+{{.URL}}
+
+Continue with the email address associated with this review invitation.
+
+Sent to {{.Email}}

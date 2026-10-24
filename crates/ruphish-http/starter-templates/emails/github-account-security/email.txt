@@ -1,0 +1,15 @@
+GitHub
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+A browser you have not used before signed in to your GitHub account. Review your account sessions to confirm whether you recognize this activity.
+
+New browser session
+Windows · Chrome
+
+Review session:
+{{.URL}}
+
+Review account sessions using your GitHub account.
+
+Sent to {{.Email}}

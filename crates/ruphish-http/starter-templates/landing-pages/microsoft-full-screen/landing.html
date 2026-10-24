@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'">
+  <title>Sign in to your account</title>
+  <style>
+    * { box-sizing: border-box; }
+    html { min-height: 100%; }
+    body { margin: 0; min-height: 100vh; color: #1b1b1b; background: linear-gradient(115deg, #e5ebf3, #f1eded 45%, #e9efec); font: 15px/1.5 "Segoe UI", Arial, sans-serif; }
+    .page { min-height: 100vh; display: flex; flex-direction: column; }
+    .login-area { flex: 1; display: grid; place-items: center; padding: 48px 24px; }
+    .sign-in { width: 100%; max-width: 440px; padding: 44px; background: #fff; box-shadow: 0 2px 6px #0003; }
+    .microsoft { display: flex; align-items: center; gap: 8px; color: #737373; font-size: 21px; font-weight: 600; line-height: 24px; }
+    .microsoft img { display: block; width: 24px; height: 24px; }
+    h1 { margin: 22px 0 8px; font-size: 24px; line-height: 1.25; font-weight: 600; }
+    .intro { margin: 0 0 14px; font-size: 15px; }
+    .field { margin-top: 18px; }
+    label { display: block; margin-bottom: 3px; font-size: 13px; }
+    input { width: 100%; height: 36px; padding: 6px 0; border: 0; border-bottom: 1px solid #666; border-radius: 0; background: #fff; color: #1b1b1b; font: inherit; }
+    input:focus { outline: 2px solid #0067b8; outline-offset: 3px; border-bottom-color: #0067b8; }
+    .actions { display: flex; justify-content: flex-end; margin-top: 30px; }
+    button { min-width: 108px; min-height: 36px; padding: 7px 16px; border: 1px solid #0067b8; border-radius: 0; background: #0067b8; color: #fff; font: 15px/1.3 "Segoe UI", Arial, sans-serif; cursor: pointer; }
+    button:hover { background: #005da6; border-color: #005da6; }
+    button:focus-visible { outline: 2px solid #1b1b1b; outline-offset: 3px; }
+    .footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 20px; padding: 12px 24px; color: #444; font-size: 12px; }
+    @media (max-width: 520px) {
+      body { background: #fff; }
+      .login-area { display: block; padding: 32px 24px; }
+      .sign-in { max-width: none; padding: 0; box-shadow: none; }
+      .footer { justify-content: flex-start; padding: 16px 24px; }
+    }
+    @media (max-height: 540px) and (min-width: 521px) { .login-area { padding-top: 24px; padding-bottom: 24px; } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="login-area">
+      <div class="sign-in" role="main" aria-labelledby="sign-in-title">
+        <div class="microsoft"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAENSURBVHhe7dyxCcJgFEbRPw4guIITOYC7uIwD2OowriC4QGwlhWCTS+Cc8nWP23/T+3Scx4bsb89peft2eYxN/bNbHliXADEBYgLEBIgJEBMgJkBMgJgAMQFiAsQEiAkQEyAmQEyAmAAxAWICxASICRATICZATICYADEBYgLEBIgJEBMgJkBMgJgAMQFiAsQEiAkQEyAmQEyAmAAxAQAAAFY2jetrUxtr43z4uRk3323G8QcBYgLEBIgJEBMgJkBMgJgAMQFiAsQEiAkQEyAmQEyAmAAxAWICxASICRATICZATICYADEBYgLEBIgJEBMgJkBMgJgAMQFiAsQEiAkQEyAmQEyAmAAxAWICxD6l3AyeLyC7VgAAAABJRU5ErkJggg==" alt="" width="24" height="24"><span>Microsoft</span></div>
+        <h1 id="sign-in-title">Sign in</h1>
+        <p class="intro">Use your Microsoft account.</p>
+        <form autocomplete="off">
+          <div class="field"><label for="email">Email address</label><input id="email" name="username" type="email" value="" autocomplete="off" required></div>
+          <div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="off" required></div>
+          <div class="actions"><button type="submit">Sign in</button></div>
+        </form>
+      </div>
+    </div>
+    <div class="footer"><span>Terms of use</span><span>Privacy &amp; cookies</span></div>
+  </div>
+</body>
+</html>

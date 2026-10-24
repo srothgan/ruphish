@@ -22,6 +22,8 @@ Ruphish evaluates Go-style text templates. Expressions are case-sensitive and en
 | `{{.TrackingURL}}` | Tracking-image URL |
 | `{{.Tracker}}` | Complete tracking-image markup |
 
+These tracking fields remain available for legacy templates. New email templates need neither: the sender automatically inserts one hidden tracking image in HTML, and previews remove rendered tracking images. Plain-text-only emails remain plain text.
+
 A recognized field can be empty. An unknown field, including a wrong-case field such as `.email`, produces an execution error rather than silently becoming an empty string.
 
 ## Conditional content and formatting

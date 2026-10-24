@@ -20,13 +20,15 @@ Templates provide personalized email content. They are separate from the SMTP co
   "name": "Local invitation",
   "subject": "Hello {{.FirstName}}",
   "text": "Open the local exercise: {{.URL}}",
-  "html": "<p>Hello {{.FirstName}}</p><p><a href=\"{{.URL}}\">Open the exercise</a></p>{{.Tracker}}",
+  "html": "<p>Hello {{.FirstName}}</p><p><a href=\"{{.URL}}\">Open the exercise</a></p>",
   "envelope_sender": "",
   "attachments": []
 }
 ```
 
 Send the body to `POST /api/templates/`. The response adds `id` and `modified_date`. A PUT must include the matching `id`; use the ETag for a conditional edit.
+
+HTML tracking is inserted automatically during composition; it is not added to stored source or shown in previews. Legacy tracking expressions remain supported. See [email tracking](../contributing/email-tracking.md) for validation and compatibility details.
 
 `subject`, `text`, and `html` are template strings. Either text or HTML can supply the message body. The legacy name `envelope_sender` is misleading: this field overrides the message's visible sender; the sending profile supplies the transport sender. See [sending profiles](../user-guide/sending-profiles.md).
 

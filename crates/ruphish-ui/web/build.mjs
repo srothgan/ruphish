@@ -47,6 +47,7 @@ if (process.argv[2] === "manifest") {
     build({ ...common, entryPoints: [path.join(web, "../ruphish.css")], external: ["fonts/*"], outfile: path.join(web, "generated/admin.css") }),
     build({ ...common, entryPoints: [path.join(web, "editor.mjs")], format: "esm", outfile: path.join(web, "generated/editor.js") }),
     build({ ...common, entryPoints: [path.join(web, "datetime.mjs")], format: "esm", outfile: path.join(web, "generated/datetime.js") }),
+    build({ ...common, entryPoints: [path.join(web, "starter-templates.mjs")], format: "esm", outfile: path.join(web, "generated/starter-templates.js") }),
     build({ ...common, entryPoints: [path.join(web, "visual-frame.mjs")], format: "iife", loader: { ".svg": "text", ".less": "empty" }, outfile: path.join(web, "generated/visual-frame.js") }),
   ]);
 } else throw new Error("Expected no argument or manifest");

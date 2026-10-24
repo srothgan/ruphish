@@ -1,0 +1,15 @@
+Google Workspace
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+The Planning team has invited you to comment on a document. Open the notes to review the proposed priorities and leave your feedback.
+
+Team planning notes
+Google Docs · Commenter access
+
+Open document:
+{{.URL}}
+
+Use the Google Workspace account that received this invitation.
+
+Sent to {{.Email}}

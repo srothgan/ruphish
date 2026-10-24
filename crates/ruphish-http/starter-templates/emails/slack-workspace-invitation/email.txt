@@ -1,0 +1,15 @@
+Slack
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+Your team has invited you to the Project workspace on Slack. Join the workspace to share updates, ask questions, and keep project conversations together.
+
+Project workspace
+Slack · Workspace invitation
+
+View invitation:
+{{.URL}}
+
+Use the work account that received this workspace invitation.
+
+Sent to {{.Email}}

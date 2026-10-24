@@ -1,0 +1,15 @@
+Microsoft Teams
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+The Project workspace team has invited you to collaborate in Microsoft Teams. Join to follow the conversation, view shared files, and catch up on project updates.
+
+Project workspace
+Microsoft Teams · Team invitation
+
+View invitation:
+{{.URL}}
+
+Use the work account that received the team invitation.
+
+Sent to {{.Email}}

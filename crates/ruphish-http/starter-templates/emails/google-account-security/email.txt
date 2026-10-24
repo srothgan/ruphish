@@ -1,0 +1,15 @@
+Google Account
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+Your Google Account was used to sign in on a Windows device. Review the activity to see whether you recognize this sign-in.
+
+Account activity
+Windows · Google Chrome
+
+Check activity:
+{{.URL}}
+
+Use your work account to review its recent activity.
+
+Sent to {{.Email}}

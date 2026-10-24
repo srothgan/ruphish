@@ -1,0 +1,15 @@
+Jira
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+The Operations team assigned you a task in Jira. Open the issue to review the acceptance criteria and add an update for the team.
+
+OPS-247 · Review rollout checklist
+Operations · Task · To do
+
+View issue:
+{{.URL}}
+
+Use the work account associated with your Jira invitation.
+
+Sent to {{.Email}}

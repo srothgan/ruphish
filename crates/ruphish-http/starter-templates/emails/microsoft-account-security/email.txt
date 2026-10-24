@@ -1,0 +1,15 @@
+Microsoft account
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+A sign-in from a browser we do not recognize was recorded for your work account. Open your account activity to review the details.
+
+Recent account activity
+Browser sign-in · Review requested
+
+Review account activity:
+{{.URL}}
+
+Account activity helps you recognize where your work account is being used.
+
+Sent to {{.Email}}

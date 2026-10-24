@@ -1,0 +1,15 @@
+Workday
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+The People team has published an updated benefits guide in Workday. Review the document to see the available benefits and where to find support.
+
+Employee benefits guide
+Workday · Published by the People team
+
+View employee document:
+{{.URL}}
+
+Use your work account to access your employee documents.
+
+Sent to {{.Email}}

@@ -46,6 +46,8 @@ mod resource_queries;
 mod resources;
 #[cfg(target_arch = "wasm32")]
 mod shared;
+#[cfg(target_arch = "wasm32")]
+mod starter_templates;
 
 #[cfg(target_arch = "wasm32")]
 fn main() {

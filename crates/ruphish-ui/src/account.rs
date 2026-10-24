@@ -666,6 +666,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         Password,
         Users(users::Screen),
         CompanySettings,
+        StarterTemplates,
     }
     let account_page = move |page: AccountPage| {
         if required {
@@ -686,7 +687,11 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
             }
             .into_any();
         }
-        if matches!(page, AccountPage::Users(_) | AccountPage::CompanySettings) && !admin {
+        if matches!(
+            page,
+            AccountPage::Users(_) | AccountPage::CompanySettings | AccountPage::StarterTemplates
+        ) && !admin
+        {
             return view! {
                 <Card class="account-panel">
                     <h1>{tr!(ui.access_denied)}</h1>
@@ -706,6 +711,9 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
             AccountPage::Password => password_form(api, token.get_value(), false).into_any(),
             AccountPage::Preferences => preferences_page(api, token.get_value()).into_any(),
             AccountPage::CompanySettings => company_settings_page().into_any(),
+            AccountPage::StarterTemplates => {
+                crate::starter_templates::page(api, token.get_value()).into_any()
+            }
             AccountPage::Overview => account_overview(api, session.get_value()).into_any(),
         }
     };
@@ -791,6 +799,10 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
             <Route
                 path=path!("/settings")
                 view=move || account_page(AccountPage::CompanySettings)
+            />
+            <Route
+                path=path!("/settings/starter-templates")
+                view=move || account_page(AccountPage::StarterTemplates)
             />
             <Route path=path!("/user/password") view=move || account_page(AccountPage::Password) />
             <Route
@@ -1036,7 +1048,9 @@ fn company_settings_page() -> impl IntoView {
     view! {
         <Card class="account-panel">
             <h1>{tr!(ui.company_settings)}</h1>
-            <p>{tr!(ui.company_settings_deferred)}</p>
+            <h2>{tr!(ui.starter_title)}</h2>
+            <p>{tr!(ui.starter_description)}</p>
+            <ActionLink href="/settings/starter-templates">{tr!(ui.starter_browse)}</ActionLink>
         </Card>
     }
 }

@@ -14,6 +14,24 @@
 @layer tokens, base, primitives, features;
 @import "./theme.css";
 
+@layer features {
+  .starter-workspace { display: grid; grid-template-columns: minmax(20rem, 2fr) minmax(0, 3fr); gap: 1.5rem; align-items: start; }
+  .starter-list { display: grid; gap: 0; max-height: 48rem; overflow-y: auto; }
+  .starter-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 1rem; padding-block: .75rem; }
+  .starter-row + .starter-row { border-top: 1px solid var(--line); }
+  .starter-row .checkbox-label { margin: 0; min-height: 2rem; }
+  .starter-row.is-current { color: var(--teal-600); }
+  .starter-preview { min-width: 0; display: grid; gap: 1rem; }
+  .starter-preview h2, .starter-preview p { margin: 0; }
+  .starter-preview-frame { display: block; width: 100%; height: 40rem; border: 0; background: #fff; }
+  .starter-upload { margin-top: 1.5rem; }
+  .starter-logo-sample { display: block; max-width: 15rem; max-height: 5rem; object-fit: contain; }
+  @media (max-width: 1000px) {
+    .starter-workspace { grid-template-columns: minmax(0, 1fr); }
+    .starter-list { max-height: 24rem; overflow-y: auto; }
+  }
+}
+
 /* ------------------------------------------------------------------ tokens */
 @layer tokens {
   @font-face {
