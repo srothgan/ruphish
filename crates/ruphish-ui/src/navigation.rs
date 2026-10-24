@@ -232,6 +232,7 @@ fn nav_group<C: IntoView + 'static>(
     }
 }
 pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<> {
+    let api = expect_context::<crate::account::Api>();
     view! {
         {link(
             path,
@@ -284,12 +285,26 @@ pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<>
                     trs!(ui.recipient_groups),
                     "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75 M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0",
                 )}
-                {link(
-                    path,
-                    "/reporting-mailboxes",
-                    trs!(ui.reporting_mailboxes),
-                    "M3 5h18v14H3z M3 5l9 7 9-7 M9 16h6",
-                )}
+                <Show when=move || {
+                    api.features.get().reporting_mailboxes_enabled
+                }>
+                    {link(
+                        path,
+                        "/reporting-mailboxes",
+                        trs!(ui.reporting_mailboxes),
+                        "M3 5h18v14H3z M3 5l9 7 9-7 M9 16h6",
+                    )}
+                </Show>
+                <Show when=move || {
+                    admin && api.features.get().webhooks_enabled
+                }>
+                    {link(
+                        path,
+                        "/webhooks",
+                        trs!(ui.webhooks),
+                        "M7 12a4 4 0 1 1 0-8 M17 12a4 4 0 1 1 0 8 M7 8l10 8 M7 16a4 4 0 1 1 0 4 M7 16h10",
+                    )}
+                </Show>
                 {link(
                     path,
                     "/smtp",
@@ -322,12 +337,6 @@ pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<>
                             "/users",
                             trs!(ui.users),
                             "M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7l-9-4 M9 12l2 2 4-4",
-                        )}
-                        {link(
-                            path,
-                            "/webhooks",
-                            trs!(ui.webhooks),
-                            "M7 12a4 4 0 1 1 0-8 M17 12a4 4 0 1 1 0 8 M7 8l10 8 M7 16a4 4 0 1 1 0 4 M7 16h10",
                         )}
                     },
                 )

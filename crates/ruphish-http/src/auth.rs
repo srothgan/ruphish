@@ -42,6 +42,7 @@ pub(crate) struct AuthState {
     reporting: Arc<dyn ruphish_application::reporting::Repository>,
     overview: Arc<dyn ruphish_application::overview::Repository>,
     integrations: Arc<dyn ruphish_application::integrations::Repository>,
+    settings: Arc<dyn ruphish_application::settings::Repository>,
     mailer_enabled: bool,
     csrf: CsrfConfig,
     index: Arc<String>,
@@ -75,6 +76,7 @@ pub fn router<S: SessionStore + Clone>(
         reporting: services.reporting,
         overview: services.overview,
         integrations: services.integrations,
+        settings: services.settings,
         mailer_enabled: services.mailer_enabled,
         index: Arc::new(assets.index),
         secure,
@@ -171,6 +173,7 @@ pub fn router<S: SessionStore + Clone>(
         .merge(super::overview::routes())
         .merge(super::integrations::routes())
         .merge(super::starter_templates::routes())
+        .merge(super::settings::routes())
         .layer(middleware::from_fn(security_headers))
         .with_state(state)
         .layer(session);
@@ -280,6 +283,9 @@ impl Context {
     }
     pub(crate) fn overview(&self) -> &dyn ruphish_application::overview::Repository {
         self.state.overview.as_ref()
+    }
+    pub(crate) fn settings(&self) -> &dyn ruphish_application::settings::Repository {
+        self.state.settings.as_ref()
     }
     pub(crate) fn domains(&self) -> &dyn ruphish_application::domains::Repository {
         self.state.domains.as_ref()
@@ -506,6 +512,8 @@ impl Context {
         if actor.is_some()
             && (self.uri.path().starts_with("/api/users")
                 || self.uri.path().starts_with("/api/starter-templates")
+                || self.uri.path().starts_with("/api/settings")
+                || self.uri.path().starts_with("/api/campaigns/complete-all")
                 || self.uri.path() == "/api/reset")
         {
             return Err(failure(
@@ -567,6 +575,8 @@ impl Context {
 
 /// Application services composed by the executable, sharing the same identity boundary.
 pub struct Services {
+    /// Installation policy and bulk closure.
+    pub settings: Arc<dyn ruphish_application::settings::Repository>,
     /// Webhooks and owner-scoped reporting mailboxes.
     pub integrations: Arc<dyn ruphish_application::integrations::Repository>,
     /// Consistent campaign analysis and exports.
@@ -632,9 +642,17 @@ async fn bootstrap(context: Context) -> Result<Response, Rejection> {
         .csrf
         .authenticity_token()
         .map_err(|_| auth_error(Error::Internal))?;
+    let mut features = None;
     let mut preferences = ruphish_contracts::auth::Preferences::default();
     let (user, actor) = match context.identity().await {
         Ok((user, actor)) => {
+            features = Some(
+                context
+                    .settings()
+                    .features(user.identity)
+                    .await
+                    .map_err(crate::resources::error)?,
+            );
             preferences = preference_wire(user.preferences);
             (
                 Some(BrowserUser {
@@ -660,6 +678,7 @@ async fn bootstrap(context: Context) -> Result<Response, Rejection> {
     Ok((
         context.csrf,
         Json(BrowserSession {
+            features,
             preferences,
             csrf_token,
             user,

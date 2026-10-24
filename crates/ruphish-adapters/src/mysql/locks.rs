@@ -8,7 +8,11 @@ pub(super) async fn write(
     sqlx::query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
         .execute(&mut *connection)
         .await?;
-    sqlx::Transaction::begin(connection, None).await
+    let mut tx = sqlx::Transaction::begin(connection, None).await?;
+    sqlx::query("SELECT id FROM ruphish_settings WHERE id=1 FOR SHARE")
+        .fetch_one(&mut *tx)
+        .await?;
+    Ok(tx)
 }
 
 pub(super) async fn snapshot(
@@ -93,4 +97,19 @@ pub(super) async fn domain_owner(
         .fetch_optional(c)
         .await?
         .is_some())
+}
+
+/// Exclusive installation boundary, acquired before any account or resource locks.
+pub(super) async fn exclusive_policy(
+    pool: &sqlx::MySqlPool,
+) -> Result<sqlx::Transaction<'static, sqlx::MySql>, sqlx::Error> {
+    let mut c = pool.acquire().await?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+        .execute(&mut *c)
+        .await?;
+    let mut tx = sqlx::Transaction::begin(c, None).await?;
+    sqlx::query("SELECT id FROM ruphish_settings WHERE id=1 FOR UPDATE")
+        .fetch_one(&mut *tx)
+        .await?;
+    Ok(tx)
 }

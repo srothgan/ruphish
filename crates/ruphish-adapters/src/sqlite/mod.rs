@@ -299,6 +299,9 @@ async fn validate_schema(
     if auth_schema::version(connection).await? >= 11 {
         event_schema::migrate(&mut expected).await?;
     }
+    if auth_schema::version(connection).await? >= 12 {
+        settings_schema::migrate(&mut expected).await?;
+    }
     if schema(connection).await? != schema(&mut expected).await? {
         return Err(UpgradeError::Unrecognized(
             "schema does not match migration history".into(),
@@ -330,3 +333,6 @@ pub(crate) fn storage_error(error: sqlx::Error) -> ruphish_application::storage:
 pub(super) fn resource_error(error: sqlx::Error) -> ruphish_application::resources::Error {
     ruphish_application::resources::Error::Storage(storage_error(error))
 }
+
+pub(super) mod settings;
+mod settings_schema;

@@ -62,6 +62,8 @@ pub struct UserEdit {
 /// Browser bootstrap deliberately excludes API credentials.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BrowserSession {
+    /// Effective installation features for authenticated presentation.
+    pub features: Option<crate::settings::Features>,
     /// Account display overrides; null fields follow this browser's defaults.
     #[serde(default)]
     pub preferences: Preferences,

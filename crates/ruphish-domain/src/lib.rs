@@ -18,3 +18,4 @@ pub mod integrations;
 pub mod template;
 
 pub mod events;
+pub mod settings;

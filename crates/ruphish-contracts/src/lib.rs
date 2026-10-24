@@ -17,6 +17,7 @@ pub mod errors;
 pub mod integrations;
 pub mod resource_details;
 pub mod resources;
+pub mod settings;
 pub mod starter_templates;
 
 // An explicit null is meaningful; an absent property is an incomplete response.

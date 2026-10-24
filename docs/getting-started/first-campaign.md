@@ -20,7 +20,7 @@ docker compose -f tests/acceptance/compose.yaml up -d dns inbox app
 node tests/acceptance/lab.mjs demo
 ```
 
-Preparation builds the Linux executable and test certificates. The first run needs dependency downloads. Initialization preserves existing fixture data and credentials. `demo` completes the fixture account's initial password change, publishes the local domain proof, and verifies the passing origin. It also keeps a deliberately failing domain for comparison.
+Preparation builds the Linux executable and test certificates. The first run needs dependency downloads. Initialization preserves existing fixture data and credentials. `demo` completes the fixture account's initial password change, enables domain verification for the demonstration, publishes the local domain proof, and verifies the passing origin. It also keeps a deliberately failing domain for comparison.
 
 Open `http://127.0.0.1:3334`. Retrieve the fixture password locally:
 

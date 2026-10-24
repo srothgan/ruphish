@@ -54,6 +54,7 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
             let db = open(Config::Sqlite {path, migrations_prefix: String::new()}, Policy::default()).await.unwrap();
             let inspection_pool = match &db.backend { super::Backend::Sqlite(db) => db.pool(), _ => unreachable!() };
             let now = OffsetDateTime::now_utc().unix_timestamp();
+            sqlx::query("UPDATE ruphish_settings SET verification_enabled=1").execute(&inspection_pool).await.unwrap();
             let domains = db.domains();
             let check = domains.claim(now).await.unwrap().unwrap();
             domains.finish(&check, Observation {
@@ -103,7 +104,7 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
                     "complete" | "submit_complete" => "UPDATE campaigns SET status='Completed'",
                     "disable" => "UPDATE ruphish_domains SET enabled=0",
                     "revoke" | "submit_revoke" => "UPDATE ruphish_domains SET verified_until=0",
-                    "expired" => "UPDATE ruphish_domains SET verified_until=1",
+                    "expired" => "UPDATE ruphish_domains SET verified_until=1,checked_at=0",
                     _ => "UPDATE results SET first_name='Bob'",
                 };
                 sqlx::query(change).execute(&inspection_pool).await.unwrap();

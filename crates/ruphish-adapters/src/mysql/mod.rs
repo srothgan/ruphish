@@ -63,3 +63,5 @@ pub(super) fn commit_error(error: sqlx::Error) -> ruphish_application::storage::
 pub(super) fn resource_error(error: sqlx::Error) -> ruphish_application::resources::Error {
     ruphish_application::resources::Error::Storage(storage_error(error))
 }
+
+pub(super) mod settings;

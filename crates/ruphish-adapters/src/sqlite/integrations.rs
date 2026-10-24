@@ -283,6 +283,7 @@ impl Repository for Integrations {
     async fn validate_webhook(&self, who: Identity, id: i64) -> Result<(), Error> {
         let mut tx = self.pool.begin().await.map_err(db)?;
         authorize(&mut tx, who, true, true).await?;
+        super::settings::require_integration(&mut tx, false).await?;
         let r = sqlx::query("SELECT url,secret FROM webhooks WHERE id=?")
             .bind(id)
             .fetch_optional(&mut *tx)
@@ -507,6 +508,7 @@ impl Repository for Integrations {
     async fn validate_mailbox(&self, who: Identity, id: i64) -> Result<(), Error> {
         let mut tx = self.pool.begin().await.map_err(db)?;
         authorize(&mut tx, who, true, false).await?;
+        super::settings::require_integration(&mut tx, true).await?;
         let r = sqlx::query("SELECT * FROM ruphish_mailboxes WHERE id=? AND owner_id=?")
             .bind(id)
             .bind(who.id)
@@ -527,6 +529,7 @@ impl Repository for Integrations {
             .map_err(|error| invalid(&error.to_string()))?;
         let mut tx = self.pool.begin().await.map_err(db)?;
         authorize(&mut tx, who, true, false).await?;
+        super::settings::require_integration(&mut tx, true).await?;
         // Only reuse the saved secret for the same account and endpoint.
         let password = match edit.password {
             Some(password) => password,
@@ -572,6 +575,7 @@ impl Repository for Integrations {
     async fn resume_mailbox(&self, who: Identity, id: i64, revision: i64) -> Result<(), Error> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(db)?;
         authorize(&mut tx, who, true, false).await?;
+        super::settings::require_integration(&mut tx, true).await?;
         let changed = sqlx::query(r#"
                 UPDATE ruphish_mailboxes
                 SET initialized=0,uidvalidity=0,last_uid=0,next_check=0,lease=0,revision=revision+1,code=''
@@ -594,6 +598,7 @@ impl Repository for Integrations {
     async fn check_mailbox(&self, who: Identity, id: i64) -> Result<(), Error> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(db)?;
         authorize(&mut tx, who, true, false).await?;
+        super::settings::require_integration(&mut tx, true).await?;
         let row = sqlx::query("SELECT enabled FROM ruphish_mailboxes WHERE id=? AND owner_id=?")
             .bind(id)
             .bind(who.id)

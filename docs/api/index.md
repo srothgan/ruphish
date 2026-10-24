@@ -56,6 +56,7 @@ These variables are conventions for the example commands, not automatic Ruphish 
 | Import or preview content | [Imports and previews](imports-and-previews.md) |
 | Select bundled email and landing-page content | [Starter templates](starter-templates.md) |
 | Prepare and launch a campaign | [Campaigns](campaigns.md), [campaign drafts](campaign-drafts.md) |
+| Control installation policy or close active campaigns | [Company settings](settings.md) |
 | Verify a campaign origin | [Domains](domains.md) |
 | Read outcomes or download reports | [Analysis and exports](analysis-and-exports.md), [overview](overview.md) |
 | Manage application access | [Users and API keys](users-and-api-keys.md) |

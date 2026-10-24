@@ -24,7 +24,7 @@ impl Worker for Integrations {
 impl WebhookQueue for Integrations {
     async fn claim_webhook(&self, clock: i64) -> Result<Option<WebhookClaim>, Error> {
         let mut tx = crate::mysql::locks::write(&self.pool).await.map_err(db)?;
-        let webhook:Option<i64> = sqlx::query_scalar("SELECT j.webhook_id FROM ruphish_webhook_jobs j JOIN webhooks w ON w.id=j.webhook_id AND w.is_active=1 JOIN ruphish_webhook_state s ON s.webhook_id=w.id AND s.revision=j.revision WHERE (j.state IN ('queued','retry') AND j.due<=?) OR (j.state='running' AND j.lease<=?) ORDER BY j.due,j.id LIMIT 1").bind(clock).bind(clock).fetch_optional(&mut *tx).await.map_err(db)?;
+        let webhook:Option<i64> = sqlx::query_scalar("SELECT j.webhook_id FROM ruphish_webhook_jobs j JOIN webhooks w ON w.id=j.webhook_id AND w.is_active=1 AND (SELECT webhooks_enabled FROM ruphish_settings WHERE id=1) JOIN ruphish_webhook_state s ON s.webhook_id=w.id AND s.revision=j.revision WHERE (j.state IN ('queued','retry') AND j.due<=?) OR (j.state='running' AND j.lease<=?) ORDER BY j.due,j.id LIMIT 1").bind(clock).bind(clock).fetch_optional(&mut *tx).await.map_err(db)?;
         let Some(webhook) = webhook else {
             tx.commit()
                 .await
@@ -64,7 +64,7 @@ impl WebhookQueue for Integrations {
                 JOIN event_history e ON e.id=j.event_id
                 WHERE j.id=? AND j.state IN ('queued','retry')
                 AND j.due<=?
-                AND w.is_active=1
+                AND w.is_active=1 AND (SELECT webhooks_enabled FROM ruphish_settings WHERE id=1)
                 ORDER BY j.due,j.id LIMIT 1
             "#).bind(job).bind(clock).fetch_optional(&mut *tx).await.map_err(db)?;
         let Some(r) = row else {
@@ -118,7 +118,7 @@ impl WebhookQueue for Integrations {
         }))
     }
     async fn webhook_current(&self, claim: &WebhookClaim, now: i64) -> Result<bool, Error> {
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ruphish_webhook_jobs j JOIN webhooks w ON w.id=j.webhook_id JOIN ruphish_webhook_state s ON s.webhook_id=w.id AND s.revision=j.revision JOIN ruphish_webhook_attempts a ON a.job_id=j.id AND a.attempt=j.attempt WHERE j.id=? AND j.attempt=? AND a.id=? AND a.finished IS NULL AND j.state='running' AND j.lease>? AND w.is_active=1)")
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ruphish_webhook_jobs j JOIN webhooks w ON w.id=j.webhook_id JOIN ruphish_webhook_state s ON s.webhook_id=w.id AND s.revision=j.revision JOIN ruphish_webhook_attempts a ON a.job_id=j.id AND a.attempt=j.attempt WHERE j.id=? AND j.attempt=? AND a.id=? AND a.finished IS NULL AND j.state='running' AND j.lease>? AND w.is_active=1 AND (SELECT webhooks_enabled FROM ruphish_settings WHERE id=1))")
             .bind(claim.id).bind(claim.attempt).bind(claim.run).bind(now)
             .fetch_one(&self.pool).await.map_err(db)
     }

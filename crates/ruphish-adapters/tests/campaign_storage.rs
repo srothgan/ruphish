@@ -34,6 +34,15 @@ struct Routing {
 // verification runs before using their origin; no verified database flag is seeded.
 async fn verify_domain(db: &DatabaseFixture, fixture: &Fixture, now: i64) {
     use ruphish_application::domains::Verifier as _;
+    let saved = db.settings().get(caller()).await.unwrap();
+    if !saved.policy.verification_enabled {
+        let mut policy = saved.policy;
+        policy.verification_enabled = true;
+        db.settings()
+            .save(caller(), saved.revision, policy, now)
+            .await
+            .unwrap();
+    }
     let domains = db.domains();
     let existing = domains.list(caller()).await.unwrap().remove(0);
     if ruphish_application::domains::eligibility(existing.enabled, existing.verified_until, now)

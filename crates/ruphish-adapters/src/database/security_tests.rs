@@ -39,6 +39,14 @@ async fn fixture() -> (tempfile::TempDir, database::Database, sqlx::SqlitePool) 
         sqlx::SqlitePool::connect_with(sqlx::sqlite::SqliteConnectOptions::new().filename(path))
             .await
             .unwrap();
+    let settings = db.settings().get(admin()).await.unwrap();
+    let mut policy = settings.policy;
+    policy.webhooks_enabled = true;
+    policy.reporting_mailboxes_enabled = true;
+    db.settings()
+        .save(admin(), settings.revision, policy, 0)
+        .await
+        .unwrap();
     (dir, db, pool)
 }
 fn mailbox(name: &str) -> MailboxEdit {

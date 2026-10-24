@@ -8,7 +8,7 @@ sidebar:
 Before launching, save your group, template, landing page, sending profile, and domain. Use a [test message](../sending-profiles.md#test-connection-versus-send-test) to inspect the output in a controlled inbox.
 
 1. Create or resume a draft and select the resources.
-2. Choose the verified public origin and any path beneath it.
+2. Choose an enabled owned public origin and any path beneath it. Verification is required only when enabled in [company settings](../../administration/settings.md).
 3. Set an immediate or future schedule.
 4. Review the resolved audience, personalized preview, and effective tracking/redirect settings.
 5. Choose **Launch campaign** or **Schedule campaign**.

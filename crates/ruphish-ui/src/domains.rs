@@ -14,7 +14,8 @@ fn editable() -> bool {
 fn state(d: &Domain) -> &'static str {
     let i18n = ruphish_ui::localization::use_i18n();
 
-    match d.status.as_str() {
+    match d.verification.status.as_str() {
+        "not_required" => leptos_i18n::t_string!(i18n, ui.verification_not_required),
         "verified" => leptos_i18n::t_string!(i18n, ui.verified),
         "expired" => leptos_i18n::t_string!(i18n, ui.expired),
         "failed" => leptos_i18n::t_string!(i18n, ui.failed),
@@ -115,10 +116,7 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
     });
     view! {
         <ManagementPage>
-            <PageHeader
-                title=trs!(ui.domains)
-                subtitle=trs!(ui.verified_destinations_for_campaign_links_and_landing_pages)
-            >
+            <PageHeader title=trs!(ui.domains) subtitle=trs!(ui.domain_destinations)>
                 <ActionButton disabled=list.fetching on_click=move |_| list.refresh.run(())>
                     {tr!(ui.refresh)}
                 </ActionButton>
@@ -174,7 +172,7 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
                                     <td>{d.origin.clone()}</td>
                                     <td>
                                         <StatusBadge tone=status_tone(
-                                            &d.status,
+                                            &d.verification.status,
                                         )>{label}</StatusBadge>
                                     </td>
                                     <td>
@@ -360,9 +358,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                     if dirty.get() {
                         leptos_i18n::t_string!(i18n, ui.unsaved_changes)
                     } else {
-                        leptos_i18n::t_string!(
-                            i18n, ui.verify_domain_control_routing_and_https_before_campaign_use
-                        )
+                        leptos_i18n::t_string!(i18n, ui.domain_destinations)
                     }
                         .to_owned()
                 })
@@ -563,6 +559,9 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                         view! {
                             <ActionButton
                                 style=ButtonStyle::Primary
+                                hidden=Signal::derive(move || {
+                                    !api.features.get().verification_enabled
+                                })
                                 disabled=Signal::derive(move || {
                                     busy.get()
                                         || domain
@@ -609,6 +608,7 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
             {move || {
                 domain
                     .get()
+                    .filter(|d| d.verification.required)
                     .and_then(|d| d.active_check)
                     .map(|run| {
                         let running = run.state == "running";
@@ -677,9 +677,27 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                 domain
                     .get()
                     .map(|d| {
+                        if !d.verification.required {
+                            return view! {
+                                <Card class="resource-read-panel domain-context">
+                                    <h2>{tr!(ui.domain_status)}</h2>
+                                    <p>{tr!(ui.verification_not_required)}</p>
+                                    <p>
+                                        {if d.enabled {
+                                            leptos_i18n::t_string!(i18n,ui.available_for_campaigns)
+                                        } else {
+                                            leptos_i18n::t_string!(
+                                                i18n,ui.disabled_unavailable_for_campaigns
+                                            )
+                                        }}
+                                    </p>
+                                </Card>
+                            }
+                                .into_any();
+                        }
                         let has_result = d.checked_at > 0;
                         let domain_state = state(&d);
-                        let domain_tone = status_tone(&d.status);
+                        let domain_tone = status_tone(&d.verification.status);
                         let checking = d.active_check.is_some();
                         let control_result = check_result(&d, "control", d.control);
                         let check_rows = [
@@ -757,8 +775,11 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                                         <dt>{tr!(ui.verified_until)}</dt>
                                         <dd>
                                             {move || {
-                                                if d.verified_until > 0 {
-                                                    instant(d.verified_until)
+                                                if let Some(expiry) = d.verification.expires_at {
+                                                    instant(expiry)
+                                                } else if d.verification.status == "verified" {
+                                                    leptos_i18n::t_string!(i18n,ui.verification_no_expiry)
+                                                        .into()
                                                 } else {
                                                     leptos_i18n::t_string!(i18n, ui.not_verified).into()
                                                 }
@@ -915,6 +936,7 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                                     .then(|| view! { <p>{tr!(ui.no_completed_checks_yet)}</p> })}
                             </section>
                         }
+                            .into_any()
                     })
             }}
             <ResourceDeleteDialog

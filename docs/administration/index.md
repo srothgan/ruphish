@@ -13,6 +13,7 @@ Installation operators manage processes, networks, storage, and configuration. A
 | Set exact options | [Configuration](configuration.md), [CLI](cli.md) |
 | Connect public domains and integrations | [Listeners/TLS](listeners-and-tls.md), [outbound connections](outbound-connections.md) |
 | Choose storage | [Databases](databases/index.md) |
+| Control optional features and close active campaigns | [Company settings](settings.md) |
 | Manage application access | [Accounts and permissions](accounts-and-permissions.md) |
 | Send events to another service | [Webhooks](webhooks.md) |
 | Keep the instance running | [Process operation](running-the-service.md), [logging](logging.md) |

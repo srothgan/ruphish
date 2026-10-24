@@ -44,6 +44,7 @@ async fn observation_upgrade_preserves_history_retry_tombstones_and_repeated_eve
     "#).execute(&raw).await.unwrap();
     raw.close().await;
     let db = DatabaseFixture::open(&path, "").await.unwrap();
+    enable_verification(&db, true).await;
     assert!(db.backup_path().is_some());
     let pool = db.inspection_pool();
     let historical: (String, String, Option<i64>, String) =
@@ -189,6 +190,16 @@ fn proof() -> Observation {
         code: "verified",
     }
 }
+async fn enable_verification(db: &DatabaseFixture, webhooks: bool) {
+    let saved = db.settings().get(caller()).await.unwrap();
+    let mut policy = saved.policy;
+    policy.verification_enabled = true;
+    policy.webhooks_enabled = webhooks;
+    db.settings()
+        .save(caller(), saved.revision, policy, 0)
+        .await
+        .unwrap();
+}
 async fn fixture() -> (tempfile::TempDir, DatabaseFixture) {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("state.db");
@@ -199,6 +210,7 @@ async fn fixture() -> (tempfile::TempDir, DatabaseFixture) {
     )
     .unwrap();
     let db = DatabaseFixture::open(&path, "").await.unwrap();
+    enable_verification(&db, false).await;
     (dir, db)
 }
 #[tokio::test]
@@ -761,7 +773,7 @@ async fn verification_history_is_coalesced_atomic_bounded_and_latest_failure_rev
     let store = db.domains();
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     let id = store.list(caller()).await.unwrap()[0].id;
-    let initial = store.get(caller(), id).await.unwrap();
+    let initial = store.request_check(caller(), id, now).await.unwrap();
     assert_eq!(initial.active_check.as_ref().unwrap().state, "queued");
     let active = initial.active_check.unwrap().id;
     let (a, b) = tokio::join!(
@@ -883,7 +895,8 @@ async fn queued_and_running_checks_survive_reopen_and_expired_workers_cannot_pub
     let (dir, db) = fixture().await;
     let store = db.domains();
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
-    let before = store.list(caller()).await.unwrap().remove(0);
+    let id = store.list(caller()).await.unwrap()[0].id;
+    let before = store.request_check(caller(), id, now).await.unwrap();
     let queued_id = before.active_check.unwrap().id;
     db.close().await;
     let db = DatabaseFixture::open(&dir.path().join("state.db"), "")

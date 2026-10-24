@@ -31,4 +31,4 @@ You cannot delete your own account. Deleting, locking, or demoting the last unlo
 
 **View as** enters explicit impersonation and displays a banner. Account and credential management are blocked while impersonating. Exit impersonation to return to the original identity.
 
-Company settings currently do not provide a general configuration editor. Installation policy remains in [configuration](configuration.md).
+[Company settings](settings.md) control domain verification, reporting mailboxes, webhooks, and confirmed closure of active campaigns. Listener, database, and network configuration remains in [configuration](configuration.md).

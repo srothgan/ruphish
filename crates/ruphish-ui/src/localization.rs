@@ -301,6 +301,9 @@ pub fn failure_label(context: leptos_i18n::I18nContext<Locale>, code: &str) -> S
             leptos_i18n::t_string!(context, errors.auth_impersonation_inactive)
         }
         Ok(ErrorCode::AuthChanged) => leptos_i18n::t_string!(context, errors.auth_changed),
+        Ok(ErrorCode::FeatureDisabled) => {
+            leptos_i18n::t_string!(context, ui.feature_disabled_description)
+        }
         Ok(ErrorCode::RateLimited) => leptos_i18n::t_string!(context, errors.rate_limited),
         Ok(ErrorCode::RequestTimeout) => leptos_i18n::t_string!(context, errors.request_timeout),
         Ok(ErrorCode::RequestTooLarge) => leptos_i18n::t_string!(context, errors.request_too_large),

@@ -66,10 +66,16 @@ fn nav_toggle_icon(expanded: bool) -> impl IntoView {
 
 #[derive(Clone, Copy)]
 pub(super) struct Api {
+    pub(super) features: RwSignal<ruphish_contracts::settings::Features>,
+    feature_generation: RwSignal<u64>,
     monitor: RwSignal<SessionMonitor>,
     i18n: leptos_i18n::I18nContext<ruphish_ui::localization::Locale>,
 }
 impl Api {
+    pub(super) fn set_features(self, value: ruphish_contracts::settings::Features) {
+        self.feature_generation.update(|n| *n = n.wrapping_add(1));
+        self.features.set(value);
+    }
     pub(super) fn invalid_read(self) -> String {
         leptos_i18n::t_string!(self.i18n, ui.invalid_read_response).to_owned()
     }
@@ -320,7 +326,11 @@ impl Api {
 fn decode_session(value: serde_json::Value) -> Result<BrowserSession, ()> {
     // Missing fields must not silently reset an account to browser defaults.
     ruphish_ui::preference_state::decode(value.get("preferences").cloned().ok_or(())?).ok_or(())?;
-    serde_json::from_value(value).map_err(|_| ())
+    let session: BrowserSession = serde_json::from_value(value).map_err(|_| ())?;
+    if session.user.is_some() && session.features.is_none() {
+        return Err(());
+    }
+    Ok(session)
 }
 
 pub(super) fn app() -> impl IntoView {
@@ -330,6 +340,8 @@ pub(super) fn app() -> impl IntoView {
     let preferences = ruphish_ui::display_preferences::DisplayPreferences::provide();
     let session = RwSignal::new(None::<Result<BrowserSession, String>>);
     let api = Api {
+        features: RwSignal::new(Default::default()),
+        feature_generation: RwSignal::new(0),
         monitor: RwSignal::new(SessionMonitor::default()),
         i18n,
     };
@@ -339,6 +351,9 @@ pub(super) fn app() -> impl IntoView {
                 .map_err(|_| leptos_i18n::t_string!(i18n, ui.invalid_session_response).into())
         });
         if let Ok(value) = &loaded {
+            if let Some(features) = value.features {
+                api.set_features(features);
+            }
             preferences.apply(value.preferences.clone(), i18n);
             api.monitor.update(|m| m.observe(value));
         }
@@ -353,6 +368,7 @@ pub(super) fn app() -> impl IntoView {
         }
         checking.set(true);
         let preference_ticket = preferences.read_ticket();
+        let feature_ticket = api.feature_generation.get_untracked();
         // Global browser callbacks do not establish a Leptos owner themselves.
         owner.with_value(|owner| {
             if let Some(owner) = owner {
@@ -366,6 +382,11 @@ pub(super) fn app() -> impl IntoView {
                             Ok(value) => {
                                 api.monitor.update(|m| m.observe(&value));
                                 if api.active() {
+                                    if feature_ticket == api.feature_generation.get_untracked()
+                                        && let Some(features) = value.features
+                                    {
+                                        api.set_features(features);
+                                    }
                                     preferences.apply_read(
                                         preference_ticket,
                                         value.preferences,
@@ -584,6 +605,7 @@ fn login(api: Api, token: String) -> impl IntoView {
     }
 }
 fn shell(api: Api, session: BrowserSession) -> impl IntoView {
+    provide_context(api);
     let queries = expect_context::<leptos_fetch::QueryClient>();
     crate::overview_queries::OverviewQueries::provide(api, queries);
     crate::campaign_queries::CampaignQueries::provide(api, queries);
@@ -710,7 +732,9 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
             .into_any(),
             AccountPage::Password => password_form(api, token.get_value(), false).into_any(),
             AccountPage::Preferences => preferences_page(api, token.get_value()).into_any(),
-            AccountPage::CompanySettings => company_settings_page().into_any(),
+            AccountPage::CompanySettings => {
+                crate::company_settings::page(api, token.get_value()).into_any()
+            }
             AccountPage::StarterTemplates => {
                 crate::starter_templates::page(api, token.get_value()).into_any()
             }
@@ -749,6 +773,12 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
             password_form(api, token.get_value(), true).into_any()
         } else if matches!(kind, crate::integrations::Kind::Webhook) && (!admin || active) {
             view! { <p role="alert">{tr!(ui.webhooks_require_administrator_access_outside_impersonation)}</p> }.into_any()
+        } else if !(if matches!(kind, crate::integrations::Kind::Webhook) {
+            api.features.get().webhooks_enabled
+        } else {
+            api.features.get().reporting_mailboxes_enabled
+        }) {
+            crate::company_settings::disabled(admin && !active).into_any()
         } else if list {
             crate::integrations::list(api, token.get_value(), kind).into_any()
         } else {
@@ -835,27 +865,51 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
             />
             <Route
                 path=path!("/webhooks")
-                view=move || integration_page(crate::integrations::Kind::Webhook, true, false)
+                view=move || move || integration_page(
+                    crate::integrations::Kind::Webhook,
+                    true,
+                    false,
+                )
             />
             <Route
                 path=path!("/webhooks/:id")
-                view=move || integration_page(crate::integrations::Kind::Webhook, false, false)
+                view=move || move || integration_page(
+                    crate::integrations::Kind::Webhook,
+                    false,
+                    false,
+                )
             />
             <Route
                 path=path!("/webhooks/:id/edit")
-                view=move || integration_page(crate::integrations::Kind::Webhook, false, true)
+                view=move || move || integration_page(
+                    crate::integrations::Kind::Webhook,
+                    false,
+                    true,
+                )
             />
             <Route
                 path=path!("/reporting-mailboxes")
-                view=move || integration_page(crate::integrations::Kind::Mailbox, true, false)
+                view=move || move || integration_page(
+                    crate::integrations::Kind::Mailbox,
+                    true,
+                    false,
+                )
             />
             <Route
                 path=path!("/reporting-mailboxes/:id")
-                view=move || integration_page(crate::integrations::Kind::Mailbox, false, false)
+                view=move || move || integration_page(
+                    crate::integrations::Kind::Mailbox,
+                    false,
+                    false,
+                )
             />
             <Route
                 path=path!("/reporting-mailboxes/:id/edit")
-                view=move || integration_page(crate::integrations::Kind::Mailbox, false, true)
+                view=move || move || integration_page(
+                    crate::integrations::Kind::Mailbox,
+                    false,
+                    true,
+                )
             />
             <Route path=path!("/campaigns/drafts/:id") view=move || draft_page(false) />
             <Route path=path!("/campaigns/drafts/:id/edit") view=move || draft_page(true) />
@@ -1041,17 +1095,6 @@ fn preferences_page(api: Api, token: String) -> impl IntoView {
             </div>
             <crate::preferences::DisplayPreferencesForm api=api token=token />
         </section>
-    }
-}
-
-fn company_settings_page() -> impl IntoView {
-    view! {
-        <Card class="account-panel">
-            <h1>{tr!(ui.company_settings)}</h1>
-            <h2>{tr!(ui.starter_title)}</h2>
-            <p>{tr!(ui.starter_description)}</p>
-            <ActionLink href="/settings/starter-templates">{tr!(ui.starter_browse)}</ActionLink>
-        </Card>
     }
 }
 

@@ -142,6 +142,15 @@ async fn acceptance_cohorts_deduplicate_isolate_owners_and_reject_untrusted_pres
 async fn snapshot_tracks_queued_launches_expiry_current_delivery_issues_and_inventory() {
     let (_dir, db, repo) = setup().await;
     let pool = db.inspection_pool();
+    let settings = db.settings().get(OWNER).await.unwrap();
+    let mut policy = settings.policy;
+    policy.verification_enabled = true;
+    let settings = db
+        .settings()
+        .save(OWNER, settings.revision, policy, NOW)
+        .await
+        .unwrap();
+
     for (id, status, at) in [
         (3, "Queued", NOW + 10),
         (4, "Scheduled", NOW + 50),
@@ -158,8 +167,8 @@ async fn snapshot_tracks_queued_launches_expiry_current_delivery_issues_and_inve
         (4, 0, NOW + 1),
         (5, 1, NOW),
     ] {
-        sqlx::query("INSERT INTO ruphish_domains(id,owner_id,name,origin,hostname,enabled,challenge,challenge_expires,verified_until,due) VALUES(?,1,'Domain',?, 'test',?,'secret',0,?,?)")
-            .bind(id).bind(format!("https://{id}.test")).bind(enabled).bind(until).bind(NOW+1000).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO ruphish_domains(id,owner_id,name,origin,hostname,enabled,challenge,challenge_expires,verified_until,due,checked_at) VALUES(?,1,'Domain',?, 'test',?,'secret',0,?,?,?)")
+            .bind(id).bind(format!("https://{id}.test")).bind(enabled).bind(until).bind(NOW+1000).bind(if until>0 {until-86400}else{0}).execute(&pool).await.unwrap();
     }
     sqlx::raw_sql("INSERT INTO templates(user_id,name) VALUES(1,'Owned'),(2,'Other'); INSERT INTO pages(user_id,name) VALUES(1,'Owned'); INSERT INTO groups(user_id,name) VALUES(1,'One'),(1,'Two'); INSERT INTO smtp(user_id,name) VALUES(1,'One');
         INSERT INTO ruphish_mailboxes(owner_id,name,enabled,host,port,username,password,tls,folder) VALUES(1,'Reports',0,'test',993,'secret','SERVICE-CANARY',1,'INBOX');
@@ -200,6 +209,16 @@ async fn snapshot_tracks_queued_launches_expiry_current_delivery_issues_and_inve
     assert_eq!(later.attention.next_launch.as_ref().map(|n| n.id), Some(4));
     assert_eq!(later.inventory.domains_verified, 0);
     assert_eq!(later.attention.unverified_enabled_domains, 4);
+    let mut policy = settings.policy;
+    policy.verification_enabled = false;
+    db.settings()
+        .save(OWNER, settings.revision, policy, NOW + 11)
+        .await
+        .unwrap();
+    let untracked = repo.snapshot(OWNER, NOW + 11).await.unwrap();
+    assert_eq!(untracked.attention.unverified_enabled_domains, 0);
+    assert_eq!(untracked.inventory.domains_verified, 0);
+    assert_eq!(untracked.inventory.domains, 5);
     db.close().await;
 }
 #[tokio::test]

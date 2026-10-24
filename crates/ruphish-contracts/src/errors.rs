@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ErrorCode {
+    /// This feature is disabled by the administrator.
+    FeatureDisabled,
     /// The saved draft contains invalid or unsupported input.
     DraftInvalid,
     /// Choose a new launch time or immediate delivery before launching.
@@ -118,6 +120,7 @@ impl ErrorCode {
     /// Canonical protocol spelling.
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::FeatureDisabled => "FEATURE_DISABLED",
             Self::DraftInvalid => "DRAFT_INVALID",
             Self::DraftSchedulePast => "DRAFT_SCHEDULE_PAST",
             Self::CsvRowEncoding => "CSV_ROW_ENCODING",

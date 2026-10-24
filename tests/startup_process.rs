@@ -40,6 +40,8 @@ mod reporting_process;
 mod resource_process;
 #[path = "server_database_process.rs"]
 mod server_database_process;
+#[path = "settings_process.rs"]
+mod settings_process;
 #[path = "starter_templates_process.rs"]
 mod starter_templates_process;
 use domain_network::tls_fixture;

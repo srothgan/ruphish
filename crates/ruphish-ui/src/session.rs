@@ -61,6 +61,7 @@ mod tests {
 
     fn session() -> BrowserSession {
         BrowserSession {
+            features: Some(Default::default()),
             csrf_token: "first-token".into(),
             preferences: Default::default(),
             actor: None,

@@ -67,6 +67,18 @@ pub(super) fn exercise(mut database_config: Value, mut fault: impl FnMut(&Path, 
         auth_process::setup(&browser, base);
     });
     let client = client();
+    let settings = get(&client, &base, "/api/settings");
+    assert_eq!(settings["policy"]["reporting_mailboxes_enabled"], false);
+    let mut policy = settings["policy"].clone();
+    policy["reporting_mailboxes_enabled"] = json!(true);
+    let response = client
+        .put(format!("{base}/api/settings"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .header("if-match", settings["revision"].to_string())
+        .json(&json!({"policy":policy}))
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), 200, "{}", response.text().unwrap());
     let r = request(
         &client,
         &base,

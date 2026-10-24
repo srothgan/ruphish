@@ -83,6 +83,19 @@ pub(super) fn start_verified(
     let (process, base) = start_with_network(directory, options);
     let network = &directory.network.get().unwrap().network;
     prepare(&base);
+    let settings = read(&base, "/api/settings");
+    let mut policy = settings["policy"].clone();
+    policy["verification_enabled"] = json!(true);
+    policy["webhooks_enabled"] = json!(true);
+    client()
+        .put(format!("{base}/api/settings"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .header("if-match", settings["revision"].to_string())
+        .json(&json!({"policy":policy}))
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
     for host in ["training.example.test", "example.test"] {
         let items = read(&base, "/api/domains/");
         let existing = items

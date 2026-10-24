@@ -52,7 +52,7 @@ fn verified_imap_reports_survive_ack_failure_restart_and_uid_reset_without_messa
     let client = client();
     database(
         directory.path(),
-        "UPDATE users SET password_change_required=0; INSERT INTO campaigns(id,user_id,name,url,status) VALUES(91,1,'Reporting test','https://training.test/','Completed'); INSERT INTO results(id,campaign_id,user_id,r_id,email,status,reported) VALUES(91,91,1,'abc123','person@example.test','Email Sent',0);",
+        "UPDATE users SET password_change_required=0; UPDATE ruphish_settings SET reporting_mailboxes_enabled=1; INSERT INTO campaigns(id,user_id,name,url,status) VALUES(91,1,'Reporting test','https://training.test/','Completed'); INSERT INTO results(id,campaign_id,user_id,r_id,email,status,reported) VALUES(91,91,1,'abc123','person@example.test','Email Sent',0);",
     );
     let draft = json!({"name":"Reports","enabled":true,"host":"127.0.0.1","port":peer.address.port(),"username":"service","password":"MAILBOX-SECRET-CANARY","tls":true,"folder":"INBOX","frequency":60});
     let created = request(
@@ -251,7 +251,7 @@ fn reporting_api_rejects_cross_owner_admin_only_stale_and_malformed_requests() {
     let client = client();
     database(
         directory.path(),
-        "UPDATE users SET password_change_required=0; INSERT INTO users(id,username,api_key,role_id,password_change_required,account_locked) VALUES(2,'other','other-key',2,0,0); INSERT INTO ruphish_auth_state VALUES(2,0); INSERT INTO campaigns(id,user_id,name,url,status) VALUES(91,1,'Owner report','https://training.test','Completed'); INSERT INTO results(id,campaign_id,user_id,r_id,email,status,reported) VALUES(91,91,1,'abc123','person@example.test','Email Sent',1);",
+        "UPDATE users SET password_change_required=0; UPDATE ruphish_settings SET reporting_mailboxes_enabled=1; INSERT INTO users(id,username,api_key,role_id,password_change_required,account_locked) VALUES(2,'other','other-key',2,0,0); INSERT INTO ruphish_auth_state VALUES(2,0); INSERT INTO campaigns(id,user_id,name,url,status) VALUES(91,1,'Owner report','https://training.test','Completed'); INSERT INTO results(id,campaign_id,user_id,r_id,email,status,reported) VALUES(91,91,1,'abc123','person@example.test','Email Sent',1);",
     );
     for path in ["/api/campaigns/91/analysis", "/api/campaigns/91/export"] {
         assert_eq!(

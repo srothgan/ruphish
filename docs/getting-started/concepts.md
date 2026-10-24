@@ -21,7 +21,7 @@ A campaign brings together an audience, a message, a destination, and delivery s
 
 ## From resources to results
 
-Suppose you're preparing an exercise for a small training group. You import its recipients, write a personalized email, and create a landing page. You then choose a sending profile and verified domain, save a draft, and review the final audience and message.
+Suppose you're preparing an exercise for a small training group. You import its recipients, write a personalized email, and create a landing page. You then choose a sending profile and eligible domain, save a draft, and review the final audience and message.
 
 Launching creates the execution state. A future launch time leaves messages waiting until they are due. Saving a draft does not start a campaign, even when its proposed launch time passes.
 

@@ -75,7 +75,7 @@ Choose your own temporary password; do not reuse tutorial credentials.
 
 The example binds the administration listener to `https://127.0.0.1:3333` and the public listener to `http://127.0.0.1:8081`. Its SQLite file is `ruphish.db`. Relative paths are resolved from the process working directory, even when the configuration file is elsewhere.
 
-The public HTTP example is enough to start the application, but campaign origins require verified HTTPS. Use the local fixture for the tutorial, or configure [listeners and TLS](../administration/listeners-and-tls.md) for your domain.
+The public HTTP example is enough to start the application, but campaign origins require HTTPS and an enabled owned domain. Verification is additionally required when enabled in [company settings](../administration/settings.md). Use the local fixture for the tutorial, or configure [listeners and TLS](../administration/listeners-and-tls.md) for your domain.
 
 ## Sign in
 

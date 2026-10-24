@@ -20,8 +20,19 @@ fn now() -> i64 {
 }
 fn encode(d: app::Domain) -> wire::Domain {
     let observed_at = now();
-    let eligible = app::eligibility(d.enabled, d.verified_until, observed_at).is_ok();
+    let eligible = app::eligibility(d.enabled, d.eligible_until, observed_at).is_ok();
     wire::Domain {
+        verification: wire::Verification {
+            required: d.verification_required,
+            status: if !d.verification_required {
+                "not_required"
+            } else {
+                app::verification_status(d.eligible_until, d.checked_at, observed_at)
+            }
+            .into(),
+            expires_at: d.expires_at,
+            next_check_at: d.verification_required.then_some(d.next_check_at),
+        },
         id: d.id,
         name: d.name,
         origin: d.origin,

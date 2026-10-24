@@ -59,3 +59,5 @@ pub(super) fn resource_error(error: sqlx::Error) -> ruphish_application::resourc
         Error::Storage(storage_error(error))
     }
 }
+
+pub(super) mod settings;

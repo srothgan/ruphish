@@ -6,6 +6,9 @@ use std::sync::Arc;
 /// Safe public resource failure.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// Installation policy disables this operation.
+    #[error("Feature disabled: {0}")]
+    FeatureDisabled(&'static str),
     /// Safe persistence classification retained for reconciliation and retry policy.
     #[error("Resource operation could not be completed")]
     Storage(#[from] crate::storage::Error),

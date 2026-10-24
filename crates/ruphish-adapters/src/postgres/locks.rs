@@ -8,6 +8,9 @@ pub(super) async fn write(
     sqlx::query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
         .execute(&mut *tx)
         .await?;
+    sqlx::query("SELECT id FROM ruphish_settings WHERE id=1 FOR SHARE")
+        .fetch_one(&mut *tx)
+        .await?;
     Ok(tx)
 }
 
@@ -93,4 +96,18 @@ pub(super) async fn domain_owner(
         .fetch_optional(c)
         .await?
         .is_some())
+}
+
+/// Exclusive installation boundary, acquired before any account or resource locks.
+pub(super) async fn exclusive_policy(
+    pool: &sqlx::PgPool,
+) -> Result<sqlx::Transaction<'static, sqlx::Postgres>, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("SELECT id FROM ruphish_settings WHERE id=1 FOR UPDATE")
+        .fetch_one(&mut *tx)
+        .await?;
+    Ok(tx)
 }

@@ -19,6 +19,7 @@ use serde_json::Value;
 pub(crate) struct ManagementQueries {
     overview: OverviewQueries,
     campaigns: CampaignQueries,
+    pub settings: Query<(), ruphish_contracts::settings::Settings>,
     pub users: Query<(), Vec<UserSummary>>,
     pub starters: Query<(), Vec<ruphish_contracts::starter_templates::Summary>>,
     pub starter: Query<String, ruphish_contracts::starter_templates::Entry>,
@@ -34,6 +35,10 @@ impl ManagementQueries {
         provide_context(Self {
             overview: expect_context(),
             campaigns: expect_context(),
+            settings: Query::new(
+                client,
+                move |()| async move { api.read("/api/settings").await },
+            ),
             users: Query::new(
                 client,
                 move |()| async move { api.read("/api/users/").await },
@@ -117,6 +122,16 @@ impl ManagementQueries {
         }
     }
 
+    pub fn policy_changed(self) {
+        self.domain_dependencies_changed();
+        self.domain.invalidate_where(|_| true);
+        self.integrations.invalidate_where(|_| true);
+        self.integration.invalidate_where(|_| true);
+        self.campaigns.directory.invalidate_where(|_| true);
+        self.campaigns.delivery.invalidate_where(|_| true);
+        self.campaigns.analysis.invalidate_where(|_| true);
+        self.overview.campaigns_changed();
+    }
     pub fn domain_verified(self, value: Domain) {
         let id = value.id;
         self.domain_dependencies_changed();
