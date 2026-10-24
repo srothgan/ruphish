@@ -4,6 +4,7 @@
 
 pub mod database;
 pub mod domain_verification;
+mod email_html;
 mod imap_limit;
 pub mod imports;
 pub mod landing;

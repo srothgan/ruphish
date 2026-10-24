@@ -1,4 +1,7 @@
 # Existing Go scenarios; status and target_test distinguish implemented equivalents from planned work.
+# DEC-046: inherited MIME scenarios preserve rendered content, headers and attachments;
+# HTML additionally receives the managed tracking image. See docs/contributing/email-tracking.md
+# and crates/ruphish-adapters/tests/email_tracking.rs for the approved output difference.
 schema_version = 1
 reference_commit = "95618469799295e2c0fec980805a2dfbb818816b"
 reference_source = "Gophish Community Edition 0.12.1"
