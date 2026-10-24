@@ -273,6 +273,14 @@ fn actual_test_delivery_composes_mime_persists_preview_and_never_records_campaig
         pool.close().await;
         rid
     });
+    let mail = mail_parser::MessageParser::default()
+        .parse(raw.as_bytes())
+        .unwrap();
+    let sent_html = mail.body_html(0).unwrap();
+    let tracking_url = format!("{public}/landing/track?rid={rid}");
+    assert_eq!(sent_html.matches("<img ").count(), 1);
+    assert!(sent_html.contains(&format!("src=\"{tracking_url}\"")));
+    assert!(sent_html.contains("style=\"display:none\""));
     let response = client
         .get(format!("{public}/landing?rid={rid}"))
         .send()
@@ -287,10 +295,7 @@ fn actual_test_delivery_composes_mime_persists_preview_and_never_records_campaig
     let html = response.text().unwrap();
     assert!(html.contains("Hello Alice"));
     assert!(!html.contains("name='email'"));
-    let pixel = client
-        .get(format!("{public}/track?rid={rid}"))
-        .send()
-        .unwrap();
+    let pixel = client.get(&tracking_url).send().unwrap();
     assert_eq!(pixel.status(), 200);
     assert_eq!(pixel.headers()["content-type"], "image/png");
     assert_eq!(
@@ -353,6 +358,116 @@ fn actual_test_delivery_composes_mime_persists_preview_and_never_records_campaig
         pool.close().await;
     });
     restarted.stop();
+}
+
+#[test]
+fn email_create_edit_and_preview_share_validation_without_mutating_source() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = ready(&mut process);
+    unlock(directory.path());
+    let client = client();
+    let source = "<p>Hello {{.FirstName}}</p><!--[if mso]><p>Outlook</p><![endif]-->";
+    let valid = json!({"name":"Managed tracking", "html":source});
+    let response = client
+        .post(format!("{base}/api/templates/"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&valid)
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), 201);
+    let saved: Value = response.json().unwrap();
+    assert_eq!(saved["html"], source);
+    let id = saved["id"].as_i64().unwrap();
+    let saved: Value = client
+        .get(format!("{base}/api/templates/{id}"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    for html in [
+        "<script>alert(1)</script>",
+        "<img src=x onerror='alert(1)'>",
+        "<form><input></form>",
+    ] {
+        let invalid = json!({"name":"Rejected", "html":html});
+        let response = client
+            .post(format!("{base}/api/templates/"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&invalid)
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), 400);
+        let invalid = json!({"id":id,"name":"Managed tracking", "html":html});
+        let response = client
+            .put(format!("{base}/api/templates/{id}"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&invalid)
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), 400);
+    }
+    let unchanged: Value = client
+        .get(format!("{base}/api/templates/{id}"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(unchanged, saved);
+    let edited_source = "<body><p>Edited {{.Email | html}}</p></body>";
+    let response = client
+        .put(format!("{base}/api/templates/{id}"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&json!({"id":id,"name":"Managed tracking", "html":edited_source}))
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.json::<Value>().unwrap()["html"], edited_source);
+    let response = client
+        .post(format!("{base}/api/util/preview"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&json!({"html":"<p>Hello</p>{{.Tracker}}<img src='{{.TrackingURL}}'>"}))
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    let preview: Value = response.json().unwrap();
+    assert_eq!(preview["html"], "<p>Hello</p>");
+    let response = client.put(format!("{base}/api/templates/{id}"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&json!({"id":id,"name":"Managed tracking", "html":"{{if eq .FirstName \"Unsafe\"}}<img src=x onerror='bad()'>{{else}}<p>Hello</p>{{end}}"}))
+        .send().unwrap();
+    assert_eq!(response.status(), 200);
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let response = client.post(format!("{base}/api/util/send_test_email"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&json!({"template":{"name":"Managed tracking"},"smtp":{"host":listener.local_addr().unwrap().to_string(),"from_address":"sender@example.test"},"email":"recipient@example.test","first_name":"Unsafe","url":"http://127.0.0.1/"}))
+        .send().unwrap();
+    assert_eq!(response.status(), 400);
+    assert_eq!(
+        listener.accept().unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let pool = sqlx::SqlitePool::connect(&format!(
+            "sqlite:{}",
+            directory.path().join("installation.sqlite3").display()
+        ))
+        .await
+        .unwrap();
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM email_requests")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            count, 0,
+            "failed composition must not persist preview state"
+        );
+        pool.close().await;
+    });
+    process.stop();
 }
 
 #[test]

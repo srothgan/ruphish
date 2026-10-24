@@ -4598,6 +4598,7 @@ dependencies = [
  "hex",
  "hickory-proto",
  "hyper-util",
+ "mail-parser",
  "nix 0.31.3",
  "portable-pty",
  "rcgen",

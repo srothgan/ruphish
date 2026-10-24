@@ -1,0 +1,15 @@
+GitHub
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+The project team has invited you to collaborate on the project-docs repository. Accept the invitation to access the documentation and contribute updates.
+
+project-team / project-docs
+Private repository · Collaborator invitation
+
+View invitation:
+{{.URL}}
+
+Use the GitHub account associated with the email address that received this invitation.
+
+Sent to {{.Email}}

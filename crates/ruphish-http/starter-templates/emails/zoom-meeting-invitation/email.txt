@@ -1,0 +1,15 @@
+Zoom
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+The Project team has invited you to a Zoom meeting. Review the invitation and confirm your attendance so the organizer can plan the session.
+
+Project check-in
+Zoom meeting · 30 minutes
+
+View meeting invitation:
+{{.URL}}
+
+The organizer will share the confirmed meeting time in your calendar invitation.
+
+Sent to {{.Email}}

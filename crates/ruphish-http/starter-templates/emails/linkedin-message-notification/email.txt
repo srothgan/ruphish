@@ -1,0 +1,15 @@
+LinkedIn
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+You have a new message on LinkedIn. Open your inbox to read the conversation and respond when you have a moment.
+
+Your LinkedIn inbox
+1 unread conversation
+
+Read message:
+{{.URL}}
+
+Use the email address associated with your LinkedIn account.
+
+Sent to {{.Email}}

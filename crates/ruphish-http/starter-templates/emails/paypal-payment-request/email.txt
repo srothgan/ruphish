@@ -1,0 +1,15 @@
+PayPal
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+You have received a payment request. Open PayPal to review the request details and decide how you would like to respond.
+
+Payment request
+PayPal · Awaiting your review
+
+Review request:
+{{.URL}}
+
+Reviewing a request does not send a payment.
+
+Sent to {{.Email}}

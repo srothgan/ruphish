@@ -82,6 +82,7 @@ pub(crate) fn ActionMenu(
 #[component]
 pub(crate) fn Checkbox(
     #[prop(into)] label: Signal<String>,
+    #[prop(into, optional)] aria_label: Signal<String>,
     #[prop(into)] checked: Signal<bool>,
     on_toggle: Callback<bool>,
     #[prop(into, optional)] disabled: Signal<bool>,
@@ -91,6 +92,7 @@ pub(crate) fn Checkbox(
         <label class="checkbox-label" class:compact=compact>
             <input
                 type="checkbox"
+                aria-label=move || (!aria_label.get().is_empty()).then(|| aria_label.get())
                 prop:checked=move || checked.get()
                 disabled=move || disabled.get()
                 on:change=move |event| on_toggle.run(event_target_checked(&event))

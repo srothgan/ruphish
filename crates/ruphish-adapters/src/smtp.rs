@@ -116,7 +116,10 @@ impl Sender for Smtp {
             .ok_or(Error::Internal)?;
         Ok(ruphish_application::delivery::ReviewMail {
             subject: parsed.subject().unwrap_or_default().into(),
-            html: parsed.body_html(0).unwrap_or_default().into_owned(),
+            html: crate::email_html::without_tracker(
+                &parsed.body_html(0).unwrap_or_default(),
+                &context(request)?.tracking_url,
+            )?,
             text: parsed.body_text(0).unwrap_or_default().into_owned(),
             transport_sender: mail.from,
             visible_sender: parsed.header_raw("From").unwrap_or_default().trim().into(),
@@ -179,7 +182,8 @@ impl Sender for Smtp {
             builder = builder.subject(subject);
         }
         let text = render(&request.template.text, &ctx)?;
-        let html = render(&request.template.html, &ctx)?;
+        let html =
+            crate::email_html::tracked(&render(&request.template.html, &ctx)?, &ctx.tracking_url)?;
         let mut body = MultiPart::mixed().build();
         if !text.is_empty() && !html.is_empty() {
             body = body.multipart(

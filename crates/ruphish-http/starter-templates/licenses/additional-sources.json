@@ -1,0 +1,36 @@
+{
+  "simpleIcons": {
+    "version": "11.15.0",
+    "icons": [
+      {
+        "title": "Amazon",
+        "hex": "FF9900",
+        "source": "https://www.amazon.com"
+      },
+      {
+        "title": "Apple",
+        "hex": "000000",
+        "source": "https://www.apple.com"
+      },
+      {
+        "title": "LinkedIn",
+        "hex": "0A66C2",
+        "source": "https://brand.linkedin.com",
+        "guidelines": "https://brand.linkedin.com/policies"
+      },
+      {
+        "title": "PayPal",
+        "hex": "003087",
+        "source": "https://www.paypal.com",
+        "guidelines": "https://newsroom.paypal-corp.com/media-resources"
+      }
+    ]
+  },
+  "workday": {
+    "repository": "glincker/thesvg",
+    "path": "public/icons/workday/default.svg",
+    "sha": "5a623a8440200b9dcbb80ecd8e4bd7da01552f69",
+    "url": "https://github.com/glincker/thesvg/blob/main/public/icons/workday/default.svg",
+    "notes": "Original SVG preserved; locally rasterized using its own fills and viewBox. Upstream LICENSE retained."
+  }
+}

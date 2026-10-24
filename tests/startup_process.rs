@@ -40,6 +40,8 @@ mod reporting_process;
 mod resource_process;
 #[path = "server_database_process.rs"]
 mod server_database_process;
+#[path = "starter_templates_process.rs"]
+mod starter_templates_process;
 use domain_network::tls_fixture;
 #[path = "support/webhook_receiver.rs"]
 mod webhook_receiver;

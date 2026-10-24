@@ -139,7 +139,7 @@ impl ContentTools for Tools {
         ctx.first_name = recipient.first_name.clone();
         ctx.last_name = recipient.last_name.clone();
         ctx.position = recipient.position.clone();
-        render(source, &ctx)
+        crate::email_html::without_tracker(&render(source, &ctx)?, &ctx.tracking_url)
     }
 }
 /// Preserve document mode and existing base semantics while resolving imported form origins.

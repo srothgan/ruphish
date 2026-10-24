@@ -378,6 +378,13 @@ fn executable_launch_delivers_personalized_mail_once_and_persists_acceptance_acr
     let (mut process, base) = start(&directory, &[]);
     let smtp = probe();
     let mut body = resources(&base, &smtp.address);
+    // Exercise managed tracking through the real queued-delivery worker, with no
+    // authored tracker and a fragment rather than a pre-wrapped HTML document.
+    let response = client().put(format!("{base}/api/templates/1"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&json!({"id":1,"name":"Mail","subject":"Hello {{.FirstName}}","text":"Training link: {{.URL}}","html":"<p>Hello {{.FirstName}} <a href='{{.URL}}'>Open</a></p>"}))
+        .send().unwrap();
+    assert_eq!(response.status(), 200);
     // Unknown input must not leak into the persistent launch fingerprint.
     body["unused"] = json!({"password":"synthetic-launch-secret-canary"});
     let launch = || {
@@ -401,6 +408,18 @@ fn executable_launch_delivers_personalized_mail_once_and_persists_acceptance_acr
     assert!(mail.contains("alice@example.test"));
     assert!(mail.contains(&format!("{}?rid=", origin(&base, "training.example.test"))));
     assert!(!mail.contains("synthetic-launch-secret-canary"));
+    let parsed = mail_parser::MessageParser::default()
+        .parse(mail.as_bytes())
+        .unwrap();
+    let html = parsed.body_html(0).unwrap();
+    assert!(html.contains("Hello Alice"));
+    assert_eq!(html.matches("<img ").count(), 1);
+    assert!(html.contains(&format!(
+        "src=\"{}/track?rid=",
+        origin(&base, "training.example.test")
+    )));
+    assert!(html.contains("style=\"display:none\""));
+    assert!(!html.contains("{{.Tracker}}"));
     smtp.reply.send(Some("250 Accepted\r\n")).unwrap();
     smtp.thread.join().unwrap();
     let state = wait_state(&base, id, "accepted");

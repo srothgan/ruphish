@@ -10,6 +10,7 @@ pub(crate) fn Dialog(
     #[prop(default = NodeRef::new())] node: NodeRef<html::Dialog>,
     #[prop(into)] title: Signal<String>,
     #[prop(default = false)] compact: bool,
+    #[prop(default = "")] class: &'static str,
     #[prop(default = true)] open_on_mount: bool,
     #[prop(into, optional)] busy: Signal<bool>,
     #[prop(optional)] on_cancel: Option<Callback<()>>,
@@ -23,7 +24,7 @@ pub(crate) fn Dialog(
     view! {
         <dialog
             node_ref=node
-            class="management-dialog"
+            class=format!("management-dialog {class}")
             class:compact=compact
             aria-label=move || title.get()
             on:cancel=move |event: leptos::ev::Event| {

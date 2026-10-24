@@ -95,9 +95,10 @@ impl Validator for Validate {
                 }
             }
             Content::Template(t) => {
-                for source in [&t.subject, &t.text, &t.html] {
+                for source in [&t.subject, &t.text] {
                     render(source, &context)?;
                 }
+                crate::email_html::document(&render(&t.html, &context)?)?;
                 if !t.envelope_sender.is_empty() {
                     mailbox(&t.envelope_sender)?;
                 }

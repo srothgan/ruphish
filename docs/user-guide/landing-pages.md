@@ -7,6 +7,8 @@ sidebar:
 
 A landing page is what a recipient sees after following the campaign link. Start with a page that works without authored JavaScript or external assets; the public representation deliberately restricts both.
 
+Administrators can choose a ready-made, independent page from the [Starter Template Repository](starter-templates.md), with optional email prefill and company branding on supported layouts.
+
 ## Create or import
 
 Open **Resources → Landing pages → Create**, enter a name, and author the HTML. You can use [template expressions](template-reference.md) for recipient personalization.

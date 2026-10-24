@@ -54,6 +54,7 @@ These variables are conventions for the example commands, not automatic Ruphish 
 | Understand requests, revisions, and failures | [Conventions](conventions.md), [errors](errors.md) |
 | Manage reusable campaign content | [Groups](groups.md), [templates](templates.md), [landing pages](landing-pages.md), [sending profiles](sending-profiles.md) |
 | Import or preview content | [Imports and previews](imports-and-previews.md) |
+| Select bundled email and landing-page content | [Starter templates](starter-templates.md) |
 | Prepare and launch a campaign | [Campaigns](campaigns.md), [campaign drafts](campaign-drafts.md) |
 | Verify a campaign origin | [Domains](domains.md) |
 | Read outcomes or download reports | [Analysis and exports](analysis-and-exports.md), [overview](overview.md) |

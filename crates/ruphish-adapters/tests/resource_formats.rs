@@ -145,13 +145,23 @@ fn inherited_email_generation_cases_decode_to_the_expected_mime_and_envelope() {
                 "firstlast@example.com - Text"
             }
         );
+        let html = parsed.body_html(0).unwrap();
+        let document = scraper::Html::parse_document(&html);
+        let body_selector = scraper::Selector::parse("body").unwrap();
+        let body = document.select(&body_selector).next().unwrap();
         assert_eq!(
-            parsed.body_html(0).unwrap().trim_end_matches(['\r', '\n']),
+            body.text().collect::<String>(),
             if variant == "url" {
                 url
             } else {
                 "firstlast@example.com - HTML"
             }
+        );
+        assert_eq!(
+            document
+                .select(&scraper::Selector::parse("img").unwrap())
+                .count(),
+            1
         );
         assert_eq!(parsed.header_raw("X-Mailer").unwrap().trim(), "gophish");
         assert_eq!(
@@ -560,7 +570,18 @@ fn campaign_mime_preserves_address_headers_and_inline_attachment_contracts() {
             }));
             assert_eq!(parsed.subject().unwrap(), "fixture-rid - Subject");
             assert_eq!(parsed.body_text(0).unwrap().trim(), "fixture-rid - Text");
-            assert_eq!(parsed.body_html(0).unwrap().trim(), "fixture-rid - HTML");
+            let html = parsed.body_html(0).unwrap();
+            let document = scraper::Html::parse_document(&html);
+            let selector = scraper::Selector::parse("body").unwrap();
+            assert_eq!(
+                document
+                    .select(&selector)
+                    .next()
+                    .unwrap()
+                    .text()
+                    .collect::<String>(),
+                "fixture-rid - HTML"
+            );
             assert_eq!(parsed.header_raw("To").unwrap().contains("John Doe"), named);
             assert_eq!(
                 parsed.header_raw("X-Mailer").unwrap().trim(),

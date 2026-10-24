@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {readFile, readdir} from 'node:fs/promises';
 import {JSDOM} from 'jsdom';
+import {prepareLanding} from '../starter-templates.mjs';
 const messages = await readFile(new URL('../../../ruphish-adapters/src/landing-locales.json', import.meta.url), 'utf8');
 const source = await readFile(new URL('../../../ruphish-adapters/src/landing-collector.js', import.meta.url), 'utf8');
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -15,6 +16,34 @@ function page(html = '<form id="f"><input name="password" type="password" value=
     return {dom, window: dom.window, requests, form: dom.window.document.querySelector('form')};
 }
 function submit(p) { p.form.requestSubmit(); }
+test('every shipped starter login reports presence only, including prefill and company-logo copies', async () => {
+    const root = new URL('../../../ruphish-http/starter-templates/landing-pages/', import.meta.url);
+    const parser = new JSDOM('');
+    globalThis.DOMParser = parser.window.DOMParser;
+    const brands = new Map([
+        ['microsoft-full-screen','.microsoft'], ['microsoft-side-panel','.microsoft'],
+        ['zoom','.masthead'], ['salesforce','img.logo'], ['workday','.brand'],
+    ]);
+    try {
+        for (const slug of await readdir(root)) {
+            const html = await readFile(new URL(`${slug}/landing.html`, root), 'utf8');
+            const variants = [html, prepareLanding(html, true, '', '')];
+            if (brands.has(slug)) variants.push(prepareLanding(html, true,
+                JSON.stringify({selector:brands.get(slug),height:36}), 'data:image/png;base64,AAAA'));
+            for (const variant of variants) {
+                const p = page(variant);
+                try {
+                    p.form.querySelector('input[type=email]').value = 'USERNAME-CANARY@example.test';
+                    p.form.querySelector('input[type=password]').value = 'PASSWORD-CANARY';
+                    submit(p); await tick();
+                    assert.equal(p.requests.length, 1, slug);
+                    assert.equal(p.requests[0].payload.password_present, true, slug);
+                    safe(p.requests);
+                } finally { p.dom.window.close(); }
+            }
+        }
+    } finally { parser.window.close(); delete globalThis.DOMParser; }
+});
 function safe(requests) {
     assert.ok(!JSON.stringify(requests).includes('CANARY'));
     for (const {payload, options} of requests) {

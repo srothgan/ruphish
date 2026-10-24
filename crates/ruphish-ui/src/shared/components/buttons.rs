@@ -43,14 +43,18 @@ impl ControlSize {
 #[component]
 pub(crate) fn ActionButton(
     children: Children,
+    #[prop(default = NodeRef::new())] node: NodeRef<leptos::html::Button>,
     #[prop(default = ButtonStyle::Secondary)] style: ButtonStyle,
     #[prop(default = ControlSize::Medium)] size: ControlSize,
     #[prop(default = "button")] kind: &'static str,
     #[prop(into, optional)] disabled: Signal<bool>,
     #[prop(into, optional)] hidden: Signal<bool>,
     #[prop(into, optional)] title: Signal<String>,
+    #[prop(into, optional)] aria_label: Signal<String>,
     #[prop(into, optional)] busy: Signal<String>,
     #[prop(into, optional)] pressed: Signal<String>,
+    #[prop(into, optional)] expanded: Signal<String>,
+    #[prop(optional)] controls: Option<&'static str>,
     #[prop(default = false)] autofocus: bool,
     #[prop(default = false)] close_panel: bool,
     #[prop(optional_no_strip)] form: Option<&'static str>,
@@ -58,6 +62,7 @@ pub(crate) fn ActionButton(
 ) -> impl IntoView {
     view! {
         <button
+            node_ref=node
             type=kind
             class=format!("{} {}", style.class(), size.class())
             form=form
@@ -66,8 +71,11 @@ pub(crate) fn ActionButton(
             disabled=move || disabled.get()
             hidden=move || hidden.get()
             title=move || title.get()
+            aria-label=move || (!aria_label.get().is_empty()).then(|| aria_label.get())
             aria-busy=move || (!busy.get().is_empty()).then(|| busy.get())
             aria-pressed=move || (!pressed.get().is_empty()).then(|| pressed.get())
+            aria-expanded=move || (!expanded.get().is_empty()).then(|| expanded.get())
+            aria-controls=controls
             on:click=move |event| {
                 if !disabled.get_untracked() && let Some(action) = on_click {
                     action.run(event);

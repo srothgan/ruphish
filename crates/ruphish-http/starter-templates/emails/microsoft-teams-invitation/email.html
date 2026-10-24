@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>You have been invited to the Project workspace team</title></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:'Segoe UI',Arial,sans-serif;color:#242424;">
+<div style="display:none;font-size:1px;color:#f3f4f6;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">Join the conversation and access the project files in Teams.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f3f4f6;"><tr><td align="center" style="padding:32px 12px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid #e0e3e7;">
+<tr><td align="left" style="padding:28px 32px;background:#ffffff;border-bottom:1px solid #e7e9ec;"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAENSURBVHhe7dyxCcJgFEbRPw4guIITOYC7uIwD2OowriC4QGwlhWCTS+Cc8nWP23/T+3Scx4bsb89peft2eYxN/bNbHliXADEBYgLEBIgJEBMgJkBMgJgAMQFiAsQEiAkQEyAmQEyAmAAxAWICxASICRATICZATICYADEBYgLEBIgJEBMgJkBMgJgAMQFiAsQEiAkQEyAmQEyAmAAxAQAAAFY2jetrUxtr43z4uRk3323G8QcBYgLEBIgJEBMgJkBMgJgAMQFiAsQEiAkQEyAmQEyAmAAxAWICxASICRATICZATICYADEBYgLEBIgJEBMgJkBMgJgAMQFiAsQEiAkQEyAmQEyAmAAxAWICxD6l3AyeLyC7VgAAAABJRU5ErkJggg==" width="28" height="28" alt="Microsoft logo" style="display:inline-block;vertical-align:middle;object-fit:contain;"><span style="font-size:22px;line-height:30px;font-weight:600;vertical-align:middle;display:inline-block;margin-left:10px;">Microsoft Teams</span></td></tr>
+<tr><td style="padding:32px;">
+<h1 style="font-size:26px;line-height:1.3;font-weight:600;margin:0 0 24px;color:#202124;">Your team is waiting</h1>
+<p style="font-size:15px;line-height:1.6;margin:0 0 18px;">Hello {{if .FirstName}}{{.FirstName | html}}{{else}}there{{end}},</p>
+<p style="font-size:15px;line-height:1.6;margin:0 0 24px;">The Project workspace team has invited you to collaborate in Microsoft Teams. Join to follow the conversation, view shared files, and catch up on project updates.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #dfe3e8;background:#f8f9fb;"><tr><td style="padding:20px;">
+<p style="font-size:17px;line-height:1.5;font-weight:600;margin:0 0 6px;">Project workspace</p><p style="font-size:13px;line-height:1.5;color:#59636e;margin:0;">Microsoft Teams · Team invitation</p>
+</td></tr></table>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0;"><tr><td bgcolor="#5b5fc7" style="background:#5b5fc7;border-radius:0;text-align:center;">
+<a href="{{.URL | html}}" style="display:inline-block;padding:14px 24px;border:1px solid #5b5fc7;border-radius:4px;color:#ffffff;text-decoration:none;font-size:15px;line-height:20px;font-weight:600;">View invitation</a>
+</td></tr></table>
+<p style="font-size:13px;line-height:1.6;color:#59636e;margin:0;">Use the work account that received the team invitation.</p>
+</td></tr>
+<tr><td style="padding:20px 32px;border-top:1px solid #e7e9ec;font-size:12px;line-height:1.6;color:#69717d;">Microsoft Teams<br>Sent to {{.Email | html}}</td></tr>
+</table>
+</td></tr></table>
+
+</body></html>

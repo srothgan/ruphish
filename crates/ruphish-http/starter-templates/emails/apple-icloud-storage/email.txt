@@ -1,0 +1,15 @@
+iCloud
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+Your iCloud storage is getting close to its limit. Review what is using space and manage the documents and backups you keep in iCloud.
+
+iCloud storage
+Photos, documents, and device backups
+
+Review storage:
+{{.URL}}
+
+Sign in with the Apple Account you use for iCloud.
+
+Sent to {{.Email}}

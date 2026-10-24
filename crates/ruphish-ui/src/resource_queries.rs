@@ -112,6 +112,12 @@ impl ResourceQueries {
     }
 
     pub fn saved(self, family: Family, id: i64) {
+        self.refresh_inventory(family);
+        self.details.invalidate((family, id.to_string()));
+    }
+
+    /// Refresh after a create attempt, including an unknown transport outcome.
+    pub fn refresh_inventory(self, family: Family) {
         self.overview.inventory_changed();
         self.campaigns.resources_changed();
         // TODO: If bug reports show confusion after a successful save followed by
@@ -120,7 +126,6 @@ impl ResourceQueries {
         // cover failed refreshes and late responses. For now, retaining the last
         // confirmed list with the localized stale-data warning and retry is intentional.
         self.summaries.invalidate(family);
-        self.details.invalidate((family, id.to_string()));
     }
 
     pub fn deleted(self, family: Family, id: i64) {

@@ -7,6 +7,8 @@ sidebar:
 
 An email template contains your subject, HTML and/or plain-text body, optional visible sender override, and attachments. Start with a small message and check a personalized example before adding more content.
 
+Administrators can also add an independent copy from the [Starter Template Repository](starter-templates.md).
+
 ## Write a message
 
 Open **Resources → Email templates → Create**. Give the template a name, enter its subject, and write the body in the source or visual editor. At least one body alternative is required; HTML-only and text-only templates are supported. The subject may be empty.
@@ -16,10 +18,9 @@ Use `{{.FirstName}}` to personalize a greeting and `{{.URL}}` for the recipient'
 ```html
 <p>Hello {{.FirstName}},</p>
 <p><a href="{{.URL}}">Open the training page</a>.</p>
-{{.Tracker}}
 ```
 
-`{{.Tracker}}` produces tracking-image markup. A message without a requested tracking image can still produce a click observation. Do not interpret missing image requests as proof the email was unread.
+Ruphish automatically adds one hidden tracking image when composing HTML email. You do not need to insert a tracker into the template, and previews omit it. Plain-text-only messages have no image-based open tracking. Mail clients can block image requests, so a missing open event is not proof the email was unread. Legacy `{{.Tracker}}` and `{{.TrackingURL}}` expressions remain supported.
 
 Provide a plain-text alternative when it helps recipients whose clients do not display HTML. The [template reference](template-reference.md) covers variables, conditional content, and escaping.
 

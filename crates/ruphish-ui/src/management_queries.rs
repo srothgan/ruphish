@@ -20,6 +20,8 @@ pub(crate) struct ManagementQueries {
     overview: OverviewQueries,
     campaigns: CampaignQueries,
     pub users: Query<(), Vec<UserSummary>>,
+    pub starters: Query<(), Vec<ruphish_contracts::starter_templates::Summary>>,
+    pub starter: Query<String, ruphish_contracts::starter_templates::Entry>,
     pub domains: Query<(), Vec<Domain>>,
     pub validated_domains: Query<(), Vec<Domain>>,
     pub domain: Query<i64, Domain>,
@@ -36,6 +38,12 @@ impl ManagementQueries {
                 client,
                 move |()| async move { api.read("/api/users/").await },
             ),
+            starters: Query::new(client, move |()| async move {
+                api.read("/api/starter-templates/").await
+            }),
+            starter: Query::new(client, move |id: String| async move {
+                api.read(&format!("/api/starter-templates/{id}")).await
+            }),
             domains: Query::new(
                 client,
                 move |()| async move { api.read("/api/domains/").await },

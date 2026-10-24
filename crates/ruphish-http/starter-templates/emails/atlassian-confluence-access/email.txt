@@ -1,0 +1,15 @@
+Confluence
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+You have been invited to the Team handbook space in Confluence. Find the latest team processes, onboarding notes, and reference documents.
+
+Team handbook
+Confluence · Space invitation
+
+Open space:
+{{.URL}}
+
+This space is available to invited team members.
+
+Sent to {{.Email}}

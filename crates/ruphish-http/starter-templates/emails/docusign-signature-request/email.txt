@@ -1,0 +1,15 @@
+Docusign
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+The Procurement team has sent you a service agreement. Review the document and the recipient details before continuing.
+
+Service agreement.pdf
+Sent by Procurement · 4 pages
+
+Review document:
+{{.URL}}
+
+Use the account that received this document invitation. Do not forward it.
+
+Sent to {{.Email}}

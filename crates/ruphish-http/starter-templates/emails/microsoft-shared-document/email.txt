@@ -1,0 +1,15 @@
+Microsoft 365
+
+Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
+
+The Operations team has shared a document with you. Review the handover notes and add your comments before the next team meeting.
+
+Operations handover.docx
+Shared by Operations · Review and comment
+
+Open document:
+{{.URL}}
+
+This document is shared with the email address that received the invitation.
+
+Sent to {{.Email}}

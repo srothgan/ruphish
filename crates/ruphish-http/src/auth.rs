@@ -111,6 +111,7 @@ pub fn router<S: SessionStore + Clone>(
         .route("/logout", get(page).post(logout))
         .route("/reset_password", get(page).post(password))
         .route("/settings", get(page))
+        .route("/settings/starter-templates", get(page))
         .route("/user", get(page))
         .route("/user/settings", get(page))
         .route("/user/password", get(page))
@@ -169,6 +170,7 @@ pub fn router<S: SessionStore + Clone>(
         .merge(super::reporting::routes())
         .merge(super::overview::routes())
         .merge(super::integrations::routes())
+        .merge(super::starter_templates::routes())
         .layer(middleware::from_fn(security_headers))
         .with_state(state)
         .layer(session);
@@ -502,7 +504,9 @@ impl Context {
             }
         })?;
         if actor.is_some()
-            && (self.uri.path().starts_with("/api/users") || self.uri.path() == "/api/reset")
+            && (self.uri.path().starts_with("/api/users")
+                || self.uri.path().starts_with("/api/starter-templates")
+                || self.uri.path() == "/api/reset")
         {
             return Err(failure(
                 StatusCode::FORBIDDEN,
@@ -598,7 +602,10 @@ async fn page(context: Context) -> Response {
                 if path == "/reset_password" && !user.password_change_required {
                     return redirect(StatusCode::TEMPORARY_REDIRECT, "/user/password");
                 }
-                if (path == "/settings" || path == "/users" || path.starts_with("/users/"))
+                if (path == "/settings"
+                    || path.starts_with("/settings/")
+                    || path == "/users"
+                    || path.starts_with("/users/"))
                     && !user.permits("modify_system")
                 {
                     return failure(StatusCode::FORBIDDEN, ErrorCode::AuthForbidden, "Forbidden")
