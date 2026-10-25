@@ -54,6 +54,66 @@ pub fn campaign(value: &Value, through: usize, now: i64) -> Report {
     }
 }
 
+/// Add current resource availability to the same campaign readiness rules used for navigation.
+pub fn campaign_with_resources(
+    value: &Value,
+    resources: Option<&Value>,
+    through: usize,
+    now: i64,
+) -> Report {
+    let mut report = campaign(value, through, now);
+    let Some(resources) = resources else {
+        return report;
+    };
+    let contains = |kind: &str, id: &Value| {
+        resources[kind]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|row| row["id"] == *id)
+    };
+    if through >= 1 {
+        if let Ok(url) = url::Url::parse(text(value, "url")) {
+            let origin = url.origin().ascii_serialization();
+            if !resources["domains"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|domain| domain["origin"].as_str() == Some(origin.as_str()))
+            {
+                report.reject("url", Code::Unavailable, "Domain unavailable");
+            }
+        }
+        for kind in ["template", "page", "smtp"] {
+            let id = &value["selection"][kind]["id"];
+            if id.as_i64().is_some_and(|id| id > 0) && !contains(kind, id) {
+                report.reject(
+                    format!("selection.{kind}.id"),
+                    Code::Unavailable,
+                    "Resource unavailable",
+                );
+            }
+        }
+        let learning = &value["policy"]["learning_page_id"];
+        if learning.as_i64().is_some_and(|id| id > 0) && !contains("learning_page", learning) {
+            report.reject(
+                "policy.learning_page_id",
+                Code::Unavailable,
+                "Learning page unavailable",
+            );
+        }
+    }
+    if value["selection"]["groups"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|selected| !contains("groups", &selected["id"]))
+    {
+        report.reject("selection.groups", Code::Unavailable, "Group unavailable");
+    }
+    report
+}
+
 /// Create requires credentials; blank edits retain an already saved secret.
 pub fn integration(value: &Value, webhook: bool, has_secret: bool) -> Report {
     let secret_field = if webhook { "secret" } else { "password" };

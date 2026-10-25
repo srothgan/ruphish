@@ -653,58 +653,21 @@ pub(super) fn create(
     let loading = resource_read.fetching;
     let step = RwSignal::new(initial_step);
     let validation_time = RwSignal::new(ruphish_domain::datetime::now().as_second());
-    let validation = FormValidation::new(move || {
-        let mut report = ruphish_ui::form_validation::campaign(
+    let readiness = move |through: usize| {
+        let available = (resources_known.get() && !loading.get()).then(|| resources.get());
+        ruphish_ui::form_validation::campaign_with_resources(
             &draft.get().value,
-            step.get(),
+            available.as_ref(),
+            through,
             validation_time.get(),
-        );
-        if resources_known.get() && !loading.get() {
-            let value = draft.get().value;
-            for kind in ["template", "page", "smtp"] {
-                let id = value["selection"][kind]["id"].as_i64().unwrap_or(0);
-                if step.get() >= 1
-                    && id > 0
-                    && !array(&resources.get(), kind)
-                        .iter()
-                        .any(|r| r["id"].as_i64() == Some(id))
-                {
-                    report.reject(
-                        format!("selection.{kind}.id"),
-                        ruphish_domain::validation::Code::Unavailable,
-                        "Resource unavailable",
-                    );
-                }
-            }
-            if step.get() >= 1
-                && value["policy"]["learning_page_id"]
-                    .as_i64()
-                    .is_some_and(|id| {
-                        id > 0
-                            && !array(&resources.get(), "learning_page")
-                                .iter()
-                                .any(|r| r["id"].as_i64() == Some(id))
-                    })
-            {
-                report.reject(
-                    "policy.learning_page_id",
-                    ruphish_domain::validation::Code::Unavailable,
-                    "Learning page unavailable",
-                );
-            }
-            if array(&value["selection"], "groups").iter().any(|selected| {
-                !array(&resources.get(), "groups")
-                    .iter()
-                    .any(|r| r["id"] == selected["id"])
-            }) {
-                report.reject(
-                    "selection.groups",
-                    ruphish_domain::validation::Code::Unavailable,
-                    "Group unavailable",
-                );
-            }
-        }
-        report
+        )
+    };
+    let validation = FormValidation::new(move || readiness(step.get()));
+    let review_ready = Memo::new(move |_| {
+        resources_known.get()
+            && !loading.get()
+            && resource_read.error.get().is_none()
+            && readiness(3).is_empty()
     });
     validation.on_reveal(Callback::new(move |field: String| {
         step.set(ruphish_domain::campaign_draft::field_step(&field))
@@ -806,9 +769,19 @@ pub(super) fn create(
         {
             return;
         }
-        if destination.is_some_and(|next| next > step.get_untracked()) {
+        if destination == Some(step.get_untracked()) {
+            return;
+        }
+        if let Some(next) = destination.filter(|next| *next > step.get_untracked()) {
+            if loading.get_untracked() {
+                return;
+            }
             validation_time.set(ruphish_domain::datetime::now().as_second());
-            if !validation.check() {
+            // A jump must validate every preceding step, including skipped sections.
+            if !validation.check_report(&untrack(|| readiness(next.saturating_sub(1)))) {
+                return;
+            }
+            if next == 3 && !review_ready.get_untracked() {
                 return;
             }
         }
@@ -979,24 +952,24 @@ pub(super) fn create(
             }>
                 <p class="form-message error">{tr!(ui.missing_draft_resource)}</p>
             </Show>
-            <ol class="campaign-steps">
-                {[
+            <StepNavigation
+                label=trs!(ui.campaign_steps)
+                labels=vec![
                     trs!(ui.audience),
                     trs!(ui.content_and_destination),
                     trs!(ui.schedule),
                     trs!(ui.review_and_launch),
                 ]
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, label)| {
-                        view! {
-                            <li aria-current=move || {
-                                (step.get() == index).then_some("step")
-                            }>{move || label.get()}</li>
-                        }
-                    })
-                    .collect_view()}
-            </ol>
+                current=step
+                disabled=Signal::derive(move || {
+                    busy.get() || loading.get() || !can_edit
+                        || draft.with(|d| d.launch.is_some() || d.page_request.is_some())
+                })
+                disabled_steps=Signal::derive(move || {
+                    if review_ready.get() { vec![] } else { vec![3] }
+                })
+                on_select=Callback::new(move |index| save.run(Some(index)))
+            />
             <FormFields disabled=Signal::derive(move || {
                 busy.get() || loading.get() || !can_edit || draft.with(|d| d.launch.is_some())
             })>

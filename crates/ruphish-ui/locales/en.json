@@ -4,6 +4,7 @@
     "native_name": "English"
   },
   "ui": {
+    "campaign_steps": "Campaign steps",
     "learning_pages": "Learning pages",
     "learning_page": "Learning page",
     "new_learning_page": "New learning page",

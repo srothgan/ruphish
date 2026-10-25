@@ -29,15 +29,17 @@ impl FormValidation {
         self.reveal.set_value(Some(callback));
     }
     pub(crate) fn check(self) -> bool {
-        self.state.update(|state| {
-            self.local
-                .with_untracked(|report| state.submit(report.issues()))
-        });
-        let valid = self.local.with_untracked(Report::is_empty);
-        if !valid {
-            self.focus();
+        self.check_report(&self.local.get_untracked())
+    }
+    /// Validate a navigation destination, revealing errors outside the currently visible step.
+    pub(crate) fn check_report(self, report: &Report) -> bool {
+        self.state.update(|state| state.submit(report.issues()));
+        if let Some(issue) = report.issues().first() {
+            self.focus_field(issue.field.clone());
+            false
+        } else {
+            true
         }
-        valid
     }
     pub(crate) fn edited(self, field: &str) {
         self.state.update(|state| state.edit(field));
@@ -63,13 +65,17 @@ impl FormValidation {
         let Some(issue) = first else {
             return;
         };
+        self.focus_field(issue.field);
+    }
+    fn focus_field(self, field: String) {
         if let Some(reveal) = self.reveal.get_value() {
-            reveal.run(issue.field.clone());
+            reveal.run(field.clone());
         }
         leptos::leptos_dom::helpers::request_animation_frame(move || {
             let _ = self.controls.try_with_value(|controls| {
-                if let Some((_, _, focus)) =
-                    controls.iter().find(|(field, _, _)| *field == issue.field)
+                if let Some((_, _, focus)) = controls
+                    .iter()
+                    .find(|(registered, _, _)| *registered == field)
                 {
                     focus.run(());
                 }

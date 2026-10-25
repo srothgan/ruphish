@@ -214,3 +214,86 @@ fn credentials_and_operational_failures_do_not_become_interchangeable_validation
         "unexpected value-bearing payload is discarded"
     );
 }
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn campaign_step_jumps_require_skipped_content_and_recheck_resource_availability() {
+    let now = ruphish_domain::datetime::parse("2026-10-25T12:00:00Z")
+        .unwrap()
+        .as_second();
+    let mut draft = json!({"name":"Training","url":"","selection":{"groups":[{"id":1}],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"redirect_url":""}});
+    let mut resources = json!({"groups":[{"id":1}],"template":[{"id":2}],"page":[{"id":3}],"smtp":[{"id":4}],"learning_page":[{"id":5}],"domains":[{"origin":"https://training.example.test"}]});
+    let readiness =
+        |draft: &serde_json::Value, resources: &serde_json::Value, destination: usize| {
+            form_validation::campaign_with_resources(
+                draft,
+                Some(resources),
+                destination.saturating_sub(1),
+                now,
+            )
+        };
+    assert!(
+        readiness(&draft, &resources, 1).is_empty(),
+        "audience permits entering content"
+    );
+    assert_eq!(
+        fields(&readiness(&draft, &resources, 2)),
+        [
+            "selection.template.id",
+            "selection.page.id",
+            "selection.smtp.id",
+            "url"
+        ],
+        "jumping directly to schedule cannot bypass content"
+    );
+    assert!(!readiness(&draft, &resources, 3).is_empty());
+    draft["selection"]["template"]["id"] = json!(2);
+    draft["selection"]["page"]["id"] = json!(3);
+    draft["selection"]["smtp"]["id"] = json!(4);
+    draft["url"] = json!("https://training.example.test");
+    assert!(
+        readiness(&draft, &resources, 3).is_empty(),
+        "complete immediate campaign permits direct review"
+    );
+    draft["launch_local"] = json!({"local":"","time_zone":"UTC"});
+    assert!(
+        readiness(&draft, &resources, 2).is_empty(),
+        "schedule can be entered to complete it"
+    );
+    assert_eq!(
+        fields(&readiness(&draft, &resources, 3)),
+        ["launch_local.local"]
+    );
+    draft["launch_local"]["local"] = json!("2026-10-26T12:00");
+    assert!(readiness(&draft, &resources, 3).is_empty());
+    resources["template"] = json!([]);
+    let missing = readiness(&draft, &resources, 3);
+    assert_eq!(fields(&missing), ["selection.template.id"]);
+    assert_eq!(missing.issues()[0].code, Code::Unavailable);
+    resources["template"] = json!([{"id":2}]);
+    draft["policy"]["learning_page_id"] = json!(6);
+    assert_eq!(
+        fields(&readiness(&draft, &resources, 3)),
+        ["policy.learning_page_id"]
+    );
+    draft["policy"]["learning_page_id"] = json!(5);
+    assert!(readiness(&draft, &resources, 3).is_empty());
+    resources["domains"] = json!([]);
+    let missing = readiness(&draft, &resources, 3);
+    assert_eq!(fields(&missing), ["url"]);
+    assert_eq!(missing.issues()[0].code, Code::Unavailable);
+    resources["domains"] = json!([{"origin":"https://training.example.test"}]);
+    draft["url"] = json!("https://training.example.test/training");
+    assert!(readiness(&draft, &resources, 3).is_empty());
+    draft["selection"]["groups"] = json!([]);
+    assert_eq!(
+        fields(&readiness(&draft, &resources, 3)),
+        ["selection.groups"]
+    );
+    assert!(
+        serde_json::from_value::<ruphish_domain::campaign_draft::Configuration>(draft)
+            .unwrap()
+            .validate(),
+        "an incomplete edit remains saveable as a draft"
+    );
+}

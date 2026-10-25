@@ -53,6 +53,7 @@ pub(crate) fn ActionButton(
     #[prop(into, optional)] aria_label: Signal<String>,
     #[prop(into, optional)] busy: Signal<String>,
     #[prop(into, optional)] pressed: Signal<String>,
+    #[prop(into, optional)] current: Signal<String>,
     #[prop(into, optional)] expanded: Signal<String>,
     #[prop(optional)] controls: Option<&'static str>,
     #[prop(default = false)] autofocus: bool,
@@ -74,6 +75,7 @@ pub(crate) fn ActionButton(
             aria-label=move || (!aria_label.get().is_empty()).then(|| aria_label.get())
             aria-busy=move || (!busy.get().is_empty()).then(|| busy.get())
             aria-pressed=move || (!pressed.get().is_empty()).then(|| pressed.get())
+            aria-current=move || (!current.get().is_empty()).then(|| current.get())
             aria-expanded=move || (!expanded.get().is_empty()).then(|| expanded.get())
             aria-controls=controls
             on:click=move |event| {

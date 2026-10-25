@@ -28,3 +28,5 @@ mod search_select;
 pub(crate) use search_select::*;
 mod resource_actions;
 pub(crate) use resource_actions::*;
+mod steps;
+pub(crate) use steps::*;
