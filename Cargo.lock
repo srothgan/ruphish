@@ -4680,6 +4680,7 @@ dependencies = [
  "async-trait",
  "ruphish-domain",
  "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]
@@ -4706,6 +4707,7 @@ dependencies = [
 name = "ruphish-http"
 version = "0.1.0-dev"
 dependencies = [
+ "async-trait",
  "axum",
  "axum_csrf",
  "futures-util",

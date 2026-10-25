@@ -6,6 +6,7 @@
 pub mod auth;
 mod campaigns;
 mod domains;
+pub mod health;
 mod integrations;
 pub mod interactions;
 mod overview;

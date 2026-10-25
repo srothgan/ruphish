@@ -20,6 +20,8 @@ use std::path::PathBuf;
 mod campaign_drafts;
 #[path = "support/company_settings.rs"]
 mod company_settings;
+#[path = "support/health.rs"]
+mod health;
 #[path = "support/mysql_proxy.rs"]
 mod mysql_proxy;
 #[path = "support/observation_versions.rs"]

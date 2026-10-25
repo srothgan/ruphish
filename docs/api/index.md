@@ -19,6 +19,8 @@ Ruphish splits its HTTP interfaces into **`/api/`, `/auth/`, and `/internal/`**.
 
 Use an API key with `/api/` for scripts. Do not automate the browser login flow or depend on `/internal/` routes just because they appear in browser network requests. Browser sessions have their own cookie and CSRF requirements. See [authentication](authentication.md).
 
+Operational monitoring uses separate unauthenticated [`/health/live` and `/health/ready` probes](../administration/health.md) on every enabled listener. They are outside these administrator API namespaces.
+
 ## Make your first request
 
 After creating an account and completing its password setup, obtain its API key from account settings. The examples use curl and POSIX shell syntax. Replace the dummy values below with your administrative HTTPS origin, without a trailing slash, and your API key. Keep real keys out of saved scripts, shared examples, and shell history.

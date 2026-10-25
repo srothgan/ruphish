@@ -7,6 +7,8 @@ sidebar:
 
 The administration listener serves accounts, the UI, and management APIs. The public listener serves campaign links and tracking. Give them deliberate binding addresses; the public listener does not expose administration assets.
 
+Both enabled listeners expose the same minimal [liveness and readiness probes](health.md), including in `admin`-only or `phish`-only mode. The exact public paths `/health/live` and `/health/ready` are reserved for these probes.
+
 ## Direct TLS
 
 Set `use_tls: true` and provide `cert_path` and `key_path` for the selected listener. The certificate must cover the hostname clients use. For public campaigns, it must also satisfy the server's domain-verification trust checks.

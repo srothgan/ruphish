@@ -65,6 +65,7 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
         ruphish_adapters::domain_verification::DnsHttps::new(config.domain_verification.clone())?;
     let policy = ruphish_adapters::outbound::Policy::new(&config.admin.allowed_internal_hosts)?;
     let database = database::open(config.database()?, policy.clone()).await?;
+    let health = ruphish_application::health::Service::new(database.health());
     if database.has_recovery_backup() {
         tracing::info!(
             "database_backup_verified; recovery backup may contain legacy captured credentials; protect or retire it under your retention policy"
@@ -102,7 +103,10 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
             let delivery = ruphish_application::delivery::Service::new(service.clone(),resources.clone(),smtp,previews);
             Some(ruphish_http::auth::router(assets, ruphish_http::auth::Services {settings:database.settings(),integrations:integrations.clone(),reporting:database.reporting(),overview:database.overview(),accounts:service,resources,delivery,campaigns,domains,mailer_enabled:!arguments.disable_mailer}, sessions, &key, config.admin.use_tls, config.admin.trusted_origins.clone(), config.admin.csrf_key.clone()))
         } else { None };
-        supervise(arguments.mode, admin_listener, phish_listener, admin_tls, phish_tls, (admin_router,public_router,worker,domain_worker,integrations), termination).await
+        let probes = ruphish_http::health::router(health.clone());
+        let admin_router = admin_router.map(|router| router.merge(probes.clone()));
+        let public_router = public_router.merge(probes);
+        supervise(arguments.mode, admin_listener, phish_listener, admin_tls, phish_tls, RuntimeServices {admin:admin_router,public:public_router,mailer:worker,domains:domain_worker,integrations,health}, termination).await
     }.await;
     // Both normal and failing server lifecycles close the pool before returning.
     tokio::time::timeout(DRAIN_TIMEOUT, database.close())
@@ -188,26 +192,29 @@ async fn prepare_tls(server: &Server) -> Result<Option<RustlsConfig>, Error> {
     ))
 }
 
+struct RuntimeServices {
+    admin: Option<axum::Router>,
+    public: axum::Router,
+    mailer: Option<crate::campaign_worker::Worker>,
+    domains: crate::domain_worker::Worker,
+    integrations: std::sync::Arc<dyn ruphish_application::integrations::Worker>,
+    health: ruphish_application::health::Service,
+}
+
 async fn supervise(
     mode: Mode,
     admin: Option<TcpListener>,
     phish: Option<TcpListener>,
     admin_tls: Option<RustlsConfig>,
     phish_tls: Option<RustlsConfig>,
-    routers: (
-        Option<axum::Router>,
-        axum::Router,
-        Option<crate::campaign_worker::Worker>,
-        crate::domain_worker::Worker,
-        std::sync::Arc<dyn ruphish_application::integrations::Worker>,
-    ),
+    services: RuntimeServices,
     mut termination: Termination,
 ) -> Result<(), Error> {
     let cancellation = CancellationToken::new();
     let mut tasks = JoinSet::new();
     let mut handles = Vec::new();
     let mut addresses = std::collections::BTreeMap::new();
-    if let (Some(listener), Some(router)) = (admin, routers.0) {
+    if let (Some(listener), Some(router)) = (admin, services.admin) {
         addresses.insert("admin", listener.local_addr()?.to_string());
         let handle = Handle::new();
         tasks.spawn(serve(
@@ -225,7 +232,7 @@ async fn supervise(
         tasks.spawn(serve(
             listener,
             phish_tls,
-            routers.1,
+            services.public,
             handle.clone(),
             cancellation.clone(),
         ));
@@ -237,15 +244,12 @@ async fn supervise(
         }
         // Honor a signal received during preflight at this safe cleanup boundary.
         tokio::select! { biased; signal = termination.wait() => return signal.map_err(Error::from), _ = std::future::ready(()) => {} }
-        let readiness = serde_json::to_string(&addresses)?;
-        eprintln!("RUPHISH_READY {readiness}");
-        tracing::info!("listeners_ready");
-        if let Some(worker)=routers.2 {tasks.spawn(worker.run(cancellation.clone()));}
-        tasks.spawn(routers.3.run(cancellation.clone()));
+        if let Some(worker)=services.mailer {tasks.spawn(worker.run(cancellation.clone()));}
+        tasks.spawn(services.domains.run(cancellation.clone()));
         if mode.admin() {
             for mailbox in [false, true] {
                 let stop = cancellation.clone();
-                let integrations = routers.4.clone();
+                let integrations = services.integrations.clone();
                 tasks.spawn(async move {
                     let mut interval = tokio::time::interval(Duration::from_secs(2));
                     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -265,11 +269,16 @@ async fn supervise(
                 });
             }
         }
+        services.health.started();
+        let readiness = serde_json::to_string(&addresses)?;
+        eprintln!("RUPHISH_READY {readiness}");
+        tracing::info!("listeners_ready");
         tokio::select! {
             signal = termination.wait() => signal.map_err(Error::from),
             exited = tasks.join_next() => Err(std::io::Error::other(format!("A required {mode:?} listener exited unexpectedly: {exited:?}")).into()),
         }
     }.await;
+    services.health.draining();
     cancellation.cancel();
     tracing::info!("shutdown_started");
     // Cancellation asks each owned listener to drain, rather than dropping its serving future.

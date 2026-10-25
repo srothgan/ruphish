@@ -22,6 +22,8 @@ mod campaign_process;
 mod database_network;
 #[path = "support/domain_network.rs"]
 mod domain_network;
+#[path = "health_process.rs"]
+mod health_process;
 #[path = "support/mailbox.rs"]
 mod mailbox;
 #[path = "mysql_process.rs"]
@@ -653,6 +655,7 @@ fn graceful_shutdown_finishes_an_in_progress_asset_response_and_bounds_idle_conn
         .unwrap();
     assert_eq!(response.content_length(), Some(content.len() as u64));
     process.interrupt();
+    health_process::assert_draining(&process, admin);
     assert_eq!(response.bytes().unwrap().as_ref(), content);
     process.wait(true);
     assert!(std::net::TcpListener::bind(admin).is_ok());
