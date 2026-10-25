@@ -234,6 +234,39 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
             let code = actual.as_object_mut().unwrap().remove("code");
             assert_eq!(code, Some(json!(expected_code)), "Go case {id}");
         }
+        // Field reports are additive; preserve every independent Go expectation below.
+        let required_fields = [
+            "name",
+            "selection.groups",
+            "selection.template.id",
+            "selection.page.id",
+            "selection.smtp.id",
+        ];
+        let expected_fields: &[&str] = match id {
+            "missing-name" => &required_fields,
+            "missing-groups" => &required_fields[1..],
+            "missing-template" => &required_fields[2..],
+            "missing-page" => &required_fields[3..],
+            "missing-profile" => &required_fields[4..],
+            "date-order" => &["send_by_local.local"],
+            _ => &[],
+        };
+        if !expected_fields.is_empty() {
+            let reason = if id == "date-order" {
+                "schedule_order"
+            } else {
+                "required"
+            };
+            let issues: Vec<_> = expected_fields
+                .iter()
+                .map(|field| json!({"field":field,"code":reason}))
+                .collect();
+            assert_eq!(
+                actual.as_object_mut().unwrap().remove("validation"),
+                Some(json!({"issues":issues})),
+                "Go case {id} field report"
+            );
+        }
         let mut expected = case["json"].clone();
         if id == "page-create" {
             // Diagnostics are additive; their behavior has dedicated HTTP coverage.
