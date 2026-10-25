@@ -59,13 +59,23 @@ pub enum Error {
 impl WebhookEdit {
     /// Validate configuration without network access.
     pub fn validate(&self) -> Result<(), Error> {
-        validate_webhook_edit(self)
+        self.validation()
+            .finish()
+            .map_err(|report| match report.issues().first() {
+                Some(issue) if issue.code == crate::validation::Code::InvalidUrl => {
+                    Error::WebhookUrl
+                }
+                Some(issue) if issue.field == "secret" => Error::WebhookSecret,
+                _ => Error::WebhookConfiguration,
+            })
     }
 }
 impl MailboxEdit {
     /// Validate configuration without network access.
     pub fn validate(&self) -> Result<(), Error> {
-        validate_mailbox_edit(self)
+        self.validation()
+            .finish()
+            .map_err(|_| Error::MailboxConfiguration)
     }
     /// Only a change of mailbox identity invalidates saved UID progress.
     pub fn resets_checkpoint(&self, host: &str, port: i64, username: &str, folder: &str) -> bool {
@@ -119,46 +129,74 @@ pub fn mailbox_delay(success: bool, frequency: u32, failures: u32) -> i64 {
 fn label(s: &str) -> bool {
     !s.trim().is_empty() && s.len() <= 255 && !s.chars().any(char::is_control)
 }
-fn validate_mailbox_edit(e: &MailboxEdit) -> Result<(), Error> {
-    if !label(&e.name)
-        || !label(&e.host)
-        || (e.host.parse::<std::net::IpAddr>().is_err()
-            && (e.host.contains(['/', ':', '@', ' ', '?', '#'])
-                || url::Host::parse(&e.host).is_err()))
-        || e.port == 0
-        || !label(&e.username)
-        || !label(&e.folder)
-        || !(30..=31540000).contains(&e.frequency)
-        || e.password
-            .as_ref()
-            .is_some_and(|s| s.is_empty() || s.len() > 4096)
-        || e.restrict_domain.len() > 253
-        || e.restrict_domain.chars().any(char::is_control)
-    {
-        return Err(Error::MailboxConfiguration);
+impl MailboxEdit {
+    /// All independent configuration failures; omitted credentials remain unchanged.
+    pub fn validation(&self) -> crate::validation::Report {
+        use crate::validation::{Code, Report};
+        let mut report = Report::default();
+        for (field, valid) in [
+            ("name", label(&self.name)),
+            (
+                "host",
+                label(&self.host)
+                    && (self.host.parse::<std::net::IpAddr>().is_ok()
+                        || (!self.host.contains(['/', ':', '@', ' ', '?', '#'])
+                            && url::Host::parse(&self.host).is_ok())),
+            ),
+            ("port", self.port != 0),
+            ("username", label(&self.username)),
+            ("folder", label(&self.folder)),
+            ("frequency", (30..=31540000).contains(&self.frequency)),
+            (
+                "password",
+                self.password
+                    .as_ref()
+                    .is_none_or(|s| !s.is_empty() && s.len() <= 4096),
+            ),
+            (
+                "restrict_domain",
+                self.restrict_domain.len() <= 253
+                    && !self.restrict_domain.chars().any(char::is_control),
+            ),
+        ] {
+            if !valid {
+                report.reject(field, Code::Invalid, "mailbox_invalid_configuration");
+            }
+        }
+        report
     }
-    Ok(())
 }
-
-fn validate_webhook_edit(e: &WebhookEdit) -> Result<(), Error> {
-    let url = url::Url::parse(&e.url).map_err(|_| Error::WebhookUrl)?;
-    if !label(&e.name)
-        || e.url.len() > 1000
-        || !matches!(url.scheme(), "https" | "http")
-        || url.host_str().is_none()
-        || !url.username().is_empty()
-        || url.password().is_some()
-        || url.fragment().is_some()
-    {
-        return Err(Error::WebhookConfiguration);
+impl WebhookEdit {
+    /// Configuration checks independent of connectivity, authorization and storage.
+    pub fn validation(&self) -> crate::validation::Report {
+        use crate::validation::{Code, Report};
+        let mut report = Report::default();
+        let parsed = url::Url::parse(&self.url);
+        if parsed.is_err() {
+            report.reject("url", Code::InvalidUrl, "webhook_invalid_url");
+        }
+        if !label(&self.name) {
+            report.reject("name", Code::Invalid, "webhook_invalid_configuration");
+        }
+        if let Ok(url) = parsed
+            && (self.url.len() > 1000
+                || !matches!(url.scheme(), "https" | "http")
+                || url.host_str().is_none()
+                || !url.username().is_empty()
+                || url.password().is_some()
+                || url.fragment().is_some())
+        {
+            report.reject("url", Code::Invalid, "webhook_invalid_configuration");
+        }
+        if self
+            .secret
+            .as_ref()
+            .is_some_and(|s| s.is_empty() || s.len() > 1024)
+        {
+            report.reject("secret", Code::Invalid, "webhook_secret_required");
+        }
+        report
     }
-    if e.secret
-        .as_ref()
-        .is_some_and(|s| s.len() > 1024 || s.is_empty())
-    {
-        return Err(Error::WebhookSecret);
-    }
-    Ok(())
 }
 
 /// Retry only outcomes for which another HTTP attempt can plausibly succeed.

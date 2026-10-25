@@ -35,19 +35,42 @@ impl Default for Policy {
 impl Policy {
     /// Reject unsupported durations and insufficient retry margin.
     pub fn validate(&self) -> Result<(), &'static str> {
-        if !(3600..=365 * 86400).contains(&self.verification_validity_seconds) {
-            return Err("settings_invalid_validity");
+        self.validation().finish().map_err(|e| e.message())
+    }
+
+    /// Independent policy issues, including the cross-field retry margin.
+    pub fn validation(&self) -> crate::validation::Report {
+        use crate::validation::{Code, Report};
+        let mut report = Report::default();
+        let validity = (3600..=365 * 86400).contains(&self.verification_validity_seconds);
+        let recheck = (300..=7 * 86400).contains(&self.verification_recheck_seconds);
+        if !validity {
+            report.reject(
+                "verification_validity_seconds",
+                Code::ValidityRange,
+                "settings_invalid_validity",
+            );
         }
-        if !(300..=7 * 86400).contains(&self.verification_recheck_seconds) {
-            return Err("settings_invalid_recheck");
+        if !recheck {
+            report.reject(
+                "verification_recheck_seconds",
+                Code::RecheckRange,
+                "settings_invalid_recheck",
+            );
         }
-        if self.verification_expires
+        if validity
+            && recheck
+            && self.verification_expires
             && self.verification_recheck_seconds + self.jitter_bound()
                 > self.verification_validity_seconds / 2
         {
-            return Err("settings_recheck_margin_required");
+            report.reject(
+                "verification_recheck_seconds",
+                Code::RecheckMargin,
+                "settings_recheck_margin_required",
+            );
         }
-        Ok(())
+        report
     }
 
     fn jitter_bound(&self) -> i64 {

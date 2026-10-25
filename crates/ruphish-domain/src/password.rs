@@ -27,3 +27,43 @@ pub fn validate(password: &str) -> Result<(), PasswordError> {
         Ok(())
     }
 }
+
+/// Supported credential input bound, also enforced before cryptographic work.
+pub const MAX_BYTES: usize = 1024;
+
+/// Candidate policy shared by setup, replacement and administrator resets.
+pub fn validation(password: &str, field: &str) -> crate::validation::Report {
+    use crate::validation::{Code, Report};
+    let mut report = Report::default();
+    if let Err(error) = validate(password) {
+        let (code, message) = match error {
+            PasswordError::Empty => (Code::Required, "No password provided"),
+            _ => (
+                Code::PasswordShort,
+                "Password must be at least 8 characters",
+            ),
+        };
+        report.reject(field, code, message);
+    }
+    if password.len() > MAX_BYTES {
+        report.reject(
+            field,
+            Code::PasswordLong,
+            "Password exceeds the supported length",
+        );
+    }
+    report
+}
+
+/// Confirmation is a separate field; no secret values enter diagnostics.
+pub fn replacement(candidate: &str, confirmation: &str) -> crate::validation::Report {
+    let mut report = validation(candidate, "password");
+    if candidate != confirmation {
+        report.reject(
+            "confirmation",
+            crate::validation::Code::PasswordMismatch,
+            "Passwords do not match",
+        );
+    }
+    report
+}

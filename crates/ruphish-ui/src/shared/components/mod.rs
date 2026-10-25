@@ -8,6 +8,8 @@ mod dialogs;
 pub(crate) use dialogs::*;
 mod forms;
 pub(crate) use forms::*;
+mod validation;
+pub(crate) use validation::*;
 mod info;
 pub(crate) use info::*;
 mod inputs;

@@ -191,3 +191,100 @@ pub fn resolve_delivery(state: &str, action: &str) -> Result<&'static str, Resol
         _ => Err(ResolutionError),
     }
 }
+/// Required configuration projected from legacy names or stable resource identities.
+pub struct Fields<'a> {
+    /// Campaign label, preserving existing whitespace semantics.
+    pub name: &'a str,
+    /// Whether at least one group was selected.
+    pub groups: bool,
+    /// Whether an email template was selected.
+    pub template: bool,
+    /// Whether a landing page was selected.
+    pub page: bool,
+    /// Whether a sending profile was selected.
+    pub smtp: bool,
+    /// Effective launch instant (immediate delivery uses the caller's clock).
+    pub launch: i64,
+    /// Optional initial distribution end.
+    pub send_by: Option<i64>,
+}
+impl Fields<'_> {
+    /// Evaluate independent requirements before expensive resource preparation.
+    pub fn validation(&self) -> crate::validation::Report {
+        let mut report = self.audience_validation();
+        report.extend(self.content_validation());
+        report.extend(self.schedule_validation());
+        report
+    }
+    /// Requirements owned by the audience step.
+    pub fn audience_validation(&self) -> crate::validation::Report {
+        use crate::validation::{Code, Report};
+        let mut report = Report::default();
+        if self.name.is_empty() {
+            report.reject("name", Code::Required, "Campaign name not specified");
+        }
+        if !self.groups {
+            report.reject("selection.groups", Code::Required, "No groups specified");
+        }
+        report
+    }
+    /// Requirements owned by the content step.
+    pub fn content_validation(&self) -> crate::validation::Report {
+        use crate::validation::{Code, Report};
+        let mut report = Report::default();
+        for (selected, field, message) in [
+            (
+                self.template,
+                "selection.template.id",
+                "No email template specified",
+            ),
+            (self.page, "selection.page.id", "No landing page specified"),
+            (
+                self.smtp,
+                "selection.smtp.id",
+                "No sending profile specified",
+            ),
+        ] {
+            if !selected {
+                report.reject(field, Code::Required, message);
+            }
+        }
+        report
+    }
+    /// Distribution end ordering, shared by legacy requests and draft readiness.
+    pub fn schedule_validation(&self) -> crate::validation::Report {
+        let mut report = crate::validation::Report::default();
+        if self.send_by.is_some_and(|end| end < self.launch) {
+            report.reject(
+                "send_by_local.local",
+                crate::validation::Code::ScheduleOrder,
+                "The launch date must be before the \"send emails by\" date",
+            );
+        }
+        report
+    }
+}
+
+/// Validate mutually exclusive post-submission destinations without resolving resources.
+pub fn policy_validation(
+    learning_page_id: Option<i64>,
+    redirect_url: &str,
+) -> crate::validation::Report {
+    use crate::validation::{Code, Report};
+    let mut report = Report::default();
+    if learning_page_id.is_some_and(|id| id <= 0) {
+        report.reject(
+            "policy.learning_page_id",
+            Code::Invalid,
+            "Choose one valid redirect destination",
+        );
+    }
+    if learning_page_id.is_some() && !redirect_url.is_empty() {
+        report.reject(
+            "policy.redirect_url",
+            Code::RedirectConflict,
+            "Choose one valid redirect destination",
+        );
+    }
+    report
+}

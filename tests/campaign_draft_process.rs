@@ -61,6 +61,77 @@ fn launch_body(base: &str, configuration: &Value, revision: &Value) -> Value {
 }
 
 #[test]
+fn incomplete_review_step_draft_reopens_rejects_review_and_launch_then_recovers() {
+    let directory = workspace();
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
+    let path = "/api/campaign-drafts/incomplete-review-step-01";
+    let incomplete = json!({"name":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"redirect_url":""}});
+    let saved = save(&base, path, Value::Null, &incomplete, 3);
+    let before = counts(directory.path());
+    process.stop();
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
+    assert_eq!(read(&base, path), saved);
+    let review = request(&base, "POST", "/api/campaign-drafts/prepare", &incomplete);
+    assert_eq!(review.status(), 400);
+    let error: Value = review.json().unwrap();
+    assert!(
+        error["validation"]["issues"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["field"] == "name")
+    );
+    let launch = request(
+        &base,
+        "POST",
+        &format!("{path}/launch"),
+        &json!({"revision":saved["revision"],"campaign":incomplete}),
+    );
+    assert_eq!(launch.status(), 400);
+    assert_eq!(read(&base, path), saved);
+    assert_eq!(counts(directory.path()), before);
+
+    let mut complete = configuration_for(&base);
+    complete["launch_local"] = json!({"local":"","time_zone":"UTC"});
+    let scheduled_incomplete = save(&base, path, saved["revision"].clone(), &complete, 2);
+    let response = request(&base, "POST", "/api/campaign-drafts/prepare", &complete);
+    assert_eq!(response.status(), 400);
+    let error: Value = response.json().unwrap();
+    assert_eq!(
+        error["validation"]["issues"][0]["field"],
+        "launch_local.local"
+    );
+    assert_eq!(read(&base, path), scheduled_incomplete);
+    assert_eq!(counts(directory.path()), before);
+
+    complete["launch_local"] = Value::Null;
+    let saved = save(
+        &base,
+        path,
+        scheduled_incomplete["revision"].clone(),
+        &complete,
+        3,
+    );
+    request(&base, "POST", "/api/campaign-drafts/prepare", &complete)
+        .error_for_status()
+        .unwrap();
+    let body = launch_body(&base, &complete, &saved["revision"]);
+    let launched: Value = request(&base, "POST", &format!("{path}/launch"), &body)
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    let retried: Value = request(&base, "POST", &format!("{path}/launch"), &body)
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(launched["id"], retried["id"]);
+    assert_eq!(counts(directory.path())[..4], [1, 1, 1, 1]);
+    process.stop();
+}
+
+#[test]
 fn campaign_draft_survives_restart_rejects_bad_input_and_launches_once_after_rollback() {
     let directory = workspace();
     let (mut process, base) = start(&directory, &["--disable-mailer"]);

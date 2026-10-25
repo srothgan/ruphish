@@ -1,10 +1,11 @@
 //! Searchable single selection using native radio keyboard behavior and shared panels.
-use super::{ActionButton, EmptyState, Field, TextInput, info::anchored_nodes};
+use super::{ActionButton, EmptyState, Field, TextInput, ValidationBinding, info::anchored_nodes};
 use leptos::prelude::*;
 use ruphish_ui::{tr, trs};
 
 #[component]
 pub(crate) fn SearchSelect(
+    #[prop(into, optional)] validation_field: String,
     id: &'static str,
     #[prop(into)] label: Signal<String>,
     #[prop(into)] search_label: Signal<String>,
@@ -13,6 +14,12 @@ pub(crate) fn SearchSelect(
     #[prop(into)] disabled: Signal<bool>,
 ) -> impl IntoView {
     let (trigger, panel) = anchored_nodes();
+    let binding = ValidationBinding::new(validation_field);
+    binding.register(Callback::new(move |()| {
+        if let Some(node) = trigger.get() {
+            let _ = node.focus();
+        }
+    }));
     let search = RwSignal::new(String::new());
     let filtered = Memo::new(move |_| {
         let query = search.get().trim().to_lowercase();
@@ -42,6 +49,9 @@ pub(crate) fn SearchSelect(
             </span>
             <button
                 node_ref=trigger
+                aria-invalid=move || binding.invalid().then_some("true")
+                aria-describedby=move || binding.described_by()
+                on:blur=move |_| binding.touched()
                 type="button"
                 class="multi-select-trigger"
                 disabled=move || disabled.get()
@@ -52,6 +62,7 @@ pub(crate) fn SearchSelect(
             >
                 <span id=format!("{id}-value")>{selected_label}</span>
             </button>
+            {binding.view()}
             <div
                 node_ref=panel
                 id=format!("{id}-panel")
@@ -83,7 +94,11 @@ pub(crate) fn SearchSelect(
                                         disabled=move || disabled.get()
                                         data-panel-close
                                         prop:checked=move || value.get() == key.get_value()
-                                        on:change=move |_| value.set(key.get_value())
+                                        on:change=move |_| {
+                                            binding.edited();
+                                            binding.touched();
+                                            value.set(key.get_value());
+                                        }
                                     />
                                     <span>{text}</span>
                                 </label>

@@ -17,3 +17,6 @@ pub mod storage;
 
 /// Shared date/time rules used by application consumers.
 pub use ruphish_domain::datetime;
+
+/// Pure validation results exposed to transport adapters.
+pub use ruphish_domain::validation;

@@ -344,6 +344,7 @@ fn field(
     view! {
         <Field label=label>
             <TextInput
+                validation_field=key
                 input_type=input_type
                 value=Signal::derive(move || {
                     let value = draft.get();
@@ -430,11 +431,22 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
             });
         });
     }
+    let validation = FormValidation::new(move || {
+        ruphish_ui::form_validation::integration(
+            &draft.get(),
+            kind.webhook(),
+            has_saved_secret.get(),
+        )
+    });
     let save = move |event: leptos::ev::SubmitEvent| {
         event.prevent_default();
         if busy.get_untracked() || !loaded.get_untracked() || !editable {
             return;
         }
+        if !validation.check() {
+            return;
+        }
+        let ticket = validation.ticket();
         let mut value = draft.get_untracked();
         let secret = if kind.webhook() { "secret" } else { "password" };
         if value[secret].as_str().is_none_or(str::is_empty) {
@@ -447,7 +459,7 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                 |id| format!("{}/{id}", kind.api()),
             );
             match api
-                .resource(
+                .resource_response(
                     if id.is_some() { "PUT" } else { "POST" },
                     &path,
                     &token.get_value(),
@@ -458,7 +470,6 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                 .and_then(|(saved, revision)| {
                     ManagementQueries::validate_integration(api, kind, saved, id)
                         .map(|saved| (saved, revision))
-                        .map_err(|e| e.message)
                 }) {
                 Ok((saved, _)) => {
                     queries.integration_saved(kind, saved.id());
@@ -473,7 +484,8 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                 }
                 Err(error) => {
                     busy.set(false);
-                    message.error(error);
+                    validation.server(ticket, &error);
+                    message.error(error.message);
                 }
             }
         });
@@ -522,7 +534,8 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                 }}
             </p>
             {message.view()}
-            <form on:submit=save>
+            <form novalidate on:submit=save>
+                <ValidationSummary form=validation />
                 <FormFields disabled=Signal::derive(move || {
                     busy.get() || !loaded.get() || !editable
                 })>
@@ -533,6 +546,7 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                                 <h2>{tr!(ui.connection)}</h2>
                                 {field(draft, "url", trs!(ui.endpoint_url), "url")}
                                 <SecretField
+                                    validation_field="secret"
                                     label=trs!(ui.signing_secret)
                                     saved_hint=trs!(ui.leave_empty_to_keep_the_saved_secret)
                                     has_saved_value=has_saved_secret
@@ -573,6 +587,7 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                                         "text",
                                     )}
                                     <SecretField
+                                        validation_field="password"
                                         label=trs!(ui.service_account_password)
                                         saved_hint=trs!(ui.leave_empty_to_keep_the_saved_password)
                                         has_saved_value=has_saved_secret

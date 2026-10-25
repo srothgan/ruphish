@@ -39,7 +39,7 @@ impl PasswordWorker {
 }
 /// Verify existing credential formats without changing stored material.
 pub fn verify(password: &str, hash: &str) -> bool {
-    if password.len() > 1024 {
+    if password.len() > ruphish_domain::password::MAX_BYTES {
         return false;
     }
     if hash.starts_with("$argon2id$") {
@@ -65,7 +65,7 @@ pub fn verify(password: &str, hash: &str) -> bool {
 }
 /// Produce the configured modern format. Called only from bounded blocking workers.
 pub fn hash(password: &str) -> Result<String, Error> {
-    if password.len() > 1024 {
+    if password.len() > ruphish_domain::password::MAX_BYTES {
         return Err(Error::TooLong);
     }
     Argon2::default()

@@ -100,7 +100,28 @@ async fn password_change_preserves_original_rejections_and_verifies_the_new_hash
                 confirmation,
             )
             .await;
-        assert!(matches!(result, Err(Error::Password(error)) if error == expected));
+        let error = result.err().unwrap();
+        assert_eq!(error.to_string(), expected.to_string());
+        match expected {
+            PasswordError::Reused => {
+                assert!(matches!(error, Error::Password(PasswordError::Reused)))
+            }
+            _ => {
+                let Error::Validation(report) = error else {
+                    panic!("expected field validation")
+                };
+                let (field, code) = if expected == PasswordError::Mismatch {
+                    (
+                        "confirmation",
+                        ruphish_domain::validation::Code::PasswordMismatch,
+                    )
+                } else {
+                    ("password", ruphish_domain::validation::Code::PasswordShort)
+                };
+                assert_eq!(report.issues()[0].field, field);
+                assert_eq!(report.issues()[0].code, code);
+            }
+        }
         assert_eq!(
             repo.by_id(user.identity.id).await.unwrap().hash,
             captured["bcrypt_hash"].as_str().unwrap()

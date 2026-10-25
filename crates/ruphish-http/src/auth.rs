@@ -1271,8 +1271,18 @@ pub(crate) struct Rejection {
     status: StatusCode,
     message: String,
     code: ErrorCode,
+    validation: Option<ruphish_contracts::validation::ValidationReport>,
 }
 impl Rejection {
+    pub(crate) fn with_validation(
+        mut self,
+        report: &ruphish_application::validation::Report,
+    ) -> Self {
+        if !report.is_empty() {
+            self.validation = Some(report.into());
+        }
+        self
+    }
     fn status(&self) -> StatusCode {
         self.status
     }
@@ -1284,11 +1294,11 @@ impl IntoResponse for Rejection {
             status = self.status.as_u16(),
             "Request rejected"
         );
-        let mut response = (
-            self.status,
-            Json(serde_json::json!({"success": false, "message": self.message, "data": null, "code": self.code.as_str()})),
-        )
-            .into_response();
+        let mut body = serde_json::json!({"success": false, "message": self.message, "data": null, "code": self.code.as_str()});
+        if let Some(validation) = self.validation {
+            body["validation"] = serde_json::json!(validation);
+        }
+        let mut response = (self.status, Json(body)).into_response();
         if self.status == StatusCode::TOO_MANY_REQUESTS {
             response
                 .headers_mut()
@@ -1302,6 +1312,7 @@ pub(crate) fn failure(status: StatusCode, code: ErrorCode, message: &str) -> Rej
         status,
         message: message.into(),
         code,
+        validation: None,
     }
 }
 fn session_error(_: tower_sessions::session::Error) -> Rejection {
@@ -1321,6 +1332,24 @@ pub(crate) fn policy_code(error: &AccountError) -> ErrorCode {
 fn auth_code(error: &Error) -> ErrorCode {
     use ruphish_application::auth::PasswordError;
     match error {
+        Error::Validation(report) => match report.issues().first() {
+            Some(issue) => match (issue.field.as_str(), issue.code) {
+                ("username", _) => ErrorCode::UsernameRequired,
+                ("role", _) => ErrorCode::RoleRequired,
+                ("language" | "format_locale" | "time_zone", _) => ErrorCode::PreferencesInvalid,
+                (_, ruphish_application::validation::Code::PasswordShort) => {
+                    ErrorCode::PasswordTooShort
+                }
+                (_, ruphish_application::validation::Code::PasswordLong) => {
+                    ErrorCode::PasswordTooLong
+                }
+                (_, ruphish_application::validation::Code::PasswordMismatch) => {
+                    ErrorCode::PasswordMismatch
+                }
+                _ => ErrorCode::PasswordRequired,
+            },
+            None => ErrorCode::RequestInvalid,
+        },
         Error::Policy(error) => policy_code(error),
         Error::Preferences(_) => ErrorCode::PreferencesInvalid,
         Error::Password(error) => match error {
@@ -1360,7 +1389,27 @@ fn auth_error(error: Error) -> Rejection {
     } else {
         error.to_string()
     };
-    failure(status, auth_code(&error), &message)
+    let rejection = failure(status, auth_code(&error), &message);
+    match &error {
+        Error::Validation(report) => rejection.with_validation(report),
+        Error::Conflict
+        | Error::RoleNotFound
+        | Error::Password(ruphish_application::auth::PasswordError::Reused) => {
+            let field = match error {
+                Error::Conflict => "username",
+                Error::RoleNotFound => "role",
+                _ => "password",
+            };
+            let mut report = ruphish_application::validation::Report::default();
+            report.reject(
+                field,
+                ruphish_application::validation::Code::Conflict,
+                "Choose a different value",
+            );
+            rejection.with_validation(&report)
+        }
+        _ => rejection,
+    }
 }
 async fn security_headers(request: Request<Body>, next: Next) -> Response {
     let api = request.uri().path().starts_with("/api/");

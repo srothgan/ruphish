@@ -8,6 +8,9 @@ use std::sync::Arc;
 /// An application failure with safe public messages.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// Independent field failures, separate from authentication and transport errors.
+    #[error(transparent)]
+    Validation(#[from] ruphish_domain::validation::Report),
     /// Invalid display override.
     #[error(transparent)]
     Preferences(#[from] ruphish_domain::preferences::Error),
@@ -130,7 +133,7 @@ impl Service {
     }
     /// Authenticate and record login using the current account generation.
     pub async fn login(&self, username: &str, password: String) -> Result<Account, Error> {
-        if password.len() > 1024 {
+        if password.len() > password::MAX_BYTES {
             return Err(Error::InvalidCredentials);
         }
         let user = match self.repository.by_name(username).await {
@@ -194,9 +197,12 @@ impl Service {
             actor.require("modify_system")?;
             None
         };
-        account::validate_fields(&edit.username, &edit.role)?;
+        let mut report = account::validation(&edit.username, &edit.role);
+        if target.is_none() || !edit.password.is_empty() {
+            report.extend(password::validation(&edit.password, "password"));
+        }
+        report.finish()?;
         let hash = if target.is_none() || !edit.password.is_empty() {
-            password::validate(&edit.password)?;
             Some(self.passwords.hash(edit.password.clone()).await?)
         } else {
             None
@@ -235,10 +241,7 @@ impl Service {
         {
             return Err(Error::InvalidCredentials);
         }
-        password::validate(&candidate)?;
-        if candidate != confirmation {
-            return Err(password::PasswordError::Mismatch.into());
-        }
+        password::replacement(&candidate, confirmation).finish()?;
         if self
             .passwords
             .verify(candidate.clone(), user.hash.clone())

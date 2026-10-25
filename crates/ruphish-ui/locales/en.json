@@ -1055,5 +1055,27 @@
     "csv_row_email": "Invalid email address.",
     "draft_invalid": "Check the draft fields and supported input limits. Your changes have been kept.",
     "draft_schedule_past": "The saved launch time is in the past. Choose a future time or clear it to launch now."
+  },
+  "validation": {
+    "scheduled_help": "Choose a local date, time and time zone. Daylight saving changes are handled automatically.",
+    "summary": "Check the highlighted fields before continuing.",
+    "required": "This field is required.",
+    "invalid": "Check this value and its required format.",
+    "too_long": "This exceeds the supported limit.",
+    "email_content": "Provide HTML or plain-text email content.",
+    "password_short": "Use at least 8 UTF-8 bytes; non-ASCII characters can use several bytes.",
+    "password_long": "Use no more than 1,024 UTF-8 bytes.",
+    "password_mismatch": "The passwords do not match.",
+    "schedule_past": "Choose a future launch time or launch immediately.",
+    "schedule_order": "The distribution end cannot be before launch.",
+    "unavailable": "This selection is unavailable. Refresh or choose another.",
+    "conflict": "This value cannot be used. Choose a different value.",
+    "redirect_conflict": "Choose a learning page or a custom redirect, not both.",
+    "validity_range": "Use 3,600 to 31,536,000 seconds (1 hour to 365 days).",
+    "recheck_range": "Use 300 to 604,800 seconds (5 minutes to 7 days).",
+    "recheck_margin": "The recheck interval plus jitter must fit within half the validity period.",
+    "immediate": "Launch immediately",
+    "scheduled": "Schedule for later",
+    "delivery_mode": "Launch timing"
   }
 }

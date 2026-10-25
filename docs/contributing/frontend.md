@@ -27,6 +27,25 @@ Keep confirmed resource data separate from incomplete form state. Preserve recov
 
 Use shared localization and date/time helpers; avoid literal English strings or feature-specific timestamp parsers. The [localization guide](localization.md) explains translation keys, error-code mapping, and independent account preferences.
 
+## Form validation
+
+Domain validators own reusable rules. `form_validation.rs` projects editable browser values into those validators, while shared controls associate localized diagnostics with fields and focus the first failing control. Use `FormValidation` for a form, supply `validation_field` for nested paths, and provide a `ValidationAnchor` for grouped or JavaScript-owned inputs. Errors become visible on blur or an attempted action. Editing invalidates pending diagnostic responses; a delayed failure must not annotate newer input.
+
+Validation reports contain field paths and stable reason codes, without input values. They are independent of `ApiError`: an API failure may carry a report, while transport, authentication, permissions and revision failures retain their separate status and recovery behavior. Never manufacture an API failure for a local rule or display arbitrary server text as a field message.
+
+| Surface | Shared browser/server rules | Server-dependent checks |
+| --- | --- | --- |
+| Campaigns | Required name and selections, redirect-choice consistency, local time parsing and schedule ordering | Resource ownership/revisions, recipient resolution, domain eligibility, rendered destinations and launch transaction |
+| Resources | Required resource fields, audience count, text-or-HTML email content and header control characters | Recipient/sender/SMTP parsing, template syntax, attachment decoding and limits, name conflicts and optimistic revision |
+| Passwords and users | Required username/role, candidate password bounds and confirmation | Current credential, reuse, role existence and permissions |
+| Domains | Name bounds and HTTPS origin syntax | Ownership, uniqueness and verification |
+| Integrations | Endpoint/configuration formats, bounds and ranges | Existing-secret preservation, permissions, revisions and connection tests |
+| Settings and preferences | Duration ranges/relationships, supported language, locale syntax and time zone | Authorized persistence; browser locale availability also depends on the browser's Intl support |
+
+These rules preserve existing accepted input. For example, the password minimum is eight UTF-8 bytes with a 1,024-byte maximum; there is no additional uppercase/digit/symbol rule. Blank passwords on user edits and blank integration secrets on existing configurations preserve saved credentials. Resource name rules do not impose a new universal minimum/maximum length. Login retains required credentials and server authentication without applying the replacement-password policy.
+
+Draft persistence permits incomplete configuration within its existing structural bounds. Continue checks readiness for the current step and saves successfully before advancing. Review checks all steps, including a draft reopened directly at Review; invalid input reveals its owning step. Server preparation and launch independently reject invalid input. A frozen launch with an uncertain result keeps its retry identity rather than being treated as a new launch.
+
 ## Verification
 
 Use functional Rust/JS tests for extracted transformations and request construction, then build the WASM distribution when UI output changes. Follow [validation](testing/validation.md) for the affected targets. The user performs [manual browser review](testing/manual-ui.md); a build or Node WASM test does not establish layout, keyboard, editor, or participant-browser behavior.

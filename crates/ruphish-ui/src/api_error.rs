@@ -13,16 +13,19 @@ pub struct ApiError {
     pub code: String,
     /// Localized, user-facing message.
     pub message: String,
+    /// Optional field failures; local validation never constructs an API error.
+    pub validation: Option<ruphish_contracts::validation::ValidationReport>,
 }
 
 impl ApiError {
-    /// A client-side failure without HTTP metadata: transport, validation, or an
+    /// A client-side failure without HTTP metadata: transport or an
     /// inactive session.
     pub fn local(message: String) -> Self {
         Self {
             status: 0,
             code: String::new(),
             message,
+            validation: None,
         }
     }
 
@@ -32,6 +35,7 @@ impl ApiError {
             status,
             code,
             message,
+            validation: None,
         }
     }
 
@@ -73,7 +77,25 @@ pub fn response(
                 503 => "SERVICE_BUSY",
                 _ => "REQUEST_FAILED",
             });
-        return Err(ApiError::http(status, code.to_owned(), label(code)));
+        let mut error = ApiError::http(status, code.to_owned(), label(code));
+        error.validation = value
+            .get("validation")
+            .cloned()
+            .and_then(|value| {
+                serde_json::from_value::<ruphish_contracts::validation::ValidationReport>(value)
+                    .ok()
+            })
+            .filter(|report| {
+                report.issues.len() <= ruphish_contracts::validation::MAX_ISSUES
+                    && report.issues.iter().all(|issue| {
+                        issue.field.len() <= 200
+                            && issue
+                                .field
+                                .bytes()
+                                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_'))
+                    })
+            });
+        return Err(error);
     }
     Ok(value)
 }

@@ -19,6 +19,7 @@ pub mod resource_details;
 pub mod resources;
 pub mod settings;
 pub mod starter_templates;
+pub mod validation;
 
 // An explicit null is meaningful; an absent property is an incomplete response.
 fn nullable<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>

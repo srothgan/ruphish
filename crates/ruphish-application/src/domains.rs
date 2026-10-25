@@ -154,11 +154,6 @@ pub struct VerificationRun {
 impl Edit {
     /// Validate the immutable origin and operator label identically for every provider.
     pub fn validate(&self) -> Result<ruphish_domain::domains::Origin, Error> {
-        let canonical = ruphish_domain::domains::origin(&self.origin, false)
-            .map_err(|code| Error::Invalid(code.into()))?;
-        if self.name.trim().is_empty() || self.name.len() > 200 {
-            return Err(Error::Invalid("domain_invalid_name".into()));
-        }
-        Ok(canonical)
+        ruphish_domain::domains::validate_edit(&self.name, &self.origin).map_err(Error::Validation)
     }
 }

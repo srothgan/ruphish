@@ -300,11 +300,20 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
     }
     let navigate = leptos_router::hooks::use_navigate();
     let cancel = navigate.clone();
+    let validation = FormValidation::new(move || {
+        ruphish_domain::domains::validate_edit(&name.get(), &origin.get())
+            .err()
+            .unwrap_or_default()
+    });
     let submit = move |event: leptos::ev::SubmitEvent| {
         event.prevent_default();
         if busy.get_untracked() || !loaded.get_untracked() || !can_edit {
             return;
         }
+        if !validation.check() {
+            return;
+        }
+        let ticket = validation.ticket();
         busy.set(true);
         let navigate = navigate.clone();
         spawn_local(async move {
@@ -318,7 +327,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                 .map(|id| format!("/api/domains/{id}"))
                 .unwrap_or_else(|| "/api/domains/".into());
             match api
-                .resource(
+                .resource_response(
                     if id.is_some() { "PUT" } else { "POST" },
                     &path,
                     &token.get_value(),
@@ -326,9 +335,8 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                     None,
                 )
                 .await
-                .and_then(|(v, _)| {
-                    ManagementQueries::validate_domain(api, v, id).map_err(|e| e.message)
-                }) {
+                .and_then(|(v, _)| ManagementQueries::validate_domain(api, v, id))
+            {
                 Ok(d) => {
                     queries.domain_saved(d.id);
                     loaded.set(false);
@@ -337,7 +345,8 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                 }
                 Err(e) => {
                     busy.set(false);
-                    message.error(e)
+                    validation.server(ticket, &e);
+                    message.error(e.message)
                 }
             }
         });
@@ -364,7 +373,8 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                 })
             ></PageHeader>
             {message.view()}
-            <form id="domain-form" on:submit=submit>
+            <form id="domain-form" novalidate on:submit=submit>
+                <ValidationSummary form=validation />
                 <FormFields disabled=Signal::derive(move || {
                     busy.get() || !loaded.get() || !can_edit
                 })>
@@ -372,6 +382,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                         <TextInput
                             required=true
                             maxlength=200
+                            validation_field="name"
                             value=Signal::derive(move || name.get())
                             on_input=move |e| name.set(event_target_value(&e))
                         />
@@ -382,6 +393,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                             required=true
                             placeholder=trs!(ui.https_training_example_com)
                             readonly=id.is_some()
+                            validation_field="origin"
                             value=Signal::derive(move || origin.get())
                             on_input=move |e| origin.set(event_target_value(&e))
                         />

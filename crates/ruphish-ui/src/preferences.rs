@@ -106,6 +106,26 @@ pub(crate) fn DisplayPreferencesForm(api: Api, token: String) -> impl IntoView {
         }
     });
     crate::navigation::protect_draft(move || busy.get() || draft() != baseline.get());
+    let validation = FormValidation::new(move || {
+        let input = draft();
+        let domain = ruphish_domain::preferences::Preferences {
+            language: input.language.clone(),
+            format_locale: input.format_locale.clone(),
+            time_zone: input.time_zone.clone(),
+            show_utc_offset: input.show_utc_offset,
+        };
+        let mut report = domain.validation();
+        if input.format_locale.as_deref().is_some_and(|locale| {
+            !browser_datetime::supports_format_locale(locale).unwrap_or(false)
+        }) {
+            report.reject(
+                "format_locale",
+                ruphish_domain::validation::Code::Invalid,
+                "Unsupported browser locale",
+            );
+        }
+        report
+    });
     let submit = move |event: leptos::ev::SubmitEvent| {
         event.prevent_default();
         if busy.get_untracked() {
@@ -113,47 +133,37 @@ pub(crate) fn DisplayPreferencesForm(api: Api, token: String) -> impl IntoView {
         }
         message.clear();
         let input = draft();
-        if input.format_locale.as_deref().is_some_and(|locale| {
-            !browser_datetime::supports_format_locale(locale).unwrap_or(false)
-        }) {
-            message.error(leptos_i18n::t_string!(i18n, preferences.invalid_format).to_owned());
+        if !validation.check() {
             return;
         }
-        if input
-            .time_zone
-            .as_deref()
-            .is_some_and(|zone| datetime::named_zone(zone).is_err())
-        {
-            message.error(leptos_i18n::t_string!(i18n, preferences.invalid_zone).to_owned());
-            return;
-        }
+        let ticket = validation.ticket();
         busy.set(true);
         spawn_local(async move {
-            let result = match serde_json::to_value(&input) {
-                Ok(body) => api
-                    .resource(
-                        "PUT",
-                        "/internal/preferences",
-                        &token.get_value(),
-                        Some(&body),
-                        None,
-                    )
-                    .await
-                    .ok()
-                    .and_then(|(value, _)| ruphish_ui::preference_state::decode(value)),
-                Err(_) => None,
-            };
+            let result = api
+                .resource_response(
+                    "PUT",
+                    "/internal/preferences",
+                    &token.get_value(),
+                    Some(&serde_json::json!(input)),
+                    None,
+                )
+                .await
+                .and_then(|(value, _)| {
+                    ruphish_ui::preference_state::decode(value)
+                        .ok_or_else(|| api.invalid_read_err())
+                });
             busy.set(false);
-            if let Some(value) = result {
+            if let Ok(value) = &result {
                 language.set(value.language.clone().unwrap_or_default());
                 format.set(value.format_locale.clone().unwrap_or_default());
                 zone.set(value.time_zone.clone().unwrap_or_default());
                 show_offset.set(value.show_utc_offset);
                 baseline.set(value.clone());
-                state.apply(value, i18n);
+                state.apply(value.clone(), i18n);
                 message.status(leptos_i18n::t_string!(i18n, preferences.saved).to_owned());
-            } else {
-                message.error(leptos_i18n::t_string!(i18n, preferences.save_failed).to_owned());
+            } else if let Err(error) = result {
+                validation.server(ticket, &error);
+                message.error(error.message);
             }
         });
     };
@@ -185,9 +195,11 @@ pub(crate) fn DisplayPreferencesForm(api: Api, token: String) -> impl IntoView {
                 noun=trs!(preferences.heading)
                 refresh=read.refresh
             />
-            <form class="account-form" on:submit=submit>
+            <form class="account-form" novalidate on:submit=submit>
+                <ValidationSummary form=validation />
                 <div class="preference-field">
                     <Select
+                        validation_field="language"
                         label=trs!(language.label)
                         value=language
                         disabled=busy
@@ -222,6 +234,7 @@ pub(crate) fn DisplayPreferencesForm(api: Api, token: String) -> impl IntoView {
                 </div>
                 <div class="preference-field">
                     <SearchSelect
+                        validation_field="format_locale"
                         id="date-format"
                         label=trs!(preferences.format_label)
                         search_label=trs!(preferences.search_formats)
@@ -246,6 +259,7 @@ pub(crate) fn DisplayPreferencesForm(api: Api, token: String) -> impl IntoView {
                 </div>
                 <div class="preference-field">
                     <SearchSelect
+                        validation_field="time_zone"
                         id="time-zone"
                         label=trs!(preferences.zone_label)
                         search_label=trs!(preferences.search_zones)

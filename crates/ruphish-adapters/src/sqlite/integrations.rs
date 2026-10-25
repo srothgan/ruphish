@@ -149,7 +149,7 @@ impl Repository for Integrations {
         id: Option<i64>,
         e: WebhookEdit,
     ) -> Result<Webhook, Error> {
-        e.validate().map_err(|error| invalid(&error.to_string()))?;
+        e.validation().finish().map_err(Error::Validation)?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(db)?;
         authorize(&mut tx, who, true, true).await?;
         let id = if let Some(id) = id {
@@ -348,7 +348,7 @@ impl Repository for Integrations {
         id: Option<i64>,
         e: MailboxEdit,
     ) -> Result<Mailbox, Error> {
-        e.validate().map_err(|error| invalid(&error.to_string()))?;
+        e.validation().finish().map_err(Error::Validation)?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(db)?;
         authorize(&mut tx, who, true, false).await?;
         let duplicate: bool = sqlx::query_scalar(
@@ -525,8 +525,7 @@ impl Repository for Integrations {
         who: Identity,
         edit: MailboxEdit,
     ) -> Result<(), Error> {
-        edit.validate()
-            .map_err(|error| invalid(&error.to_string()))?;
+        edit.validation().finish().map_err(Error::Validation)?;
         let mut tx = self.pool.begin().await.map_err(db)?;
         authorize(&mut tx, who, true, false).await?;
         super::settings::require_integration(&mut tx, true).await?;

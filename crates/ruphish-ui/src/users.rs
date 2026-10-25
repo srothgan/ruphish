@@ -109,11 +109,25 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
             });
         });
     }
+    let validation = FormValidation::new(move || {
+        let mut report = ruphish_domain::account::validation(&username.get(), &role.get());
+        if id.is_none() || !password.get().is_empty() {
+            report.extend(ruphish_domain::password::validation(
+                &password.get(),
+                "password",
+            ));
+        }
+        report
+    });
     let submit = move |event: leptos::ev::SubmitEvent| {
         event.prevent_default();
         if busy.get_untracked() || !loaded.get_untracked() {
             return;
         }
+        if !validation.check() {
+            return;
+        }
+        let ticket = validation.ticket();
         busy.set(true);
         message.clear();
         let navigate = navigate.clone();
@@ -129,18 +143,19 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                 .map(|id| format!("/api/users/{id}"))
                 .unwrap_or_else(|| "/api/users/".into());
             let result = api
-                .json(
+                .resource_response(
                     if id.is_some() { "PUT" } else { "POST" },
                     &path,
                     &token.get_value(),
-                    Some(&value),
+                    Some(&serde_json::json!(value)),
+                    None,
                 )
                 .await
-                .and_then(|value| {
+                .and_then(|(value, _)| {
                     let user: User =
-                        serde_json::from_value(value).map_err(|_| api.invalid_read())?;
+                        serde_json::from_value(value).map_err(|_| api.invalid_read_err())?;
                     if user.id <= 0 || id.is_some_and(|id| id != user.id) {
-                        return Err(api.invalid_read());
+                        return Err(api.invalid_read_err());
                     }
                     Ok(())
                 });
@@ -173,7 +188,10 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                         },
                     );
                 }
-                Err(error) => message.error(error),
+                Err(error) => {
+                    validation.server(ticket, &error);
+                    message.error(error.message);
+                }
             }
         });
     };
@@ -224,12 +242,14 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                 />
             </PageHeader>
             {message.view()}
-            <form id="user-form" on:submit=submit>
+            <form id="user-form" novalidate on:submit=submit>
+                <ValidationSummary form=validation />
                 <FormFields disabled=Signal::derive(move || busy.get() || !loaded.get())>
                     <Field label=trs!(ui.username)>
                         <TextInput
                             autocomplete="off"
                             required=true
+                            validation_field="username"
                             value=Signal::derive(move || username.get())
                             on_input=move |e| username.set(event_target_value(&e))
                         />
@@ -248,11 +268,13 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                             input_type="password"
                             autocomplete="new-password"
                             required=id.is_none()
+                            validation_field="password"
                             value=Signal::derive(move || password.get())
                             on_input=move |e| password.set(event_target_value(&e))
                         />
                     </Field>
                     <Select
+                        validation_field="role"
                         label=trs!(ui.role)
                         value=role
                         on_change=Callback::new(move |v| role.set(v))

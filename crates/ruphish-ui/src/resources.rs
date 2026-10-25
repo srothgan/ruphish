@@ -435,6 +435,7 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
 
 #[derive(Clone, Copy)]
 struct Editor {
+    validation: FormValidation,
     draft: RwSignal<ResourceDraft>,
     message: Message,
     epoch: RwSignal<u64>,
@@ -456,6 +457,7 @@ impl Editor {
             .with(|d| d.value()[key].as_str().unwrap_or("").to_owned())
     }
     fn set(self, key: &str, value: Value) {
+        self.validation.edited(key);
         self.draft.update(|d| d.edit(|v| v[key] = value));
     }
     fn field(
@@ -510,7 +512,11 @@ fn edit(
     let draft = imported
         .map(|i| RwSignal::from(i.draft))
         .unwrap_or_else(|| RwSignal::new(ResourceDraft::new(family.empty(), None)));
+    let validation = FormValidation::new(move || {
+        draft.with(|d| ruphish_ui::form_validation::resource(d.value(), family.route()))
+    });
     let editor = Editor {
+        validation,
         draft,
         import_review,
         message: Message::new(String::new()),
@@ -654,6 +660,7 @@ fn edit(
                 })}
             {editor.import_review.map(|review| import_review_panel(review, editor.message))}
             {editor.message.view()}
+            <ValidationSummary form=validation />
             <Show when=move || loading.get()>
                 <p>{tr!(ui.loading_resource)}</p>
             </Show>
@@ -742,6 +749,10 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
     {
         return false;
     }
+    if !editor.validation.check() {
+        return false;
+    }
+    let ticket = editor.validation.ticket();
     editor.busy.set(true);
     editor.message.clear();
     let current = editor.draft.get_untracked();
@@ -753,7 +764,7 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
         format!("/api/{}/{id}", family.route())
     };
     let result = api
-        .resource(
+        .resource_response(
             if id == 0 { "POST" } else { "PUT" },
             &path,
             &token,
@@ -762,8 +773,7 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
         )
         .await
         .and_then(|(value, revision)| {
-            ResourceQueries::validate_detail(api, family, &value, (id != 0).then_some(id))
-                .map_err(|e| e.message)?;
+            ResourceQueries::validate_detail(api, family, &value, (id != 0).then_some(id))?;
             Ok((value, revision))
         });
     editor.busy.set(false);
@@ -791,7 +801,10 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
             true
         }
         Err(e) => {
-            editor.message.error(e);
+            if editor.draft.with_untracked(|d| d.value() == &submitted) {
+                editor.validation.server(ticket, &e);
+            }
+            editor.message.error(e.message);
             false
         }
     }
@@ -810,6 +823,7 @@ fn group_fields(editor: Editor) -> impl IntoView {
                             .draft
                             .update(|d| {
                                 d.edit(|v| {
+                                    editor.validation.edited("targets");
                                     if let Some(rows) = v["targets"].as_array_mut() {
                                         rows.push(
                                             json!(
@@ -824,6 +838,7 @@ fn group_fields(editor: Editor) -> impl IntoView {
                     {tr!(ui.add_recipient)}
                 </ActionButton>
             </div>
+            <ValidationAnchor field="targets" />
             <DataTable
                 label=trs!(ui.recipients)
                 headers=vec![
@@ -851,6 +866,7 @@ fn group_fields(editor: Editor) -> impl IntoView {
                                         view! {
                                             <td>
                                                 <TextInput
+                                                    validation_field=format!("targets.{index}.{key}")
                                                     aria_label=leptos_i18n::t_string!(
                                                         i18n, messages.recipient_arg0_arg1, arg0 = (index+1).to_string(), arg1 = match key { "email" => leptos_i18n::t_string!(i18n, ui.email), "first_name" => leptos_i18n::t_string!(i18n, ui.first_name), "last_name" => leptos_i18n::t_string!(i18n, ui.last_name), _ => leptos_i18n::t_string!(i18n, ui.position) }
                                                     )
@@ -885,6 +901,7 @@ fn group_fields(editor: Editor) -> impl IntoView {
                                                 .draft
                                                 .update(|d| {
                                                     d.edit(|v| {
+                                                        editor.validation.edited("targets");
                                                         if let Some(rows) = v["targets"].as_array_mut()
                                                             && index < rows.len()
                                                         {
@@ -918,6 +935,13 @@ fn content_workspace(
     let showing_preview = Signal::derive(move || selected_tab.get() == 1);
     let preview = RwSignal::new(ContentPreview::default());
     let html_source = Memo::new(move |_| editor.text("html"));
+    editor
+        .validation
+        .on_reveal(Callback::new(move |field: String| {
+            if field == "html" {
+                selected_tab.set(0);
+            }
+        }));
     let retry = RwSignal::new(0u64);
     Effect::new(move |_| {
         let visible = showing_preview.get();
@@ -968,6 +992,7 @@ fn content_workspace(
     });
     view! {
         <section class="content-workspace">
+            <ValidationAnchor field="html" />
             <div class="content-heading">
                 <h2>
                     {move || {
@@ -1112,6 +1137,7 @@ fn content_fields(
                             } else {
                                 file.type_()
                             };
+                            editor.validation.edited("attachments");
                             editor.draft.update(|d| d.attach(file.name(), mime, &bytes));
                         }
                         Err(_) => editor.message.error(
@@ -1145,6 +1171,7 @@ fn content_fields(
                         <label class="text-alternative">
                             {tr!(ui.plain_text_alternative)}
                             <Textarea
+                                validation_field="text"
                                 rows=6
                                 value=Signal::derive(move || editor.text("text"))
                                 on_input=move |e| editor.set("text", json!(event_target_value(&e)))
@@ -1152,6 +1179,7 @@ fn content_fields(
                         </label>
                         <div class="resource-section">
                             <h2>{tr!(ui.attachments)}</h2>
+                            <ValidationAnchor field="attachments" />
                             <input node_ref=files hidden type="file" multiple on:change=add />
                             <ActionButton
                                 kind="button"
@@ -1179,12 +1207,14 @@ fn content_fields(
                                             view! {
                                                 <li>
                                                     {a["name"].as_str().unwrap_or("").to_owned()}
+                                                    <ValidationAnchor field=format!("attachments.{i}") />
                                                     <ActionButton
                                                         kind="button"
                                                         on_click=move |_| {
                                                             editor
                                                                 .draft
                                                                 .update(|d| {
+                                                                    editor.validation.edited("attachments");
                                                                     d.remove_attachment(i);
                                                                 })
                                                         }
@@ -1348,6 +1378,7 @@ fn profile_fields(editor: Editor) -> impl IntoView {
                             .draft
                             .update(|d| {
                                 d.edit(|v| {
+                                    editor.validation.edited("headers");
                                     if let Some(rows) = v["headers"].as_array_mut() {
                                         rows.push(json!({"key":"","value":""}));
                                     }
@@ -1379,6 +1410,7 @@ fn profile_fields(editor: Editor) -> impl IntoView {
                                                 }
                                             }}
                                             <TextInput
+                                                validation_field=format!("headers.{index}.{key}")
                                                 value=Signal::derive(move || {
                                                     editor
                                                         .draft
@@ -1410,6 +1442,7 @@ fn profile_fields(editor: Editor) -> impl IntoView {
                                         .draft
                                         .update(|d| {
                                             d.edit(|v| {
+                                                editor.validation.edited("headers");
                                                 if let Some(rows) = v["headers"].as_array_mut()
                                                     && index < rows.len()
                                                 {

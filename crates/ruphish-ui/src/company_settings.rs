@@ -59,22 +59,45 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
         _ => false,
     };
     crate::navigation::protect_draft(move || dirty() || busy.get() || closure.get().is_some());
+    let validation = FormValidation::new(move || {
+        let Some((_, mut policy)) = draft.get() else {
+            return Default::default();
+        };
+        let mut report = ruphish_domain::validation::Report::default();
+        match validity.get().parse::<i64>() {
+            Ok(value) => policy.verification_validity_seconds = value,
+            Err(_) => report.reject(
+                "verification_validity_seconds",
+                ruphish_domain::validation::Code::Invalid,
+                "Enter whole seconds",
+            ),
+        }
+        match recheck.get().parse::<i64>() {
+            Ok(value) => policy.verification_recheck_seconds = value,
+            Err(_) => report.reject(
+                "verification_recheck_seconds",
+                ruphish_domain::validation::Code::Invalid,
+                "Enter whole seconds",
+            ),
+        }
+        report.extend(policy.validation());
+        report
+    });
     let save = Callback::new(move |()| {
         if busy.get_untracked() {
             return;
         }
-        let Some((revision, policy)) = edited() else {
-            message.error(leptos_i18n::t_string!(i18n, ui.settings_invalid_durations).to_owned());
-            return;
-        };
-        if policy.validate().is_err() {
-            message.error(leptos_i18n::t_string!(i18n, ui.settings_invalid_durations).to_owned());
+        if !validation.check() {
             return;
         }
+        let Some((revision, policy)) = edited() else {
+            return;
+        };
+        let ticket = validation.ticket();
         busy.set(true);
         spawn_local(async move {
             let result = api
-                .resource(
+                .resource_response(
                     "PUT",
                     "/api/settings",
                     &token.get_value(),
@@ -83,7 +106,7 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                 )
                 .await
                 .and_then(|(value, _)| {
-                    serde_json::from_value::<Settings>(value).map_err(|_| api.invalid_read())
+                    serde_json::from_value::<Settings>(value).map_err(|_| api.invalid_read_err())
                 });
             match result {
                 Ok(saved) => {
@@ -94,7 +117,10 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                     confirming_policy.set(false);
                     message.status(leptos_i18n::t_string!(i18n, ui.settings_saved).to_owned());
                 }
-                Err(error) => message.error(error),
+                Err(error) => {
+                    validation.server(ticket, &error);
+                    message.error(error.message);
+                }
             }
             busy.set(false);
         });
@@ -166,6 +192,7 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                 </ActionButton>
             </PageHeader>
             {message.view()}
+            <ValidationSummary form=validation />
             <QueryStatus
                 fetching=read.fetching
                 has_data=Signal::derive(move || read.data.get().is_some())
@@ -174,10 +201,15 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                 refresh=read.refresh
             />
             <div class="settings-stack">
-                <form on:submit=move |event: leptos::ev::SubmitEvent| {
-                    event.prevent_default();
-                    confirming_policy.set(true);
-                }>
+                <form
+                    novalidate
+                    on:submit=move |event: leptos::ev::SubmitEvent| {
+                        event.prevent_default();
+                        if validation.check() {
+                            confirming_policy.set(true);
+                        }
+                    }
+                >
                     <FormFields disabled=Signal::derive(move || {
                         busy.get() || draft.get().is_none()
                     })>
@@ -207,6 +239,12 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                                         .with(|d| {
                                             d.as_ref().is_some_and(|(_, p)| p.verification_enabled)
                                         })
+                                        || validation
+                                            .error("verification_validity_seconds")
+                                            .is_some()
+                                        || validation
+                                            .error("verification_recheck_seconds")
+                                            .is_some()
                                 }>
                                     <Checkbox
                                         label=trs!(ui.settings_verification_expires)
@@ -230,20 +268,16 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                                             <TextInput
                                                 input_type="number"
                                                 step="1"
+                                                validation_field="verification_validity_seconds"
                                                 value=validity
                                                 on_input=move |e| validity.set(event_target_value(&e))
-                                                disabled=Signal::derive(move || {
-                                                    draft
-                                                        .with(|d| {
-                                                            d.as_ref().is_none_or(|(_, p)| !p.verification_expires)
-                                                        })
-                                                })
                                             />
                                         </Field>
                                         <Field label=trs!(ui.settings_recheck_seconds)>
                                             <TextInput
                                                 input_type="number"
                                                 step="1"
+                                                validation_field="verification_recheck_seconds"
                                                 value=recheck
                                                 on_input=move |e| recheck.set(event_target_value(&e))
                                             />

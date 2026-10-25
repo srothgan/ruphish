@@ -343,20 +343,22 @@ fn kind(context: &Context) -> Result<Kind, Rejection> {
 }
 pub(crate) fn resource_code(error: &app::Error) -> ErrorCode {
     match error {
+        app::Error::Field { source, .. } => resource_code(source),
         app::Error::Policy(error) => crate::auth::policy_code(error),
         app::Error::NotFound(_) => ErrorCode::ResourceNotFound,
         app::Error::Conflict(_) => ErrorCode::ResourceNameTaken,
         app::Error::Changed => ErrorCode::ResourceChanged,
         app::Error::InUse => ErrorCode::ResourceInUse,
-        app::Error::Invalid(_) => ErrorCode::ResourceInvalid,
+        app::Error::Invalid(_) | app::Error::Validation(_) => ErrorCode::ResourceInvalid,
         app::Error::DraftSchedulePast => ErrorCode::DraftSchedulePast,
         app::Error::FeatureDisabled(_) => ErrorCode::FeatureDisabled,
         app::Error::Delivery(_) => ErrorCode::DeliveryFailed,
         app::Error::Storage(_) | app::Error::Internal => ErrorCode::InternalError,
     }
 }
-pub(crate) fn error(error: app::Error) -> Rejection {
-    let status = match &error {
+fn error_status(error: &app::Error) -> StatusCode {
+    match error {
+        app::Error::Field { source, .. } => error_status(source),
         app::Error::NotFound(_) => StatusCode::NOT_FOUND,
         app::Error::Conflict(_) | app::Error::InUse => StatusCode::CONFLICT,
         app::Error::Changed => StatusCode::PRECONDITION_FAILED,
@@ -368,9 +370,45 @@ pub(crate) fn error(error: app::Error) -> Rejection {
             StatusCode::UNAUTHORIZED
         }
         app::Error::Policy(_) => StatusCode::FORBIDDEN,
-        app::Error::Invalid(_) | app::Error::DraftSchedulePast => StatusCode::BAD_REQUEST,
-    };
-    failure(status, resource_code(&error), &error.to_string())
+        app::Error::Invalid(_) | app::Error::Validation(_) | app::Error::DraftSchedulePast => {
+            StatusCode::BAD_REQUEST
+        }
+    }
+}
+pub(crate) fn error(error: app::Error) -> Rejection {
+    let status = error_status(&error);
+    let rejection = failure(status, resource_code(&error), &error.to_string());
+    match &error {
+        app::Error::Field { field, .. } => {
+            let mut report = ruphish_application::validation::Report::default();
+            report.reject(
+                field,
+                ruphish_application::validation::Code::Invalid,
+                "Invalid field",
+            );
+            rejection.with_validation(&report)
+        }
+        app::Error::Validation(report) => rejection.with_validation(report),
+        app::Error::Conflict(_) => {
+            let mut report = ruphish_application::validation::Report::default();
+            report.reject(
+                "name",
+                ruphish_application::validation::Code::Conflict,
+                "Name already in use",
+            );
+            rejection.with_validation(&report)
+        }
+        app::Error::DraftSchedulePast => {
+            let mut report = ruphish_application::validation::Report::default();
+            report.reject(
+                "launch_local.local",
+                ruphish_application::validation::Code::SchedulePast,
+                "Draft schedule is in the past",
+            );
+            rejection.with_validation(&report)
+        }
+        _ => rejection,
+    }
 }
 fn expected(context: &Context) -> Result<Option<String>, Rejection> {
     context
@@ -657,7 +695,7 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
             context
                 .resources()
                 .page_preview(&page.html, app::PagePreview::Learning)
-                .map_err(error)?
+                .map_err(|e| error(e.at("html")))?
                 .1,
         )
     } else if let Content::Page(page) = &value.content {
@@ -665,7 +703,7 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
             context
                 .resources()
                 .page_warnings(&page.html)
-                .map_err(error)?,
+                .map_err(|e| error(e.at("html")))?,
         )
     } else {
         None

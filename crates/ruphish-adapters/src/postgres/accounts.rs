@@ -204,7 +204,7 @@ impl Repository for Accounts {
                 if actor.password_change_required {
                     return Err(ruphish_application::auth::AccountError::ResetRequired.into());
                 }
-                preferences.validate()?;
+                preferences.validation().finish()?;
                 sqlx::query("INSERT INTO ruphish_user_preferences(user_id,language,format_locale,time_zone,show_utc_offset) VALUES($1,$2,$3,$4,$5) ON CONFLICT(user_id) DO UPDATE SET language=excluded.language,format_locale=excluded.format_locale,time_zone=excluded.time_zone,show_utc_offset=excluded.show_utc_offset")
                     .bind(caller.id).bind(preferences.language).bind(preferences.format_locale).bind(preferences.time_zone).bind(preferences.show_utc_offset)
                     .execute(&mut *tx).await.map_err(storage)?;

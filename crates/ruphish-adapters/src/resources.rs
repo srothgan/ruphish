@@ -125,47 +125,56 @@ impl Validator for Validate {
         let context = sample();
         match &resource.content {
             Content::Group(targets) => {
-                for target in targets {
-                    mailbox(&target.email)?;
+                for (index, target) in targets.iter().enumerate() {
+                    mailbox(&target.email).map_err(|e| e.at(format!("targets.{index}.email")))?;
                 }
             }
             Content::Template(t) => {
-                for source in [&t.subject, &t.text] {
-                    render(source, &context)?;
+                for (field, source) in [("subject", &t.subject), ("text", &t.text)] {
+                    render(source, &context).map_err(|e| e.at(field))?;
                 }
-                crate::email_html::document(&render(&t.html, &context)?)?;
+                crate::email_html::document(&render(&t.html, &context).map_err(|e| e.at("html"))?)
+                    .map_err(|e| e.at("html"))?;
                 if !t.envelope_sender.is_empty() {
-                    mailbox(&t.envelope_sender)?;
+                    mailbox(&t.envelope_sender).map_err(|e| e.at("envelope_sender"))?;
                 }
                 let mut total = 0usize;
-                for a in &t.attachments {
-                    let bytes = attachment(a, &context)?;
+                for (index, a) in t.attachments.iter().enumerate() {
+                    let bytes = attachment(a, &context)
+                        .map_err(|e| e.at(format!("attachments.{index}")))?;
                     total = total.saturating_add(bytes.len());
                     if total > MAX_ARCHIVE_EXPANDED {
-                        return Err(invalid("Attachments exceed 64 MiB"));
+                        return Err(invalid("Attachments exceed 64 MiB").at("attachments"));
                     }
                 }
             }
             Content::LearningPage(p) => {
-                self.page_preview(&p.html, PagePreview::Learning)?;
+                self.page_preview(&p.html, PagePreview::Learning)
+                    .map_err(|e| e.at("html"))?;
             }
             Content::Page(p) => {
-                self.page_warnings(&p.html)?;
-                let redirect = render(&p.redirect_url, &context)?;
-                crate::landing::redirect(&redirect, "https://example.test")?;
+                self.page_warnings(&p.html).map_err(|e| e.at("html"))?;
+                let redirect =
+                    render(&p.redirect_url, &context).map_err(|e| e.at("redirect_url"))?;
+                crate::landing::redirect(&redirect, "https://example.test")
+                    .map_err(|e| e.at("redirect_url"))?;
             }
             Content::Profile(p) => {
-                mailbox(&p.from_address)?;
-                smtp_address(&p.host)?;
-                for header in &p.headers {
-                    let key = render(&header.key, &context)?;
+                mailbox(&p.from_address).map_err(|e| e.at("from_address"))?;
+                smtp_address(&p.host).map_err(|e| e.at("host"))?;
+                for (index, header) in p.headers.iter().enumerate() {
+                    let key = render(&header.key, &context)
+                        .map_err(|e| e.at(format!("headers.{index}.key")))?;
                     if key.is_empty() || !key.bytes().all(|c| (33..=126).contains(&c) && c != b':')
                     {
-                        return Err(invalid("Invalid rendered header name"));
+                        return Err(invalid("Invalid rendered header name")
+                            .at(format!("headers.{index}.key")));
                     }
-                    let value = render(&header.value, &context)?;
+                    let value = render(&header.value, &context)
+                        .map_err(|e| e.at(format!("headers.{index}.value")))?;
                     if value.contains(['\r', '\n', '\0']) {
-                        return Err(invalid("Rendered header contains a line break"));
+                        return Err(invalid("Rendered header contains a line break")
+                            .at(format!("headers.{index}.value")));
                     }
                 }
             }

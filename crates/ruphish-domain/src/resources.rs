@@ -143,49 +143,32 @@ impl Resource {
     }
     /// Rules independent of parsing libraries; normalization is intentional and minimal.
     pub fn validate(&mut self) -> Result<(), &'static str> {
-        match &mut self.content {
-            Content::Group(targets) => {
-                if self.name.is_empty() {
-                    return Err("Group name not specified");
-                }
-                if targets.is_empty() {
-                    return Err("No targets specified");
-                }
-                if targets.len() > 100_000 {
-                    return Err("Group exceeds 100000 recipients");
-                }
-            }
-            Content::Template(t) => {
-                if self.name.is_empty() {
-                    return Err("Template name not specified");
-                }
-                if t.text.is_empty() && t.html.is_empty() {
-                    return Err("Need to specify at least plaintext or HTML content");
-                }
-            }
-            Content::Page(_) | Content::LearningPage(_) => {
-                if self.name.is_empty() {
-                    return Err("Page Name not specified");
-                }
-            }
-            Content::Profile(p) => {
-                if p.from_address.is_empty() {
-                    return Err("No From Address specified");
-                }
-                if p.host.is_empty() {
-                    return Err("No SMTP Host specified");
-                }
-                for h in &p.headers {
-                    if h.key.is_empty()
-                        || h.key.contains(['\r', '\n', '\0'])
-                        || h.value.contains(['\r', '\n', '\0'])
-                    {
-                        return Err("Invalid email header");
-                    }
-                }
-            }
-        }
-        Ok(())
+        self.validation().finish().map_err(|e| e.message())
+    }
+    /// Collect independent field failures without including authored content.
+    pub fn validation(&self) -> crate::validation::Report {
+        let fields = match &self.content {
+            Content::Group(targets) => Fields::Group {
+                name: &self.name,
+                count: targets.len(),
+            },
+            Content::Template(t) => Fields::Template {
+                name: &self.name,
+                text: &t.text,
+                html: &t.html,
+            },
+            Content::Page(_) | Content::LearningPage(_) => Fields::Page { name: &self.name },
+            Content::Profile(p) => Fields::Profile {
+                from: &p.from_address,
+                host: &p.host,
+                headers: p
+                    .headers
+                    .iter()
+                    .map(|h| (h.key.as_str(), h.value.as_str()))
+                    .collect(),
+            },
+        };
+        fields.validate()
     }
 }
 /// List metadata deliberately excludes bodies, attachments and credentials.
@@ -210,4 +193,109 @@ pub struct PageWarning {
     pub code: &'static str,
     /// Input position in the processed document, when applicable.
     pub control: Option<usize>,
+}
+
+/// Borrowed editable fields shared by wire projections and authoritative resources.
+pub enum Fields<'a> {
+    /// Group name and audience size.
+    Group {
+        /// Display name.
+        name: &'a str,
+        /// Number of recipients.
+        count: usize,
+    },
+    /// Email name and alternative bodies.
+    Template {
+        /// Display name.
+        name: &'a str,
+        /// Plain-text alternative.
+        text: &'a str,
+        /// HTML alternative.
+        html: &'a str,
+    },
+    /// Landing or learning page name.
+    Page {
+        /// Display name.
+        name: &'a str,
+    },
+    /// Sending profile fields; credentials are not needed for these checks.
+    Profile {
+        /// Envelope sender.
+        from: &'a str,
+        /// SMTP endpoint.
+        host: &'a str,
+        /// Ordered custom header names and values.
+        headers: Vec<(&'a str, &'a str)>,
+    },
+}
+impl Fields<'_> {
+    /// Apply the same rules regardless of create, edit, import or rendering surface.
+    pub fn validate(&self) -> crate::validation::Report {
+        use crate::validation::{Code, Report};
+        let mut report = Report::default();
+        match self {
+            Self::Group { name, count } => {
+                if name.is_empty() {
+                    report.reject("name", Code::Required, "Group name not specified");
+                }
+                if *count == 0 {
+                    report.reject("targets", Code::Required, "No targets specified");
+                }
+                if *count > 100_000 {
+                    report.reject("targets", Code::TooLong, "Group exceeds 100000 recipients");
+                }
+            }
+            Self::Template { name, text, html } => {
+                if name.is_empty() {
+                    report.reject("name", Code::Required, "Template name not specified");
+                }
+                if text.is_empty() && html.is_empty() {
+                    report.reject(
+                        "html",
+                        Code::EmailContent,
+                        "Need to specify at least plaintext or HTML content",
+                    );
+                    report.reject(
+                        "text",
+                        Code::EmailContent,
+                        "Need to specify at least plaintext or HTML content",
+                    );
+                }
+            }
+            Self::Page { name } => {
+                if name.is_empty() {
+                    report.reject("name", Code::Required, "Page Name not specified");
+                }
+            }
+            Self::Profile {
+                from,
+                host,
+                headers,
+            } => {
+                if from.is_empty() {
+                    report.reject("from_address", Code::Required, "No From Address specified");
+                }
+                if host.is_empty() {
+                    report.reject("host", Code::Required, "No SMTP Host specified");
+                }
+                for (index, (key, value)) in headers.iter().enumerate() {
+                    if key.is_empty() || key.contains(['\r', '\n', '\0']) {
+                        report.reject(
+                            format!("headers.{index}.key"),
+                            Code::Invalid,
+                            "Invalid email header",
+                        );
+                    }
+                    if value.contains(['\r', '\n', '\0']) {
+                        report.reject(
+                            format!("headers.{index}.value"),
+                            Code::Invalid,
+                            "Invalid email header",
+                        );
+                    }
+                }
+            }
+        }
+        report
+    }
 }
