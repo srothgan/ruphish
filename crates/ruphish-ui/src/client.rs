@@ -8,6 +8,7 @@
 use gloo_net::http::Request;
 use leptos::prelude::*;
 use ruphish_contracts::auth::{BrowserSession, UserEdit};
+use ruphish_ui::api_error::ApiError;
 use ruphish_ui::session::{SessionAction, SessionMonitor};
 use serde_json::Value;
 
@@ -51,14 +52,17 @@ impl Api {
     pub(crate) fn invalid_read(self) -> String {
         leptos_i18n::t_string!(self.i18n, ui.invalid_read_response).to_owned()
     }
+    /// An invalid-read failure as a read error, with no originating HTTP status.
+    pub(crate) fn invalid_read_err(self) -> ApiError {
+        ApiError::local(self.invalid_read())
+    }
     /// Decode required wire fields before a read can enter a query cache.
     pub(crate) async fn read<T: serde::de::DeserializeOwned>(
         self,
         path: &str,
-    ) -> Result<T, String> {
+    ) -> Result<T, ApiError> {
         let value = self.get(path).await?;
-        serde_json::from_value(value)
-            .map_err(|_| leptos_i18n::t_string!(self.i18n, ui.invalid_read_response).to_owned())
+        serde_json::from_value(value).map_err(|_| self.invalid_read_err())
     }
 
     pub(crate) async fn launch(
@@ -83,7 +87,7 @@ impl Api {
         let value = self
             .response(path, response)
             .await
-            .map_err(|e| (status, e))?;
+            .map_err(|e| (status, e.message))?;
         if value["id"].as_i64().is_none_or(|id| id <= 0) {
             return Err((0, leptos_i18n::t_string!(i18n, ui.launch_outcome_is_not_known_retry_uses_the_same_launch_key_do_not_create_another).into()));
         }
@@ -97,18 +101,40 @@ impl Api {
         value: Option<&Value>,
         revision: Option<&str>,
     ) -> Result<(Value, Option<String>), String> {
-        let i18n = self.i18n;
+        self.resource_response(method, path, token, value, revision)
+            .await
+            .map_err(|error| error.message)
+    }
 
+    /// A read retaining the concurrency revision and structured failure.
+    pub(crate) async fn read_resource(
+        self,
+        path: &str,
+    ) -> Result<(Value, Option<String>), ApiError> {
+        self.resource_response("GET", path, "", None, None).await
+    }
+
+    async fn resource_response(
+        self,
+        method: &str,
+        path: &str,
+        token: &str,
+        value: Option<&Value>,
+        revision: Option<&str>,
+    ) -> Result<(Value, Option<String>), ApiError> {
         if !self.active() {
-            return Err(leptos_i18n::t_string!(
-                i18n,
-                ui.your_session_ended_sign_in_again_to_continue
-            )
-            .into());
+            return Err(ApiError::local(
+                leptos_i18n::t_string!(self.i18n, ui.your_session_ended_sign_in_again_to_continue)
+                    .to_owned(),
+            ));
         }
         let request =
-            ruphish_ui::browser_http::resource_request(method, path, token, value, revision)?;
-        let response = self.send_request(path, request).await?;
+            ruphish_ui::browser_http::resource_request(method, path, token, value, revision)
+                .map_err(ApiError::local)?;
+        let response = self
+            .send_request(path, request)
+            .await
+            .map_err(ApiError::local)?;
         let etag = response.etag.clone();
         self.response(path, response)
             .await
@@ -147,7 +173,7 @@ impl Api {
             return Err(leptos_i18n::t_string!(i18n, ui.your_session_ended).into());
         }
         if !(200..300).contains(&response.status) {
-            self.response(path, response).await?;
+            self.response(path, response).await.map_err(|e| e.message)?;
             return Err(leptos_i18n::t_string!(i18n, ui.the_export_could_not_be_generated).into());
         }
         ruphish_ui::browser_http::save_file(&file, filename)
@@ -173,53 +199,48 @@ impl Api {
         self,
         _path: &str,
         response: ruphish_ui::browser_http::Received,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, ApiError> {
         let i18n = self.i18n;
 
         let status = response.status;
         if !self.active() {
-            return Err(leptos_i18n::t_string!(
-                i18n,
-                ui.your_session_ended_sign_in_again_to_continue
-            )
-            .into());
+            return Err(ApiError::http(
+                status,
+                "AUTH_REQUIRED".into(),
+                leptos_i18n::t_string!(i18n, ui.your_session_ended_sign_in_again_to_continue)
+                    .to_string(),
+            ));
         }
-        let text = response.body;
-        let decoded = ruphish_ui::browser_http::decode(status, &text);
-        let value = if (200..300).contains(&status) {
-            decoded?
-        } else {
-            decoded.unwrap_or(Value::Null)
-        };
-        if !(200..300).contains(&status) || value["success"] == false {
-            let code = value["code"].as_str().unwrap_or(match status {
-                401 => "AUTH_REQUIRED",
-                403 => "AUTH_FORBIDDEN",
-                429 => "RATE_LIMITED",
-                503 => "SERVICE_BUSY",
-                _ => "REQUEST_FAILED",
-            });
-            return Err(ruphish_ui::localization::failure_label(i18n, code));
-        }
-        Ok(value)
+        ruphish_ui::api_error::response(
+            status,
+            ruphish_ui::browser_http::decode(status, &response.body),
+            |code| ruphish_ui::localization::failure_label(i18n, code),
+        )
     }
-    pub(crate) async fn get(self, path: &str) -> Result<Value, String> {
+
+    pub(crate) async fn get(self, path: &str) -> Result<Value, ApiError> {
         let i18n = self.i18n;
 
         if !self.active() {
-            return Err(leptos_i18n::t_string!(
-                i18n,
-                ui.your_session_ended_sign_in_again_to_continue
-            )
-            .into());
+            return Err(ApiError::local(
+                leptos_i18n::t_string!(i18n, ui.your_session_ended_sign_in_again_to_continue)
+                    .to_string(),
+            ));
         }
         let request = Request::get(path)
             .header("x-ruphish-client", "browser")
             .header("accept", "application/json")
             .build()
-            .map_err(|_| leptos_i18n::t_string!(i18n, ui.cannot_prepare_request).to_owned())?;
-        self.response(path, self.send_request(path, request).await?)
-            .await
+            .map_err(|_| {
+                ApiError::local(leptos_i18n::t_string!(i18n, ui.cannot_prepare_request).to_string())
+            })?;
+        self.response(
+            path,
+            self.send_request(path, request)
+                .await
+                .map_err(ApiError::local)?,
+        )
+        .await
     }
 
     pub(crate) async fn form(
@@ -248,6 +269,7 @@ impl Api {
             .map_err(|_| leptos_i18n::t_string!(i18n, ui.cannot_prepare_the_request).to_owned())?;
         self.response(path, self.send_request(path, request).await?)
             .await
+            .map_err(|e| e.message)
     }
     pub(crate) async fn json(
         self,
@@ -281,5 +303,6 @@ impl Api {
         .map_err(|_| leptos_i18n::t_string!(i18n, ui.cannot_prepare_the_request).to_owned())?;
         self.response(path, self.send_request(path, request).await?)
             .await
+            .map_err(|e| e.message)
     }
 }

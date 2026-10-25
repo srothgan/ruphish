@@ -357,8 +357,16 @@ pub(super) fn detail(api: Api, token: String) -> impl IntoView {
                         }
                         create(api, token.get_value(), initial, None).into_any()
                     }
-                } else {
+                } else if id.parse::<i64>().ok().is_some_and(|id| id > 0) {
                     show(api, token.get_value(), id).into_any()
+                } else {
+                    view! {
+                        <NotFoundPage
+                            back_href="/campaigns"
+                            back_label=trs!(ui.back_to_campaigns)
+                        />
+                    }
+                        .into_any()
                 }
             }
         />
@@ -488,7 +496,8 @@ fn load_page_defaults(
             &id.to_string(),
         )
         .await
-        .map(|(value, _)| value);
+        .map(|(value, _)| value)
+        .map_err(|e| e.message);
         let accepted = draft
             .try_update(|d| d.page_loaded(request, result.as_ref().ok()))
             .unwrap_or(false);
@@ -1518,6 +1527,9 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
     if let Ok(timer) = set_interval_with_handle(
         move || {
             if !loading.get_untracked()
+                && !read
+                    .failure
+                    .with_untracked(|e| e.as_ref().is_some_and(|e| e.is_terminal()))
                 && !busy.get_untracked()
                 && js_sys::Date::now() >= next_poll.get_value()
                 && web_sys::window()
@@ -1541,6 +1553,7 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
             match api
                 .get(&format!("/api/campaigns/{}/draft", id.get_value()))
                 .await
+                .map_err(|e| e.message)
                 .and_then(|value| {
                     serde_json::from_value::<ruphish_contracts::campaign_workflow::Duplicate>(value)
                         .map_err(|_| api.invalid_read())
@@ -1621,7 +1634,7 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
             busy.set(false);
         });
     });
-    view! {
+    let content = view! {
         <ManagementPage>
             <BackLink href="/campaigns">{tr!(ui.back_to_campaigns)}</BackLink>
             <PageHeader
@@ -1862,6 +1875,18 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
                     })
             }}
         </ManagementPage>
+    };
+    view! {
+        <ReadBoundary
+            failure=read.failure
+            has_data=Signal::derive(move || read.data.with(Option::is_some))
+            fetching=read.fetching
+            retry=read.refresh
+            back_href="/campaigns"
+            back_label=trs!(ui.back_to_campaigns)
+        >
+            {content}
+        </ReadBoundary>
     }
 }
 

@@ -92,10 +92,14 @@ pub(super) fn app() -> impl IntoView {
     let session = RwSignal::new(None::<Result<BrowserSession, String>>);
     let api = Api::new(i18n);
     spawn_local(async move {
-        let loaded = api.get("/auth/session").await.and_then(|v| {
-            decode_session(v)
-                .map_err(|_| leptos_i18n::t_string!(i18n, ui.invalid_session_response).into())
-        });
+        let loaded = api
+            .get("/auth/session")
+            .await
+            .map_err(|e| e.message)
+            .and_then(|v| {
+                decode_session(v)
+                    .map_err(|_| leptos_i18n::t_string!(i18n, ui.invalid_session_response).into())
+            });
         if let Ok(value) = &loaded {
             if let Some(features) = value.features {
                 api.set_features(features);
@@ -120,11 +124,15 @@ pub(super) fn app() -> impl IntoView {
             if let Some(owner) = owner {
                 owner.with(|| {
                     spawn_local(async move {
-                        match api.get("/auth/session").await.and_then(|v| {
-                            decode_session(v).map_err(|_| {
-                                leptos_i18n::t_string!(i18n, ui.invalid_session_response).into()
-                            })
-                        }) {
+                        match api
+                            .get("/auth/session")
+                            .await
+                            .map_err(|e| e.message)
+                            .and_then(|v| {
+                                decode_session(v).map_err(|_| {
+                                    leptos_i18n::t_string!(i18n, ui.invalid_session_response).into()
+                                })
+                            }) {
                             Ok(value) => {
                                 api.observe_session(&value);
                                 if api.active() {
@@ -461,10 +469,13 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         ) && !admin
         {
             return view! {
-                <Card class="account-panel">
-                    <h1>{tr!(ui.access_denied)}</h1>
-                    <p>{tr!(ui.administration_requires_permissions)}</p>
-                </Card>
+                <StatusPage
+                    title=trs!(ui.access_denied)
+                    message=trs!(ui.administration_requires_permissions)
+                    status=Some(403)
+                >
+                    <ActionLink href="/">{tr!(ui.go_to_dashboard)}</ActionLink>
+                </StatusPage>
             }
             .into_any();
         }
@@ -518,7 +529,16 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         if required {
             password_form(api, token.get_value(), true).into_any()
         } else if matches!(kind, crate::integrations::Kind::Webhook) && (!admin || active) {
-            view! { <p role="alert">{tr!(ui.webhooks_require_administrator_access_outside_impersonation)}</p> }.into_any()
+            view! {
+                <StatusPage
+                    title=trs!(ui.access_denied)
+                    message=trs!(ui.webhooks_require_administrator_access_outside_impersonation)
+                    status=Some(403)
+                >
+                    <ActionLink href="/">{tr!(ui.go_to_dashboard)}</ActionLink>
+                </StatusPage>
+            }
+            .into_any()
         } else if !(if matches!(kind, crate::integrations::Kind::Webhook) {
             api.features.get().webhooks_enabled
         } else {
@@ -541,7 +561,9 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         }
     };
     let content = view! {
-        <Routes fallback=|| view! { <p>{tr!(ui.this_page_is_not_available)}</p> }>
+        <Routes fallback=|| {
+            view! { <NotFoundPage back_href="/" back_label=trs!(ui.go_to_dashboard) /> }
+        }>
             <Route
                 path=path!("/logout")
                 view=move || {
@@ -1284,7 +1306,10 @@ fn account_overview(api: Api, session: BrowserSession) -> impl IntoView {
 async fn load_api_key(api: Api, id: i64) -> Result<String, String> {
     let i18n = api.i18n;
 
-    let value = api.get(&format!("/api/users/{id}")).await?;
+    let value = api
+        .get(&format!("/api/users/{id}"))
+        .await
+        .map_err(|e| e.message)?;
     value["api_key"]
         .as_str()
         .filter(|key| !key.is_empty())

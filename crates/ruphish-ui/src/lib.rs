@@ -25,6 +25,8 @@ pub mod view_tasks;
 #[cfg(target_arch = "wasm32")]
 pub mod query;
 
+pub mod api_error;
+
 /// Build an isolated preview document without changing the stored source.
 ///
 /// The browser also applies an empty iframe sandbox, inert interaction, and no referrer.

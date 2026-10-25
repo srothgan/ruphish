@@ -194,7 +194,6 @@ pub(crate) async fn admin_admission(
 
 pub(crate) fn finish(router: Router) -> Router {
     router
-        .fallback(|| async { super::response::not_found() })
         .layer(CompressionLayer::new())
         .layer(middleware::from_fn(access_log))
 }

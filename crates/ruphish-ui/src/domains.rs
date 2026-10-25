@@ -239,7 +239,7 @@ pub(super) fn detail(api: Api, token: String, editing: bool) -> impl IntoView {
             children=move |s| {
                 if s == "new" {
                     form(api, token.clone(), None).into_any()
-                } else if let Ok(id) = s.parse::<i64>() {
+                } else if let Ok(id) = s.parse::<i64>() && id > 0 {
                     if editing {
                         form(api, token.clone(), Some(id)).into_any()
                     } else {
@@ -247,10 +247,7 @@ pub(super) fn detail(api: Api, token: String, editing: bool) -> impl IntoView {
                     }
                 } else {
                     view! {
-                        <ManagementPage>
-                            <p role="alert">{tr!(ui.invalid_domain_address)}</p>
-                            <a href="/domains">{tr!(ui.back_to_domains)}</a>
-                        </ManagementPage>
+                        <NotFoundPage back_href="/domains" back_label=trs!(ui.back_to_domains) />
                     }
                         .into_any()
                 }
@@ -277,6 +274,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
     });
     crate::navigation::protect_draft(move || dirty.get() || busy.get());
     let reload = RwSignal::new(0u64);
+    let load_error = RwSignal::new(None::<ruphish_ui::api_error::ApiError>);
     let loading = RwSignal::new(id.is_some());
     if let Some(id) = id {
         Effect::new(move |_| {
@@ -286,6 +284,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
             spawn_local(async move {
                 match ManagementQueries::read_domain(api, id).await {
                     Ok(d) => {
+                        load_error.set(None);
                         baseline.set((d.name.clone(), d.origin.clone(), d.enabled));
                         name.set(d.name);
                         origin.set(d.origin);
@@ -293,7 +292,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                         revision.set(Some(d.revision));
                         loaded.set(true)
                     }
-                    Err(e) => message.error(e),
+                    Err(e) => load_error.set(Some(e)),
                 }
                 loading.set(false);
             });
@@ -327,8 +326,9 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                     None,
                 )
                 .await
-                .and_then(|(v, _)| ManagementQueries::validate_domain(api, v, id))
-            {
+                .and_then(|(v, _)| {
+                    ManagementQueries::validate_domain(api, v, id).map_err(|e| e.message)
+                }) {
                 Ok(d) => {
                     queries.domain_saved(d.id);
                     loaded.set(false);
@@ -342,7 +342,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
             }
         });
     };
-    view! {
+    let content = view! {
         <ManagementPage>
             <BackLink href="/domains">{tr!(ui.back_to_domains)}</BackLink>
             <PageHeader
@@ -364,11 +364,6 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                 })
             ></PageHeader>
             {message.view()}
-            <Show when=move || !loaded.get() && !loading.get()>
-                <ActionButton on_click=move |_| {
-                    reload.update(|n| *n += 1)
-                }>{tr!(ui.retry_loading_domain)}</ActionButton>
-            </Show>
             <form id="domain-form" on:submit=submit>
                 <FormFields disabled=Signal::derive(move || {
                     busy.get() || !loaded.get() || !can_edit
@@ -434,11 +429,25 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                             })
                                 .to_owned()
                         })
-                        disabled=Signal::derive(move || busy.get() || !loaded.get() || !can_edit)
+                        disabled=Signal::derive(move || {
+                            busy.get() || !loaded.get() || !can_edit
+                        })
                     />
                 </FormFooter>
             </form>
         </ManagementPage>
+    };
+    view! {
+        <ReadBoundary
+            failure=load_error
+            has_data=Signal::derive(move || loaded.get())
+            fetching=loading
+            retry=Callback::new(move |()| reload.update(|n| *n += 1))
+            back_href="/domains"
+            back_label=trs!(ui.back_to_domains)
+        >
+            {content}
+        </ReadBoundary>
     }
 }
 fn show(api: Api, token: String, id: i64) -> impl IntoView {
@@ -467,6 +476,9 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                 && web_sys::window()
                     .and_then(|w| w.document())
                     .is_some_and(|d| !d.hidden())
+                && !read
+                    .failure
+                    .with_untracked(|e| e.as_ref().is_some_and(|e| e.is_terminal()))
                 && !read.fetching.get_untracked()
                 && !busy.get_untracked()
             {
@@ -499,7 +511,9 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                     None,
                 )
                 .await
-                .and_then(|(v, _)| ManagementQueries::validate_domain(api, v, Some(id)));
+                .and_then(|(v, _)| {
+                    ManagementQueries::validate_domain(api, v, Some(id)).map_err(|e| e.message)
+                });
             match result {
                 Ok(value) => {
                     queries.domain_verified(value);
@@ -524,7 +538,7 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
             deletion.select(DeleteTarget { id, name:d.name, path:format!("/api/domains/{id}"), revision:Some(format!("\"{}\"",d.revision)),description:leptos_i18n::t_string!(i18n, ui.only_unused_domains_can_be_deleted_this_removes_the_domain_configuration_and_its) });
         }
     });
-    view! {
+    let content = view! {
         <ManagementPage>
             <BackLink href="/domains">{tr!(ui.back_to_domains)}</BackLink>
             <PageHeader
@@ -538,7 +552,9 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                     domain
                         .get()
                         .map(|d| d.origin)
-                        .unwrap_or_else(|| leptos_i18n::t_string!(i18n, ui.loading_domain).into())
+                        .unwrap_or_else(|| {
+                            leptos_i18n::t_string!(i18n, ui.loading_domain).into()
+                        })
                 })
             >
                 <ActionButton
@@ -933,7 +949,9 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                                         .collect_view()}
                                 </DataTable>
                                 {(!has_result)
-                                    .then(|| view! { <p>{tr!(ui.no_completed_checks_yet)}</p> })}
+                                    .then(|| {
+                                        view! { <p>{tr!(ui.no_completed_checks_yet)}</p> }
+                                    })}
                             </section>
                         }
                             .into_any()
@@ -946,6 +964,18 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                 on_deleted=deleted
             />
         </ManagementPage>
+    };
+    view! {
+        <ReadBoundary
+            failure=read.failure
+            has_data=Signal::derive(move || read.data.with(Option::is_some))
+            fetching=read.fetching
+            retry=read.refresh
+            back_href="/domains"
+            back_label=trs!(ui.back_to_domains)
+        >
+            {content}
+        </ReadBoundary>
     }
 }
 

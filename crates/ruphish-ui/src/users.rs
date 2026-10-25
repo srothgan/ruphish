@@ -31,13 +31,10 @@ pub(super) fn page(api: Api, current_user: i64, token: String, screen: Screen) -
                             form(api, token.clone(), Some(id)).into_any()
                         } else {
                             view! {
-                                <ManagementPage>
-                                    <h1>{tr!(ui.invalid_user_address)}</h1>
-                                    <p role="alert">
-                                        {tr!(ui.choose_a_user_from_the_list_to_edit)}
-                                    </p>
-                                    <a href="/users">{tr!(ui.back_to_users)}</a>
-                                </ManagementPage>
+                                <NotFoundPage
+                                    back_href="/users"
+                                    back_label=trs!(ui.back_to_users)
+                                />
                             }
                                 .into_any()
                         }
@@ -60,6 +57,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
     let reset = RwSignal::new(true);
     let baseline = RwSignal::new((String::new(), "user".to_owned(), false, true));
     let loaded = RwSignal::new(id.is_none());
+    let load_error = RwSignal::new(None::<ruphish_ui::api_error::ApiError>);
     let loading = RwSignal::new(id.is_some());
     let busy = RwSignal::new(false);
     let message = Message::new(String::new());
@@ -85,13 +83,14 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                     .await
                     .and_then(|value| {
                         let user: User =
-                            serde_json::from_value(value).map_err(|_| api.invalid_read())?;
+                            serde_json::from_value(value).map_err(|_| api.invalid_read_err())?;
                         if user.id != id {
-                            return Err(api.invalid_read());
+                            return Err(api.invalid_read_err());
                         }
                         Ok(user)
                     }) {
                     Ok(user) => {
+                        load_error.set(None);
                         baseline.set((
                             user.username.clone(),
                             user.role.slug.clone(),
@@ -104,7 +103,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                         reset.set(user.password_change_required);
                         loaded.set(true);
                     }
-                    Err(error) => message.error(error),
+                    Err(error) => load_error.set(Some(error)),
                 }
                 loading.set(false);
             });
@@ -178,7 +177,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
             }
         });
     };
-    view! {
+    let content = view! {
         <ManagementPage>
             <BackLink href="/users">{tr!(ui.back_to_users)}</BackLink>
             <PageHeader
@@ -225,11 +224,6 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                 />
             </PageHeader>
             {message.view()}
-            <Show when=move || !loaded.get() && !loading.get()>
-                <ActionButton on_click=move |_| {
-                    reload.update(|n| *n += 1)
-                }>{tr!(ui.retry_loading_user)}</ActionButton>
-            </Show>
             <form id="user-form" on:submit=submit>
                 <FormFields disabled=Signal::derive(move || busy.get() || !loaded.get())>
                     <Field label=trs!(ui.username)>
@@ -300,6 +294,18 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                 </FormFooter>
             </form>
         </ManagementPage>
+    };
+    view! {
+        <ReadBoundary
+            failure=load_error
+            has_data=Signal::derive(move || loaded.get())
+            fetching=loading
+            retry=Callback::new(move |()| reload.update(|n| *n += 1))
+            back_href="/users"
+            back_label=trs!(ui.back_to_users)
+        >
+            {content}
+        </ReadBoundary>
     }
 }
 

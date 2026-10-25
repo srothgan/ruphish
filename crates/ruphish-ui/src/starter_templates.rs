@@ -156,7 +156,10 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                     .map(|row| row.name)
                     .unwrap_or_else(|| id.clone());
                 let result = async {
-                    let entry: Entry = api.read(&format!("/api/starter-templates/{id}")).await?;
+                    let entry: Entry = api
+                        .read(&format!("/api/starter-templates/{id}"))
+                        .await
+                        .map_err(|e| e.message)?;
                     let family = match entry.summary.kind {
                         Kind::Email => Family::Templates,
                         Kind::LandingPage => Family::Pages,
@@ -170,7 +173,8 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                     if names.is_none() {
                         let rows: ResourceSummaries = api
                             .read(&format!("/api/{}/summary", family.route()))
-                            .await?;
+                            .await
+                            .map_err(|e| e.message)?;
                         *names = Some(
                             rows.items
                                 .into_iter()
@@ -194,7 +198,8 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                         )
                         .await
                         .and_then(|(saved, _)| {
-                            ResourceQueries::validate_detail(api, family, &saved, None)?;
+                            ResourceQueries::validate_detail(api, family, &saved, None)
+                                .map_err(|e| e.message)?;
                             saved["id"].as_i64().ok_or_else(|| api.invalid_read())
                         });
                     match response {

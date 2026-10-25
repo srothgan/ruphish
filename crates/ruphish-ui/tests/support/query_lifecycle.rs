@@ -1,6 +1,7 @@
 //! Production leptos-fetch adapter under controlled request completion order.
 use leptos::prelude::*;
 use leptos_fetch::{QueryClient, QueryOptions};
+use ruphish_ui::api_error::ApiError;
 use ruphish_ui::query::Query;
 use std::{cell::Cell, rc::Rc, time::Duration};
 use wasm_bindgen::JsValue;
@@ -53,6 +54,130 @@ fn client() -> QueryClient {
 }
 
 #[wasm_bindgen_test]
+async fn missing_and_forbidden_refreshes_remove_stale_records_and_recover_on_success() {
+    let _ = any_spawner::Executor::init_wasm_bindgen();
+    let owner = Owner::new();
+    let status = Rc::new(Cell::new(200u16));
+    let (query, view, other) = owner.with(|| {
+        let status = status.clone();
+        let query = Query::new(client(), move |key: u8| {
+            let status = if key == 1 { status.get() } else { 200 };
+            async move {
+                ruphish_ui::api_error::response(
+                    status,
+                    if status == 200 {
+                        Ok(serde_json::json!({"id":key,"name":"saved"}))
+                    } else {
+                        Err("non-JSON proxy rejection".into())
+                    },
+                    str::to_owned,
+                )
+            }
+        });
+        (query, query.observe(|| 1), query.observe(|| 2))
+    });
+    until(&owner, move || {
+        view.data.get().is_some() && other.data.get().is_some()
+    })
+    .await;
+    for rejection in [404, 403, 401] {
+        // A retryable failure must preserve the saved record and allow recovery.
+        status.set(503);
+        query.invalidate(1);
+        until(&owner, move || {
+            !view.fetching.get()
+                && view
+                    .failure
+                    .with(|e| e.as_ref().is_some_and(|e| e.status == 503))
+        })
+        .await;
+        assert_eq!(view.data.get_untracked().unwrap()["name"], "saved");
+        status.set(rejection);
+        view.refresh.run(());
+        until(&owner, move || {
+            !view.fetching.get()
+                && view
+                    .failure
+                    .with(|e| e.as_ref().is_some_and(|e| e.status == rejection))
+        })
+        .await;
+        assert!(
+            view.data.get_untracked().is_none(),
+            "a terminal rejection invalidates the old record"
+        );
+        assert!(
+            other.data.get_untracked().is_some(),
+            "other records remain usable"
+        );
+        assert!(other.failure.get_untracked().is_none());
+        let revisited = owner.with(|| query.observe(|| 1));
+        assert!(
+            revisited.data.get_untracked().is_none(),
+            "revisiting cannot resurrect cached data"
+        );
+        // Going offline after deletion/permission loss cannot resurrect it either.
+        status.set(503);
+        query.invalidate(1);
+        until(&owner, move || {
+            !view.fetching.get()
+                && view
+                    .failure
+                    .with(|e| e.as_ref().is_some_and(|e| e.status == 503))
+        })
+        .await;
+        assert!(view.data.get_untracked().is_none());
+        status.set(200);
+        view.refresh.run(());
+        until(&owner, move || {
+            !view.fetching.get() && view.data.get().is_some() && view.failure.get().is_none()
+        })
+        .await;
+        assert_eq!(view.data.get_untracked().unwrap()["id"], 1);
+    }
+    owner.cleanup();
+}
+
+#[wasm_bindgen_test]
+async fn initial_missing_record_does_not_contaminate_navigation_to_a_valid_record() {
+    let _ = any_spawner::Executor::init_wasm_bindgen();
+    let owner = Owner::new();
+    let (selection, view) = owner.with(|| {
+        let query = Query::new(client(), |id: u8| async move {
+            if id == 1 {
+                Err(ApiError::http(
+                    404,
+                    "RESOURCE_NOT_FOUND".into(),
+                    "Missing".into(),
+                ))
+            } else {
+                Ok(id)
+            }
+        });
+        let selection = RwSignal::new(1);
+        (selection, query.observe(move || selection.get()))
+    });
+    until(&owner, move || {
+        view.failure.get().is_some() && !view.fetching.get()
+    })
+    .await;
+    assert!(view.data.get_untracked().is_none());
+    assert!(view.failure.get_untracked().unwrap().is_not_found());
+    selection.set(2);
+    until(&owner, move || {
+        view.data.get() == Some(2) && !view.fetching.get()
+    })
+    .await;
+    assert!(view.failure.get_untracked().is_none());
+    selection.set(1);
+    until(&owner, move || {
+        view.failure.get().is_some() && !view.fetching.get()
+    })
+    .await;
+    assert!(view.data.get_untracked().is_none());
+    owner.cleanup();
+}
+
+#[wasm_bindgen_test]
 async fn query_consumers_share_reads_and_recover_without_losing_confirmed_data() {
     let _ = any_spawner::Executor::init_wasm_bindgen();
     let owner = Owner::new();
@@ -74,7 +199,7 @@ async fn query_consumers_share_reads_and_recover_without_losing_confirmed_data()
                 started.release();
                 release.wait().await;
                 if fail.get() {
-                    Err("offline".into())
+                    Err(ApiError::local("offline".into()))
                 } else {
                     Ok(vec![41, 42])
                 }
@@ -145,7 +270,7 @@ async fn confirmed_delete_cancels_old_read_and_failed_reconciliation_keeps_row_a
                     _ => {
                         new_started.release();
                         new_release.wait().await;
-                        Err("reconciliation failed".into())
+                        Err(ApiError::local("reconciliation failed".into()))
                     }
                 }
             }
@@ -189,7 +314,7 @@ async fn deleted_detail_is_not_reused_when_reconciliation_fails() {
                         release.wait().await;
                         Ok("obsolete detail".to_owned())
                     }
-                    _ => Err("not found".into()),
+                    _ => Err(ApiError::local("not found".into())),
                 }
             }
         });
@@ -330,7 +455,7 @@ async fn deletion_reconciles_inactive_filters_and_pending_reads_without_touching
                         release.wait().await;
                         Ok(vec![1, 2])
                     }
-                    _ => Err("reconciliation unavailable".into()),
+                    _ => Err(ApiError::local("reconciliation unavailable".into())),
                 }
             }
         })

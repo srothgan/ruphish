@@ -38,6 +38,7 @@ fn fetch(
                 campaign.get_value()
             ))
             .await
+            .map_err(|e| e.message)
             .and_then(|value| {
                 let value: ruphish_contracts::campaign_reads::History =
                     serde_json::from_value(value).map_err(|_| api.invalid_read())?;

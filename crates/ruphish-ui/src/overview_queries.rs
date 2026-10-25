@@ -23,7 +23,7 @@ impl OverviewQueries {
                     .read(&format!("/api/overview/posture?window={window}"))
                     .await?;
                 if value.window != window {
-                    return Err(api.invalid_read());
+                    return Err(api.invalid_read_err());
                 }
                 Ok(value)
             }),

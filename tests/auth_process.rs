@@ -220,13 +220,20 @@ fn dedicated_user_pages_preserve_browser_crud_and_reject_unauthorized_access() {
     );
     for path in [
         "/settings".to_owned(),
+        "/settings/starter-templates".to_owned(),
         "/users".to_owned(),
         "/users/new".to_owned(),
         format!("/users/{id}/edit"),
     ] {
+        // Intentional browser-page compatibility change: forbidden pages keep
+        // HTTP 403 but return the inert UI shell instead of an API JSON envelope.
+        let denied = member.get(format!("{base}{path}")).send().unwrap();
+        assert_eq!(denied.status(), 403);
+        assert_eq!(denied.headers()["content-type"], "text/html; charset=utf-8");
+        assert_eq!(denied.headers()["cache-control"], "no-store");
         assert_eq!(
-            member.get(format!("{base}{path}")).send().unwrap().status(),
-            403
+            denied.text().unwrap(),
+            std::fs::read_to_string(directory.path().join("dist/admin/index.html")).unwrap()
         );
     }
     for path in [
@@ -239,6 +246,19 @@ fn dedicated_user_pages_preserve_browser_crud_and_reject_unauthorized_access() {
             member.get(format!("{base}{path}")).send().unwrap().status(),
             200
         );
+    }
+    for path in ["/api/users/", "/api/settings"] {
+        let denied = member.get(format!("{base}{path}")).send().unwrap();
+        assert_eq!(denied.status(), 403);
+        assert_eq!(denied.headers()["content-type"], "application/json");
+        let body: Value = denied.json().unwrap();
+        assert_eq!(body["success"], false);
+        assert_eq!(body["code"], "AUTH_FORBIDDEN");
+    }
+    for path in ["/not-a-page", "/api/not-a-resource"] {
+        let missing = member.get(format!("{base}{path}")).send().unwrap();
+        assert_eq!(missing.status(), 404);
+        assert_eq!(missing.text().unwrap(), "404 page not found\n");
     }
     let member_session = bootstrap(&member, &base);
     let saved = member
@@ -295,6 +315,272 @@ fn dedicated_user_pages_preserve_browser_crud_and_reject_unauthorized_access() {
             .unwrap()
             .status(),
         403
+    );
+    process.stop();
+}
+
+#[test]
+fn unknown_browser_pages_load_the_real_ui_without_masking_protocol_or_asset_errors() {
+    // Intentional compatibility difference: direct admin document navigation must
+    // reach the styled UI fallback with HTTP 404. API, asset and public misses
+    // retain their plain-text contract; a successful shell response is not enough.
+    let directory = workspace_with_built_assets();
+    let mut process = Process::start(directory.path(), "all");
+    let ready = process.ready();
+    let base = format!("http://{}", ready["admin"].as_str().unwrap());
+    let public = format!("http://{}", ready["phish"].as_str().unwrap());
+    let admin = browser();
+    setup(&admin, &base);
+    let shell = std::fs::read_to_string(directory.path().join("dist/admin/index.html")).unwrap();
+    let html = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+    for path in ["/does-not-exist", "/nested/unknown/page?from=bookmark"] {
+        // Repeating the request covers entering a URL and refreshing that URL.
+        for _ in 0..2 {
+            let response = admin
+                .get(format!("{base}{path}"))
+                .header("accept", html)
+                .send()
+                .unwrap();
+            assert_eq!(response.status(), 404);
+            assert_eq!(
+                response.headers()["content-type"],
+                "text/html; charset=utf-8"
+            );
+            assert_eq!(response.headers()["cache-control"], "no-store");
+            assert_eq!(response.headers()["x-content-type-options"], "nosniff");
+            assert_eq!(response.text().unwrap(), shell);
+        }
+    }
+    let head = admin
+        .head(format!("{base}/does-not-exist"))
+        .header("accept", html)
+        .send()
+        .unwrap();
+    assert_eq!(head.status(), 404);
+    assert_eq!(head.headers()["content-type"], "text/html; charset=utf-8");
+    assert!(head.bytes().unwrap().is_empty());
+    let anonymous = browser()
+        .get(format!("{base}/does-not-exist"))
+        .header("accept", html)
+        .send()
+        .unwrap();
+    assert_eq!(anonymous.status(), 307);
+    assert_eq!(
+        anonymous.headers()["location"],
+        "/login?next=/does-not-exist"
+    );
+    for accept in ["*/*", "application/json", "text/plain", "text/html;q=0,*/*"] {
+        let response = admin
+            .get(format!("{base}/does-not-exist"))
+            .header("accept", accept)
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), 404, "{accept}");
+        assert_eq!(response.text().unwrap(), "404 page not found\n");
+    }
+    for path in [
+        "/api/not-a-resource",
+        "/api",
+        "/auth/not-a-route",
+        "/internal/not-a-route",
+        "/missing.wasm",
+        "/missing.js",
+        "/missing.css",
+        "/snippets/missing/module.js",
+        "/.git/config",
+        "/config.json",
+    ] {
+        let response = admin
+            .get(format!("{base}{path}"))
+            .header("accept", html)
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), 404, "{path}");
+        assert_eq!(response.text().unwrap(), "404 page not found\n", "{path}");
+    }
+    for method in [
+        reqwest::Method::POST,
+        reqwest::Method::PUT,
+        reqwest::Method::DELETE,
+    ] {
+        let response = admin
+            .request(method, format!("{base}/does-not-exist"))
+            .header("accept", html)
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), 404);
+        assert_eq!(response.text().unwrap(), "404 page not found\n");
+    }
+    let response = admin
+        .get(format!("{public}/does-not-exist"))
+        .header("accept", html)
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), 404);
+    assert_eq!(response.text().unwrap(), "404 page not found\n");
+    let valid = admin
+        .get(format!("{base}/templates"))
+        .header("accept", html)
+        .send()
+        .unwrap();
+    assert_eq!(valid.status(), 200);
+    assert_eq!(valid.text().unwrap(), shell);
+    assert_eq!(
+        admin
+            .get(format!("{base}/api/templates/summary"))
+            .send()
+            .unwrap()
+            .status(),
+        200
+    );
+    process.stop();
+}
+
+#[test]
+fn browser_detail_navigation_preserves_ownership_and_handles_deleted_records() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = endpoint(&mut process);
+    let admin = browser();
+    let session = setup(&admin, &base);
+    let csrf = session["csrf_token"].as_str().unwrap();
+    create(&admin, &base, "other-reader", "user");
+    let member = browser();
+    assert_eq!(
+        sign_in(&member, &base, "other-reader", "another-user-password").status(),
+        200
+    );
+    let shell = std::fs::read_to_string(directory.path().join("dist/admin/index.html")).unwrap();
+    let anonymous = browser();
+    for (family, draft) in [
+        (
+            "groups",
+            json!({"name":"Owner-only group","targets":[{"email":"synthetic@example.test","first_name":"Private"}]}),
+        ),
+        (
+            "templates",
+            json!({"name":"Owner-only template","text":"Private template body"}),
+        ),
+        (
+            "pages",
+            json!({"name":"Owner-only page","html":"<p>Private page body</p>"}),
+        ),
+        (
+            "smtp",
+            json!({"name":"Owner-only profile","host":"127.0.0.1:25","from_address":"sender@example.test","password":"synthetic-private-service-secret"}),
+        ),
+    ] {
+        let created = admin
+            .post(format!("{base}/api/{family}/"))
+            .header("origin", &base)
+            .header("x-csrf-token", csrf)
+            .header("x-ruphish-client", "browser")
+            .json(&draft)
+            .send()
+            .unwrap();
+        assert_eq!(created.status(), 201);
+        let record: Value = created.json().unwrap();
+        let id = record["id"].as_i64().unwrap();
+        let api_path = format!("{base}/api/{family}/{id}");
+        // Both valid and missing detail/edit URLs serve only the inert shell.
+        // Reading the record is independently authenticated and owner-scoped.
+        for address in [id.to_string(), "999999".into(), "not-an-id".into()] {
+            for suffix in ["", "/edit"] {
+                let path = format!("/{family}/{address}{suffix}");
+                let redirect = anonymous.get(format!("{base}{path}")).send().unwrap();
+                assert_eq!(redirect.status(), 307);
+                assert_eq!(
+                    redirect.headers()["location"],
+                    format!("/login?next={path}")
+                );
+                for user in [&admin, &member] {
+                    let page = user.get(format!("{base}{path}")).send().unwrap();
+                    assert_eq!(page.status(), 200);
+                    assert_eq!(page.headers()["cache-control"], "no-store");
+                    assert_eq!(page.text().unwrap(), shell);
+                }
+            }
+        }
+        let legitimate = admin.get(&api_path).send().unwrap();
+        assert_eq!(legitimate.status(), 200);
+        let revision = legitimate.headers().get("etag").cloned();
+        let saved: Value = legitimate.json().unwrap();
+        assert_eq!(saved["name"], draft["name"]);
+        let foreign = member.get(&api_path).send().unwrap();
+        assert_eq!(foreign.status(), 404);
+        let foreign: Value = foreign.json().unwrap();
+        assert_eq!(foreign["code"], "RESOURCE_NOT_FOUND");
+        let missing = member
+            .get(format!("{base}/api/{family}/999999"))
+            .send()
+            .unwrap();
+        assert_eq!(missing.status(), 404);
+        assert_eq!(
+            foreign,
+            missing.json::<Value>().unwrap(),
+            "missing and foreign records must not be distinguishable"
+        );
+        let member_csrf = bootstrap(&member, &base)["csrf_token"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let denied_delete = member
+            .delete(&api_path)
+            .header("origin", &base)
+            .header("x-ruphish-client", "browser")
+            .header("x-csrf-token", &member_csrf)
+            .send()
+            .unwrap();
+        assert_eq!(denied_delete.status(), 404);
+        assert_eq!(
+            admin
+                .get(&api_path)
+                .send()
+                .unwrap()
+                .json::<Value>()
+                .unwrap(),
+            saved
+        );
+        let mut delete = admin
+            .delete(&api_path)
+            .header("origin", &base)
+            .header("x-ruphish-client", "browser")
+            .header("x-csrf-token", csrf);
+        if let Some(revision) = revision {
+            delete = delete.header("if-match", revision);
+        }
+        assert_eq!(delete.send().unwrap().status(), 200);
+        let deleted = admin.get(&api_path).send().unwrap();
+        assert_eq!(deleted.status(), 404);
+        assert_eq!(deleted.headers()["cache-control"], "no-store");
+        assert_eq!(
+            deleted.json::<Value>().unwrap()["code"],
+            "RESOURCE_NOT_FOUND"
+        );
+        let list: Value = admin
+            .get(format!("{base}/api/{family}/"))
+            .send()
+            .unwrap()
+            .json()
+            .unwrap();
+        assert!(list.as_array().unwrap().iter().all(|row| row["id"] != id));
+    }
+    assert_eq!(post(&member, &base, "/logout", &[]).status(), 200);
+    assert_eq!(
+        member
+            .get(format!("{base}/groups/999999"))
+            .send()
+            .unwrap()
+            .status(),
+        307
+    );
+    assert_eq!(
+        member
+            .get(format!("{base}/api/groups/999999"))
+            .send()
+            .unwrap()
+            .status(),
+        401
     );
     process.stop();
 }
