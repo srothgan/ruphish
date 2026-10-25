@@ -1,5 +1,6 @@
 //! Separate user list and form routes; account APIs remain the authorization boundary.
-use super::{Api, navigate};
+use super::navigate;
+use crate::client::Api;
 use crate::shared::components::*;
 use crate::{feedback::Message, management_queries::ManagementQueries};
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};

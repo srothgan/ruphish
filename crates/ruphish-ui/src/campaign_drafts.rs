@@ -1,8 +1,8 @@
 //! Durable campaign drafts use the shared management surface and request lifecycle.
 use crate::{
-    account::Api,
     campaign_queries::CampaignQueries,
     campaigns::{array, text},
+    client::Api,
     feedback::Message,
     shared::components::*,
 };

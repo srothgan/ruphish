@@ -217,7 +217,7 @@ pub(super) fn page() -> impl IntoView {
 }
 
 fn snapshot_sections(s: Snapshot) -> impl IntoView {
-    let api = expect_context::<crate::account::Api>();
+    let api = expect_context::<crate::client::Api>();
     let i18n = ruphish_ui::localization::use_i18n();
 
     let inventory = s.inventory;

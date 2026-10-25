@@ -1,9 +1,9 @@
 //! Campaign analysis: shared filters, activity chart and recipient drilldown.
 use crate::{
-    account::Api,
     analysis_chart::{ActivityChart, Bucket, labels},
     campaign_queries::CampaignQueries,
     campaigns::{array, text},
+    client::Api,
     feedback::Message,
     shared::components::*,
     time_display::{instant as minute, local_input, parse_input},

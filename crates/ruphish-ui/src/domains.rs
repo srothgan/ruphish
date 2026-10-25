@@ -1,6 +1,6 @@
 //! Domain management uses the shared resource shell, forms and confirmation dialog.
 use crate::{
-    account::Api, feedback::Message, management_queries::ManagementQueries,
+    client::Api, feedback::Message, management_queries::ManagementQueries,
     resources::ResourceAccess, shared::components::*,
 };
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};

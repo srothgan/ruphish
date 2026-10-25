@@ -1,6 +1,6 @@
 //! Resource summary queries and their mutation dependencies, owned by the shell.
 use crate::{
-    account::Api, campaign_queries::CampaignQueries, overview_queries::OverviewQueries,
+    campaign_queries::CampaignQueries, client::Api, overview_queries::OverviewQueries,
     resources::Family,
 };
 use leptos::prelude::*;

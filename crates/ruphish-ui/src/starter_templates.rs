@@ -1,6 +1,6 @@
 //! Read-only catalog selection. All writes go through ordinary resource creation.
 use crate::{
-    account::Api, management_queries::ManagementQueries, resource_queries::ResourceQueries,
+    client::Api, management_queries::ManagementQueries, resource_queries::ResourceQueries,
     resources::Family, shared::components::*,
 };
 use leptos::prelude::*;

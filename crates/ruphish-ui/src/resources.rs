@@ -1,5 +1,5 @@
 //! Resource lists and full-page editors using the preserved HTTP boundary.
-use crate::account::Api;
+use crate::client::Api;
 use crate::feedback::Message;
 use crate::resource_queries::ResourceQueries;
 use crate::shared::components::*;

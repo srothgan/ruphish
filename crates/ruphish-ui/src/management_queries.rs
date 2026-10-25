@@ -1,7 +1,7 @@
 //! Shared domain and integration reads and their mutation dependencies.
 use crate::{
-    account::Api,
     campaign_queries::CampaignQueries,
+    client::Api,
     integrations::{Kind, Record},
     overview_queries::OverviewQueries,
 };

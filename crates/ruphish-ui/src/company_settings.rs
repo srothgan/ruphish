@@ -1,6 +1,6 @@
 //! Company policy and the separately confirmed installation-wide closure action.
 use crate::{
-    account::Api, feedback::Message, management_queries::ManagementQueries, shared::components::*,
+    client::Api, feedback::Message, management_queries::ManagementQueries, shared::components::*,
 };
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use ruphish_contracts::settings::{ClosurePreview, ClosureResult, Features, Policy, Settings};

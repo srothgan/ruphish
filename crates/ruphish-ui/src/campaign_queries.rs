@@ -1,5 +1,5 @@
 //! Campaign read ownership and mutation dependencies, separate from editable drafts.
-use crate::{account::Api, overview_queries::OverviewQueries};
+use crate::{client::Api, overview_queries::OverviewQueries};
 use leptos::prelude::*;
 use leptos_fetch::QueryClient;
 use ruphish_contracts::{campaign_reads as reads, reporting::Filter};

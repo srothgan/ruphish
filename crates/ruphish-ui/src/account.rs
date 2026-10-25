@@ -1,13 +1,12 @@
 //! Account pages using the public API and session-only browser actions.
+use crate::client::Api;
 use crate::feedback::Message;
 use crate::shared::components::*;
-use gloo_net::http::Request;
 use leptos::prelude::*;
 use leptos::task::spawn_local_scoped_with_cancellation as spawn_local;
-use ruphish_contracts::auth::{BrowserSession, UserEdit};
-use ruphish_ui::session::{SessionAction, SessionMonitor};
+use ruphish_contracts::auth::BrowserSession;
+use ruphish_ui::session::SessionAction;
 use ruphish_ui::{tr, trs};
-use serde_json::Value;
 
 #[path = "account_menu.rs"]
 mod account_menu;
@@ -64,128 +63,6 @@ fn nav_toggle_icon(expanded: bool) -> impl IntoView {
     }
 }
 
-#[derive(Clone, Copy)]
-pub(super) struct Api {
-    pub(super) features: RwSignal<ruphish_contracts::settings::Features>,
-    feature_generation: RwSignal<u64>,
-    monitor: RwSignal<SessionMonitor>,
-    i18n: leptos_i18n::I18nContext<ruphish_ui::localization::Locale>,
-}
-impl Api {
-    pub(super) fn set_features(self, value: ruphish_contracts::settings::Features) {
-        self.feature_generation.update(|n| *n = n.wrapping_add(1));
-        self.features.set(value);
-    }
-    pub(super) fn invalid_read(self) -> String {
-        leptos_i18n::t_string!(self.i18n, ui.invalid_read_response).to_owned()
-    }
-    /// Decode required wire fields before a read can enter a query cache.
-    pub(super) async fn read<T: serde::de::DeserializeOwned>(
-        self,
-        path: &str,
-    ) -> Result<T, String> {
-        let value = self.get(path).await?;
-        serde_json::from_value(value)
-            .map_err(|_| leptos_i18n::t_string!(self.i18n, ui.invalid_read_response).to_owned())
-    }
-
-    pub(super) async fn launch(
-        self,
-        path: &str,
-        token: &str,
-        key: &str,
-        value: &Value,
-    ) -> Result<Value, (u16, String)> {
-        let i18n = self.i18n;
-
-        if !self.active() {
-            return Err((
-                401,
-                leptos_i18n::t_string!(i18n, ui.your_session_ended).into(),
-            ));
-        }
-        let request = ruphish_ui::browser_http::launch_request(path, token, key, value)
-            .map_err(|e| (0, e))?;
-        let response=self.send_request(path, request).await.map_err(|_|(0,leptos_i18n::t_string!(i18n, ui.launch_outcome_is_not_known_retry_uses_the_same_launch_key_do_not_create_another).into()))?;
-        let status = response.status;
-        let value = self
-            .response(path, response)
-            .await
-            .map_err(|e| (status, e))?;
-        if value["id"].as_i64().is_none_or(|id| id <= 0) {
-            return Err((0, leptos_i18n::t_string!(i18n, ui.launch_outcome_is_not_known_retry_uses_the_same_launch_key_do_not_create_another).into()));
-        }
-        Ok(value)
-    }
-    pub(super) async fn resource(
-        self,
-        method: &str,
-        path: &str,
-        token: &str,
-        value: Option<&Value>,
-        revision: Option<&str>,
-    ) -> Result<(Value, Option<String>), String> {
-        let i18n = self.i18n;
-
-        if !self.active() {
-            return Err(leptos_i18n::t_string!(
-                i18n,
-                ui.your_session_ended_sign_in_again_to_continue
-            )
-            .into());
-        }
-        let request =
-            ruphish_ui::browser_http::resource_request(method, path, token, value, revision)?;
-        let response = self.send_request(path, request).await?;
-        let etag = response.etag.clone();
-        self.response(path, response)
-            .await
-            .map(|value| (value, etag))
-    }
-    /// Only explicit acknowledgements confirm actions without a resource response.
-    pub(super) async fn command(
-        self,
-        method: &str,
-        path: &str,
-        token: &str,
-        value: Option<&Value>,
-        revision: Option<&str>,
-    ) -> Result<(), String> {
-        let (value, _) = self.resource(method, path, token, value, revision).await?;
-        if value["success"] != true {
-            return Err(self.invalid_read());
-        }
-        Ok(())
-    }
-
-    pub(super) async fn download(self, path: &str, filename: &str) -> Result<(), String> {
-        let i18n = self.i18n;
-
-        if !self.active() {
-            return Err(leptos_i18n::t_string!(i18n, ui.your_session_ended).into());
-        }
-        let request = ruphish_ui::browser_http::resource_request("GET", path, "", None, None)?;
-        let observed_path = path.to_owned();
-        let (response, file) = ruphish_ui::browser_http::download(request, move |status| {
-            self.monitor
-                .update(|monitor| monitor.response(&observed_path, status));
-        })
-        .await?;
-        if !self.active() {
-            return Err(leptos_i18n::t_string!(i18n, ui.your_session_ended).into());
-        }
-        if !(200..300).contains(&response.status) {
-            self.response(path, response).await?;
-            return Err(leptos_i18n::t_string!(i18n, ui.the_export_could_not_be_generated).into());
-        }
-        ruphish_ui::browser_http::save_file(&file, filename)
-    }
-    fn active(self) -> bool {
-        self.monitor
-            .with_untracked(|m| m.action() == SessionAction::Continue)
-    }
-}
-
 fn location() -> String {
     web_sys::window()
         .and_then(|w| w.location().pathname().ok())
@@ -194,132 +71,6 @@ fn location() -> String {
 fn navigate(path: &str) {
     if let Some(window) = web_sys::window() {
         let _ = window.location().set_href(path);
-    }
-}
-impl Api {
-    async fn send_request(
-        self,
-        path: &str,
-        request: Request,
-    ) -> Result<ruphish_ui::browser_http::Received, String> {
-        let path = path.to_owned();
-        ruphish_ui::browser_http::send(request, move |status| {
-            self.monitor.update(|m| m.response(&path, status))
-        })
-        .await
-    }
-    pub(super) async fn response(
-        self,
-        _path: &str,
-        response: ruphish_ui::browser_http::Received,
-    ) -> Result<Value, String> {
-        let i18n = self.i18n;
-
-        let status = response.status;
-        if !self.active() {
-            return Err(leptos_i18n::t_string!(
-                i18n,
-                ui.your_session_ended_sign_in_again_to_continue
-            )
-            .into());
-        }
-        let text = response.body;
-        let decoded = ruphish_ui::browser_http::decode(status, &text);
-        let value = if (200..300).contains(&status) {
-            decoded?
-        } else {
-            decoded.unwrap_or(Value::Null)
-        };
-        if !(200..300).contains(&status) || value["success"] == false {
-            let code = value["code"].as_str().unwrap_or(match status {
-                401 => "AUTH_REQUIRED",
-                403 => "AUTH_FORBIDDEN",
-                429 => "RATE_LIMITED",
-                503 => "SERVICE_BUSY",
-                _ => "REQUEST_FAILED",
-            });
-            return Err(ruphish_ui::localization::failure_label(i18n, code));
-        }
-        Ok(value)
-    }
-    pub(super) async fn get(self, path: &str) -> Result<Value, String> {
-        let i18n = self.i18n;
-
-        if !self.active() {
-            return Err(leptos_i18n::t_string!(
-                i18n,
-                ui.your_session_ended_sign_in_again_to_continue
-            )
-            .into());
-        }
-        let request = Request::get(path)
-            .header("x-ruphish-client", "browser")
-            .header("accept", "application/json")
-            .build()
-            .map_err(|_| leptos_i18n::t_string!(i18n, ui.cannot_prepare_request).to_owned())?;
-        self.response(path, self.send_request(path, request).await?)
-            .await
-    }
-
-    async fn form(
-        self,
-        path: &str,
-        token: &str,
-        fields: &[(&str, String)],
-    ) -> Result<Value, String> {
-        let i18n = self.i18n;
-
-        if !self.active() {
-            return Err(leptos_i18n::t_string!(
-                i18n,
-                ui.your_session_ended_sign_in_again_to_continue
-            )
-            .into());
-        }
-        let body = serde_urlencoded::to_string(fields)
-            .map_err(|_| leptos_i18n::t_string!(i18n, ui.cannot_prepare_the_request).to_owned())?;
-        let request = Request::post(path)
-            .header("x-ruphish-client", "browser")
-            .header("accept", "application/json")
-            .header("content-type", "application/x-www-form-urlencoded")
-            .header("x-csrf-token", token)
-            .body(body)
-            .map_err(|_| leptos_i18n::t_string!(i18n, ui.cannot_prepare_the_request).to_owned())?;
-        self.response(path, self.send_request(path, request).await?)
-            .await
-    }
-    async fn json(
-        self,
-        method: &str,
-        path: &str,
-        token: &str,
-        value: Option<&UserEdit>,
-    ) -> Result<Value, String> {
-        let i18n = self.i18n;
-
-        if !self.active() {
-            return Err(leptos_i18n::t_string!(
-                i18n,
-                ui.your_session_ended_sign_in_again_to_continue
-            )
-            .into());
-        }
-        let builder = match method {
-            "PUT" => Request::put(path),
-            "DELETE" => Request::delete(path),
-            _ => Request::post(path),
-        }
-        .header("x-ruphish-client", "browser")
-        .header("accept", "application/json")
-        .header("x-csrf-token", token);
-        let request = if let Some(value) = value {
-            builder.json(value)
-        } else {
-            builder.build()
-        }
-        .map_err(|_| leptos_i18n::t_string!(i18n, ui.cannot_prepare_the_request).to_owned())?;
-        self.response(path, self.send_request(path, request).await?)
-            .await
     }
 }
 
@@ -339,12 +90,7 @@ pub(super) fn app() -> impl IntoView {
 
     let preferences = ruphish_ui::display_preferences::DisplayPreferences::provide();
     let session = RwSignal::new(None::<Result<BrowserSession, String>>);
-    let api = Api {
-        features: RwSignal::new(Default::default()),
-        feature_generation: RwSignal::new(0),
-        monitor: RwSignal::new(SessionMonitor::default()),
-        i18n,
-    };
+    let api = Api::new(i18n);
     spawn_local(async move {
         let loaded = api.get("/auth/session").await.and_then(|v| {
             decode_session(v)
@@ -355,7 +101,7 @@ pub(super) fn app() -> impl IntoView {
                 api.set_features(features);
             }
             preferences.apply(value.preferences.clone(), i18n);
-            api.monitor.update(|m| m.observe(value));
+            api.observe_session(value);
         }
         session.set(Some(loaded));
     });
@@ -368,7 +114,7 @@ pub(super) fn app() -> impl IntoView {
         }
         checking.set(true);
         let preference_ticket = preferences.read_ticket();
-        let feature_ticket = api.feature_generation.get_untracked();
+        let feature_ticket = api.feature_ticket();
         // Global browser callbacks do not establish a Leptos owner themselves.
         owner.with_value(|owner| {
             if let Some(owner) = owner {
@@ -380,9 +126,9 @@ pub(super) fn app() -> impl IntoView {
                             })
                         }) {
                             Ok(value) => {
-                                api.monitor.update(|m| m.observe(&value));
+                                api.observe_session(&value);
                                 if api.active() {
-                                    if feature_ticket == api.feature_generation.get_untracked()
+                                    if feature_ticket == api.feature_ticket()
                                         && let Some(features) = value.features
                                     {
                                         api.set_features(features);
@@ -429,7 +175,7 @@ pub(super) fn app() -> impl IntoView {
     });
     // The authenticated shell survives routing and routine session checks.
     // Only an identity/permission change invalidates it.
-    let action = Memo::new(move |_| api.monitor.with(|m| m.action()));
+    let action = Memo::new(move |_| api.session_action());
     Effect::new(move |_| {
         let action = action.get();
         if let Some(window) = web_sys::window() {
@@ -657,7 +403,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
                 return;
             }
             match api.form(path, &token.get_value(), &[]).await {
-                Ok(_) if path == "/logout" => api.monitor.update(|m| m.signed_out()),
+                Ok(_) if path == "/logout" => api.mark_signed_out(),
                 Ok(value) => navigate(value["data"].as_str().unwrap_or("/login")),
                 Err(error) => message.error(error),
             }

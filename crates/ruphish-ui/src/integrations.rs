@@ -1,6 +1,6 @@
 //! Webhook administration and reporting mailbox resources share presentation primitives.
 use crate::{
-    account::Api, campaigns::text, feedback::Message, management_queries::ManagementQueries,
+    campaigns::text, client::Api, feedback::Message, management_queries::ManagementQueries,
     resources::ResourceAccess, shared::components::*, time_display::instant,
 };
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};

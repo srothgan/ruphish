@@ -1,8 +1,9 @@
 //! Stable recipient rows with an independently loaded, expandable history panel.
 use crate::shared::components::{ActionButton, ButtonStyle, StatusBadge, StatusTone};
 use crate::{
-    account::{Api, copy_text},
+    account::copy_text,
     campaigns::{array, text},
+    client::Api,
     time_display::instant,
 };
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};

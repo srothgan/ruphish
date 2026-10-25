@@ -1,5 +1,5 @@
 //! Dashboard snapshots and the mutations that make them stale.
-use crate::account::Api;
+use crate::client::Api;
 use leptos::prelude::*;
 use leptos_fetch::QueryClient;
 use ruphish_contracts::overview::{PostureResponse, Snapshot};

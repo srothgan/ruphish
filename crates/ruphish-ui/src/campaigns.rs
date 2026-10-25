@@ -1,6 +1,6 @@
 //! Campaign preparation and operational delivery views within the shared shell.
 use crate::campaign_queries::CampaignQueries;
-use crate::{account::Api, feedback::Message, resources::ResourceAccess, shared::components::*};
+use crate::{client::Api, feedback::Message, resources::ResourceAccess, shared::components::*};
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use leptos_router::hooks::{use_navigate, use_params_map, use_query_map};
 use ruphish_ui::campaign_state::Draft;
