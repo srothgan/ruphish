@@ -35,8 +35,8 @@ jobs:
         with:
           node-version: '26.8.1'
           package-manager-cache: false
-      - name: Check gate behavior
-        run: node --test .github/scripts/validation.test.mjs
+      - name: Check gate behavior and fixture initialization
+        run: node --test .github/scripts/validation.test.mjs tests/acceptance/init.test.mjs
       - name: Lint workflows
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck="" -pyflakes=""
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -295,7 +295,8 @@ jobs:
         run: |
           node tests/acceptance/lab.mjs init
           docker compose -f tests/acceptance/compose.yaml --profile setup run --rm prepare
-          docker compose -f tests/acceptance/compose.yaml up -d dns inbox app
+          docker compose -f tests/acceptance/compose.yaml build app
+          docker compose -f tests/acceptance/compose.yaml up -d --wait dns inbox app
           node tests/acceptance/lab.mjs demo
           node tests/acceptance/lab.mjs seed
           node --test tests/acceptance/public.test.mjs

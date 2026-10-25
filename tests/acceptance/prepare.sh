@@ -55,6 +55,16 @@ fi
 cd /workspace
 # Host-side HTTPS clients need the public certificates, never the private keys.
 chmod 644 /lab/data/ca.pem /lab/data/server.pem
+# Preserve host ownership of fixture inputs while allowing the image's group to
+# create SQLite/log files. Only application-owned private files change owner.
+chgrp 10001 /lab/data
+chmod g+wx /lab/data
+for file in server.key ruphish.db ruphish.db-wal ruphish.db-shm ruphish.db-journal ruphish.db.ruphish-startup.lock ruphish.log; do
+    if [ -f "/lab/data/$file" ]; then
+        chown 10001:10001 "/lab/data/$file"
+    fi
+done
 cargo build -p ruphish --locked
-cp /target/debug/ruphish /lab/data/ruphish
-echo 'Local Linux executable and certificates prepared. No system CA store was changed.'
+cp /target/debug/ruphish /artifact/ruphish
+chmod 755 /artifact/ruphish
+echo 'Linux executable prepared in target/docker for the runtime image. No system CA store was changed.'

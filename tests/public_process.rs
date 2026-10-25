@@ -423,6 +423,24 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
         "User-agent: *\nDisallow: /\n"
     );
     let before = get(&admin, &format!("/api/campaigns/{}", campaign["id"]));
+    // Reserved operational paths must not render or track even a valid recipient.
+    for (path, status) in [("live", "live"), ("ready", "ready")] {
+        let response = browser
+            .get(format!("{origin}/health/{path}?rid={rid}"))
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        assert_eq!(response.json::<Value>().unwrap(), json!({"status":status}));
+        assert_eq!(
+            browser
+                .post(format!("{origin}/health/{path}?rid={rid}"))
+                .json(&json!({"password":"health-participant-canary"}))
+                .send()
+                .unwrap()
+                .status(),
+            405
+        );
+    }
     for path in ["/", "/track", "/report"] {
         for suffix in ["+", "%2b"] {
             let value: Value = browser

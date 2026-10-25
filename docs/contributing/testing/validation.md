@@ -27,7 +27,7 @@ Cost describes the work performed, not a promised duration. Compilation, tool in
 | Public Docker acceptance | Controlled DNS/TLS/SMTP and privacy through the canonical fixture | Container startup and a Linux development build. Public fixture or shared build/workflow changes and full nightly/release acceptance |
 | Dependency policy | Rust advisories/licenses/sources/bans and npm advisories | Tool install and advisory download are separate. Dependency/policy changes plus nightly; cached test success does not replace fresh advisory data |
 | Bounded audience measurement | Existing ignored launch/read/claim/compose workload at legacy audience sizes | Measurement, not a wall-clock assertion. Full nightly/release acceptance; not an agent completion check |
-| Workflow lint and gate tests | YAML/Actions expressions and failure/skip handling | Small compared with product builds. Every PR and after workflow edits; inspect representative path groups when their patterns change |
+| Workflow lint, gate and fixture initialization tests | YAML/Actions expressions, failure/skip handling and caller-owned Cargo artifact directories | Small compared with product builds. Every PR and after workflow edits; run `node --test .github/scripts/validation.test.mjs tests/acceptance/init.test.mjs` and inspect representative path groups when their patterns change |
 
 Executable campaign tests use an isolated DNS/HTTPS fixture on ordinary loopback and an allocated port. The fixture belongs to the test workspace, so its origin remains stable across application restarts. No privileged-port configuration is needed. API and lifecycle process tests use small synthetic assets with a valid manifest; they exercise the real server without loading the full UI on each startup. Dedicated distribution-serving, immutability, traversal/integrity and symlink tests retain copies of the real built UI. Migration-only tests omit UI assets and inspect preserved data after shutdown; dedicated shared-database scenarios retain concurrent access. Process failures include bounded OS process observations and workspace file metadata, without dumping configuration or database contents.
 
@@ -139,9 +139,9 @@ The CI workflow always starts for PRs to main and pushes to main, including docu
 | Group | Main paths | Fixed checks |
 | --- | --- | --- |
 | Website | `website/**`, `docs/**` | Website tests, Astro checks/build and site validation |
-| Product | `crates/**`, `tests/**`, `migrations/**` and shared build inputs | Browser tests/lint/formatting and development assets; complete native Clippy/tests on Linux x64, Windows x64 and macOS ARM64; platform asset promotion |
+| Product | `crates/**`, `tests/**`, `migrations/**`, runtime Docker inputs and shared build inputs | Browser tests/lint/formatting and development assets; complete native Clippy/tests on Linux x64, Windows x64 and macOS ARM64; platform asset promotion |
 | Persistence | Adapter/application/domain crates, `tests/**`, `migrations/**` and shared build inputs | Both supported MySQL and PostgreSQL versions, complete histories/schema recovery, transport checks and provider executable scenarios |
-| Public | `tests/acceptance/**` and shared build inputs | Canonical Docker DNS/TLS/SMTP/privacy fixture |
+| Public | `tests/acceptance/**`, `Dockerfile`, `.dockerignore`, `docker/**` and shared build inputs | Canonical runtime image health, shutdown/persistence and DNS/TLS/SMTP/privacy fixture |
 | Dependencies | Shared build inputs and browser npm manifests/lockfile | Cargo dependency policy and browser npm audit |
 
 Shared build inputs include workspace/crate manifests, the Cargo lockfile, toolchain and formatter configuration, `.cargo/`, Trunk, dependency policy, line-ending policy, workflow/action implementations and CI path/gate files. Workflow and path/gate changes also select website checks. Issue templates, the PR template, CODEOWNERS and Dependabot configuration do not select product acceptance. The YAML file is authoritative; add new source/build locations to the appropriate group when introducing them.

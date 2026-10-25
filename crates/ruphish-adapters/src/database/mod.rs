@@ -28,6 +28,7 @@ mod postgres_config;
 mod security_tests;
 pub use postgres_config::{PostgresConfig, PostgresTls};
 mod errors;
+mod health;
 mod sessions;
 pub(crate) mod text;
 pub(crate) use errors::commit_error;
@@ -53,6 +54,7 @@ pub enum Config {
 /// Owned database lifecycle and provider-neutral feature capabilities.
 pub struct Database {
     backend: Backend,
+    health: Arc<dyn app::health::Storage>,
     settings: Arc<dyn app::settings::Repository>,
     rendering: Arc<tokio::sync::Semaphore>,
     sessions: Arc<dyn app::storage::Sessions>,
@@ -87,6 +89,7 @@ pub async fn open(config: Config, policy: Policy) -> Result<Database, Error> {
             let pool = backend.pool();
             let rendering = Arc::new(tokio::sync::Semaphore::new(8));
             Ok(Database {
+                health: Arc::new(health::Probe::Sqlite(pool.clone())),
                 settings: Arc::new(sqlite::settings::SettingsStore::new(pool.clone())),
                 sessions: Arc::new(sqlite::sessions::Sessions::new(pool.clone())),
                 accounts: Arc::new(sqlite::accounts::Accounts::new(pool.clone())),
@@ -118,6 +121,7 @@ pub async fn open(config: Config, policy: Policy) -> Result<Database, Error> {
             let pool = backend.pool();
             let rendering = Arc::new(tokio::sync::Semaphore::new(8));
             Ok(Database {
+                health: Arc::new(health::Probe::MySql(pool.clone())),
                 settings: Arc::new(mysql::settings::SettingsStore::new(pool.clone())),
                 sessions: Arc::new(mysql::sessions::Sessions::new(pool.clone())),
                 accounts: Arc::new(mysql::accounts::Accounts::new(pool.clone())),
@@ -149,6 +153,7 @@ pub async fn open(config: Config, policy: Policy) -> Result<Database, Error> {
             let pool = backend.pool();
             let rendering = Arc::new(tokio::sync::Semaphore::new(8));
             Ok(Database {
+                health: Arc::new(health::Probe::Postgres(pool.clone())),
                 settings: Arc::new(postgres::settings::SettingsStore::new(pool.clone())),
                 sessions: Arc::new(postgres::sessions::Sessions::new(pool.clone())),
                 accounts: Arc::new(postgres::accounts::Accounts::new(pool.clone())),
@@ -179,6 +184,11 @@ pub async fn open(config: Config, policy: Policy) -> Result<Database, Error> {
 }
 
 impl Database {
+    /// Read-only readiness capability; callers use the application's bounded health service.
+    pub fn health(&self) -> Arc<dyn app::health::Storage> {
+        self.health.clone()
+    }
+
     /// Installation policy and administrator campaign closure.
     pub fn settings(&self) -> Arc<dyn app::settings::Repository> {
         self.settings.clone()

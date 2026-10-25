@@ -79,6 +79,8 @@ The public HTTP example is enough to start the application, but campaign origins
 
 ## Sign in
 
+For automated monitoring, use the [liveness and readiness probes](../administration/health.md). They are available on each enabled listener after HTTP startup, without administrator credentials.
+
 Wait for the `RUPHISH_READY` message on stderr, then open the administration address. For locally generated development certificates, inspect the certificate before accepting a browser exception. Do not use that development trust arrangement as your public TLS setup.
 
 Sign in as `admin` using the temporary password you supplied. Complete the required password change. The application does not print passwords or API tokens. If the first startup generated an inaccessible temporary password, stop it and restart with `GOPHISH_INITIAL_ADMIN_PASSWORD` set.

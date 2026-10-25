@@ -4,6 +4,16 @@ use sqlx::Connection;
 #[test]
 #[ignore = "Requires the canonical MySQL acceptance service and RUPHISH_MYSQL_TEST_PORT"]
 fn mysql_process_full_production_workflow() {
+    with_database(false);
+}
+
+#[test]
+#[ignore = "Requires the canonical MySQL acceptance service and RUPHISH_MYSQL_TEST_PORT"]
+fn mysql_health_process_recovers_after_database_outage() {
+    with_database(true);
+}
+
+fn with_database(health_only: bool) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let port: u16 = std::env::var("RUPHISH_MYSQL_TEST_PORT")
         .unwrap()
@@ -32,9 +42,11 @@ fn mysql_process_full_production_workflow() {
             .as_nanos()
     );
     runtime.block_on(sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE DATABASE `{name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin; USE `{name}`"))).execute(&mut inspector)).unwrap();
-    super::server_database_process::exercise(
-        json!({"db_name":"mysql","db_path":"","mysql":{"host":"127.0.0.1","port":port,"database":name,"username":"root","password":"ruphish-mysql-fixture-only","ca_path":ca}}),
-        |_, fault| {
+    let config = json!({"db_name":"mysql","db_path":"","mysql":{"host":"127.0.0.1","port":port,"database":name,"username":"root","password":"ruphish-mysql-fixture-only","ca_path":ca}});
+    if health_only {
+        super::health_process::server_outage(config);
+    } else {
+        super::server_database_process::exercise(config, |_, fault| {
             for statement in super::server_database_process::fault_statements("mysql", fault) {
                 if matches!(
                     fault,
@@ -57,8 +69,8 @@ fn mysql_process_full_production_workflow() {
                         .unwrap();
                 }
             }
-        },
-    );
+        });
+    }
     runtime
         .block_on(
             sqlx::raw_sql(sqlx::AssertSqlSafe(format!("DROP DATABASE `{name}`")))

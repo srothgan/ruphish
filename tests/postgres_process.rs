@@ -4,6 +4,16 @@ use sqlx::Connection;
 #[test]
 #[ignore = "Requires canonical PostgreSQL fixture and RUPHISH_POSTGRES_TEST_PORT"]
 fn postgres_process_full_production_workflow() {
+    with_database(false);
+}
+
+#[test]
+#[ignore = "Requires canonical PostgreSQL fixture and RUPHISH_POSTGRES_TEST_PORT"]
+fn postgres_health_process_recovers_after_database_outage() {
+    with_database(true);
+}
+
+fn with_database(health_only: bool) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let port = std::env::var("RUPHISH_POSTGRES_TEST_PORT")
         .unwrap()
@@ -55,9 +65,11 @@ fn postgres_process_full_production_workflow() {
                 .options([("search_path", "ruphish,pg_catalog")]),
         ))
         .unwrap();
-    super::server_database_process::exercise(
-        json!({"db_name":"postgres","db_path":"","postgres":{"host":"127.0.0.1","port":port,"database":name,"username":name,"password":"synthetic-process-password","ca_path":ca}}),
-        |_, fault| {
+    let config = json!({"db_name":"postgres","db_path":"","postgres":{"host":"127.0.0.1","port":port,"database":name,"username":name,"password":"synthetic-process-password","ca_path":ca}});
+    if health_only {
+        super::health_process::server_outage(config);
+    } else {
+        super::server_database_process::exercise(config, |_, fault| {
             for statement in super::server_database_process::fault_statements("postgres", fault) {
                 if matches!(
                     fault,
@@ -80,8 +92,8 @@ fn postgres_process_full_production_workflow() {
                         .unwrap();
                 }
             }
-        },
-    );
+        });
+    }
     runtime.block_on(inspector.close()).unwrap();
     runtime
         .block_on(
