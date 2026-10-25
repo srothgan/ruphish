@@ -29,7 +29,7 @@ impl Public for Interactions {
             .map_err(|_| Error::Internal)?;
         let document = tokio::task::spawn_blocking(move || {
             let _permit = permit;
-            crate::landing::learning(&source)
+            crate::landing::render(&source, crate::landing::Mode::Learning)
         })
         .await
         .map_err(|_| Error::Internal)??;
@@ -88,9 +88,17 @@ impl Public for Interactions {
                 let destination = crate::landing::redirect(&redirect, &base)?;
                 let document = source
                     .map(|source| {
-                        let html =
-                            crate::resources::render(&source, &context).map_err(|_| missing())?;
-                        crate::landing::render(&html, Some(&endpoint))
+                        crate::landing::render(
+                            &source,
+                            crate::landing::Mode::Landing {
+                                context: &context,
+                                endpoint: Some(&endpoint),
+                            },
+                        )
+                        .map_err(|error| match error {
+                            crate::landing::RenderError::Template(_) => missing(),
+                            crate::landing::RenderError::Document(error) => error,
+                        })
                     })
                     .transpose()?;
                 Ok::<_, Error>((document, destination))

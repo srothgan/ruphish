@@ -913,10 +913,10 @@ fn content_workspace(
             let result = api
                 .resource(
                     "POST",
-                    if family == Family::LearningPages {
-                        "/api/learning-pages/preview"
-                    } else {
-                        "/api/util/preview"
+                    match family {
+                        Family::LearningPages => "/api/learning-pages/preview",
+                        Family::Pages => "/api/pages/preview",
+                        _ => "/api/util/preview",
                     },
                     &token.get_value(),
                     Some(&body),

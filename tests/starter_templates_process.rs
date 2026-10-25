@@ -2,6 +2,10 @@
 use super::*;
 use reqwest::Method;
 
+// Exercise the same catalog payload construction with an unpublished test fixture.
+#[path = "../crates/ruphish-http/src/starter_templates/source.rs"]
+mod catalog_source;
+
 #[test]
 fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources() {
     use auth_process::{bootstrap, browser, post, setup, sign_in};
@@ -40,6 +44,50 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
         assert_eq!(response.headers()["cache-control"], "no-store");
         response.json::<Value>().unwrap()
     };
+    for path in ["/api/pages/preview", "/api/learning-pages/preview"] {
+        assert_eq!(
+            anonymous
+                .post(format!("{base}{path}"))
+                .json(&json!({"html":"<p>Preview</p>"}))
+                .send()
+                .unwrap()
+                .status(),
+            401
+        );
+        assert_eq!(
+            admin
+                .post(format!("{base}{path}"))
+                .json(&json!({"html":"<p>Preview</p>"}))
+                .send()
+                .unwrap()
+                .status(),
+            403
+        );
+        assert_eq!(send(Method::GET, path, &json!({})).status(), 405);
+        assert_eq!(send(Method::POST, path, &json!({"html":42})).status(), 400);
+    }
+    // Only landing-page previews execute compatible expressions. Learning content stays literal.
+    assert_eq!(
+        send(
+            Method::POST,
+            "/api/pages/preview",
+            &json!({"html":"<p>{{unfinished</p>"})
+        )
+        .status(),
+        400
+    );
+    let literal = send(
+        Method::POST,
+        "/api/learning-pages/preview",
+        &json!({"html":"<p>{{unfinished</p>"}),
+    );
+    assert_eq!(literal.status(), 200);
+    assert!(
+        literal.json::<Value>().unwrap()["html"]
+            .as_str()
+            .unwrap()
+            .contains("{{unfinished")
+    );
     let route = "/settings/starter-templates";
     assert_eq!(
         anonymous
@@ -55,14 +103,24 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
     );
     let catalog = get("/api/starter-templates/");
     let rows = catalog.as_array().unwrap();
-    assert_eq!(rows.iter().filter(|r| r["kind"] == "email").count(), 20);
+    assert!(rows.iter().any(|r| r["kind"] == "email"));
+    assert!(rows.iter().any(|r| r["kind"] == "landing_page"));
+    let learning: std::collections::BTreeSet<_> = rows
+        .iter()
+        .filter(|row| row["kind"] == "learning_page")
+        .map(|row| row["id"].as_str().unwrap())
+        .collect();
     assert_eq!(
-        rows.iter().filter(|r| r["kind"] == "landing_page").count(),
-        19
+        learning,
+        std::collections::BTreeSet::from([
+            "learning-slam",
+            "learning-stop-challenge-protect",
+            "learning-recognize-resist-report-delete",
+        ])
     );
     let branding: std::collections::BTreeSet<_> = rows
         .iter()
-        .filter(|r| !r["company_logo"].is_null())
+        .filter(|r| r["kind"] == "landing_page" && !r["company_logo"].is_null())
         .map(|r| r["id"].as_str().unwrap())
         .collect();
     assert_eq!(
@@ -77,6 +135,7 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
     );
     assert_eq!(get("/api/templates/"), json!([]));
     assert_eq!(get("/api/pages/"), json!([]));
+    assert_eq!(get("/api/learning-pages/"), json!([]));
     let unknown = admin
         .get(format!("{base}/api/starter-templates/not-found"))
         .send()
@@ -93,12 +152,32 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
             405
         );
     }
-    // Every approved entry must pass the actual create and preview pipeline.
-    let mut saved = Vec::new();
+    // Every bundled entry and the unpublished learning fixture use the real create/preview APIs.
+    let learning = catalog_source::Source {
+        id: "fixture-learning",
+        name: "Fixture explanation",
+        brand: "Fixture",
+        kind: ruphish_contracts::starter_templates::Kind::LearningPage,
+        html: "<div class='brand'>Default mark</div><h1>Fixture explanation</h1><p>{{.FirstName}}</p><p>Literal {{ unfinished example</p><form><input name='password'><button>Submit</button></form><script>unsafe()</script>",
+        subject: "",
+        text: "",
+        logo: Some((".brand", 48, "Learning page header")),
+    };
+    let mut entries = Vec::new();
     for row in rows {
-        let id = row["id"].as_str().unwrap();
-        let entry = get(&format!("/api/starter-templates/{id}"));
+        let entry = get(&format!(
+            "/api/starter-templates/{}",
+            row["id"].as_str().unwrap()
+        ));
         assert_eq!(entry["summary"], *row);
+        entries.push(entry);
+    }
+    assert!(!rows.iter().any(|row| row["id"] == "fixture-learning"));
+    entries.push(serde_json::to_value(learning.entry()).unwrap());
+    let mut saved = Vec::new();
+    for entry in entries {
+        let row = &entry["summary"];
+        let id = row["id"].as_str().unwrap();
         let resource = &entry["resource"];
         let html = resource["html"].as_str().unwrap();
         assert!(!html.contains("{{.Tracker}}"));
@@ -107,12 +186,33 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
         }
         assert!(resource.get("id").is_none());
         assert!(resource.get("catalog_id").is_none());
-        let preview = send(Method::POST, "/api/util/preview", &json!({"html":html}));
-        assert_eq!(preview.status(), 200, "{id}: {}", preview.text().unwrap());
-        let family = if row["kind"] == "email" {
-            "templates"
+        let preview_path = if row["kind"] == "learning_page" {
+            assert_eq!(row["prefill"], false);
+            assert!(resource.get("redirect_url").is_none());
+            assert!(resource.get("public_id").is_none());
+            "/api/learning-pages/preview"
+        } else if row["kind"] == "landing_page" {
+            "/api/pages/preview"
         } else {
-            "pages"
+            "/api/util/preview"
+        };
+        let preview = send(Method::POST, preview_path, &json!({"html":html}));
+        assert_eq!(preview.status(), 200, "{id}: {}", preview.text().unwrap());
+        if row["kind"] == "learning_page" {
+            let rendered: Value = preview.json().unwrap();
+            let html = rendered["html"].as_str().unwrap();
+            if id == "fixture-learning" {
+                assert!(html.contains("{{.FirstName}}"));
+            }
+            for removed in ["<form", "<input", "<button", "<script"] {
+                assert!(!html.contains(removed));
+            }
+        }
+        let family = match row["kind"].as_str().unwrap() {
+            "email" => "templates",
+            "landing_page" => "pages",
+            "learning_page" => "learning-pages",
+            unexpected => panic!("Unsupported catalog kind: {unexpected}"),
         };
         // Session creation still requires CSRF; the catalog cannot bypass it.
         assert_eq!(
@@ -128,15 +228,25 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
         assert_eq!(response.status(), 201, "{id}: {}", response.text().unwrap());
         let created: Value = response.json().unwrap();
         ruphish_contracts::resource_details::validate(
-            if family == "templates" {
-                ruphish_contracts::resource_details::Kind::Template
-            } else {
-                ruphish_contracts::resource_details::Kind::Page
+            match family {
+                "templates" => ruphish_contracts::resource_details::Kind::Template,
+                "learning-pages" => ruphish_contracts::resource_details::Kind::LearningPage,
+                _ => ruphish_contracts::resource_details::Kind::Page,
             },
             &created,
         )
         .unwrap();
         assert_eq!(created["html"], resource["html"]);
+        if family == "learning-pages" {
+            let before = get("/api/learning-pages/");
+            let duplicate = send(Method::POST, "/api/learning-pages/", resource);
+            assert_eq!(duplicate.status(), 409);
+            assert_eq!(get("/api/learning-pages/"), before);
+            assert_eq!(
+                get(&format!("/api/learning-pages/{}", created["id"]))["html"],
+                resource["html"]
+            );
+        }
         saved.push((family, created["id"].as_i64().unwrap(), entry));
     }
     // Use the production browser transform with the actual API metadata, then save its output.
@@ -160,24 +270,62 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
         String::from_utf8_lossy(&transformed.stderr)
     );
     let copies: Vec<Value> = serde_json::from_slice(&transformed.stdout).unwrap();
-    assert_eq!(copies.len(), 24);
+    let expected_options = saved
+        .iter()
+        .filter(|(_, _, entry)| entry["summary"]["kind"] != "email")
+        .map(|(_, _, entry)| {
+            if entry["summary"]["company_logo"].is_null() {
+                1
+            } else {
+                2
+            }
+        })
+        .sum::<usize>();
+    assert_eq!(copies.len(), expected_options);
+    let mut prepared_copies = Vec::new();
     for copy in copies {
-        let response = send(Method::POST, "/api/pages/", &copy);
+        let learning = copy["kind"] == "learning_page";
+        let family = if learning { "learning-pages" } else { "pages" };
+        let payload = &copy["resource"];
+        let response = send(Method::POST, &format!("/api/{family}/"), payload);
         assert_eq!(response.status(), 201);
         let created: Value = response.json().unwrap();
         assert_eq!(
-            get(&format!("/api/pages/{}", created["id"]))["html"],
-            copy["html"]
+            get(&format!("/api/{family}/{}", created["id"]))["html"],
+            payload["html"]
         );
+        prepared_copies.push((
+            family,
+            created["id"].as_i64().unwrap(),
+            json!({"resource":payload}),
+        ));
         let preview = send(
             Method::POST,
-            "/api/util/preview",
+            if learning {
+                "/api/learning-pages/preview"
+            } else {
+                "/api/pages/preview"
+            },
             &json!({
-                "html":copy["html"],"recipient":{"email":"prefilled@example.test","first_name":"Example","last_name":"Recipient","position":"Test"},
+                "html":payload["html"],"recipient":{"email":"prefilled@example.test","first_name":"Example","last_name":"Recipient","position":"Test"},
             }),
         );
         assert_eq!(preview.status(), 200);
         let rendered: Value = preview.json().unwrap();
+        if learning {
+            let html = rendered["html"].as_str().unwrap();
+            if copy["source_id"] == "fixture-learning" {
+                assert!(html.contains("{{.FirstName}}"));
+                assert!(html.contains("Literal {{ unfinished example"));
+                assert_eq!(
+                    html.contains("data:image/png;base64,"),
+                    copy["branded"] == true
+                );
+            }
+            assert!(!html.contains("prefilled@example.test"));
+            assert!(!html.contains("<input"));
+            continue;
+        }
         assert!(
             rendered["html"]
                 .as_str()
@@ -186,8 +334,8 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
         );
         assert!(!rendered["html"].as_str().unwrap().contains("{{.Email"));
     }
-    // Re-add, edit and delete independently in both resource families.
-    for family in ["templates", "pages"] {
+    // Re-add, edit and delete independently in every resource family.
+    for family in ["templates", "pages", "learning-pages"] {
         let (_, first_id, entry) = saved.iter().find(|(f, _, _)| *f == family).unwrap();
         let mut copy = entry["resource"].clone();
         copy["name"] = json!(format!("{} (2)", copy["name"].as_str().unwrap()));
@@ -196,6 +344,12 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
         let mut second: Value = response.json().unwrap();
         let second_id = second["id"].as_i64().unwrap();
         assert_ne!(first_id, &second_id);
+        if family == "learning-pages" {
+            assert_ne!(
+                second["public_id"],
+                get(&format!("/api/{family}/{first_id}"))["public_id"]
+            );
+        }
         second["html"] = json!("<html><body><p>Independent edit</p></body></html>");
         assert_eq!(
             send(Method::PUT, &format!("/api/{family}/{second_id}"), &second).status(),
@@ -206,7 +360,18 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
             entry["resource"]["html"]
         );
         let source_id = entry["summary"]["id"].as_str().unwrap();
-        assert_eq!(get(&format!("/api/starter-templates/{source_id}")), *entry);
+        if source_id == "fixture-learning" {
+            assert_eq!(
+                admin
+                    .get(format!("{base}/api/starter-templates/{source_id}"))
+                    .send()
+                    .unwrap()
+                    .status(),
+                404
+            );
+        } else {
+            assert_eq!(get(&format!("/api/starter-templates/{source_id}")), *entry);
+        }
         assert_eq!(
             send(
                 Method::DELETE,
@@ -273,15 +438,18 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
             .status(),
         403
     );
-    let (family, id, _) = &saved[0];
-    assert_eq!(
-        user_browser
-            .get(format!("{base}/api/{family}/{id}"))
-            .send()
-            .unwrap()
-            .status(),
-        404
-    );
+    for family in ["templates", "pages", "learning-pages"] {
+        let (_, id, _) = saved.iter().find(|(f, _, _)| *f == family).unwrap();
+        for method in [Method::GET, Method::PUT, Method::DELETE] {
+            assert_eq!(
+                anonymous.request(method, format!("{base}/api/{family}/{id}"))
+                    .bearer_auth(user_key)
+                    .json(&json!({"id":id,"name":"Other owner's resource","html":"<p>Unauthorized replacement</p>","subject":"Unauthorized"}))
+                    .send().unwrap().status(),
+                404
+            );
+        }
+    }
     assert_eq!(
         post(
             &admin,
@@ -305,7 +473,7 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
     process.stop();
     let mut restarted = Process::start(directory.path(), "admin");
     let base = format!("http://{}", restarted.ready()["admin"].as_str().unwrap());
-    for (family, id, entry) in saved {
+    for (family, id, entry) in saved.into_iter().chain(prepared_copies) {
         let resource: Value = anonymous
             .get(format!("{base}/api/{family}/{id}"))
             .bearer_auth("synthetic-bootstrap-token")

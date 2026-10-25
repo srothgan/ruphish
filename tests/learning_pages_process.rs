@@ -2,6 +2,115 @@
 use super::*;
 
 #[test]
+fn bundled_learning_methods_import_with_both_logos_and_serve_complete_static_lessons() {
+    let dns = Dns::start();
+    let directory = workspace();
+    let cert = configure(directory.path(), &dns);
+    let mut process = Process::with_options(
+        directory.path(),
+        "all",
+        Some("synthetic-bootstrap-password"),
+        Some("synthetic-bootstrap-token"),
+        &["--disable-mailer"],
+    );
+    let ready = process.ready();
+    let admin = format!("http://{}", ready["admin"].as_str().unwrap());
+    let public: SocketAddr = ready["phish"].as_str().unwrap().parse().unwrap();
+    database(
+        directory.path(),
+        "UPDATE users SET password_change_required=0",
+    );
+    let origin = format!("https://training.example.test:{}", public.port());
+    post(
+        &admin,
+        "/api/domains/",
+        json!({"name":"Starter learning domain","origin":origin,"enabled":true}),
+    );
+    let browser = reqwest::blocking::Client::builder()
+        .no_proxy()
+        .add_root_certificate(reqwest::Certificate::from_pem(&cert).unwrap())
+        .resolve("training.example.test", public)
+        .timeout(Duration::from_secs(5))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+    let entries: Vec<Value> = [
+        "learning-slam",
+        "learning-stop-challenge-protect",
+        "learning-recognize-resist-report-delete",
+    ]
+    .iter()
+    .map(|id| {
+        let entry = get(&admin, &format!("/api/starter-templates/{id}"));
+        assert_eq!(entry["summary"]["kind"], "learning_page");
+        assert_eq!(entry["summary"]["prefill"], false);
+        assert_eq!(entry["summary"]["brand"], "Ruphish");
+        assert!(entry["summary"]["company_logo"].is_object());
+        entry
+    })
+    .collect();
+    let input = directory.path().join("learning-starters.json");
+    std::fs::write(&input, serde_json::to_vec(&entries).unwrap()).unwrap();
+    let support = Path::new(env!("CARGO_MANIFEST_DIR")).join("../ruphish-ui/web/tests/support");
+    let transformed = std::process::Command::new("node")
+        .arg(support.join("starter-options.mjs"))
+        .arg(&input)
+        .output()
+        .unwrap();
+    assert!(
+        transformed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&transformed.stderr)
+    );
+    let copies: Vec<Value> = serde_json::from_slice(&transformed.stdout).unwrap();
+    assert_eq!(copies.len(), entries.len() * 2);
+    let mut documents = Vec::new();
+    let mut public_ids = std::collections::HashSet::new();
+    for copy in copies {
+        let created = post(&admin, "/api/learning-pages/", copy["resource"].clone());
+        let public_id = created["public_id"].as_str().unwrap();
+        assert!(public_ids.insert(public_id.to_owned()));
+        let preview = post(
+            &admin,
+            "/api/learning-pages/preview",
+            json!({"html":created["html"]}),
+        );
+        assert_eq!(preview["warnings"], json!([]), "{}", copy["source_id"]);
+        let response = browser
+            .get(format!("{origin}/learn/{public_id}"))
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        let csp = response.headers()["content-security-policy"]
+            .to_str()
+            .unwrap();
+        for policy in [
+            "script-src 'none'",
+            "connect-src 'none'",
+            "form-action 'none'",
+        ] {
+            assert!(csp.contains(policy));
+        }
+        let rendered = response.text().unwrap();
+        assert_eq!(rendered, preview["html"].as_str().unwrap());
+        documents.push(json!({"source":created["html"], "rendered":rendered}));
+    }
+    let rendered = directory.path().join("learning-served.json");
+    std::fs::write(&rendered, serde_json::to_vec(&documents).unwrap()).unwrap();
+    let checked = std::process::Command::new("node")
+        .arg(support.join("learning-preview.mjs"))
+        .arg(&rendered)
+        .output()
+        .unwrap();
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
+    process.stop();
+}
+
+#[test]
 fn learning_pages_redirect_without_tracking_survive_restart_and_reject_adversarial_requests() {
     let dns = Dns::start();
     let directory = workspace();
@@ -34,7 +143,7 @@ fn learning_pages_redirect_without_tracking_survive_restart_and_reject_adversari
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .unwrap();
-    let authored = "<!doctype html><html><body><h1>Learn to inspect the sender</h1><p>{{.FirstName}} is literal</p><style>h1{color:navy}</style><a href='https://example.test/help'>Help</a><form action='https://outside.invalid/collect'><input name='password' type='password'><button formaction='https://outside.invalid'>Continue</button></form><iframe src='https://outside.invalid'></iframe><img src='https://outside.invalid/pixel' onerror='unsafe()'><script>unsafe()</script><meta http-equiv='refresh' content='0;url=https://outside.invalid'></body></html>";
+    let authored = "<!doctype html><html><head><title>Learning document title</title></head><body><h1>Learn to inspect the sender</h1><p>{{.FirstName}} is literal</p><style>h1{color:navy}</style><a href='https://example.test/help'>Help</a><form action='https://outside.invalid/collect'><input name='password' type='password'><button formaction='https://outside.invalid'>Continue</button></form><iframe src='https://outside.invalid'></iframe><img src='https://outside.invalid/pixel' onerror='unsafe()'><script>unsafe()</script><meta http-equiv='refresh' content='0;url=https://outside.invalid'></body></html>";
     assert_eq!(
         client()
             .post(format!("{admin}/api/learning-pages/"))
@@ -181,10 +290,16 @@ fn learning_pages_redirect_without_tracking_survive_restart_and_reject_adversari
         "/api/templates/",
         json!({"name":"Mail","subject":"Training","text":"Visit {{.URL}}"}),
     );
+    let landing_source = "<!doctype html><html lang='en'><head><title>Landing for {{.FirstName}}</title><style>.lesson{color:navy}</style></head><body><main class='lesson'><section><h1>Hello {{.FirstName}}</h1><form action='https://outside.invalid'><input type='password' name='password'><button>Continue</button></form></section></main><script>unsafe()</script><img src='https://outside.invalid/pixel' onerror='unsafe()'></body></html>";
     post(
         &admin,
         "/api/pages/",
-        json!({"name":"Landing","html":"<form><input type='password' name='password'><button>Continue</button></form>","redirect_url":"https://example.test/default/{{.FirstName}}"}),
+        json!({"name":"Landing","html":landing_source,"redirect_url":"https://example.test/default/{{.FirstName}}"}),
+    );
+    let landing_preview = post(
+        &admin,
+        "/api/pages/preview",
+        json!({"html":landing_source,"recipient":{"email":"alice@example.test","first_name":"Alice"}}),
     );
     post(
         &admin,
@@ -220,6 +335,26 @@ fn learning_pages_redirect_without_tracking_survive_restart_and_reject_adversari
     );
     let rid = campaign["results"][0]["id"].as_str().unwrap();
     let submit = format!("{origin}/?rid={rid}");
+    let landing_served = browser.get(&submit).send().unwrap();
+    assert_eq!(landing_served.status(), 200);
+    let parity = directory.path().join("page-preview-parity.json");
+    std::fs::write(&parity, serde_json::to_vec(&json!([
+        {"kind":"learning","preview":preview["html"],"served":html,"title":"Learning document title","visible":["Learn to inspect the sender","{{.FirstName}} is literal"]},
+        {"kind":"landing","preview":landing_preview["html"],"served":landing_served.text().unwrap(),"title":"Landing for Alice","visible":["Hello Alice"]}
+    ])).unwrap()).unwrap();
+    let checked = std::process::Command::new("node")
+        .arg(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../ruphish-ui/web/tests/support/page-preview-parity.mjs"),
+        )
+        .arg(&parity)
+        .output()
+        .unwrap();
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
     for _ in 0..2 {
         let response = browser
             .post(&submit)

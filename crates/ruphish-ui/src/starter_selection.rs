@@ -117,7 +117,7 @@ impl StarterSelection {
         edit(self.options.entry(id.to_owned()).or_default());
     }
 
-    /// Number selected across both catalog tabs.
+    /// Number selected across all catalog tabs.
     pub fn count(&self) -> usize {
         self.selected.len()
     }
@@ -263,10 +263,13 @@ mod tests {
         draft.configure("google", |options| options.prefill = true);
         draft.select("google", true);
         draft.select("email", true);
-        assert_eq!(draft.count(), 2);
+        draft.select("learning", true);
+        assert_eq!(draft.count(), 3);
         assert!(!draft.needs_logo());
         let batch = draft.snapshot();
         draft.configure("google", |options| options.prefill = false);
+        draft.configure("learning", |options| options.logo = true);
+        assert!(draft.needs_logo());
         assert_eq!(
             batch,
             vec![
@@ -278,12 +281,15 @@ mod tests {
                         logo: false
                     }
                 ),
+                ("learning".into(), Options::default()),
             ]
         );
         for (id, _) in batch {
             draft.select(&id, false);
         }
         assert_eq!(draft.count(), 0);
+        assert!(!draft.needs_logo());
+        assert!(draft.options("learning").logo);
         assert!(draft.options("zoom").logo);
     }
 }

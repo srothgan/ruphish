@@ -1,11 +1,12 @@
 import {TemplateVault} from './template-html.mjs';
 
 // Transform a copy only. No repository marker or new template syntax survives import.
-export function prepareLanding(source, prefill, brandingJson, logo) {
+export function preparePage(source, prefill, brandingJson, logo, staticContent = false) {
+  if (staticContent && prefill) throw new Error('starter_invalid');
   const branding = brandingJson ? JSON.parse(brandingJson) : null;
   if (!prefill && !branding) return source;
-  const vault = new TemplateVault(source);
-  const document = new DOMParser().parseFromString(vault.mask(source), 'text/html');
+  const vault = staticContent ? null : new TemplateVault(source);
+  const document = new DOMParser().parseFromString(vault ? vault.mask(source) : source, 'text/html');
   if (prefill) {
     const fields = document.querySelectorAll('input[name="username"]');
     if (fields.length !== 1 || fields[0].type !== 'email') throw new Error('starter_invalid');
@@ -28,7 +29,7 @@ export function prepareLanding(source, prefill, brandingJson, logo) {
       target.replaceChildren(image);
     }
   }
-  return '<!DOCTYPE html>\n' + vault.export(document);
+  return '<!DOCTYPE html>\n' + (vault ? vault.export(document) : document.documentElement.outerHTML);
 }
 
 export function validateLogoFile(file) {

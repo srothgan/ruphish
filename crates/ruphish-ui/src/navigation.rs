@@ -272,18 +272,18 @@ pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<>
                     trs!(ui.domains),
                     "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M3 12h18 M12 3c5 5 5 13 0 18-5-5-5-13 0-18",
                 )}
-                {link(
-                    path,
-                    "/learning-pages",
-                    trs!(ui.learning_pages),
-                    "M4 3h7v18H4z M11 3h9v18h-9 M14 7h3 M14 11h3",
-                )}
                 {link(path, "/templates", trs!(ui.email_templates), "M3 5h18v14H3z M3 5l9 7 9-7")}
                 {link(
                     path,
                     "/pages",
                     trs!(ui.landing_pages),
                     "M3 3h18v18H3z M3 8h18 M7 5.5h.01 M11 5.5h.01 M7 12h10 M7 16h6",
+                )}
+                {link(
+                    path,
+                    "/learning-pages",
+                    trs!(ui.learning_pages),
+                    "M4 3h7v18H4z M11 3h9v18h-9 M14 7h3 M14 11h3",
                 )}
                 {link(
                     path,
@@ -301,6 +301,12 @@ pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<>
                         "M3 5h18v14H3z M3 5l9 7 9-7 M9 16h6",
                     )}
                 </Show>
+                {link(
+                    path,
+                    "/smtp",
+                    trs!(ui.sending_profiles),
+                    "M22 2 9 15 M22 2l-7 20-4-9-9-4 20-7",
+                )}
                 <Show when=move || {
                     admin && api.features.get().webhooks_enabled
                 }>
@@ -311,12 +317,6 @@ pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<>
                         "M7 12a4 4 0 1 1 0-8 M17 12a4 4 0 1 1 0 8 M7 8l10 8 M7 16a4 4 0 1 1 0 4 M7 16h10",
                     )}
                 </Show>
-                {link(
-                    path,
-                    "/smtp",
-                    trs!(ui.sending_profiles),
-                    "M22 2 9 15 M22 2l-7 20-4-9-9-4 20-7",
-                )}
             },
         )}
         {external_link(

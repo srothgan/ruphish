@@ -26,6 +26,7 @@ pub(crate) fn routes() -> Router<AuthState> {
             );
     }
     routes
+        .route("/api/pages/preview", axum::routing::post(preview_landing))
         .route("/api/pages/validate", axum::routing::post(validate_page))
         .route(
             "/api/learning-pages/validate",
@@ -173,11 +174,33 @@ struct PreviewRequest {
     recipient: wire::Recipient,
 }
 async fn preview_learning(context: Context, body: Bytes) -> Result<Response, Rejection> {
+    preview_page(context, body, true).await
+}
+async fn preview_landing(context: Context, body: Bytes) -> Result<Response, Rejection> {
+    preview_page(context, body, false).await
+}
+async fn preview_page(
+    context: Context,
+    body: Bytes,
+    learning: bool,
+) -> Result<Response, Rejection> {
     editor_identity(&context).await?;
     let request: PreviewRequest = parse(&body)?;
+    let r = request.recipient;
+    let recipient = app::Recipient {
+        email: r.email,
+        first_name: r.first_name,
+        last_name: r.last_name,
+        position: r.position,
+    };
+    let mode = if learning {
+        app::PagePreview::Learning
+    } else {
+        app::PagePreview::Landing(&recipient)
+    };
     let (html, warnings) = context
         .resources()
-        .learning_preview(&request.html)
+        .page_preview(&request.html, mode)
         .map_err(error)?;
     response(
         StatusCode::OK,
@@ -579,7 +602,7 @@ async fn read(context: Context, Path(id): Path<i64>) -> Result<Response, Rejecti
     if let Content::LearningPage(page) = &value.content {
         let (html, warnings) = context
             .resources()
-            .learning_preview(&page.html)
+            .page_preview(&page.html, app::PagePreview::Learning)
             .map_err(error)?;
         wire["preview_html"] = json!(html);
         wire["warnings"] = json!(warnings);
@@ -633,7 +656,7 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
         Some(
             context
                 .resources()
-                .learning_preview(&page.html)
+                .page_preview(&page.html, app::PagePreview::Learning)
                 .map_err(error)?
                 .1,
         )

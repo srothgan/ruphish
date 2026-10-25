@@ -57,7 +57,7 @@ These variables are conventions for the example commands, not automatic Ruphish 
 | Manage reusable campaign content | [Groups](groups.md), [templates](templates.md), [landing pages](landing-pages.md), [sending profiles](sending-profiles.md) |
 | Import or preview content | [Imports and previews](imports-and-previews.md) |
 | Manage static explanations and campaign destinations | [Learning pages](learning-pages.md) |
-| Select bundled email and landing-page content | [Starter templates](starter-templates.md) |
+| Select bundled campaign content | [Starter templates](starter-templates.md) |
 | Prepare and launch a campaign | [Campaigns](campaigns.md), [campaign drafts](campaign-drafts.md) |
 | Control installation policy or close active campaigns | [Company settings](settings.md) |
 | Verify a campaign origin | [Domains](domains.md) |

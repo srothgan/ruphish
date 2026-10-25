@@ -9,16 +9,18 @@ pub enum Kind {
     Email,
     /// Ordinary landing page.
     LandingPage,
+    /// Static explanatory page without recipient personalization.
+    LearningPage,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-/// Reviewed logo replacement location and supported vendor context.
+/// Reviewed logo replacement location and supported page context.
 pub struct CompanyLogo {
     /// Unique selector in this catalog entry, never stored on the created resource.
     pub selector: String,
     /// Maximum displayed image height in CSS pixels.
     pub height: u16,
-    /// Vendor configuration represented by the branded variant.
+    /// Page or vendor configuration represented by the branded variant.
     pub context: String,
 }
 

@@ -13,18 +13,54 @@ pub struct Document {
     pub warnings: Vec<ruphish_application::resources::PageWarning>,
 }
 
-/// Preserve form semantics while removing executable authored content and network resources.
-/// Input is the already-rendered document, never an unexpanded template.
-pub fn render(source: &str, endpoint: Option<&str>) -> Result<Document, Error> {
-    render_document(source, endpoint, false)
+/// Page-specific capabilities supplied by the caller, never by authored HTML.
+pub enum Mode<'a> {
+    /// Render compatible template expressions; only live pages receive a collector endpoint.
+    Landing {
+        /// Sample or campaign context for this rendering.
+        context: &'a crate::template::Context,
+        /// Trusted submission URL; absent in previews and validation.
+        endpoint: Option<&'a str>,
+    },
+    /// Static content, without recipient expansion, controls or a collector.
+    Learning,
 }
 
-/// Static educational document with no collector, form controls or recipient context.
-pub fn learning(source: &str) -> Result<Document, Error> {
-    render_document(source, None, true)
+/// Keep template failures distinguishable for existing public error contracts.
+#[derive(Debug, thiserror::Error)]
+pub enum RenderError {
+    /// Compatible template expansion failed before document processing.
+    #[error("{0}")]
+    Template(Error),
+    /// Document preparation or content policy failed.
+    #[error("{0}")]
+    Document(Error),
 }
 
-fn render_document(
+impl From<RenderError> for Error {
+    fn from(error: RenderError) -> Self {
+        match error {
+            RenderError::Template(error) | RenderError::Document(error) => error,
+        }
+    }
+}
+
+/// Prepare and sanitize a complete page identically for previews, validation and public serving.
+pub fn render(source: &str, mode: Mode<'_>) -> Result<Document, RenderError> {
+    let (source, endpoint, learning) = match mode {
+        Mode::Landing { context, endpoint } => (
+            std::borrow::Cow::Owned(
+                crate::resources::render(source, context).map_err(RenderError::Template)?,
+            ),
+            endpoint,
+            false,
+        ),
+        Mode::Learning => (std::borrow::Cow::Borrowed(source), None, true),
+    };
+    prepare_document(source.as_ref(), endpoint, learning).map_err(RenderError::Document)
+}
+
+fn prepare_document(
     source: &str,
     endpoint: Option<&str>,
     learning: bool,
@@ -32,13 +68,29 @@ fn render_document(
     if source.len() > crate::resources::MAX_DOCUMENT {
         return Err(Error::Invalid("landing_document_too_large".into()));
     }
+    let parsed = scraper::Html::parse_document(source);
+    let title_selector = scraper::Selector::parse("head > title").map_err(|_| Error::Internal)?;
+    let title = parsed
+        .select(&title_selector)
+        .next()
+        .map_or_else(String::new, |node| {
+            format!(
+                "<title>{}</title>",
+                ammonia::clean_text(&node.text().collect::<String>())
+            )
+        });
     let mut cleaner = ammonia::Builder::default();
     cleaner
         .add_url_schemes(&["data"])
         .rm_clean_content_tags(&["style"])
+        // Fragment sanitization must not turn document metadata into visible body text.
+        // The first head title is escaped and placed back into the document head below.
+        .add_clean_content_tags(&["title"])
+        // Full authored pages need semantic containers omitted by Ammonia's fragment defaults.
+        // Attributes and descendants still pass through the same content policy.
         .add_tags(&[
-            "style", "form", "input", "textarea", "select", "option", "optgroup", "button",
-            "label", "fieldset", "legend", "datalist",
+            "main", "section", "style", "form", "input", "textarea", "select", "option",
+            "optgroup", "button", "label", "fieldset", "legend", "datalist",
         ])
         .add_generic_attributes(&[
             "id",
@@ -137,7 +189,6 @@ fn render_document(
         warnings.retain(|warning| {
             matches!(warning.code, "authored_execution_removed" | "html_repaired")
         });
-        let parsed = scraper::Html::parse_document(source);
         let selector =
             scraper::Selector::parse("form, input, textarea, select, button, [contenteditable]")
                 .map_err(|_| Error::Internal)?;
@@ -153,7 +204,7 @@ fn render_document(
     getrandom::fill(&mut bytes).map_err(|_| Error::Internal)?;
     let nonce = hex::encode(bytes);
     let mut html = format!(
-        "<!doctype html><html{html_attributes}><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head><body{body_attributes}>{body}"
+        "<!doctype html><html{html_attributes}><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">{title}</head><body{body_attributes}>{body}"
     );
     if let Some(endpoint) = endpoint {
         let config = serde_json::to_string(endpoint)
@@ -169,7 +220,7 @@ fn render_document(
     Ok(Document {
         html,
         warnings,
-        csp: if learning {
+        csp: if endpoint.is_none() {
             "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'".into()
         } else {
             format!(

@@ -49,11 +49,21 @@ impl Previews for PreviewService {
             .map_err(|_| Error::Internal)?;
         tokio::task::spawn_blocking(move || {
             let _permit = permit;
-            let mut page = snapshot.page;
-            page.html =
-                crate::resources::render(&page.html, &crate::smtp::context(&snapshot.message)?)
-                    .map_err(|_| crate::resources::invalid("Preview could not be rendered"))?;
-            crate::imports::landing_html(&page)
+            let context = crate::smtp::context(&snapshot.message)?;
+            crate::landing::render(
+                &snapshot.page.html,
+                crate::landing::Mode::Landing {
+                    context: &context,
+                    endpoint: None,
+                },
+            )
+            .map(|document| document.html)
+            .map_err(|error| match error {
+                crate::landing::RenderError::Template(_) => {
+                    crate::resources::invalid("Preview could not be rendered")
+                }
+                crate::landing::RenderError::Document(error) => error,
+            })
         })
         .await
         .map_err(|_| Error::Internal)?

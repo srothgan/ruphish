@@ -465,9 +465,6 @@ fn domain_selector(draft: RwSignal<Draft>, resources: Signal<Value>) -> impl Int
                 />
             </Field>
             <p>{move || text(&draft.get().value, "url")}</p>
-            <a href="/domains" target="_blank" rel="noopener">
-                {tr!(ui.manage_and_verify_domains)}
-            </a>
         </div>
     }
 }
@@ -1004,24 +1001,21 @@ pub(super) fn create(
                                 {tr!(ui.create_sending_profile)}
                             </a>
                         </li>
+                        <li>
+                            <a href="/domains" target="_blank" rel="noopener">
+                                {tr!(ui.manage_and_verify_domains)}
+                            </a>
+                        </li>
                     </ul>
                     <p class="resource-usage">
                         {tr!(
                             ui.changes_to_saved_templates_or_sending_profiles_can_affect_scheduled_emails_and_r
                         )}
                     </p>
+                    <p>{tr!(ui.all_submissions_recorded)}</p>
                     <section class="resource-section">
-                        <h2>{tr!(ui.event_tracking_and_redirect_optional)}</h2>
-                        <p>
-                            {tr!(
-                                ui.selecting_a_landing_page_fills_these_fields_with_its_defaults_edit_them_for_this
-                            )}
-                        </p>
-                        <p>
-                            {tr!(
-                                ui.track_submission_and_password_presence_only_entered_usernames_passwords_and_othe
-                            )}
-                        </p>
+                        <h2>{tr!(ui.redirect_after_submission_optional)}</h2>
+                        <p>{tr!(ui.campaign_redirect_defaults)}</p>
                         <Show when=move || draft.with(|d| d.page_request.is_some())>
                             <p role="status">{tr!(ui.loading_landing_page_defaults)}</p>
                         </Show>
@@ -1048,7 +1042,6 @@ pub(super) fn create(
                         <FormFields disabled=Signal::derive(move || {
                             !draft.with(Draft::policy_ready)
                         })>
-                            <p>{tr!(ui.all_submissions_recorded)}</p>
                             <Select
                                 label=trs!(ui.redirect_destination)
                                 value=Signal::derive(move || {

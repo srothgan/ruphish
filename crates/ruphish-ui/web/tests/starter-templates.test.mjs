@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile, readdir} from 'node:fs/promises';
 import {JSDOM} from 'jsdom';
-import {prepareLanding, validateLogoFile, readLogo} from '../starter-templates.mjs';
+import {preparePage, validateLogoFile, readLogo} from '../starter-templates.mjs';
 
 const window = new JSDOM('').window;
 globalThis.DOMParser = window.DOMParser;
@@ -22,14 +22,14 @@ test('all landing pages remain offline; options default off and preserve indepen
   assert.equal(directories.length,19);
   for (const slug of directories) {
     const source = await readFile(new URL(`landing-pages/${slug}/landing.html`,root),'utf8');
-    assert.equal(prepareLanding(source,false,'',''),source);
+    assert.equal(preparePage(source,false,'',''),source);
     const standard = parse(source);
     assert.equal(standard.querySelector('input[type=email]').value,'');
     assert.equal(standard.querySelector('input[type=password]').value,'');
     assert.equal(standard.querySelector('input[type=password]').required,true);
     assert.equal(standard.querySelectorAll('script,iframe,object,embed,link').length,0);
     for (const image of standard.images) assert.match(image.src,/^data:image\/png;base64,/);
-    const prefilled = prepareLanding(source,true,'','');
+    const prefilled = preparePage(source,true,'','');
     assert.equal(parse(prefilled).querySelector('input[type=email]').value,'{{.Email | html}}');
     assert.equal(parse(prefilled).querySelector('input[type=password]').value,'');
     assert.equal(parse(source).querySelector('input[type=email]').value,'');
@@ -37,7 +37,7 @@ test('all landing pages remain offline; options default off and preserve indepen
     if (branding.has(slug)) {
       const config = branding.get(slug);
       for (const prefill of [false,true]) {
-        const prepared = parse(prepareLanding(source,prefill,JSON.stringify(config),logo));
+        const prepared = parse(preparePage(source,prefill,JSON.stringify(config),logo));
         const target = prepared.querySelector(config.selector);
         const image = target.tagName === 'IMG' ? target : target.querySelector('img');
         assert.equal(image.src,logo);
@@ -49,9 +49,36 @@ test('all landing pages remain offline; options default off and preserve indepen
         assert.equal(prepared.querySelectorAll('[data-starter-id],[data-catalog-id],[data-ruphish-field]').length,0);
         assert.equal(prepared.querySelectorAll('form').length,standard.querySelectorAll('form').length);
       }
-      assert.throws(()=>prepareLanding(source,false,JSON.stringify(config),''),/starter_logo_required/);
-      assert.throws(()=>prepareLanding(source,false,JSON.stringify(config),'https://example.test/logo.png'),/starter_logo_required/);
+      assert.throws(()=>preparePage(source,false,JSON.stringify(config),''),/starter_logo_required/);
+      assert.throws(()=>preparePage(source,false,JSON.stringify(config),'https://example.test/logo.png'),/starter_logo_required/);
     }
+  }
+});
+
+test('learning-page logos preserve static explanations and reject unusable branding without changing the source', () => {
+  for (const slot of ['<div class="brand">Default mark</div>', '<img class="brand" alt="Default mark" src="data:image/png;base64,AAAA">']) {
+    const source = `<!doctype html><html><body>${slot}<h1>Fixture explanation</h1><p>Literal {{.FirstName}} and {{ unfinished example</p></body></html>`;
+    const metadata = JSON.stringify({selector:'.brand',height:48});
+    assert.equal(preparePage(source,false,'','',true), source);
+    const first = parse(preparePage(source,false,metadata,logo,true));
+    const target = first.querySelector('.brand');
+    const image = target.tagName === 'IMG' ? target : target.querySelector('img');
+    assert.equal(image.src,logo);
+    assert.equal(image.style.maxHeight,'48px');
+    assert.equal(first.querySelector('h1').textContent,'Fixture explanation');
+    assert.equal(first.querySelector('p').textContent,'Literal {{.FirstName}} and {{ unfinished example');
+    assert.equal(first.querySelectorAll('form,input,[data-ruphish-field],[data-catalog-id]').length,0);
+    const replacement = 'data:image/png;base64,BBBB';
+    const second = parse(preparePage(source,false,metadata,replacement,true));
+    assert.equal(second.querySelector('.brand img, img.brand').src,replacement);
+    assert.equal(image.src,logo,'another copy retains its own embedded logo');
+    assert.equal(parse(source).querySelector('.brand').outerHTML,parse(slot).querySelector('.brand').outerHTML);
+    for (const invalid of ['', 'https://example.test/logo.png', 'data:image/svg+xml;base64,AAAA']) {
+      assert.throws(()=>preparePage(source,false,metadata,invalid,true),/starter_logo_required/);
+    }
+    assert.throws(()=>preparePage(source,true,metadata,logo,true),/starter_invalid/);
+    assert.throws(()=>preparePage(source,false,JSON.stringify({selector:'.missing',height:48}),logo,true),/starter_invalid/);
+    assert.throws(()=>preparePage(source.replace('</body>','<div class="brand"></div></body>'),false,metadata,logo,true),/starter_invalid/);
   }
 });
 
@@ -69,12 +96,12 @@ test('email catalog has no tracker or remote images and retains ordinary Go expr
 });
 
 test('transformations fail closed on changed structures and preserve quoted Go syntax', () => {
-  assert.throws(()=>prepareLanding('<input type=email>',true,'',''),/starter_invalid/);
-  assert.throws(()=>prepareLanding('<input name=username type=email><input name=username type=email>',true,'',''),/starter_invalid/);
-  assert.throws(()=>prepareLanding('<input name=username type=password>',true,'',''),/starter_invalid/);
-  assert.throws(()=>prepareLanding('<div></div>',false,JSON.stringify({selector:'.missing',height:36}),logo),/starter_invalid/);
+  assert.throws(()=>preparePage('<input type=email>',true,'',''),/starter_invalid/);
+  assert.throws(()=>preparePage('<input name=username type=email><input name=username type=email>',true,'',''),/starter_invalid/);
+  assert.throws(()=>preparePage('<input name=username type=password>',true,'',''),/starter_invalid/);
+  assert.throws(()=>preparePage('<div></div>',false,JSON.stringify({selector:'.missing',height:36}),logo),/starter_invalid/);
   const source = '<html><body><p>{{if eq .FirstName "A > B"}}Hello{{end}}</p><input name="username" type="email"></body></html>';
-  assert.match(prepareLanding(source,true,'',''),/\{\{if eq \.FirstName "A > B"\}\}Hello\{\{end\}\}/);
+  assert.match(preparePage(source,true,'',''),/\{\{if eq \.FirstName "A > B"\}\}Hello\{\{end\}\}/);
 });
 
 test('upload validation rejects missing, oversized, empty and non-raster files', () => {

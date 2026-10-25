@@ -22,12 +22,13 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(module = "/web/generated/starter-templates.js")]
 extern "C" {
-    #[wasm_bindgen(catch, js_name = prepareLanding)]
-    fn prepare_landing(
+    #[wasm_bindgen(catch, js_name = preparePage)]
+    fn prepare_page(
         source: &str,
         prefill: bool,
         branding: &str,
         logo: &str,
+        static_content: bool,
     ) -> Result<String, JsValue>;
     #[wasm_bindgen(catch, js_name = readLogo)]
     async fn read_logo(input: &web_sys::HtmlInputElement) -> Result<JsValue, JsValue>;
@@ -43,7 +44,7 @@ struct RepositoryState {
 fn prepare(entry: &Entry, options: Options, logo: &str) -> Result<Value, String> {
     let i18n = ruphish_ui::localization::use_i18n();
     let mut resource = entry.resource.clone();
-    if entry.summary.kind == Kind::LandingPage {
+    if matches!(entry.summary.kind, Kind::LandingPage | Kind::LearningPage) {
         if options.logo && logo.is_empty() {
             return Err(leptos_i18n::t_string!(i18n, ui.starter_logo_required).into());
         }
@@ -56,11 +57,12 @@ fn prepare(entry: &Entry, options: Options, logo: &str) -> Result<Value, String>
         } else {
             None
         };
-        let html = prepare_landing(
+        let html = prepare_page(
             resource["html"].as_str().unwrap_or_default(),
-            options.prefill && entry.summary.prefill,
+            entry.summary.kind == Kind::LandingPage && options.prefill && entry.summary.prefill,
             branding.as_deref().unwrap_or_default(),
             logo,
+            entry.summary.kind == Kind::LearningPage,
         )
         .map_err(|_| leptos_i18n::t_string!(i18n, ui.starter_invalid).to_string())?;
         resource["html"] = html.into();
@@ -97,10 +99,10 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
         });
     });
     let visible = Memo::new(move |_| {
-        let kind = if tab.get() == 0 {
-            Kind::Email
-        } else {
-            Kind::LandingPage
+        let kind = match tab.get() {
+            0 => Kind::Email,
+            1 => Kind::LandingPage,
+            _ => Kind::LearningPage,
         };
         let search = search.get().trim().to_lowercase();
         catalog
@@ -143,6 +145,7 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
         spawn_local(async move {
             let mut email_names = None;
             let mut page_names = None;
+            let mut learning_names = None;
             for (id, options) in selected {
                 let mut display_name = catalog
                     .data
@@ -154,15 +157,15 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                     .unwrap_or_else(|| id.clone());
                 let result = async {
                     let entry: Entry = api.read(&format!("/api/starter-templates/{id}")).await?;
-                    let family = if entry.summary.kind == Kind::Email {
-                        Family::Templates
-                    } else {
-                        Family::Pages
+                    let family = match entry.summary.kind {
+                        Kind::Email => Family::Templates,
+                        Kind::LandingPage => Family::Pages,
+                        Kind::LearningPage => Family::LearningPages,
                     };
-                    let names = if family == Family::Templates {
-                        &mut email_names
-                    } else {
-                        &mut page_names
+                    let names = match entry.summary.kind {
+                        Kind::Email => &mut email_names,
+                        Kind::LandingPage => &mut page_names,
+                        Kind::LearningPage => &mut learning_names,
                     };
                     if names.is_none() {
                         let rows: ResourceSummaries = api
@@ -240,14 +243,21 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                         label: trs!(ui.landing_pages),
                         disabled: false.into(),
                     },
+                    Tab {
+                        id: "starter-learning-pages",
+                        label: trs!(ui.learning_pages),
+                        disabled: false.into(),
+                    },
                 ]
             />
-            {["starter-emails", "starter-pages"]
+            // One upload serves both page families and remains mounted across tab changes.
+            <div hidden=move || tab.get() == 0>{logo_panel(state, logo_expanded, logo_picker)}</div>
+            {["starter-emails", "starter-pages", "starter-learning-pages"]
                 .into_iter()
                 .enumerate()
                 .map(move |(index, panel_id)| {
                     let mut headers = vec![trs!(ui.starter_select), trs!(ui.name)];
-                    if index == 1 {
+                    if index != 0 {
                         headers.push(trs!(ui.starter_available_options));
                     }
                     headers.push(trs!(ui.actions));
@@ -257,9 +267,6 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                             class="starter-tab"
                             selected=Signal::derive(move || tab.get() == index)
                         >
-                            // Keep the upload mounted in its hidden tab so switching tabs
-                            // preserves the file input and any in-flight image preparation.
-                            {(index == 1).then(|| logo_panel(state, logo_expanded, logo_picker))}
                             <Show when=move || tab.get() == index>
                                 <ListToolbar
                                     search=search
@@ -272,7 +279,14 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                                     ready=Signal::derive(move || catalog.data.get().is_some())
                                     count=Signal::derive(move || visible.get().len())
                                     search=search
-                                    guidance=trs!(ui.starter_empty)
+                                    guidance=Signal::derive(move || {
+                                        if index == 2 {
+                                            leptos_i18n::t_string!(i18n, ui.starter_learning_empty)
+                                                .to_string()
+                                        } else {
+                                            leptos_i18n::t_string!(i18n, ui.starter_empty).to_string()
+                                        }
+                                    })
                                 />
                                 <DataTable
                                     class="starter-table"
@@ -314,7 +328,7 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                                                         />
                                                     </td>
                                                     <th scope="row">{move || name.get_value()}</th>
-                                                    <Show when=move || index == 1>
+                                                    <Show when=move || index != 0>
                                                         <td>
                                                             <div class="starter-capabilities">
                                                                 {prefill
@@ -595,15 +609,20 @@ fn preview_panel(
             return;
         };
         spawn_local(async move {
-            let body = json!({"html":source,"recipient":{"email":"alice@example.test","first_name":"Alice","last_name":"Example","position":"Analyst"}});
-            let result = api
-                .resource(
-                    "POST",
-                    "/api/util/preview",
-                    &token.get_value(),
-                    Some(&body),
-                    None,
+            let (path, body) = if entry.summary.kind == Kind::LearningPage {
+                ("/api/learning-pages/preview", json!({"html":source}))
+            } else {
+                (
+                    if entry.summary.kind == Kind::LandingPage {
+                        "/api/pages/preview"
+                    } else {
+                        "/api/util/preview"
+                    },
+                    json!({"html":source,"recipient":{"email":"alice@example.test","first_name":"Alice","last_name":"Example","position":"Analyst"}}),
                 )
+            };
+            let result = api
+                .resource("POST", path, &token.get_value(), Some(&body), None)
                 .await
                 .and_then(|(value, _)| {
                     value["html"]

@@ -9,7 +9,7 @@ Learning pages are reusable explanations hosted by Ruphish. A campaign can redir
 
 ## Create and check a page
 
-Open **Resources → Learning pages → Create**. Enter a name and write the explanation in the HTML or visual editor. You can also import HTML or resource JSON. Use **Preview** and **Check learning page** before saving.
+Open **Resources → Learning pages → Create**. Enter a name and write the explanation in the HTML or visual editor. You can also import HTML or resource JSON. Use **Preview** and **Check learning page** before saving. Administrators can also add available entries from the **Learning pages** tab in the [Starter Template Repository](starter-templates.md); each addition creates an independent resource copy.
 
 Pages support static text, styling, permitted embedded images and ordinary links. Forms and input controls are removed from the public representation. Authored scripts, external resource loading and automatic redirects are blocked. Recipient template expressions are displayed literally; learning pages do not receive recipient context. Checks warn about removed controls and executable content, without requiring a submission form.
 

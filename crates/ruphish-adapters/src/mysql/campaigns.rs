@@ -107,7 +107,13 @@ async fn prepare_authorized(
     let redirect = crate::resources::render(&policy.redirect_url, &sample)?;
     crate::landing::redirect(&redirect, &url)?;
     if let Content::Page(page) = &page.content {
-        crate::landing::render(&crate::resources::render(&page.html, &sample)?, None)?;
+        crate::landing::render(
+            &page.html,
+            crate::landing::Mode::Landing {
+                context: &sample,
+                endpoint: None,
+            },
+        )?;
     }
     Ok(Prepared {
         domain_id,
