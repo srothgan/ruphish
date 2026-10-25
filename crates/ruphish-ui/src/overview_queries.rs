@@ -1,5 +1,5 @@
 //! Dashboard snapshots and the mutations that make them stale.
-use crate::account::Api;
+use crate::client::Api;
 use leptos::prelude::*;
 use leptos_fetch::QueryClient;
 use ruphish_contracts::overview::{PostureResponse, Snapshot};
@@ -23,7 +23,7 @@ impl OverviewQueries {
                     .read(&format!("/api/overview/posture?window={window}"))
                     .await?;
                 if value.window != window {
-                    return Err(api.invalid_read());
+                    return Err(api.invalid_read_err());
                 }
                 Ok(value)
             }),

@@ -23,7 +23,7 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
         queries.deleted(family, id);
         navigate(&format!("/{}", family.route()), Default::default());
     });
-    view! {
+    let content = view! {
         <ManagementPage>
             <BackLink href=format!("/{}", family.route())>{move || family.back_label()}</BackLink>
             {message.view()}
@@ -97,6 +97,18 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
                     })
             }}
         </ManagementPage>
+    };
+    view! {
+        <ReadBoundary
+            failure=read.failure
+            has_data=Signal::derive(move || read.data.with(Option::is_some))
+            fetching=read.fetching
+            retry=read.refresh
+            back_href=format!("/{}", family.route())
+            back_label=Signal::derive(move || family.back_label())
+        >
+            {content}
+        </ReadBoundary>
     }
 }
 

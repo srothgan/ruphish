@@ -1,5 +1,5 @@
 //! Resource lists and full-page editors using the preserved HTTP boundary.
-use crate::account::Api;
+use crate::client::Api;
 use crate::feedback::Message;
 use crate::resource_queries::ResourceQueries;
 use crate::shared::components::*;
@@ -95,6 +95,19 @@ pub(super) fn detail(api: Api, token: String, family: Family, editing: bool) -> 
                         }
                             .into_any()
                     }
+                } else if (id != "new" && id.parse::<i64>().ok().is_none_or(|id| id <= 0))
+                    || (id == "new"
+                        && duplicate
+                            .as_ref()
+                            .is_some_and(|id| id.parse::<i64>().ok().is_none_or(|id| id <= 0)))
+                {
+                    view! {
+                        <NotFoundPage
+                            back_href=format!("/{}", family.route())
+                            back_label=Signal::derive(move || family.back_label().to_owned())
+                        />
+                    }
+                        .into_any()
                 } else if editing || id == "new" {
                     edit(api, token.clone(), family, id, duplicate, replace_url, None).into_any()
                 } else {
@@ -489,8 +502,9 @@ fn edit(
 
     let token = StoredValue::new(token);
     let requested = StoredValue::new(id);
+    let load_error = RwSignal::new(None::<ruphish_ui::api_error::ApiError>);
     let loading = RwSignal::new(true);
-    let load_failed = RwSignal::new(false);
+    let load_failed = Signal::derive(move || load_error.get().is_some());
     let is_imported = imported.is_some();
     let import_review = imported.as_ref().map(|i| RwSignal::from(i.review.clone()));
     let draft = imported
@@ -512,7 +526,7 @@ fn edit(
     Effect::new(move |_| {
         reload.get();
         loading.set(true);
-        load_failed.set(false);
+
         editor.message.clear();
         let duplicate = duplicate.clone();
         spawn_local(async move {
@@ -531,6 +545,7 @@ fn edit(
                     .await
                 {
                     Ok((mut value, revision)) => {
+                        load_error.set(None);
                         if duplicate.is_some() {
                             value["id"] = json!(0);
                             value["name"] = json!(leptos_i18n::t_string!(
@@ -554,8 +569,7 @@ fn edit(
                         editor.epoch.update(|v| *v += 1);
                     }
                     Err(e) => {
-                        editor.message.error(e);
-                        load_failed.set(true);
+                        load_error.set(Some(e));
                     }
                 }
             }
@@ -579,7 +593,7 @@ fn edit(
         }
         Family::Profiles => profile_fields(editor).into_any(),
     };
-    view! {
+    let content = view! {
         <ManagementPage>
             <BackLink href=format!("/{}", family.route())>{move || family.back_label()}</BackLink>
             <PageHeader
@@ -640,11 +654,6 @@ fn edit(
                 })}
             {editor.import_review.map(|review| import_review_panel(review, editor.message))}
             {editor.message.view()}
-            <Show when=move || !loading.get() && load_failed.get()>
-                <ActionButton on_click=move |_| {
-                    reload.update(|n| *n += 1)
-                }>{tr!(ui.retry_loading_resource)}</ActionButton>
-            </Show>
             <Show when=move || loading.get()>
                 <p>{tr!(ui.loading_resource)}</p>
             </Show>
@@ -700,6 +709,18 @@ fn edit(
                     .then(|| test_panel(api, token.get_value(), family, editor, test_open))
             }}
         </ManagementPage>
+    };
+    view! {
+        <ReadBoundary
+            failure=load_error
+            has_data=Signal::derive(move || !loading.get() && !load_failed.get())
+            fetching=loading
+            retry=Callback::new(move |()| reload.update(|n| *n += 1))
+            back_href=format!("/{}", family.route())
+            back_label=Signal::derive(move || family.back_label().to_owned())
+        >
+            {content}
+        </ReadBoundary>
     }
 }
 fn finish_edit(editor: Editor, family: Family) {
@@ -741,7 +762,8 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
         )
         .await
         .and_then(|(value, revision)| {
-            ResourceQueries::validate_detail(api, family, &value, (id != 0).then_some(id))?;
+            ResourceQueries::validate_detail(api, family, &value, (id != 0).then_some(id))
+                .map_err(|e| e.message)?;
             Ok((value, revision))
         });
     editor.busy.set(false);

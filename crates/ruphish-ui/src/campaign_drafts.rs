@@ -1,8 +1,8 @@
 //! Durable campaign drafts use the shared management surface and request lifecycle.
 use crate::{
-    account::Api,
     campaign_queries::CampaignQueries,
     campaigns::{array, text},
+    client::Api,
     feedback::Message,
     shared::components::*,
 };
@@ -88,7 +88,7 @@ fn load(api: Api, token: String, id: String, editing: bool) -> impl IntoView {
     let token = StoredValue::new(token);
     let tasks = ViewTasks::default();
     let data = RwSignal::new(None::<Value>);
-    let message = Message::new(String::new());
+    let load_error = RwSignal::new(None::<ruphish_ui::api_error::ApiError>);
     let loading = RwSignal::new(false);
     let refresh = RwSignal::new(0u64);
     let navigate = use_navigate();
@@ -99,21 +99,21 @@ fn load(api: Api, token: String, id: String, editing: bool) -> impl IntoView {
         tasks.spawn(async move {
             match CampaignQueries::read_draft(api, &id.get_value()).await {
                 Ok(v) => {
+                    load_error.set(None);
                     if let Some(campaign) = v["campaign_id"].as_i64() {
                         navigate(&format!("/campaigns/{campaign}"), Default::default());
                     } else {
                         data.set(Some(v));
-                        message.clear();
                     }
                 }
-                Err(e) => message.error(e),
+                Err(e) => load_error.set(Some(e)),
             }
             loading.set(false);
         });
     });
     // Only a newly loaded record should replace the form. Initial preference reads
     // must not subscribe this factory and discard unsaved edits on preference changes.
-    view! {
+    let content = view! {
         {move || {
             data.get()
                 .map(|saved| untrack(|| crate::campaigns::create(
@@ -126,15 +126,21 @@ fn load(api: Api, token: String, id: String, editing: bool) -> impl IntoView {
         <Show when=move || data.get().is_none()>
             <ManagementPage>
                 <BackLink href="/campaigns">{tr!(ui.back_to_campaigns)}</BackLink>
-                {message.view()}
-                <ActionButton
-                    disabled=Signal::derive(move || loading.get())
-                    on_click=move |_| refresh.update(|n| *n += 1)
-                >
-                    {tr!(ui.refresh)}
-                </ActionButton>
+                <p role="status">{tr!(ui.loading_resource)}</p>
             </ManagementPage>
         </Show>
+    };
+    view! {
+        <ReadBoundary
+            failure=load_error
+            has_data=Signal::derive(move || data.with(Option::is_some))
+            fetching=loading
+            retry=Callback::new(move |()| refresh.update(|n| *n += 1))
+            back_href="/campaigns"
+            back_label=trs!(ui.back_to_campaigns)
+        >
+            {content}
+        </ReadBoundary>
     }
     .into_any()
 }
@@ -202,7 +208,7 @@ fn read_only(api: Api, token: String, id: String) -> impl IntoView {
             busy.set(false);
         });
     });
-    view! {
+    let content = view! {
         <ManagementPage>
             <BackLink href="/campaigns">{tr!(ui.back_to_campaigns)}</BackLink>
             <PageHeader title=title subtitle=trs!(ui.draft_description)>
@@ -361,5 +367,17 @@ fn read_only(api: Api, token: String, id: String) -> impl IntoView {
                 />
             </Show>
         </ManagementPage>
+    };
+    view! {
+        <ReadBoundary
+            failure=read.failure
+            has_data=Signal::derive(move || read.data.with(Option::is_some))
+            fetching=read.fetching
+            retry=read.refresh
+            back_href="/campaigns"
+            back_label=trs!(ui.back_to_campaigns)
+        >
+            {content}
+        </ReadBoundary>
     }
 }

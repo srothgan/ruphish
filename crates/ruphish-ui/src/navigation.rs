@@ -232,7 +232,7 @@ fn nav_group<C: IntoView + 'static>(
     }
 }
 pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<> {
-    let api = expect_context::<crate::account::Api>();
+    let api = expect_context::<crate::client::Api>();
     view! {
         {link(
             path,

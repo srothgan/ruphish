@@ -1,11 +1,12 @@
 //! Resource summary queries and their mutation dependencies, owned by the shell.
 use crate::{
-    account::Api, campaign_queries::CampaignQueries, overview_queries::OverviewQueries,
+    campaign_queries::CampaignQueries, client::Api, overview_queries::OverviewQueries,
     resources::Family,
 };
 use leptos::prelude::*;
 use leptos_fetch::QueryClient;
 use ruphish_contracts::resources::{GroupSummaries, ResourceSummaries};
+use ruphish_ui::api_error::ApiError;
 use ruphish_ui::query::{Query, QueryView};
 use serde_json::Value;
 
@@ -70,15 +71,9 @@ impl ResourceQueries {
         api: Api,
         family: Family,
         id: &str,
-    ) -> Result<(Value, Option<String>), String> {
+    ) -> Result<(Value, Option<String>), ApiError> {
         let result = api
-            .resource(
-                "GET",
-                &format!("/api/{}/{id}", family.route()),
-                "",
-                None,
-                None,
-            )
+            .read_resource(&format!("/api/{}/{id}", family.route()))
             .await?;
         Self::validate_detail(api, family, &result.0, id.parse().ok())?;
         Ok(result)
@@ -89,7 +84,7 @@ impl ResourceQueries {
         family: Family,
         value: &Value,
         expected_id: Option<i64>,
-    ) -> Result<(), String> {
+    ) -> Result<(), ApiError> {
         use ruphish_contracts::resource_details::{Kind, validate};
         let kind = match family {
             Family::Groups => Kind::Group,
@@ -98,12 +93,12 @@ impl ResourceQueries {
             Family::LearningPages => Kind::LearningPage,
             Family::Profiles => Kind::Profile,
         };
-        validate(kind, value).map_err(|_| api.invalid_read())?;
+        validate(kind, value).map_err(|_| api.invalid_read_err())?;
         if value["id"]
             .as_i64()
             .is_none_or(|id| id <= 0 || expected_id.is_some_and(|expected| id != expected))
         {
-            return Err(api.invalid_read());
+            return Err(api.invalid_read_err());
         }
         Ok(())
     }

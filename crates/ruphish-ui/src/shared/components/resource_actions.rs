@@ -1,5 +1,5 @@
 use super::{ActionButton, ActionLink, ButtonStyle, ControlSize, DeleteConfirmation};
-use crate::{account::Api, feedback::Message};
+use crate::{client::Api, feedback::Message};
 use leptos::prelude::*;
 pub(crate) use ruphish_ui::deletion_state::DeleteTarget;
 use ruphish_ui::deletion_state::Deletion;

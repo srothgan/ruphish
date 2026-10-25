@@ -1,5 +1,6 @@
 //! Account entry point anchored to the sidebar footer.
-use super::{Api, Message};
+use super::Message;
+use crate::client::Api;
 use crate::shared::components::{ActionButton, ButtonStyle};
 use leptos::{html, prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use ruphish_ui::tr;
@@ -53,7 +54,7 @@ pub(super) fn menu(
                 return;
             }
             match api.form("/logout", &token.get_value(), &[]).await {
-                Ok(_) => api.monitor.update(|m| m.signed_out()),
+                Ok(_) => api.mark_signed_out(),
                 Err(error) => {
                     message.error(error);
                     busy.set(false);

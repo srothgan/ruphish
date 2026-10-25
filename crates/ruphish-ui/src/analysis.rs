@@ -1,9 +1,9 @@
 //! Campaign analysis: shared filters, activity chart and recipient drilldown.
 use crate::{
-    account::Api,
     analysis_chart::{ActivityChart, Bucket, labels},
     campaign_queries::CampaignQueries,
     campaigns::{array, text},
+    client::Api,
     feedback::Message,
     shared::components::*,
     time_display::{instant as minute, local_input, parse_input},
@@ -40,10 +40,19 @@ pub(super) fn page(api: Api) -> impl IntoView {
             }
             key=|key| key.clone()
             children=move |(id, recipient)| {
-                match id.parse::<i64>() {
-                    Ok(id) => detail(api, id, recipient.and_then(|r| r.parse().ok())).into_any(),
-                    Err(_) => {
-                        view! { <p role="alert">{tr!(ui.invalid_campaign_address)}</p> }.into_any()
+                let id = id.parse::<i64>().ok().filter(|id| *id > 0);
+                let recipient = recipient.map(|r| r.parse::<i64>().ok().filter(|id| *id > 0));
+                match (id, recipient) {
+                    (Some(id), None) => detail(api, id, None).into_any(),
+                    (Some(id), Some(Some(recipient))) => detail(api, id, Some(recipient)).into_any(),
+                    _ => {
+                        view! {
+                            <NotFoundPage
+                                back_href="/analysis"
+                                back_label=trs!(ui.back_to_analysis)
+                            />
+                        }
+                            .into_any()
                     }
                 }
             }
@@ -120,6 +129,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
             };
             let result = CampaignQueries::read_analysis(api, id, &filter)
                 .await
+                .map_err(|e| e.message)
                 .map(|value| {
                     let rows = array(&value, "recipients")
                         .into_iter()
@@ -233,7 +243,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
         .as_u64()
         .unwrap_or(0) as usize
     });
-    view! {
+    let content = view! {
         <ManagementPage>
             <BackLink href=Signal::derive(move || {
                 if recipient.is_some() {
@@ -630,7 +640,9 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                 </span>
                 <div class="management-actions">
                     <ActionButton
-                        disabled=Signal::derive(move || loading.get() || filters.get().offset == 0)
+                        disabled=Signal::derive(move || {
+                            loading.get() || filters.get().offset == 0
+                        })
                         on_click=move |_| {
                             let mut f = filters.get_untracked();
                             f.offset = f.offset.saturating_sub(f.limit);
@@ -656,5 +668,17 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                 </div>
             </div>
         </ManagementPage>
+    };
+    view! {
+        <ReadBoundary
+            failure=read.failure
+            has_data=Signal::derive(move || read.data.with(Option::is_some))
+            fetching=read.fetching
+            retry=read.refresh
+            back_href="/analysis"
+            back_label=trs!(ui.back_to_analysis)
+        >
+            {content}
+        </ReadBoundary>
     }
 }

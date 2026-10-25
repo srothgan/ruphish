@@ -1,5 +1,5 @@
 //! Account-owned display settings. Only confirmed saves change active presentation.
-use crate::{account::Api, feedback::Message, shared::components::*};
+use crate::{client::Api, feedback::Message, shared::components::*};
 use leptos::prelude::*;
 use leptos::task::spawn_local_scoped_with_cancellation as spawn_local;
 use leptos_i18n::Locale as _;

@@ -1,6 +1,6 @@
 //! Webhook administration and reporting mailbox resources share presentation primitives.
 use crate::{
-    account::Api, campaigns::text, feedback::Message, management_queries::ManagementQueries,
+    campaigns::text, client::Api, feedback::Message, management_queries::ManagementQueries,
     resources::ResourceAccess, shared::components::*, time_display::instant,
 };
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
@@ -313,14 +313,20 @@ pub(super) fn page(api: Api, token: String, kind: Kind, editing: bool) -> impl I
             children=move |id| {
                 if id == "new" {
                     form(api, token.get_value(), kind, None).into_any()
-                } else if let Ok(id) = id.parse::<i64>() {
+                } else if let Ok(id) = id.parse::<i64>() && id > 0 {
                     if editing {
                         form(api, token.get_value(), kind, Some(id)).into_any()
                     } else {
                         detail(api, token.get_value(), kind, id).into_any()
                     }
                 } else {
-                    view! { <p role="alert">{tr!(ui.invalid_resource_address)}</p> }.into_any()
+                    view! {
+                        <NotFoundPage
+                            back_href=kind.path()
+                            back_label=Signal::derive(move || kind.back_label().to_owned())
+                        />
+                    }
+                        .into_any()
                 }
             }
         />
@@ -386,8 +392,9 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
     let draft = RwSignal::new(initial.clone());
     let baseline = RwSignal::new(initial);
     let loaded = RwSignal::new(id.is_none());
+    let load_error = RwSignal::new(None::<ruphish_ui::api_error::ApiError>);
     let loading = RwSignal::new(id.is_some());
-    let load_failed = RwSignal::new(false);
+    let load_failed = Signal::derive(move || load_error.get().is_some());
     let has_saved_secret = RwSignal::new(false);
     let busy = RwSignal::new(false);
     let refresh = RwSignal::new(0u64);
@@ -403,10 +410,11 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
         Effect::new(move |_| {
             refresh.get();
             loading.set(true);
-            load_failed.set(false);
+
             spawn_local(async move {
                 match ManagementQueries::read_integration(api, kind, id).await {
                     Ok(value) => {
+                        load_error.set(None);
                         has_saved_secret.set(value.has_secret());
                         let value = value.edit_value();
                         baseline.set(value.clone());
@@ -415,8 +423,7 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                         message.clear();
                     }
                     Err(error) => {
-                        load_failed.set(true);
-                        message.error(error);
+                        load_error.set(Some(error));
                     }
                 }
                 loading.set(false);
@@ -451,6 +458,7 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                 .and_then(|(saved, revision)| {
                     ManagementQueries::validate_integration(api, kind, saved, id)
                         .map(|saved| (saved, revision))
+                        .map_err(|e| e.message)
                 }) {
                 Ok((saved, _)) => {
                     queries.integration_saved(kind, saved.id());
@@ -470,7 +478,7 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
             }
         });
     };
-    view! {
+    let content = view! {
         <ManagementPage>
             <BackLink href=kind.path()>{move || kind.back_label()}</BackLink>
             <PageHeader
@@ -514,11 +522,6 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                 }}
             </p>
             {message.view()}
-            <Show when=move || load_failed.get() && !loading.get()>
-                <ActionButton on_click=move |_| {
-                    refresh.update(|r| *r += 1)
-                }>{tr!(ui.retry_loading)}</ActionButton>
-            </Show>
             <form on:submit=save>
                 <FormFields disabled=Signal::derive(move || {
                     busy.get() || !loaded.get() || !editable
@@ -630,7 +633,9 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                     </ActionButton>
                     <SaveButton
                         kind="submit"
-                        disabled=Signal::derive(move || busy.get() || !loaded.get() || !editable)
+                        disabled=Signal::derive(move || {
+                            busy.get() || !loaded.get() || !editable
+                        })
                         label=Signal::derive(move || {
                             if busy.get() {
                                 leptos_i18n::t_string!(i18n, ui.saving).to_owned()
@@ -646,6 +651,18 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                 </FormFooter>
             </form>
         </ManagementPage>
+    };
+    view! {
+        <ReadBoundary
+            failure=load_error
+            has_data=Signal::derive(move || loaded.get())
+            fetching=loading
+            retry=Callback::new(move |()| refresh.update(|n| *n += 1))
+            back_href=kind.path()
+            back_label=Signal::derive(move || kind.back_label().to_owned())
+        >
+            {content}
+        </ReadBoundary>
     }
 }
 
@@ -695,7 +712,10 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
     let editable = use_context::<ResourceAccess>().is_some_and(|access| access.0);
     let interval = set_interval_with_handle(
         move || {
-            if !read.fetching.get_untracked()
+            if !read
+                .failure
+                .with_untracked(|e| e.as_ref().is_some_and(|e| e.is_terminal()))
+                && !read.fetching.get_untracked()
                 && !busy.get_untracked()
                 && !deletion.busy.get_untracked()
             {
@@ -725,6 +745,7 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                 .await
                 .and_then(|(saved, _)| {
                     ManagementQueries::validate_integration(api, kind, saved, Some(id))
+                        .map_err(|e| e.message)
                 });
             match result {
                 Ok(saved) => {
@@ -747,7 +768,7 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
             busy.set(false);
         });
     };
-    view! {
+    let content = view! {
         <ManagementPage>
             <BackLink href=kind.path()>{move || kind.back_label()}</BackLink>
             <PageHeader title=Signal::derive(move || {
@@ -1013,5 +1034,17 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                 on_deleted=deleted
             />
         </ManagementPage>
+    };
+    view! {
+        <ReadBoundary
+            failure=read.failure
+            has_data=Signal::derive(move || read.data.with(Option::is_some))
+            fetching=read.fetching
+            retry=read.refresh
+            back_href=kind.path()
+            back_label=Signal::derive(move || kind.back_label().to_owned())
+        >
+            {content}
+        </ReadBoundary>
     }
 }

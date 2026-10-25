@@ -1,4 +1,5 @@
 //! Shared read policy over leptos-fetch. The query cache is the only data owner.
+use crate::api_error::ApiError;
 use leptos::prelude::*;
 use leptos_fetch::{QueryClient, QueryOptions, QueryScopeLocal};
 use std::{fmt::Debug, hash::Hash, time::Duration};
@@ -28,13 +29,13 @@ pub fn provide_client() -> QueryClient {
     client
 }
 
-/// One cached result: a failed refresh retains the last confirmed value.
+/// One cached result: only a retryable refresh failure retains confirmed data.
 #[derive(Clone, Debug)]
 pub struct Snapshot<T> {
     /// Absent until a response has been validated successfully.
     pub data: Option<T>,
-    /// The latest read failure, cleared by the next successful read.
-    pub error: Option<String>,
+    /// The latest structured failure, cleared by a successful read or confirmed change.
+    pub error: Option<ApiError>,
 }
 
 fn scope<K, T, F, Fut>(client: QueryClient, fetch: F) -> QueryScopeLocal<K, Snapshot<T>>
@@ -42,7 +43,7 @@ where
     K: Clone + Hash + Debug + 'static,
     T: Clone + Debug + 'static,
     F: Fn(K) -> Fut + Clone + 'static,
-    Fut: Future<Output = Result<T, String>> + 'static,
+    Fut: Future<Output = Result<T, ApiError>> + 'static,
 {
     QueryScopeLocal::new(move |key: K| {
         let fetch = fetch.clone();
@@ -57,7 +58,8 @@ where
                     // Reconstructing this scope preserves the fetcher's type identity.
                     data: client
                         .get_cached_query(scope(client, fetch), key)
-                        .and_then(|s| s.data),
+                        .and_then(|s| s.data)
+                        .filter(|_| !error.is_terminal()),
                     error: Some(error),
                 },
             }
@@ -86,7 +88,7 @@ where
     pub fn new<F, Fut>(client: QueryClient, fetch: F) -> Self
     where
         F: Fn(K) -> Fut + Clone + 'static,
-        Fut: Future<Output = Result<T, String>> + 'static,
+        Fut: Future<Output = Result<T, ApiError>> + 'static,
     {
         Self {
             client,
@@ -114,7 +116,8 @@ where
         let fetching = self.client.subscribe_is_fetching_local(scope, key.clone());
         QueryView {
             data: Signal::derive(move || value.get().and_then(|s| s.data)),
-            error: Signal::derive(move || value.get().and_then(|s| s.error)),
+            error: Signal::derive(move || value.get().and_then(|s| s.error.map(|e| e.message))),
+            failure: Signal::derive(move || value.get().and_then(|s| s.error)),
             fetching,
             refresh: Callback::new(move |()| self.invalidate(key())),
         }
@@ -204,8 +207,10 @@ where
 pub struct QueryView<T: Send + Sync + 'static> {
     /// Last confirmed data for the current key only.
     pub data: Signal<Option<T>>,
-    /// Latest read error, distinct from mutation feedback.
+    /// Latest read error message, distinct from mutation feedback.
     pub error: Signal<Option<String>>,
+    /// Structured failure for page-level missing/access/retry presentation.
+    pub failure: Signal<Option<ApiError>>,
     /// Initial or background read is in flight.
     pub fetching: Signal<bool>,
     /// Explicit retry/refresh uses the same query definition.

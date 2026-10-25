@@ -1,7 +1,7 @@
 //! Shared domain and integration reads and their mutation dependencies.
 use crate::{
-    account::Api,
     campaign_queries::CampaignQueries,
+    client::Api,
     integrations::{Kind, Record},
     overview_queries::OverviewQueries,
 };
@@ -12,7 +12,7 @@ use ruphish_contracts::{
     domains::Domain,
     integrations::{Mailbox, Webhook},
 };
-use ruphish_ui::query::Query;
+use ruphish_ui::{api_error::ApiError, query::Query};
 use serde_json::Value;
 
 #[derive(Clone, Copy)]
@@ -76,7 +76,7 @@ impl ManagementQueries {
         });
     }
 
-    pub async fn read_domain(api: Api, id: i64) -> Result<Domain, String> {
+    pub async fn read_domain(api: Api, id: i64) -> Result<Domain, ApiError> {
         let value = api.get(&format!("/api/domains/{id}")).await?;
         Self::validate_domain(api, value, Some(id))
     }
@@ -85,15 +85,15 @@ impl ManagementQueries {
         api: Api,
         value: Value,
         expected_id: Option<i64>,
-    ) -> Result<Domain, String> {
-        let value: Domain = serde_json::from_value(value).map_err(|_| api.invalid_read())?;
+    ) -> Result<Domain, ApiError> {
+        let value: Domain = serde_json::from_value(value).map_err(|_| api.invalid_read_err())?;
         if value.id <= 0 || expected_id.is_some_and(|id| id != value.id) {
-            return Err(api.invalid_read());
+            return Err(api.invalid_read_err());
         }
         Ok(value)
     }
 
-    pub async fn read_integration(api: Api, kind: Kind, id: i64) -> Result<Record, String> {
+    pub async fn read_integration(api: Api, kind: Kind, id: i64) -> Result<Record, ApiError> {
         let path = format!("{}/{id}", kind.api());
         let value = api.get(&path).await?;
         Self::validate_integration(api, kind, value, Some(id))
@@ -104,21 +104,21 @@ impl ManagementQueries {
         kind: Kind,
         value: Value,
         expected_id: Option<i64>,
-    ) -> Result<Record, String> {
+    ) -> Result<Record, ApiError> {
         if value["id"]
             .as_i64()
             .is_none_or(|id| id <= 0 || expected_id.is_some_and(|expected| expected != id))
         {
-            return Err(api.invalid_read());
+            return Err(api.invalid_read_err());
         }
         if kind.webhook() {
             serde_json::from_value::<Webhook>(value)
                 .map(Record::Webhook)
-                .map_err(|_| api.invalid_read())
+                .map_err(|_| api.invalid_read_err())
         } else {
             serde_json::from_value::<Mailbox>(value)
                 .map(Record::Mailbox)
-                .map_err(|_| api.invalid_read())
+                .map_err(|_| api.invalid_read_err())
         }
     }
 

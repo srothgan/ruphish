@@ -1,9 +1,9 @@
 //! Campaign read ownership and mutation dependencies, separate from editable drafts.
-use crate::{account::Api, overview_queries::OverviewQueries};
+use crate::{client::Api, overview_queries::OverviewQueries};
 use leptos::prelude::*;
 use leptos_fetch::QueryClient;
 use ruphish_contracts::{campaign_reads as reads, reporting::Filter};
-use ruphish_ui::{analysis_state, query::Query};
+use ruphish_ui::{analysis_state, api_error::ApiError, query::Query};
 use serde_json::Value;
 
 #[derive(Clone, Debug)]
@@ -39,7 +39,7 @@ impl CampaignQueries {
                     .read(&format!("/api/campaigns/{id}/delivery?after={after}"))
                     .await?;
                 if value.campaign.id.to_string() != id {
-                    return Err(api.invalid_read());
+                    return Err(api.invalid_read_err());
                 }
                 Ok(DeliverySnapshot {
                     value: encoded(api, value)?,
@@ -90,6 +90,12 @@ impl CampaignQueries {
                     .find_map(|(_, read)| read.error.get())
                     .or_else(|| domains.and_then(|read| read.error.get()))
             }),
+            failure: Signal::derive(move || {
+                reads
+                    .into_iter()
+                    .find_map(|(_, read)| read.failure.get())
+                    .or_else(|| domains.and_then(|read| read.failure.get()))
+            }),
             fetching: Signal::derive(move || {
                 reads.into_iter().any(|(_, read)| read.fetching.get())
                     || domains.is_some_and(|read| read.fetching.get())
@@ -109,24 +115,24 @@ impl CampaignQueries {
         (id, analysis_state::query(filter, false))
     }
 
-    pub async fn read_analysis(api: Api, id: i64, filter: &Filter) -> Result<Value, String> {
+    pub async fn read_analysis(api: Api, id: i64, filter: &Filter) -> Result<Value, ApiError> {
         Self::read_analysis_query(api, id, &analysis_state::query(filter, false)).await
     }
 
-    async fn read_analysis_query(api: Api, id: i64, query: &str) -> Result<Value, String> {
+    async fn read_analysis_query(api: Api, id: i64, query: &str) -> Result<Value, ApiError> {
         let value: reads::Analysis = api
             .read(&format!("/api/campaigns/{id}/analysis?{query}"))
             .await?;
         if value.id != id {
-            return Err(api.invalid_read());
+            return Err(api.invalid_read_err());
         }
         encoded(api, value)
     }
 
-    pub async fn read_draft(api: Api, id: &str) -> Result<Value, String> {
+    pub async fn read_draft(api: Api, id: &str) -> Result<Value, ApiError> {
         let value: reads::Draft = api.read(&format!("/api/campaign-drafts/{id}")).await?;
         if value.id != id {
-            return Err(api.invalid_read());
+            return Err(api.invalid_read_err());
         }
         encoded(api, value)
     }
@@ -178,6 +184,6 @@ impl CampaignQueries {
     }
 }
 
-fn encoded(api: Api, value: impl serde::Serialize) -> Result<Value, String> {
-    serde_json::to_value(value).map_err(|_| api.invalid_read())
+fn encoded(api: Api, value: impl serde::Serialize) -> Result<Value, ApiError> {
+    serde_json::to_value(value).map_err(|_| api.invalid_read_err())
 }

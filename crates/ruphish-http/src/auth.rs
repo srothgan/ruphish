@@ -178,6 +178,7 @@ pub fn router<S: SessionStore + Clone>(
         .merge(super::starter_templates::routes())
         .merge(super::settings::routes())
         .layer(middleware::from_fn(security_headers))
+        .fallback(missing_page)
         .with_state(state)
         .layer(session);
     let admission = std::sync::Arc::new(tokio::sync::Semaphore::new(64));
@@ -600,6 +601,51 @@ pub struct Services {
     pub mailer_enabled: bool,
 }
 
+/// Direct document navigation reaches the same UI fallback as client navigation.
+/// Protocol namespaces and file requests must never be replaced with the shell.
+async fn missing_page(context: Context) -> Response {
+    let path = context.uri.path();
+    let namespace = path.split('/').nth(1).unwrap_or_default();
+    let document = context.headers.get_all(header::ACCEPT).iter().any(|value| {
+        value.to_str().ok().is_some_and(|value| {
+            value.split(',').any(|range| {
+                let mut parts = range.split(';');
+                let html = parts
+                    .next()
+                    .is_some_and(|mime| mime.trim().eq_ignore_ascii_case("text/html"));
+                let quality = parts
+                    .filter_map(|parameter| parameter.trim().split_once('='))
+                    .find(|(name, _)| name.trim().eq_ignore_ascii_case("q"))
+                    .map_or(Some(1.0), |(_, value)| value.trim().parse::<f32>().ok());
+                html && quality.is_some_and(|quality| quality > 0.0 && quality <= 1.0)
+            })
+        })
+    });
+    let head = context.method == Method::HEAD;
+    let mut response = if (context.method == Method::GET || head)
+        && document
+        && !matches!(namespace, "api" | "auth" | "internal")
+        && !path.split('/').any(|segment| segment.contains('.'))
+    {
+        // Reuse page authentication, password-change and permission rules. Only
+        // a successful shell changes to 404; redirects and rejections keep theirs.
+        let mut response = page(context).await;
+        if response.status() == StatusCode::OK {
+            *response.status_mut() = StatusCode::NOT_FOUND;
+        }
+        response
+    } else {
+        super::response::not_found()
+    };
+    response
+        .headers_mut()
+        .insert(header::VARY, header::HeaderValue::from_static("Accept"));
+    if head {
+        *response.body_mut() = Body::empty();
+    }
+    page_security_headers(response)
+}
+
 async fn page(context: Context) -> Response {
     let path = context.uri.path();
     if path != "/login" {
@@ -621,7 +667,14 @@ async fn page(context: Context) -> Response {
                     || path.starts_with("/users/"))
                     && !user.permits("modify_system")
                 {
-                    return failure(StatusCode::FORBIDDEN, ErrorCode::AuthForbidden, "Forbidden")
+                    // The shell contains no protected data. Keep the HTTP rejection,
+                    // but let the authenticated UI explain it; APIs still authorize
+                    // each read and mutation independently.
+                    return (
+                        StatusCode::FORBIDDEN,
+                        context.csrf,
+                        Html((*context.state.index).clone()),
+                    )
                         .into_response();
                 }
             }
@@ -1331,6 +1384,10 @@ async fn security_headers(request: Request<Body>, next: Next) -> Response {
         );
         // No Allow-Credentials: external browser integrations must supply their API key.
     }
+    page_security_headers(response)
+}
+
+fn page_security_headers(mut response: Response) -> Response {
     response.headers_mut().insert(
         "content-security-policy",
         header::HeaderValue::from_static("frame-ancestors 'none';"),
