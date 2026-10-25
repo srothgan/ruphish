@@ -94,6 +94,7 @@ fn encode_campaign(c: &app::Campaign) -> Value {
             Kind::Page => "page",
             Kind::Profile => "smtp",
             Kind::Group => "group",
+            Kind::LearningPage => "learning_page",
         }] = encode(r);
     }
     if !c.results.is_empty() {
@@ -156,6 +157,7 @@ fn decode(context: &Context, bytes: &[u8]) -> Result<app::Create, Rejection> {
             capture_credentials: Some(true),
             capture_passwords: Some(true),
             redirect_url: p.redirect_url,
+            learning_page_id: p.learning_page_id,
         },
         idempotency: None,
     };
@@ -439,6 +441,7 @@ fn read_policy(p: &app::InteractionPolicy) -> reads::Policy {
         capture_credentials: true,
         capture_passwords: true,
         redirect_url: p.redirect_url.clone(),
+        learning_page_id: p.learning_page_id,
     }
 }
 fn encode_header(c: &app::CampaignHeader) -> reads::Header {
@@ -686,7 +689,7 @@ async fn duplicate(context: Context, Path(id): Path<i64>) -> Result<Response, Re
             Kind::Template => &mut selection.template,
             Kind::Page => &mut selection.page,
             Kind::Profile => &mut selection.smtp,
-            Kind::Group => continue,
+            Kind::Group | Kind::LearningPage => continue,
         };
         selected.id = resource.id;
     }

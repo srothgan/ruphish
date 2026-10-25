@@ -9,6 +9,55 @@ use ruphish_application::resources::{Attachment, ContentTools, Page};
 use std::io::{Cursor, Read, Write};
 
 #[test]
+fn learning_pages_are_static_and_preserve_explanations_without_collectors_or_form_checks() {
+    let source = r#"<!doctype html><html lang="de"><body class="lesson"><style>.lesson{color:navy}</style><h1>Recognize suspicious messages</h1><p>{{.FirstName}} stays literal</p><a href="https://example.test/help">Help</a><form action="https://outside.invalid"><input name="password" type="password"><button>Submit</button></form><textarea>private</textarea><div contenteditable>Editable</div><script>unsafe()</script><img src="https://outside.invalid/pixel"></body></html>"#;
+    let document = ruphish_adapters::landing::learning(source).unwrap();
+    assert!(document.html.contains("Recognize suspicious messages"));
+    assert!(document.html.contains("{{.FirstName}} stays literal"));
+    assert!(document.html.contains("https://example.test/help"));
+    assert!(document.html.contains("class=\"lesson\""));
+    assert!(document.html.contains("lang=\"de\""));
+    for forbidden in [
+        "<script",
+        "<form",
+        "<input",
+        "<textarea",
+        "<button",
+        "contenteditable",
+        "outside.invalid",
+        "event_id",
+        "password_present",
+    ] {
+        assert!(
+            !document.html.contains(forbidden),
+            "{forbidden}: {}",
+            document.html
+        );
+    }
+    assert!(document.csp.contains("script-src 'none'"));
+    assert!(document.csp.contains("connect-src 'none'"));
+    assert!(document.csp.contains("form-action 'none'"));
+    let codes: Vec<_> = document
+        .warnings
+        .iter()
+        .map(|warning| warning.code)
+        .collect();
+    assert!(codes.contains(&"learning_controls_removed"));
+    assert!(codes.contains(&"authored_execution_removed"));
+    assert!(
+        !codes
+            .iter()
+            .any(|code| code.starts_with("password_") || code.starts_with("form_"))
+    );
+    assert!(
+        ruphish_adapters::landing::learning("<!doctype html><html><head><title>Explanation</title></head><body><h1>Explanation</h1></body></html>")
+            .unwrap()
+            .warnings
+            .is_empty()
+    );
+}
+
+#[test]
 fn original_go_attachment_files_match_independent_expected_content() {
     let root =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/attachments");

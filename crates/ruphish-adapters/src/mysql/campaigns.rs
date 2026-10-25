@@ -50,6 +50,7 @@ async fn selection(
         Kind::Group => "`groups`",
         Kind::Template => "templates",
         Kind::Page => "pages",
+        Kind::LearningPage => "ruphish_learning_pages",
         Kind::Profile => "smtp",
     };
     let id = if let Some(id) = s.id {
@@ -95,6 +96,9 @@ async fn prepare_authorized(
     let page = selection(c, caller.id, Kind::Page, &input.page).await?;
     let profile = selection(c, caller.id, Kind::Profile, &input.profile).await?;
     let policy = ruphish_application::campaign::preparation::policy(input, &page)?;
+    if let Some(id) = policy.learning_page_id {
+        super::resources::load(c, caller.id, Kind::LearningPage, id).await?;
+    }
     // Validate syntax using the same renderer; recipient-dependent failures are still
     // checked before every individual submission.
     let sample = crate::resources::sample();
@@ -133,6 +137,7 @@ async fn missing_resource(
             content: match kind {
                 Kind::Template => Content::Template(Template::default()),
                 Kind::Page => Content::Page(Page::default()),
+                Kind::LearningPage => Content::LearningPage(Default::default()),
                 Kind::Profile => Content::Profile(Profile::default()),
                 Kind::Group => Content::Group(vec![]),
             },
@@ -226,6 +231,7 @@ async fn load_aggregate(
         .map(|p| {
             Ok::<_, Error>(InteractionPolicy {
                 redirect_url: text(&p, "redirect_url")?,
+                learning_page_id: p.try_get("learning_page_id").map_err(storage)?,
             })
         })
         .transpose()?;
@@ -263,7 +269,7 @@ async fn load_aggregate(
     })
 }
 async fn header(c: &mut MySqlConnection, owner: i64, id: i64) -> Result<CampaignHeader, Error> {
-    let row=sqlx::query("SELECT c.id,c.name,c.status,c.launch_date,c.send_by_date,c.url,c.template_id,c.page_id,c.smtp_id,t.name AS template_name,t.subject,t.envelope_sender,s.name AS profile_name,s.from_address,l.name AS page_name,(SELECT count(*) FROM results r WHERE r.campaign_id=c.id) AS total,p.campaign_id AS policy_id,p.redirect_url FROM campaigns c LEFT JOIN ruphish_campaign_policy p ON p.campaign_id=c.id LEFT JOIN templates t ON t.id=c.template_id AND t.user_id=c.user_id LEFT JOIN pages l ON l.id=c.page_id AND l.user_id=c.user_id LEFT JOIN smtp s ON s.id=c.smtp_id AND s.user_id=c.user_id WHERE c.id=? AND c.user_id=?").bind(id).bind(owner).fetch_optional(&mut *c).await.map_err(storage)?.ok_or(Error::NotFound("Campaign"))?;
+    let row=sqlx::query("SELECT c.id,c.name,c.status,c.launch_date,c.send_by_date,c.url,c.template_id,c.page_id,c.smtp_id,t.name AS template_name,t.subject,t.envelope_sender,s.name AS profile_name,s.from_address,l.name AS page_name,(SELECT count(*) FROM results r WHERE r.campaign_id=c.id) AS total,p.campaign_id AS policy_id,p.redirect_url,p.learning_page_id FROM campaigns c LEFT JOIN ruphish_campaign_policy p ON p.campaign_id=c.id LEFT JOIN templates t ON t.id=c.template_id AND t.user_id=c.user_id LEFT JOIN pages l ON l.id=c.page_id AND l.user_id=c.user_id LEFT JOIN smtp s ON s.id=c.smtp_id AND s.user_id=c.user_id WHERE c.id=? AND c.user_id=?").bind(id).bind(owner).fetch_optional(&mut *c).await.map_err(storage)?.ok_or(Error::NotFound("Campaign"))?;
     let policy_id: Option<i64> = row.try_get("policy_id").map_err(storage)?;
     let domain: Option<(i64,bool,i64)> = sqlx::query_as("SELECT d.id,d.enabled,(SELECT eligible_until FROM ruphish_domain_policy WHERE id=d.id) FROM ruphish_campaign_domains cd JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=? WHERE cd.campaign_id=?").bind(owner).bind(id).fetch_optional(&mut *c).await.map_err(storage)?;
     let domain_id = domain.map(|d| d.0);
@@ -315,6 +321,7 @@ async fn header(c: &mut MySqlConnection, owner: i64, id: i64) -> Result<Campaign
             .map(|_| {
                 Ok::<_, Error>(InteractionPolicy {
                     redirect_url: text(&row, "redirect_url")?,
+                    learning_page_id: row.try_get("learning_page_id").map_err(storage)?,
                 })
             })
             .transpose()?,
@@ -754,9 +761,10 @@ impl Campaigns {
             .execute(&mut *tx)
             .await
             .map_err(storage)?;
-        sqlx::query("INSERT INTO ruphish_campaign_policy(campaign_id,redirect_url) VALUES(?,?)")
+        sqlx::query("INSERT INTO ruphish_campaign_policy(campaign_id,redirect_url,learning_page_id) VALUES(?,?,?)")
             .bind(id)
             .bind(&p.policy.redirect_url)
+            .bind(p.policy.learning_page_id)
             .execute(&mut *tx)
             .await
             .map_err(storage)?;

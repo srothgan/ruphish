@@ -63,6 +63,13 @@ fn migrator() -> Migrator {
                 include_str!("../../migrations/mysql/6_settings.sql").into_sql_str(),
                 false,
             ),
+            Migration::new(
+                7,
+                Cow::Borrowed("learning pages"),
+                MigrationType::Simple,
+                include_str!("../../migrations/mysql/7_learning_pages.sql").into_sql_str(),
+                false,
+            ),
         ]),
         locking: false,
         ..Migrator::DEFAULT
@@ -284,6 +291,7 @@ fn current_tables() -> BTreeSet<String> {
         "ruphish_campaign_closures".into(),
         "ruphish_domain_policy".into(),
     ]);
+    tables.insert("ruphish_learning_pages".into());
     tables.insert("event_history".into());
     tables
 }

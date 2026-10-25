@@ -966,6 +966,18 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
                 path=path!("/templates/:id/edit")
                 view=move || resource_page(Family::Templates, Screen::Edit)
             />
+            <Route
+                path=path!("/learning-pages")
+                view=move || resource_page(Family::LearningPages, Screen::List)
+            />
+            <Route
+                path=path!("/learning-pages/:id")
+                view=move || resource_page(Family::LearningPages, Screen::View)
+            />
+            <Route
+                path=path!("/learning-pages/:id/edit")
+                view=move || resource_page(Family::LearningPages, Screen::Edit)
+            />
             <Route path=path!("/pages") view=move || resource_page(Family::Pages, Screen::List) />
             <Route
                 path=path!("/pages/:id")

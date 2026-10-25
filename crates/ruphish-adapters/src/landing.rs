@@ -16,6 +16,19 @@ pub struct Document {
 /// Preserve form semantics while removing executable authored content and network resources.
 /// Input is the already-rendered document, never an unexpanded template.
 pub fn render(source: &str, endpoint: Option<&str>) -> Result<Document, Error> {
+    render_document(source, endpoint, false)
+}
+
+/// Static educational document with no collector, form controls or recipient context.
+pub fn learning(source: &str) -> Result<Document, Error> {
+    render_document(source, None, true)
+}
+
+fn render_document(
+    source: &str,
+    endpoint: Option<&str>,
+    learning: bool,
+) -> Result<Document, Error> {
     if source.len() > crate::resources::MAX_DOCUMENT {
         return Err(Error::Invalid("landing_document_too_large".into()));
     }
@@ -109,8 +122,32 @@ pub fn render(source: &str, endpoint: Option<&str>) -> Result<Document, Error> {
             }
             Some(value.into())
         });
+    if learning {
+        cleaner.rm_tags(&[
+            "form", "input", "textarea", "select", "option", "optgroup", "button", "datalist",
+        ]);
+        let mut attributes = cleaner.clone_tag_attributes();
+        attributes.retain(|tag, _| !matches!(*tag, "textarea" | "select" | "button" | "datalist"));
+        cleaner.tag_attributes(attributes);
+        cleaner.add_clean_content_tags(&["textarea", "select", "button", "datalist"]);
+    }
     let body = cleaner.clean(source).to_string();
-    let warnings = diagnostics::inspect(source, &body)?;
+    let mut warnings = diagnostics::inspect(source, &body)?;
+    if learning {
+        warnings.retain(|warning| {
+            matches!(warning.code, "authored_execution_removed" | "html_repaired")
+        });
+        let parsed = scraper::Html::parse_document(source);
+        let selector =
+            scraper::Selector::parse("form, input, textarea, select, button, [contenteditable]")
+                .map_err(|_| Error::Internal)?;
+        if parsed.select(&selector).next().is_some() {
+            warnings.push(ruphish_application::resources::PageWarning {
+                code: "learning_controls_removed",
+                control: None,
+            });
+        }
+    }
     let [html_attributes, body_attributes] = root_attributes(source)?;
     let mut bytes = [0; 24];
     getrandom::fill(&mut bytes).map_err(|_| Error::Internal)?;
@@ -132,9 +169,13 @@ pub fn render(source: &str, endpoint: Option<&str>) -> Result<Document, Error> {
     Ok(Document {
         html,
         warnings,
-        csp: format!(
-            "default-src 'none'; script-src 'nonce-{nonce}'; script-src-attr 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'"
-        ),
+        csp: if learning {
+            "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'".into()
+        } else {
+            format!(
+                "default-src 'none'; script-src 'nonce-{nonce}'; script-src-attr 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'"
+            )
+        },
     })
 }
 

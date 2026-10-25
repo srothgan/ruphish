@@ -272,6 +272,12 @@ pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<>
                     trs!(ui.domains),
                     "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M3 12h18 M12 3c5 5 5 13 0 18-5-5-5-13 0-18",
                 )}
+                {link(
+                    path,
+                    "/learning-pages",
+                    trs!(ui.learning_pages),
+                    "M4 3h7v18H4z M11 3h9v18h-9 M14 7h3 M14 11h3",
+                )}
                 {link(path, "/templates", trs!(ui.email_templates), "M3 5h18v14H3z M3 5l9 7 9-7")}
                 {link(
                     path,

@@ -4,7 +4,8 @@
 
 Initial release targeting feature parity with Gophish, with a native Rust server and a new Rust/WASM administration interface.
 
-- Manage recipient groups, email templates, landing pages, attachments, and sending profiles.
+- Manage recipient groups, email templates, landing pages, reusable static learning pages, attachments, and sending profiles.
+- Select hosted learning pages as campaign redirect destinations without adding training-completion tracking.
 - Save campaign drafts, review campaigns before launch, and schedule delivery with explicit recovery for uncertain sends.
 - Review dashboards and campaign/recipient timelines, with CSV and XLSX exports.
 - Verify campaign domains, process reports through multiple IMAP mailboxes, and deliver signed webhooks.

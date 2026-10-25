@@ -52,6 +52,13 @@ fn migrator() -> Migrator {
                 include_str!("../../migrations/postgres/6_settings.sql").into_sql_str(),
                 false,
             ),
+            Migration::new(
+                7,
+                Cow::Borrowed("learning pages"),
+                MigrationType::Simple,
+                include_str!("../../migrations/postgres/7_learning_pages.sql").into_sql_str(),
+                false,
+            ),
         ]),
         locking: false,
         ..Migrator::DEFAULT

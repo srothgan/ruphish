@@ -1049,22 +1049,113 @@ pub(super) fn create(
                             !draft.with(Draft::policy_ready)
                         })>
                             <p>{tr!(ui.all_submissions_recorded)}</p>
-                            <Field label=trs!(ui.redirect_url_optional_leave_empty_for_no_redirect)>
-                                <TextInput
-                                    value=Signal::derive(move || text(
-                                        &draft.get().value["policy"],
-                                        "redirect_url",
-                                    ))
-                                    on_input=move |e| {
+                            <Select
+                                label=trs!(ui.redirect_destination)
+                                value=Signal::derive(move || {
+                                    if draft.get().value["policy"]["learning_page_id"].is_number() {
+                                        "learning".to_owned()
+                                    } else {
+                                        "custom".to_owned()
+                                    }
+                                })
+                                on_change=Callback::new(move |value: String| {
+                                    draft
+                                        .update(|d| {
+                                            d.edit(|v| {
+                                                v["policy"] = if value == "learning" {
+                                                    json!({"redirect_url":"", "learning_page_id":0})
+                                                } else {
+                                                    json!({"redirect_url":""})
+                                                };
+                                            })
+                                        })
+                                })
+                            >
+                                <option value="custom">{tr!(ui.custom_redirect)}</option>
+                                <option value="learning">{tr!(ui.learning_page)}</option>
+                            </Select>
+                            <Show when=move || {
+                                draft.get().value["policy"]["learning_page_id"].is_number()
+                            }>
+                                <Select
+                                    label=trs!(ui.learning_page)
+                                    value=Signal::derive(move || {
+                                        draft
+                                            .get()
+                                            .value["policy"]["learning_page_id"]
+                                            .as_i64()
+                                            .unwrap_or(0)
+                                            .to_string()
+                                    })
+                                    on_change=Callback::new(move |value: String| {
                                         draft
                                             .update(|d| {
                                                 d.edit(|v| {
-                                                    v["policy"]["redirect_url"] = json!(event_target_value(&e));
+                                                    v["policy"]["learning_page_id"] = json!(
+                                                        value.parse::<i64>().unwrap_or(0)
+                                                    );
                                                 })
                                             })
-                                    }
-                                />
-                            </Field>
+                                    })
+                                >
+                                    <option value="0">{tr!(ui.select_learning_page)}</option>
+                                    {move || {
+                                        let selected = draft
+                                            .get()
+                                            .value["policy"]["learning_page_id"]
+                                            .as_i64()
+                                            .unwrap_or(0);
+                                        let rows = array(&resources.get(), "learning_page");
+                                        (selected > 0
+                                            && !rows
+                                                .iter()
+                                                .any(|row| row["id"].as_i64() == Some(selected)))
+                                            .then(|| {
+                                                view! {
+                                                    <option value=selected.to_string() disabled=true>
+                                                        {tr!(ui.unavailable)}
+                                                    </option>
+                                                }
+                                            })
+                                    }}
+                                    {move || {
+                                        array(&resources.get(), "learning_page")
+                                            .into_iter()
+                                            .map(|row| {
+                                                view! {
+                                                    <option value=row["id"]
+                                                        .to_string()>{text(&row, "name")}</option>
+                                                }
+                                            })
+                                            .collect_view()
+                                    }}
+                                </Select>
+                                <a href="/learning-pages/new" target="_blank" rel="noopener">
+                                    {tr!(ui.create_learning_page)}
+                                </a>
+                            </Show>
+                            <Show when=move || {
+                                !draft.get().value["policy"]["learning_page_id"].is_number()
+                            }>
+                                <Field label=trs!(
+                                    ui.redirect_url_optional_leave_empty_for_no_redirect
+                                )>
+                                    <TextInput
+                                        value=Signal::derive(move || text(
+                                            &draft.get().value["policy"],
+                                            "redirect_url",
+                                        ))
+                                        on_input=move |e| {
+                                            draft
+                                                .update(|d| {
+                                                    d.edit(|v| {
+                                                        v["policy"]["redirect_url"] = json!(event_target_value(&e));
+                                                    })
+                                                })
+                                        }
+                                    />
+                                </Field>
+                            </Show>
                         </FormFields>
                     </section>
                 </section>
@@ -1232,7 +1323,27 @@ pub(super) fn create(
                                                 <dd>{tr!(ui.yes)}</dd>
                                             </div><div>
                                                 <dt>{tr!(ui.redirect)}</dt>
-                                                <dd>{r.policy.redirect_url}</dd>
+                                                <dd>
+                                                    {match r.policy.learning_page_id {
+                                                        Some(id) => {
+                                                            view! {
+                                                                <a href=format!(
+                                                                    "/learning-pages/{id}",
+                                                                )>
+                                                                    {array(&resources.get(), "learning_page")
+                                                                        .iter()
+                                                                        .find(|row| row["id"].as_i64() == Some(id))
+                                                                        .map(|row| text(row, "name"))
+                                                                        .unwrap_or_else(|| {
+                                                                            leptos_i18n::t_string!(i18n, ui.unavailable).to_owned()
+                                                                        })}
+                                                                </a>
+                                                            }
+                                                                .into_any()
+                                                        }
+                                                        None => r.policy.redirect_url.into_any(),
+                                                    }}
+                                                </dd>
                                             </div>
                                         </dl> <section class="resource-section">
                                             <h3>{tr!(ui.rendered_sample)}</h3>
@@ -1904,6 +2015,7 @@ fn campaign_context(c: &Value) -> impl IntoView + use<> {
     };
     let c = c.clone();
     let template_sender = text(&c, "template_sender");
+    let destination = c["policy"].clone();
     view! {
         <Card class="resource-read-panel campaign-context" label=trs!(ui.campaign_details)>
             <h2>{tr!(ui.campaign_details)}</h2>
@@ -1923,6 +2035,21 @@ fn campaign_context(c: &Value) -> impl IntoView + use<> {
                 })}
             <dl class="resource-facts">
                 {resources} <div>
+                    <dt>{tr!(ui.redirect_destination)}</dt>
+                    <dd>
+                        {match destination["learning_page_id"].as_i64() {
+                            Some(id) => {
+                                view! {
+                                    <a href=format!(
+                                        "/learning-pages/{id}",
+                                    )>{tr!(ui.learning_page)}" #"{id}</a>
+                                }
+                                    .into_any()
+                            }
+                            None => text(&destination, "redirect_url").into_any(),
+                        }}
+                    </dd>
+                </div> <div>
                     <dt>{tr!(ui.email_subject_template)}</dt>
                     <dd>
                         {c["subject"]

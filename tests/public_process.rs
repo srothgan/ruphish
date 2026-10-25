@@ -1,5 +1,7 @@
 //! Real executable, controlled DNS and trusted HTTPS; no external DNS or recipients.
 use super::*;
+#[path = "learning_pages_process.rs"]
+mod learning_pages;
 use hickory_proto::{
     op::{Message, OpCode},
     rr::{

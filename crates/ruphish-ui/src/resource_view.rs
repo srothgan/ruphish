@@ -229,6 +229,15 @@ fn body(value: Value, family: Family) -> AnyView {
             }
             .into_any()
         }
+        Family::LearningPages => {
+            let mut preview = value.clone();
+            preview["html"] = value["preview_html"].clone();
+            view! {
+                <p>{tr!(ui.learning_static_help)}</p>
+                {content(&preview)}
+            }
+            .into_any()
+        }
         Family::Pages => view! {
             <section class="resource-section">
                 <h2>{tr!(ui.submission_tracking)}</h2>

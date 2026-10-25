@@ -9,6 +9,8 @@ pub enum Kind {
     Template,
     /// Landing-page content and capture policy.
     Page,
+    /// Reusable static educational content.
+    LearningPage,
     /// SMTP connection and message headers.
     Profile,
 }
@@ -19,6 +21,7 @@ impl Kind {
             Self::Group => "Group",
             Self::Template => "Template",
             Self::Page => "Page",
+            Self::LearningPage => "Learning page",
             Self::Profile => "SMTP",
         }
     }
@@ -75,6 +78,14 @@ pub struct Page {
     /// Templated destination after submission.
     pub redirect_url: String,
 }
+/// Static content with a server-assigned public identity.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LearningPage {
+    /// Authored HTML; never interpreted as a recipient template.
+    pub html: String,
+    /// Stable opaque public identity, assigned by persistence.
+    pub public_id: String,
+}
 /// SMTP credentials stay in backend models and authorized legacy responses only.
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct Profile {
@@ -102,6 +113,8 @@ pub enum Content {
     Template(Template),
     /// Landing-page content and capture policy.
     Page(Page),
+    /// Static educational content.
+    LearningPage(LearningPage),
     /// SMTP connection and message headers.
     Profile(Profile),
 }
@@ -124,6 +137,7 @@ impl Resource {
             Content::Group(_) => Kind::Group,
             Content::Template(_) => Kind::Template,
             Content::Page(_) => Kind::Page,
+            Content::LearningPage(_) => Kind::LearningPage,
             Content::Profile(_) => Kind::Profile,
         }
     }
@@ -149,7 +163,7 @@ impl Resource {
                     return Err("Need to specify at least plaintext or HTML content");
                 }
             }
-            Content::Page(_) => {
+            Content::Page(_) | Content::LearningPage(_) => {
                 if self.name.is_empty() {
                     return Err("Page Name not specified");
                 }

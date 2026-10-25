@@ -65,6 +65,7 @@ impl CampaignQueries {
             ("groups", resources.list(Family::Groups)),
             ("template", resources.list(Family::Templates)),
             ("page", resources.list(Family::Pages)),
+            ("learning_page", resources.list(Family::LearningPages)),
             ("smtp", resources.list(Family::Profiles)),
         ];
         let domains = include_domains.then(|| {

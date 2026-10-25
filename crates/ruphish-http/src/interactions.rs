@@ -150,6 +150,36 @@ async fn handle(request: Request<Body>, state: &Services) -> Response {
             .into_response();
     }
     let host = authority(&request, state);
+    if let Some(public_id) = path.strip_prefix("/learn/") {
+        if !matches!(method, Method::GET | Method::HEAD) {
+            return empty(StatusCode::METHOD_NOT_ALLOWED);
+        }
+        let Some(host) = host else {
+            return empty(StatusCode::NOT_FOUND);
+        };
+        return match state.interactions.learning_page(&host, public_id).await {
+            Ok(Output::Html { html, csp }) => (
+                [
+                    (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+                    (header::CONTENT_SECURITY_POLICY, csp.as_str()),
+                    (header::CACHE_CONTROL, "no-store"),
+                    (header::REFERRER_POLICY, "no-referrer"),
+                    (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+                ],
+                if method == Method::HEAD {
+                    String::new()
+                } else {
+                    html
+                },
+            )
+                .into_response(),
+            Err(
+                ruphish_application::resources::Error::Internal
+                | ruphish_application::resources::Error::Storage(_),
+            ) => empty(StatusCode::SERVICE_UNAVAILABLE),
+            _ => empty(StatusCode::NOT_FOUND),
+        };
+    }
     if path.starts_with("/static/") {
         let Some(host) = host else {
             return empty(StatusCode::NOT_FOUND);

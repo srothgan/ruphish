@@ -82,6 +82,10 @@ pub fn smtp_address(value: &str) -> Result<(String, u16), Error> {
     Ok((host, port))
 }
 impl Validator for Validate {
+    fn learning_preview(&self, html: &str) -> Result<(String, Vec<PageWarning>), Error> {
+        let document = crate::landing::learning(html)?;
+        Ok((document.html, document.warnings))
+    }
     fn page_warnings(&self, html: &str) -> Result<Vec<PageWarning>, Error> {
         let rendered = render(html, &sample())?;
         Ok(crate::landing::render(&rendered, None)?.warnings)
@@ -110,6 +114,9 @@ impl Validator for Validate {
                         return Err(invalid("Attachments exceed 64 MiB"));
                     }
                 }
+            }
+            Content::LearningPage(p) => {
+                self.learning_preview(&p.html)?;
             }
             Content::Page(p) => {
                 self.page_warnings(&p.html)?;

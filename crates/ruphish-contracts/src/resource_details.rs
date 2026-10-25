@@ -11,6 +11,8 @@ pub enum Kind {
     Template,
     /// Landing pages.
     Page,
+    /// Static learning pages.
+    LearningPage,
     /// Sending profiles.
     Profile,
 }
@@ -57,6 +59,11 @@ struct Page {
     redirect_url: String,
 }
 #[derive(Deserialize, Serialize)]
+struct LearningPage {
+    html: String,
+    public_id: String,
+}
+#[derive(Deserialize, Serialize)]
 struct Header {
     key: String,
     value: String,
@@ -78,6 +85,9 @@ pub fn validate(kind: Kind, value: &Value) -> Result<(), serde_json::Error> {
     match kind {
         Kind::Group => serde_json::from_value::<Detail<Group>>(value.clone()).map(|_| ()),
         Kind::Template => serde_json::from_value::<Detail<Template>>(value.clone()).map(|_| ()),
+        Kind::LearningPage => {
+            serde_json::from_value::<Detail<LearningPage>>(value.clone()).map(|_| ())
+        }
         Kind::Page => serde_json::from_value::<Detail<Page>>(value.clone()).map(|_| ()),
         Kind::Profile => serde_json::from_value::<Detail<Profile>>(value.clone()).map(|_| ()),
     }

@@ -323,6 +323,7 @@ impl Repository for Accounts {
                     "DELETE FROM attachments WHERE template_id IN (SELECT id FROM templates WHERE user_id=?)",
                     "DELETE FROM templates WHERE user_id=?",
                     "DELETE FROM pages WHERE user_id=?",
+                    "DELETE FROM ruphish_learning_pages WHERE user_id=?",
                     "DELETE FROM group_targets WHERE group_id IN (SELECT id FROM `groups` WHERE user_id=?)",
                     "DELETE FROM `groups` WHERE user_id=?",
                     "DELETE FROM headers WHERE smtp_id IN (SELECT id FROM smtp WHERE user_id=?)",

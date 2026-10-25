@@ -23,6 +23,7 @@ fn table(kind: Kind) -> &'static str {
         Kind::Group => "groups",
         Kind::Template => "templates",
         Kind::Page => "pages",
+        Kind::LearningPage => "ruphish_learning_pages",
         Kind::Profile => "smtp",
     }
 }
@@ -136,6 +137,10 @@ pub(super) async fn load(
                     .collect::<Result<_, Error>>()?,
             })
         }
+        Kind::LearningPage => Content::LearningPage(LearningPage {
+            html: text(&row, "html")?,
+            public_id: text(&row, "public_id")?,
+        }),
         Kind::Page => Content::Page(Page {
             html: text(&row, "html")?,
             redirect_url: text(&row, "redirect_url")?,
@@ -173,8 +178,12 @@ pub(super) async fn load(
     })
 }
 async fn usage(c: &mut PgConnection, kind: Kind, id: i64) -> Result<i64, Error> {
+    if kind == Kind::LearningPage {
+        return sqlx::query_scalar("SELECT count(*) FROM campaigns c JOIN ruphish_campaign_policy p ON p.campaign_id=c.id WHERE p.learning_page_id=$1 AND COALESCE(c.status,'') != 'Completed'")
+            .bind(id).fetch_one(c).await.map_err(storage);
+    }
     let column = match kind {
-        Kind::Group => return Ok(0),
+        Kind::Group | Kind::LearningPage => return Ok(0),
         Kind::Template => "template_id",
         Kind::Page => "page_id",
         Kind::Profile => "smtp_id",
@@ -226,7 +235,7 @@ async fn clear_children(c: &mut PgConnection, kind: Kind, id: i64) -> Result<(),
                 .await
                 .map_err(storage)?;
         }
-        Kind::Page => {}
+        Kind::Page | Kind::LearningPage => {}
     }
     Ok(())
 }
@@ -399,6 +408,16 @@ impl Repository for Resources {
             .insert_id()
             .map_err(storage)?
         };
+        if let Content::LearningPage(page) = &mut value.content {
+            page.public_id = match old.as_ref().map(|resource| &resource.content) {
+                Some(Content::LearningPage(previous)) => previous.public_id.clone(),
+                _ => {
+                    let mut bytes = [0; 16];
+                    getrandom::fill(&mut bytes).map_err(|_| Error::Internal)?;
+                    hex::encode(bytes)
+                }
+            };
+        }
         let id = value.id;
         match &value.content {
             Content::Group(targets) => {
@@ -447,6 +466,15 @@ impl Repository for Resources {
                     .await
                     .map_err(storage)?;
                 }
+            }
+            Content::LearningPage(p) => {
+                sqlx::query("UPDATE ruphish_learning_pages SET html=$1,public_id=$2 WHERE id=$3")
+                    .bind(&p.html)
+                    .bind(&p.public_id)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(storage)?;
             }
             Content::Page(p) => {
                 sqlx::query("UPDATE pages SET html=$1,redirect_url=$2 WHERE id=$3")

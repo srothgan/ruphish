@@ -85,6 +85,8 @@ pub trait Repository: Send + Sync {
 }
 /// Parser/template checks supplied by concrete established libraries.
 pub trait Validator: Send + Sync {
+    /// Process static educational HTML through the public content policy.
+    fn learning_preview(&self, html: &str) -> Result<(String, Vec<PageWarning>), Error>;
     /// Check content rules without persisting or performing delivery.
     fn validate(&self, resource: &Resource) -> Result<(), Error>;
     /// Inspect the processed landing document without storing diagnostic state.
@@ -151,6 +153,10 @@ pub trait ContentTools: Send + Sync {
     fn preview(&self, source: &str, recipient: &Recipient) -> Result<String, Error>;
 }
 impl Service {
+    /// Same static representation and diagnostics as the public learning route.
+    pub fn learning_preview(&self, html: &str) -> Result<(String, Vec<PageWarning>), Error> {
+        self.validator.learning_preview(html)
+    }
     /// Compose the concrete dependencies for this boundary.
     pub fn new(
         repository: Arc<dyn Repository>,
