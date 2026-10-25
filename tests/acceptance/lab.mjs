@@ -52,6 +52,9 @@ async function api(path, method = 'GET', body, headers = {}) {
     return response.json();
 }
 async function init() {
+    // Create bind sources as the host user before Docker can create root-owned
+    // parents. Native provider tests must still be able to write target/debug.
+    await mkdir(new URL('../../target/docker/', import.meta.url), { recursive: true });
     await mkdir(data, { recursive: true });
     try {
         await writeFile(join(data, 'bootstrap.env'), `GOPHISH_INITIAL_ADMIN_PASSWORD=${randomBytes(20).toString('hex')}\nGOPHISH_INITIAL_ADMIN_API_TOKEN=${randomBytes(32).toString('hex')}\n`, { flag: 'wx', mode: 0o600 });

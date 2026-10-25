@@ -55,7 +55,11 @@ services:
       - .:/lab
       - target:/target
       - registry:/usr/local/cargo/registry
-      - ../../target/docker:/artifact
+      - type: bind
+        source: ../../target/docker
+        target: /artifact
+        bind:
+          create_host_path: false
     entrypoint: [sh, /lab/prepare.sh]
   dns:
     image: coredns/coredns:1.14.7

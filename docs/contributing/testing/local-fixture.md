@@ -25,6 +25,8 @@ node --test tests/acceptance/public.test.mjs
 
 `prepare` compiles the Linux executable in the Rust builder container using Cargo.lock, exports it to `target/docker/ruphish`, and generates or reuses the local CA/server certificate. The Dockerfile packages that executable and `dist/admin/` as `ruphish:local`; the running app does not mount the source checkout. Building needs network access for toolchains, crates and runtime packages; acceptance scenarios use local services only. `demo` uses normal login/password-change APIs and actual DNS/TLS verification: `https://good.ruphish.test:8443` must pass and `https://bad.ruphish.test:8443` must fail with a TXT mismatch. `seed` preserves existing named resources and creates a new browser campaign each time. The protocol tests check unauthenticated health on both listeners, rejected probes, received SMTP content, public events, duplicate submissions, malformed bodies, completion, absence of canary values from API responses/logs/live SQLite files, and persistence across container replacement. They do not execute the browser collector.
 
+`init` creates `target/docker/` as the host user before any Docker command. This keeps the parent Cargo output directory writable by native tests on Linux; Compose refuses to create a missing artifact bind source as root. If the directory was removed after initialization, recreate it as the host user with `mkdir -p target/docker` (PowerShell: `New-Item -ItemType Directory -Force target/docker`) before running `prepare` again.
+
 | Surface | Address |
 | --- | --- |
 | Admin | `http://127.0.0.1:3334` |
