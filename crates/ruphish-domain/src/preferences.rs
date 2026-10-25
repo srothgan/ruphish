@@ -30,30 +30,46 @@ pub enum Error {
 impl Preferences {
     /// Validate overrides at the domain boundary; null alone selects browser defaults.
     pub fn validate(&self) -> Result<(), Error> {
+        self.validation().finish().map_err(|report| {
+            match report.issues().first().map(|i| i.field.as_str()) {
+                Some("language") => Error::Language,
+                Some("format_locale") => Error::FormatLocale,
+                _ => Error::TimeZone,
+            }
+        })
+    }
+    /// Domain grammar, separate from browser-specific formatting support.
+    pub fn validation(&self) -> crate::validation::Report {
+        use crate::validation::{Code, Report};
+        let mut report = Report::default();
         if self
             .language
             .as_deref()
             .is_some_and(|v| !matches!(v, "en" | "de"))
         {
-            return Err(Error::Language);
+            report.reject("language", Code::Invalid, "Unsupported interface language");
         }
         if let Some(value) = &self.format_locale {
-            if value.len() > 128 {
-                return Err(Error::FormatLocale);
-            }
-            let tag = language_tags::LanguageTag::parse(value).map_err(|_| Error::FormatLocale)?;
-            tag.validate().map_err(|_| Error::FormatLocale)?;
-            // Private-use-only and grandfathered tags are not Intl locale identifiers.
-            if tag.primary_language().len() < 2 || tag.extended_language().is_some() {
-                return Err(Error::FormatLocale);
+            let valid = value.len() <= 128
+                && language_tags::LanguageTag::parse(value).is_ok_and(|tag| {
+                    tag.validate().is_ok()
+                        && tag.primary_language().len() >= 2
+                        && tag.extended_language().is_none()
+                });
+            if !valid {
+                report.reject(
+                    "format_locale",
+                    Code::Invalid,
+                    "Invalid date/time format locale",
+                );
             }
         }
         if let Some(value) = &self.time_zone
             && (value.len() > 128 || crate::datetime::named_zone(value).is_err())
         {
-            return Err(Error::TimeZone);
+            report.reject("time_zone", Code::Invalid, "Invalid time zone");
         }
-        Ok(())
+        report
     }
 }
 

@@ -90,3 +90,22 @@ pub fn verification_status(verified_until: i64, checked_at: i64, now: i64) -> &'
         "not_verified"
     }
 }
+
+/// Validate an operator label and origin without network access.
+pub fn validate_edit(name: &str, value: &str) -> Result<Origin, crate::validation::Report> {
+    use crate::validation::{Code, Report};
+    let mut report = Report::default();
+    let parsed = origin(value, false);
+    if let Err(message) = parsed.as_ref() {
+        report.reject("origin", Code::Invalid, message);
+    }
+    if name.trim().is_empty() || name.len() > 200 {
+        report.reject("name", Code::Invalid, "domain_invalid_name");
+    }
+    report.finish()?;
+    parsed.map_err(|message| {
+        let mut report = Report::default();
+        report.reject("origin", Code::Invalid, message);
+        report
+    })
+}

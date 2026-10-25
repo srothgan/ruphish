@@ -2,14 +2,14 @@
 use ruphish_application::resources::Error;
 pub(crate) fn url(source: &str) -> Result<String, Error> {
     let sample = crate::resources::sample();
-    let url = crate::resources::render(source, &sample)?;
+    let url = crate::resources::render(source, &sample).map_err(|e| e.at("url"))?;
     // Check the original authority as well: recipient expressions cannot select hosts.
     let configured = ruphish_domain::domains::origin(source, true)
-        .map_err(|code| Error::Invalid(code.into()))?;
-    let rendered =
-        ruphish_domain::domains::origin(&url, true).map_err(|code| Error::Invalid(code.into()))?;
+        .map_err(|code| Error::Invalid(code.into()).at("url"))?;
+    let rendered = ruphish_domain::domains::origin(&url, true)
+        .map_err(|code| Error::Invalid(code.into()).at("url"))?;
     if configured != rendered {
-        return Err(Error::Invalid("domain_dynamic_hostname".into()));
+        return Err(Error::Invalid("domain_dynamic_hostname".into()).at("url"));
     }
     Ok(url)
 }

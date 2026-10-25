@@ -114,7 +114,7 @@ impl Repository for SettingsStore {
         policy: Policy,
         now: i64,
     ) -> Result<Settings, Error> {
-        policy.validate().map_err(|e| Error::Invalid(e.into()))?;
+        policy.validation().finish().map_err(Error::Validation)?;
         let mut tx = self
             .pool
             .begin_with("BEGIN IMMEDIATE")

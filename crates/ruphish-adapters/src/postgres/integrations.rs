@@ -154,7 +154,7 @@ impl Repository for Integrations {
         id: Option<i64>,
         e: WebhookEdit,
     ) -> Result<Webhook, Error> {
-        e.validate().map_err(|error| invalid(&error.to_string()))?;
+        e.validation().finish().map_err(Error::Validation)?;
         let mut tx = crate::postgres::locks::write(&self.pool)
             .await
             .map_err(db)?;
@@ -377,7 +377,7 @@ impl Repository for Integrations {
         id: Option<i64>,
         e: MailboxEdit,
     ) -> Result<Mailbox, Error> {
-        e.validate().map_err(|error| invalid(&error.to_string()))?;
+        e.validation().finish().map_err(Error::Validation)?;
         let mut tx = crate::postgres::locks::write(&self.pool)
             .await
             .map_err(db)?;
@@ -568,8 +568,7 @@ impl Repository for Integrations {
         who: Identity,
         edit: MailboxEdit,
     ) -> Result<(), Error> {
-        edit.validate()
-            .map_err(|error| invalid(&error.to_string()))?;
+        edit.validation().finish().map_err(Error::Validation)?;
         let mut tx = crate::postgres::locks::write(&self.pool)
             .await
             .map_err(db)?;

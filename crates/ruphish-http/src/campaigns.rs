@@ -172,16 +172,20 @@ fn decode(context: &Context, bytes: &[u8]) -> Result<app::Create, Rejection> {
         result.page = stable(s.page);
         result.profile = stable(s.smtp);
     }
-    for (local, target) in [
-        (input.launch_local, &mut result.launch),
-        (input.send_by_local, &mut result.send_by),
+    for (local, target, field) in [
+        (input.launch_local, &mut result.launch, "launch_local.local"),
+        (
+            input.send_by_local,
+            &mut result.send_by,
+            "send_by_local.local",
+        ),
     ] {
         if let Some(local) = local {
             *target = Some(
                 context
                     .campaigns()
                     .resolve_time(&local.local, &local.time_zone)
-                    .map_err(error)?,
+                    .map_err(|e| error(e.at(field)))?,
             );
         }
     }
@@ -199,16 +203,33 @@ fn decode(context: &Context, bytes: &[u8]) -> Result<app::Create, Rejection> {
 }
 fn launch_error(e: Error) -> Rejection {
     match e {
-        Error::NotFound("SMTP") => failure(
-            StatusCode::BAD_REQUEST,
-            ErrorCode::ResourceNotFound,
-            "Sending profile not found",
-        ),
-        Error::NotFound(kind) => failure(
-            StatusCode::BAD_REQUEST,
-            ErrorCode::ResourceNotFound,
-            &format!("{kind} not found"),
-        ),
+        Error::NotFound(kind) => {
+            let message = if kind == "SMTP" {
+                "Sending profile not found".into()
+            } else {
+                format!("{kind} not found")
+            };
+            let mut report = ruphish_application::validation::Report::default();
+            let field = match kind {
+                "SMTP" => "selection.smtp.id",
+                "Template" => "selection.template.id",
+                "Page" => "selection.page.id",
+                "Group" => "selection.groups",
+                "Learning page" => "policy.learning_page_id",
+                _ => "url",
+            };
+            report.reject(
+                field,
+                ruphish_application::validation::Code::Unavailable,
+                "Resource not found",
+            );
+            failure(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::ResourceNotFound,
+                &message,
+            )
+            .with_validation(&report)
+        }
         other => error(other),
     }
 }

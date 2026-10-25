@@ -241,25 +241,34 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         auth::Preferences::default(),
         "other accounts remain isolated"
     );
-    for invalid in [
-        auth::Preferences {
-            language: Some("zh".into()),
-            ..overrides.clone()
-        },
-        auth::Preferences {
-            format_locale: Some("not_a_locale".into()),
-            ..overrides.clone()
-        },
-        auth::Preferences {
-            time_zone: Some("Mars/Unknown".into()),
-            ..overrides.clone()
-        },
+    for (field, invalid) in [
+        (
+            "language",
+            auth::Preferences {
+                language: Some("zh".into()),
+                ..overrides.clone()
+            },
+        ),
+        (
+            "format_locale",
+            auth::Preferences {
+                format_locale: Some("not_a_locale".into()),
+                ..overrides.clone()
+            },
+        ),
+        (
+            "time_zone",
+            auth::Preferences {
+                time_zone: Some("Mars/Unknown".into()),
+                ..overrides.clone()
+            },
+        ),
     ] {
         assert!(matches!(
             accounts
                 .write(normal.identity, auth::Write::Preferences(invalid))
                 .await,
-            Err(auth::Error::Preferences(_))
+            Err(auth::Error::Validation(report)) if report.issues().iter().any(|issue| issue.field == field)
         ));
         assert_eq!(
             accounts

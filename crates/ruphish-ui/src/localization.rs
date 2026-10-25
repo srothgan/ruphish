@@ -392,3 +392,42 @@ pub fn role_label(
         _ => role.name.clone(),
     }
 }
+
+/// Translate value-free validation identities independently of API error categories.
+pub fn validation_label(
+    context: leptos_i18n::I18nContext<Locale>,
+    code: ruphish_domain::validation::Code,
+) -> String {
+    use ruphish_domain::validation::Code;
+    match code {
+        Code::Required => leptos_i18n::t_string!(context, validation.required).to_owned(),
+        Code::TooLong => leptos_i18n::t_string!(context, validation.too_long).to_owned(),
+        Code::EmailContent => leptos_i18n::t_string!(context, validation.email_content).to_owned(),
+        Code::PasswordShort => {
+            leptos_i18n::t_string!(context, validation.password_short).to_owned()
+        }
+        Code::PasswordLong => leptos_i18n::t_string!(context, validation.password_long).to_owned(),
+        Code::PasswordMismatch => {
+            leptos_i18n::t_string!(context, validation.password_mismatch).to_owned()
+        }
+        Code::SchedulePast => leptos_i18n::t_string!(context, validation.schedule_past).to_owned(),
+        Code::ScheduleOrder => {
+            leptos_i18n::t_string!(context, validation.schedule_order).to_owned()
+        }
+        Code::Unavailable => leptos_i18n::t_string!(context, validation.unavailable).to_owned(),
+        Code::Conflict => leptos_i18n::t_string!(context, validation.conflict).to_owned(),
+        Code::RedirectConflict => {
+            leptos_i18n::t_string!(context, validation.redirect_conflict).to_owned()
+        }
+        Code::ValidityRange => {
+            leptos_i18n::t_string!(context, validation.validity_range).to_owned()
+        }
+        Code::RecheckRange => leptos_i18n::t_string!(context, validation.recheck_range).to_owned(),
+        Code::RecheckMargin => {
+            leptos_i18n::t_string!(context, validation.recheck_margin).to_owned()
+        }
+        Code::Invalid | Code::InvalidUrl | Code::Unknown => {
+            leptos_i18n::t_string!(context, validation.invalid).to_owned()
+        }
+    }
+}

@@ -1605,6 +1605,22 @@ fn go_account_observations_match_except_approved_account_security_policies() {
             let code = value.as_object_mut().unwrap().remove("code");
             assert_eq!(code, Some(json!(expected_code)), "{}", case["id"]);
         }
+        let validation_field = match case["id"].as_str().unwrap() {
+            "empty-name" | "duplicate-create" | "duplicate-update" => Some("username"),
+            "empty-role" | "unknown-role" => Some("role"),
+            _ => None,
+        };
+        if let Some(field) = validation_field {
+            let report: ruphish_contracts::validation::ValidationReport = serde_json::from_value(
+                value.as_object_mut().unwrap().remove("validation").unwrap(),
+            )
+            .unwrap();
+            assert!(
+                report.issues.iter().any(|issue| issue.field == field),
+                "{}",
+                case["id"]
+            );
+        }
         // DEC-043 rejects the credential-changing part of the original self-edit.
         // Keep the independent Go fixture, and separately retain harmless self-edits.
         if case["id"] == "self-update" {

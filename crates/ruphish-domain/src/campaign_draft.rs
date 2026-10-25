@@ -94,3 +94,100 @@ impl Configuration {
                 .all(|time| text(&time.local, 100) && text(&time.time_zone, 100))
     }
 }
+
+impl Configuration {
+    /// Readiness through a wizard step. Persistence deliberately uses `validate` instead.
+    pub fn readiness(&self, through: usize, now: i64) -> crate::validation::Report {
+        use crate::validation::{Code, Report};
+        let mut fields = crate::campaign::Fields {
+            name: &self.name,
+            groups: !self.selection.groups.is_empty()
+                && self.selection.groups.iter().all(|r| r.id > 0),
+            template: self.selection.template.id > 0,
+            page: self.selection.page.id > 0,
+            smtp: self.selection.smtp.id > 0,
+            launch: now,
+            send_by: None,
+        };
+        let mut report = fields.audience_validation();
+        if through >= 1 {
+            report.extend(fields.content_validation());
+            if self.url.is_empty() {
+                report.reject("url", Code::Required, "Campaign destination not specified");
+            } else if crate::domains::origin(&self.url, true).is_err() {
+                report.reject("url", Code::Invalid, "Invalid campaign destination");
+            }
+            match &self.policy {
+                None => report.reject(
+                    "selection.page.id",
+                    Code::Unavailable,
+                    "Draft policy is incomplete",
+                ),
+                Some(policy) => report.extend(crate::campaign::policy_validation(
+                    policy.learning_page_id,
+                    &policy.redirect_url,
+                )),
+            }
+        }
+        if through >= 2 {
+            let mut times = Report::default();
+            let mut resolve = |time: &Option<LocalTime>, field: &str| -> Option<i64> {
+                let time = time.as_ref()?;
+                if time.local.is_empty() {
+                    times.reject(
+                        format!("{field}.local"),
+                        Code::Required,
+                        "Choose a date and time",
+                    );
+                    return None;
+                }
+                match crate::datetime::resolve_local(&time.local, &time.time_zone) {
+                    Ok(value) => Some(value.as_second()),
+                    Err(crate::datetime::Error::UnknownZone) => {
+                        times.reject(
+                            format!("{field}.time_zone"),
+                            Code::Invalid,
+                            "Unknown time zone",
+                        );
+                        None
+                    }
+                    Err(_) => {
+                        times.reject(
+                            format!("{field}.local"),
+                            Code::Invalid,
+                            "Invalid local date/time",
+                        );
+                        None
+                    }
+                }
+            };
+            let launch = resolve(&self.launch_local, "launch_local");
+            let end = resolve(&self.send_by_local, "send_by_local");
+            if launch.is_some_and(|time| time < now) {
+                times.reject(
+                    "launch_local.local",
+                    Code::SchedulePast,
+                    "Draft schedule is in the past",
+                );
+            }
+            if times.is_empty() {
+                fields.launch = launch.unwrap_or(now);
+                fields.send_by = end;
+                times.extend(fields.schedule_validation());
+            }
+            report.extend(times);
+        }
+        report
+    }
+}
+
+/// The editing step which owns a diagnostic, independent of browser markup.
+pub fn field_step(field: &str) -> usize {
+    if field == "name" || field.starts_with("selection.groups") {
+        0
+    } else if field.starts_with("launch_local") || field.starts_with("send_by_local") {
+        2
+    } else {
+        1
+    }
+}

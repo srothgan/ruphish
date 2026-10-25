@@ -887,6 +887,17 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
     let confirm = RwSignal::new(String::new());
     let busy = RwSignal::new(false);
     let message = Message::new(String::new());
+    let validation = FormValidation::new(move || {
+        let mut report = ruphish_domain::password::replacement(&candidate.get(), &confirm.get());
+        if !required && current.get().is_empty() {
+            report.reject(
+                "current_password",
+                ruphish_domain::validation::Code::Required,
+                "Current password is required",
+            );
+        }
+        report
+    });
     let notice = use_context::<PasswordNotice>();
     let navigate_account = leptos_router::hooks::use_navigate();
     let cancel_navigation = navigate_account.clone();
@@ -901,6 +912,10 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
         if busy.get_untracked() {
             return;
         }
+        if !validation.check() {
+            return;
+        }
+        let ticket = validation.ticket();
         busy.set(true);
         message.clear();
         let navigate_account = navigate_account.clone();
@@ -922,7 +937,7 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
                     ("confirm_new_password", confirm.get_untracked()),
                 ]
             };
-            let result = api.form(path, &token.get_value(), &fields).await;
+            let result = api.form_response(path, &token.get_value(), &fields).await;
             current.set(String::new());
             candidate.set(String::new());
             confirm.set(String::new());
@@ -941,7 +956,10 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
                         },
                     );
                 }
-                Err(error) => message.error(error),
+                Err(error) => {
+                    validation.server(ticket, &error);
+                    message.error(error.message);
+                }
             }
         });
     };
@@ -972,7 +990,8 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
                         )
                     }
                 }}
-            </p> <form class="account-form" on:submit=submit>
+            </p> <form class="account-form" novalidate on:submit=submit>
+                <ValidationSummary form=validation />
                 {(!required)
                     .then(|| {
                         view! {
@@ -980,6 +999,8 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
                                 {tr!(ui.current_password)}
                                 <TextInput
                                     input_type="password"
+                                    validation_field="current_password"
+                                    disabled=busy
                                     autocomplete="current-password"
                                     required=true
                                     value=Signal::derive(move || current.get())
@@ -992,6 +1013,8 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
                     {tr!(ui.new_password)}
                     <TextInput
                         input_type="password"
+                        validation_field="password"
+                        disabled=busy
                         autocomplete="new-password"
                         required=true
                         value=Signal::derive(move || candidate.get())
@@ -1002,6 +1025,8 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
                     {tr!(ui.confirm_new_password)}
                     <TextInput
                         input_type="password"
+                        validation_field="confirmation"
+                        disabled=busy
                         autocomplete="new-password"
                         required=true
                         value=Signal::derive(move || confirm.get())

@@ -376,6 +376,7 @@ fn input(draft: RwSignal<Draft>, key: &'static str, label: Signal<String>) -> im
     view! {
         <Field label=label>
             <TextInput
+                validation_field=key
                 value=Signal::derive(move || text(&draft.get().value, key))
                 on_input=move |e| {
                     draft.update(|d| d.edit(|v| v[key] = json!(event_target_value(&e))))
@@ -392,6 +393,7 @@ fn selector(
 ) -> impl IntoView {
     view! {
         <Select
+            validation_field=format!("selection.{kind}.id")
             label=label
             value=Signal::derive(move || draft.get().value["selection"][kind]["id"].to_string())
             on_change=Callback::new(move |v: String| {
@@ -437,6 +439,7 @@ fn domain_selector(draft: RwSignal<Draft>, resources: Signal<Value>) -> impl Int
     view! {
         <div>
             <Select
+                validation_field="url"
                 label=trs!(ui.verified_domain)
                 value=Signal::derive(selected)
                 on_change=Callback::new(move |origin: String| {
@@ -529,6 +532,7 @@ fn page_selector(
 ) -> impl IntoView {
     view! {
         <Select
+            validation_field="selection.page.id"
             label=trs!(ui.landing_page)
             value=Signal::derive(move || draft.get().value["selection"]["page"]["id"].to_string())
             on_change=Callback::new(move |v: String| load_page_defaults(
@@ -561,13 +565,21 @@ fn schedule(
         <section class="resource-section">
             <h2>{move || label.get()}</h2>
             <p>
-                {tr!(
-                    ui.leave_blank_for_no_explicit_time_daylight_saving_changes_are_handled_automatical
-                )}
+                {move || {
+                    if key == "launch_local" {
+                        tr!(validation.scheduled_help).into_any()
+                    } else {
+                        tr!(
+                            ui.leave_blank_for_no_explicit_time_daylight_saving_changes_are_handled_automatical
+                        )
+                            .into_any()
+                    }
+                }}
             </p>
             <div class="resource-columns">
                 <Field label=trs!(ui.local_date_and_time)>
                     <TextInput
+                        validation_field=format!("{key}.local")
                         input_type="datetime-local"
                         value=Signal::derive(move || text(&draft.get().value[key], "local"))
                         on_input=move |e| {
@@ -575,7 +587,7 @@ fn schedule(
                             draft
                                 .update(|d| {
                                     d.edit(|v| {
-                                        if local.is_empty() {
+                                        if local.is_empty() && key != "launch_local" {
                                             if let Some(v) = v.as_object_mut() {
                                                 v.remove(key);
                                             }
@@ -593,6 +605,7 @@ fn schedule(
                 </Field>
                 <Field label=trs!(ui.time_zone)>
                     <TextInput
+                        validation_field=format!("{key}.time_zone")
                         disabled=Signal::derive(move || draft.get().value[key].is_null())
                         placeholder=zone.get_value()
                         value=Signal::derive(move || text(&draft.get().value[key], "time_zone"))
@@ -639,6 +652,26 @@ pub(super) fn create(
     let busy = RwSignal::new(false);
     let loading = resource_read.fetching;
     let step = RwSignal::new(initial_step);
+    let validation_time = RwSignal::new(ruphish_domain::datetime::now().as_second());
+    let readiness = move |through: usize| {
+        let available = (resources_known.get() && !loading.get()).then(|| resources.get());
+        ruphish_ui::form_validation::campaign_with_resources(
+            &draft.get().value,
+            available.as_ref(),
+            through,
+            validation_time.get(),
+        )
+    };
+    let validation = FormValidation::new(move || readiness(step.get()));
+    let review_ready = Memo::new(move |_| {
+        resources_known.get()
+            && !loading.get()
+            && resource_read.error.get().is_none()
+            && readiness(3).is_empty()
+    });
+    validation.on_reveal(Callback::new(move |field: String| {
+        step.set(ruphish_domain::campaign_draft::field_step(&field))
+    }));
     let message = Message::new(String::new());
     let can_edit = editable();
     crate::navigation::protect_draft(move || {
@@ -658,6 +691,13 @@ pub(super) fn create(
     });
     Effect::new(move |_| {
         let (step, retry, loading, _) = review_inputs.get();
+        if step == 3 && !loading && draft.with_untracked(|d| d.launch.is_none()) {
+            validation_time.set(ruphish_domain::datetime::now().as_second());
+            if !untrack(|| validation.check()) {
+                draft.update(Draft::clear_review);
+                return;
+            }
+        }
         let mut request = None;
         draft.update(|state| {
             review_flow.update_value(|flow| {
@@ -667,9 +707,10 @@ pub(super) fn create(
         let Some((request, body)) = request else {
             return;
         };
+        let validation_ticket = validation.ticket();
         spawn_local(async move {
             let result = api
-                .resource(
+                .resource_response(
                     "POST",
                     "/api/campaign-drafts/prepare",
                     &token.get_value(),
@@ -679,11 +720,15 @@ pub(super) fn create(
                 .await
                 .and_then(|(value, _)| {
                     serde_json::from_value::<ruphish_contracts::campaign_workflow::Review>(value)
-                        .map_err(|_| api.invalid_read())
+                        .map_err(|_| api.invalid_read_err())
                 });
-            draft.update(|state| {
-                state.reviewed(request, result);
-            });
+            let error = result.as_ref().err().cloned();
+            let accepted = draft
+                .try_update(|state| state.reviewed(request, result.map_err(|e| e.message)))
+                .unwrap_or(false);
+            if accepted && let Some(error) = error {
+                validation.server(validation_ticket, &error);
+            }
         });
     });
     let send_test = move |_| {
@@ -724,6 +769,22 @@ pub(super) fn create(
         {
             return;
         }
+        if destination == Some(step.get_untracked()) {
+            return;
+        }
+        if let Some(next) = destination.filter(|next| *next > step.get_untracked()) {
+            if loading.get_untracked() {
+                return;
+            }
+            validation_time.set(ruphish_domain::datetime::now().as_second());
+            // A jump must validate every preceding step, including skipped sections.
+            if !validation.check_report(&untrack(|| readiness(next.saturating_sub(1)))) {
+                return;
+            }
+            if next == 3 && !review_ready.get_untracked() {
+                return;
+            }
+        }
         busy.set(true);
         message.clear();
         let snapshot = draft.get_untracked();
@@ -757,6 +818,12 @@ pub(super) fn create(
         });
     });
     let launch = move |_| {
+        if draft.with_untracked(|d| d.launch.is_none()) {
+            validation_time.set(ruphish_domain::datetime::now().as_second());
+            if !validation.check() {
+                return;
+            }
+        }
         if busy.get_untracked() {
             return;
         }
@@ -773,6 +840,7 @@ pub(super) fn create(
             return;
         };
         busy.set(true);
+        let validation_ticket = validation.ticket();
         let navigate = navigate.clone();
         tasks.spawn(async move {
             let snapshot = draft.get_untracked();
@@ -801,12 +869,13 @@ pub(super) fn create(
                     });
                     navigate(&format!("/campaigns/{}", v["id"]), Default::default());
                 }
-                Err((status, e)) => {
-                    if (400..500).contains(&status) {
+                Err(e) => {
+                    if (400..500).contains(&e.status) {
                         draft.update(Draft::rejected);
                         retry_review.update(|generation| *generation += 1);
+                        validation.server(validation_ticket, &e);
                     }
-                    message.error(e);
+                    message.error(e.message);
                 }
             }
             busy.set(false);
@@ -852,6 +921,7 @@ pub(super) fn create(
                 </ActionButton>
             </PageHeader>
             {message.view()}
+            <ValidationSummary form=validation />
             <QueryStatus
                 fetching=loading
                 has_data=resources_known
@@ -882,30 +952,31 @@ pub(super) fn create(
             }>
                 <p class="form-message error">{tr!(ui.missing_draft_resource)}</p>
             </Show>
-            <ol class="campaign-steps">
-                {[
+            <StepNavigation
+                label=trs!(ui.campaign_steps)
+                labels=vec![
                     trs!(ui.audience),
                     trs!(ui.content_and_destination),
                     trs!(ui.schedule),
                     trs!(ui.review_and_launch),
                 ]
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, label)| {
-                        view! {
-                            <li aria-current=move || {
-                                (step.get() == index).then_some("step")
-                            }>{move || label.get()}</li>
-                        }
-                    })
-                    .collect_view()}
-            </ol>
+                current=step
+                disabled=Signal::derive(move || {
+                    busy.get() || loading.get() || !can_edit
+                        || draft.with(|d| d.launch.is_some() || d.page_request.is_some())
+                })
+                disabled_steps=Signal::derive(move || {
+                    if review_ready.get() { vec![] } else { vec![3] }
+                })
+                on_select=Callback::new(move |index| save.run(Some(index)))
+            />
             <FormFields disabled=Signal::derive(move || {
                 busy.get() || loading.get() || !can_edit || draft.with(|d| d.launch.is_some())
             })>
                 <section hidden=move || step.get() != 0>
                     <h2>{tr!(ui.audience)}</h2>
                     {input(draft, "name", trs!(ui.campaign_name))}
+                    <ValidationAnchor field="selection.groups" />
                     <p>
                         {tr!(
                             ui.choose_recipient_groups_overlaps_are_counted_once_by_exact_email_address_the_fir
@@ -930,6 +1001,7 @@ pub(super) fn create(
                                                 })
                                         })
                                         on_toggle=Callback::new(move |checked| {
+                                            validation.edited("selection.groups");
                                             draft
                                                 .update(|d| {
                                                     d.edit(|v| {
@@ -965,6 +1037,7 @@ pub(super) fn create(
                                         )
                                         checked=true
                                         on_toggle=Callback::new(move |_: bool| {
+                                            validation.edited("selection.groups");
                                             draft
                                                 .update(|d| {
                                                     d.edit(|v| {
@@ -1053,6 +1126,7 @@ pub(super) fn create(
                         })>
                             <Select
                                 label=trs!(ui.redirect_destination)
+                                validation_field="policy"
                                 value=Signal::derive(move || {
                                     if draft.get().value["policy"]["learning_page_id"].is_number() {
                                         "learning".to_owned()
@@ -1081,6 +1155,7 @@ pub(super) fn create(
                             }>
                                 <Select
                                     label=trs!(ui.learning_page)
+                                    validation_field="policy.learning_page_id"
                                     value=Signal::derive(move || {
                                         draft
                                             .get()
@@ -1143,6 +1218,7 @@ pub(super) fn create(
                                     ui.redirect_url_optional_leave_empty_for_no_redirect
                                 )>
                                     <TextInput
+                                        validation_field="policy.redirect_url"
                                         value=Signal::derive(move || text(
                                             &draft.get().value["policy"],
                                             "redirect_url",
@@ -1161,10 +1237,36 @@ pub(super) fn create(
                         </FormFields>
                     </section>
                 </section>
-                <section hidden=move || {
-                    step.get() != 2
-                }>
-                    {schedule(draft, "launch_local", trs!(ui.launch_time), zone)}
+                <section hidden=move || { step.get() != 2 }>
+                    <Select
+                        label=trs!(validation.delivery_mode)
+                        value=Signal::derive(move || {
+                            if draft.get().value["launch_local"].is_null() {
+                                "immediate".to_owned()
+                            } else {
+                                "scheduled".to_owned()
+                            }
+                        })
+                        on_change=Callback::new(move |mode: String| {
+                            validation.edited("launch_local");
+                            draft
+                                .update(|d| {
+                                    d.edit(|v| {
+                                        v["launch_local"] = if mode == "scheduled" {
+                                            json!({"local":"","time_zone":zone.get_value()})
+                                        } else {
+                                            Value::Null
+                                        };
+                                    })
+                                })
+                        })
+                    >
+                        <option value="immediate">{tr!(validation.immediate)}</option>
+                        <option value="scheduled">{tr!(validation.scheduled)}</option>
+                    </Select>
+                    <Show when=move || {
+                        !draft.get().value["launch_local"].is_null()
+                    }>{schedule(draft, "launch_local", trs!(ui.launch_time), zone)}</Show>
                     {schedule(
                         draft,
                         "send_by_local",

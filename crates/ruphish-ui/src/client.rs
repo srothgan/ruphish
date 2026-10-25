@@ -7,7 +7,7 @@
 //! returns localized error messages. Feature modules depend only on `Api`.
 use gloo_net::http::Request;
 use leptos::prelude::*;
-use ruphish_contracts::auth::{BrowserSession, UserEdit};
+use ruphish_contracts::auth::BrowserSession;
 use ruphish_ui::api_error::ApiError;
 use ruphish_ui::session::{SessionAction, SessionMonitor};
 use serde_json::Value;
@@ -71,25 +71,28 @@ impl Api {
         token: &str,
         key: &str,
         value: &Value,
-    ) -> Result<Value, (u16, String)> {
+    ) -> Result<Value, ApiError> {
         let i18n = self.i18n;
 
         if !self.active() {
-            return Err((
+            return Err(ApiError::http(
                 401,
+                "AUTH_REQUIRED".into(),
                 leptos_i18n::t_string!(i18n, ui.your_session_ended).into(),
             ));
         }
+        let uncertain = || {
+            ApiError::local(leptos_i18n::t_string!(i18n, ui.launch_outcome_is_not_known_retry_uses_the_same_launch_key_do_not_create_another).into())
+        };
         let request = ruphish_ui::browser_http::launch_request(path, token, key, value)
-            .map_err(|e| (0, e))?;
-        let response=self.send_request(path, request).await.map_err(|_|(0,leptos_i18n::t_string!(i18n, ui.launch_outcome_is_not_known_retry_uses_the_same_launch_key_do_not_create_another).into()))?;
-        let status = response.status;
-        let value = self
-            .response(path, response)
+            .map_err(ApiError::local)?;
+        let response = self
+            .send_request(path, request)
             .await
-            .map_err(|e| (status, e.message))?;
+            .map_err(|_| uncertain())?;
+        let value = self.response(path, response).await?;
         if value["id"].as_i64().is_none_or(|id| id <= 0) {
-            return Err((0, leptos_i18n::t_string!(i18n, ui.launch_outcome_is_not_known_retry_uses_the_same_launch_key_do_not_create_another).into()));
+            return Err(uncertain());
         }
         Ok(value)
     }
@@ -114,7 +117,7 @@ impl Api {
         self.resource_response("GET", path, "", None, None).await
     }
 
-    async fn resource_response(
+    pub(crate) async fn resource_response(
         self,
         method: &str,
         path: &str,
@@ -249,60 +252,44 @@ impl Api {
         token: &str,
         fields: &[(&str, String)],
     ) -> Result<Value, String> {
+        self.form_response(path, token, fields)
+            .await
+            .map_err(|error| error.message)
+    }
+    pub(crate) async fn form_response(
+        self,
+        path: &str,
+        token: &str,
+        fields: &[(&str, String)],
+    ) -> Result<Value, ApiError> {
         let i18n = self.i18n;
 
         if !self.active() {
-            return Err(leptos_i18n::t_string!(
-                i18n,
-                ui.your_session_ended_sign_in_again_to_continue
-            )
-            .into());
+            return Err(ApiError::local(
+                leptos_i18n::t_string!(i18n, ui.your_session_ended_sign_in_again_to_continue)
+                    .into(),
+            ));
         }
-        let body = serde_urlencoded::to_string(fields)
-            .map_err(|_| leptos_i18n::t_string!(i18n, ui.cannot_prepare_the_request).to_owned())?;
+        let body = serde_urlencoded::to_string(fields).map_err(|_| {
+            ApiError::local(leptos_i18n::t_string!(i18n, ui.cannot_prepare_the_request).to_owned())
+        })?;
         let request = Request::post(path)
             .header("x-ruphish-client", "browser")
             .header("accept", "application/json")
             .header("content-type", "application/x-www-form-urlencoded")
             .header("x-csrf-token", token)
             .body(body)
-            .map_err(|_| leptos_i18n::t_string!(i18n, ui.cannot_prepare_the_request).to_owned())?;
-        self.response(path, self.send_request(path, request).await?)
-            .await
-            .map_err(|e| e.message)
-    }
-    pub(crate) async fn json(
-        self,
-        method: &str,
-        path: &str,
-        token: &str,
-        value: Option<&UserEdit>,
-    ) -> Result<Value, String> {
-        let i18n = self.i18n;
-
-        if !self.active() {
-            return Err(leptos_i18n::t_string!(
-                i18n,
-                ui.your_session_ended_sign_in_again_to_continue
-            )
-            .into());
-        }
-        let builder = match method {
-            "PUT" => Request::put(path),
-            "DELETE" => Request::delete(path),
-            _ => Request::post(path),
-        }
-        .header("x-ruphish-client", "browser")
-        .header("accept", "application/json")
-        .header("x-csrf-token", token);
-        let request = if let Some(value) = value {
-            builder.json(value)
-        } else {
-            builder.build()
-        }
-        .map_err(|_| leptos_i18n::t_string!(i18n, ui.cannot_prepare_the_request).to_owned())?;
-        self.response(path, self.send_request(path, request).await?)
-            .await
-            .map_err(|e| e.message)
+            .map_err(|_| {
+                ApiError::local(
+                    leptos_i18n::t_string!(i18n, ui.cannot_prepare_the_request).to_owned(),
+                )
+            })?;
+        self.response(
+            path,
+            self.send_request(path, request)
+                .await
+                .map_err(ApiError::local)?,
+        )
+        .await
     }
 }

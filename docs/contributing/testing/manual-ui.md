@@ -17,6 +17,16 @@ The user performs browser appearance and interaction review. Use synthetic data 
 - Switch English/German, formatting locale, and time zone independently. Check persistence after another login and reset-to-browser behavior.
 - Inspect narrow layouts, wrapped labels/actions, keyboard navigation, visible focus, reduced motion, and long localized strings.
 
+## Form validation and recovery
+
+- Start a campaign with empty fields. Continue must stay on the incomplete step, show localized field feedback and move keyboard focus to the first error. Correct each step and confirm the draft is saved before the next step appears.
+- Save an incomplete draft, reload it, and attempt Review. Missing audience/content or scheduled time must lead to the relevant editing step without a broken review page. Choose immediate delivery explicitly, then compare with a scheduled launch requiring a valid date and time zone.
+- Delete a selected resource from another session before review, then correct the selection. Repeat with a schedule that has passed and with a launch response interrupted after submission; the latter must retain the existing retry action.
+- Submit invalid resource content, including a recipient row, template expression and attachment. Confirm errors point to editable controls or content anchors and that the saved resource remains intact. Correct and save; then test a stale edit from another session.
+- Check password confirmation, short and oversized passwords, blank password on a user edit, and blank secret on an integration edit. Confirm diagnostics never echo credentials and that a rejected change preserves the existing credential.
+- Check settings duration ranges, invalid domain origins and preference values. Correct an error while a request is delayed; an obsolete field error must not replace the new state. Distinguish operational failures from field errors.
+- Repeat in English and German using keyboard navigation and narrow layouts. Inspect labels, associated error descriptions, focus and hidden editor panels; functional Rust tests do not establish these browser behaviors.
+
 ## Participant-browser checks
 
 Keep the admin campaign view open alongside DevTools Network on the public page. Use invented canaries such as `LOCAL-USERNAME-CANARY` and `LOCAL-PASSWORD-CANARY`; never use real login information. Create a fresh campaign with `seed` when a case requires a clean recipient/session.

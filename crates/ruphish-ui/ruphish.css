@@ -541,7 +541,9 @@
   .recipient-table input { min-width: 130px; margin: 0; }
   .recipient-table td:first-child input { min-width: 230px; }
   .recipient-table td { padding: var(--s3) var(--s2); }
-  .header-row { display: grid; grid-template-columns: minmax(140px,1fr) minmax(200px,2fr) auto; align-items: end; gap: var(--s3); margin: var(--s3) 0; }
+  .header-row { display: grid; grid-template-columns: minmax(140px,1fr) minmax(200px,2fr) auto; grid-template-rows: auto auto auto; align-items: start; column-gap: var(--s3); margin: var(--s3) 0; }
+  .header-row > label { display: grid; grid-template-rows: subgrid; grid-row: 1 / span 3; min-width: 0; }
+  .header-row > button { grid-column: 3; grid-row: 2; align-self: end; }
   .text-alternative { margin: var(--s5) 0; }
   .content-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s3) var(--s5); margin-bottom: var(--s3); }
   .content-heading h2 { margin: 0; }
@@ -573,8 +575,6 @@
   @media(max-width:900px) { .resource-columns { grid-template-columns: 1fr; } }
 
   /* Campaign steps + context. */
-  .campaign-steps { display: flex; flex-wrap: wrap; gap: var(--s3) var(--s6); padding: 0 0 var(--s5) var(--s5); border-bottom: 1px solid var(--line); color: var(--muted); }
-  .campaign-steps [aria-current=step] { color: var(--teal-600); font-weight: var(--fw-bold); }
   .campaign-resource-links { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s3) var(--s5); margin: var(--s4) 0; padding: 0; list-style: none; }
   .campaign-review { margin-top: var(--s5); padding-top: var(--s5); border-top: 1px solid var(--line); }
   .delivery-code { display: block; color: var(--muted); font-family: var(--font-mono); font-size: var(--fs-sm); }
@@ -746,4 +746,38 @@
   .settings-fields { display: flex; flex-wrap: wrap; gap: var(--s4); align-items: end; }
   .settings-fields > .form-field { flex: 0 1 14rem; min-width: 0; margin: 0; }
   .settings-danger { border-color: var(--danger); }
+}
+
+@layer primitives {
+  .field-error { display: block; font-size: 0.875rem; line-height: 1.4; color: var(--danger); }
+  .validation-summary { color: var(--danger); }
+  .validation-summary:empty { display: none; }
+  [aria-invalid="true"] { border-color: var(--danger); }
+}
+
+@layer primitives {
+  .step-navigation { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s2); list-style: none; padding: 0; margin: 0 0 var(--s6); }
+  .step-navigation > li { display: flex; min-width: 0; }
+  .account-app .step-navigation button {
+    --step-tip: 1rem; --step-edge: var(--line-strong); --step-fill: var(--paper);
+    --step-shape: polygon(0 0, calc(100% - var(--step-tip)) 0, 100% 50%, calc(100% - var(--step-tip)) 100%, 0 100%, var(--step-tip) 50%);
+    position: relative; isolation: isolate; width: 100%; min-height: 3.5rem;
+    padding: var(--s3) calc(var(--step-tip) + var(--s3)); gap: var(--s3);
+    border: 0; border-radius: 0; background: var(--step-edge); clip-path: var(--step-shape);
+    white-space: normal; overflow-wrap: anywhere; line-height: var(--lh); text-align: center;
+  }
+  .account-app .step-navigation button::before { content: ''; position: absolute; inset: 1px; z-index: -1; background: var(--step-fill); clip-path: var(--step-shape); }
+  .account-app .step-navigation button:hover:not(:disabled) { --step-edge: var(--muted); --step-fill: var(--hover); background: var(--step-edge); }
+  .account-app .step-navigation button:disabled { --step-fill: var(--canvas); color: var(--muted); opacity: 1; cursor: not-allowed; }
+  .account-app .step-navigation button[aria-current=step] { --step-edge: var(--teal-600); --step-fill: var(--teal-50); color: var(--teal-700); font-weight: var(--fw-bold); }
+  .account-app .step-navigation button:focus-visible { --step-edge: var(--ink); outline: none; }
+  .account-app .step-navigation button:focus-visible::before { inset: 3px; }
+  .step-navigation-number { flex: 0 0 auto; }
+  @media (max-width: 760px) { .step-navigation { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 420px) { .step-navigation { grid-template-columns: minmax(0, 1fr); } }
+  @media (forced-colors: active) {
+    .account-app .step-navigation button { forced-color-adjust: none; --step-edge: ButtonText; --step-fill: Canvas; color: ButtonText; }
+    .account-app .step-navigation button:disabled { --step-edge: GrayText; color: GrayText; }
+    .account-app .step-navigation button[aria-current=step], .account-app .step-navigation button:focus-visible { --step-edge: Highlight; color: Highlight; }
+  }
 }

@@ -29,6 +29,7 @@ pub(crate) fn Field(
 
 #[component]
 pub(crate) fn SecretField(
+    #[prop(into, optional)] validation_field: String,
     #[prop(into)] label: Signal<String>,
     #[prop(into)] saved_hint: Signal<String>,
     #[prop(into)] has_saved_value: Signal<bool>,
@@ -38,6 +39,7 @@ pub(crate) fn SecretField(
     view! {
         <Field label=label>
             <TextInput
+                validation_field=validation_field
                 input_type="password"
                 autocomplete="new-password"
                 required=Signal::derive(move || !has_saved_value.get())

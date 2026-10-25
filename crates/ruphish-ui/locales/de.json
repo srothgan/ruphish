@@ -4,6 +4,7 @@
     "native_name": "Deutsch"
   },
   "ui": {
+    "campaign_steps": "Kampagnenschritte",
     "learning_pages": "Lernseiten",
     "learning_page": "Lernseite",
     "new_learning_page": "Neue Lernseite",
@@ -1055,5 +1056,27 @@
     "csv_row_email": "Ungültige E-Mail-Adresse.",
     "draft_invalid": "Prüfen Sie die Entwurfsfelder und Eingabegrenzen. Ihre Änderungen bleiben erhalten.",
     "draft_schedule_past": "Die gespeicherte Startzeit liegt in der Vergangenheit. Wählen Sie eine zukünftige Zeit oder entfernen Sie sie für einen sofortigen Start."
+  },
+  "validation": {
+    "scheduled_help": "Wähle ein lokales Datum, eine Uhrzeit und eine Zeitzone. Zeitumstellungen werden automatisch berücksichtigt.",
+    "summary": "Bitte prüfe die markierten Felder, bevor du fortfährst.",
+    "required": "Dieses Feld ist erforderlich.",
+    "invalid": "Bitte prüfe diesen Wert und das erforderliche Format.",
+    "too_long": "Das unterstützte Limit wurde überschritten.",
+    "email_content": "Gib E-Mail-Inhalt als HTML oder Klartext ein.",
+    "password_short": "Verwende mindestens 8 UTF-8-Bytes; Nicht-ASCII-Zeichen können mehrere Bytes belegen.",
+    "password_long": "Verwende höchstens 1.024 UTF-8-Bytes.",
+    "password_mismatch": "Die Passwörter stimmen nicht überein.",
+    "schedule_past": "Wähle einen zukünftigen Startzeitpunkt oder starte sofort.",
+    "schedule_order": "Das Versandende darf nicht vor dem Start liegen.",
+    "unavailable": "Diese Auswahl ist nicht verfügbar. Aktualisiere die Daten oder wähle eine andere.",
+    "conflict": "Dieser Wert kann nicht verwendet werden. Wähle einen anderen Wert.",
+    "redirect_conflict": "Wähle entweder eine Lernseite oder eine eigene Weiterleitung.",
+    "validity_range": "Verwende 3.600 bis 31.536.000 Sekunden (1 Stunde bis 365 Tage).",
+    "recheck_range": "Verwende 300 bis 604.800 Sekunden (5 Minuten bis 7 Tage).",
+    "recheck_margin": "Prüfintervall und Zeitversatz müssen innerhalb der halben Gültigkeitsdauer liegen.",
+    "immediate": "Sofort starten",
+    "scheduled": "Für später planen",
+    "delivery_mode": "Startzeitpunkt"
   }
 }

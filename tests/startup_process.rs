@@ -46,6 +46,8 @@ mod server_database_process;
 mod settings_process;
 #[path = "starter_templates_process.rs"]
 mod starter_templates_process;
+#[path = "validation_process.rs"]
+mod validation_process;
 use domain_network::tls_fixture;
 #[path = "support/webhook_receiver.rs"]
 mod webhook_receiver;

@@ -6,32 +6,18 @@ use crate::{
 use std::collections::HashMap;
 /// Validate required selections and launch ordering.
 pub fn validate(input: &Create, now: i64) -> Result<i64, Error> {
-    for (invalid, message) in [
-        (input.name.is_empty(), "Campaign name not specified"),
-        (input.groups.is_empty(), "No groups specified"),
-        (
-            input.template.name.is_empty() && input.template.id.is_none(),
-            "No email template specified",
-        ),
-        (
-            input.page.name.is_empty() && input.page.id.is_none(),
-            "No landing page specified",
-        ),
-        (
-            input.profile.name.is_empty() && input.profile.id.is_none(),
-            "No sending profile specified",
-        ),
-    ] {
-        if invalid {
-            return Err(Error::Invalid(message.into()));
-        }
-    }
     let launch = input.launch.unwrap_or(now);
-    if input.send_by.is_some_and(|end| end < launch) {
-        return Err(Error::Invalid(
-            "The launch date must be before the \"send emails by\" date".into(),
-        ));
+    ruphish_domain::campaign::Fields {
+        name: &input.name,
+        groups: !input.groups.is_empty(),
+        template: !input.template.name.is_empty() || input.template.id.is_some(),
+        page: !input.page.name.is_empty() || input.page.id.is_some(),
+        smtp: !input.profile.name.is_empty() || input.profile.id.is_some(),
+        launch,
+        send_by: input.send_by,
     }
+    .validation()
+    .finish()?;
     Ok(launch)
 }
 /// Deduplicated audience and conflicting attributes from the selected groups.
@@ -67,10 +53,12 @@ pub fn audience(groups: &[Resource]) -> Result<Audience, Error> {
         }
     }
     if recipients.is_empty() {
-        return Err(Error::Invalid("No targets specified".into()));
+        return Err(Error::Invalid("No targets specified".into()).at("selection.groups"));
     }
     if recipients.len() > 100_000 {
-        return Err(Error::Invalid("Campaign exceeds 100000 recipients".into()));
+        return Err(
+            Error::Invalid("Campaign exceeds 100000 recipients".into()).at("selection.groups")
+        );
     }
     Ok(Audience {
         recipients,
@@ -83,18 +71,11 @@ pub fn policy(input: &Create, page: &Resource) -> Result<InteractionPolicy, Erro
     let Content::Page(defaults) = &page.content else {
         return Err(Error::Internal);
     };
-    if input.policy.learning_page_id.is_some_and(|id| id <= 0)
-        || (input.policy.learning_page_id.is_some()
-            && input
-                .policy
-                .redirect_url
-                .as_ref()
-                .is_some_and(|url| !url.is_empty()))
-    {
-        return Err(Error::Invalid(
-            "Choose one valid redirect destination".into(),
-        ));
-    }
+    ruphish_domain::campaign::policy_validation(
+        input.policy.learning_page_id,
+        input.policy.redirect_url.as_deref().unwrap_or(""),
+    )
+    .finish()?;
     let policy = InteractionPolicy {
         learning_page_id: input.policy.learning_page_id,
         redirect_url: input.policy.redirect_url.clone().unwrap_or_else(|| {

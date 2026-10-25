@@ -28,3 +28,15 @@ Common resource codes include `RESOURCE_INVALID`, `RESOURCE_NOT_FOUND`, `RESOURC
 One legacy inconsistency is retained: a group PUT whose body ID differs from the path ID returns `500`, while the other reusable resource families return `400`. Always send a matching ID rather than treating that response as a retryable server outage.
 
 For an SMTP timeout after message submission, a failure response does not establish that no message was sent. Read [delivery outcomes](../user-guide/campaigns/delivery.md) before retrying.
+
+## Field validation reports
+
+Input and name-conflict failures can additionally include `validation`, independently of the HTTP status and top-level `code`. Existing compatibility message fields remain present. Each report contains at most 100 issues, with a schema field path and a stable lowercase reason code; it never includes submitted values. Paths such as `targets.1.email` use zero-based collection indexes. Local validation and API failures remain separate concepts: a client can reuse the same issue representation for local rules without inventing an HTTP error.
+
+For example, an empty group name can return HTTP `400` with:
+
+```json
+{"success":false,"message":"Group name not specified","data":null,"code":"RESOURCE_INVALID","validation":{"issues":[{"field":"name","code":"required"}]}}
+```
+
+Translate known issue codes to field messages and provide a generic fallback for unknown codes. A missing report does not imply valid input: malformed JSON, authorization failures, stale revisions and some workflow failures use the existing operation-level response. Preserve their distinct recovery behavior. Do not apply a delayed report to a form the user has since changed.

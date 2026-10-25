@@ -6,6 +6,17 @@ use std::sync::Arc;
 /// Safe public resource failure.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// A parser or operational failure associated with a known schema field.
+    #[error("{source}")]
+    Field {
+        /// Schema-owned path, never a submitted value.
+        field: String,
+        /// Original classification and legacy diagnostic.
+        source: Box<Error>,
+    },
+    /// Independent invalid fields, without authored values.
+    #[error(transparent)]
+    Validation(#[from] ruphish_domain::validation::Report),
     /// Installation policy disables this operation.
     #[error("Feature disabled: {0}")]
     FeatureDisabled(&'static str),
@@ -39,6 +50,15 @@ pub enum Error {
     #[error("Resource operation could not be completed")]
     /// Infrastructure failure with details withheld from clients.
     Internal,
+}
+impl Error {
+    /// Preserve classification while associating a parser failure with a field.
+    pub fn at(self, field: impl Into<String>) -> Self {
+        Self::Field {
+            field: field.into(),
+            source: Box::new(self),
+        }
+    }
 }
 impl From<crate::auth::Error> for Error {
     fn from(error: crate::auth::Error) -> Self {
@@ -222,7 +242,7 @@ impl Service {
     }
     /// Apply the same authoritative validation to saved resources and inline profiles.
     pub fn validate(&self, value: &mut Resource) -> Result<(), Error> {
-        value.validate().map_err(|s| Error::Invalid(s.into()))?;
+        value.validation().finish()?;
         self.validator.validate(value)
     }
     /// Reuse serving-time form diagnostics for save, preview and campaign review.

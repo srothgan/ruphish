@@ -613,6 +613,36 @@ fn independent_go_resource_observations_run_against_the_executable() {
             let code = observed.as_object_mut().unwrap().remove("code");
             assert_eq!(code, Some(json!(expected_code)), "{id}");
         }
+        // Field reports are additive; retain every independent Go expectation below.
+        let expected_fields: &[&str] = match id {
+            "groups-no-name"
+            | "groups-duplicate"
+            | "templates-duplicate"
+            | "profiles-duplicate" => &["name"],
+            "groups-no-targets" => &["targets"],
+            "templates-no-content" => &["html", "text"],
+            "templates-unknown-field" => &["text"],
+            _ => &[],
+        };
+        if !expected_fields.is_empty() {
+            let report: ruphish_contracts::validation::ValidationReport = serde_json::from_value(
+                observed
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("validation")
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                report
+                    .issues
+                    .iter()
+                    .map(|issue| issue.field.as_str())
+                    .collect::<Vec<_>>(),
+                expected_fields,
+                "{id}"
+            );
+        }
         normalize(&mut observed);
         let mut expected = case["json"].clone();
         match id {

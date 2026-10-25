@@ -1,29 +1,46 @@
 //! Shared form controls. One owner for selects and checkboxes so their markup,
 //! labelling and styling cannot drift across features.
-use super::{ButtonStyle, Field};
+use super::{ButtonStyle, Field, ValidationBinding};
 use leptos::prelude::*;
 
 /// Labelled dropdown. Features supply the options and react to the chosen value;
 /// appearance (chevron, height, focus) is owned centrally.
 #[component]
 pub(crate) fn Select(
+    #[prop(into, optional)] validation_field: String,
     #[prop(into)] label: Signal<String>,
     #[prop(into)] value: Signal<String>,
     on_change: Callback<String>,
     children: Children,
     #[prop(into, optional)] disabled: Signal<bool>,
 ) -> impl IntoView {
+    let binding = ValidationBinding::new(validation_field);
+    let node = NodeRef::<leptos::html::Select>::new();
+    binding.register(Callback::new(move |()| {
+        if let Some(node) = node.get() {
+            let _ = node.focus();
+        }
+    }));
     view! {
         <Field label=label>
             <span class="select-control">
                 <select
+                    node_ref=node
+                    aria-invalid=move || binding.invalid().then_some("true")
+                    aria-describedby=move || binding.described_by()
+                    on:blur=move |_| binding.touched()
                     prop:value=move || value.get()
                     disabled=move || disabled.get()
-                    on:change=move |event| on_change.run(event_target_value(&event))
+                    on:change=move |event| {
+                        binding.edited();
+                        binding.touched();
+                        on_change.run(event_target_value(&event));
+                    }
                 >
                     {children()}
                 </select>
             </span>
+            {binding.view()}
         </Field>
     }
 }

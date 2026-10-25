@@ -126,13 +126,25 @@ impl Account {
 
 /// Validate identity fields without changing the user's spelling or whitespace.
 pub fn validate_fields(username: &str, role: &str) -> Result<(), AccountError> {
+    let report = validation(username, role);
+    match report.issues().first().map(|i| i.field.as_str()) {
+        Some("username") => Err(AccountError::EmptyUsername),
+        Some(_) => Err(AccountError::EmptyRole),
+        None => Ok(()),
+    }
+}
+
+/// Identity fields without normalization or submitted values in diagnostics.
+pub fn validation(username: &str, role: &str) -> crate::validation::Report {
+    use crate::validation::{Code, Report};
+    let mut report = Report::default();
     if username.is_empty() {
-        return Err(AccountError::EmptyUsername);
+        report.reject("username", Code::Required, "No username provided");
     }
     if role.is_empty() {
-        return Err(AccountError::EmptyRole);
+        report.reject("role", Code::Required, "No role specified");
     }
-    Ok(())
+    report
 }
 
 /// Reject deleting, locking or demoting the last unlocked administrator.
