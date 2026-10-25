@@ -15,6 +15,29 @@ fn missing() -> Error {
 }
 #[async_trait::async_trait]
 impl Public for Interactions {
+    async fn learning_page(&self, authority: &str, public_id: &str) -> Result<Output, Error> {
+        if public_id.len() != 32 || !public_id.bytes().all(|c| c.is_ascii_hexdigit()) {
+            return Err(missing());
+        }
+        let origin = ruphish_domain::domains::origin(&format!("https://{authority}"), false)
+            .map_err(|_| missing())?;
+        let source = self.store.learning_page(&origin.value, public_id).await?;
+        let permit = self
+            .rendering
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| Error::Internal)?;
+        let document = tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            crate::landing::render(&source, crate::landing::Mode::Learning)
+        })
+        .await
+        .map_err(|_| Error::Internal)??;
+        Ok(Output::Html {
+            html: document.html,
+            csp: document.csp,
+        })
+    }
     async fn interact(
         &self,
         authority: &str,
@@ -65,9 +88,17 @@ impl Public for Interactions {
                 let destination = crate::landing::redirect(&redirect, &base)?;
                 let document = source
                     .map(|source| {
-                        let html =
-                            crate::resources::render(&source, &context).map_err(|_| missing())?;
-                        crate::landing::render(&html, Some(&endpoint))
+                        crate::landing::render(
+                            &source,
+                            crate::landing::Mode::Landing {
+                                context: &context,
+                                endpoint: Some(&endpoint),
+                            },
+                        )
+                        .map_err(|error| match error {
+                            crate::landing::RenderError::Template(_) => missing(),
+                            crate::landing::RenderError::Document(error) => error,
+                        })
                     })
                     .transpose()?;
                 Ok::<_, Error>((document, destination))

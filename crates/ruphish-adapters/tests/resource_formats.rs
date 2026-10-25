@@ -1,12 +1,165 @@
 //! Real CSV/MIME/Office/HTML transformations with independent content expectations.
 use base64::{Engine, engine::general_purpose::STANDARD};
 use ruphish_adapters::{
-    imports::{Tools, landing_html},
+    imports::Tools,
     outbound::Policy,
     resources::{attachment, sample},
 };
 use ruphish_application::resources::{Attachment, ContentTools, Page};
 use std::io::{Cursor, Read, Write};
+
+#[test]
+fn page_titles_remain_escaped_head_metadata_in_preview_and_live_modes() {
+    use ruphish_adapters::landing::{Mode, render};
+    let context = sample();
+    for (source, expected_title) in [
+        (
+            "<!doctype html><html><head><title>TITLE-ONLY &amp; &lt;/title&gt;&lt;img src=x onerror=bad()&gt;</title><title>DISCARDED-TITLE</title></head><body><main><section><h1>Visible lesson</h1></section></main><title>BODY-TITLE</title><script>bad()</script></body></html>",
+            "TITLE-ONLY & </title><img src=x onerror=bad()>",
+        ),
+        ("<!doctype html><title>TITLE-ONLY", "TITLE-ONLY"),
+        ("<main><h1>Visible lesson</h1></main>", ""),
+    ] {
+        for mode in [
+            Mode::Learning,
+            Mode::Landing {
+                context: &context,
+                endpoint: None,
+            },
+            Mode::Landing {
+                context: &context,
+                endpoint: Some("https://example.test/?rid=test"),
+            },
+        ] {
+            let output = render(source, mode).unwrap();
+            let document = scraper::Html::parse_document(&output.html);
+            let titles = scraper::Selector::parse("head > title").unwrap();
+            let title = document
+                .select(&titles)
+                .next()
+                .map(|n| n.text().collect::<String>())
+                .unwrap_or_default();
+            assert_eq!(title, expected_title);
+            let body = scraper::Selector::parse("body").unwrap();
+            let text = document
+                .select(&body)
+                .next()
+                .unwrap()
+                .text()
+                .collect::<String>();
+            for hidden in ["TITLE-ONLY", "DISCARDED-TITLE", "BODY-TITLE"] {
+                assert!(!text.contains(hidden), "metadata leaked: {hidden}");
+            }
+            let unsafe_nodes = scraper::Selector::parse("body title, img, [onerror]").unwrap();
+            assert_eq!(document.select(&unsafe_nodes).count(), 0);
+        }
+    }
+}
+
+#[test]
+fn semantic_page_layout_survives_without_allowing_active_attributes_or_descendants() {
+    let source = r##"<!doctype html><html><body><main class="lesson" onclick="unsafe()"><nav aria-label="Lesson"><a href="#check">Check</a></nav><section id="check" aria-labelledby="heading" onmouseover="unsafe()"><h2 id="heading">Verify independently</h2><p>Use a known contact.</p><script>unsafe()</script><iframe src="https://outside.invalid"></iframe><img src="https://outside.invalid/pixel" onerror="unsafe()"><a href="javascript:unsafe()">Unsafe destination</a><form action="https://outside.invalid"><input name="password"><button>Send</button></form></section></main></body></html>"##;
+    for learning in [false, true] {
+        let rendered = if learning {
+            ruphish_adapters::landing::render(source, ruphish_adapters::landing::Mode::Learning)
+                .unwrap()
+        } else {
+            ruphish_adapters::landing::render(
+                source,
+                ruphish_adapters::landing::Mode::Landing {
+                    context: &sample(),
+                    endpoint: None,
+                },
+            )
+            .unwrap()
+        };
+        let document = scraper::Html::parse_document(&rendered.html);
+        let heading = scraper::Selector::parse("main.lesson > section#check > h2#heading").unwrap();
+        assert_eq!(
+            document
+                .select(&heading)
+                .next()
+                .unwrap()
+                .text()
+                .collect::<String>(),
+            "Verify independently"
+        );
+        let navigation =
+            scraper::Selector::parse("main > nav[aria-label] > a[href='#check']").unwrap();
+        assert_eq!(document.select(&navigation).count(), 1);
+        let section = scraper::Selector::parse("section[aria-labelledby='heading']").unwrap();
+        assert_eq!(document.select(&section).count(), 1);
+        for forbidden in [
+            "onclick",
+            "onmouseover",
+            "onerror",
+            "javascript:",
+            "unsafe()",
+            "<script",
+            "<iframe",
+            "outside.invalid",
+        ] {
+            assert!(!rendered.html.contains(forbidden), "{forbidden}");
+        }
+        let controls = scraper::Selector::parse("form,input,button").unwrap();
+        assert_eq!(
+            document.select(&controls).count(),
+            if learning { 0 } else { 3 }
+        );
+        assert!(rendered.csp.contains("connect-src 'none'"));
+    }
+}
+
+#[test]
+fn learning_pages_are_static_and_preserve_explanations_without_collectors_or_form_checks() {
+    let source = r#"<!doctype html><html lang="de"><body class="lesson"><style>.lesson{color:navy}</style><h1>Recognize suspicious messages</h1><p>{{.FirstName}} stays literal</p><a href="https://example.test/help">Help</a><form action="https://outside.invalid"><input name="password" type="password"><button>Submit</button></form><textarea>private</textarea><div contenteditable>Editable</div><script>unsafe()</script><img src="https://outside.invalid/pixel"></body></html>"#;
+    let document =
+        ruphish_adapters::landing::render(source, ruphish_adapters::landing::Mode::Learning)
+            .unwrap();
+    assert!(document.html.contains("Recognize suspicious messages"));
+    assert!(document.html.contains("{{.FirstName}} stays literal"));
+    assert!(document.html.contains("https://example.test/help"));
+    assert!(document.html.contains("class=\"lesson\""));
+    assert!(document.html.contains("lang=\"de\""));
+    for forbidden in [
+        "<script",
+        "<form",
+        "<input",
+        "<textarea",
+        "<button",
+        "contenteditable",
+        "outside.invalid",
+        "event_id",
+        "password_present",
+    ] {
+        assert!(
+            !document.html.contains(forbidden),
+            "{forbidden}: {}",
+            document.html
+        );
+    }
+    assert!(document.csp.contains("script-src 'none'"));
+    assert!(document.csp.contains("connect-src 'none'"));
+    assert!(document.csp.contains("form-action 'none'"));
+    let codes: Vec<_> = document
+        .warnings
+        .iter()
+        .map(|warning| warning.code)
+        .collect();
+    assert!(codes.contains(&"learning_controls_removed"));
+    assert!(codes.contains(&"authored_execution_removed"));
+    assert!(
+        !codes
+            .iter()
+            .any(|code| code.starts_with("password_") || code.starts_with("form_"))
+    );
+    assert!(
+        ruphish_adapters::landing::render("<!doctype html><html><head><title>Explanation</title></head><body><h1>Explanation</h1></body></html>", ruphish_adapters::landing::Mode::Learning)
+            .unwrap()
+            .warnings
+            .is_empty()
+    );
+}
 
 #[test]
 fn original_go_attachment_files_match_independent_expected_content() {
@@ -297,19 +450,24 @@ fn mime_decodes_alternatives_and_link_conversion_preserves_expressions() {
 #[test]
 fn final_page_policy_preserves_names_and_rendered_expressions_without_changing_authored_source() {
     let authored = "<form action='/outside'><input name='user'><input type='password' name='secret'><p>{{printf \"<b>%s</b>\" .FirstName}}</p></form>";
-    let source =
-        ruphish_adapters::resources::render(authored, &ruphish_adapters::resources::sample())
-            .unwrap();
     let page = Page {
-        html: source.clone(),
+        html: authored.into(),
         ..Default::default()
     };
-    let html = landing_html(&page).unwrap();
+    let html = ruphish_adapters::landing::render(
+        &page.html,
+        ruphish_adapters::landing::Mode::Landing {
+            context: &sample(),
+            endpoint: None,
+        },
+    )
+    .unwrap()
+    .html;
     assert!(html.contains("name=\"user\""));
     assert!(html.contains("name=\"secret\""));
     assert!(html.contains("<b>Alice</b>"));
     assert!(!html.contains("action="));
-    assert_eq!(page.html, source);
+    assert_eq!(page.html, authored);
 }
 
 #[test]
@@ -319,7 +477,15 @@ fn processed_pages_remove_form_actions_and_executable_authored_content() {
         html: source.into(),
         ..Default::default()
     };
-    let html = landing_html(&page).unwrap();
+    let html = ruphish_adapters::landing::render(
+        &page.html,
+        ruphish_adapters::landing::Mode::Landing {
+            context: &sample(),
+            endpoint: None,
+        },
+    )
+    .unwrap()
+    .html;
     assert!(html.contains("name=\"associated\""));
     assert!(html.contains("form=\"training\""));
     assert!(!html.contains("dirname="));

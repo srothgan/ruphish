@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile, readdir} from 'node:fs/promises';
 import {JSDOM} from 'jsdom';
-import {prepareLanding} from '../starter-templates.mjs';
+import {preparePage} from '../starter-templates.mjs';
 const messages = await readFile(new URL('../../../ruphish-adapters/src/landing-locales.json', import.meta.url), 'utf8');
 const source = await readFile(new URL('../../../ruphish-adapters/src/landing-collector.js', import.meta.url), 'utf8');
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -27,8 +27,8 @@ test('every shipped starter login reports presence only, including prefill and c
     try {
         for (const slug of await readdir(root)) {
             const html = await readFile(new URL(`${slug}/landing.html`, root), 'utf8');
-            const variants = [html, prepareLanding(html, true, '', '')];
-            if (brands.has(slug)) variants.push(prepareLanding(html, true,
+            const variants = [html, preparePage(html, true, '', '')];
+            if (brands.has(slug)) variants.push(preparePage(html, true,
                 JSON.stringify({selector:brands.get(slug),height:36}), 'data:image/png;base64,AAAA'));
             for (const variant of variants) {
                 const p = page(variant);

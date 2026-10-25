@@ -302,6 +302,13 @@ async fn validate_schema(
     if auth_schema::version(connection).await? >= 12 {
         settings_schema::migrate(&mut expected).await?;
     }
+    if auth_schema::version(connection).await? >= 13 {
+        sqlx::raw_sql(include_str!(
+            "../../migrations/sqlite/13_learning_pages.sql"
+        ))
+        .execute(&mut expected)
+        .await?;
+    }
     if schema(connection).await? != schema(&mut expected).await? {
         return Err(UpgradeError::Unrecognized(
             "schema does not match migration history".into(),

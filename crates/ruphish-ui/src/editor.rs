@@ -95,6 +95,13 @@ pub(super) fn download_template(bytes: &[u8], name: &str) -> Result<(), JsValue>
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+pub(super) enum ContentKind {
+    Email,
+    Landing,
+    Learning,
+}
+
 /// Embed the established source/visual editor without giving it a competing draft.
 pub(super) fn content_editor(
     source: Signal<String>,
@@ -103,7 +110,7 @@ pub(super) fn content_editor(
     message: Message,
     visual_pending: RwSignal<bool>,
     readonly: bool,
-    allow_forms: bool,
+    kind: ContentKind,
 ) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
@@ -123,6 +130,7 @@ pub(super) fn content_editor(
         let variables = match serde_json::to_string(
             &Field::ALL
                 .iter()
+                .filter(|_| !matches!(kind, ContentKind::Learning))
                 .map(|field| field.name())
                 .collect::<Vec<_>>(),
         ) {
@@ -140,7 +148,7 @@ pub(super) fn content_editor(
             visual_callback.as_ref().unchecked_ref(),
             readonly,
             leptos_i18n::Locale::as_str(i18n.get_locale_untracked()),
-            allow_forms,
+            matches!(kind, ContentKind::Landing),
         ) {
             Ok(editor) => handle.set_value(Some((editor, callback, visual_callback))),
             Err(e) => message.error(leptos_i18n::t_string!(

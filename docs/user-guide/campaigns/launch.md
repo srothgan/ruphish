@@ -17,7 +17,9 @@ Before launching, save your group, template, landing page, sending profile, and 
 
 The launch audience is resolved from the selected groups. Review shows the number of unique recipients, duplicate entries, and conflicts where the same address carries different attributes. First-occurrence precedence makes group order meaningful; inspect the retained details rather than assuming every group row becomes a separate message.
 
-Resource revisions are checked at launch. If a selected resource changed after review, refresh the review so you approve the current content. Missing resources or an ineligible domain must be corrected first.
+Revisions of the selected groups, email template, landing page and sending profile are checked at launch. If one changed after review, refresh the review so you approve the current content. Missing resources or an ineligible domain must be corrected first.
+
+Choose **Custom redirect** or a reusable **Learning page** as the post-submission destination. The destination remains fixed after launch. See [learning pages](../learning-pages.md) for authoring, public availability and content-edit behavior.
 
 ## Check the policy
 

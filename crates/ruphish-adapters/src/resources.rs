@@ -32,6 +32,16 @@ pub fn sample() -> Context {
         tracker: "<img src=\"https://example.test/track?rid=preview-sample\"/>".into(),
     }
 }
+/// Shared draft context for email and page previews with an explicit sample recipient.
+pub(crate) fn sample_for(recipient: &Recipient) -> Context {
+    Context {
+        email: recipient.email.clone(),
+        first_name: recipient.first_name.clone(),
+        last_name: recipient.last_name.clone(),
+        position: recipient.position.clone(),
+        ..sample()
+    }
+}
 /// Render within document limits, discarding partial output on failure.
 pub fn render(source: &str, context: &Context) -> Result<String, Error> {
     if source.len() > MAX_DOCUMENT {
@@ -82,9 +92,34 @@ pub fn smtp_address(value: &str) -> Result<(String, u16), Error> {
     Ok((host, port))
 }
 impl Validator for Validate {
+    fn page_preview(
+        &self,
+        html: &str,
+        mode: PagePreview<'_>,
+    ) -> Result<(String, Vec<PageWarning>), Error> {
+        let context;
+        let mode = match mode {
+            PagePreview::Landing(recipient) => {
+                context = sample_for(recipient);
+                crate::landing::Mode::Landing {
+                    context: &context,
+                    endpoint: None,
+                }
+            }
+            PagePreview::Learning => crate::landing::Mode::Learning,
+        };
+        let document = crate::landing::render(html, mode)?;
+        Ok((document.html, document.warnings))
+    }
     fn page_warnings(&self, html: &str) -> Result<Vec<PageWarning>, Error> {
-        let rendered = render(html, &sample())?;
-        Ok(crate::landing::render(&rendered, None)?.warnings)
+        Ok(crate::landing::render(
+            html,
+            crate::landing::Mode::Landing {
+                context: &sample(),
+                endpoint: None,
+            },
+        )?
+        .warnings)
     }
     fn validate(&self, resource: &Resource) -> Result<(), Error> {
         let context = sample();
@@ -110,6 +145,9 @@ impl Validator for Validate {
                         return Err(invalid("Attachments exceed 64 MiB"));
                     }
                 }
+            }
+            Content::LearningPage(p) => {
+                self.page_preview(&p.html, PagePreview::Learning)?;
             }
             Content::Page(p) => {
                 self.page_warnings(&p.html)?;

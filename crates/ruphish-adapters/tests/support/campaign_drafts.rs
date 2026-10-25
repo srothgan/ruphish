@@ -134,6 +134,7 @@ pub(super) async fn exercise(
         capture_credentials: Some(true),
         capture_passwords: Some(true),
         redirect_url: Some(review.policy.redirect_url.clone()),
+        learning_page_id: review.policy.learning_page_id,
     };
     let configuration = Configuration {
         name: input.name.clone(),
@@ -158,6 +159,7 @@ pub(super) async fn exercise(
             capture_credentials: true,
             capture_passwords: true,
             redirect_url: review.policy.redirect_url,
+            learning_page_id: review.policy.learning_page_id,
         }),
         ..Default::default()
     };

@@ -154,10 +154,13 @@ pub fn prepare_creation(
 ) -> Result<PreparedImport, ImportError> {
     use ruphish_contracts::legacy;
     let supported = match format {
-        "json" => matches!(family, "groups" | "templates" | "pages" | "smtp"),
+        "json" => matches!(
+            family,
+            "groups" | "templates" | "pages" | "learning-pages" | "smtp"
+        ),
         "csv" => family == "groups",
         "email" => family == "templates",
-        "html" => matches!(family, "templates" | "pages"),
+        "html" => matches!(family, "templates" | "pages" | "learning-pages"),
         "site" => family == "pages",
         _ => false,
     };
@@ -180,7 +183,7 @@ pub fn prepare_creation(
         let matches = match family {
             "groups" => value.get("targets").is_some(),
             "templates" => value.get("text").is_some() || value.get("html").is_some(),
-            "pages" => value.get("html").is_some(),
+            "pages" | "learning-pages" => value.get("html").is_some(),
             "smtp" => value.get("host").is_some(),
             _ => false,
         };
@@ -231,6 +234,12 @@ pub fn prepare_creation(
     let mut fields = match family {
         "groups" => canonical::<legacy::Group>(value)?,
         "templates" => canonical::<legacy::EmailTemplate>(value)?,
+        "learning-pages" => {
+            if value.get("name").is_none() {
+                value["name"] = json!("");
+            }
+            canonical::<ruphish_contracts::resources::LearningPageInput>(value)?
+        }
         "pages" => canonical::<legacy::LandingPage>(value)?,
         "smtp" => canonical::<legacy::SendingProfile>(value)?,
         _ => return Err(ImportError::WrongResourceType),
@@ -240,4 +249,30 @@ pub fn prepare_creation(
         object.insert("id".into(), json!(0));
     }
     Ok(PreparedImport { fields, review })
+}
+
+#[cfg(test)]
+mod learning_import_tests {
+    use super::*;
+    #[test]
+    fn exported_learning_content_imports_as_a_new_editable_resource_without_identity_or_tracking_policy()
+     {
+        let imported = prepare_creation("learning-pages", "json", json!({"id":21,"public_id":"old-public-identity","user_id":9,"modified_date":"invalid-old-date","name":"Explanation","html":"<h1>Check the sender</h1>","capture_credentials":true,"redirect_url":"https://outside.invalid"})).unwrap();
+        assert_eq!(
+            imported.fields,
+            json!({"id":0,"name":"Explanation","html":"<h1>Check the sender</h1>"})
+        );
+        let html =
+            prepare_creation("learning-pages", "html", json!({"html":"<p>Explain</p>"})).unwrap();
+        assert_eq!(html.fields["html"], "<p>Explain</p>");
+        assert_eq!(html.fields["name"], "");
+        assert!(
+            prepare_creation(
+                "learning-pages",
+                "json",
+                json!({"name":"Wrong family","targets":[]})
+            )
+            .is_err()
+        );
+    }
 }

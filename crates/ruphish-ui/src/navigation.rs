@@ -281,6 +281,12 @@ pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<>
                 )}
                 {link(
                     path,
+                    "/learning-pages",
+                    trs!(ui.learning_pages),
+                    "M4 3h7v18H4z M11 3h9v18h-9 M14 7h3 M14 11h3",
+                )}
+                {link(
+                    path,
                     "/groups",
                     trs!(ui.recipient_groups),
                     "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75 M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0",
@@ -295,6 +301,12 @@ pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<>
                         "M3 5h18v14H3z M3 5l9 7 9-7 M9 16h6",
                     )}
                 </Show>
+                {link(
+                    path,
+                    "/smtp",
+                    trs!(ui.sending_profiles),
+                    "M22 2 9 15 M22 2l-7 20-4-9-9-4 20-7",
+                )}
                 <Show when=move || {
                     admin && api.features.get().webhooks_enabled
                 }>
@@ -305,12 +317,6 @@ pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<>
                         "M7 12a4 4 0 1 1 0-8 M17 12a4 4 0 1 1 0 8 M7 8l10 8 M7 16a4 4 0 1 1 0 4 M7 16h10",
                     )}
                 </Show>
-                {link(
-                    path,
-                    "/smtp",
-                    trs!(ui.sending_profiles),
-                    "M22 2 9 15 M22 2l-7 20-4-9-9-4 20-7",
-                )}
             },
         )}
         {external_link(

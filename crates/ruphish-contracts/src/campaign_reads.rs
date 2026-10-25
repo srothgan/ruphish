@@ -55,6 +55,9 @@ pub struct Policy {
     pub capture_passwords: bool,
     /// Post-submission redirect.
     pub redirect_url: String,
+    /// Selected owned learning page; custom redirect must be empty when present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub learning_page_id: Option<i64>,
 }
 
 /// Campaign metadata shown beside delivery status.

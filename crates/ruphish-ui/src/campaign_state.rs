@@ -80,6 +80,11 @@ impl Draft {
         if self.launch.is_some() {
             return None;
         }
+        if self.value["policy"]["learning_page_id"].is_number() {
+            self.edit(|v| v["selection"]["page"] = json!({"id":id}));
+            self.page_request = None;
+            return None;
+        }
         self.edit(|v| {
             v["selection"]["page"] = json!({"id":id});
             v["policy"] = if id == 0 {
@@ -199,6 +204,24 @@ mod tests {
             value: json!({"name":"Training","policy":{"redirect_url":""}}),
             ..Default::default()
         }
+    }
+    #[test]
+    fn learning_destination_survives_landing_selection_review_and_uncertain_launch_retry() {
+        let mut draft = Draft {
+            value: json!({"selection":{"page":{"id":1}},"policy":{"redirect_url":"","learning_page_id":42}}),
+            ..Default::default()
+        };
+        assert!(draft.select_page(2).is_none());
+        assert_eq!(draft.value["policy"]["learning_page_id"], 42);
+        let (request, _) = draft.begin_review().unwrap();
+        assert!(draft.reviewed(
+            request,
+            Ok(review(json!({"policy":{"learning_page_id":42}})))
+        ));
+        let first = draft.launch("learning-launch".into()).unwrap();
+        assert_eq!(first.1["policy"]["learning_page_id"], 42);
+        draft.edit(|value| value["policy"]["learning_page_id"] = json!(99));
+        assert_eq!(draft.launch("different-key".into()).unwrap(), first);
     }
     #[test]
     fn automatic_review_waits_for_resources_and_defaults_then_revalidates_each_visit() {

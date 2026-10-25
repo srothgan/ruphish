@@ -83,8 +83,21 @@ pub trait Repository: Send + Sync {
         expected: Option<String>,
     ) -> Result<(), Error>;
 }
+/// Preview context for page content, separate from email rendering.
+pub enum PagePreview<'a> {
+    /// Expand landing-page expressions using the supplied sample recipient.
+    Landing(&'a Recipient),
+    /// Keep learning-page content static.
+    Learning,
+}
 /// Parser/template checks supplied by concrete established libraries.
 pub trait Validator: Send + Sync {
+    /// Render a page through the same document policy used for public serving.
+    fn page_preview(
+        &self,
+        html: &str,
+        mode: PagePreview<'_>,
+    ) -> Result<(String, Vec<PageWarning>), Error>;
     /// Check content rules without persisting or performing delivery.
     fn validate(&self, resource: &Resource) -> Result<(), Error>;
     /// Inspect the processed landing document without storing diagnostic state.
@@ -151,6 +164,14 @@ pub trait ContentTools: Send + Sync {
     fn preview(&self, source: &str, recipient: &Recipient) -> Result<String, Error>;
 }
 impl Service {
+    /// Same document preparation and diagnostics as the corresponding public page route.
+    pub fn page_preview(
+        &self,
+        html: &str,
+        mode: PagePreview<'_>,
+    ) -> Result<(String, Vec<PageWarning>), Error> {
+        self.validator.page_preview(html, mode)
+    }
     /// Compose the concrete dependencies for this boundary.
     pub fn new(
         repository: Arc<dyn Repository>,

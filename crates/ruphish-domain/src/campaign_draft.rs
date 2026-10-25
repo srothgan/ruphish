@@ -43,6 +43,9 @@ pub struct Policy {
     pub capture_passwords: bool,
     /// Optional redirect expression.
     pub redirect_url: String,
+    /// Selected owned learning page; custom redirect must be empty when present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub learning_page_id: Option<i64>,
 }
 
 /// Versioned, closed configuration accepted by draft persistence.
@@ -79,10 +82,12 @@ impl Configuration {
                     &self.selection.smtp,
                 ])
                 .all(|reference| reference.id >= 0)
-            && self
-                .policy
-                .as_ref()
-                .is_none_or(|policy| text(&policy.redirect_url, 8192))
+            && self.policy.as_ref().is_none_or(|policy| {
+                text(&policy.redirect_url, 8192)
+                    && policy
+                        .learning_page_id
+                        .is_none_or(|id| id >= 0 && policy.redirect_url.is_empty())
+            })
             && [&self.launch_local, &self.send_by_local]
                 .into_iter()
                 .flatten()

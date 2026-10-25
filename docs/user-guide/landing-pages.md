@@ -34,3 +34,5 @@ Preview uses the restricted representation with submission tracking disabled. Sc
 Before launch, inspect the page's layout, labels, keyboard access, and expected redirect using a synthetic local campaign. Embedded PNG/JPEG/GIF data images are supported. Publishing a file under `/static/` does not exempt it from the page's resource restrictions.
 
 Editing a page changes its current consumers, while the launched campaign's saved redirect remains its own. Duplicate a page when you need an independent content version. A page referenced by an unfinished campaign cannot be deleted.
+
+For a hosted explanation after submission, create a [learning page](learning-pages.md) and select it as the campaign destination. Learning pages are separate static resources and do not contain submission collectors.

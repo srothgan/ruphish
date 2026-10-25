@@ -41,6 +41,8 @@ Send `html` and optional `recipient` to `POST /api/util/preview`. Recipient fiel
 
 A successful preview establishes rendering for those inputs. It does not verify mail-client layout, public routing, or launch eligibility.
 
+For the restricted representation of a landing page, use [`POST /api/pages/preview`](landing-pages.md#preview-a-landing-page). For static learning content, use [`POST /api/learning-pages/preview`](learning-pages.md). Both page endpoints apply the same document preparation and sanitizer as public page serving; `/api/util/preview` retains its template/email-preview behavior.
+
 ## SMTP checks
 
 `POST /api/util/test_connection` accepts a sending-profile object and returns a success envelope when connection verification succeeds. `POST /api/util/send_test_email` accepts `template`, `page`, `smtp`, `url`, and recipient fields `email`, `first_name`, `last_name`, and `position`. It returns a success envelope after accepted submission.

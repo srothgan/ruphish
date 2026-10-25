@@ -83,3 +83,15 @@ mod tests {
         assert!(serde_json::from_value::<GroupSummary>(group).is_ok());
     }
 }
+
+/// Authored static learning-page input; public identity is always server owned.
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub struct LearningPageInput {
+    /// Existing resource ID; ignored when creating.
+    #[serde(default)]
+    pub id: i64,
+    /// Owner-scoped resource name.
+    pub name: String,
+    /// Static authored HTML.
+    pub html: String,
+}

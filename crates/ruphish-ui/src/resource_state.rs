@@ -18,6 +18,10 @@ pub fn import_resource(bytes: &[u8], family: &str) -> Result<Value, String> {
             (value.get("text").is_some() || value.get("html").is_some())
                 && serde_json::from_value::<legacy::EmailTemplate>(value.clone()).is_ok()
         }
+        "learning-pages" => {
+            serde_json::from_value::<ruphish_contracts::resources::LearningPageInput>(value.clone())
+                .is_ok()
+        }
         "pages" => {
             value.get("html").is_some()
                 && serde_json::from_value::<legacy::LandingPage>(value.clone()).is_ok()

@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 
 pub(crate) fn routes() -> Router<AuthState> {
     let mut routes = Router::new();
-    for family in ["groups", "templates", "pages", "smtp"] {
+    for family in ["groups", "templates", "pages", "learning-pages", "smtp"] {
         routes = routes
             .route(&format!("/api/{family}"), get(slash).post(slash))
             .route(&format!("/api/{family}/"), get(list).post(create))
@@ -26,7 +26,16 @@ pub(crate) fn routes() -> Router<AuthState> {
             );
     }
     routes
+        .route("/api/pages/preview", axum::routing::post(preview_landing))
         .route("/api/pages/validate", axum::routing::post(validate_page))
+        .route(
+            "/api/learning-pages/validate",
+            axum::routing::post(preview_learning),
+        )
+        .route(
+            "/api/learning-pages/preview",
+            axum::routing::post(preview_learning),
+        )
         .route("/api/groups/{id}/summary", get(group_summary))
         .route("/api/import/group", axum::routing::post(import_group))
         .route(
@@ -164,6 +173,41 @@ struct PreviewRequest {
     #[serde(default)]
     recipient: wire::Recipient,
 }
+async fn preview_learning(context: Context, body: Bytes) -> Result<Response, Rejection> {
+    preview_page(context, body, true).await
+}
+async fn preview_landing(context: Context, body: Bytes) -> Result<Response, Rejection> {
+    preview_page(context, body, false).await
+}
+async fn preview_page(
+    context: Context,
+    body: Bytes,
+    learning: bool,
+) -> Result<Response, Rejection> {
+    editor_identity(&context).await?;
+    let request: PreviewRequest = parse(&body)?;
+    let r = request.recipient;
+    let recipient = app::Recipient {
+        email: r.email,
+        first_name: r.first_name,
+        last_name: r.last_name,
+        position: r.position,
+    };
+    let mode = if learning {
+        app::PagePreview::Learning
+    } else {
+        app::PagePreview::Landing(&recipient)
+    };
+    let (html, warnings) = context
+        .resources()
+        .page_preview(&request.html, mode)
+        .map_err(error)?;
+    response(
+        StatusCode::OK,
+        &json!({"html":html,"warnings":warnings}),
+        None,
+    )
+}
 async fn validate_page(context: Context, body: Bytes) -> Result<Response, Rejection> {
     editor_identity(&context).await?;
     let request: PreviewRequest = parse(&body)?;
@@ -288,6 +332,7 @@ fn kind(context: &Context) -> Result<Kind, Rejection> {
         Some("groups") => Ok(Kind::Group),
         Some("templates") => Ok(Kind::Template),
         Some("pages") => Ok(Kind::Page),
+        Some("learning-pages") => Ok(Kind::LearningPage),
         Some("smtp") => Ok(Kind::Profile),
         _ => Err(failure(
             StatusCode::NOT_FOUND,
@@ -381,6 +426,7 @@ pub(crate) fn encode(r: &Resource) -> Value {
         Content::Template(t) => {
             json!({"subject":t.subject,"text":t.text,"html":t.html,"envelope_sender":t.envelope_sender,"attachments":t.attachments.iter().map(|a|json!({"name":a.name,"type":a.mime_type,"content":a.content})).collect::<Vec<_>>()})
         }
+        Content::LearningPage(p) => json!({"html":p.html,"public_id":p.public_id}),
         Content::Page(p) => {
             json!({"html":p.html,"capture_credentials":true,"capture_passwords":true,"redirect_url":p.redirect_url})
         }
@@ -450,6 +496,19 @@ fn decode(kind: Kind, bytes: &[u8]) -> Result<Resource, Rejection> {
                             content: a.content,
                         })
                         .collect(),
+                }),
+            })
+        }
+        Kind::LearningPage => {
+            let v: ruphish_contracts::resources::LearningPageInput =
+                serde_json::from_slice(bytes).map_err(invalid)?;
+            Ok(Resource {
+                id: v.id,
+                name: v.name,
+                modified_date: String::new(),
+                content: Content::LearningPage(app::LearningPage {
+                    html: v.html,
+                    public_id: String::new(),
                 }),
             })
         }
@@ -540,6 +599,14 @@ async fn read(context: Context, Path(id): Path<i64>) -> Result<Response, Rejecti
                 .map_err(error)?
         );
     }
+    if let Content::LearningPage(page) = &value.content {
+        let (html, warnings) = context
+            .resources()
+            .page_preview(&page.html, app::PagePreview::Learning)
+            .map_err(error)?;
+        wire["preview_html"] = json!(html);
+        wire["warnings"] = json!(warnings);
+    }
     response(StatusCode::OK, &wire, Some(&value.modified_date))
 }
 async fn create(context: Context, body: Bytes) -> Result<Response, Rejection> {
@@ -580,12 +647,20 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
             match kind {
                 Kind::Group => "Error: /:id and group_id mismatch",
                 Kind::Template => "Error: /:id and template_id mismatch",
-                Kind::Page => "/:id and /:page_id mismatch",
+                Kind::Page | Kind::LearningPage => "/:id and /:page_id mismatch",
                 Kind::Profile => "/:id and /:smtp_id mismatch",
             },
         ));
     }
-    let warnings = if let Content::Page(page) = &value.content {
+    let warnings = if let Content::LearningPage(page) = &value.content {
+        Some(
+            context
+                .resources()
+                .page_preview(&page.html, app::PagePreview::Learning)
+                .map_err(error)?
+                .1,
+        )
+    } else if let Content::Page(page) = &value.content {
         Some(
             context
                 .resources()
@@ -629,6 +704,7 @@ async fn delete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejec
         Kind::Group => "Group deleted successfully!",
         Kind::Template => "Template deleted successfully!",
         Kind::Page => "Page Deleted Successfully",
+        Kind::LearningPage => "Learning page deleted successfully",
         Kind::Profile => "SMTP Deleted Successfully",
     };
     response(

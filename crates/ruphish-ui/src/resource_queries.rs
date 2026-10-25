@@ -95,6 +95,7 @@ impl ResourceQueries {
             Family::Groups => Kind::Group,
             Family::Templates => Kind::Template,
             Family::Pages => Kind::Page,
+            Family::LearningPages => Kind::LearningPage,
             Family::Profiles => Kind::Profile,
         };
         validate(kind, value).map_err(|_| api.invalid_read())?;

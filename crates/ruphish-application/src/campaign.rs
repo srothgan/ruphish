@@ -28,6 +28,8 @@ pub struct Overrides {
     pub capture_passwords: Option<bool>,
     /// Explicit empty string clears the default redirect.
     pub redirect_url: Option<String>,
+    /// Selected owned learning page; custom redirect must be empty when present.
+    pub learning_page_id: Option<i64>,
 }
 /// Normalized campaign input, with no caller-controlled ownership or result IDs.
 #[derive(Clone, Default)]

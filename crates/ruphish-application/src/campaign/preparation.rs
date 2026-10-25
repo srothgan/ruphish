@@ -83,12 +83,27 @@ pub fn policy(input: &Create, page: &Resource) -> Result<InteractionPolicy, Erro
     let Content::Page(defaults) = &page.content else {
         return Err(Error::Internal);
     };
+    if input.policy.learning_page_id.is_some_and(|id| id <= 0)
+        || (input.policy.learning_page_id.is_some()
+            && input
+                .policy
+                .redirect_url
+                .as_ref()
+                .is_some_and(|url| !url.is_empty()))
+    {
+        return Err(Error::Invalid(
+            "Choose one valid redirect destination".into(),
+        ));
+    }
     let policy = InteractionPolicy {
-        redirect_url: input
-            .policy
-            .redirect_url
-            .clone()
-            .unwrap_or_else(|| defaults.redirect_url.clone()),
+        learning_page_id: input.policy.learning_page_id,
+        redirect_url: input.policy.redirect_url.clone().unwrap_or_else(|| {
+            if input.policy.learning_page_id.is_some() {
+                String::new()
+            } else {
+                defaults.redirect_url.clone()
+            }
+        }),
     };
     Ok(policy)
 }

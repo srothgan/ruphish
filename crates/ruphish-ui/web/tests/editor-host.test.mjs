@@ -110,6 +110,26 @@ test('HTML and visual modes share edits, retain line numbers and reject stale se
     assert.equal(readOnlyView.state.sliceDoc(), source);
     editor.replace('<p>New server content</p>');
     assert.equal(readOnlyView.contentDOM.getAttribute('contenteditable'), 'false');
+    editor.destroy();
+    const explanation = '<p>Literal {{.FirstName}} explanation</p>';
+    editor = mountEditor(host, explanation, value => changes.push(value), '[]', () => {}, false, 'en', false);
+    const learningView = EditorView.findFromDOM(host.querySelector('.source').firstElementChild);
+    assert.equal(host.querySelector('.editor-mode label').hidden, true);
+    editor.openVisual();
+    const learningFrame = host.querySelector('iframe');
+    const learningMessages = [];
+    learningFrame.contentWindow.postMessage = data => learningMessages.push(data);
+    receive(learningFrame, {type: 'booted'});
+    assert.deepEqual(learningMessages[0].variables, []);
+    assert.equal(learningMessages[0].source, explanation);
+    const learningToken = learningMessages[0].token;
+    receive(learningFrame, {type: 'opened', token: learningToken});
+    receive(learningFrame, {type: 'change', token: learningToken, source: '<p>Edited explanation</p>'});
+    [...host.querySelectorAll('button')].find(button => button.textContent === 'HTML source').click();
+    receive(learningFrame, {type: 'snapshot', token: learningToken, source: '<p>Edited explanation</p>'});
+    assert.equal(learningView.state.sliceDoc(), '<p>Edited explanation</p>');
+    assert.equal(changes.at(-1), '<p>Edited explanation</p>');
+    assert.equal(host.querySelector('.editor-mode label').hidden, true);
   } finally {
     editor?.destroy(); window.close();
     for (const [name, descriptor] of descriptors) {

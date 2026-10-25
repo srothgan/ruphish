@@ -409,9 +409,14 @@ async fn failed_event_write_rolls_back_submission_deduplication_and_result_state
 #[test]
 fn final_html_retains_form_semantics_without_authored_execution_or_network_endpoints() {
     let source = r#"<style>body {background: navy}</style><form action="https://outside.invalid"><input name="username" autocomplete="username"><input type="password" name="password"><button formaction="https://outside.invalid">Submit</button></form><iframe srcdoc="<script>alert(1)</script>"></iframe><svg onload="fetch('https://outside.invalid')"></svg><img src="https://outside.invalid/image"><meta http-equiv="refresh" content="0;url=https://outside.invalid"><script>canaryScript()</script>"#;
-    let doc =
-        ruphish_adapters::landing::render(source, Some("https://training.example.test/?rid=abc"))
-            .unwrap();
+    let doc = ruphish_adapters::landing::render(
+        source,
+        ruphish_adapters::landing::Mode::Landing {
+            context: &ruphish_adapters::resources::sample(),
+            endpoint: Some("https://training.example.test/?rid=abc"),
+        },
+    )
+    .unwrap();
     assert!(doc.html.contains("name=\"username\""));
     assert!(doc.html.contains("name=\"password\""));
     assert!(doc.html.contains("background: navy"));
@@ -631,7 +636,14 @@ fn canonical_domain_origins_reject_ambiguous_authorities_and_preserve_valid_idna
 #[test]
 fn whole_document_layout_attributes_and_embedded_images_survive_final_policy() {
     let source = r#"<!doctype html><html lang="fr"><head><style>.welcome { color: navy }</style></head><body class="welcome" style="margin: 2rem" onload="bad()"><form><input name="email"></form><img src="data:image/png;base64,iVBORw0KGgo="><a href="data:text/html,unsafe">Unsafe link</a></body></html>"#;
-    let document = ruphish_adapters::landing::render(source, None).unwrap();
+    let document = ruphish_adapters::landing::render(
+        source,
+        ruphish_adapters::landing::Mode::Landing {
+            context: &ruphish_adapters::resources::sample(),
+            endpoint: None,
+        },
+    )
+    .unwrap();
     assert!(document.html.contains("<html lang=\"fr\">"));
     assert!(
         document

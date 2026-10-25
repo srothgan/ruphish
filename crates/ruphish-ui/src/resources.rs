@@ -110,6 +110,7 @@ pub(super) enum Family {
     Groups,
     Templates,
     Pages,
+    LearningPages,
     Profiles,
 }
 impl Family {
@@ -119,6 +120,7 @@ impl Family {
             Self::Groups => leptos_i18n::t_string!(i18n, ui.new_group),
             Self::Templates => leptos_i18n::t_string!(i18n, ui.new_template),
             Self::Pages => leptos_i18n::t_string!(i18n, ui.new_page),
+            Self::LearningPages => leptos_i18n::t_string!(i18n, ui.new_learning_page),
             Self::Profiles => leptos_i18n::t_string!(i18n, ui.new_profile),
         }
     }
@@ -128,6 +130,7 @@ impl Family {
             Self::Groups => leptos_i18n::t_string!(i18n, ui.back_to_groups),
             Self::Templates => leptos_i18n::t_string!(i18n, ui.back_to_templates),
             Self::Pages => leptos_i18n::t_string!(i18n, ui.back_to_pages),
+            Self::LearningPages => leptos_i18n::t_string!(i18n, ui.back_to_learning_pages),
             Self::Profiles => leptos_i18n::t_string!(i18n, ui.back_to_profiles),
         }
     }
@@ -136,6 +139,7 @@ impl Family {
             Self::Groups => "groups",
             Self::Templates => "templates",
             Self::Pages => "pages",
+            Self::LearningPages => "learning-pages",
             Self::Profiles => "smtp",
         }
     }
@@ -146,6 +150,7 @@ impl Family {
             Self::Groups => leptos_i18n::t_string!(i18n, ui.recipient_groups),
             Self::Templates => leptos_i18n::t_string!(i18n, ui.email_templates),
             Self::Pages => leptos_i18n::t_string!(i18n, ui.landing_pages),
+            Self::LearningPages => leptos_i18n::t_string!(i18n, ui.learning_pages),
             Self::Profiles => leptos_i18n::t_string!(i18n, ui.sending_profiles),
         }
     }
@@ -156,6 +161,7 @@ impl Family {
             Self::Groups => leptos_i18n::t_string!(i18n, ui.group),
             Self::Templates => leptos_i18n::t_string!(i18n, ui.email_template_2),
             Self::Pages => leptos_i18n::t_string!(i18n, ui.landing_page_2),
+            Self::LearningPages => leptos_i18n::t_string!(i18n, ui.learning_page),
             Self::Profiles => leptos_i18n::t_string!(i18n, ui.sending_profile_2),
         }
     }
@@ -166,6 +172,7 @@ impl Family {
             Self::Groups => leptos_i18n::t_string!(i18n, ui.recipient_groups_2),
             Self::Templates => leptos_i18n::t_string!(i18n, ui.email_templates_2),
             Self::Pages => leptos_i18n::t_string!(i18n, ui.landing_pages_2),
+            Self::LearningPages => leptos_i18n::t_string!(i18n, ui.learning_pages),
             Self::Profiles => leptos_i18n::t_string!(i18n, ui.sending_profiles_2),
         }
     }
@@ -176,6 +183,7 @@ impl Family {
             Self::Groups => leptos_i18n::t_string!(i18n, ui.no_recipient_groups_yet),
             Self::Templates => leptos_i18n::t_string!(i18n, ui.no_email_templates_yet),
             Self::Pages => leptos_i18n::t_string!(i18n, ui.no_landing_pages_yet),
+            Self::LearningPages => leptos_i18n::t_string!(i18n, ui.no_learning_pages),
             Self::Profiles => leptos_i18n::t_string!(i18n, ui.no_sending_profiles_yet),
         }
     }
@@ -191,6 +199,7 @@ impl Family {
                 i18n,
                 ui.create_or_import_an_email_template_to_send_in_a_campaign
             ),
+            Self::LearningPages => leptos_i18n::t_string!(i18n, ui.learning_guidance),
             Self::Pages => leptos_i18n::t_string!(
                 i18n,
                 ui.create_or_import_a_landing_page_for_recipients_who_follow_a_link
@@ -207,6 +216,7 @@ impl Family {
             Self::Templates => {
                 json!({"id":0,"name":"","subject":"","envelope_sender":"","html":"","text":"","attachments":[]})
             }
+            Self::LearningPages => json!({"id":0,"name":"","html":""}),
             Self::Pages => {
                 json!({"id":0,"name":"","html":"","redirect_url":""})
             }
@@ -275,6 +285,7 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
                             i18n, ui.compose_messages_manage_attachments_and_send_a_test
                         )
                     }
+                    Family::LearningPages => leptos_i18n::t_string!(i18n, ui.learning_guidance),
                     Family::Pages => {
                         leptos_i18n::t_string!(
                             i18n, ui.prepare_landing_page_content_and_optional_interaction_defaults
@@ -563,7 +574,9 @@ fn edit(
     };
     let content = match family {
         Family::Groups => group_fields(editor).into_any(),
-        Family::Templates | Family::Pages => content_fields(api, token, editor, family).into_any(),
+        Family::Templates | Family::Pages | Family::LearningPages => {
+            content_fields(api, token, editor, family).into_any()
+        }
         Family::Profiles => profile_fields(editor).into_any(),
     };
     view! {
@@ -612,7 +625,10 @@ fn edit(
                     })}
 
             </PageHeader>
-            {matches!(family, Family::Templates | Family::Pages | Family::Profiles)
+            {matches!(
+                family,
+                Family::Templates | Family::Pages | Family::LearningPages | Family::Profiles
+            )
                 .then(|| {
                     view! {
                         <p class="resource-usage">
@@ -897,14 +913,20 @@ fn content_workspace(
             let result = api
                 .resource(
                     "POST",
-                    "/api/util/preview",
+                    match family {
+                        Family::LearningPages => "/api/learning-pages/preview",
+                        Family::Pages => "/api/pages/preview",
+                        _ => "/api/util/preview",
+                    },
                     &token.get_value(),
                     Some(&body),
                     None,
                 )
                 .await
                 .and_then(|(value, _)| {
-                    if family == Family::Pages && editor.text("html") == source {
+                    if matches!(family, Family::Pages | Family::LearningPages)
+                        && editor.text("html") == source
+                    {
                         let warnings =
                             serde_json::from_value(value["warnings"].clone()).map_err(|_| {
                                 leptos_i18n::t_string!(i18n, ui.validation_response_invalid)
@@ -929,6 +951,8 @@ fn content_workspace(
                     {move || {
                         if family == Family::Templates {
                             leptos_i18n::t_string!(i18n, ui.email_html)
+                        } else if family == Family::LearningPages {
+                            leptos_i18n::t_string!(i18n, ui.learning_html)
                         } else {
                             leptos_i18n::t_string!(i18n, ui.landing_page_html)
                         }
@@ -962,7 +986,11 @@ fn content_workspace(
                     editor.message,
                     editor.visual_pending,
                     editor.readonly,
-                    family == Family::Pages,
+                    match family {
+                        Family::LearningPages => crate::editor::ContentKind::Learning,
+                        Family::Pages => crate::editor::ContentKind::Landing,
+                        _ => crate::editor::ContentKind::Email,
+                    },
                 )}
             </TabPanel>
             <TabPanel
@@ -972,9 +1000,15 @@ fn content_workspace(
                 busy=Signal::derive(move || preview.with(|p| p.loading))
             >
                 <p class="content-tab-help">
-                    {tr!(
-                        ui.current_draft_with_sample_recipient_alice_example_scripts_external_resources_and
-                    )}
+                    {move || {
+                        if family == Family::LearningPages {
+                            leptos_i18n::t_string!(i18n, ui.learning_preview_help)
+                        } else {
+                            leptos_i18n::t_string!(
+                                i18n, ui.current_draft_with_sample_recipient_alice_example_scripts_external_resources_and
+                            )
+                        }
+                    }}
                     {(family == Family::Templates)
                         .then_some(
                             leptos_i18n::t_string!(i18n, ui.email_clients_may_render_it_differently),
@@ -1144,11 +1178,19 @@ fn content_fields(
                         </div>
                     }
                 })}
-            {(family == Family::Pages)
+            {matches!(family, Family::Pages | Family::LearningPages)
                 .then(|| {
                     view! {
                         <section class="resource-section">
-                            <h2>{tr!(ui.landing_page_checks)}</h2>
+                            <h2>
+                                {move || {
+                                    if family == Family::LearningPages {
+                                        leptos_i18n::t_string!(i18n, ui.learning_checks)
+                                    } else {
+                                        leptos_i18n::t_string!(i18n, ui.landing_page_checks)
+                                    }
+                                }}
+                            </h2>
                             <ActionButton
                                 kind="button"
                                 disabled=editor.visual_pending
@@ -1159,7 +1201,11 @@ fn content_fields(
                                         match api
                                             .resource(
                                                 "POST",
-                                                "/api/pages/validate",
+                                                if family == Family::LearningPages {
+                                                    "/api/learning-pages/validate"
+                                                } else {
+                                                    "/api/pages/validate"
+                                                },
                                                 &token.get_value(),
                                                 Some(&body),
                                                 None,
@@ -1187,7 +1233,13 @@ fn content_fields(
                                     });
                                 }
                             >
-                                {tr!(ui.check_landing_page)}
+                                {move || {
+                                    if family == Family::LearningPages {
+                                        leptos_i18n::t_string!(i18n, ui.check_learning)
+                                    } else {
+                                        leptos_i18n::t_string!(i18n, ui.check_landing_page)
+                                    }
+                                }}
                             </ActionButton>
                             {page_warnings(
                                 Signal::derive(move || {
@@ -1207,25 +1259,38 @@ fn content_fields(
                                         source == editor.text("html") && warnings.is_empty()
                                     })
                             }>
-                                <p role="status">{tr!(ui.no_landing_page_warnings)}</p>
+                                <p role="status">
+                                    {move || {
+                                        if family == Family::LearningPages {
+                                            leptos_i18n::t_string!(i18n, ui.no_learning_warnings)
+                                        } else {
+                                            leptos_i18n::t_string!(i18n, ui.no_landing_page_warnings)
+                                        }
+                                    }}
+                                </p>
                             </Show>
-                            <p>
-                                {tr!(
-                                    ui.public_pages_preserve_field_names_and_styling_but_block_authored_scripts_embedde
-                                )}
-                            </p>
-                            <p>{tr!(ui.all_submissions_recorded)}</p>
-                            {editor
-                                .field(
-                                    "redirect_url",
-                                    trs!(ui.redirect_url_after_submission_optional),
-                                    "text",
-                                )}
-                            <p>
-                                {tr!(
-                                    ui.track_only_whether_fields_were_filled_and_submitted_entered_usernames_passwords
-                                )}
-                            </p>
+                            <Show when=move || family == Family::LearningPages>
+                                <p>{tr!(ui.learning_static_help)}</p>
+                            </Show>
+                            <Show when=move || family == Family::Pages>
+                                <p>
+                                    {tr!(
+                                        ui.public_pages_preserve_field_names_and_styling_but_block_authored_scripts_embedde
+                                    )}
+                                </p>
+                                <p>{tr!(ui.all_submissions_recorded)}</p>
+                                {editor
+                                    .field(
+                                        "redirect_url",
+                                        trs!(ui.redirect_url_after_submission_optional),
+                                        "text",
+                                    )}
+                                <p>
+                                    {tr!(
+                                        ui.track_only_whether_fields_were_filled_and_submitted_entered_usernames_passwords
+                                    )}
+                                </p>
+                            </Show>
                         </section>
                     }
                 })}
@@ -1386,7 +1451,14 @@ fn import_panel(api: Api, token: String, family: Family, open: RwSignal<bool>) -
             "json" => "json",
             "csv" if family == Family::Groups => "csv",
             "eml" if family == Family::Templates => "email",
-            "html" | "htm" if matches!(family, Family::Templates | Family::Pages) => "html",
+            "html" | "htm"
+                if matches!(
+                    family,
+                    Family::Templates | Family::Pages | Family::LearningPages
+                ) =>
+            {
+                "html"
+            }
             _ => {
                 message.error(ruphish_ui::localization::import_error(
                     i18n,
@@ -1503,7 +1575,7 @@ fn import_panel(api: Api, token: String, family: Family, open: RwSignal<bool>) -
                     accept=match family {
                         Family::Groups => ".json,.csv",
                         Family::Templates => ".json,.eml,.html,.htm",
-                        Family::Pages => ".json,.html,.htm",
+                        Family::Pages | Family::LearningPages => ".json,.html,.htm",
                         Family::Profiles => ".json",
                     }
                     on:change=read
@@ -1527,7 +1599,7 @@ fn import_panel(api: Api, token: String, family: Family, open: RwSignal<bool>) -
                         .then(|| view! { <option value="csv">{tr!(ui.recipients_csv)}</option> })}
                     {(family == Family::Templates)
                         .then(|| view! { <option value="email">{tr!(ui.email_eml)}</option> })}
-                    {matches!(family, Family::Templates | Family::Pages)
+                    {matches!(family, Family::Templates | Family::Pages | Family::LearningPages)
                         .then(|| view! { <option value="html">{tr!(ui.html_document)}</option> })}
                     {(family == Family::Pages)
                         .then(|| view! { <option value="site">{tr!(ui.website_url)}</option> })}
@@ -1993,6 +2065,11 @@ pub(super) fn page_warnings(
                                     }
                                     "form_without_submit" => {
                                         leptos_i18n::t_string!(i18n, ui.warning_form_without_submit)
+                                    }
+                                    "learning_controls_removed" => {
+                                        leptos_i18n::t_string!(
+                                            i18n, ui.warning_learning_controls_removed
+                                        )
                                     }
                                     "authored_execution_removed" => {
                                         leptos_i18n::t_string!(

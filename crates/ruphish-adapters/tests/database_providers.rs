@@ -22,6 +22,8 @@ mod campaign_drafts;
 mod company_settings;
 #[path = "support/health.rs"]
 mod health;
+#[path = "support/learning_pages.rs"]
+mod learning_pages;
 #[path = "support/mysql_proxy.rs"]
 mod mysql_proxy;
 #[path = "support/observation_versions.rs"]
@@ -603,6 +605,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         idempotency: Some(("launch-once".into(), "request-fingerprint".into())),
         ..campaign::Create::default()
     };
+    learning_pages::exercise(db, actor, normal.identity, input.clone(), now).await;
     campaign_drafts::exercise(db, actor, normal.identity, input.clone(), now, fault).await;
     let campaigns = db.campaigns();
     let review = campaigns.prepare(actor, &input, now).await.unwrap();
@@ -1077,6 +1080,14 @@ async fn sqlite_provider_contract() {
     last_admin_race(&db, &peer).await;
     peer.close().await;
     db.close().await;
+    // Reconstruct the immediately preceding schema, then verify its populated upgrade.
+    let mut previous = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
+    )
+    .await
+    .unwrap();
+    sqlx::raw_sql("DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM ruphish_schema WHERE version=13; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut previous).await.unwrap();
+    previous.close().await.unwrap();
     let db = database::open(
         Config::Sqlite {
             path,
@@ -1087,6 +1098,22 @@ async fn sqlite_provider_contract() {
     .await
     .unwrap();
     assert!(db.bootstrap(None, None).await.unwrap().is_none());
+    let actor = db.accounts().by_name("admin").await.unwrap().identity;
+    let upgraded = db.campaigns().list(actor).await.unwrap();
+    assert_eq!(upgraded.len(), 1);
+    assert_eq!(
+        upgraded[0].policy.as_ref().unwrap().redirect_url,
+        "https://example.test/preserved-after-upgrade"
+    );
+    assert_eq!(upgraded[0].policy.as_ref().unwrap().learning_page_id, None);
+    assert!(
+        db.resources()
+            .list(actor, Kind::LearningPage)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
     let draft = db
         .campaigns()
         .draft(
@@ -1123,10 +1150,28 @@ async fn mysql_provider_contract() {
     last_admin_race(&db, &peer).await;
     peer.close().await;
     db.close().await;
+    // Reconstruct the immediately preceding schema, then verify its populated upgrade.
+    sqlx::raw_sql("DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM _sqlx_migrations WHERE version=7; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut inspector).await.unwrap();
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
         .unwrap();
     assert!(db.bootstrap(None, None).await.unwrap().is_none());
+    let actor = db.accounts().by_name("admin").await.unwrap().identity;
+    let upgraded = db.campaigns().list(actor).await.unwrap();
+    assert_eq!(upgraded.len(), 1);
+    assert_eq!(
+        upgraded[0].policy.as_ref().unwrap().redirect_url,
+        "https://example.test/preserved-after-upgrade"
+    );
+    assert_eq!(upgraded[0].policy.as_ref().unwrap().learning_page_id, None);
+    assert!(
+        db.resources()
+            .list(actor, Kind::LearningPage)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
     let draft = db
         .campaigns()
         .draft(
@@ -1883,10 +1928,30 @@ async fn postgres_provider_contract() {
     last_admin_race(&db, &peer).await;
     peer.close().await;
     db.close().await;
+    // Reconstruct the immediately preceding schema, then verify its populated upgrade.
+    let mut previous = postgres_inspect(&config).await;
+    sqlx::raw_sql("DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM _sqlx_migrations WHERE version=7; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut previous).await.unwrap();
+    previous.close().await.unwrap();
     let db = database::open(Config::Postgres(config.clone()), Policy::default())
         .await
         .unwrap();
     assert!(db.bootstrap(None, None).await.unwrap().is_none());
+    let actor = db.accounts().by_name("admin").await.unwrap().identity;
+    let upgraded = db.campaigns().list(actor).await.unwrap();
+    assert_eq!(upgraded.len(), 1);
+    assert_eq!(
+        upgraded[0].policy.as_ref().unwrap().redirect_url,
+        "https://example.test/preserved-after-upgrade"
+    );
+    assert_eq!(upgraded[0].policy.as_ref().unwrap().learning_page_id, None);
+    assert!(
+        db.resources()
+            .list(actor, Kind::LearningPage)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
     let draft = db
         .campaigns()
         .draft(

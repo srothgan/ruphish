@@ -39,6 +39,9 @@ pub struct Policy {
     pub capture_passwords: Option<bool>,
     /// Post-submission redirect override.
     pub redirect_url: Option<String>,
+    /// Selected owned learning page; custom redirect must be empty when present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub learning_page_id: Option<i64>,
 }
 /// Local time entry resolved authoritatively on the server.
 #[derive(Clone, Default, Serialize, Deserialize)]

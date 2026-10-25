@@ -49,6 +49,8 @@ pub enum Output {
 #[async_trait::async_trait]
 /// Public application boundary without transport or submitted-value types.
 pub trait Public: Send + Sync {
+    /// Serve static educational content without a recipient or interaction event.
+    async fn learning_page(&self, authority: &str, public_id: &str) -> Result<Output, Error>;
     /// Resolve an exact origin/RID pair and apply the action transactionally.
     async fn interact(
         &self,
@@ -84,6 +86,8 @@ pub struct RenderInput {
 /// Provider operations around shared rendering. A snapshot is not permission to commit later.
 #[async_trait::async_trait]
 pub trait Persistence: Send + Sync {
+    /// Resolve an opaque learning-page identity on an eligible owner domain.
+    async fn learning_page(&self, origin: &str, public_id: &str) -> Result<String, Error>;
     /// Read one currently eligible origin/identifier pair under a consistent snapshot.
     async fn snapshot(&self, origin: &str, rid: &str, action: &Action) -> Result<Snapshot, Error>;
     /// Recheck eligibility, deduplicate submissions and atomically commit event plus work.

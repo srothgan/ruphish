@@ -60,6 +60,8 @@ pub const MAX_RETRIES: u32 = 8;
 pub struct InteractionPolicy {
     /// Post-submission redirect template, empty for no redirect.
     pub redirect_url: String,
+    /// Selected owned learning page; custom redirect must be empty when present.
+    pub learning_page_id: Option<i64>,
 }
 /// Compute the legacy minute-level distribution over the actual unique audience.
 pub fn send_date(launch: i64, send_by: Option<i64>, index: usize, total: usize) -> Option<i64> {

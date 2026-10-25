@@ -71,6 +71,10 @@ Direct creation returns `201`, while draft launch returns `200`. An idempotency 
 
 `POST /api/campaigns/test` takes an object containing `campaign` (the campaign request) and `email` (the controlled test recipient). It uses sample personalization values and returns a `200` success envelope after SMTP acceptance. It sends a real test message without launching the campaign; a lost response is not a reason to resend automatically.
 
+## Learning-page destinations
+
+Set `policy.learning_page_id` to an owned [learning page](learning-pages.md) to use its hosted explanation after submission. A nonempty custom `redirect_url` cannot be combined with that selection. The campaign destination is fixed at launch; the reusable page content remains editable. Omitting the learning-page field preserves legacy redirect behavior.
+
 ## Read results
 
 Legacy campaign detail includes identity, lifecycle timestamps, URL, selected resources, and available `results` and `timeline`. Empty results or timeline fields may be omitted. Result `id` is the opaque recipient tracking ID. Legacy network-location fields are not a source of participant identity; do not build new tracking around them.

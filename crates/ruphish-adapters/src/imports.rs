@@ -1,7 +1,7 @@
 //! Reviewable CSV/MIME imports and bounded HTML transformation.
 use crate::{
     outbound::Policy,
-    resources::{MAX_DOCUMENT, invalid, mailbox, render, sample},
+    resources::{MAX_DOCUMENT, invalid, mailbox, render},
 };
 use lol_html::{MemorySettings, Settings, element, html_content::ContentType};
 use ruphish_application::resources::*;
@@ -134,11 +134,7 @@ impl ContentTools for Tools {
         site_document(&source, &final_url)
     }
     fn preview(&self, source: &str, recipient: &Recipient) -> Result<String, Error> {
-        let mut ctx = sample();
-        ctx.email = recipient.email.clone();
-        ctx.first_name = recipient.first_name.clone();
-        ctx.last_name = recipient.last_name.clone();
-        ctx.position = recipient.position.clone();
+        let ctx = crate::resources::sample_for(recipient);
         crate::email_html::without_tracker(&render(source, &ctx)?, &ctx.tracking_url)
     }
 }
@@ -355,12 +351,6 @@ fn shield(source: &str) -> Result<(String, String, Vec<String>), Error> {
         return Err(invalid("Shielded HTML exceeds 8 MiB"));
     }
     Ok((result, prefix, tokens))
-}
-
-/// Apply the shared landing policy to an already rendered preview.
-/// The response must also carry the preview CSP; authored source is never modified.
-pub fn landing_html(page: &Page) -> Result<String, Error> {
-    Ok(crate::landing::render(&page.html, None)?.html)
 }
 
 #[cfg(test)]

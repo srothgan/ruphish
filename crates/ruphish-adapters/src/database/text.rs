@@ -47,7 +47,7 @@ pub(crate) fn resource(value: &Resource) -> Result<(), Error> {
                 bounded(&header.key, 255)?;
             }
         }
-        Content::Page(_) => {}
+        Content::Page(_) | Content::LearningPage(_) => {}
     }
     Ok(())
 }

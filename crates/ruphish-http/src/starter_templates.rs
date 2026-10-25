@@ -5,50 +5,9 @@ use crate::{
 };
 use axum::{Router, extract::Path, http::StatusCode, response::Response, routing::get};
 use ruphish_contracts::{errors::ErrorCode, starter_templates::*};
-use serde_json::json;
 
-struct Source {
-    id: &'static str,
-    name: &'static str,
-    brand: &'static str,
-    html: &'static str,
-    email: Option<(&'static str, &'static str)>,
-    logo: Option<(&'static str, u16, &'static str)>,
-}
-
-impl Source {
-    fn summary(&self) -> Summary {
-        Summary {
-            id: self.id.into(),
-            name: self.name.into(),
-            brand: self.brand.into(),
-            kind: if self.email.is_some() {
-                Kind::Email
-            } else {
-                Kind::LandingPage
-            },
-            prefill: self.email.is_none(),
-            company_logo: self.logo.map(|(selector, height, context)| CompanyLogo {
-                selector: selector.into(),
-                height,
-                context: context.into(),
-            }),
-        }
-    }
-
-    fn entry(&self) -> Entry {
-        Entry {
-            summary: self.summary(),
-            resource: match self.email {
-                Some((subject, text)) => json!({
-                    "name": self.name, "html": self.html,
-                    "subject": subject.trim_end(), "text": text, "attachments": [],
-                }),
-                None => json!({"name": self.name, "html": self.html, "redirect_url": ""}),
-            },
-        }
-    }
-}
+mod source;
+use source::Source;
 
 macro_rules! email {
     ($id:literal, $brand:literal, $name:literal) => {
@@ -57,10 +16,9 @@ macro_rules! email {
             name: $name,
             brand: $brand,
             html: include_str!(concat!("../starter-templates/emails/", $id, "/email.html")),
-            email: Some((
-                include_str!(concat!("../starter-templates/emails/", $id, "/subject.txt")),
-                include_str!(concat!("../starter-templates/emails/", $id, "/email.txt")),
-            )),
+            kind: Kind::Email,
+            subject: include_str!(concat!("../starter-templates/emails/", $id, "/subject.txt")),
+            text: include_str!(concat!("../starter-templates/emails/", $id, "/email.txt")),
             logo: None,
         }
     };
@@ -76,8 +34,29 @@ macro_rules! page {
                 $id,
                 "/landing.html"
             )),
-            email: None,
+            kind: Kind::LandingPage,
+            subject: "",
+            text: "",
             logo: $logo,
+        }
+    };
+}
+
+macro_rules! learning {
+    ($id:literal, $name:literal) => {
+        Source {
+            id: concat!("learning-", $id),
+            name: $name,
+            brand: "Ruphish",
+            html: include_str!(concat!(
+                "../starter-templates/learning-pages/",
+                $id,
+                "/learning.html"
+            )),
+            kind: Kind::LearningPage,
+            subject: "",
+            text: "",
+            logo: Some((".learning-logo", 48, "Learning page header")),
         }
     };
 }
@@ -263,6 +242,12 @@ const CATALOG: &[Source] = &[
         "Workday",
         "Workday - Native tenant sign-in",
         Some((".brand", 48, "Native tenant login"))
+    ),
+    learning!("slam", "SLAM (EN)"),
+    learning!("stop-challenge-protect", "Stop, Challenge, Protect (EN)"),
+    learning!(
+        "recognize-resist-report-delete",
+        "Recognize, Resist and Report, Delete (EN)"
     ),
 ];
 

@@ -17,7 +17,7 @@ export function mountEditor(parent, source, onChange, variablesJson, onVisualSta
   const variableLabel = document.createElement('label'); const variableText = document.createTextNode(''); variableLabel.append(variableText); setText(variableText, 'recipient_field');
   const picker = document.createElement('select'); picker.append(new Option(t('choose_field'), ''));
   for (const name of variables) picker.append(new Option(name, name));
-  variableLabel.append(picker);
+  variableLabel.append(picker); variableLabel.hidden = variables.length === 0;
   const open = document.createElement('button'); open.type = 'button'; setText(open, 'edit_visually'); open.disabled = readOnly; picker.disabled = readOnly;
   const sourceButton = document.createElement('button'); sourceButton.type = 'button'; setText(sourceButton, 'source'); sourceButton.disabled = true;
   const note = document.createElement('p'); note.className = 'editor-help'; note.setAttribute('role', 'status');
