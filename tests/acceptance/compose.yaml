@@ -47,11 +47,15 @@ services:
     working_dir: /workspace
     environment:
       CARGO_TARGET_DIR: /target
+      CARGO_BUILD_JOBS: "1"
+      TOKIO_WORKER_THREADS: "2"
+      RAYON_NUM_THREADS: "2"
     volumes:
       - ../..:/workspace:ro
       - .:/lab
       - target:/target
       - registry:/usr/local/cargo/registry
+      - ../../target/docker:/artifact
     entrypoint: [sh, /lab/prepare.sh]
   dns:
     image: coredns/coredns:1.14.7
@@ -69,13 +73,16 @@ services:
       lab:
         ipv4_address: 172.30.53.20
   app:
-    image: rust:1.99.1-bookworm
-    working_dir: /workspace
-    entrypoint: [/lab/data/ruphish]
+    image: ${RUPHISH_APP_IMAGE:-ruphish:local}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${RUPHISH_IMAGE_VERSION:-local-development}
+        REVISION: ${RUPHISH_IMAGE_REVISION:-unknown}
     command: [--config, /lab/data/config.json]
     env_file: ./data/bootstrap.env
     volumes:
-      - ../..:/workspace:ro
       - ./data:/lab/data
     ports:
       - "127.0.0.1:3334:3333"
@@ -84,7 +91,7 @@ services:
       lab:
         ipv4_address: 172.30.53.10
     depends_on: [dns, inbox]
-    stop_grace_period: 15s
+    stop_grace_period: 30s
 networks:
   lab:
     ipam:

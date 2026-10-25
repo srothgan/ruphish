@@ -295,7 +295,8 @@ jobs:
         run: |
           node tests/acceptance/lab.mjs init
           docker compose -f tests/acceptance/compose.yaml --profile setup run --rm prepare
-          docker compose -f tests/acceptance/compose.yaml up -d dns inbox app
+          docker compose -f tests/acceptance/compose.yaml build app
+          docker compose -f tests/acceptance/compose.yaml up -d --wait dns inbox app
           node tests/acceptance/lab.mjs demo
           node tests/acceptance/lab.mjs seed
           node --test tests/acceptance/public.test.mjs

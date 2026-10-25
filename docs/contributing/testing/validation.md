@@ -139,9 +139,9 @@ The CI workflow always starts for PRs to main and pushes to main, including docu
 | Group | Main paths | Fixed checks |
 | --- | --- | --- |
 | Website | `website/**`, `docs/**` | Website tests, Astro checks/build and site validation |
-| Product | `crates/**`, `tests/**`, `migrations/**` and shared build inputs | Browser tests/lint/formatting and development assets; complete native Clippy/tests on Linux x64, Windows x64 and macOS ARM64; platform asset promotion |
+| Product | `crates/**`, `tests/**`, `migrations/**`, runtime Docker inputs and shared build inputs | Browser tests/lint/formatting and development assets; complete native Clippy/tests on Linux x64, Windows x64 and macOS ARM64; platform asset promotion |
 | Persistence | Adapter/application/domain crates, `tests/**`, `migrations/**` and shared build inputs | Both supported MySQL and PostgreSQL versions, complete histories/schema recovery, transport checks and provider executable scenarios |
-| Public | `tests/acceptance/**` and shared build inputs | Canonical Docker DNS/TLS/SMTP/privacy fixture |
+| Public | `tests/acceptance/**`, `Dockerfile`, `.dockerignore`, `docker/**` and shared build inputs | Canonical runtime image health, shutdown/persistence and DNS/TLS/SMTP/privacy fixture |
 | Dependencies | Shared build inputs and browser npm manifests/lockfile | Cargo dependency policy and browser npm audit |
 
 Shared build inputs include workspace/crate manifests, the Cargo lockfile, toolchain and formatter configuration, `.cargo/`, Trunk, dependency policy, line-ending policy, workflow/action implementations and CI path/gate files. Workflow and path/gate changes also select website checks. Issue templates, the PR template, CODEOWNERS and Dependabot configuration do not select product acceptance. The YAML file is authoritative; add new source/build locations to the appropriate group when introducing them.

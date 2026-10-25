@@ -18,6 +18,9 @@ product:
   - 'crates/**'
   - 'tests/**'
   - 'migrations/**'
+  - 'Dockerfile'
+  - '.dockerignore'
+  - 'docker/**'
 
 website:
   - 'website/**'
@@ -36,6 +39,9 @@ persistence:
 
 public:
   - *build_inputs
+  - 'Dockerfile'
+  - '.dockerignore'
+  - 'docker/**'
   - 'tests/acceptance/**'
 
 dependencies:

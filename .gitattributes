@@ -10,3 +10,4 @@ crates/ruphish-adapters/migrations/postgres/** text eol=crlf
 crates/ruphish-adapters/src/mysql/upgrade.rs text eol=lf
 # Container entrypoints must retain POSIX line endings on Windows checkouts.
 tests/acceptance/*.sh text eol=lf
+docker/*.sh text eol=lf

@@ -29,7 +29,8 @@ function publicRequest(path, { body, host = 'good.ruphish.test:8443', contentTyp
     return new Promise((resolve, reject) => {
         // Pin only resolution; ordinary certificate-chain and hostname checks remain enabled.
         const req = request(`${origin}${path}`, {
-            ca, lookup: (_host, options, callback) => options.all
+            // Authenticate the real TLS peer even when a test spoofs HTTP Host.
+            ca, servername: new URL(origin).hostname, lookup: (_host, options, callback) => options.all
                 ? callback(null, [{ address: publicIp, family: 4 }])
                 : callback(null, publicIp, 4),
             method: body === undefined ? 'GET' : 'POST', agent: false,
@@ -56,13 +57,75 @@ async function until(observe, predicate, label) {
     assert.fail(`Timed out waiting for ${label}`);
 }
 
+function docker(args) {
+    const result = spawnSync('docker', args, { encoding: 'utf8', timeout: 120_000 });
+    assert.ifError(result.error);
+    return result;
+}
+const compose = ['compose', '-f', fileURLToPath(new URL('./compose.yaml', import.meta.url))];
+
+async function resourceIdentities() {
+    const identities = {};
+    for (const resource of ['users', 'groups', 'templates', 'pages', 'smtp', 'campaigns']) {
+        identities[resource] = (await api(`/api/${resource}/`)).map(item => item.id).sort((a, b) => a - b);
+    }
+    return identities;
+}
+
+test('runtime image exposes health on HTTP and verified HTTPS and rejects failed probes', async () => {
+    for (const [path, status] of [['/health/live', 'live'], ['/health/ready', 'ready']]) {
+        const response = await fetch(`${admin}${path}`, { signal: AbortSignal.timeout(5000) });
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get('cache-control'), 'no-store');
+        assert.deepEqual(response.headers.getSetCookie(), []);
+        assert.deepEqual(await response.json(), { status });
+        const secure = await publicRequest(path);
+        assert.equal(secure.status, 200);
+        assert.equal(secure.headers['cache-control'], 'no-store');
+        assert.equal(secure.headers['set-cookie'], undefined);
+        assert.deepEqual(JSON.parse(secure.body), { status });
+    }
+    const identity = docker([...compose, 'exec', '-T', 'app', 'id', '-u']);
+    assert.equal(identity.status, 0, identity.stderr);
+    assert.equal(identity.stdout.trim(), '10001');
+    const passing = docker([...compose, 'exec', '-T', '-e', 'http_proxy=http://127.0.0.1:1',
+        'app', 'ruphish-healthcheck']);
+    assert.equal(passing.status, 0, passing.stderr);
+    const container = docker([...compose, 'ps', '-q', 'app']);
+    assert.equal(container.status, 0, container.stderr);
+    const image = docker(['inspect', '--format={{.Image}}', container.stdout.trim()]);
+    assert.equal(image.status, 0, image.stderr);
+    // A disposable probe client uses this same image and fixture, with no new service or port.
+    const secureProbe = docker(['run', '--rm', '--network', 'ruphish-acceptance_lab',
+        '--add-host', 'good.ruphish.test:172.30.53.10', '--volumes-from', `${container.stdout.trim()}:ro`,
+        '-e', 'RUPHISH_HEALTH_URL=https://good.ruphish.test:8443/health/ready',
+        '-e', 'RUPHISH_HEALTH_CA=/lab/data/ca.pem',
+        '--entrypoint', '/usr/local/bin/ruphish-healthcheck', image.stdout.trim()]);
+    assert.equal(secureProbe.status, 0, secureProbe.stderr);
+    for (const url of [
+        'http://127.0.0.1:3333/', // Login redirect must not count as readiness.
+        'http://127.0.0.1:3333/api/users/', // Authentication failure.
+        'http://127.0.0.1:1/health/ready', // Connection refused.
+        'https://127.0.0.1:8443/health/ready', // Untrusted CA and wrong hostname.
+    ]) {
+        const rejected = docker([...compose, 'exec', '-T', '-e', `RUPHISH_HEALTH_URL=${url}`,
+            'app', 'ruphish-healthcheck']);
+        assert.equal(rejected.status, 1, `Probe must reject ${url}: ${rejected.stderr}`);
+        assert.equal(rejected.stdout, '');
+        assert.equal(rejected.stderr.trim(), 'Ruphish readiness probe failed');
+    }
+});
+
 test('verified domain -> SMTP inbox -> public events -> completion, without participant values', { timeout: 90_000 }, async () => {
+    // The user may repair the demonstration's bad domain. Keep rejection coverage
+    // independent of that mutable example; lab.mjs demo owns wrong-TXT acceptance.
+    const unregistered = `unregistered-${randomUUID()}.ruphish.test`;
     const domains = await api('/api/domains/');
     assert.equal(domains.find(item => item.hostname === 'good.ruphish.test')?.eligible, true);
-    assert.equal(domains.find(item => item.hostname === 'bad.ruphish.test')?.eligible, false);
+    assert(!domains.some(item => item.hostname === unregistered));
     const eligible = await api('/api/domains/validated/');
     assert(eligible.some(item => item.origin === origin));
-    assert(!eligible.some(item => item.hostname === 'bad.ruphish.test'));
+    assert(!eligible.some(item => item.hostname === unregistered));
     const profiles = await api('/api/smtp/');
     assert.equal(profiles.find(item => item.name === 'Local inbox only')?.host, '172.30.53.20:1025', 'Fixture SMTP must still target the local inbox');
 
@@ -87,7 +150,7 @@ test('verified domain -> SMTP inbox -> public events -> completion, without part
     assert(received.HTML.includes(`/track?rid=${rid}`), 'SMTP content must include the tracking image');
 
     const before = await api(campaignPath);
-    assert.equal((await publicRequest(`/track?rid=${rid}`, { host: 'bad.ruphish.test:8443' })).status, 404);
+    assert.equal((await publicRequest(`/track?rid=${rid}`, { host: `${unregistered}:8443` })).status, 404);
     assert.deepEqual(await api(campaignPath), before);
     assert.equal((await publicRequest(`/track?rid=${rid}`)).status, 200);
     const landing = await publicRequest(`/?rid=${rid}`);
@@ -139,4 +202,26 @@ test('verified domain -> SMTP inbox -> public events -> completion, without part
             assert.equal(scan.status, 0, `Privacy scan failed for ${file}: ${scan.error ?? (scan.stderr || 'canary retained')}`);
         }
     }
+});
+
+test('container replacement preserves accounts and resources and restores Docker health', { timeout: 150_000 }, async () => {
+    const before = await resourceIdentities();
+    const oldContainer = docker([...compose, 'ps', '-q', 'app']);
+    assert.equal(oldContainer.status, 0, oldContainer.stderr);
+    const stopped = docker([...compose, 'stop', 'app']);
+    assert.equal(stopped.status, 0, stopped.stderr);
+    const exit = docker(['inspect', '--format={{.State.ExitCode}}', oldContainer.stdout.trim()]);
+    assert.equal(exit.status, 0, exit.stderr);
+    assert.equal(exit.stdout.trim(), '0', 'SIGTERM must finish cleanly within the grace period');
+    const replaced = docker([...compose, 'up', '-d', '--no-deps', '--force-recreate', '--wait', '--wait-timeout', '90', 'app']);
+    assert.equal(replaced.status, 0, replaced.stderr);
+    const current = docker([...compose, 'ps', '-q', 'app']);
+    assert.equal(current.status, 0, current.stderr);
+    assert.notEqual(current.stdout.trim(), oldContainer.stdout.trim());
+    const health = docker(['inspect', '--format={{.State.Health.Status}}', current.stdout.trim()]);
+    assert.equal(health.status, 0, health.stderr);
+    assert.equal(health.stdout.trim(), 'healthy');
+    assert.deepEqual(await resourceIdentities(), before);
+    // Successful authenticated reads also prove that the persisted API token survived.
+    assert.equal((await publicRequest('/health/ready')).status, 200);
 });

@@ -16,13 +16,14 @@ Requirements: Docker with Linux containers and Compose v2, Node with native Fetc
 ```sh
 node tests/acceptance/lab.mjs init
 docker compose -f tests/acceptance/compose.yaml --profile setup run --rm prepare
-docker compose -f tests/acceptance/compose.yaml up -d dns inbox app
+docker compose -f tests/acceptance/compose.yaml build app
+docker compose -f tests/acceptance/compose.yaml up -d --wait dns inbox app
 node tests/acceptance/lab.mjs demo
 node tests/acceptance/lab.mjs seed
 node --test tests/acceptance/public.test.mjs
 ```
 
-`prepare` builds the real Linux executable using Cargo.lock and generates a local CA/server certificate. It needs network access to obtain the toolchain and crates; the acceptance scenarios use local services only. `demo` uses normal login/password-change APIs and actual DNS/TLS verification: `https://good.ruphish.test:8443` must pass and `https://bad.ruphish.test:8443` must fail with a TXT mismatch. `seed` preserves existing named resources and creates a new browser campaign each time. The protocol test creates its own campaign and synthetic recipient, checks received SMTP content, public events, duplicate submissions, malformed bodies, completion and absence of canary values from API responses, logs and live SQLite files. It does not execute the browser collector.
+`prepare` compiles the Linux executable in the Rust builder container using Cargo.lock, exports it to `target/docker/ruphish`, and generates or reuses the local CA/server certificate. The Dockerfile packages that executable and `dist/admin/` as `ruphish:local`; the running app does not mount the source checkout. Building needs network access for toolchains, crates and runtime packages; acceptance scenarios use local services only. `demo` uses normal login/password-change APIs and actual DNS/TLS verification: `https://good.ruphish.test:8443` must pass and `https://bad.ruphish.test:8443` must fail with a TXT mismatch. `seed` preserves existing named resources and creates a new browser campaign each time. The protocol tests check unauthenticated health on both listeners, rejected probes, received SMTP content, public events, duplicate submissions, malformed bodies, completion, absence of canary values from API responses/logs/live SQLite files, and persistence across container replacement. They do not execute the browser collector.
 
 | Surface | Address |
 | --- | --- |
@@ -31,7 +32,17 @@ node --test tests/acceptance/public.test.mjs
 | Public passing origin | `https://good.ruphish.test:8443` |
 | Public failing origin | `https://bad.ruphish.test:8443` |
 
-Log in as `admin`; retrieve the fixture password with `node tests/acceptance/lab.mjs password`. This is a separate account/database. Its generated secrets, certificate keys, binary and database are ignored under `tests/acceptance/data/`. Do not publish that directory or raw Mailpit messages as CI artifacts. If you change the admin password/API key manually, update the local bootstrap file before using fixture commands again.
+Log in as `admin`; retrieve the fixture password with `node tests/acceptance/lab.mjs password`. This is a separate account/database. Its generated secrets, certificate keys and database are ignored under `tests/acceptance/data/`; the exported binary is ignored under `target/docker/`. Do not publish the data directory or raw Mailpit messages as CI artifacts. If you change the admin password/API key manually, update the local bootstrap file before using fixture commands again.
+
+## Local image definition
+
+The root [Dockerfile](../../../Dockerfile) packages prebuilt artifacts on a pinned Debian Bookworm slim base compatible with the Linux builder. The runtime includes CA certificates, curl and libgcc, runs as UID/GID `10001:10001`, and starts Ruphish directly as PID 1. It contains no Rust or Node toolchain. The [.dockerignore](../../../.dockerignore) allows only the executable, completed UI, license and probe script into the build context. These are development artifacts: the large unoptimized executable/WASM and separate UI files are not the self-contained production distribution planned for release.
+
+The image expects `--config /etc/ruphish/config.json` by default; the fixture overrides this to `/lab/data/config.json`. Database selection still comes from the ordinary [database configuration](../../administration/databases/index.md). The fixture supplies SQLite and its existing certificates, credentials and database through the data mount. Preparation preserves host ownership of fixture inputs, grants the app group write access to the data directory, and assigns the server key and existing database/log files to the app user. A general deployment must mount its own readable configuration/certificates and writable state paths; fixture settings are not production defaults.
+
+The image's [health probe](../../administration/health.md) requires exactly HTTP `200` from `http://127.0.0.1:3333/health/ready`. It checks every 30 seconds, allows a 60-second startup grace period and becomes unhealthy after three consecutive failures. Curl has a two-second deadline inside Docker's three-second command timeout. Set `RUPHISH_HEALTH_URL` to match an alternative listener/port/scheme and `RUPHISH_HEALTH_CA` to a mounted CA file for private HTTPS; the URL's hostname must match the certificate. These variables configure the probe only. The script bypasses proxy environment variables, rejects redirects and validates TLS. Docker health status alone does not restart a process.
+
+Optional Compose build inputs are `RUPHISH_APP_IMAGE` (default `ruphish:local`), `RUPHISH_IMAGE_VERSION` (default `local-development`) and `RUPHISH_IMAGE_REVISION` (default `unknown`). The latter two label the image and do not change the compiled application version. No image is published by these commands.
 
 ## Open a browser without changing system DNS or trust
 
@@ -66,12 +77,13 @@ Local manual testing retains the fixture database between runs. The [validation 
 docker compose -f tests/acceptance/compose.yaml logs --tail 60 app dns inbox
 docker compose -f tests/acceptance/compose.yaml stop app
 docker compose -f tests/acceptance/compose.yaml --profile setup run --rm prepare
-docker compose -f tests/acceptance/compose.yaml up -d app
+docker compose -f tests/acceptance/compose.yaml build app
+docker compose -f tests/acceptance/compose.yaml up -d --wait app
 node --test tests/acceptance/public.test.mjs
 docker compose -f tests/acceptance/compose.yaml down
 ```
 
-Stop `app` before rebuilding its binary or promoting new UI assets. `down` preserves the database and keys. Mailpit's inbox is ephemeral; each protocol run sends its own uniquely correlated email. Re-running `demo` after repairing the deliberately bad domain refuses to overwrite that successful configuration. Use fresh fixture data for a fresh failing example; never delete data belonging to another installation.
+Stop `app` before rebuilding its binary or promoting new UI assets. `down` preserves the database and keys. Mailpit's inbox is ephemeral; each protocol run sends its own uniquely correlated email. The protocol test uses a unique unregistered hostname for rejected-host coverage, so a manually repaired bad example remains intact. Re-running `demo` after repairing the deliberately bad domain refuses to overwrite that successful configuration; `demo` owns the explicit wrong-TXT verification check on fresh fixture data. Never delete data belonging to another installation.
 
 The fixture is self-contained and designed for a Linux GitHub-hosted runner with Docker: build the WASM distribution, run the same setup/protocol commands, run the native Cargo process suite directly, and always run Compose cleanup. The checked-in workflows reuse this fixture; their presence does not establish an executed hosted result. It reserves host ports 3334, 8026 and 8443 and subnet `172.30.53.0/24`; run one fixture per host. Hosted jobs on separate VMs are isolated, while concurrent jobs sharing a self-hosted Docker daemon need separate port/subnet configuration. Cache Cargo outputs separately from fixture secrets/data. Do not upload the whole `data/` directory.
 

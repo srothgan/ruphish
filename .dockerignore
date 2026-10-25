@@ -1,0 +1,13 @@
+# Artifact-only context: never send local configuration, state or source to Docker.
+**
+!Dockerfile
+!.dockerignore
+!LICENSE
+!docker/
+!docker/healthcheck.sh
+!target/
+!target/docker/
+!target/docker/ruphish
+!dist/
+!dist/admin/
+!dist/admin/**
