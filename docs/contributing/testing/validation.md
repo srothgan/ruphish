@@ -93,6 +93,45 @@ cargo test -p ruphish-adapters --test mysql_preflight mysql_preflight_transport 
 
 The CI persistence group runs complete provider suites, including historical upgrades and schema recovery, on both supported versions. There are no filename-based migration exceptions or `--skip` lists. Agents still select focused local scenarios based on semantics; the broad CI groups do not replace inspecting changed behavior.
 
+## Public demo
+
+The default UI build is the production application. Its existing tests continue to run without the opt-in `demo` feature. Demo tests are separate; never run production Fetch expectations against simulated responses. See [the local preview instructions](../../../demo/README.md) and [the demo development guide](../demo.md).
+
+For the shared dataset and demo transport, use the functional and real-contract checks:
+
+```sh
+node --test --test-concurrency=1 demo/tests/api.test.mjs demo/tests/preview.test.mjs
+cargo test -p ruphish-ui --test demo_contracts --features demo --locked
+cargo clippy -p ruphish-ui --test demo_contracts --features demo --locked -- -D warnings
+```
+
+For the replacement SQL seeder, first build a normal UI distribution and the actual executable, then run the disposable SQLite scenario. This initializes current migrations, seeds once, restarts, reads affected API routes, checks outbound integrations are disabled, and rejects reseeding. It requires Node 26 for `node:sqlite` and does not use the acceptance lab:
+
+```sh
+trunk build --locked
+cargo build -p ruphish --locked
+node --test demo/tests/seed.test.mjs
+```
+
+For demo UI changes, apply the normal formatting rules, generate the demo transport, build the development artifact, and lint the WASM target:
+
+```sh
+node crates/ruphish-ui/web/build-demo.mjs
+node --test demo/tests/bundle.test.mjs
+trunk build --locked --features demo
+cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --features demo --locked -- -D warnings
+```
+
+When the shared transport changes, also run the existing `http.test.mjs` and default-feature `browser_requests` WASM target. The latter exercises the real Fetch path:
+
+```sh
+node --test crates/ruphish-ui/web/tests/http.test.mjs
+cargo test -p ruphish-ui --test browser_requests --target wasm32-unknown-unknown --locked
+cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --locked -- -D warnings
+```
+
+Both local builds use `dist/.stage` and complete at `dist/admin`; rebuild the desired mode before using the output. CI builds demo assets in a separate job/cache and uploads `demo-distribution`, while native/provider tests consume only `admin-distribution`. Visual review and screenshot recapture remain user tasks.
+
 ## Complete source acceptance commands
 
 This catalog is for an explicitly selected full acceptance run. It is not a local completion checklist. Generate the real development distribution before process tests; Trunk invokes the JS/CSS generator itself:
@@ -139,7 +178,7 @@ The CI workflow always starts for PRs to main and pushes to main, including docu
 | Group | Main paths | Fixed checks |
 | --- | --- | --- |
 | Website | `website/**`, `docs/**` | Website tests, Astro checks/build and site validation |
-| Product | `crates/**`, `tests/**`, `migrations/**`, runtime Docker inputs and shared build inputs | Browser tests/lint/formatting and development assets; complete native Clippy/tests on Linux x64, Windows x64 and macOS ARM64; platform asset promotion |
+| Product | `crates/**`, `tests/**`, `migrations/**`, `demo/**`, `assets/website-demo/**`, runtime Docker inputs and shared build inputs | Normal browser tests/lint/formatting and development assets; separate demo contracts/build and shared seed checks; complete native Clippy/tests on Linux x64, Windows x64 and macOS ARM64; platform asset promotion |
 | Persistence | Adapter/application/domain crates, `tests/**`, `migrations/**` and shared build inputs | Both supported MySQL and PostgreSQL versions, complete histories/schema recovery, transport checks and provider executable scenarios |
 | Public | `tests/acceptance/**`, `Dockerfile`, `.dockerignore`, `docker/**` and shared build inputs | Canonical runtime image health, shutdown/persistence and DNS/TLS/SMTP/privacy fixture |
 | Dependencies | Shared build inputs and browser npm manifests/lockfile | Cargo dependency policy and browser npm audit |
