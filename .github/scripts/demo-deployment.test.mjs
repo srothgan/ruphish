@@ -14,7 +14,7 @@ const github = (event = 'pull_request', repository = 'owner/repo', login = 'main
 const allowed = (event, enabled = 'true', changed = 'true') => runInNewContext(guard, {
     github: event,
     vars: { DEMO_DEPLOY_ENABLED: enabled },
-    needs: { checks: { outputs: { demo_changed: changed } } },
+    needs: { demo: { outputs: { demo_changed: changed } } },
 });
 
 test('deployment requires explicit activation and a selected demo artifact', () => {
@@ -36,4 +36,17 @@ test('production is limited to main pushes and explicit main dispatches', () => 
         assert.equal(allowed(github(event, 'owner/repo', 'maintainer', 'refs/heads/feature')), false);
     }
     assert.equal(allowed(github('schedule', 'owner/repo', 'maintainer', 'refs/heads/main')), false);
+});
+
+test('deployment waits only for the demo, while the PR gate still requires both suites', () => {
+    const jobs = Object.fromEntries([...workflow.matchAll(/^  ([\w-]+):\r?\n([\s\S]*?)(?=^  [\w-]+:|$(?![\s\S]))/gm)]
+        .map(([, name, body]) => [name, body]));
+    const dependencies = name => jobs[name].match(/^    needs: (.+)$/m)?.[1].trim()
+        .replace(/[\[\]]/g, '').split(/,\s*/) ?? [];
+    const ancestors = name => dependencies(name).flatMap(parent => [parent, ...ancestors(parent)]);
+    assert.deepEqual(ancestors('deploy-demo'), ['demo']);
+    assert.deepEqual(dependencies('gate').sort(), ['checks', 'demo']);
+    assert.match(jobs.checks, /suite: source/);
+    assert.match(jobs.demo, /suite: demo/);
+    assert.match(jobs['deploy-demo'], /demo-preview.*demo-production/);
 });

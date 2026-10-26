@@ -66,3 +66,25 @@ test('unexpected jobs cannot hide failures behind unselected groups', () => {
     }
   }
 });
+
+test('independent demo runs select no source suites, and combined callers keep full coverage', () => {
+  const expressions = Object.fromEntries([...workflow.matchAll(/^      (\w+): \$\{\{ (inputs\.suite.*?) \}\}$/gm)]
+    .map(([, group, expression]) => [group, expression]));
+  assert.deepEqual(Object.keys(expressions).sort(), [...groups].sort());
+  for (const suite of ['all', 'source', 'demo']) {
+    for (const full of [false, true]) {
+      for (const changed of [false, true]) {
+        const paths = Object.fromEntries(groups.map(group => [group, String(changed)]));
+        const selected = groups.filter(group => runInNewContext(expressions[group], {
+          inputs: { suite, full }, steps: { paths: { outputs: paths } },
+        }) === 'true');
+        const expected = full || changed
+          ? groups.filter(group => suite === 'all' || (suite === 'demo' ? group === 'demo' : group !== 'demo'))
+          : [];
+        assert.deepEqual(selected, expected, `${suite}, full=${full}, changed=${changed}`);
+        const selectedJobs = jobs.filter(job => selected.includes({ assets: 'product', native: 'product', platforms: 'product', database: 'persistence' }[job] ?? job));
+        check(results(selected, selectedJobs));
+      }
+    }
+  }
+});

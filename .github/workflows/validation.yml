@@ -7,6 +7,10 @@ on:
         description: Whether this run selected and built the demo
         value: ${{ jobs.changes.outputs.demo }}
     inputs:
+      suite:
+        type: string
+        default: all
+        description: Select all, source (without demo), or demo checks
       full:
         type: boolean
         default: false
@@ -25,13 +29,18 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
-      product: ${{ inputs.full && 'true' || steps.paths.outputs.product }}
-      demo: ${{ inputs.full && 'true' || steps.paths.outputs.demo }}
-      website: ${{ inputs.full && 'true' || steps.paths.outputs.website }}
-      persistence: ${{ inputs.full && 'true' || steps.paths.outputs.persistence }}
-      public: ${{ inputs.full && 'true' || steps.paths.outputs.public }}
-      dependencies: ${{ inputs.full && 'true' || steps.paths.outputs.dependencies }}
+      product: ${{ inputs.suite == 'demo' && 'false' || inputs.full && 'true' || steps.paths.outputs.product }}
+      demo: ${{ inputs.suite == 'source' && 'false' || inputs.full && 'true' || steps.paths.outputs.demo }}
+      website: ${{ inputs.suite == 'demo' && 'false' || inputs.full && 'true' || steps.paths.outputs.website }}
+      persistence: ${{ inputs.suite == 'demo' && 'false' || inputs.full && 'true' || steps.paths.outputs.persistence }}
+      public: ${{ inputs.suite == 'demo' && 'false' || inputs.full && 'true' || steps.paths.outputs.public }}
+      dependencies: ${{ inputs.suite == 'demo' && 'false' || inputs.full && 'true' || steps.paths.outputs.dependencies }}
     steps:
+      - name: Validate suite selection
+        env:
+          SUITE: ${{ inputs.suite }}
+        run: |
+          case "$SUITE" in all|source|demo) ;; *) exit 1 ;; esac
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0

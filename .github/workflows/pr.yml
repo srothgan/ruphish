@@ -18,26 +18,33 @@ jobs:
   checks:
     uses: ./.github/workflows/validation.yml
     with:
+      suite: source
+      full: ${{ github.event_name == 'workflow_dispatch' }}
+  demo:
+    uses: ./.github/workflows/validation.yml
+    with:
+      suite: demo
       full: ${{ github.event_name == 'workflow_dispatch' }}
   gate:
     name: PR gate
-    needs: checks
+    needs: [checks, demo]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - env:
           RESULT: ${{ needs.checks.result }}
-        run: test "$RESULT" = success
+          DEMO_RESULT: ${{ needs.demo.result }}
+        run: test "$RESULT" = success && test "$DEMO_RESULT" = success
 
   deploy-demo:
     name: Deploy prebuilt demo
-    needs: [checks, gate]
+    needs: demo
     # Credentials exist only in protected deployment environments. Forks and
     # Dependabot still build/test affected inputs, but receive no deployment token.
     if: >-
       vars.DEMO_DEPLOY_ENABLED == 'true' &&
-      needs.checks.outputs.demo_changed == 'true' &&
+      needs.demo.outputs.demo_changed == 'true' &&
       (github.event_name == 'push' && github.ref == 'refs/heads/main' ||
        github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' ||
        github.event_name == 'pull_request' &&
