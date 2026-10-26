@@ -17,3 +17,8 @@ jobs:
     uses: ./.github/workflows/validation.yml
     with:
       full: true
+
+  demo:
+    uses: ./.github/workflows/demo.yml
+    with:
+      full: true

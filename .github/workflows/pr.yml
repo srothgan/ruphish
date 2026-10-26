@@ -19,25 +19,30 @@ jobs:
     uses: ./.github/workflows/validation.yml
     with:
       full: ${{ github.event_name == 'workflow_dispatch' }}
+  demo:
+    uses: ./.github/workflows/demo.yml
+    with:
+      full: ${{ github.event_name == 'workflow_dispatch' }}
   gate:
     name: PR gate
-    needs: checks
+    needs: [checks, demo]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - env:
           RESULT: ${{ needs.checks.result }}
-        run: test "$RESULT" = success
+          DEMO_RESULT: ${{ needs.demo.result }}
+        run: test "$RESULT" = success && test "$DEMO_RESULT" = success
 
   deploy-demo:
     name: Deploy prebuilt demo
-    needs: [checks, gate]
+    needs: demo
     # Credentials exist only in protected deployment environments. Forks and
     # Dependabot still build/test affected inputs, but receive no deployment token.
     if: >-
       vars.DEMO_DEPLOY_ENABLED == 'true' &&
-      needs.checks.outputs.demo_changed == 'true' &&
+      needs.demo.outputs.demo_changed == 'true' &&
       (github.event_name == 'push' && github.ref == 'refs/heads/main' ||
        github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' ||
        github.event_name == 'pull_request' &&
@@ -45,6 +50,11 @@ jobs:
        github.event.pull_request.user.login != 'dependabot[bot]')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
     environment:
       name: ${{ github.event_name == 'pull_request' && 'demo-preview' || 'demo-production' }}
       url: ${{ steps.deploy.outputs.url }}
@@ -55,6 +65,65 @@ jobs:
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_DEMO_PROJECT_ID }}
     steps:
+      - name: Report demo deployment starting
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        timeout-minutes: 1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          REPORT_PHASE: deploying
+        with:
+          script: &demo-comment-script |
+            const marker = '<!-- ruphish-demo-preview -->';
+            const issue_number = context.payload.pull_request.number;
+            const head = context.payload.pull_request.head.sha;
+            const repo = context.repo;
+            const { data: current } = await github.rest.pulls.get({ ...repo, pull_number: issue_number });
+            if (current.state !== 'open' || current.head.sha !== head) return;
+
+            const phase = process.env.REPORT_PHASE;
+            const attempt = process.env.GITHUB_RUN_ATTEMPT || '1';
+            const comments = await github.paginate(github.rest.issues.listComments, { ...repo, issue_number, per_page: 100 });
+            const previous = comments.find(comment => comment.user?.login === 'github-actions[bot]' && comment.user?.type === 'Bot' && comment.body?.startsWith(marker));
+            const progress = previous?.body.match(/<!-- ruphish-demo-progress:(\d+):(\d+):(\w+) -->/);
+            const stages = ['building', 'approval', 'deploying', 'finished'];
+            if (progress) {
+              const [, run, priorAttempt, priorPhase] = progress;
+              if (Number(run) > context.runId) return;
+              if (Number(run) === context.runId && (Number(priorAttempt) > Number(attempt)
+                || priorAttempt === attempt && stages.indexOf(priorPhase) > stages.indexOf(phase))) return;
+            }
+            const ready = phase === 'finished' && process.env.DEMO_RESULT === 'success' && process.env.DEPLOY_RESULT === 'success';
+            let preview = phase === 'finished' ? 'Unavailable' : 'Not ready yet';
+            if (ready) {
+              const url = new URL(process.env.PREVIEW_URL);
+              if (url.protocol !== 'https:' || !url.hostname.endsWith('.vercel.app') || url.origin !== process.env.PREVIEW_URL) {
+                throw new Error('Unexpected Vercel preview URL');
+              }
+              preview = `[Visit preview](${url.href})`;
+            }
+            const status = phase === 'building' ? '⏳ Building'
+              : phase === 'approval' ? '⏸ Awaiting approval'
+              : phase === 'deploying' ? '🚀 Deploying'
+              : ready ? '✅ Ready'
+              : process.env.DEMO_RESULT === 'failure' ? '❌ Build failed' : '❌ Deployment failed';
+            const base = `${context.serverUrl}/${repo.owner}/${repo.repo}`;
+            const body = [
+              marker,
+              `<!-- ruphish-demo-progress:${context.runId}:${attempt}:${phase} -->`,
+              'The latest demo preview for this pull request.',
+              '',
+              '| Project | Status | Preview | Commit |',
+              '| --- | --- | --- | --- |',
+              `| ruphish-demo | ${status} | ${preview} | [${head.slice(0, 7)}](${base}/commit/${head}) |`,
+              '',
+              `[View workflow logs](${base}/actions/runs/${context.runId})`,
+            ].join('\n');
+            if (previous) {
+              await github.rest.issues.updateComment({ ...repo, comment_id: previous.id, body });
+            } else {
+              await github.rest.issues.createComment({ ...repo, issue_number, body });
+            }
       # Deliberately no source checkout or Cargo/npm project build in this job.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
@@ -80,3 +149,89 @@ jobs:
           url=$(vercel deploy "${args[@]}")
           echo "url=$url" >> "$GITHUB_OUTPUT"
           printf 'Demo deployment: %s\n' "$url" >> "$GITHUB_STEP_SUMMARY"
+
+  demo-comment-start:
+    name: Announce demo preview
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      vars.DEMO_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # Read the canonical path filter without executing repository code.
+      # This job runs alongside the build, never as its prerequisite.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: paths
+        with:
+          token: ''
+          base: ${{ github.base_ref }}
+          filters: .github/paths.yml
+      - name: Create or update the bot's preview comment
+        if: steps.paths.outputs.demo == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          REPORT_PHASE: building
+        with:
+          script: *demo-comment-script
+
+  demo-comment-approval:
+    name: Report demo awaiting approval
+    needs: [demo, demo-comment-start]
+    if: >-
+      always() && !cancelled() &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      vars.DEMO_DEPLOY_ENABLED == 'true' &&
+      needs.demo.outputs.demo_changed == 'true' &&
+      needs.demo.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Update the bot's preview comment
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          REPORT_PHASE: approval
+        with:
+          script: *demo-comment-script
+
+  demo-comment:
+    name: Report demo preview result
+    needs: [demo, deploy-demo, demo-comment-start, demo-comment-approval]
+    if: >-
+      always() && !cancelled() &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      vars.DEMO_DEPLOY_ENABLED == 'true' &&
+      needs.demo.outputs.demo_changed == 'true' &&
+      (needs.demo.result == 'failure' ||
+       needs['deploy-demo'].result == 'failure' ||
+       needs['deploy-demo'].result == 'success')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      # Order reporting jobs so a late progress update cannot overwrite the result.
+      # Only the automatic GitHub token is available; no checkout or Vercel token.
+      - name: Update the bot's preview comment
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          REPORT_PHASE: finished
+          DEMO_RESULT: ${{ needs.demo.result }}
+          DEPLOY_RESULT: ${{ needs.deploy-demo.result }}
+          PREVIEW_URL: ${{ needs.deploy-demo.outputs.url }}
+        with:
+          script: *demo-comment-script

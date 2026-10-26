@@ -2,10 +2,6 @@ name: Shared validation
 
 on:
   workflow_call:
-    outputs:
-      demo_changed:
-        description: Whether this run selected and built the demo
-        value: ${{ jobs.changes.outputs.demo }}
     inputs:
       full:
         type: boolean
@@ -26,7 +22,6 @@ jobs:
     timeout-minutes: 10
     outputs:
       product: ${{ inputs.full && 'true' || steps.paths.outputs.product }}
-      demo: ${{ inputs.full && 'true' || steps.paths.outputs.demo }}
       website: ${{ inputs.full && 'true' || steps.paths.outputs.website }}
       persistence: ${{ inputs.full && 'true' || steps.paths.outputs.persistence }}
       public: ${{ inputs.full && 'true' || steps.paths.outputs.public }}
@@ -122,37 +117,6 @@ jobs:
         with:
           name: admin-distribution
           path: dist/admin/
-          retention-days: 2
-          if-no-files-found: error
-
-  demo:
-    name: Static demo contracts and build
-    needs: changes
-    if: needs.changes.outputs.demo == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/toolchain
-        with:
-          browser: 'true'
-          cache-group: browser-demo
-      - run: npm ci --prefix crates/ruphish-ui/web
-      - run: node --test demo/tests/api.test.mjs demo/tests/preview.test.mjs
-      - run: cargo test -p ruphish-ui --test demo_contracts --features demo --locked
-      - run: cargo clippy -p ruphish-ui --test demo_contracts --features demo --locked -- -D warnings
-      - run: node crates/ruphish-ui/web/build-demo.mjs
-      - run: node --test demo/tests/bundle.test.mjs
-      - run: trunk build --locked --release --features demo
-      - run: cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --features demo --locked -- -D warnings
-      - run: node demo/vercel-output.mjs
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: demo-vercel-output
-          path: .vercel/output/
-          include-hidden-files: true
           retention-days: 2
           if-no-files-found: error
 
@@ -344,7 +308,7 @@ jobs:
 
   gate:
     name: Validation gate
-    needs: [changes, website, assets, demo, native, database, platforms, dependencies, public]
+    needs: [changes, website, assets, native, database, platforms, dependencies, public]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -357,13 +321,12 @@ jobs:
           const jobs = JSON.parse(process.env.RESULTS);
           if (jobs.changes.result !== 'success') throw new Error('Path checks failed or were cancelled');
           const groups = jobs.changes.outputs;
-          for (const group of ['product', 'demo', 'website', 'persistence', 'dependencies', 'public']) {
+          for (const group of ['product', 'website', 'persistence', 'dependencies', 'public']) {
             if (!['true', 'false'].includes(groups[group])) throw new Error('Missing path group: ' + group);
           }
           const required = {
             website: groups.website,
             assets: groups.product,
-            demo: groups.demo,
             native: groups.product,
             platforms: groups.product,
             database: groups.persistence,

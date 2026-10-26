@@ -18,7 +18,7 @@ test('demo selection includes browser dependencies, authored content and build o
         'assets/website-demo/data.json', 'demo/vercel-output.mjs',
         'Cargo.lock', 'Cargo.toml', 'Trunk.toml', 'rust-toolchain.toml',
         '.cargo/config.toml', '.github/actions/trunk/linux-x64.sha256',
-        '.github/workflows/pr.yml', '.github/paths.yml',
+        '.github/workflows/pr.yml', '.github/workflows/demo.yml', '.github/paths.yml',
     ]) assert.equal(selected(path), true, path);
 });
 

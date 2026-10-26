@@ -14,7 +14,14 @@ for (const [file, document] of documents) {
     const value = node.getAttribute('href') ?? node.getAttribute('src');
     if (!value || /^(mailto:|tel:|data:|javascript:)/i.test(value)) continue;
     const target = new URL(value, url);
-    if (target.origin !== 'https://website.test') continue;
+    if (target.origin !== 'https://website.test') {
+      if (node.localName === 'a' && ['http:', 'https:'].includes(target.protocol)) {
+        if (node.getAttribute('target') !== '_blank' || !node.getAttribute('rel')?.split(/\s+/).includes('noopener')) {
+          failures.add(`${relative(dist, file)}: external link must open a new tab with noopener: ${value}`);
+        }
+      }
+      continue;
+    }
     let path = resolve(dist, '.' + decodeURIComponent(target.pathname));
     if (existsSync(path) && statSync(path).isDirectory()) path = resolve(path, 'index.html');
     if (!existsSync(path)) failures.add(`${relative(dist, file)}: missing ${target.pathname}`);
@@ -31,4 +38,4 @@ if (!existsSync(resolve(dist, 'pagefind/pagefind.js'))) failures.add('Missing Pa
 if (failures.size) {
   console.error([...failures].sort().join('\n'));
   process.exitCode = 1;
-} else console.log(`Verified ${pages.length} HTML pages: local links, anchors, assets, page metadata, image alternatives, and search index.`);
+} else console.log(`Verified ${pages.length} HTML pages: local links, external link targets, anchors, assets, page metadata, image alternatives, and search index.`);
