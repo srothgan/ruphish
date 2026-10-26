@@ -2,6 +2,10 @@ name: Shared validation
 
 on:
   workflow_call:
+    outputs:
+      demo_changed:
+        description: Whether this run selected and built the demo
+        value: ${{ jobs.changes.outputs.demo }}
     inputs:
       full:
         type: boolean
@@ -22,6 +26,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       product: ${{ inputs.full && 'true' || steps.paths.outputs.product }}
+      demo: ${{ inputs.full && 'true' || steps.paths.outputs.demo }}
       website: ${{ inputs.full && 'true' || steps.paths.outputs.website }}
       persistence: ${{ inputs.full && 'true' || steps.paths.outputs.persistence }}
       public: ${{ inputs.full && 'true' || steps.paths.outputs.public }}
@@ -36,7 +41,7 @@ jobs:
           node-version: '26.8.1'
           package-manager-cache: false
       - name: Check gate behavior and fixture initialization
-        run: node --test .github/scripts/validation.test.mjs tests/acceptance/init.test.mjs
+        run: node --test .github/scripts/*.test.mjs demo/tests/vercel-output.test.mjs tests/acceptance/init.test.mjs
       - name: Lint workflows
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck="" -pyflakes=""
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -123,7 +128,7 @@ jobs:
   demo:
     name: Static demo contracts and build
     needs: changes
-    if: needs.changes.outputs.product == 'true'
+    if: needs.changes.outputs.demo == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -140,12 +145,14 @@ jobs:
       - run: cargo clippy -p ruphish-ui --test demo_contracts --features demo --locked -- -D warnings
       - run: node crates/ruphish-ui/web/build-demo.mjs
       - run: node --test demo/tests/bundle.test.mjs
-      - run: trunk build --locked --features demo
+      - run: trunk build --locked --release --features demo
       - run: cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --features demo --locked -- -D warnings
+      - run: node demo/vercel-output.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: demo-distribution
-          path: dist/admin/
+          name: demo-vercel-output
+          path: .vercel/output/
+          include-hidden-files: true
           retention-days: 2
           if-no-files-found: error
 
@@ -350,13 +357,13 @@ jobs:
           const jobs = JSON.parse(process.env.RESULTS);
           if (jobs.changes.result !== 'success') throw new Error('Path checks failed or were cancelled');
           const groups = jobs.changes.outputs;
-          for (const group of ['product', 'website', 'persistence', 'dependencies', 'public']) {
+          for (const group of ['product', 'demo', 'website', 'persistence', 'dependencies', 'public']) {
             if (!['true', 'false'].includes(groups[group])) throw new Error('Missing path group: ' + group);
           }
           const required = {
             website: groups.website,
             assets: groups.product,
-            demo: groups.product,
+            demo: groups.demo,
             native: groups.product,
             platforms: groups.product,
             database: groups.persistence,

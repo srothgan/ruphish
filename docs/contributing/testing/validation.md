@@ -130,7 +130,7 @@ cargo test -p ruphish-ui --test browser_requests --target wasm32-unknown-unknown
 cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --locked -- -D warnings
 ```
 
-Both local builds use `dist/.stage` and complete at `dist/admin`; rebuild the desired mode before using the output. CI builds demo assets in a separate job/cache and uploads `demo-distribution`, while native/provider tests consume only `admin-distribution`. Visual review and screenshot recapture remain user tasks.
+Both local builds use `dist/.stage` and complete at `dist/admin`; rebuild the desired mode before using the output. CI builds the demo with `--release` in a separate job/cache, validates and packages it with `node demo/vercel-output.mjs`, and uploads `demo-vercel-output`. Native/provider tests consume only the normal development `admin-distribution`. [Demo deployment](../demo.md#github-build-and-vercel-deployment) consumes the optimized artifact without rebuilding. Visual review and screenshot recapture remain user tasks.
 
 ## Complete source acceptance commands
 
@@ -178,7 +178,8 @@ The CI workflow always starts for PRs to main and pushes to main, including docu
 | Group | Main paths | Fixed checks |
 | --- | --- | --- |
 | Website | `website/**`, `docs/**` | Website tests, Astro checks/build and site validation |
-| Product | `crates/**`, `tests/**`, `migrations/**`, `demo/**`, `assets/website-demo/**`, runtime Docker inputs and shared build inputs | Normal browser tests/lint/formatting and development assets; separate demo contracts/build and shared seed checks; complete native Clippy/tests on Linux x64, Windows x64 and macOS ARM64; platform asset promotion |
+| Product | `crates/**`, `tests/**`, `migrations/**`, `demo/**`, `assets/website-demo/**`, runtime Docker inputs and shared build inputs | Normal browser tests/lint/formatting and development assets; shared seed checks; complete native Clippy/tests on Linux x64, Windows x64 and macOS ARM64; platform asset promotion |
+| Demo | UI/domain/contracts, embedded starter content, demo data, workspace manifest/lockfile, toolchain and build/deployment inputs | Demo contracts, bundle tests, native/WASM lint, optimized build and static deployment artifact |
 | Persistence | Adapter/application/domain crates, `tests/**`, `migrations/**` and shared build inputs | Both supported MySQL and PostgreSQL versions, complete histories/schema recovery, transport checks and provider executable scenarios |
 | Public | `tests/acceptance/**`, `Dockerfile`, `.dockerignore`, `docker/**` and shared build inputs | Canonical runtime image health, shutdown/persistence and DNS/TLS/SMTP/privacy fixture |
 | Dependencies | Shared build inputs and browser npm manifests/lockfile | Cargo dependency policy and browser npm audit |
@@ -189,14 +190,14 @@ These groups intentionally trade some extra execution for predictable coverage. 
 
 Linux native Clippy, library/integration tests, SQLite histories and executable scenarios share one job and Cargo target directory. Database jobs run independently of that job once browser assets are available; their fixed suite includes provider executable scenarios that consume those assets. Provider caches are separate from the Linux native cache so concurrent jobs cannot prevent its final test outputs from being saved. Browser compilation and each additional native platform still require their own compilation; this is not a single portable build artifact.
 
-CI uses the tools' default build, test and worker parallelism. Provider and platform matrices have no repository-imposed parallel-job cap; GitHub schedules them within its hosted-runner limits. The bounded commands above are for local work. macOS CI covers Apple Silicon (ARM64); Intel macOS is no longer a supported validation target. Superseded runs for the same PR or scheduled ref are cancelled. Matching UI inputs can reuse development assets; tests still run. Optimized UI is built only in the release workflow. The final gates reject failed/cancelled checks, missing group outputs and unexpectedly skipped selected jobs.
+CI uses the tools' default build, test and worker parallelism. Provider and platform matrices have no repository-imposed parallel-job cap; GitHub schedules them within its hosted-runner limits. The bounded commands above are for local work. macOS CI covers Apple Silicon (ARM64); Intel macOS is no longer a supported validation target. Superseded runs for the same PR or scheduled ref are cancelled. Matching UI inputs can reuse development assets; tests still run. Normal optimized UI is built in the release workflow; the selected demo job builds its optimized deployable artifact in CI. The final gates reject failed/cancelled checks, missing group outputs and unexpectedly skipped selected jobs.
 
 Native platform and release test steps point `TMPDIR`, `TMP` and `TEMP` at GitHub's `runner.temp` directory. This keeps disposable databases and other fixtures in the job's temporary storage instead of the Windows user-profile directory. OS process metrics are optional failure diagnostics; an unavailable or timed-out metrics command does not itself fail a product test.
 
-Actions use pinned commits, read-only repository permissions and checkout without persisted credentials. These workflows neither receive deployment secrets nor publish releases. Validate workflow edits locally with:
+Validation jobs use pinned actions, read-only repository permissions and checkout without persisted credentials. They receive no deployment secrets and do not publish releases. The opt-in demo deployment job runs only after validation and obtains its credential from a protected environment; see [activation and credentials](../demo.md#activation-and-credentials). Validate workflow edits locally with:
 
 ```sh
-node --test .github/scripts/validation.test.mjs
+node --test .github/scripts/*.test.mjs demo/tests/vercel-output.test.mjs
 actionlint -shellcheck="" -pyflakes=""
 ```
 
