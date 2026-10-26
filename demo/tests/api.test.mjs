@@ -3,8 +3,31 @@ import assert from 'node:assert/strict';
 import { createDemoApi } from '../../crates/ruphish-ui/web/demo-api.mjs';
 import { dataset, draftId } from '../../assets/website-demo/dataset.mjs';
 import { startRequestWith } from '../../crates/ruphish-ui/web/http.mjs';
+import { readFileSync } from 'node:fs';
 
 const now = 1793016000;
+
+test('configured resources and the demo starter picker use the existing authored starters', async () => {
+    const f = setup(); await f.login();
+    const catalog = (await f.request('/api/starter-templates/')).value;
+    assert.equal(catalog.filter(row => row.kind === 'email').length, 4);
+    assert.equal(catalog.filter(row => row.kind === 'landing_page').length, 2);
+    assert.equal(catalog.filter(row => row.kind === 'learning_page').length, 3);
+    for (const [family, id, source] of [
+        ['templates', 'email-microsoft-shared-document', 'emails/microsoft-shared-document/email.html'],
+        ['pages', 'page-microsoft-side-panel', 'landing-pages/microsoft-side-panel/landing.html'],
+        ['learning-pages', 'learning-slam', 'learning-pages/slam/learning.html'],
+    ]) {
+        const original = readFileSync(new URL(`../../crates/ruphish-http/starter-templates/${source}`, import.meta.url), 'utf8');
+        const resource = (await f.request(`/api/${family}/1`)).value;
+        const entry = (await f.request(`/api/starter-templates/${id}`)).value;
+        assert.equal(resource.html, original);
+        assert.equal(entry.resource.html, original);
+        assert.equal(entry.summary.name, resource.name);
+    }
+    assert.equal(catalog.find(row => row.id === 'page-microsoft-side-panel').company_logo.selector, '.microsoft');
+    assert.equal(catalog.find(row => row.id === 'learning-slam').company_logo.selector, '.learning-logo');
+});
 
 test('spreadsheet download contains separate recipient and event sheets with safe cells', async () => {
     const f = setup(); await f.login();

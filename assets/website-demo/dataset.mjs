@@ -1,5 +1,6 @@
 // Shared synthetic scenario. No SQL, network, credentials, or submitted user content.
 import source from './data.json' with { type: 'json' };
+import { starterContent } from './starter-content.mjs';
 
 export const DAY = 86400;
 export const ZERO = '0001-01-01T00:00:00Z';
@@ -21,18 +22,15 @@ export function dataset(now) {
         targets: recipients.filter((_, n) => n % source.departments.length === i),
     }));
     groups.push(resource('New starters', 4, { targets: recipients.slice(0, 12) }), resource('Next exercise audience', 5, { targets: [] }));
-    const templates = source.templates.map((name, i) => resource(name, i, {
-        subject: `${name} - awareness exercise`, envelope_sender: '', attachments: [],
-        text: 'Hello {{.FirstName}}, this is a synthetic awareness exercise. {{.URL}}',
-        html: '<h1>Awareness exercise</h1><p>Hello {{.FirstName}},</p><p>This message is part of a synthetic exercise.</p><p><a href="{{.URL}}">Review the exercise</a></p>{{.Tracker}}',
+    const templates = source.templates.map((entry, i) => resource(entry.name, i, {
+        ...starterContent.templates[i], envelope_sender: '', attachments: [],
     }));
-    const pages = source.pages.map((name, i) => resource(name, i, {
-        html: '<!doctype html><html lang="en"><title>Awareness exercise</title><h1>Synthetic awareness exercise</h1><p>No sign-in is needed. This is sample content for the public demo.</p></html>',
+    const pages = source.pages.map((entry, i) => resource(entry.name, i, {
+        ...starterContent.pages[i],
         ...policy,
     }));
-    const learning = source.learning_pages.map((name, i) => resource(name, i, {
-        public_id: `sample-lesson-${i + 1}`,
-        html: `<!doctype html><html lang="en"><title>${name}</title><h1>${name}</h1><p>Check the sender, inspect links, and report unexpected requests to your security team.</p><p>This lesson is synthetic demo content.</p></html>`,
+    const learning = source.learning_pages.map((entry, i) => resource(entry.name, i, {
+        public_id: String(i + 1).padStart(32, '0'), ...starterContent.learning_pages[i],
     }));
     const smtp = ['Awareness team', 'Training team'].map((name, i) => resource(name, i, {
         interface_type: 'SMTP', host: 'smtp.example.test:587', from_address: `${name} <awareness@example.test>`,
@@ -107,5 +105,9 @@ export function dataset(now) {
         id: draftId(i + 1), revision: 1, configuration: { name, url: domains[0].origin, selection, policy, launch_local: null, send_by_local: null },
         step: i, created: iso(now - DAY), modified: iso(now - 3600), campaign_id: null, status: 'draft',
     }));
-    return { now, groups, templates, pages, 'learning-pages': learning, smtp, users, domains, webhooks, 'reporting-mailboxes': mailboxes, campaigns, drafts };
+    const starters = [['templates', 'email', templates], ['pages', 'landing_page', pages], ['learning_pages', 'learning_page', learning]].flatMap(([family, kind, resources]) => source[family].map((entry, i) => ({
+        summary: { id: `${{ email: 'email', landing_page: 'page', learning_page: 'learning' }[kind]}-${entry.starter}`, name: entry.name, brand: entry.brand, kind, prefill: kind === 'landing_page', company_logo: entry.company_logo ?? (kind === 'learning_page' ? { selector: '.learning-logo', height: 48, context: 'Learning page header' } : null) },
+        resource: resources[i],
+    })));
+    return { now, groups, templates, pages, 'learning-pages': learning, smtp, users, domains, webhooks, 'reporting-mailboxes': mailboxes, campaigns, drafts, starters };
 }

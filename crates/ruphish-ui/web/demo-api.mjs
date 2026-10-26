@@ -186,7 +186,7 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage } =
         if (path === '/api/import/email' && method === 'POST') return json({ ...data.templates[0], id: 0 });
         if (path === '/api/import/group/review' && method === 'POST') return json({ targets: data.groups[4].targets, errors: [], duplicates: 0 });
         if (path.startsWith('/api/starter-templates') && method === 'GET') {
-            const entries = ['templates', 'pages', 'learning-pages'].flatMap((family, i) => data[family].map(r => ({ summary: { id: `demo-${family}-${r.id}`, name: r.name, brand: 'Ruphish', kind: ['email', 'landing_page', 'learning_page'][i], prefill: false, company_logo: null }, resource: r })));
+            const entries = data.starters;
             if (path === '/api/starter-templates') return json(entries.map(e => e.summary));
             const entry = entries.find(e => e.summary.id === path.split('/').at(-1));
             return entry ? json(entry) : failure(404);

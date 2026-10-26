@@ -8,9 +8,21 @@
     { "name": "Benefits enrollment", "ago": 21, "size": 617, "opened": 320, "clicked": 48, "submitted": 12, "reported": 140, "complete": true, "failed": 0 },
     { "name": "Delivery notification", "ago": 2, "size": 320, "opened": 170, "clicked": 22, "submitted": 6, "reported": 98, "complete": false, "failed": 12 }
   ],
-  "templates": ["Benefits enrollment", "Shared document", "Delivery notification", "Team onboarding"],
-  "pages": ["Awareness exercise", "Document sharing exercise"],
-  "learning_pages": ["Spot the warning signs", "Report suspicious messages", "Protect your account"],
+  "templates": [
+    { "starter": "microsoft-shared-document", "name": "Microsoft 365 - Shared document (EN)", "brand": "Microsoft" },
+    { "starter": "google-account-security", "name": "Google Account - Account security (EN)", "brand": "Google" },
+    { "starter": "docusign-signature-request", "name": "Docusign - Signature request (EN)", "brand": "Docusign" },
+    { "starter": "workday-employee-document", "name": "Workday - Employee document (EN)", "brand": "Workday" }
+  ],
+  "pages": [
+    { "starter": "microsoft-side-panel", "name": "Microsoft - Sign in (side panel)", "brand": "Microsoft", "company_logo": { "selector": ".microsoft", "height": 36, "context": "Entra company branding" } },
+    { "starter": "google-workspace", "name": "Google - Sign in (wide)", "brand": "Google" }
+  ],
+  "learning_pages": [
+    { "starter": "slam", "name": "SLAM (EN)", "brand": "Ruphish" },
+    { "starter": "stop-challenge-protect", "name": "Stop, Challenge, Protect (EN)", "brand": "Ruphish" },
+    { "starter": "recognize-resist-report-delete", "name": "Recognize, Resist and Report, Delete (EN)", "brand": "Ruphish" }
+  ],
   "users": [
     { "username": "demo", "role": "admin" },
     { "username": "alex.security", "role": "admin" },

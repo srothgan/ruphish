@@ -28,6 +28,8 @@ Edit sample values in [`data.json`](data.json) and their materialization in [`da
 
 The sample's **937 emails sent** in the last 30 days are **332 recipients − 12 failures + 617 recipients**. The older campaign's 400 recipients remain in the recent-campaign table but fall outside that period; they supply the previous-period comparison.
 
+Content examples reference the existing [starter collection](../../crates/ruphish-http/starter-templates/): Microsoft shared document, Google account security, Docusign signature request, and Workday employee document emails; Microsoft side-panel and Google Workspace landing pages; and all three learning pages (SLAM; Stop, Challenge, Protect; Recognize, Resist and Report, Delete). `starter-content.mjs` reads those authored files directly. The browser bundler embeds their content and license notices; no second content snapshot is maintained.
+
 **Manual second-place replacement:** after reviewing `assets/dashboard.png`, copy it over `website/public/dashboard.png`. That second file is served at `/dashboard.png` by both the website landing page and documentation. The recorder deliberately leaves it unchanged. In PowerShell, from the repository root:
 
 ```powershell

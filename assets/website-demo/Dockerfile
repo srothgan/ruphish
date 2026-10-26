@@ -27,4 +27,5 @@ COPY --from=build /built/ruphish /app/ruphish
 COPY --from=build /source/dist/admin/ /app/dist/admin/
 COPY assets/website-demo/*.mjs ./
 COPY assets/website-demo/data.json ./
+COPY crates/ruphish-http/starter-templates/ /crates/ruphish-http/starter-templates/
 ENTRYPOINT ["node", "/recorder/record.mjs"]
