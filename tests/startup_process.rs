@@ -56,6 +56,8 @@ use domain_network::tls_fixture;
 #[path = "support/webhook_receiver.rs"]
 mod webhook_receiver;
 
+const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+
 struct Process {
     directory: PathBuf,
     mode: String,
@@ -167,7 +169,7 @@ impl Process {
     }
 
     fn ready(&mut self) -> Value {
-        let deadline = Instant::now() + Duration::from_secs(30);
+        let deadline = Instant::now() + STARTUP_TIMEOUT;
         loop {
             let (buffer, changed) = &*self.output;
             let buffer = buffer.lock().unwrap();
@@ -200,7 +202,11 @@ impl Process {
     }
 
     fn wait(&mut self, success: bool) {
-        let deadline = Instant::now() + Duration::from_secs(15);
+        self.wait_for_exit(success, Duration::from_secs(15));
+    }
+
+    fn wait_for_exit(&mut self, success: bool, timeout: Duration) {
+        let deadline = Instant::now() + timeout;
         loop {
             if let Some(status) = self.child.try_wait().unwrap() {
                 // Child exit can precede ConPTY's final output. Close the terminal
@@ -278,7 +284,9 @@ impl Process {
     }
 
     fn fail(&mut self) {
-        self.wait(false);
+        // Rejected startup still validates the distribution, including the full
+        // development WASM. Allow the same startup budget as readiness checks.
+        self.wait_for_exit(false, STARTUP_TIMEOUT);
         assert!(!self.output().contains("RUPHISH_READY"));
     }
 

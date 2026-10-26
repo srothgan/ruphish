@@ -72,6 +72,38 @@ See [local demo instructions](../../demo/README.md) for building and previewing 
 
 Both local modes use Trunk's existing `dist/.stage` staging and final `dist/admin` directory. Build sequentially and rebuild the intended mode before consuming this directory. CI uses separate jobs and artifact names so a demo artifact cannot satisfy the normal product asset cache.
 
+## Vercel build settings
+
+Use a separate `ruphish-demo` project connected to this repository, with `main` as its production branch after the demo changes are merged. Configure the following [Vercel build settings](https://vercel.com/docs/builds/configure-a-build):
+
+| Setting | Value |
+| --- | --- |
+| Application preset | Other |
+| Root directory | `./` (repository root) |
+| Output directory | `dist/admin` |
+| Install Command override | Enabled; use the command below |
+| Build Command override | Enabled; use the command below |
+
+Copy each command as a single line. The install command is 239 characters and the build command is 165 characters, both below the dashboard's 256-character field limit.
+
+### Install Command
+
+```sh
+export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH" && rustup install 1.99.1 --target wasm32-unknown-unknown && cargo +1.99.1 install trunk --version 0.21.14 --locked --profile dev -j1 && npm ci --include=dev --prefix crates/ruphish-ui/web
+```
+
+The Vercel environment used for this project already provides `rustup` and sets `CARGO_HOME` to `/rust`. Reuse that installation rather than running the rustup installer again or assuming an environment file exists at `$HOME/.cargo/env`. Installing the toolchain explicitly avoids rustup's deprecated automatic toolchain installation. Keep these version arguments aligned with [`rust-toolchain.toml`](../../rust-toolchain.toml) and [`Trunk.toml`](../../Trunk.toml); retain `--locked` when installing Trunk.
+
+### Build Command
+
+```sh
+export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH" && node crates/ruphish-ui/web/build-demo.mjs && CARGO_BUILD_JOBS=1 trunk build --locked --release --features demo
+```
+
+The build command sets its own tool path because the install and build commands run separately. It generates the demo transport before Trunk builds the optimized public WASM artifact. Local development and ordinary validation continue to use the development build documented above.
+
+These commands cover installation and compilation, not a verified deployment. Application-route rewrites are still required for direct visits and refreshes on nested pages such as `/campaigns/3`; asset files must remain directly accessible, and missing assets and API URLs must not return the application HTML. Domain assignment to `demo.ruphish.com` is a separate project setting.
+
 ## Manual acceptance
 
 Local validation covers the changed guarantees; the CI matrix remains the broader backstop. Deployment and manual browser review remain separate from passing compilation and protocol tests.
