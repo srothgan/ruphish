@@ -5,6 +5,7 @@ mod cli;
 mod config;
 mod diagnostics;
 mod domain_worker;
+mod installation;
 mod logging;
 mod runtime;
 mod worker_backoff;
@@ -25,7 +26,7 @@ pub fn entry() -> std::process::ExitCode {
         }
     };
     let result = (|| {
-        let config = config::load(&arguments.config)?;
+        let config = installation::load(arguments.config.as_deref())?;
         config.validate(arguments.mode)?;
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
@@ -49,6 +50,13 @@ pub fn entry() -> std::process::ExitCode {
             {
                 eprintln!(
                     "Could not read configuration ({:?}); check its path and permissions",
+                    error.kind()
+                );
+            } else if let Some(config::ConfigError::Initialize(error)) =
+                error.downcast_ref::<config::ConfigError>()
+            {
+                eprintln!(
+                    "Could not create default configuration ({:?}); check the OS configuration/data directories and permissions",
                     error.kind()
                 );
             } else if let Some(config::ConfigError::Invalid(message)) =

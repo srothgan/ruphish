@@ -13,7 +13,7 @@ mod mysql;
 pub mod outbound;
 pub mod password_worker;
 mod postgres;
-mod private_file;
+pub mod private_file;
 pub mod resources;
 pub mod smtp;
 mod sqlite;

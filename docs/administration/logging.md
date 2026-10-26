@@ -5,7 +5,7 @@ sidebar:
   order: 8
 ---
 
-Set `logging.filename` to append to a file, or leave it empty for stderr only. With a file configured, logs also go to stderr. The process must be able to write the selected path; relative paths follow its working directory.
+Set `logging.filename` to append to a file, or leave it empty for stderr only. With a file configured, logs also go to stderr. Generated configurations select `ruphish.log` in the OS log directory. The process must be able to write the selected path; relative paths follow the configuration directory for automatic discovery and the working directory with explicit `--config`. See [configuration locations](configuration.md#default-locations-and-explicit-configuration).
 
 Use `info` for ordinary operation. `debug` and `trace` increase application diagnostics, but do not enable dependency logging. `warn`/`warning`, `error`, `fatal`, and `panic` are accepted compatibility names; fatal/panic map to error severity.
 

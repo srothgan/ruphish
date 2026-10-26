@@ -5,7 +5,7 @@ sidebar:
   order: 10
 ---
 
-Run Ruphish with an explicit working directory and configuration path. Relative database, certificate, log, and asset paths depend on that directory. A service manager must preserve the same relationship you verified interactively.
+Running Ruphish without `--config` reads or creates the OS user configuration and uses its persistent data/log paths. For a service or Docker deployment, select an explicit configuration and working directory: relative database, certificate and log paths in that file depend on the working directory. Development asset paths also depend on it. A service manager must preserve the same relationship you verified interactively. See [configuration discovery and path rules](configuration.md#default-locations-and-explicit-configuration).
 
 Use [installation](../getting-started/installation.md) for the intended release-binary and Docker-image setup paths.
 

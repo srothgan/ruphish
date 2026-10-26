@@ -5,9 +5,44 @@ sidebar:
   order: 2
 ---
 
-Ruphish reads JSON from the path selected by `--config`, defaulting to `./config.json`. Paths inside it resolve against the process working directory, not the configuration file's directory. Changes take effect at restart; there is no hot-reload contract.
+Ruphish reads JSON. Without `--config`, it reads the OS-specific `config.json` below and creates it with SQLite defaults on first startup. Existing files are never rewritten automatically. Changes take effect at restart; there is no hot-reload contract.
 
-Start from `config.example.json`. Its sample values are not decoder defaults: omitted legacy strings start empty, booleans false, and lists empty. An incomplete configuration can therefore be rejected even though the sample works.
+## Default locations and explicit configuration
+
+| OS | Configuration | SQLite and generated certificates | Logs |
+| --- | --- | --- | --- |
+| Windows | `%LOCALAPPDATA%\ruphish\config.json` | `%LOCALAPPDATA%\ruphish\data\` | `%LOCALAPPDATA%\ruphish\logs\` |
+| Linux | `$XDG_CONFIG_HOME/ruphish/config.json`, otherwise `~/.config/ruphish/config.json` | `$XDG_DATA_HOME/ruphish/`, otherwise `~/.local/share/ruphish/` | `$XDG_STATE_HOME/ruphish/`, otherwise `~/.local/state/ruphish/` |
+| macOS | `~/Library/Application Support/ruphish/config.json` | `~/Library/Application Support/ruphish/` | `~/Library/Logs/ruphish/` |
+
+Empty or relative Linux XDG directory variables use the listed home-directory fallback. Startup prints the selected configuration, SQLite and log paths. The generated file contains absolute paths; relative filesystem paths you later enter in this automatically discovered file resolve against its directory. Configuration creation uses private file permissions and publishes a complete file without replacing an existing one. Invalid configuration, denied access and database failures stop startup instead of resetting settings or choosing another database.
+
+Use `ruphish --config /path/to/config.json` for an explicit installation, including Docker. That file must already exist; Ruphish does not create a fallback per-user installation. For compatibility, relative paths inside an explicitly selected configuration resolve against the process working directory. A local `./config.json` is only selected with `--config ./config.json`.
+
+Generated defaults come from `config.example.json` embedded at build time; a loose example file is never read at runtime. These are not decoder defaults: omitted legacy strings start empty, booleans false, and lists empty. An incomplete configuration can therefore be rejected even though the generated file works. Operators can select MySQL or PostgreSQL by editing the configuration and restarting; moving data between providers is an operator task.
+
+For an explicit installation, copy this minimal SQLite configuration into your chosen file and adjust the paths and listeners:
+
+```json
+{
+  "admin_server": {
+    "listen_url": "127.0.0.1:3333",
+    "use_tls": true,
+    "cert_path": "ruphish_admin.crt",
+    "key_path": "ruphish_admin.key"
+  },
+  "phish_server": {
+    "listen_url": "127.0.0.1:8081",
+    "use_tls": false,
+    "cert_path": "ruphish_public.crt",
+    "key_path": "ruphish_public.key"
+  },
+  "db_name": "sqlite3",
+  "db_path": "ruphish.db",
+  "migrations_prefix": "",
+  "logging": { "filename": "ruphish.log", "level": "info" }
+}
+```
 
 ## Top-level fields
 
@@ -20,7 +55,7 @@ Start from `config.example.json`. Its sample values are not decoder defaults: om
 | `db_sslca_path` | string | Legacy MySQL CA path; incompatible with typed MySQL settings and other providers |
 | `mysql` | object/null | [Typed MySQL settings](databases/mysql.md) |
 | `postgres` | object/null | [Typed PostgreSQL settings](databases/postgresql.md) |
-| `migrations_prefix` | string | Legacy migration-directory compatibility setting; normally `db/db_` from the example |
+| `migrations_prefix` | string | Empty uses embedded migrations; a nonempty value selects a verified legacy SQLite migration directory |
 | `contact_address` | string | Contact address exposed by the public transparency response |
 | `logging` | object | Output file and level |
 | `domain_verification` | object | Installation-owned DNS/HTTPS/proxy policy |
@@ -60,7 +95,7 @@ Resource API clients cannot change these installation settings. See [listeners a
 
 ## Logging and environment
 
-`logging.filename` defaults to empty (stderr only). A configured file is appended to, with logs also written to stderr. `logging.level` defaults to the info behavior; accepted names are empty, `trace`, `debug`, `info`, `warn`, `warning`, `error`, `fatal`, and `panic`, case-insensitively. Fatal/panic levels map to error severity. See [logging](logging.md).
+Omitting `logging.filename` means stderr only; generated configurations select `ruphish.log` in the OS log directory. A configured file is appended to, with logs also written to stderr. `logging.level` defaults to the info behavior; accepted names are empty, `trace`, `debug`, `info`, `warn`, `warning`, `error`, `fatal`, and `panic`, case-insensitively. Fatal/panic levels map to error severity. See [logging](logging.md).
 
 `GOPHISH_INITIAL_ADMIN_PASSWORD` and `GOPHISH_INITIAL_ADMIN_API_TOKEN` are preserved bootstrap environment names. They are not configuration keys. Supply bootstrap credentials privately and remove them from the shell after setup. When no initial password is supplied, the application prints the generated temporary administrator password to startup stderr, including noninteractive Docker output. Supplied passwords and API tokens are never printed; generated passwords are not sent to the application log file. Typed database `password_env` fields name their own environment variable; there is no generic environment override for every JSON field.
 

@@ -13,7 +13,7 @@
   },
   "db_name": "sqlite3",
   "db_path": "ruphish.db",
-  "migrations_prefix": "db/db_",
+  "migrations_prefix": "",
   "contact_address": "",
   "domain_verification": {
     "trusted_proxies": [],

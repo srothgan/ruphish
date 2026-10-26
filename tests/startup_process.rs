@@ -103,6 +103,9 @@ impl Process {
         let mut command = CommandBuilder::new(env!("CARGO_BIN_EXE_ruphish"));
         command.cwd(directory);
         command.args(["--mode", mode]);
+        if !options.contains(&"--config") {
+            command.args(["--config", "config.json"]);
+        }
         command.args(options);
         for (name, value) in [
             ("GOPHISH_INITIAL_ADMIN_PASSWORD", password),

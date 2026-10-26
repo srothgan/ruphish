@@ -12,13 +12,13 @@ trunk build --locked
 cargo build --workspace --exclude ruphish-ui --locked
 ```
 
-Copy config.example.json to config.json, then run from this product directory:
+Run from this product directory; startup reads or creates the per-user OS configuration:
 
 ```sh
-cargo run -p ruphish --locked -- --config ./config.json --mode all
+cargo run -p ruphish --locked
 ```
 
-The example uses local admin HTTPS on 3333 and public HTTP on 8081. The decoder itself has Go's zero defaults, not these sample values. Each selected listener requires an explicitly configured, nonempty `listen_url`; a missing address fails startup. Existing Go JSON fields and GOPHISH_INITIAL_ADMIN_PASSWORD / GOPHISH_INITIAL_ADMIN_API_TOKEN environment names are preserved. Paths resolve against the process working directory, including when --config points into another directory. Unknown fields and invalid known-field types fail, so spelling mistakes cannot silently disable listener protections. test_flag cannot enable test mode. SQLite is the default local configuration; MySQL and PostgreSQL are explicitly selectable through [typed database settings](database.md). Invalid/conflicting provider settings fail before readiness, with no fallback.
+The example uses local admin HTTPS on 3333 and public HTTP on 8081. The decoder itself has Go's zero defaults, not these sample values. Each selected listener requires an explicitly configured, nonempty `listen_url`; a missing address fails startup. Existing Go JSON fields and GOPHISH_INITIAL_ADMIN_PASSWORD / GOPHISH_INITIAL_ADMIN_API_TOKEN environment names are preserved. Generated defaults use absolute OS data/log paths. Relative paths in an automatically discovered configuration resolve against its directory. Explicit --config requires an existing file and preserves working-directory-relative paths. See [configuration locations](../administration/configuration.md#default-locations-and-explicit-configuration). Unknown fields and invalid known-field types fail, so spelling mistakes cannot silently disable listener protections. test_flag cannot enable test mode. SQLite is the default local configuration; MySQL and PostgreSQL are explicitly selectable through [typed database settings](database.md). Invalid/conflicting provider settings fail before readiness, with no fallback.
 
 --mode admin and --mode phish start only the selected listener. Inactive listeners do not need assets, usable addresses or certificates. --disable-mailer stops campaign queue execution in this process; --no-disable-mailer enables it. Only modes containing the admin listener run the campaign worker. Resource management, campaign delivery, public interactions and reporting mailboxes are implemented.
 

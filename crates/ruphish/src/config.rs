@@ -42,6 +42,8 @@ pub(crate) struct Config {
 pub(crate) enum ConfigError {
     #[error("Could not read configuration: {0}")]
     Io(#[from] std::io::Error),
+    #[error("Could not create default configuration")]
+    Initialize(#[source] std::io::Error),
     #[error("Invalid configuration JSON at line {line}, column {column}")]
     Json { line: usize, column: usize },
     #[error("{0}")]
@@ -50,8 +52,12 @@ pub(crate) enum ConfigError {
 
 pub(crate) fn load(path: &Path) -> Result<Config, ConfigError> {
     let source = std::fs::read(path)?;
+    decode(&source)
+}
+
+pub(crate) fn decode(source: &[u8]) -> Result<Config, ConfigError> {
     let mut config = Config::default();
-    merge(&mut config, &source).map_err(|error| ConfigError::Json {
+    merge(&mut config, source).map_err(|error| ConfigError::Json {
         line: error.line(),
         column: error.column(),
     })?;
@@ -59,6 +65,53 @@ pub(crate) fn load(path: &Path) -> Result<Config, ConfigError> {
 }
 
 impl Config {
+    /// OS-discovered configurations use their own directory for relative paths.
+    /// Explicit --config inputs retain the legacy process-working-directory contract.
+    pub(crate) fn resolve_paths(&mut self, base: &Path) -> Result<(), ConfigError> {
+        fn resolve(path: &mut PathBuf, base: &Path) {
+            if !path.as_os_str().is_empty() && path.is_relative() {
+                *path = base.join(&*path);
+            }
+        }
+        for path in [
+            &mut self.admin.cert_path,
+            &mut self.admin.key_path,
+            &mut self.phish.cert_path,
+            &mut self.phish.key_path,
+            &mut self.db_sslca_path,
+            &mut self.logging.filename,
+        ] {
+            resolve(path, base);
+        }
+        if self.db_name == "sqlite3" {
+            resolve(&mut self.db_path, base);
+            if !self.migrations_prefix.is_empty() {
+                let mut prefix = PathBuf::from(&self.migrations_prefix);
+                resolve(&mut prefix, base);
+                self.migrations_prefix = prefix.into_os_string().into_string().map_err(|_| {
+                    ConfigError::Invalid(
+                        "Migration directory must be representable as Unicode".into(),
+                    )
+                })?;
+            }
+        }
+        for path in [
+            self.mysql
+                .as_mut()
+                .and_then(|config| config.ca_path.as_mut()),
+            self.postgres
+                .as_mut()
+                .and_then(|config| config.ca_path.as_mut()),
+            self.domain_verification.trusted_ca_path.as_mut(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            resolve(path, base);
+        }
+        Ok(())
+    }
+
     pub(crate) fn validate(&self, mode: Mode) -> Result<(), ConfigError> {
         self.database()?;
         for (selected, name, server) in [
