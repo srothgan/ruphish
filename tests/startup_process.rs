@@ -788,7 +788,9 @@ fn raw_traversal_requests_cannot_escape_assets_and_modified_distributions_fail_p
     .unwrap();
     let mut stale = Process::start(directory.path(), "admin");
     stale.fail();
-    assert!(stale.output().contains("integrity"));
+    let output = stale.output();
+    assert!(output.contains("Load administration assets"), "{output}");
+    assert!(output.contains("rebuild with Trunk"), "{output}");
 }
 
 #[cfg(unix)]
