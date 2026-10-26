@@ -1,8 +1,7 @@
 {
   "demo": {
-    "notice": "Öffentliche Demo — Änderungen werden nicht gespeichert und keine Nachrichten versendet.",
+    "notice": "Öffentliche Demo - Änderungen werden nicht gespeichert und keine Nachrichten versendet.",
     "website": "Ruphish-Website",
-    "credentials": "Demo-Benutzername: demo · Passwort: demodemo. Verwenden Sie nur diese Beispieldaten.",
     "created": "Erstellung simuliert. Nichts wurde gespeichert; ein Beispiel wird angezeigt.",
     "saved": "Änderungen für diese Demo akzeptiert. Nichts wurde gespeichert.",
     "deleted": "Löschung simuliert. Die Beispieldaten bleiben unverändert.",

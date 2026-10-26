@@ -212,12 +212,7 @@ pub(super) fn app() -> impl IntoView {
             {#[cfg(feature = "demo")]
             {
                 view! {
-                    <div class="demo-notice" role="note">
-                        <span>{tr!(demo.notice)}</span>
-                        <a href="https://www.ruphish.com/" rel="external">
-                            {tr!(demo.website)}
-                        </a>
-                    </div>
+                    <DemoBanner />
                     <DemoToastHost notifications=api.notifications />
                 }
             }} {navigation_guard}
@@ -330,7 +325,15 @@ fn login(api: Api, token: String) -> impl IntoView {
                 <p>{tr!(ui.manage_your_security_awareness_workspace)}</p>
                 {#[cfg(feature = "demo")]
                 {
-                    view! { <p class="demo-credentials">{tr!(demo.credentials)}</p> }
+                    view! {
+                        <p class="demo-credentials">
+                            <strong>{tr!(ui.username)}</strong>
+                            ": demo"
+                            <br />
+                            <strong>{tr!(ui.password)}</strong>
+                            ": demodemo"
+                        </p>
+                    }
                 }}
                 <form on:submit=submit>
                     <label>

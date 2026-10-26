@@ -142,7 +142,7 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage } =
         if (path === '/api/campaigns/directory' && method === 'GET') {
             const all = [...data.drafts.map(d => ({ id: d.id, kind: 'draft', revision: d.revision, name: d.configuration.name, status: 'Draft', total: null, launch_date: null })), ...data.campaigns.map(c => ({ id: String(c.header.id), kind: 'campaign', revision: null, name: c.header.name, status: c.header.status, total: c.header.total, launch_date: c.header.launch_date }))];
             const filter = url.searchParams.get('filter') ?? '';
-            const filtered = all.filter(r => !filter || filter === 'all' || (filter === 'drafts' ? r.kind === 'draft' : filter === 'active' ? ['In progress', 'Queued'].includes(r.status) : filter === 'completed' ? r.status === 'Completed' : false));
+            const filtered = all.filter(r => !filter || filter === 'all' || (filter === 'drafts' ? r.kind === 'draft' : filter === 'executions' ? r.kind === 'campaign' : filter === 'active' ? ['In progress', 'Queued'].includes(r.status) : filter === 'completed' ? r.status === 'Completed' : false));
             return json({ items: url.searchParams.get('after') ? [] : filtered, next_after: null });
         }
         if (path === '/api/campaigns/complete-all/preview' && method === 'POST') return json({ token: 'demo-confirmation', expires_at: now + 600, campaigns: 2, pending_deliveries: 12 });

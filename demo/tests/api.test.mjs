@@ -124,6 +124,25 @@ test('dashboard, filters, pagination and recipient drill-downs share the same re
     assert.equal((await f.request('/api/campaigns/3/analysis?search=does-not-exist')).value.recipient_total, 0);
 });
 
+test('analysis navigation lists campaign executions and opens their populated results', async () => {
+    const f = setup(); await f.login();
+    const directory = await f.request('/api/campaigns/directory?filter=executions&after=');
+    assert.equal(directory.status, 200);
+    assert.equal(directory.value.items.length, 4);
+    assert.ok(directory.value.items.every(row => row.kind === 'campaign'));
+    for (const row of directory.value.items) {
+        const result = await f.request(`/api/campaigns/${row.id}/analysis`);
+        assert.equal(result.status, 200);
+        assert.equal(String(result.value.id), row.id);
+        assert.equal(result.value.name, row.name);
+        assert.ok(result.value.audience > 0);
+        if (row.status !== 'Queued') {
+            assert.ok(result.value.event_total > 0);
+            assert.ok(result.value.recipients.length > 0);
+        }
+    }
+});
+
 test('saved draft, review, launch and reopening are coherent without persistence', async () => {
     const f = setup(); await f.login();
     const path = `/api/campaign-drafts/${draftId(1)}`;

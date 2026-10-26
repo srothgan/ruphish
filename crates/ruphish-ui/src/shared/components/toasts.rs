@@ -3,6 +3,32 @@ use super::{ActionButton, ButtonStyle, ControlSize};
 use leptos::prelude::*;
 use ruphish_ui::{tr, trs};
 
+#[component]
+pub(crate) fn DemoBanner() -> impl IntoView {
+    let visible = RwSignal::new(true);
+    view! {
+        <Show when=move || visible.get()>
+            <aside class="demo-notice" role="note">
+                <div class="demo-notice-content">
+                    <span>{tr!(demo.notice)}</span>
+                    <a href="https://www.ruphish.com/" rel="external">
+                        {tr!(demo.website)}
+                    </a>
+                </div>
+                <ActionButton
+                    style=ButtonStyle::Ghost
+                    size=ControlSize::Small
+                    title=trs!(demo.dismiss)
+                    aria_label=trs!(demo.dismiss)
+                    on_click=move |_| visible.set(false)
+                >
+                    <span aria-hidden="true">"×"</span>
+                </ActionButton>
+            </aside>
+        </Show>
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) enum DemoNotice {
     Created,

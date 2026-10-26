@@ -23,6 +23,11 @@ test('the generated browser bundle logs in and reads real starter content withou
         assert.match((await read('/api/templates/1')).html, /Microsoft/);
         assert.match((await read('/api/pages/1')).html, /Sign in to your account/);
         assert.match((await read('/api/learning-pages/1')).preview_html, /SLAM/);
+        const directory = await read('/api/campaigns/directory?filter=executions&after=');
+        assert.equal(directory.items.length, 4);
+        const completed = directory.items.find(row => row.status === 'Completed');
+        assert.ok(completed);
+        assert.ok((await read(`/api/campaigns/${completed.id}/analysis`)).event_total > 0);
         assert.ok([...memory.values()].every(value => value !== 'demodemo'));
     } finally {
         if (previousWindow === undefined) delete globalThis.window;

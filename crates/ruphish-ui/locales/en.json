@@ -1,8 +1,7 @@
 {
   "demo": {
-    "notice": "Public demo — changes are not saved and no messages are sent.",
+    "notice": "Public demo - changes are not saved and no messages are sent.",
     "website": "Ruphish website",
-    "credentials": "Demo username: demo · Password: demodemo. Use these sample credentials only.",
     "created": "Creation simulated. Nothing was saved; showing a sample resource.",
     "saved": "Changes accepted for this demo. Nothing was saved.",
     "deleted": "Deletion simulated. The sample data is unchanged.",
