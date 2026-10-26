@@ -46,7 +46,8 @@ test('deployment waits only for the demo, while the PR gate still requires both 
     const ancestors = name => dependencies(name).flatMap(parent => [parent, ...ancestors(parent)]);
     assert.deepEqual(ancestors('deploy-demo'), ['demo']);
     assert.deepEqual(dependencies('gate').sort(), ['checks', 'demo']);
-    assert.match(jobs.checks, /suite: source/);
-    assert.match(jobs.demo, /suite: demo/);
+    assert.match(jobs.checks, /uses: \.\/.github\/workflows\/validation\.yml/);
+    assert.match(jobs.demo, /uses: \.\/.github\/workflows\/demo\.yml/);
+    assert.doesNotMatch(jobs.checks + jobs.demo, /suite:/);
     assert.match(jobs['deploy-demo'], /demo-preview.*demo-production/);
 });

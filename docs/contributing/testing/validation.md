@@ -164,14 +164,15 @@ Run native acceptance on Linux, Windows and macOS when validating the full suppo
 
 ## GitHub selection and branch rules
 
-Three entry points own schedules and branch rules. The reusable [validation workflow](../../../.github/workflows/validation.yml) owns source-check commands, and [paths.yml](../../../.github/paths.yml) owns the five broad path groups. Each group runs a fixed suite; there is no custom selector, feature-name inference, dynamic database matrix or smoke deduplication.
+Three entry points own schedules and branch rules. The reusable [validation workflow](../../../.github/workflows/validation.yml) owns normal source-check commands, the dedicated [demo workflow](../../../.github/workflows/demo.yml) owns demo checks and its deployable artifact, and [paths.yml](../../../.github/paths.yml) owns the five normal path groups plus the demo group. Each group runs a fixed suite; there is no custom selector, feature-name inference, dynamic database matrix or smoke deduplication.
 
 | File | Trigger | Validation | Required status |
 | --- | --- | --- | --- |
 | [pr.yml](../../../.github/workflows/pr.yml) | PR to main; push to main; manual full run | YAML path groups select fixed suites; a manual run selects all suites | PR gate on main |
 | [nightly.yml](../../../.github/workflows/nightly.yml) | Daily at 02:23 UTC; manual | Full development-profile source acceptance, all provider versions and native platforms, histories/recovery, dependency policy and bounded performance measurement | Monitoring; does not replace PR gates |
 | [release.yml](../../../.github/workflows/release.yml) | PR to release; manual | Full source acceptance, then optimized UI and native/executable tests on Linux x64, Windows x64 and macOS ARM64 | Release gate on release |
-| [validation.yml](../../../.github/workflows/validation.yml) | Called by the three entry points | One implementation of checks with `all`, `source` (without demo) and `demo` suites, each with its own Validation gate | Internal prerequisite of the caller's gate |
+| [validation.yml](../../../.github/workflows/validation.yml) | Called by the three entry points | Normal source checks and an internal Validation gate | Internal prerequisite of the caller's gate |
+| [demo.yml](../../../.github/workflows/demo.yml) | Called separately by the three entry points | Demo path selection, fixed demo checks/build, artifact upload and Demo gate | Required by PR and Release gates; independent prerequisite of demo deployment |
 
 The CI workflow always starts for PRs to main and pushes to main, including documentation and repository housekeeping, so its gate is reported. A commit-pinned `dorny/paths-filter` action reads the YAML groups and compares the checked-out PR merge commit against its base using Git. Pushes compare main against its revision before the push, including all commits in that push. Full checkout history avoids API file-count limits and extra permissions; deleted paths and both sides of renames participate. Nightly, release and manual runs pass `full: true` and bypass path filtering. The README CI badge tracks push runs on main: it reports the checks applicable to the latest push, while nightly runs cover the full suite.
 
@@ -194,7 +195,7 @@ CI uses the tools' default build, test and worker parallelism. Provider and plat
 
 Native platform and release test steps point `TMPDIR`, `TMP` and `TEMP` at GitHub's `runner.temp` directory. This keeps disposable databases and other fixtures in the job's temporary storage instead of the Windows user-profile directory. OS process metrics are optional failure diagnostics; an unavailable or timed-out metrics command does not itself fail a product test.
 
-Validation jobs use pinned actions, read-only repository permissions and checkout without persisted credentials. They receive no deployment secrets and do not publish releases. CI calls the shared workflow separately for `source` and `demo` so the opt-in deployment job can proceed after its own demo artifact is ready, independently of the other checks and PR gate. The PR gate requires both suites; nightly and release callers retain the default `all` suite. Deployment obtains its credential from a protected environment after manual approval; see [activation and credentials](../demo.md#activation-and-credentials). Validate workflow edits locally with:
+Validation jobs use pinned actions, read-only repository permissions and checkout without persisted credentials. They receive no deployment secrets and do not publish releases. CI calls normal validation and the dedicated demo workflow in parallel, so the opt-in deployment job can proceed after its own demo artifact is ready, independently of the other checks and PR gate. The demo workflow contains no normal application jobs or duplicate workflow-lint/gate-test execution. The PR gate requires both workflows; nightly and release callers run both with `full: true`, and the Release gate continues to require demo validation. Deployment obtains its credential from a protected environment after manual approval; see [activation and credentials](../demo.md#activation-and-credentials). Validate workflow edits locally with:
 
 ```sh
 node --test .github/scripts/*.test.mjs demo/tests/vercel-output.test.mjs

@@ -18,12 +18,10 @@ jobs:
   checks:
     uses: ./.github/workflows/validation.yml
     with:
-      suite: source
       full: ${{ github.event_name == 'workflow_dispatch' }}
   demo:
-    uses: ./.github/workflows/validation.yml
+    uses: ./.github/workflows/demo.yml
     with:
-      suite: demo
       full: ${{ github.event_name == 'workflow_dispatch' }}
   gate:
     name: PR gate
