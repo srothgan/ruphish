@@ -21,7 +21,7 @@ The only mode flag is the opt-in Cargo feature `demo` on `ruphish-ui`. No flag m
 
 `browser_http.rs` selects either the normal Fetch transport or the generated demo bundle at compile time. Both use the existing request lifecycle, including cancellation, deadlines, response decoding, and downloads. The demo dispatcher returns standard `Response` objects and has no network fallback. No server handlers, persistence rules, or production authentication behavior change.
 
-The installation-capability flags in the session remain separate from the build mode. The synthetic session enables navigation for domains, webhooks, and reporting mailboxes; it does not create workers.
+The installation-capability flags in the session remain separate from the build mode. The browser demo and recorder seed both take these flags from `features` in `assets/website-demo/data.json`, enabling the same navigation. The recorder applies them after inserting the sample resources because its initial migrations ran on an empty database. Individual recorder domains, webhooks, and mailboxes remain inactive; the browser demo simulates their behavior without workers.
 
 Normal production tests retain their assertions and run without `demo`. Dedicated demo tests verify the simulation separately. Do not execute production Fetch tests against the fake transport or reinterpret their expectations as demo assertions.
 

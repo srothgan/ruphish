@@ -1,6 +1,6 @@
 // The SQL consumer of the same complete dataset used by the public browser demo.
 import { randomBytes } from 'node:crypto';
-import { dataset, DAY, ZERO, iso } from './dataset.mjs';
+import { dataset, DAY, ZERO, iso, features } from './dataset.mjs';
 
 export function seed(db, now = Math.floor(Date.now() / 1000)) {
   const data = dataset(now);
@@ -22,7 +22,7 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
       run('INSERT INTO users(username,hash,api_key,role_id,password_change_required,last_login,account_locked) VALUES(?,?,?,?,?,?,?)', user.username, admin.hash, randomBytes(32).toString('hex'), role.id, Number(user.password_change_required), user.last_login, Number(user.account_locked));
     }
     for (const d of data.domains) {
-      // Historical state only. Verification remains disabled in the recorder's installation policy.
+      // Historical state only. Individual domains stay disabled in the recorder.
       run('INSERT INTO ruphish_domains(id,owner_id,name,origin,hostname,enabled,challenge,challenge_expires,checked_at,verified_until,control,dns,routing,tls,code) VALUES(?,?,?,?,?,0,?,?,?,?,?,?,?,?,?)', d.id, owner, d.name, d.origin, d.hostname, randomBytes(32).toString('hex'), 0, d.checked_at, d.verified_until, Number(d.control), Number(d.dns), Number(d.routing), Number(d.tls), d.code);
       run('INSERT INTO ruphish_domain_claims(hostname,owner_id) VALUES(?,?)', d.hostname, owner);
     }
@@ -66,6 +66,9 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
       run('INSERT INTO ruphish_mailboxes(id,owner_id,name,enabled,host,port,username,password,tls,folder,restrict_domain,delete_reported,frequency,last_check,last_success,code) VALUES(?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?)', m.id, owner, m.name, m.host, m.port, m.username, randomBytes(32).toString('hex'), Number(m.tls), m.folder, m.restrict_domain, Number(m.delete_reported), m.frequency, m.last_check, m.last_success, m.code);
       for (const h of m.history) run('INSERT INTO ruphish_mailbox_runs(mailbox_id,started,finished,code,matched,rejected) VALUES(?,?,?,?,?,?)', m.id, h.started, h.finished, h.code, h.matched, h.rejected);
     }
+    // Migrations ran before these resources existed. Apply the same installation
+    // features as the browser demo; individual outbound integrations stay inactive.
+    run('UPDATE ruphish_settings SET verification_enabled=?,reporting_mailboxes_enabled=?,webhooks_enabled=?,revision=revision+1,updated_at=?,updated_by=? WHERE id=1', Number(features.verification_enabled), Number(features.reporting_mailboxes_enabled), Number(features.webhooks_enabled), now, owner);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');

@@ -68,7 +68,7 @@ jobs:
           cache: npm
           cache-dependency-path: website/package-lock.json
       - run: npm ci
-      - run: node --test tools/docs.test.mjs tools/ignore-build.test.mjs
+      - run: node --test tools/docs.test.mjs tools/ignore-build.test.mjs tools/navigation.test.mjs
       - run: npx astro check
       - run: npx astro build
       - run: node tools/check-site.mjs

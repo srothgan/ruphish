@@ -8,6 +8,8 @@ export async function capture(base, password, destination) {
     const context = await browser.newContext({
       viewport: { width: 1512, height: 982 }, deviceScaleFactor: 2,
       locale: 'en-US', timezoneId: 'Europe/Berlin', colorScheme: 'light', reducedMotion: 'reduce',
+      // This is loopback-only: avoid compressing the large development WASM on every capture.
+      extraHTTPHeaders: { 'Accept-Encoding': 'identity' },
     });
     async function request(path, form) {
       const response = form
@@ -33,9 +35,26 @@ export async function capture(base, password, destination) {
     assert.equal(metrics.delivered, 937);
 
     const page = await context.newPage();
+    const pendingRequests = new Set();
+    page.on('request', (request) => pendingRequests.add(request));
+    page.on('requestfinished', (request) => pendingRequests.delete(request));
+    page.on('pageerror', (error) => console.error('Dashboard browser error:', error.message));
+    page.on('requestfailed', (request) => {
+      pendingRequests.delete(request);
+      console.error('Dashboard request failed:', new URL(request.url()).pathname, request.failure()?.errorText);
+    });
+    page.on('response', (response) => {
+      if (response.status() >= 400) console.error('Dashboard HTTP error:', response.status(), new URL(response.url()).pathname);
+    });
     page.setDefaultTimeout(60_000);
     await page.goto(base + '/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
-    await page.locator('.dashboard-metric-value').first().waitFor();
+    try {
+      await page.locator('.dashboard-metric-value').first().waitFor();
+    } catch (error) {
+      console.error('Dashboard did not load:', new URL(page.url()).pathname, (await page.locator('body').innerText()).slice(0, 2000));
+      console.error('Pending dashboard requests:', [...pendingRequests].map((request) => new URL(request.url()).pathname));
+      throw error;
+    }
     await page.locator('.dashboard-attention').waitFor();
     const displayedCounts = await page.locator('.dashboard-metric-value').evaluateAll((nodes) => nodes.map((node) =>
       [...node.childNodes].filter((child) => child.nodeType === Node.TEXT_NODE).map((child) => child.textContent).join('').trim()));

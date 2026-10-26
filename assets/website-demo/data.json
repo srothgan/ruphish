@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "features": { "verification_enabled": true, "reporting_mailboxes_enabled": true, "webhooks_enabled": true },
   "first_names": ["Alex", "Sam", "Robin", "Morgan", "Jamie", "Taylor", "Casey", "Avery"],
   "last_names": ["Rivera", "Lee", "Meyer", "Brooks", "Patel", "Winter", "Chen", "Berg"],
   "departments": ["Operations", "Engineering", "Finance", "People & culture"],

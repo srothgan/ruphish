@@ -3,6 +3,7 @@ import source from './data.json' with { type: 'json' };
 import { starterContent } from './starter-content.mjs';
 
 export const DAY = 86400;
+export const features = Object.freeze(source.features);
 export const ZERO = '0001-01-01T00:00:00Z';
 export const iso = seconds => new Date(seconds * 1000).toISOString();
 export const draftId = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;

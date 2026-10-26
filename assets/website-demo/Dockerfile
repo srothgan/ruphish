@@ -13,6 +13,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY .cargo/ .cargo/
 COPY crates/ crates/
 RUN npm ci --no-audit --no-fund --prefix crates/ruphish-ui/web
+COPY config.example.json ./
 RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/source/target \
     cargo build -p ruphish --locked && mkdir /built && cp target/debug/ruphish /built/ruphish
 RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/source/target \

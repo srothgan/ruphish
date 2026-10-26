@@ -1,9 +1,13 @@
 ---
 import SocialIcons from '@astrojs/starlight/components/SocialIcons.astro';
+import ExternalLinkIcon from './ExternalLinkIcon.astro';
+import { demo } from '../site';
 ---
-<a class="about-link" href="/about/">About</a>
+<a class="site-link external-link" href={demo}>Demo <ExternalLinkIcon /></a>
+<a class="site-link" href="/about/">About</a>
 <SocialIcons><slot /></SocialIcons>
 <style>
-  .about-link { color: var(--sl-color-text); font-size: var(--sl-text-sm); text-decoration: none; }
-  .about-link:hover { text-decoration: underline; }
+  .site-link { color: var(--sl-color-text); font-size: var(--sl-text-sm); text-decoration: none; }
+  .site-link:hover { text-decoration: underline; }
+  .external-link { display: inline-flex; align-items: center; gap: 4px; }
 </style>

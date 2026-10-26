@@ -1,11 +1,10 @@
 // Browser-only simulation of the existing wire contracts. No HTTP fallback or persistent resources.
-import { dataset, DAY, iso, policy } from '../../../assets/website-demo/dataset.mjs';
+import { dataset, DAY, iso, policy, features } from '../../../assets/website-demo/dataset.mjs';
 import { workbook } from './demo-export.mjs';
 
 const kinds = ['Email Sent', 'Email Opened', 'Clicked Link', 'Submitted Data', 'Email Reported'];
 const families = ['groups', 'templates', 'pages', 'learning-pages', 'smtp', 'domains', 'users', 'webhooks', 'reporting-mailboxes'];
 export const preferences = { language: null, format_locale: null, time_zone: null, show_utc_offset: true };
-const features = { verification_enabled: true, reporting_mailboxes_enabled: true, webhooks_enabled: true };
 const copy = value => structuredClone(value);
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json', etag: '"1"' } });
 const success = (data = null) => json({ success: true, message: 'Demo action simulated', data });
