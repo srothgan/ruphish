@@ -13,7 +13,7 @@
   },
   "db_name": "sqlite3",
   "db_path": "ruphish.db",
-  "migrations_prefix": "db/db_",
+  "migrations_prefix": "",
   "contact_address": "",
   "domain_verification": {
     "trusted_proxies": [],
@@ -21,5 +21,10 @@
     "allowed_networks": [],
     "trusted_ca_path": null
   },
-  "logging": { "filename": "ruphish.log", "level": "info" }
+  "logging": {
+    "filename": "ruphish.log",
+    "level": "info",
+    "max_size_bytes": 10485760,
+    "max_files": 5
+  }
 }

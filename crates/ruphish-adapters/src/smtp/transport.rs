@@ -46,7 +46,7 @@ fn timed_out(stage: Stage) -> DeliveryFailure {
     )
 }
 pub(super) fn public_failure(error: DeliveryFailure) -> Error {
-    invalid(match error.kind {
+    let message = match error.kind {
         FailureKind::Unknown => {
             "Delivery outcome is unknown after connection loss or timeout. Check the mail server before sending again."
         }
@@ -55,7 +55,22 @@ pub(super) fn public_failure(error: DeliveryFailure) -> Error {
         FailureKind::Retryable => {
             "SMTP server temporarily unavailable or rejected the test email; try again later"
         }
-    })
+    };
+    let stage = match error.stage {
+        Stage::Capacity => "local sending capacity",
+        Stage::Connect => "connection or DNS lookup",
+        Stage::Tls => "TLS negotiation/certificate validation",
+        Stage::Authentication => "authentication",
+        Stage::Envelope => "sender/recipient acceptance",
+        Stage::Data => "DATA command",
+        Stage::Acceptance => "message acceptance",
+        Stage::Content => "message composition",
+    };
+    let code = error
+        .smtp_code
+        .map(|code| format!("; SMTP {code}"))
+        .unwrap_or_default();
+    invalid(format!("{message} (stage: {stage}{code})"))
 }
 impl Smtp {
     pub(super) async fn connection(

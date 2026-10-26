@@ -35,6 +35,11 @@ fn run(arguments: &[&str]) -> (tempfile::TempDir, Output) {
         .current_dir(directory.path())
         .env_remove("GOPHISH_INITIAL_ADMIN_PASSWORD")
         .env_remove("GOPHISH_INITIAL_ADMIN_API_TOKEN")
+        .env("LOCALAPPDATA", directory.path().join("os-local"))
+        .env("HOME", directory.path().join("os-home"))
+        .env("XDG_CONFIG_HOME", directory.path().join("os-config"))
+        .env("XDG_DATA_HOME", directory.path().join("os-data"))
+        .env("XDG_STATE_HOME", directory.path().join("os-state"))
         .args(arguments)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -106,7 +111,6 @@ fn invalid_cli_and_missing_configuration_fail_without_starting_the_application()
         vec!["--unknown-flag"],
         vec!["--config"],
         vec!["--config", "missing config.json"],
-        vec![],
     ] {
         let (directory, output) = run(&arguments);
         assert_eq!(output.status.code(), Some(1), "{arguments:?}: {output:?}");

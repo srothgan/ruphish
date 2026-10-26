@@ -108,6 +108,17 @@ fn smtp_starttls_verifies_certificates_before_authentication_and_reports_rejecti
         let body = response.text().unwrap();
         assert!(!body.contains("synthetic-password"));
         assert_eq!(success, ignore_cert_errors && accepted_auth, "{body}");
+        if !ignore_cert_errors {
+            assert!(
+                body.contains("TLS negotiation/certificate validation"),
+                "{body}"
+            );
+        } else if !accepted_auth {
+            assert!(
+                body.contains("authentication") && body.contains("SMTP 535"),
+                "{body}"
+            );
+        }
         assert_eq!(thread.join().unwrap(), ignore_cert_errors);
     }
     process.stop();

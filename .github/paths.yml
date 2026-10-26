@@ -16,6 +16,7 @@ product:
     - '.github/paths.yml'
     - '.github/scripts/**'
   - 'crates/**'
+  - 'config.example.json'
   - 'tests/**'
   - 'migrations/**'
   - 'Dockerfile'

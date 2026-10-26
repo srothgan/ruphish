@@ -1,6 +1,7 @@
 use crate::{
     cli::{Arguments, Mode},
     config::{Config, Server},
+    diagnostics::context,
 };
 use axum_server::{Handle, tls_rustls::RustlsConfig};
 use ruphish_adapters::{database, tls};
@@ -17,54 +18,88 @@ const START_TIMEOUT: Duration = Duration::from_secs(15);
 const DRAIN_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub(crate) async fn run(arguments: Arguments, config: Config) -> Result<(), Error> {
-    let _logging = crate::logging::setup(&config.logging)?;
+    let _logging = crate::logging::setup(&config.logging)
+        .map_err(|error| context("Open application log", error))?;
     let result = start(arguments, config).await;
     if result.is_err() {
-        tracing::error!("application_failed");
+        if let Some(error) = result
+            .as_ref()
+            .err()
+            .and_then(|error| error.downcast_ref::<crate::diagnostics::Failure>())
+        {
+            tracing::error!(%error, "application_failed");
+        } else {
+            tracing::error!("application_failed");
+        }
     }
     result
 }
 
 async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
     // Install handlers before any readiness output or asynchronous startup work.
-    let termination = Termination::new()?;
+    let termination =
+        Termination::new().map_err(|error| context("Install shutdown handlers", error))?;
     // Only selected listeners require assets/certificates. An inactive listener's
     // settings are retained but cannot accidentally bind a port or create files.
     let admin_router = if arguments.mode.admin() {
-        Some(ruphish_http::server::admin_router(Path::new("dist/admin"))?)
+        Some(
+            ruphish_http::server::admin_router(Path::new("dist/admin")).map_err(|error| {
+                context(
+                    "Load administration assets; rebuild with Trunk if missing or stale",
+                    error,
+                )
+            })?,
+        )
     } else {
         None
     };
     let public_assets = if arguments.mode.phish() {
-        ruphish_http::public_assets::Assets::load(Path::new("static/endpoint"))?
+        ruphish_http::public_assets::Assets::load(Path::new("static/endpoint"))
+            .map_err(|error| context("Load public assets", error))?
     } else {
         Default::default()
     };
     let admin_listener = if arguments.mode.admin() {
-        Some(bind(&config.admin.listen_url).await?)
+        Some(bind(&config.admin.listen_url).await.map_err(|error| {
+            context(
+                "Bind administration listener (admin_server.listen_url)",
+                error,
+            )
+        })?)
     } else {
         None
     };
-    let phish_listener = if arguments.mode.phish() {
-        Some(bind(&config.phish.listen_url).await?)
-    } else {
-        None
-    };
+    let phish_listener =
+        if arguments.mode.phish() {
+            Some(bind(&config.phish.listen_url).await.map_err(|error| {
+                context("Bind public listener (phish_server.listen_url)", error)
+            })?)
+        } else {
+            None
+        };
     let _ = rustls::crypto::ring::default_provider().install_default();
     let admin_tls = if arguments.mode.admin() {
-        prepare_tls(&config.admin).await?
+        prepare_tls(&config.admin)
+            .await
+            .map_err(|error| context("Prepare administration TLS certificate/key", error))?
     } else {
         None
     };
     let phish_tls = if arguments.mode.phish() {
-        prepare_tls(&config.phish).await?
+        prepare_tls(&config.phish)
+            .await
+            .map_err(|error| context("Prepare public TLS certificate/key", error))?
     } else {
         None
     };
     let domain_verifier =
-        ruphish_adapters::domain_verification::DnsHttps::new(config.domain_verification.clone())?;
-    let policy = ruphish_adapters::outbound::Policy::new(&config.admin.allowed_internal_hosts)?;
-    let database = database::open(config.database()?, policy.clone()).await?;
+        ruphish_adapters::domain_verification::DnsHttps::new(config.domain_verification.clone())
+            .map_err(|error| context("Configure domain verification", error))?;
+    let policy = ruphish_adapters::outbound::Policy::new(&config.admin.allowed_internal_hosts)
+        .map_err(|error| context("Configure outbound connection policy", error))?;
+    let database = database::open(config.database()?, policy.clone())
+        .await
+        .map_err(|error| context("Open or upgrade database", error))?;
     let health = ruphish_application::health::Service::new(database.health());
     if database.has_recovery_backup() {
         tracing::info!(
@@ -74,11 +109,14 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
     let result = async {
         let password = environment("GOPHISH_INITIAL_ADMIN_PASSWORD")?;
         let supplied = password.as_ref().is_some_and(|value| !value.is_empty());
-        let credential = database.bootstrap(password, environment("GOPHISH_INITIAL_ADMIN_API_TOKEN")?).await?;
-        if credential.is_some() {
+        let credential = database.bootstrap(password, environment("GOPHISH_INITIAL_ADMIN_API_TOKEN")?).await
+            .map_err(|error| context("Initialize administrator account", error))?;
+        if let Some(password) = credential {
             if supplied { eprintln!("Initial administrator password set from GOPHISH_INITIAL_ADMIN_PASSWORD."); }
             else {
-                eprintln!("Initial administrator created. Restart with GOPHISH_INITIAL_ADMIN_PASSWORD to set its temporary password; credentials are never printed.");
+                // Deliberate operator delivery, including non-TTY Docker output. Do not
+                // send this through tracing or echo supplied credentials/API tokens.
+                eprintln!("Initial administrator: admin\nTemporary password: {password}\nChange this password at first login.");
             }
         }
         if config.contact_address.is_empty() { tracing::warn!("No contact_address configured"); }
@@ -93,8 +131,8 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
         let public_router = ruphish_http::interactions::router(ruphish_http::interactions::Services{assets:public_assets,domains:domains.clone(),interactions:database.interactions(),previews:previews.clone(),tls:config.phish.use_tls,trusted_proxies:config.domain_verification.trusted_proxies.clone(),contact:config.contact_address.clone()});
         let admin_router = if let Some(assets) = admin_router {
             let sessions = database.sessions();
-            sessions.cleanup().await?;
-            let key = sessions.cookie_key().await?;
+            sessions.cleanup().await.map_err(|error| context("Clean up expired sessions", error))?;
+            let key = sessions.cookie_key().await.map_err(|error| context("Initialize session signing key", error))?;
             let service = ruphish_application::auth::Service::new(
                 database.accounts(),
                 std::sync::Arc::new(ruphish_adapters::password_worker::PasswordWorker::default()),
@@ -106,7 +144,7 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
         let probes = ruphish_http::health::router(health.clone());
         let admin_router = admin_router.map(|router| router.merge(probes.clone()));
         let public_router = public_router.merge(probes);
-        supervise(arguments.mode, admin_listener, phish_listener, admin_tls, phish_tls, RuntimeServices {admin:admin_router,public:public_router,mailer:worker,domains:domain_worker,integrations,health}, termination).await
+        supervise(arguments.mode, admin_listener, phish_listener, admin_tls, phish_tls, RuntimeServices {admin:admin_router,public:public_router,mailer:worker,domains:domain_worker,integrations,health}, termination).await.map_err(|error| context("Run listeners and background workers", error))
     }.await;
     // Both normal and failing server lifecycles close the pool before returning.
     tokio::time::timeout(DRAIN_TIMEOUT, database.close())
@@ -121,11 +159,13 @@ fn environment(name: &str) -> Result<Option<String>, Error> {
     match std::env::var(name) {
         Ok(value) => Ok(Some(value)),
         Err(std::env::VarError::NotPresent) => Ok(None),
-        Err(std::env::VarError::NotUnicode(_)) => Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("{name} must contain valid Unicode"),
-        )
-        .into()),
+        Err(std::env::VarError::NotUnicode(_)) => Err(context(
+            "Read bootstrap environment; values must be Unicode",
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("{name} must contain valid Unicode"),
+            ),
+        )),
     }
 }
 

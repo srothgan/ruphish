@@ -24,6 +24,8 @@ mod database_network;
 mod domain_network;
 #[path = "health_process.rs"]
 mod health_process;
+#[path = "logging_process.rs"]
+mod logging_process;
 #[path = "support/mailbox.rs"]
 mod mailbox;
 #[path = "mysql_process.rs"]
@@ -46,6 +48,8 @@ mod server_database_process;
 mod settings_process;
 #[path = "starter_templates_process.rs"]
 mod starter_templates_process;
+#[path = "startup_launch.rs"]
+mod startup_launch;
 #[path = "validation_process.rs"]
 mod validation_process;
 use domain_network::tls_fixture;
@@ -101,6 +105,9 @@ impl Process {
         let mut command = CommandBuilder::new(env!("CARGO_BIN_EXE_ruphish"));
         command.cwd(directory);
         command.args(["--mode", mode]);
+        if !options.contains(&"--config") {
+            command.args(["--config", "config.json"]);
+        }
         command.args(options);
         for (name, value) in [
             ("GOPHISH_INITIAL_ADMIN_PASSWORD", password),
@@ -781,7 +788,9 @@ fn raw_traversal_requests_cannot_escape_assets_and_modified_distributions_fail_p
     .unwrap();
     let mut stale = Process::start(directory.path(), "admin");
     stale.fail();
-    assert!(stale.output().contains("integrity"));
+    let output = stale.output();
+    assert!(output.contains("Load administration assets"), "{output}");
+    assert!(output.contains("rebuild with Trunk"), "{output}");
 }
 
 #[cfg(unix)]
@@ -933,10 +942,21 @@ fn failed_bootstrap_rolls_back_then_forced_process_death_allows_clean_restart() 
     let mut generated = Process::with_credentials(directory.path(), "phish", None, None);
     generated.ready();
     let output = generated.output();
-    assert!(!output.contains("Temporary password:"));
-    assert!(output.contains("GOPHISH_INITIAL_ADMIN_PASSWORD"));
+    let password = output
+        .split("Temporary password: ")
+        .nth(1)
+        .unwrap()
+        .lines()
+        .next()
+        .unwrap()
+        .trim();
     let row = database(directory.path(), "SELECT hash,api_key FROM users");
     assert!(row[0].get::<String, _>("hash").starts_with("$argon2id$"));
+    assert!(ruphish_adapters::password_worker::verify(
+        password,
+        &row[0].get::<String, _>("hash")
+    ));
+    assert!(!output.contains(&row[0].get::<String, _>("api_key")));
     assert_eq!(row[0].get::<String, _>("api_key").len(), 64);
     database(
         directory.path(),
@@ -957,7 +977,7 @@ fn failed_bootstrap_rolls_back_then_forced_process_death_allows_clean_restart() 
     assert!(
         !std::fs::read_to_string(directory.path().join("server.log"))
             .unwrap()
-            .contains("Temporary password:")
+            .contains(password)
     );
 }
 

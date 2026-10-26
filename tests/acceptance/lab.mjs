@@ -63,7 +63,7 @@ async function init() {
         admin_server: { listen_url: '0.0.0.0:3333', use_tls: false, allowed_internal_hosts: ['172.30.53.20/32'] },
         phish_server: { listen_url: '0.0.0.0:8443', use_tls: true, cert_path: '/lab/data/server.pem', key_path: '/lab/data/server.key' },
         db_name: 'sqlite3', db_path: '/lab/data/ruphish.db', migrations_prefix: 'db/db_',
-        logging: { filename: '/lab/data/ruphish.log', level: 'info' },
+        logging: { filename: '', level: 'info' },
         domain_verification: { resolvers: ['172.30.53.53:53'], allowed_networks: ['172.30.53.10/32'], trusted_ca_path: '/lab/data/ca.pem', trusted_proxies: [] },
     };
     await writeFile(join(data, 'config.json'), `${JSON.stringify(config, null, 2)}\n`);

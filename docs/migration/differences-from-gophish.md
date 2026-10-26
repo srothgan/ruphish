@@ -16,6 +16,7 @@ The comparison baseline is Gophish 0.12.1, commit `95618469799295e2c0fec980805a2
 | Browser API layout | Browser and administrative routes without the same three-way separation | Public `/api/`, session `/auth/`, browser-specific `/internal/`, plus retained form routes | Integrate through documented public endpoints |
 | Participant submissions | Optional captured form/credential values and network-derived details | Closed event/presence schema; old opaque details and locations removed from active data | Redesign pages and consumers that expect captured values |
 | Campaign origins | Campaign URL without Ruphish's ownership-verification workflow | HTTPS DNS origin with control, routing, and certificate verification | Verify an origin before launch or continued use of supported migrated links |
+| Configuration lookup | Defaults to `./config.json` | Reads or creates the per-user OS configuration with SQLite defaults | Use `--config ./config.json` to keep an existing working-directory installation; see [locations and path rules](../administration/configuration.md#default-locations-and-explicit-configuration) |
 | Database engines | SQLite and MySQL | SQLite, MySQL, and PostgreSQL with distinct upgrade contracts | Select the provider explicitly; do not assume a cross-engine importer |
 | Delivery recovery | Legacy queue flags and retry state | Durable attempts, generation checks, and explicit unknown outcomes | Reconcile uncertain sends before choosing a resend |
 | Reporting | Legacy result state and event history | Separate observed counts, progression, filtered analysis, and defined exports | Recheck denominators and raw-versus-derived comparisons |
@@ -45,6 +46,6 @@ An event is an observation, not proof that a particular person acted. New report
 
 Campaign origins require DNS, routing, and TLS verification. SMTP trust and authentication checks may reject previously accepted insecure configurations. A timeout after SMTP submission can become an explicit unknown outcome requiring a decision; Ruphish does not promise exactly-once mail delivery.
 
-New passwords use Argon2id while supported legacy hashes remain usable. Bootstrap credentials are not printed to logs. Browser sessions, current-password changes, and API keys have separate lifecycles.
+New passwords use Argon2id while supported legacy hashes remain usable. Generated temporary administrator passwords appear in startup stderr, including container output, but not the application log file. Supplied passwords and API tokens are never echoed. Browser sessions, current-password changes, and API keys have separate lifecycles.
 
 SQLite, MySQL, and PostgreSQL have distinct startup and migration contracts. PostgreSQL is an additional provider, not an automatic target for a legacy MySQL or SQLite database. Re-read [configuration](../administration/configuration.md) and [database setup](../administration/databases/index.md) before reusing deployment files.
