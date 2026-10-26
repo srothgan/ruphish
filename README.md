@@ -5,12 +5,14 @@
 
 [![Version](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsrothgan%2Fruphish%2Fmain%2FCargo.toml&query=%24.workspace.package.version&label=version&color=blue)](https://github.com/srothgan/ruphish/blob/main/Cargo.toml)
 [![CI](https://github.com/srothgan/ruphish/actions/workflows/pr.yml/badge.svg?branch=main&event=push)](https://github.com/srothgan/ruphish/actions/workflows/pr.yml?query=branch%3Amain+event%3Apush)
-[![Docs](https://img.shields.io/badge/docs-website-blueviolet)](https://ruphish.vercel.app/docs/)
+[![Docs](https://img.shields.io/badge/docs-website-blueviolet)](https://ruphish.com/docs/)
 [![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/srothgan/ruphish/blob/main/LICENSE)
 
 Ruphish is a phishing-simulation application with a native Rust server and a Rust/WASM admin interface. Prepare personalized campaigns, deliver them through your SMTP service, and review delivery, participant interactions, and reported messages in one place.
 
-Ruphish aims to be a compatible, drop-in replacement for Gophish while adding a new interface, persistent campaign drafts, verified domains, richer analysis, and explicit delivery recovery. Full compatibility cannot be guaranteed for every integration or deployment; review the [documented differences](https://ruphish.vercel.app/docs/migration/differences-from-gophish/) before migrating.
+**[Try the demo](https://demo.ruphish.com/)** with username `demo` and password `demodemo`.
+
+Ruphish aims to be a compatible, drop-in replacement for Gophish while adding a new interface, persistent campaign drafts, verified domains, richer analysis, and explicit delivery recovery. Full compatibility cannot be guaranteed for every integration or deployment; review the [documented differences](https://ruphish.com/docs/migration/differences-from-gophish/) before migrating.
 
 ![Ruphish dashboard showing campaign outcomes, recent campaigns, and deliveries needing review.](assets/dashboard.png)
 
@@ -24,26 +26,26 @@ Ruphish aims to be a compatible, drop-in replacement for Gophish while adding a 
 - Use English or German interface text with independent date-format and time-zone preferences.
 - Automate workflows through compatible resource endpoints and Ruphish's added APIs.
 
-Participant tracking is designed around interaction events and optional presence booleans. Entered usernames, passwords, OTPs, and arbitrary form values are outside the supported collection model. Read [participant data](https://ruphish.vercel.app/docs/user-guide/participant-data/) for behavior and verification limits.
+Participant tracking is designed around interaction events and optional presence booleans. Entered usernames, passwords, OTPs, and arbitrary form values are outside the supported collection model. Read [participant data](https://ruphish.com/docs/user-guide/participant-data/) for behavior and verification limits.
 
 ## Start here
 
 | Your goal | Guide |
 | --- | --- |
-| Try a contained exercise with a local inbox | [Your first campaign](https://ruphish.vercel.app/docs/getting-started/first-campaign/) |
-| Install a release binary or run the Docker image | [Installation](https://ruphish.vercel.app/docs/getting-started/installation/) |
-| Run campaigns and understand results | [User guide](https://ruphish.vercel.app/docs/user-guide/) |
-| Configure databases, TLS, accounts, or recovery | [Administration](https://ruphish.vercel.app/docs/administration/) |
-| Integrate with Ruphish | [HTTP API](https://ruphish.vercel.app/docs/api/) |
-| Bring an existing Gophish installation across | [Migration and compatibility](https://ruphish.vercel.app/docs/migration/) |
+| Try a contained exercise with a local inbox | [Your first campaign](https://ruphish.com/docs/getting-started/first-campaign/) |
+| Install a release binary or run the Docker image | [Installation](https://ruphish.com/docs/getting-started/installation/) |
+| Run campaigns and understand results | [User guide](https://ruphish.com/docs/user-guide/) |
+| Configure databases, TLS, accounts, or recovery | [Administration](https://ruphish.com/docs/administration/) |
+| Integrate with Ruphish | [HTTP API](https://ruphish.com/docs/api/) |
+| Bring an existing Gophish installation across | [Migration and compatibility](https://ruphish.com/docs/migration/) |
 | Change code, translations, or documentation | [Contributing](CONTRIBUTING.md) |
 | Report a suspected security vulnerability | [Security policy](SECURITY.md) |
 
-The HTTP interface separates `/api/` for public automation, `/auth/` for browser authentication/session data, and `/internal/` for browser-specific operations. See the [API overview](https://ruphish.vercel.app/docs/api/) before choosing an endpoint for an integration.
+The HTTP interface separates `/api/` for public automation, `/auth/` for browser authentication/session data, and `/internal/` for browser-specific operations. See the [API overview](https://ruphish.com/docs/api/) before choosing an endpoint for an integration.
 
 ## Installation
 
-The intended installation options are a release binary and a Docker image. SQLite is the default database; MySQL and PostgreSQL are also configurable. See [installation](https://ruphish.vercel.app/docs/getting-started/installation/) for setup and [database administration](https://ruphish.vercel.app/docs/administration/databases/) for provider requirements.
+The intended installation options are a release binary and a Docker image. SQLite is the default database; MySQL and PostgreSQL are also configurable. See [installation](https://ruphish.com/docs/getting-started/installation/) for setup and [database administration](https://ruphish.com/docs/administration/databases/) for provider requirements.
 
 > TODO before publication: Publish the release binaries and Docker image, then complete and verify their installation instructions. These distribution options are not available yet.
 

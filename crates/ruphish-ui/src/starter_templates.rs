@@ -205,6 +205,8 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                     match response {
                         Ok(id) => {
                             resources.saved(family, id);
+                            #[cfg(feature = "demo")]
+                            api.notifications.show(DemoNotice::Created);
                             Ok(format!("/{}/{id}", family.route()))
                         }
                         Err(error) => {

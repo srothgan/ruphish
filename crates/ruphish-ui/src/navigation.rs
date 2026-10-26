@@ -320,7 +320,7 @@ pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<>
             },
         )}
         {external_link(
-            "https://ruphish.vercel.app/docs/",
+            "https://ruphish.com/docs/",
             trs!(ui.documentation),
             "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 0 3-3h7z",
         )}

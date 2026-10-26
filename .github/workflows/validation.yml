@@ -68,7 +68,7 @@ jobs:
           cache: npm
           cache-dependency-path: website/package-lock.json
       - run: npm ci
-      - run: node --test tools/docs.test.mjs tools/ignore-build.test.mjs
+      - run: node --test tools/docs.test.mjs tools/ignore-build.test.mjs tools/navigation.test.mjs
       - run: npx astro check
       - run: npx astro build
       - run: node tools/check-site.mjs
@@ -120,6 +120,35 @@ jobs:
           retention-days: 2
           if-no-files-found: error
 
+  demo:
+    name: Static demo contracts and build
+    needs: changes
+    if: needs.changes.outputs.product == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/toolchain
+        with:
+          browser: 'true'
+          cache-group: browser-demo
+      - run: npm ci --prefix crates/ruphish-ui/web
+      - run: node --test demo/tests/api.test.mjs demo/tests/preview.test.mjs
+      - run: cargo test -p ruphish-ui --test demo_contracts --features demo --locked
+      - run: cargo clippy -p ruphish-ui --test demo_contracts --features demo --locked -- -D warnings
+      - run: node crates/ruphish-ui/web/build-demo.mjs
+      - run: node --test demo/tests/bundle.test.mjs
+      - run: trunk build --locked --features demo
+      - run: cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --features demo --locked -- -D warnings
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: demo-distribution
+          path: dist/admin/
+          retention-days: 2
+          if-no-files-found: error
+
   native:
     name: Linux native and executable acceptance
     needs: [changes, assets]
@@ -143,6 +172,8 @@ jobs:
         run: cargo clippy --workspace --exclude ruphish-ui --all-targets --locked -- -D warnings
       - name: Complete native and executable functionality
         run: cargo test --workspace --exclude ruphish-ui --locked -- --nocapture
+      - name: Shared demo dataset against the real SQLite executable
+        run: node --test demo/tests/seed.test.mjs
       - name: Bounded audience performance measurement
         if: inputs.full
         run: cargo test -p ruphish-adapters --test campaign_storage measure_launch_read_claim_and_compose_at_legacy_audience_sizes --locked -- --ignored --exact --nocapture
@@ -306,7 +337,7 @@ jobs:
 
   gate:
     name: Validation gate
-    needs: [changes, website, assets, native, database, platforms, dependencies, public]
+    needs: [changes, website, assets, demo, native, database, platforms, dependencies, public]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -325,6 +356,7 @@ jobs:
           const required = {
             website: groups.website,
             assets: groups.product,
+            demo: groups.product,
             native: groups.product,
             platforms: groups.product,
             database: groups.persistence,

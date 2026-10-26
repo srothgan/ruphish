@@ -8,7 +8,7 @@ const workflow = readFileSync(new URL('../workflows/validation.yml', import.meta
   .replaceAll('\r\n', '\n');
 const gate = workflow.match(/node --input-type=module <<'NODE'\n([\s\S]*?)\n\s*NODE/)[1];
 const groups = ['product', 'website', 'persistence', 'dependencies', 'public'];
-const jobs = ['website', 'assets', 'native', 'platforms', 'database', 'dependencies', 'public'];
+const jobs = ['website', 'assets', 'demo', 'native', 'platforms', 'database', 'dependencies', 'public'];
 
 function results(selected = [], succeeded = []) {
   return {
@@ -30,8 +30,8 @@ test('housekeeping and website changes can pass without product jobs', () => {
 });
 
 test('product and complete runs require their fixed suites', () => {
-  check(results(['product'], ['assets', 'native', 'platforms']));
-  check(results(['product', 'persistence'], ['assets', 'native', 'platforms', 'database']));
+  check(results(['product'], ['assets', 'demo', 'native', 'platforms']));
+  check(results(['product', 'persistence'], ['assets', 'demo', 'native', 'platforms', 'database']));
   check(results(groups, jobs));
 });
 

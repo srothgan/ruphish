@@ -12,6 +12,7 @@ Read the repository's [contribution guide](../../CONTRIBUTING.md) for review exp
 | Build and run a development checkout | [Setup](setup.md) |
 | Understand responsibility boundaries | [Architecture](architecture.md), [database development](database-development.md) |
 | Extend the admin interface | [Frontend](frontend.md), [design system](design-system.md) |
+| Maintain the static public demo and shared sample data | [Public demo](demo.md) |
 | Translate interface text or change date/time presentation | [Localization](localization.md) |
 | Verify a change | [Testing](testing/index.md), [validation commands](testing/validation.md) |
 | Exercise real protocols locally | [Canonical fixture](testing/local-fixture.md), [database providers](testing/database-providers.md) |

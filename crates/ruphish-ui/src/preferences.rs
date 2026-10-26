@@ -154,6 +154,8 @@ pub(crate) fn DisplayPreferencesForm(api: Api, token: String) -> impl IntoView {
                 });
             busy.set(false);
             if let Ok(value) = &result {
+                #[cfg(feature = "demo")]
+                api.notifications.show(DemoNotice::Saved);
                 language.set(value.language.clone().unwrap_or_default());
                 format.set(value.format_locale.clone().unwrap_or_default());
                 zone.set(value.time_zone.clone().unwrap_or_default());

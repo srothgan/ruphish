@@ -16,6 +16,8 @@ product:
     - '.github/paths.yml'
     - '.github/scripts/**'
   - 'crates/**'
+  - 'demo/**'
+  - 'assets/website-demo/**'
   - 'config.example.json'
   - 'tests/**'
   - 'migrations/**'

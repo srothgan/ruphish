@@ -472,6 +472,12 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                         .map(|saved| (saved, revision))
                 }) {
                 Ok((saved, _)) => {
+                    #[cfg(feature = "demo")]
+                    api.notifications.show(if id.is_none() {
+                        DemoNotice::Created
+                    } else {
+                        DemoNotice::Saved
+                    });
                     queries.integration_saved(kind, saved.id());
                     baseline.set(draft.get_untracked());
                     busy.set(false);
@@ -764,6 +770,8 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                 });
             match result {
                 Ok(saved) => {
+                    #[cfg(feature = "demo")]
+                    api.notifications.show(DemoNotice::External);
                     message.status(
                         if operation == "validate" {
                             leptos_i18n::t_string!(i18n, ui.connection_validated_successfully)
