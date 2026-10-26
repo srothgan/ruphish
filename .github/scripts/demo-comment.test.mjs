@@ -6,7 +6,7 @@ import { runInNewContext } from 'node:vm';
 const workflow = readFileSync(new URL('../workflows/pr.yml', import.meta.url), 'utf8');
 const job = workflow.slice(workflow.indexOf('\n  demo-comment:'));
 const guard = job.match(/    if: >-\r?\n([\s\S]*?)\r?\n    runs-on:/)[1].trim();
-const script = workflow.match(/          script: &demo-comment-script \|\r?\n([\s\S]*?)(?=\r?\n  [\w-]+:)/)[1];
+const script = workflow.match(/          script: &demo-comment-script \|\r?\n((?: {12}.*(?:\r?\n|$)|\r?\n)*)/)[1];
 const marker = '<!-- ruphish-demo-preview -->';
 const head = 'a'.repeat(40);
 
@@ -22,7 +22,7 @@ function eligible({ event = 'pull_request', fork = false, bot = false, enabled =
   });
 }
 
-async function report({ phase = 'finished', build = 'success', deploy = 'success', comments = [], state = 'open', currentHead = head, url = 'https://ruphish-demo-example.vercel.app' } = {}) {
+async function report({ phase = 'finished', build = 'success', deploy = 'success', comments = [], state = 'open', currentHead = head, runId = 123, attempt = '1', url = 'https://ruphish-demo-example.vercel.app' } = {}) {
   const writes = [];
   const rest = {
     pulls: { get: async () => ({ data: { state, head: { sha: currentHead } } }) },
@@ -34,9 +34,9 @@ async function report({ phase = 'finished', build = 'success', deploy = 'success
   };
   await runInNewContext(`(async () => { ${script}\n })()`, {
     github: { rest, paginate: async () => comments }, URL,
-    context: { repo: { owner: 'owner', repo: 'repo' }, serverUrl: 'https://github.com', runId: 123,
+    context: { repo: { owner: 'owner', repo: 'repo' }, serverUrl: 'https://github.com', runId,
       payload: { pull_request: { number: 28, head: { sha: head } } } },
-    process: { env: { REPORT_PHASE: phase, DEMO_RESULT: build, DEPLOY_RESULT: deploy, PREVIEW_URL: url } },
+    process: { env: { REPORT_PHASE: phase, DEMO_RESULT: build, DEPLOY_RESULT: deploy, PREVIEW_URL: url, GITHUB_RUN_ATTEMPT: attempt } },
   });
   return writes;
 }
@@ -87,9 +87,9 @@ test('a success comment requires a valid Vercel deployment origin', async () => 
   }
 });
 
-test('one comment progresses from building through approval to a ready preview', async () => {
+test('one comment progresses from building through approval and deploying to a ready preview', async () => {
   const comments = [];
-  for (const [phase, status] of [['building', 'Building'], ['approval', 'Awaiting approval'], ['finished', 'Ready']]) {
+  for (const [phase, status] of [['building', 'Building'], ['approval', 'Awaiting approval'], ['deploying', 'Deploying'], ['finished', 'Ready']]) {
     const [comment] = await report({ phase, comments });
     assert.equal(comment.action, comments.length ? 'update' : 'create');
     assert.ok(comment.body.includes(status));
@@ -101,7 +101,7 @@ test('one comment progresses from building through approval to a ready preview',
 
 test('new runs reset the previous preview link before building', async () => {
   const [ready] = await report();
-  const [building] = await report({ phase: 'building', comments: [
+  const [building] = await report({ phase: 'building', runId: 124, comments: [
     { id: 10, user: { login: 'github-actions[bot]', type: 'Bot' }, body: ready.body },
   ] });
   assert.equal(building.action, 'update');
@@ -121,7 +121,25 @@ test('reporting stages are ordered without becoming build or deployment prerequi
   assert.deepEqual(dependencies('demo-comment'), ['demo', 'deploy-demo', 'demo-comment-start', 'demo-comment-approval']);
   assert.match(jobs['demo-comment-start'], /filters: \.github\/paths\.yml/);
   assert.match(jobs['demo-comment-start'], /if: steps\.paths\.outputs\.demo == 'true'/);
-  for (const name of ['demo-comment-approval', 'demo-comment']) {
+  for (const name of ['demo-comment-start', 'demo-comment-approval', 'demo-comment']) {
     assert.match(jobs[name], /script: \*demo-comment-script/);
   }
+  const deployment = jobs['deploy-demo'];
+  const reporting = deployment.slice(deployment.indexOf('- name: Report demo deployment starting'), deployment.indexOf('# Deliberately no source checkout'));
+  assert.match(reporting, /if: github.event_name == 'pull_request'/);
+  assert.match(reporting, /continue-on-error: true/);
+  assert.match(reporting, /REPORT_PHASE: deploying/);
+  assert.ok(deployment.indexOf('REPORT_PHASE: deploying') < deployment.indexOf('vercel deploy'));
+});
+
+test('late progress reports cannot replace an already recorded later stage', async () => {
+  const [deploying] = await report({ phase: 'deploying' });
+  const comments = [{ id: 10, user: { login: 'github-actions[bot]', type: 'Bot' }, body: deploying.body }];
+  assert.deepEqual(await report({ phase: 'building', comments }), []);
+  assert.deepEqual(await report({ phase: 'approval', comments }), []);
+  const [ready] = await report({ comments });
+  comments[0].body = ready.body;
+  assert.deepEqual(await report({ phase: 'deploying', comments }), []);
+  assert.deepEqual(await report({ runId: 122, comments }), []);
+  assert.equal((await report({ phase: 'building', attempt: '2', comments }))[0].action, 'update');
 });

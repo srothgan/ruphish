@@ -52,6 +52,9 @@ jobs:
        github.event.pull_request.user.login != 'dependabot[bot]')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
     outputs:
       url: ${{ steps.deploy.outputs.url }}
     environment:
@@ -64,6 +67,65 @@ jobs:
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_DEMO_PROJECT_ID }}
     steps:
+      - name: Report demo deployment starting
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        timeout-minutes: 1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          REPORT_PHASE: deploying
+        with:
+          script: &demo-comment-script |
+            const marker = '<!-- ruphish-demo-preview -->';
+            const issue_number = context.payload.pull_request.number;
+            const head = context.payload.pull_request.head.sha;
+            const repo = context.repo;
+            const { data: current } = await github.rest.pulls.get({ ...repo, pull_number: issue_number });
+            if (current.state !== 'open' || current.head.sha !== head) return;
+
+            const phase = process.env.REPORT_PHASE;
+            const attempt = process.env.GITHUB_RUN_ATTEMPT || '1';
+            const comments = await github.paginate(github.rest.issues.listComments, { ...repo, issue_number, per_page: 100 });
+            const previous = comments.find(comment => comment.user?.login === 'github-actions[bot]' && comment.user?.type === 'Bot' && comment.body?.startsWith(marker));
+            const progress = previous?.body.match(/<!-- ruphish-demo-progress:(\d+):(\d+):(\w+) -->/);
+            const stages = ['building', 'approval', 'deploying', 'finished'];
+            if (progress) {
+              const [, run, priorAttempt, priorPhase] = progress;
+              if (Number(run) > context.runId) return;
+              if (Number(run) === context.runId && (Number(priorAttempt) > Number(attempt)
+                || priorAttempt === attempt && stages.indexOf(priorPhase) > stages.indexOf(phase))) return;
+            }
+            const ready = phase === 'finished' && process.env.DEMO_RESULT === 'success' && process.env.DEPLOY_RESULT === 'success';
+            let preview = phase === 'finished' ? 'Unavailable' : 'Not ready yet';
+            if (ready) {
+              const url = new URL(process.env.PREVIEW_URL);
+              if (url.protocol !== 'https:' || !url.hostname.endsWith('.vercel.app') || url.origin !== process.env.PREVIEW_URL) {
+                throw new Error('Unexpected Vercel preview URL');
+              }
+              preview = `[Visit preview](${url.href})`;
+            }
+            const status = phase === 'building' ? '⏳ Building'
+              : phase === 'approval' ? '⏸ Awaiting approval'
+              : phase === 'deploying' ? '🚀 Deploying'
+              : ready ? '✅ Ready'
+              : process.env.DEMO_RESULT === 'failure' ? '❌ Build failed' : '❌ Deployment failed';
+            const base = `${context.serverUrl}/${repo.owner}/${repo.repo}`;
+            const body = [
+              marker,
+              `<!-- ruphish-demo-progress:${context.runId}:${attempt}:${phase} -->`,
+              'The latest demo preview for this pull request.',
+              '',
+              '| Project | Status | Preview | Commit |',
+              '| --- | --- | --- | --- |',
+              `| ruphish-demo | ${status} | ${preview} | [${head.slice(0, 7)}](${base}/commit/${head}) |`,
+              '',
+              `[View workflow logs](${base}/actions/runs/${context.runId})`,
+            ].join('\n');
+            if (previous) {
+              await github.rest.issues.updateComment({ ...repo, comment_id: previous.id, body });
+            } else {
+              await github.rest.issues.createComment({ ...repo, issue_number, body });
+            }
       # Deliberately no source checkout or Cargo/npm project build in this job.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
@@ -121,46 +183,7 @@ jobs:
         env:
           REPORT_PHASE: building
         with:
-          script: &demo-comment-script |
-            const marker = '<!-- ruphish-demo-preview -->';
-            const issue_number = context.payload.pull_request.number;
-            const head = context.payload.pull_request.head.sha;
-            const repo = context.repo;
-            const { data: current } = await github.rest.pulls.get({ ...repo, pull_number: issue_number });
-            if (current.state !== 'open' || current.head.sha !== head) return;
-
-            const phase = process.env.REPORT_PHASE;
-            const ready = phase === 'finished' && process.env.DEMO_RESULT === 'success' && process.env.DEPLOY_RESULT === 'success';
-            let preview = phase === 'finished' ? 'Unavailable' : 'Not ready yet';
-            if (ready) {
-              const url = new URL(process.env.PREVIEW_URL);
-              if (url.protocol !== 'https:' || !url.hostname.endsWith('.vercel.app') || url.origin !== process.env.PREVIEW_URL) {
-                throw new Error('Unexpected Vercel preview URL');
-              }
-              preview = `[Visit preview](${url.href})`;
-            }
-            const status = phase === 'building' ? '⏳ Building'
-              : phase === 'approval' ? '⏸ Awaiting approval'
-              : ready ? '✅ Ready'
-              : process.env.DEMO_RESULT === 'failure' ? '❌ Build failed' : '❌ Deployment failed';
-            const base = `${context.serverUrl}/${repo.owner}/${repo.repo}`;
-            const body = [
-              marker,
-              'The latest demo preview for this pull request.',
-              '',
-              '| Project | Status | Preview | Commit |',
-              '| --- | --- | --- | --- |',
-              `| ruphish-demo | ${status} | ${preview} | [${head.slice(0, 7)}](${base}/commit/${head}) |`,
-              '',
-              `[View workflow logs](${base}/actions/runs/${context.runId})`,
-            ].join('\n');
-            const comments = await github.paginate(github.rest.issues.listComments, { ...repo, issue_number, per_page: 100 });
-            const previous = comments.find(comment => comment.user?.login === 'github-actions[bot]' && comment.user?.type === 'Bot' && comment.body?.startsWith(marker));
-            if (previous) {
-              await github.rest.issues.updateComment({ ...repo, comment_id: previous.id, body });
-            } else {
-              await github.rest.issues.createComment({ ...repo, issue_number, body });
-            }
+          script: *demo-comment-script
 
   demo-comment-approval:
     name: Report demo awaiting approval
