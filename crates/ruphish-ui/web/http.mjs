@@ -1,5 +1,10 @@
 // One deadline covers connection, headers and body. Dropping the Rust future cancels Fetch.
 export function startRequest(request, milliseconds, onHeaders = () => {}, download = false) {
+    return startRequestWith(fetch, request, milliseconds, onHeaders, download);
+}
+
+// Explicit executor injection keeps demo requests out of the network without replacing global Fetch.
+export function startRequestWith(execute, request, milliseconds, onHeaders = () => {}, download = false) {
     const controller = new AbortController();
     let timedOut = false;
     const timer = setTimeout(() => {
@@ -8,7 +13,7 @@ export function startRequest(request, milliseconds, onHeaders = () => {}, downlo
     }, milliseconds);
     const promise = (async () => {
         try {
-            const response = await fetch(request, { signal: controller.signal });
+            const response = await execute(request, { signal: controller.signal });
             if (controller.signal.aborted) throw new Error('aborted');
             onHeaders(response.status);
             const file = download && response.ok ? await response.blob() : null;

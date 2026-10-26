@@ -6,6 +6,9 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+demo = []
+
 [dependencies]
 base64 = "0.23.1"
 ruphish-contracts = { version = "0.1.0-dev", path = "../ruphish-contracts" }

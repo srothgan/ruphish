@@ -1,76 +1,70 @@
-// One initial dataset for a newly initialized, disposable screenshot database.
+// The SQL consumer of the same complete dataset used by the public browser demo.
 import { randomBytes } from 'node:crypto';
-
-const day = 86400;
-const iso = (seconds) => new Date(seconds * 1000).toISOString();
-const zero = '0001-01-01T00:00:00Z';
-const names = ['Alex', 'Sam', 'Robin', 'Morgan', 'Jamie', 'Taylor', 'Casey', 'Avery'];
-const surnames = ['Rivera', 'Lee', 'Meyer', 'Brooks', 'Patel', 'Winter', 'Chen', 'Berg'];
-const campaigns = [
-  { name: 'Quarterly awareness baseline', ago: 54, size: 400, opened: 260, clicked: 72, submitted: 28, reported: 44, complete: true, failed: 0 },
-  { name: 'Benefits enrollment', ago: 21, size: 617, opened: 320, clicked: 48, submitted: 12, reported: 140, complete: true, failed: 0 },
-  { name: 'Delivery notification', ago: 2, size: 320, opened: 170, clicked: 22, submitted: 6, reported: 98, complete: false, failed: 12 },
-];
+import { dataset, DAY, ZERO, iso } from './dataset.mjs';
 
 export function seed(db, now = Math.floor(Date.now() / 1000)) {
+  const data = dataset(now);
   db.exec('BEGIN IMMEDIATE');
   try {
-    const owner = db.prepare("SELECT id FROM users WHERE username='admin'").get()?.id;
-    if (!owner) throw new Error('Initialize the application administrator before seeding.');
-    for (const table of ['campaigns', 'results', 'events', 'templates', 'pages', 'groups', 'targets', 'smtp', 'ruphish_domains']) {
-      if (db.prepare(`SELECT count(*) AS total FROM ${table}`).get().total !== 0) {
-        throw new Error('The recorder requires a fresh database; existing data will not be changed.');
+    const admin = db.prepare("SELECT * FROM users WHERE username='admin'").get();
+    if (!admin || db.prepare('SELECT count(*) AS n FROM users').get().n !== 1) throw new Error('Initialize one fresh disposable administrator before seeding.');
+    for (const table of ['campaigns', 'results', 'events', 'templates', 'pages', 'groups', 'targets', 'smtp', 'ruphish_domains', 'ruphish_learning_pages', 'ruphish_campaign_drafts', 'webhooks', 'ruphish_mailboxes']) {
+      if (db.prepare(`SELECT count(*) AS n FROM ${table}`).get().n !== 0) throw new Error('The recorder requires a fresh database; existing data will not be changed.');
+    }
+    const owner = admin.id;
+    const run = (sql, ...values) => db.prepare(sql).run(...values);
+    const insert = (sql, ...values) => Number(run(sql, ...values).lastInsertRowid);
+    // Preserve the recorder's random bootstrap password; never use public demo credentials on a server.
+    run('UPDATE users SET username=?,password_change_required=0,last_login=? WHERE id=?', data.users[0].username, data.users[0].last_login, owner);
+    for (const user of data.users.slice(1)) {
+      const role = db.prepare('SELECT id FROM roles WHERE slug=?').get(user.role.slug);
+      if (!role) throw new Error('Missing installed role');
+      run('INSERT INTO users(username,hash,api_key,role_id,password_change_required,last_login,account_locked) VALUES(?,?,?,?,?,?,?)', user.username, admin.hash, randomBytes(32).toString('hex'), role.id, Number(user.password_change_required), user.last_login, Number(user.account_locked));
+    }
+    for (const d of data.domains) {
+      // Historical state only. Verification remains disabled in the recorder's installation policy.
+      run('INSERT INTO ruphish_domains(id,owner_id,name,origin,hostname,enabled,challenge,challenge_expires,checked_at,verified_until,control,dns,routing,tls,code) VALUES(?,?,?,?,?,0,?,?,?,?,?,?,?,?,?)', d.id, owner, d.name, d.origin, d.hostname, randomBytes(32).toString('hex'), 0, d.checked_at, d.verified_until, Number(d.control), Number(d.dns), Number(d.routing), Number(d.tls), d.code);
+      run('INSERT INTO ruphish_domain_claims(hostname,owner_id) VALUES(?,?)', d.hostname, owner);
+    }
+    for (const s of data.smtp) run('INSERT INTO smtp(id,user_id,name,interface_type,host,username,password,from_address,modified_date,ignore_cert_errors) VALUES(?,?,?,?,?,?,?,?,?,?)', s.id, owner, s.name, s.interface_type, s.host, '', '', s.from_address, s.modified_date, 0);
+    for (const p of data.pages) run('INSERT INTO pages(id,user_id,name,html,modified_date,redirect_url) VALUES(?,?,?,?,?,?)', p.id, owner, p.name, p.html, p.modified_date, p.redirect_url);
+    for (const p of data['learning-pages']) run('INSERT INTO ruphish_learning_pages(id,user_id,name,html,modified_date,public_id) VALUES(?,?,?,?,?,?)', p.id, owner, p.name, p.html, p.modified_date, p.public_id);
+    for (const t of data.templates) run('INSERT INTO templates(id,user_id,name,subject,text,html,modified_date) VALUES(?,?,?,?,?,?,?)', t.id, owner, t.name, t.subject, t.text, t.html, t.modified_date);
+    const targets = new Map();
+    for (const group of data.groups) {
+      run('INSERT INTO groups(id,user_id,name,modified_date) VALUES(?,?,?,?)', group.id, owner, group.name, group.modified_date);
+      for (const p of group.targets) {
+        if (!targets.has(p.email)) targets.set(p.email, insert('INSERT INTO targets(first_name,last_name,email,position) VALUES(?,?,?,?)', p.first_name, p.last_name, p.email, p.position));
+        run('INSERT INTO group_targets(group_id,target_id) VALUES(?,?)', group.id, targets.get(p.email));
       }
     }
-    const insert = (sql, ...values) => Number(db.prepare(sql).run(...values).lastInsertRowid);
-    const date = iso(now);
-    const origin = 'https://awareness.example.test';
-    // Historical demonstration only: no claimed verification and no domain worker requests.
-    const domain = insert('INSERT INTO ruphish_domains(owner_id,name,origin,hostname,enabled,challenge,challenge_expires) VALUES(?,?,?,?,?,?,?)', owner, 'Awareness exercises', origin, 'awareness.example.test', 0, randomBytes(32).toString('hex'), 0);
-    db.prepare('INSERT INTO ruphish_domain_claims(hostname,owner_id) VALUES(?,?)').run('awareness.example.test', owner);
-    const profile = insert('INSERT INTO smtp(user_id,name,interface_type,host,username,password,from_address,modified_date,ignore_cert_errors) VALUES(?,?,?,?,?,?,?,?,?)', owner, 'Awareness team', 'SMTP', 'smtp.example.test:1025', '', '', 'Awareness team <awareness@example.test>', date, 0);
-    const pages = ['Awareness exercise', 'Document sharing exercise'].map((name) => insert('INSERT INTO pages(user_id,name,html,modified_date,capture_credentials,capture_passwords,redirect_url) VALUES(?,?,?,?,?,?,?)', owner, name, '<!doctype html><html lang="en"><title>Awareness exercise</title><h1>Synthetic awareness exercise</h1><p>No sign-in is needed.</p></html>', date, 0, 0, ''));
-    const templates = ['Benefits enrollment', 'Shared document', 'Delivery notification', 'Team onboarding'].map((name) => insert('INSERT INTO templates(user_id,name,subject,text,html,modified_date) VALUES(?,?,?,?,?,?)', owner, name, `${name} - local exercise`, 'Hello {{.FirstName}}, this is a local demonstration. {{.URL}}', '<p>Hello {{.FirstName}},</p><p>This is a local demonstration. <a href="{{.URL}}">View the exercise</a>.</p>{{.Tracker}}', date));
-    const departments = ['Operations', 'Engineering', 'Finance', 'People & culture'];
-    const groups = departments.map((name) => insert('INSERT INTO groups(user_id,name,modified_date) VALUES(?,?,?)', owner, name, date));
-    const people = Array.from({ length: Math.max(...campaigns.map((campaign) => campaign.size)) }, (_, n) => {
-      const first = names[n % names.length];
-      const last = surnames[Math.floor(n / names.length) % surnames.length];
-      const email = `person${String(n + 1).padStart(3, '0')}@example.test`;
-      const position = departments[n % departments.length];
-      const id = insert('INSERT INTO targets(first_name,last_name,email,position) VALUES(?,?,?,?)', first, last, email, position);
-      db.prepare('INSERT INTO group_targets(group_id,target_id) VALUES(?,?)').run(groups[n % groups.length], id);
-      return { first, last, email, position };
-    });
-    for (const [index, campaign] of campaigns.entries()) {
-      const launch = now - campaign.ago * day;
-      const id = insert('INSERT INTO campaigns(user_id,name,created_date,completed_date,template_id,page_id,status,url,smtp_id,launch_date,send_by_date) VALUES(?,?,?,?,?,?,?,?,?,?,?)', owner, campaign.name, iso(launch - day), campaign.complete ? iso(launch + day) : zero, templates[index % templates.length], pages[index % pages.length], campaign.complete ? 'Completed' : 'In progress', origin, profile, iso(launch), zero);
-      db.prepare('INSERT INTO ruphish_campaign_policy(campaign_id,capture_credentials,capture_passwords,redirect_url) VALUES(?,?,?,?)').run(id, 0, 0, '');
-      db.prepare('INSERT INTO ruphish_campaign_domains(campaign_id,domain_id) VALUES(?,?)').run(id, domain);
-      for (const [ordinal, group] of groups.entries()) db.prepare('INSERT INTO ruphish_campaign_groups(campaign_id,ordinal,group_id) VALUES(?,?,?)').run(id, ordinal, group);
-      const event = (email, time, kind, details = '{}') => db.prepare('INSERT INTO events(campaign_id,email,time,message,details) VALUES(?,?,?,?,?)').run(id, email, iso(time), kind, details);
-      event('', launch - day, 'Campaign Created');
-      for (let n = 0; n < campaign.size; n++) {
-        const person = people[n];
-        const accepted = launch + n * 7;
-        const reported = n >= campaign.size - campaign.reported;
-        const status = n < campaign.submitted ? 'Submitted Data' : n < campaign.clicked ? 'Clicked Link' : n < campaign.opened ? 'Email Opened' : 'Email Sent';
-        const result = insert('INSERT INTO results(campaign_id,user_id,r_id,email,first_name,last_name,status,ip,latitude,longitude,position,send_date,reported,modified_date) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)', id, owner, randomBytes(16).toString('hex'), person.email, person.first, person.last, status, '', 0, 0, person.position, iso(accepted), Number(reported), iso(accepted + 7200));
-        db.prepare('INSERT INTO ruphish_delivery(result_id,campaign_id,state,due,code) VALUES(?,?,?,?,?)').run(result, id, 'accepted', accepted, '');
-        event(person.email, accepted, 'Email Sent');
-        if (n < campaign.opened) event(person.email, accepted + 900, 'Email Opened');
-        if (n < campaign.clicked) event(person.email, accepted + 1800, 'Clicked Link');
-        if (n < campaign.submitted) event(person.email, accepted + 2100, 'Submitted Data', '{"password_present":true}');
-        if (reported) event(person.email, accepted + 3600, 'Email Reported');
+    for (const { header: c, results } of data.campaigns) {
+      const launch = Date.parse(c.launch_date) / 1000;
+      run('INSERT INTO campaigns(id,user_id,name,created_date,completed_date,template_id,page_id,status,url,smtp_id,launch_date,send_by_date) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', c.id, owner, c.name, iso(launch - DAY), c.status === 'Completed' ? iso(launch + DAY) : ZERO, c.template.id, c.page.id, c.status, c.url, c.smtp.id, c.launch_date, c.send_by_date);
+      run('INSERT INTO ruphish_campaign_policy(campaign_id,redirect_url) VALUES(?,?)', c.id, c.policy.redirect_url);
+      run('INSERT INTO ruphish_campaign_domains(campaign_id,domain_id) VALUES(?,?)', c.id, c.domain_id);
+      for (const [ordinal, group] of data.groups.slice(0, 4).entries()) run('INSERT INTO ruphish_campaign_groups(campaign_id,ordinal,group_id) VALUES(?,?,?)', c.id, ordinal, group.id);
+      for (const r of results) {
+        const status = r.state === 'failed' ? 'Error' : r.state === 'ready' ? 'Sending' : r.events.filter(e => e.kind !== 'Email Reported').at(-1)?.kind ?? 'Email Sent';
+        run('INSERT INTO results(id,campaign_id,user_id,r_id,email,first_name,last_name,status,ip,latitude,longitude,position,send_date,reported,modified_date) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', r.id, c.id, owner, r.rid, r.email, r.first_name, r.last_name, status, '', 0, 0, r.position, iso(r.due), Number(r.events.some(e => e.kind === 'Email Reported')), iso(r.due));
+        run('INSERT INTO ruphish_delivery(result_id,campaign_id,state,due,generation,code,smtp_code,stage) VALUES(?,?,?,?,?,?,?,?)', r.id, c.id, r.state, r.due, r.attempts.length ? 1 : 0, r.state === 'failed' ? 'smtp_permanent_rejection' : '', r.state === 'failed' ? 550 : null, r.state === 'failed' ? 'Envelope' : '');
+        for (const a of r.attempts) run('INSERT INTO ruphish_delivery_attempt(result_id,generation,started,finished,state,stage,smtp_code,message_id) VALUES(?,?,?,?,?,?,?,?)', r.id, a.generation, a.started, a.finished, a.state, a.stage, a.smtp_code, a.message_id);
+        const kind = { 'Email Sent': 'email_sent', 'Email Opened': 'email_opened', 'Clicked Link': 'link_clicked', 'Submitted Data': 'form_submitted', 'Email Reported': 'email_reported' };
+        for (const e of r.events) run('INSERT INTO events(id,campaign_id,email,time,kind,metadata,recipient_id,source) VALUES(?,?,?,?,?,?,?,?)', e.id, c.id, r.email, e.time, kind[e.kind], JSON.stringify(e.password_present === null ? {} : { password_present: e.password_present }), r.id, e.source);
       }
-      for (let n = 1; n <= campaign.failed; n++) {
-        const email = `undeliverable${String(n).padStart(2, '0')}@example.test`;
-        const due = launch + 7200;
-        const result = insert('INSERT INTO results(campaign_id,user_id,r_id,email,first_name,last_name,status,ip,latitude,longitude,position,send_date,reported,modified_date) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)', id, owner, randomBytes(16).toString('hex'), email, 'Demo', `Recipient ${n}`, 'Error', '', 0, 0, 'Operations', iso(launch), 0, iso(due));
-        db.prepare('INSERT INTO ruphish_delivery(result_id,campaign_id,state,due,code,smtp_code,stage) VALUES(?,?,?,?,?,?,?)').run(result, id, 'failed', due, 'smtp_permanent_rejection', 550, 'Envelope');
-        event(email, due, 'Error Sending Email', JSON.stringify({ code: 'smtp_permanent_rejection', error: 'Synthetic SMTP 550: recipient mailbox unavailable' }));
-      }
-      if (campaign.complete) event('', launch + day, 'Campaign Completed');
+    }
+    for (const draft of data.drafts) run('INSERT INTO ruphish_campaign_drafts(id,owner_id,revision,name,configuration,schema_version,step,created,modified) VALUES(?,?,?,?,?,1,?,?,?)', draft.id, owner, draft.revision, draft.configuration.name, JSON.stringify(draft.configuration), draft.step, Date.parse(draft.created) / 1000, Date.parse(draft.modified) / 1000);
+    // Insert integrations after events, disabled, so seeding never queues outbound deliveries.
+    const sampleEvent = data.campaigns[0].results[0].events[0].id;
+    for (const w of data.webhooks) {
+      run('INSERT INTO webhooks(id,name,url,secret,is_active) VALUES(?,?,?,?,0)', w.id, w.name, w.url, randomBytes(32).toString('hex'));
+      run('INSERT INTO ruphish_webhook_state(webhook_id,revision) VALUES(?,?)', w.id, w.revision);
+      const job = insert("INSERT INTO ruphish_webhook_jobs(webhook_id,revision,event_id,state,attempt,code) VALUES(?,?,?,'done',1,?)", w.id, w.revision, sampleEvent, w.history[0].code);
+      for (const h of w.history) run('INSERT INTO ruphish_webhook_attempts(job_id,attempt,started,finished,status,code) VALUES(?,?,?,?,?,?)', job, h.attempt, h.started, h.finished, h.status, h.code);
+    }
+    for (const m of data['reporting-mailboxes']) {
+      run('INSERT INTO ruphish_mailboxes(id,owner_id,name,enabled,host,port,username,password,tls,folder,restrict_domain,delete_reported,frequency,last_check,last_success,code) VALUES(?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?)', m.id, owner, m.name, m.host, m.port, m.username, randomBytes(32).toString('hex'), Number(m.tls), m.folder, m.restrict_domain, Number(m.delete_reported), m.frequency, m.last_check, m.last_success, m.code);
+      for (const h of m.history) run('INSERT INTO ruphish_mailbox_runs(mailbox_id,started,finished,code,matched,rejected) VALUES(?,?,?,?,?,?)', m.id, h.started, h.finished, h.code, h.matched, h.rejected);
     }
     db.exec('COMMIT');
   } catch (error) {
