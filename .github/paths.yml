@@ -32,6 +32,27 @@ website:
   - '.github/paths.yml'
   - '.github/scripts/**'
 
+# Browser deployment inputs, including the starter content embedded by the demo.
+# The workspace lockfile is deliberately conservative: backend dependency updates
+# can still select this group, but backend implementation-only changes do not.
+demo:
+  - 'Cargo.toml'
+  - 'Cargo.lock'
+  - 'rust-toolchain.toml'
+  - '.cargo/**'
+  - 'Trunk.toml'
+  - '.gitattributes'
+  - 'crates/ruphish-ui/**'
+  - 'crates/ruphish-domain/**'
+  - 'crates/ruphish-contracts/**'
+  - 'crates/ruphish-http/starter-templates/**'
+  - 'assets/website-demo/**'
+  - 'demo/**'
+  - '.github/workflows/**'
+  - '.github/actions/**'
+  - '.github/scripts/**'
+  - '.github/paths.yml'
+
 persistence:
   - *build_inputs
   - 'crates/ruphish-adapters/**'

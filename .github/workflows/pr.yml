@@ -29,3 +29,54 @@ jobs:
       - env:
           RESULT: ${{ needs.checks.result }}
         run: test "$RESULT" = success
+
+  deploy-demo:
+    name: Deploy prebuilt demo
+    needs: [checks, gate]
+    # Credentials exist only in protected deployment environments. Forks and
+    # Dependabot still build/test affected inputs, but receive no deployment token.
+    if: >-
+      vars.DEMO_DEPLOY_ENABLED == 'true' &&
+      needs.checks.outputs.demo_changed == 'true' &&
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' ||
+       github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' ||
+       github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.user.login != 'dependabot[bot]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: ${{ github.event_name == 'pull_request' && 'demo-preview' || 'demo-production' }}
+      url: ${{ steps.deploy.outputs.url }}
+    concurrency:
+      group: demo-deploy-${{ github.event.pull_request.number || 'production' }}
+      cancel-in-progress: false
+    env:
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_DEMO_PROJECT_ID }}
+    steps:
+      # Deliberately no source checkout or Cargo/npm project build in this job.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '26.8.1'
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: demo-vercel-output
+          path: .vercel/output
+      - name: Install pinned deployment CLI
+        run: npm install --global vercel@65.3.1
+      - name: Deploy the tested static artifact
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DEPLOY_TARGET: ${{ github.event_name == 'pull_request' && 'preview' || 'production' }}
+        run: |
+          test -n "$VERCEL_TOKEN"
+          test -n "$VERCEL_ORG_ID"
+          test -n "$VERCEL_PROJECT_ID"
+          args=(--prebuilt --yes)
+          if [ "$DEPLOY_TARGET" = production ]; then args+=(--prod); fi
+          url=$(vercel deploy "${args[@]}")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          printf 'Demo deployment: %s\n' "$url" >> "$GITHUB_STEP_SUMMARY"
