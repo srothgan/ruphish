@@ -83,7 +83,7 @@ For automated monitoring, use the [liveness and readiness probes](../administrat
 
 Wait for the `RUPHISH_READY` message on stderr, then open the administration address. For locally generated development certificates, inspect the certificate before accepting a browser exception. Do not use that development trust arrangement as your public TLS setup.
 
-Sign in as `admin` using the temporary password you supplied. Complete the required password change. The application does not print passwords or API tokens. If the first startup generated an inaccessible temporary password, stop it and restart with `GOPHISH_INITIAL_ADMIN_PASSWORD` set.
+Sign in as `admin` using the temporary password you supplied. If `GOPHISH_INITIAL_ADMIN_PASSWORD` is omitted, startup generates a random temporary password and prints it to stderr for both terminal and noninteractive launches, including Docker. Complete the required password change. Generated passwords bypass the application log file, but container logs or redirected stderr can retain this deliberate startup output. Supplied passwords and API tokens are never printed.
 
 After stopping the process, remove the temporary variable from your shell with `Remove-Item Env:GOPHISH_INITIAL_ADMIN_PASSWORD` in PowerShell or `unset GOPHISH_INITIAL_ADMIN_PASSWORD` in a POSIX shell. An established account password is preserved on subsequent starts.
 

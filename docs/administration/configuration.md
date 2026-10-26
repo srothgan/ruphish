@@ -62,7 +62,7 @@ Resource API clients cannot change these installation settings. See [listeners a
 
 `logging.filename` defaults to empty (stderr only). A configured file is appended to, with logs also written to stderr. `logging.level` defaults to the info behavior; accepted names are empty, `trace`, `debug`, `info`, `warn`, `warning`, `error`, `fatal`, and `panic`, case-insensitively. Fatal/panic levels map to error severity. See [logging](logging.md).
 
-`GOPHISH_INITIAL_ADMIN_PASSWORD` and `GOPHISH_INITIAL_ADMIN_API_TOKEN` are preserved bootstrap environment names. They are not configuration keys. Supply bootstrap credentials privately and remove them from the shell after setup. The application never prints generated credentials. Typed database `password_env` fields name their own environment variable; there is no generic environment override for every JSON field.
+`GOPHISH_INITIAL_ADMIN_PASSWORD` and `GOPHISH_INITIAL_ADMIN_API_TOKEN` are preserved bootstrap environment names. They are not configuration keys. Supply bootstrap credentials privately and remove them from the shell after setup. When no initial password is supplied, the application prints the generated temporary administrator password to startup stderr, including noninteractive Docker output. Supplied passwords and API tokens are never printed; generated passwords are not sent to the application log file. Typed database `password_env` fields name their own environment variable; there is no generic environment override for every JSON field.
 
 ## Parsing behavior
 

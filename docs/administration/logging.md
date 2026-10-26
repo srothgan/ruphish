@@ -11,7 +11,7 @@ Use `info` for ordinary operation. `debug` and `trace` increase application diag
 
 Startup readiness is a separate stderr line beginning `RUPHISH_READY` with bound-address JSON. It is emitted independently of logging level after initialization succeeds. An open process alone is not proof of readiness.
 
-Request logs record the method, router-owned route pattern, and response status. They omit raw request paths/queries, headers, bodies, and peer diagnostics. Operational boundaries use safe categories instead of raw SMTP/SQL responses. The application does not print bootstrap passwords or API tokens.
+Request logs record the method, router-owned route pattern, and response status. They omit raw request paths/queries, headers, bodies, and peer diagnostics. Operational boundaries use safe categories instead of raw SMTP/SQL responses. Generated temporary administrator passwords are deliberately delivered through startup stderr, separately from the application log file, and can therefore appear in container logs or redirected output. Supplied passwords and API tokens are never printed. Startup failures identify the operation and safe failure category; raw database, protocol and input text remains excluded.
 
 When collecting diagnostics, include the operation, time, safe code/status, and affected version/configuration category. Review external proxy/mail/database logs separately: application redaction does not sanitize those systems or historical copies.
 

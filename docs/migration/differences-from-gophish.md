@@ -45,6 +45,6 @@ An event is an observation, not proof that a particular person acted. New report
 
 Campaign origins require DNS, routing, and TLS verification. SMTP trust and authentication checks may reject previously accepted insecure configurations. A timeout after SMTP submission can become an explicit unknown outcome requiring a decision; Ruphish does not promise exactly-once mail delivery.
 
-New passwords use Argon2id while supported legacy hashes remain usable. Bootstrap credentials are not printed to logs. Browser sessions, current-password changes, and API keys have separate lifecycles.
+New passwords use Argon2id while supported legacy hashes remain usable. Generated temporary administrator passwords appear in startup stderr, including container output, but not the application log file. Supplied passwords and API tokens are never echoed. Browser sessions, current-password changes, and API keys have separate lifecycles.
 
 SQLite, MySQL, and PostgreSQL have distinct startup and migration contracts. PostgreSQL is an additional provider, not an automatic target for a legacy MySQL or SQLite database. Re-read [configuration](../administration/configuration.md) and [database setup](../administration/databases/index.md) before reusing deployment files.
