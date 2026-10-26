@@ -1,4 +1,17 @@
 {
+  "demo": {
+    "notice": "Öffentliche Demo — Änderungen werden nicht gespeichert und keine Nachrichten versendet.",
+    "website": "Ruphish-Website",
+    "credentials": "Demo-Benutzername: demo · Passwort: demodemo. Verwenden Sie nur diese Beispieldaten.",
+    "created": "Erstellung simuliert. Nichts wurde gespeichert; ein Beispiel wird angezeigt.",
+    "saved": "Änderungen für diese Demo akzeptiert. Nichts wurde gespeichert.",
+    "deleted": "Löschung simuliert. Die Beispieldaten bleiben unverändert.",
+    "external": "Aktion simuliert. Kein externer Dienst wurde kontaktiert.",
+    "launched": "Kampagnenstart simuliert. Keine E-Mails wurden versendet.",
+    "status": "Demo-Antwort. Beispieldaten bleiben unverändert; externe Aktionen werden simuliert.",
+    "dismiss": "Schließen",
+    "storage_required": "Erlauben Sie Sitzungsspeicher, um sich an dieser Demo anzumelden. Kein Passwort wird gespeichert."
+  },
   "language": {
     "label": "Anzeigesprache",
     "native_name": "Deutsch"

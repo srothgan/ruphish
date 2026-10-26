@@ -76,6 +76,9 @@ test('all resource mutations resolve to real sample IDs without changing any rea
         assert.equal((await f.request(`/api/${family}/999999`)).status, 404, family);
     }
     assert.ok(!JSON.stringify([...f.storage]).includes('do-not-retain'));
+    const lesson = (await f.request('/api/learning-pages/1')).value;
+    assert.ok(lesson.preview_html.includes('<h1>'));
+    assert.equal(lesson.preview_html, lesson.html);
 });
 
 test('dashboard, filters, pagination and recipient drill-downs share the same records', async () => {
@@ -102,6 +105,11 @@ test('saved draft, review, launch and reopening are coherent without persistence
     const f = setup(); await f.login();
     const path = `/api/campaign-drafts/${draftId(1)}`;
     const original = (await f.request(path)).value;
+    const newPath = '/api/campaign-drafts/11111111-1111-4111-8111-111111111111';
+    const created = await f.request(newPath, 'PUT', { revision: null, step: 1, configuration: original.configuration });
+    assert.equal(created.value.id, original.id);
+    assert.equal((await f.request(newPath)).status, 404);
+    assert.equal((await f.request(`/api/campaign-drafts/${created.value.id}`)).status, 200);
     const saved = (await f.request(path, 'PUT', { revision: null, step: 2, configuration: { ...original.configuration, name: 'Discarded campaign' } })).value;
     assert.equal(saved.id, original.id);
     assert.equal(saved.revision, 1);

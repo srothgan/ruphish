@@ -129,6 +129,12 @@
     font-size: var(--fs-base);
     line-height: var(--lh);
   }
+  .demo-notice { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s2) var(--s5); padding: var(--s3) var(--s5); background: var(--amber-soft); color: var(--warning-ink); border-bottom: 1px solid var(--line); }
+  .demo-credentials { padding: var(--s3); background: var(--teal-50); border-radius: var(--r-sm); }
+  .demo-toast { position: fixed; right: var(--s5); bottom: var(--s5); z-index: 100; max-width: min(30rem, calc(100vw - 2 * var(--s5))); display: flex; align-items: start; gap: var(--s3); pointer-events: none; }
+  .demo-toast.has-content { padding: var(--s4); background: var(--paper); color: var(--ink); border: 1px solid var(--teal-600); border-radius: var(--r-md); box-shadow: 0 8px 32px #0c2f2b24; pointer-events: auto; }
+  .demo-toast p { margin: 0; }
+  .demo-toast button { flex-shrink: 0; }
   .account-app h1 { margin: 0; font-size: var(--fs-lg); line-height: 1.15; font-weight: var(--fw-semibold); letter-spacing: -.01em; color: var(--ink); }
   .account-app h2 { font-size: var(--fs-md); font-weight: var(--fw-semibold); }
   .account-app p { max-width: 80ch; line-height: 1.6; }

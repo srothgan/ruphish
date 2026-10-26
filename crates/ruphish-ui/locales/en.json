@@ -1,4 +1,17 @@
 {
+  "demo": {
+    "notice": "Public demo — changes are not saved and no messages are sent.",
+    "website": "Ruphish website",
+    "credentials": "Demo username: demo · Password: demodemo. Use these sample credentials only.",
+    "created": "Creation simulated. Nothing was saved; showing a sample resource.",
+    "saved": "Changes accepted for this demo. Nothing was saved.",
+    "deleted": "Deletion simulated. The sample data is unchanged.",
+    "external": "Action simulated. No external service was contacted.",
+    "launched": "Campaign launch simulated. No emails were sent.",
+    "status": "Demo response. Sample data remains unchanged; external actions are simulated.",
+    "dismiss": "Dismiss",
+    "storage_required": "Allow session storage for this demo to sign in. No password is stored."
+  },
   "language": {
     "label": "Display language",
     "native_name": "English"

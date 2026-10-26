@@ -110,6 +110,8 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                 });
             match result {
                 Ok(saved) => {
+                    #[cfg(feature = "demo")]
+                    api.notifications.show(DemoNotice::Saved);
                     api.set_features(Features::from(&saved.policy));
                     draft.set(Some((saved.revision, saved.policy.clone())));
                     queries.settings.confirmed((), |value| *value = saved);
@@ -175,6 +177,8 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                 }) {
                 Ok(_) => {
                     closure.set(None);
+                    #[cfg(feature = "demo")]
+                    api.notifications.show(DemoNotice::External);
                     queries.policy_changed();
                     message
                         .status(leptos_i18n::t_string!(i18n, ui.all_campaigns_closed).to_owned());

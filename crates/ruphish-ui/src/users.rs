@@ -164,6 +164,12 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
             match result {
                 Ok(_) => {
                     queries.users.invalidate(());
+                    #[cfg(feature = "demo")]
+                    api.notifications.show(if id.is_none() {
+                        DemoNotice::Created
+                    } else {
+                        DemoNotice::Saved
+                    });
                     baseline.set((
                         username.get_untracked(),
                         role.get_untracked(),

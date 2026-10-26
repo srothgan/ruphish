@@ -209,7 +209,18 @@ pub(super) fn app() -> impl IntoView {
     });
     view! {
         <div class="account-app">
-            {navigation_guard}
+            {#[cfg(feature = "demo")]
+            {
+                view! {
+                    <div class="demo-notice" role="note">
+                        <span>{tr!(demo.notice)}</span>
+                        <a href="https://www.ruphish.com/" rel="external">
+                            {tr!(demo.website)}
+                        </a>
+                    </div>
+                    <DemoToastHost notifications=api.notifications />
+                }
+            }} {navigation_guard}
             {move || {
                 if action.get() != SessionAction::Continue {
                     view! {
@@ -317,6 +328,10 @@ fn login(api: Api, token: String) -> impl IntoView {
                 <div class="login-brand">{tr!(ui.ruphish)}</div>
                 <h1>{tr!(ui.sign_in)}</h1>
                 <p>{tr!(ui.manage_your_security_awareness_workspace)}</p>
+                {#[cfg(feature = "demo")]
+                {
+                    view! { <p class="demo-credentials">{tr!(demo.credentials)}</p> }
+                }}
                 <form on:submit=submit>
                     <label>
                         {tr!(ui.username)}
@@ -945,6 +960,8 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
             match result {
                 Ok(_) if required => navigate("/"),
                 Ok(_) => {
+                    #[cfg(feature = "demo")]
+                    api.notifications.show(DemoNotice::Saved);
                     if let Some(notice) = notice {
                         notice.0.set(true);
                     }
@@ -1147,7 +1164,7 @@ fn account_overview(api: Api, session: BrowserSession) -> impl IntoView {
             };
             match value {
                 Ok(value) => match account_menu::copy_text(&value).await {
-                    Ok(()) => message.status(if secret { leptos_i18n::t_string!(i18n, ui.api_key_copied) } else { leptos_i18n::t_string!(i18n, ui.api_base_url_copied) }.into()),
+                    Ok(()) => message.local_status(if secret { leptos_i18n::t_string!(i18n, ui.api_key_copied) } else { leptos_i18n::t_string!(i18n, ui.api_base_url_copied) }.into()),
                     Err(_) => message.error(if secret {
                         leptos_i18n::t_string!(i18n, ui.clipboard_access_is_unavailable_reveal_the_key_select_it_and_copy_it_manually)
                     } else { leptos_i18n::t_string!(i18n, ui.clipboard_access_is_unavailable_select_the_url_and_copy_it_manually) }.into()),
@@ -1168,6 +1185,8 @@ fn account_overview(api: Api, session: BrowserSession) -> impl IntoView {
                 Ok(value) => {
                     key.set(value["data"].as_str().map(str::to_owned));
                     confirm.set(false);
+                    #[cfg(feature = "demo")]
+                    api.notifications.show(DemoNotice::Saved);
                     message.status({
                         leptos_i18n::t_string!(
                             i18n,

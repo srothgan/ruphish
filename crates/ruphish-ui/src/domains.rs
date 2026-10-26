@@ -339,6 +339,12 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
             {
                 Ok(d) => {
                     queries.domain_saved(d.id);
+                    #[cfg(feature = "demo")]
+                    api.notifications.show(if id.is_none() {
+                        DemoNotice::Created
+                    } else {
+                        DemoNotice::Saved
+                    });
                     loaded.set(false);
                     busy.set(false);
                     navigate(&format!("/domains/{}", d.id), Default::default());
@@ -529,6 +535,8 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
             match result {
                 Ok(value) => {
                     queries.domain_verified(value);
+                    #[cfg(feature = "demo")]
+                    api.notifications.show(DemoNotice::External);
                 }
                 Err(error) => message.error(ruphish_ui::localization::verification_error(
                     i18n, &error, true,

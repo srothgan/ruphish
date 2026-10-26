@@ -152,7 +152,8 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage } =
         }
         const draftMatch = path.match(/^\/api\/campaign-drafts\/([^/]+)(\/launch)?$/);
         if (draftMatch) {
-            const draft = data.drafts.find(d => d.id === draftMatch[1]);
+            const draft = data.drafts.find(d => d.id === draftMatch[1])
+                ?? (method === 'PUT' && !draftMatch[2] && /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i.test(draftMatch[1]) ? data.drafts[0] : null);
             if (!draft) return failure(404);
             if (draftMatch[2]) return method === 'POST' ? json({ id: 3 }) : failure(405);
             if (method === 'GET') return json(draft);
@@ -193,7 +194,7 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage } =
         const match = path.match(/^\/api\/([^/]+)(?:\/([^/]+))?(?:\/([^/]+))?$/);
         if (match && families.includes(match[1])) {
             const [, family, identity, operation] = match;
-            const rows = data[family];
+            const rows = family === 'learning-pages' ? data[family].map(row => ({ ...row, preview_html: row.html })) : data[family];
             if (method === 'GET' && identity === 'summary' && !operation && ['groups', 'templates', 'pages', 'learning-pages', 'smtp'].includes(family)) return json(summaries(data, family));
             if (method === 'GET' && family === 'domains' && identity === 'validated') return json(rows.filter(r => r.eligible));
             const row = identity ? rows.find(r => r.id === Number(identity)) : null;

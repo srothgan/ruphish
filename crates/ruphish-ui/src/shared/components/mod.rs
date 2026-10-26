@@ -1,5 +1,10 @@
 //! Shared management UI. Features own data, permissions and mutations.
 
+#[cfg(feature = "demo")]
+mod toasts;
+#[cfg(feature = "demo")]
+pub(crate) use toasts::*;
+
 mod buttons;
 pub(crate) use buttons::*;
 mod controls;

@@ -217,9 +217,8 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                 .download(&url, &format!("campaign-{id}-{scope}.{format}"))
                 .await
             {
-                Ok(()) => {
-                    message.status(leptos_i18n::t_string!(i18n, ui.export_downloaded).to_owned())
-                }
+                Ok(()) => message
+                    .local_status(leptos_i18n::t_string!(i18n, ui.export_downloaded).to_owned()),
                 Err(error) => message.error(error),
             }
             downloading.set(false);

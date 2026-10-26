@@ -14,6 +14,8 @@ use serde_json::Value;
 
 #[derive(Clone, Copy)]
 pub(crate) struct Api {
+    #[cfg(feature = "demo")]
+    pub(crate) notifications: crate::shared::components::DemoNotifications,
     pub(crate) features: RwSignal<ruphish_contracts::settings::Features>,
     feature_generation: RwSignal<u64>,
     monitor: RwSignal<SessionMonitor>,
@@ -23,6 +25,8 @@ impl Api {
     /// Construct a client bound to the browser locale with a fresh session monitor.
     pub(crate) fn new(i18n: leptos_i18n::I18nContext<ruphish_ui::localization::Locale>) -> Self {
         Self {
+            #[cfg(feature = "demo")]
+            notifications: crate::shared::components::DemoNotifications::new(),
             features: RwSignal::new(ruphish_contracts::settings::Features::default()),
             feature_generation: RwSignal::new(0),
             monitor: RwSignal::new(SessionMonitor::default()),
@@ -94,6 +98,9 @@ impl Api {
         if value["id"].as_i64().is_none_or(|id| id <= 0) {
             return Err(uncertain());
         }
+        #[cfg(feature = "demo")]
+        self.notifications
+            .show(crate::shared::components::DemoNotice::Launched);
         Ok(value)
     }
     pub(crate) async fn resource(
@@ -156,6 +163,12 @@ impl Api {
         if value["success"] != true {
             return Err(self.invalid_read());
         }
+        #[cfg(feature = "demo")]
+        self.notifications.show(if method == "DELETE" {
+            crate::shared::components::DemoNotice::Deleted
+        } else {
+            crate::shared::components::DemoNotice::External
+        });
         Ok(())
     }
 
