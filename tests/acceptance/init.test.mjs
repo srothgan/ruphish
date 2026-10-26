@@ -23,6 +23,8 @@ test('fresh fixture initialization owns Cargo output and preserves existing arti
     };
 
     initialize();
+    const configuration = JSON.parse(readFileSync(join(fixture, 'data', 'config.json'), 'utf8'));
+    assert.equal(configuration.logging.filename, '', 'Container logs belong to the configured Docker driver');
     for (const path of [join(root, 'target'), join(root, 'target', 'docker')]) {
         assert(statSync(path).isDirectory(), 'Artifact directories must exist before Docker binds them');
         if (process.getuid) assert.equal(statSync(path).uid, process.getuid());

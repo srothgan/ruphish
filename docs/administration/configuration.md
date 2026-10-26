@@ -40,7 +40,7 @@ For an explicit installation, copy this minimal SQLite configuration into your c
   "db_name": "sqlite3",
   "db_path": "ruphish.db",
   "migrations_prefix": "",
-  "logging": { "filename": "ruphish.log", "level": "info" }
+  "logging": { "filename": "ruphish.log", "level": "info", "max_size_bytes": 10485760, "max_files": 5 }
 }
 ```
 
@@ -95,7 +95,7 @@ Resource API clients cannot change these installation settings. See [listeners a
 
 ## Logging and environment
 
-Omitting `logging.filename` means stderr only; generated configurations select `ruphish.log` in the OS log directory. A configured file is appended to, with logs also written to stderr. `logging.level` defaults to the info behavior; accepted names are empty, `trace`, `debug`, `info`, `warn`, `warning`, `error`, `fatal`, and `panic`, case-insensitively. Fatal/panic levels map to error severity. See [logging](logging.md).
+Omitting `logging.filename` means stderr only; generated configurations select `ruphish.log` in the OS log directory. A configured file is appended to and rotated, with logs also written to stderr. Positive integer `logging.max_size_bytes` defaults to `10485760` (10 MiB); positive integer `logging.max_files` defaults to `5` archives in addition to the active file. Missing or null settings use these defaults unless an earlier duplicate legacy field already set the value. A single oversized record is kept intact. Oldest archives are removed to meet the configured count; changes take effect after restart. `logging.level` defaults to the info behavior; accepted names are empty, `trace`, `debug`, `info`, `warn`, `warning`, `error`, `fatal`, and `panic`, case-insensitively. Fatal/panic levels map to error severity. See [logging](logging.md).
 
 `GOPHISH_INITIAL_ADMIN_PASSWORD` and `GOPHISH_INITIAL_ADMIN_API_TOKEN` are preserved bootstrap environment names. They are not configuration keys. Supply bootstrap credentials privately and remove them from the shell after setup. When no initial password is supplied, the application prints the generated temporary administrator password to startup stderr, including noninteractive Docker output. Supplied passwords and API tokens are never printed; generated passwords are not sent to the application log file. Typed database `password_env` fields name their own environment variable; there is no generic environment override for every JSON field.
 

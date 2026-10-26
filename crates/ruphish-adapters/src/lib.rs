@@ -15,6 +15,7 @@ pub mod password_worker;
 mod postgres;
 pub mod private_file;
 pub mod resources;
+pub mod rotating_log;
 pub mod smtp;
 mod sqlite;
 pub mod template;

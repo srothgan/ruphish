@@ -24,6 +24,8 @@ mod database_network;
 mod domain_network;
 #[path = "health_process.rs"]
 mod health_process;
+#[path = "logging_process.rs"]
+mod logging_process;
 #[path = "support/mailbox.rs"]
 mod mailbox;
 #[path = "mysql_process.rs"]

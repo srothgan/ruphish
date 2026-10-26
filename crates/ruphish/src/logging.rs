@@ -1,4 +1,5 @@
 use crate::config::{ConfigError, Logging};
+use std::io::{self, Write};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{
     filter::LevelFilter,
@@ -28,13 +29,15 @@ pub(crate) fn setup(
     let (writer, guard) = if config.filename.as_os_str().is_empty() {
         (BoxMakeWriter::new(std::io::stderr), None)
     } else {
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&config.filename)?;
+        let file =
+            ruphish_adapters::rotating_log::Writer::open(&config.filename, config.rotation())?;
         let (writer, guard) = tracing_appender::non_blocking::NonBlockingBuilder::default()
+            .buffered_lines_limit(4096)
             .lossy(false)
-            .finish(file);
+            .finish(ReportedFile {
+                inner: file,
+                failed: false,
+            });
         (BoxMakeWriter::new(std::io::stderr.and(writer)), Some(guard))
     };
     let targets = tracing_subscriber::filter::Targets::new()
@@ -52,4 +55,41 @@ pub(crate) fn setup(
         )
         .try_init()?;
     Ok(guard)
+}
+
+// The worker otherwise suppresses I/O errors. Stderr already receives each event; report only
+// transitions, never raw filesystem error text, and retry file output on the next record.
+struct ReportedFile {
+    inner: ruphish_adapters::rotating_log::Writer,
+    failed: bool,
+}
+
+impl Write for ReportedFile {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        match self.inner.write_all(bytes) {
+            Ok(()) if self.failed => {
+                let _ = writeln!(
+                    io::stderr(),
+                    "Application file logging resumed; stderr logging remained active."
+                );
+                self.failed = false;
+            }
+            Err(error) => {
+                if !self.failed {
+                    let _ = writeln!(
+                        io::stderr(),
+                        "Application file logging unavailable ({:?}); stderr logging remains active. Check log directory access, free space and archive files.",
+                        error.kind()
+                    );
+                }
+                self.failed = true;
+            }
+            Ok(()) => {}
+        }
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
 }

@@ -21,6 +21,18 @@ pub(crate) struct Server {
 pub(crate) struct Logging {
     pub(crate) filename: PathBuf,
     pub(crate) level: String,
+    pub(crate) max_size_bytes: Option<u64>,
+    pub(crate) max_files: Option<usize>,
+}
+
+impl Logging {
+    pub(crate) fn rotation(&self) -> ruphish_adapters::rotating_log::Policy {
+        let defaults = ruphish_adapters::rotating_log::Policy::default();
+        ruphish_adapters::rotating_log::Policy {
+            max_size_bytes: self.max_size_bytes.unwrap_or(defaults.max_size_bytes),
+            max_files: self.max_files.unwrap_or(defaults.max_files),
+        }
+    }
 }
 
 #[derive(Clone, Default)]
@@ -113,6 +125,10 @@ impl Config {
     }
 
     pub(crate) fn validate(&self, mode: Mode) -> Result<(), ConfigError> {
+        self.logging
+            .rotation()
+            .validate()
+            .map_err(|error| ConfigError::Invalid(error.to_string()))?;
         self.database()?;
         for (selected, name, server) in [
             (mode.admin(), "admin_server", &self.admin),
@@ -319,6 +335,8 @@ impl Apply for Logging {
         match name {
             "filename" => scalar(&mut self.filename, value),
             "level" => scalar(&mut self.level, value),
+            "max_size_bytes" => scalar(&mut self.max_size_bytes, value),
+            "max_files" => scalar(&mut self.max_files, value),
             _ => Err(de::Error::custom("Unknown logging configuration field")),
         }
     }
