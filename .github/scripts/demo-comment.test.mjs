@@ -6,7 +6,7 @@ import { runInNewContext } from 'node:vm';
 const workflow = readFileSync(new URL('../workflows/pr.yml', import.meta.url), 'utf8');
 const job = workflow.slice(workflow.indexOf('\n  demo-comment:'));
 const guard = job.match(/    if: >-\r?\n([\s\S]*?)\r?\n    runs-on:/)[1].trim();
-const script = job.match(/          script: \|\r?\n([\s\S]*)/)[1];
+const script = workflow.match(/          script: &demo-comment-script \|\r?\n([\s\S]*?)(?=\r?\n  [\w-]+:)/)[1];
 const marker = '<!-- ruphish-demo-preview -->';
 const head = 'a'.repeat(40);
 
@@ -22,7 +22,7 @@ function eligible({ event = 'pull_request', fork = false, bot = false, enabled =
   });
 }
 
-async function report({ build = 'success', deploy = 'success', comments = [], state = 'open', currentHead = head, url = 'https://ruphish-demo-example.vercel.app' } = {}) {
+async function report({ phase = 'finished', build = 'success', deploy = 'success', comments = [], state = 'open', currentHead = head, url = 'https://ruphish-demo-example.vercel.app' } = {}) {
   const writes = [];
   const rest = {
     pulls: { get: async () => ({ data: { state, head: { sha: currentHead } } }) },
@@ -36,7 +36,7 @@ async function report({ build = 'success', deploy = 'success', comments = [], st
     github: { rest, paginate: async () => comments }, URL,
     context: { repo: { owner: 'owner', repo: 'repo' }, serverUrl: 'https://github.com', runId: 123,
       payload: { pull_request: { number: 28, head: { sha: head } } } },
-    process: { env: { DEMO_RESULT: build, DEPLOY_RESULT: deploy, PREVIEW_URL: url } },
+    process: { env: { REPORT_PHASE: phase, DEMO_RESULT: build, DEPLOY_RESULT: deploy, PREVIEW_URL: url } },
   });
   return writes;
 }
@@ -84,5 +84,44 @@ test('old runs cannot overwrite the current PR preview or report on closed PRs',
 test('a success comment requires a valid Vercel deployment origin', async () => {
   for (const url of ['', 'http://example.vercel.app', 'https://example.com', 'https://example.vercel.app/extra']) {
     await assert.rejects(report({ url }));
+  }
+});
+
+test('one comment progresses from building through approval to a ready preview', async () => {
+  const comments = [];
+  for (const [phase, status] of [['building', 'Building'], ['approval', 'Awaiting approval'], ['finished', 'Ready']]) {
+    const [comment] = await report({ phase, comments });
+    assert.equal(comment.action, comments.length ? 'update' : 'create');
+    assert.ok(comment.body.includes(status));
+    assert.equal(comment.body.includes('Visit preview'), phase === 'finished');
+    if (comments.length) assert.equal(comment.comment_id, 10);
+    comments.splice(0, comments.length, { id: 10, user: { login: 'github-actions[bot]', type: 'Bot' }, body: comment.body });
+  }
+});
+
+test('new runs reset the previous preview link before building', async () => {
+  const [ready] = await report();
+  const [building] = await report({ phase: 'building', comments: [
+    { id: 10, user: { login: 'github-actions[bot]', type: 'Bot' }, body: ready.body },
+  ] });
+  assert.equal(building.action, 'update');
+  assert.ok(building.body.includes('Building'));
+  assert.ok(!building.body.includes('Visit preview'));
+});
+
+test('reporting stages are ordered without becoming build or deployment prerequisites', () => {
+  const jobs = Object.fromEntries([...workflow.matchAll(/^  ([\w-]+):\r?\n([\s\S]*?)(?=^  [\w-]+:|$(?![\s\S]))/gm)]
+    .map(([, name, body]) => [name, body]));
+  const dependencies = name => jobs[name].match(/^    needs: (.+)$/m)?.[1].trim()
+    .replace(/[\[\]]/g, '').split(/,\s*/) ?? [];
+  assert.deepEqual(dependencies('demo'), []);
+  assert.deepEqual(dependencies('deploy-demo'), ['demo']);
+  assert.deepEqual(dependencies('demo-comment-start'), []);
+  assert.deepEqual(dependencies('demo-comment-approval'), ['demo', 'demo-comment-start']);
+  assert.deepEqual(dependencies('demo-comment'), ['demo', 'deploy-demo', 'demo-comment-start', 'demo-comment-approval']);
+  assert.match(jobs['demo-comment-start'], /filters: \.github\/paths\.yml/);
+  assert.match(jobs['demo-comment-start'], /if: steps\.paths\.outputs\.demo == 'true'/);
+  for (const name of ['demo-comment-approval', 'demo-comment']) {
+    assert.match(jobs[name], /script: \*demo-comment-script/);
   }
 });
