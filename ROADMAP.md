@@ -2,7 +2,7 @@
 
 Bugs, errors, security issues, and reliability problems are addressed continuously across all releases.
 
-Ruphish targets Gophish compatibility and a drop-in replacement, subject to [documented differences](https://ruphish.vercel.app/docs/migration/differences-from-gophish/).
+Ruphish targets Gophish compatibility and a drop-in replacement, subject to [documented differences](https://ruphish.com/docs/migration/differences-from-gophish/).
 
 Milestones describe priorities, not release dates; scope may change with feedback.
 
