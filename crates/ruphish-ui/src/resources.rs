@@ -1473,7 +1473,7 @@ fn import_panel(api: Api, token: String, family: Family, open: RwSignal<bool>) -
 
     let token = StoredValue::new(token);
     let content = RwSignal::new(String::new());
-    let mode = RwSignal::new("json".to_owned());
+    let mode = RwSignal::new(ruphish_ui::import_state::initial_format(family.route()).to_owned());
     let busy = RwSignal::new(false);
     let message = Message::new(String::new());
     let file = NodeRef::<html::Input>::new();

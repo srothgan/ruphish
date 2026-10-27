@@ -15,7 +15,7 @@ Names must be unique within your account for newly created or renamed groups. If
 
 ## Import CSV
 
-Choose **Import** from the group list, select a file or paste its contents, then review the columns before continuing to the create form.
+Choose **Import** from the group list; CSV is selected by default. Select a file or paste its contents, then review the columns before continuing to the create form. Choose JSON when importing an exported group resource; imports for other resource types start with JSON.
 
 Choose **Download recipient CSV template** in the import dialog to get a UTF-8 file with the supported headers and two synthetic example recipients. Replace the examples with your recipients, then select the file to review it before saving.
 

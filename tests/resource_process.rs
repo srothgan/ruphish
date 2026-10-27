@@ -14,6 +14,49 @@ fn client() -> Client {
 }
 
 #[test]
+fn demo_csv_acceptance_cases_match_the_real_import_review() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = ready(&mut process);
+    unlock(directory.path());
+    let client = client();
+    let cases: Vec<Value> =
+        serde_json::from_str(include_str!("../demo/recipient-csv-cases.json")).unwrap();
+    for case in cases {
+        let mut body = case["request"].clone();
+        if case["template"] == true {
+            body["content"] = json!(include_str!(
+                "../crates/ruphish-ui/assets/recipient-template.csv"
+            ));
+        }
+        let response = client
+            .post(format!("{base}/api/import/group/review"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&body)
+            .send()
+            .unwrap();
+        assert_eq!(
+            u64::from(response.status().as_u16()),
+            case["status"].as_u64().unwrap(),
+            "{}",
+            case["name"]
+        );
+        if response.status().is_success() {
+            let value: Value = response.json().unwrap();
+            assert_eq!(value["targets"], case["targets"], "{}", case["name"]);
+            let errors: Vec<_> = value["errors"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|error| json!({"row":error["row"],"code":error["code"]}))
+                .collect();
+            assert_eq!(json!(errors), case["errors"], "{}", case["name"]);
+        }
+    }
+    process.stop();
+}
+
+#[test]
 fn recipient_csv_template_imports_reviews_and_persists_without_accepting_bad_rows() {
     let directory = workspace();
     let mut process = Process::start(directory.path(), "admin");

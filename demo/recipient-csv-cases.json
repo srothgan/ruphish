@@ -1,0 +1,41 @@
+[
+  {
+    "name": "downloaded template",
+    "template": true,
+    "request": {},
+    "status": 200,
+    "targets": [{"email":"alex@example.test","first_name":"Alex","last_name":"Rivera","position":"Operations"},{"email":"sam@example.test","first_name":"Sam","last_name":"Lee","position":"Support"}],
+    "errors": []
+  },
+  {
+    "name": "BOM, CRLF, mapped columns, Unicode, quoted commas and newline",
+    "request": {"content":"\ufeffAddress,Role,Surname,Given\r\n\"Élise <elise@example.test>\",\"=1+1\",Müller,\"Élise, \"\"E\"\"\r\nJunior\"\r\n","columns":["Address","Given","Surname","Role"]},
+    "status": 200,
+    "targets": [{"email":"elise@example.test","first_name":"Élise, \"E\"\r\nJunior","last_name":"Müller","position":"=1+1"}],
+    "errors": []
+  },
+  {
+    "name": "rejected rows do not inherit values and duplicates remain for UI review",
+    "request": {"content":"First Name,Last Name,Email,Position\nA,One,valid@example.test,Role\nBad,Two,not-an-email,Role\nShort,row\nB,Three,VALID@example.test,Other\n"},
+    "status": 200,
+    "targets": [{"email":"valid@example.test","first_name":"A","last_name":"One","position":"Role"},{"email":"VALID@example.test","first_name":"B","last_name":"Three","position":"Other"}],
+    "errors": [{"row":3,"code":"CSV_ROW_EMAIL"},{"row":4,"code":"CSV_ROW_COLUMNS"}]
+  },
+  {
+    "name": "optional columns and normalized headers",
+    "request": {"content":"\n E_m a_i_l \n unicode@example.test\n"},
+    "status": 200,
+    "targets": [{"email":"unicode@example.test","first_name":"","last_name":"","position":""}],
+    "errors": []
+  },
+  {
+    "name": "empty audience retains columns",
+    "request": {"content":"First Name,Last Name,Email,Position\r\n"},
+    "status": 200,
+    "targets": [],
+    "errors": []
+  },
+  {"name":"missing email header","request":{"content":"First Name,Position\nA,Role\n"},"status":400},
+  {"name":"invalid mapping shape","request":{"content":"Email\na@example.test\n","columns":["Email"]},"status":400},
+  {"name":"invalid content type","request":{"content":17},"status":400}
+]

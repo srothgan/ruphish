@@ -28,6 +28,27 @@ test('the generated browser bundle logs in and reads real starter content withou
         const completed = directory.items.find(row => row.status === 'Completed');
         assert.ok(completed);
         assert.ok((await read(`/api/campaigns/${completed.id}/analysis`)).event_total > 0);
+        const sample = await readFile(new URL('../../crates/ruphish-ui/assets/recipient-template.csv', import.meta.url), 'utf8');
+        const review = async content => {
+            const request = new Request('https://demo.example.test/api/import/group/review', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content }) });
+            return bundle.requestPromise(bundle.startRequest(request, 1000, () => {}, false));
+        };
+        const imported = await review(sample);
+        assert.equal(imported.status, 200);
+        assert.deepEqual(JSON.parse(imported.body).targets.map(r => r.email), ['alex@example.test', 'sam@example.test']);
+        assert.equal((await review('Wrong,Headers\na,b\n')).status, 400);
+        const request = new Request(`https://demo.example.test/api/campaigns/${completed.id}/export?format=csv&scope=recipients&limit=1`);
+        const download = await bundle.requestPromise(bundle.startRequest(request, 1000, () => {}, true));
+        assert.equal(download.status, 200);
+        assert.ok(download.file instanceof Blob);
+        const exported = JSON.parse((await review(await download.file.text())).body);
+        assert.ok(exported.columns.includes('Send Date (UTC)'));
+        assert.ok(exported.columns.includes('Modified Date (UTC)'));
+        assert.equal(exported.targets.length, completed.total);
+        const malformed = new Request(`https://demo.example.test/api/campaigns/${completed.id}/export?format=xlsx&from=invalid`);
+        const rejected = await bundle.requestPromise(bundle.startRequest(malformed, 1000, () => {}, true));
+        assert.equal(rejected.status, 400);
+        assert.equal(rejected.file, null);
         assert.ok([...memory.values()].every(value => value !== 'demodemo'));
     } finally {
         if (previousWindow === undefined) delete globalThis.window;

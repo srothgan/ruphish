@@ -97,7 +97,7 @@ export function dataset(now) {
                 if (n >= c.size - c.reported) add('Email Reported', 3600);
             }
             const attempts = state === 'ready' ? [] : [{ generation: 1, started: sent, finished: sent + 1, state, stage: failed ? 'Envelope' : 'Data', smtp_code: failed ? 550 : 250, message_id: `demo-${resultId}@example.test` }];
-            return { ...person, id: resultId, rid: `demo-recipient-${resultId}`, state, due: sent, attempts, events };
+            return { ...person, id: resultId, rid: `demo-recipient-${resultId}`, state, due: sent, send_date: iso(sent), modified_date: iso(sent), attempts, events };
         });
         return { header, results };
     });
