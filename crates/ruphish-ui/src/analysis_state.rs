@@ -110,13 +110,14 @@ mod tests {
         assert_eq!(address("/analysis/7", &filter, false), "/analysis/7");
         filter.recipients = "2,9".into();
         filter.search = "Renée & team+one".into();
-        filter.event = "Email Reported".into();
+        filter.event = "email_reported".into();
         filter.offset = 50;
         filter.format = "xlsx".into();
         filter.scope = "all".into();
         let bookmark = query(&filter, false);
         let parsed: Filter = serde_urlencoded::from_str(&bookmark).unwrap();
         assert_eq!(parsed.recipients, "2,9");
+        assert_eq!(parsed.event, "email_reported");
         assert_eq!(parsed.search, filter.search);
         assert_eq!(parsed.offset, 50);
         assert!(!bookmark.contains("format="));

@@ -282,10 +282,10 @@ fn verified_imap_reports_survive_ack_failure_restart_and_uid_reset_without_messa
     assert_eq!(failed["history"][0]["matched"], 1);
     assert_eq!(failed["history"][0]["rejected"], 1);
     let analysis = get(&client, &base, "/api/campaigns/91/analysis");
-    assert_eq!(analysis["totals"][4], 1);
+    assert_eq!(analysis["totals"]["reported"], 1);
     assert_eq!(analysis["events"][0]["source"], "mailbox");
-    assert_eq!(analysis["unique"][1], 0);
-    assert_eq!(analysis["unique"][2], 0);
+    assert_eq!(analysis["unique"]["opened"], 0);
+    assert_eq!(analysis["unique"]["clicked"], 0);
     process.stop();
     peer.state.lock().unwrap().reject_ack = false;
     process = Process::start(directory.path(), "admin");
@@ -310,7 +310,7 @@ fn verified_imap_reports_survive_ack_failure_restart_and_uid_reset_without_messa
     assert_eq!(recovered["code"], "passed");
     assert_eq!(recovered["history"][0]["rejected"], 2);
     assert_eq!(
-        get(&client, &base, "/api/campaigns/91/analysis")["totals"][4],
+        get(&client, &base, "/api/campaigns/91/analysis")["totals"]["reported"],
         1
     );
     assert_eq!(peer.state.lock().unwrap().seen, vec![2]);
@@ -381,7 +381,7 @@ fn verified_imap_reports_survive_ack_failure_restart_and_uid_reset_without_messa
     );
     assert_eq!(resumed["code"], "passed");
     assert_eq!(
-        get(&client, &base, "/api/campaigns/91/analysis")["totals"][4],
+        get(&client, &base, "/api/campaigns/91/analysis")["totals"]["reported"],
         1
     );
     process.stop();
@@ -680,7 +680,7 @@ fn reporting_api_rejects_cross_owner_admin_only_stale_and_malformed_requests() {
     );
     let analysis = get(&client, &base, "/api/campaigns/91/analysis");
     assert_eq!(analysis["recipients"][0]["historical_reported"], true);
-    assert_eq!(analysis["unique"][4], 0);
+    assert_eq!(analysis["unique"]["reported"], 0);
     let mailbox_path = format!("{base}/api/reporting-mailboxes/{id}");
     for (key, revision, status) in [
         ("other-key", "1", 404),
@@ -758,7 +758,10 @@ fn analysis_multiselect_filters_chart_pages_and_exports_and_rejects_invalid_iden
     );
     assert_eq!(selected["recipient_total"], 2);
     assert_eq!(selected["event_total"], 3);
-    assert_eq!(selected["unique"], json!([0, 1, 1, 0, 1]));
+    assert_eq!(
+        selected["unique"],
+        json!({"accepted":0,"opened":1,"clicked":1,"submitted":0,"reported":1})
+    );
     assert_eq!(selected["recipients"][0]["id"], 91);
     let next = get(
         &client,
@@ -775,15 +778,17 @@ fn analysis_multiselect_filters_chart_pages_and_exports_and_rejects_invalid_iden
             .all(|b| b["time"].as_i64().unwrap() % 60 == 0)
     );
     assert!(
-        buckets
-            .iter()
-            .any(|b| b["counts"] == json!([0, 0, 0, 0, 0])),
+        buckets.iter().any(|b| b["counts"]
+            == json!({"accepted":0,"opened":0,"clicked":0,"submitted":0,"reported":0})),
         "Quiet intervals must not be bridged as sustained activity"
     );
     let mut sum = [0_i64; 5];
     for bucket in buckets {
         for (index, value) in sum.iter_mut().enumerate() {
-            *value += bucket["counts"][index].as_i64().unwrap();
+            *value += bucket["counts"]
+                [["accepted", "opened", "clicked", "submitted", "reported"][index]]
+                .as_i64()
+                .unwrap();
         }
     }
     assert_eq!(sum, [0, 1, 1, 0, 1]);
@@ -798,7 +803,7 @@ fn analysis_multiselect_filters_chart_pages_and_exports_and_rejects_invalid_iden
     let intersect = get(
         &client,
         &base,
-        "/api/campaigns/91/analysis?recipients=91,92&recipient=92&event=Clicked%20Link",
+        "/api/campaigns/91/analysis?recipients=91,92&recipient=92&event=link_clicked",
     );
     assert_eq!(intersect["event_total"], 1);
     let csv = request(
@@ -855,6 +860,10 @@ fn analysis_multiselect_filters_chart_pages_and_exports_and_rejects_invalid_iden
         ("recipients=0", 400),
         ("recipients=-1", 400),
         ("recipients=91%20OR%201=1", 400),
+        ("event=Submitted%20Data", 400),
+        ("event=unknown", 400),
+        ("event=%27%20OR%201=1--", 400),
+        ("source=unknown", 400),
     ] {
         for route in ["analysis", "export"] {
             let response = request(
@@ -879,5 +888,31 @@ fn analysis_multiselect_filters_chart_pages_and_exports_and_rejects_invalid_iden
         .status(),
         400
     );
+    let before = get(&client, &base, "/api/campaigns/91/analysis");
+    database(
+        directory.path(),
+        "INSERT INTO events(campaign_id,recipient_id,email,time,kind,source,metadata) VALUES(91,91,'a@example.test','2026-10-04T00:00:00Z','Proxied request','legacy','{}')",
+    );
+    let after = get(&client, &base, "/api/campaigns/91/analysis");
+    assert_eq!(
+        after["totals"], before["totals"],
+        "unrecognized history must not invent known actions"
+    );
+    assert_eq!(
+        after["event_total"].as_i64().unwrap(),
+        before["event_total"].as_i64().unwrap() + 1
+    );
+    assert!(after["events"].as_array().unwrap().iter().any(|e| e["kind"]
+        == json!({"type":"historical","value":"Proxied request"})
+        && e["source"] == "legacy"));
+    let csv = request(
+        &client,
+        &base,
+        reqwest::Method::GET,
+        "/api/campaigns/91/export?scope=events",
+        None,
+    );
+    assert_eq!(csv.status(), 200);
+    assert!(csv.text().unwrap().contains("Proxied request"));
     process.stop();
 }

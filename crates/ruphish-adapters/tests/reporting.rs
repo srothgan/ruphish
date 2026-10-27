@@ -284,7 +284,7 @@ async fn observations_filters_and_exports_preserve_evidence_without_credentials_
         "same-time events must paginate deterministically"
     );
     let mut selected = filter();
-    selected.event = "Email Reported".into();
+    selected.event = Some(ruphish_domain::events::Kind::EmailReported);
     let selected = reports
         .analysis(caller(), campaign, selected)
         .await
@@ -292,9 +292,6 @@ async fn observations_filters_and_exports_preserve_evidence_without_credentials_
     assert_eq!(selected.progression, [0, 0, 0, 0, 1]);
     assert_eq!(selected.event_total, 2);
     assert_eq!(selected.recipient_total, 1);
-    let mut invalid = filter();
-    invalid.event = "' OR 1=1--".into();
-    assert!(reports.analysis(caller(), campaign, invalid).await.is_err());
     assert!(
         reports
             .analysis(Identity { id: 2, epoch: 0 }, campaign, filter())

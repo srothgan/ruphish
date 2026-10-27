@@ -38,7 +38,7 @@ fn recipients(a: &Analysis) -> Vec<Vec<String>> {
             r.id.to_string(),
             r.email.clone(),
             r.name.clone(),
-            r.delivery.clone(),
+            r.delivery.as_str().into(),
         ];
         v.extend(r.counts.iter().map(ToString::to_string));
         v.push(r.historical_reported.to_string());
@@ -74,8 +74,8 @@ fn events(a: &Analysis) -> Vec<Vec<String>> {
             e.recipient_id.map(|v| v.to_string()).unwrap_or_default(),
             e.email.clone(),
             e.time.clone(),
-            e.kind.clone(),
-            e.source.clone(),
+            e.kind.label().into(),
+            e.source.as_str().into(),
             e.password_present
                 .map(|v| v.to_string())
                 .unwrap_or_default(),
@@ -141,8 +141,20 @@ pub(crate) fn generate(
                 .collect::<Vec<_>>()
                 .join(","),
         ],
-        vec!["Event filter".into(), f.event.clone()],
-        vec!["Source filter".into(), f.source.clone()],
+        vec![
+            "Event filter".into(),
+            f.event
+                .map(ruphish_domain::events::Kind::label)
+                .unwrap_or_default()
+                .into(),
+        ],
+        vec![
+            "Source filter".into(),
+            f.source
+                .map(ruphish_domain::reporting::Source::as_str)
+                .unwrap_or_default()
+                .into(),
+        ],
     ];
     for (index, name) in ["Accepted", "Opened", "Clicked", "Submitted", "Reported"]
         .iter()

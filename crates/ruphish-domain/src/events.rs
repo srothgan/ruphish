@@ -1,7 +1,8 @@
 //! Canonical observation kinds. Legacy labels belong to compatibility projections.
 
 /// One observed action; repeats are distinct events, not state transitions.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Kind {
     /// Campaign creation.
     CampaignCreated,
@@ -22,6 +23,23 @@ pub enum Kind {
 }
 
 impl Kind {
+    /// All recognized observations in presentation order.
+    pub const ALL: [Self; 8] = [
+        Self::CampaignCreated,
+        Self::EmailSent,
+        Self::EmailError,
+        Self::EmailOpened,
+        Self::LinkClicked,
+        Self::FormSubmitted,
+        Self::EmailReported,
+        Self::DeliveryReconciled,
+    ];
+
+    /// Decode a stable event identifier at an input or storage boundary.
+    pub fn from_key(key: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.key() == key)
+    }
+
     /// Stable storage identifier.
     pub const fn key(self) -> &'static str {
         match self {
@@ -62,6 +80,29 @@ impl Kind {
             "Email Reported" => Some(Self::EmailReported),
             "Delivery reconciled" => Some(Self::DeliveryReconciled),
             _ => None,
+        }
+    }
+}
+
+/// A classified observation or an unrecognized name retained from imported history.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+pub enum RecordedKind {
+    /// One of the canonical observation kinds.
+    Known(Kind),
+    /// Preserved imported name; never treated as evidence for a known action.
+    Historical(String),
+}
+impl RecordedKind {
+    /// Classify a stored event-history label without discarding unknown history.
+    pub fn from_label(label: String) -> Self {
+        Kind::from_label(&label).map_or_else(|| Self::Historical(label), Self::Known)
+    }
+    /// Human-readable event name for presentation and tabular exports.
+    pub fn label(&self) -> &str {
+        match self {
+            Self::Known(kind) => kind.label(),
+            Self::Historical(label) => label,
         }
     }
 }

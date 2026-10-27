@@ -15,7 +15,7 @@ sidebar:
 | `recipients` | Comma-separated numeric recipient-row IDs; at most 200 |
 | `from` | Inclusive UTC Unix seconds |
 | `until` | Exclusive UTC Unix seconds |
-| `event` | Exact supported event name; omit for all events |
+| `event` | Stable event identifier; omit for all events |
 | `source` | `legacy`, `application`, `public`, or `mailbox`; omit for all sources |
 | `search` | Case-insensitive recipient name/email substring |
 | `sort` | Recipient column: `email` (default), `name`, `delivery`, `accepted`, `opened`, `clicked`, `submitted`, or `reported` |
@@ -25,9 +25,9 @@ sidebar:
 | `offset` | Table offset, default 0 |
 | `limit` | Requested table rows, 1–200; default 50 |
 
-Recipient filters intersect when combined. Invalid filters fail rather than silently broadening the result. Supported event filters are `Campaign Created`, `Email Sent`, `Error Sending Email`, `Email Opened`, `Clicked Link`, `Submitted Data`, `Email Reported`, and `Delivery reconciled`. Do not translate these wire values into UI labels before sending them back to the API.
+Recipient filters intersect when combined. Invalid filters fail rather than silently broadening the result. Supported event filters are `campaign_created`, `email_sent`, `email_error`, `email_opened`, `link_clicked`, `form_submitted`, `email_reported`, and `delivery_reconciled`. Display labels are not filter identifiers; for example, use `event=form_submitted`. Unknown event identifiers or sources return `400`.
 
-Sorting applies to the complete filtered collection before pagination. Recipient text uses case-sensitive Unicode order, and counts sort numerically. Equal recipient values use ascending recipient ID; equal event values use event ID in the selected direction. Presence sorts absent, false, then true in ascending order. Undated historical report flags do not contribute to the recorded report count. Unknown sort columns or directions return `400`.
+Sorting applies to the complete filtered collection before pagination. Recipient text uses case-sensitive Unicode order, and counts sort numerically. Event-kind ordering uses the readable event name shown in the table and exports. Equal recipient values use ascending recipient ID; equal event values use event ID in the selected direction. Presence sorts absent, false, then true in ascending order. Undated historical report flags do not contribute to the recorded report count. Unknown sort columns or directions return `400`.
 
 Changing sort or filters should reset `offset` to zero. Separate requests read current data, so new observations can move rows between pages; an offset is not a frozen snapshot. Exports use the same selected ordering across all matching rows and ignore the displayed page offset/limit.
 
@@ -37,9 +37,13 @@ For example, `/api/campaigns/42/analysis?limit=25&offset=0` reads the first page
 
 The response contains campaign `id`, `name`, `status`, `as_of` (UTC Unix seconds), unfiltered `audience`, filtered `recipient_total` and `event_total`, current `recipients` and `events` pages, chart `buckets`, and `bucket_seconds`.
 
-`unique`, `progression`, `totals`, recipient `counts`, and bucket `counts` use this fixed order: **accepted, opened, clicked, submitted, reported**. `unique` counts distinct recipients with observed matching events; `totals` counts the events themselves. `progression` includes inferred earlier engagement stages. They answer different questions. See [metric definitions](../user-guide/results/metrics.md).
+`unique`, `progression`, `totals`, recipient `counts`, and bucket `counts` are objects with five required numeric fields: `accepted`, `opened`, `clicked`, `submitted`, and `reported`. Empty results contain zero values, not omitted fields or positional arrays. `unique` counts distinct recipients with observed matching events; `totals` counts the events themselves. `progression` includes inferred earlier engagement stages. They answer different questions. See [metric definitions](../user-guide/results/metrics.md).
 
-Recipient rows contain `id`, `email`, `name`, `delivery`, `counts`, and `historical_reported`. Event rows contain `id`, optional `recipient_id`, `email`, UTC `time`, `kind`, `source`, and optional `password_present`. Missing presence data is not the same as `false`. Historical reported state is separate from an observed report event.
+Recipient rows contain `id`, `email`, `name`, `delivery`, `counts`, and `historical_reported`. Delivery is one of `ready`, `preparing`, `submitting`, `retry`, `accepted`, `failed`, `unknown`, `blocked`, `cancelled`, or `historical`. `unknown` means ambiguous transport acceptance; `historical` means no native transport record exists. Campaign `status` is `Created`, `Queued`, `In progress`, `Emails Sent`, or `Completed`; the first and fourth values can occur in imported campaign history.
+
+Event rows contain `id`, nullable `recipient_id`, `email`, UTC `time`, `kind`, `source`, and nullable `password_present`. The nullable fields must still be present. `source` is `legacy`, `application`, `public`, or `mailbox`. Missing presence evidence is not the same as `false`. Historical reported state is separate from an observed report event.
+
+A recognized event uses a classified kind such as `{"type":"known","value":"form_submitted"}`. Unrecognized imported names remain explicit history, for example `{"type":"historical","value":"Proxied request"}`. They remain visible in event rows and exports but never contribute to a known action's metrics. CSV and XLSX retain readable event names. There are no aliases for superseded pre-release reporting formats.
 
 ## Downloads
 

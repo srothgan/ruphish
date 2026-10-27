@@ -280,7 +280,7 @@ async fn exercise(db: &Database) {
             reporting::Filter {
                 sort: RecipientSort::Opened,
                 order: SortDirection::Desc,
-                event: "Email Opened".into(),
+                event: Some(ruphish_domain::events::Kind::EmailOpened),
                 limit: 1,
                 offset: 1,
                 ..Default::default()

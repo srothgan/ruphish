@@ -823,8 +823,8 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         recipients: vec![claim.result_id],
         from: Some(now + 3),
         until: Some(now + 4),
-        event: "Submitted Data".into(),
-        source: "public".into(),
+        event: Some(ruphish_domain::events::Kind::FormSubmitted),
+        source: Some(ruphish_domain::reporting::Source::Public),
         search: "EXAMPLE.TEST".into(),
         limit: 50,
         ..Default::default()

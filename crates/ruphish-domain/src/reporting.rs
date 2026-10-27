@@ -66,18 +66,6 @@ impl Progression {
     }
 }
 
-/// Only recognized observations can be selected by reporting clients.
-pub const EVENT_TYPES: &[&str] = &[
-    "Campaign Created",
-    "Email Sent",
-    "Error Sending Email",
-    "Email Opened",
-    "Clicked Link",
-    "Submitted Data",
-    "Email Reported",
-    "Delivery reconciled",
-];
-
 /// Validate an inclusive start/exclusive end window and bounded query size.
 pub fn valid_window(from: Option<i64>, until: Option<i64>, limit: usize) -> bool {
     (1..=200).contains(&limit) && !matches!((from, until), (Some(a), Some(b)) if a >= b)
@@ -136,4 +124,153 @@ pub enum EventSort {
     Source,
     /// Optional credential-presence flag, never participant values.
     PasswordPresent,
+}
+
+/// Recorded campaign lifecycle, including supported imported lifecycle states.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum CampaignStatus {
+    /// Created but not launched.
+    #[serde(rename = "Created")]
+    Created,
+    /// Waiting for launch.
+    #[serde(rename = "Queued")]
+    Queued,
+    /// Active execution.
+    #[serde(rename = "In progress")]
+    InProgress,
+    /// Imported execution whose messages have been sent.
+    #[serde(rename = "Emails Sent")]
+    EmailsSent,
+    /// Closed execution.
+    #[serde(rename = "Completed")]
+    Completed,
+}
+impl CampaignStatus {
+    /// Decode the stored identifier; invalid state is not silently defaulted.
+    pub fn from_stored(value: &str) -> Option<Self> {
+        match value {
+            "Created" => Some(Self::Created),
+            "Queued" => Some(Self::Queued),
+            "In progress" => Some(Self::InProgress),
+            "Emails Sent" => Some(Self::EmailsSent),
+            "Completed" => Some(Self::Completed),
+            _ => None,
+        }
+    }
+    /// Stable value used by storage, presentation and tabular exports.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Created => "Created",
+            Self::Queued => "Queued",
+            Self::InProgress => "In progress",
+            Self::EmailsSent => "Emails Sent",
+            Self::Completed => "Completed",
+        }
+    }
+}
+
+/// Transport state reported independently from recipient engagement.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum DeliveryState {
+    /// Waiting for a delivery attempt.
+    #[serde(rename = "ready")]
+    Ready,
+    /// Preparing a message.
+    #[serde(rename = "preparing")]
+    Preparing,
+    /// SMTP submission in progress.
+    #[serde(rename = "submitting")]
+    Submitting,
+    /// Waiting for a retry.
+    #[serde(rename = "retry")]
+    Retry,
+    /// SMTP acceptance recorded.
+    #[serde(rename = "accepted")]
+    Accepted,
+    /// Permanent failure.
+    #[serde(rename = "failed")]
+    Failed,
+    /// External delivery outcome is ambiguous.
+    #[serde(rename = "unknown")]
+    Unknown,
+    /// Operator action required.
+    #[serde(rename = "blocked")]
+    Blocked,
+    /// Delivery cancelled.
+    #[serde(rename = "cancelled")]
+    Cancelled,
+    /// Imported recipient with no native transport record.
+    #[serde(rename = "historical")]
+    Historical,
+}
+impl DeliveryState {
+    /// Decode the stored identifier; invalid state is not silently defaulted.
+    pub fn from_stored(value: &str) -> Option<Self> {
+        match value {
+            "ready" => Some(Self::Ready),
+            "preparing" => Some(Self::Preparing),
+            "submitting" => Some(Self::Submitting),
+            "retry" => Some(Self::Retry),
+            "accepted" => Some(Self::Accepted),
+            "failed" => Some(Self::Failed),
+            "unknown" => Some(Self::Unknown),
+            "blocked" => Some(Self::Blocked),
+            "cancelled" => Some(Self::Cancelled),
+            "historical" => Some(Self::Historical),
+            _ => None,
+        }
+    }
+    /// Stable value used by storage, presentation and tabular exports.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::Preparing => "preparing",
+            Self::Submitting => "submitting",
+            Self::Retry => "retry",
+            Self::Accepted => "accepted",
+            Self::Failed => "failed",
+            Self::Unknown => "unknown",
+            Self::Blocked => "blocked",
+            Self::Cancelled => "cancelled",
+            Self::Historical => "historical",
+        }
+    }
+}
+
+/// Recorded observation provenance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Source {
+    /// Imported event history.
+    #[serde(rename = "legacy")]
+    Legacy,
+    /// Application-generated observation.
+    #[serde(rename = "application")]
+    Application,
+    /// Public tracking endpoint.
+    #[serde(rename = "public")]
+    Public,
+    /// Verified reporting mailbox.
+    #[serde(rename = "mailbox")]
+    Mailbox,
+}
+impl Source {
+    /// Decode the stored identifier; invalid state is not silently defaulted.
+    pub fn from_stored(value: &str) -> Option<Self> {
+        match value {
+            "legacy" => Some(Self::Legacy),
+            "application" => Some(Self::Application),
+            "public" => Some(Self::Public),
+            "mailbox" => Some(Self::Mailbox),
+            _ => None,
+        }
+    }
+    /// Stable value used by storage, presentation and tabular exports.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Legacy => "legacy",
+            Self::Application => "application",
+            Self::Public => "public",
+            Self::Mailbox => "mailbox",
+        }
+    }
 }

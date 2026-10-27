@@ -641,9 +641,9 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
         &admin,
         &format!("/api/campaigns/{}/analysis?limit=100", campaign["id"]),
     );
-    assert_eq!(analysis["unique"][3], 1);
-    assert_eq!(analysis["progression"][3], 1);
-    assert_eq!(analysis["totals"][3], 4);
+    assert_eq!(analysis["unique"]["submitted"], 1);
+    assert_eq!(analysis["progression"]["submitted"], 1);
+    assert_eq!(analysis["totals"]["submitted"], 4);
     assert_eq!(
         get(
             &admin,
@@ -659,13 +659,13 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
             campaign["id"]
         ),
     );
-    assert_eq!(recipient_analysis["totals"][3], 4);
+    assert_eq!(recipient_analysis["totals"]["submitted"], 4);
     assert_eq!(
         recipient_analysis["events"]
             .as_array()
             .unwrap()
             .iter()
-            .filter(|event| event["kind"] == "Submitted Data")
+            .filter(|event| event["kind"] == json!({"type":"known","value":"form_submitted"}))
             .count(),
         4
     );

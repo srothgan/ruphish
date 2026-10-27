@@ -231,17 +231,17 @@ pub struct Analysis {
     /// Campaign display name.
     pub name: String,
     /// Lifecycle state.
-    pub status: String,
+    pub status: ruphish_domain::reporting::CampaignStatus,
     /// Snapshot UTC seconds.
     pub as_of: i64,
     /// Unfiltered audience size.
     pub audience: i64,
     /// Unique recipients per observed event type.
-    pub unique: [i64; 5],
+    pub unique: crate::reporting::Counts,
     /// Cumulative recipient progression.
-    pub progression: [i64; 5],
+    pub progression: crate::reporting::Counts,
     /// Raw event counts.
-    pub totals: [i64; 5],
+    pub totals: crate::reporting::Counts,
     /// Matching recipients before pagination.
     pub recipient_total: i64,
     /// Matching events before pagination.
@@ -266,9 +266,9 @@ pub struct AnalysisRecipient {
     /// Administrator-supplied name.
     pub name: String,
     /// Transport outcome.
-    pub delivery: String,
+    pub delivery: ruphish_domain::reporting::DeliveryState,
     /// Observed event counts.
-    pub counts: [i64; 5],
+    pub counts: crate::reporting::Counts,
     /// Legacy report state without an observed timestamp.
     pub historical_reported: bool,
 }
@@ -286,9 +286,9 @@ pub struct AnalysisEvent {
     /// Normalized UTC timestamp.
     pub time: String,
     /// Event kind.
-    pub kind: String,
+    pub kind: ruphish_domain::events::RecordedKind,
     /// Observation provenance.
-    pub source: String,
+    pub source: ruphish_domain::reporting::Source,
     /// Presence only, when recorded.
     #[serde(deserialize_with = "nullable")]
     pub password_present: Option<bool>,
@@ -300,7 +300,7 @@ pub struct Bucket {
     /// UTC bucket start.
     pub time: i64,
     /// Observed event counts.
-    pub counts: [i64; 5],
+    pub counts: crate::reporting::Counts,
 }
 
 /// Persisted draft snapshot; configuration may deliberately be incomplete.

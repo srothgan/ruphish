@@ -15,17 +15,6 @@ use ruphish_ui::analysis_state::address;
 use ruphish_ui::{tr, trs};
 use serde_json::Value;
 
-const EVENTS: [&str; 8] = [
-    "Campaign Created",
-    "Email Sent",
-    "Error Sending Email",
-    "Email Opened",
-    "Clicked Link",
-    "Submitted Data",
-    "Email Reported",
-    "Delivery reconciled",
-];
-
 pub(super) fn page(api: Api) -> impl IntoView {
     let params = use_params_map();
     view! {
@@ -299,7 +288,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                         .iter()
                         .map(|b| Bucket {
                             time: b.time,
-                            counts: b.counts,
+                            counts: b.counts.values(),
                         })
                         .collect::<Vec<_>>()
                 })
@@ -436,12 +425,16 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                         on_change=Callback::new(move |v| selected_event.set(v))
                     >
                         <option value="">{tr!(ui.all_events)}</option>
-                        {EVENTS
+                        {ruphish_domain::events::Kind::ALL
                             .into_iter()
                             .map(|e| {
                                 view! {
-                                    <option value=e>
-                                        {move || ruphish_ui::localization::event_label(i18n, e)}
+                                    <option value=e
+                                        .key()>
+                                        {move || ruphish_ui::localization::event_label(
+                                            i18n,
+                                            e.label(),
+                                        )}
                                     </option>
                                 }
                             })
@@ -537,9 +530,9 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                                                         0,
                                                         |v| {
                                                             if recipient.is_some() {
-                                                                v.totals[i]
+                                                                v.totals.values()[i]
                                                             } else {
-                                                                v.progression[i]
+                                                                v.progression.values()[i]
                                                             }
                                                         },
                                                     )
@@ -550,7 +543,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                                         <small>
                                             {move || {
                                                 leptos_i18n::t_string!(
-                                                    i18n, messages.arg0_recorded_events, arg0 = (data.with(|v| v.as_ref().map_or(0, |v| v.totals[i]))).to_string()
+                                                    i18n, messages.arg0_recorded_events, arg0 = (data.with(|v| v.as_ref().map_or(0, |v| v.totals.values()[i]))).to_string()
                                                 )
                                             }}
                                         </small>
@@ -640,14 +633,14 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                                                 <td>
                                                     {ruphish_ui::localization::delivery_label(
                                                         i18n,
-                                                        &row.delivery,
+                                                        row.delivery.as_str(),
                                                     )}
                                                 </td>
                                                 {(0..5)
                                                     .map(|i| {
                                                         view! {
                                                             <td>
-                                                                {row.counts[i]}
+                                                                {row.counts.values()[i]}
                                                                 {(i == 4 && row.historical_reported)
                                                                     .then(|| {
                                                                         view! {
@@ -692,9 +685,12 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                                             <tr>
                                                 <td>{minute(&Value::String(e.time))}</td>
                                                 <td>
-                                                    {ruphish_ui::localization::event_label(i18n, &e.kind)}
+                                                    {ruphish_ui::localization::event_label(
+                                                        i18n,
+                                                        e.kind.label(),
+                                                    )}
                                                 </td>
-                                                <td>{e.source}</td>
+                                                <td>{e.source.as_str()}</td>
                                                 <td>
                                                     {e
                                                         .password_present

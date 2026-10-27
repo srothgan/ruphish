@@ -146,13 +146,13 @@
     "bucket_seconds": 60,
     "buckets": [
       {
-        "counts": [
-          1,
-          0,
-          0,
-          0,
-          0
-        ],
+        "counts": {
+          "accepted": 1,
+          "opened": 0,
+          "clicked": 0,
+          "submitted": 0,
+          "reported": 0
+        },
         "time": 1792415880
       }
     ],
@@ -161,7 +161,10 @@
       {
         "email": "browser@example.test",
         "id": 17,
-        "kind": "Submitted Data",
+        "kind": {
+          "type": "known",
+          "value": "form_submitted"
+        },
         "password_present": true,
         "recipient_id": 1,
         "source": "legacy",
@@ -170,7 +173,10 @@
       {
         "email": "browser@example.test",
         "id": 16,
-        "kind": "Clicked Link",
+        "kind": {
+          "type": "known",
+          "value": "link_clicked"
+        },
         "password_present": null,
         "recipient_id": 1,
         "source": "legacy",
@@ -179,7 +185,10 @@
       {
         "email": "browser@example.test",
         "id": 15,
-        "kind": "Email Opened",
+        "kind": {
+          "type": "known",
+          "value": "email_opened"
+        },
         "password_present": null,
         "recipient_id": 1,
         "source": "legacy",
@@ -188,7 +197,10 @@
       {
         "email": "browser@example.test",
         "id": 2,
-        "kind": "Email Sent",
+        "kind": {
+          "type": "known",
+          "value": "email_sent"
+        },
         "password_present": null,
         "recipient_id": 1,
         "source": "legacy",
@@ -197,7 +209,10 @@
       {
         "email": "",
         "id": 1,
-        "kind": "Campaign Created",
+        "kind": {
+          "type": "known",
+          "value": "campaign_created"
+        },
         "password_present": null,
         "recipient_id": null,
         "source": "legacy",
@@ -206,23 +221,23 @@
     ],
     "id": 1,
     "name": "Browser acceptance 2026-10-19T13:18:42.755Z",
-    "progression": [
-      1,
-      1,
-      1,
-      1,
-      0
-    ],
+    "progression": {
+      "accepted": 1,
+      "opened": 1,
+      "clicked": 1,
+      "submitted": 1,
+      "reported": 0
+    },
     "recipient_total": 1,
     "recipients": [
       {
-        "counts": [
-          1,
-          1,
-          1,
-          1,
-          0
-        ],
+        "counts": {
+          "accepted": 1,
+          "opened": 1,
+          "clicked": 1,
+          "submitted": 1,
+          "reported": 0
+        },
         "delivery": "accepted",
         "email": "browser@example.test",
         "historical_reported": false,
@@ -231,19 +246,19 @@
       }
     ],
     "status": "Completed",
-    "totals": [
-      1,
-      1,
-      1,
-      1,
-      0
-    ],
-    "unique": [
-      1,
-      1,
-      1,
-      1,
-      0
-    ]
+    "totals": {
+      "accepted": 1,
+      "opened": 1,
+      "clicked": 1,
+      "submitted": 1,
+      "reported": 0
+    },
+    "unique": {
+      "accepted": 1,
+      "opened": 1,
+      "clicked": 1,
+      "submitted": 1,
+      "reported": 0
+    }
   }
 }

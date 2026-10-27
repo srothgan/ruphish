@@ -1,3 +1,4 @@
+import { countValues, eventLabel, metrics } from './demo-reporting.mjs';
 // Minimal uncompressed OOXML workbook for synthetic demo downloads only.
 const encode = value => new TextEncoder().encode(value);
 const xml = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]);
@@ -77,11 +78,11 @@ export function exportResponse(value, query) {
     }
     // Preserve the demo's existing JSON download contract.
     if (format === 'json') {
-        const rows = scope === 'events' ? value.events.map(e => ({ email: e.email, time: e.time, event: e.kind, source: e.source, password_present: e.password_present })) : value.recipients.map(r => ({ email: r.email, name: r.name, delivery: r.delivery, sent: r.counts[0], opened: r.counts[1], clicked: r.counts[2], submitted: r.counts[3], reported: r.counts[4] }));
+        const rows = scope === 'events' ? value.events.map(e => ({ email: e.email, time: e.time, event: eventLabel(e.kind), source: e.source, password_present: e.password_present })) : value.recipients.map(r => ({ email: r.email, name: r.name, delivery: r.delivery, sent: r.counts.accepted, opened: r.counts.opened, clicked: r.counts.clicked, submitted: r.counts.submitted, reported: r.counts.reported }));
         return new Response(JSON.stringify(scope === 'all' ? value : rows), { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
     }
-    const recipients = [recipientHeaders, ...value.recipients.map(r => [r.id, r.email, r.name, r.delivery, ...r.counts, String(r.historical_reported), r.first_name ?? '', r.last_name ?? '', r.position ?? '', storedDate(r.send_date), storedDate(r.modified_date)])];
-    const events = [eventHeaders, ...value.events.map(e => [e.id, e.recipient_id ?? '', e.email, e.time, e.kind, e.source, e.password_present === null ? '' : String(e.password_present)])];
+    const recipients = [recipientHeaders, ...value.recipients.map(r => [r.id, r.email, r.name, r.delivery, ...countValues(r.counts), String(r.historical_reported), r.first_name ?? '', r.last_name ?? '', r.position ?? '', storedDate(r.send_date), storedDate(r.modified_date)])];
+    const events = [eventHeaders, ...value.events.map(e => [e.id, e.recipient_id ?? '', e.email, e.time, eventLabel(e.kind), e.source, e.password_present === null ? '' : String(e.password_present)])];
     let bytes, mime;
     if (format === 'csv') {
         const cell = value => `"${protectedText(value).replaceAll('"', '""')}"`;
@@ -96,7 +97,7 @@ export function exportResponse(value, query) {
             ['Event filter', query.get('event') ?? ''], ['Source filter', query.get('source') ?? ''],
         ];
         for (const [index, name] of ['Accepted', 'Opened', 'Clicked', 'Submitted', 'Reported'].entries()) {
-            summary.push([`${name} unique recipients`, value.unique[index]], [`${name} total events`, value.totals[index]]);
+            summary.push([`${name} unique recipients`, value.unique[metrics[index]]], [`${name} total events`, value.totals[metrics[index]]]);
         }
         summary.push(['Filtered event rows', value.event_total], ['Filtered recipient rows', value.recipient_total]);
         bytes = workbook([['Summary', summary], ...(scope !== 'events' ? [['Recipients', recipients]] : []), ...(scope !== 'recipients' ? [['Events', events]] : [])]);

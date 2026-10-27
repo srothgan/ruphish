@@ -1,6 +1,7 @@
 // Browser-only simulation of the existing wire contracts. No HTTP fallback or persistent resources.
 import { dataset, DAY, iso, policy, features } from '../../../assets/website-demo/dataset.mjs';
 import { exportResponse } from './demo-export.mjs';
+import { namedCounts, eventKinds, recordedKind } from './demo-reporting.mjs';
 import { reviewCsv } from './demo-csv.mjs';
 import { recipientOrder, eventOrder, keyset } from './demo-sorting.mjs';
 
@@ -33,13 +34,15 @@ export function overview(data) {
 }
 
 export function analysis(campaign, query, now, paginate = true) {
+    if (query.get('event') && !Object.values(eventKinds).includes(query.get('event'))) throw new Error('Invalid event');
+    if (query.get('source') && !['legacy', 'application', 'public', 'mailbox'].includes(query.get('source'))) throw new Error('Invalid source');
     const from = Number(query.get('from') ?? 0), until = Number(query.get('until') ?? now);
     const selected = new Set((query.get('recipients') ?? '').split(',').filter(Boolean).map(Number));
     const search = (query.get('search') ?? '').toLocaleLowerCase();
     const results = campaign.results.filter(r => (!query.has('recipient') || r.id === Number(query.get('recipient'))) && (!selected.size || selected.has(r.id)) && (!search || `${r.email} ${r.first_name} ${r.last_name}`.toLocaleLowerCase().includes(search)));
     const events = results.flatMap(r => r.events).filter(e => {
         const at = Date.parse(e.time) / 1000;
-        return at >= from && at < until && (!query.get('event') || query.get('event') === e.kind) && (!query.get('source') || query.get('source') === e.source);
+        return at >= from && at < until && (!query.get('event') || query.get('event') === eventKinds[e.kind]) && (!query.get('source') || query.get('source') === e.source);
     }).sort(byTime);
     const eventMap = new Map();
     for (const e of events) {
@@ -55,10 +58,11 @@ export function analysis(campaign, query, now, paginate = true) {
     for (const e of events) {
         const time = Math.floor(Date.parse(e.time) / 1000 / 3600) * 3600;
         if (!buckets.has(time)) buckets.set(time, [0, 0, 0, 0, 0]);
-        buckets.get(time)[kinds.indexOf(e.kind)]++;
+        const index = kinds.indexOf(e.kind);
+        if (index >= 0) buckets.get(time)[index]++;
     }
     const offset = Math.max(0, Number(query.get('offset') ?? 0)), limit = Math.max(1, Math.min(200, Number(query.get('limit') ?? 50)));
-    return { id: campaign.header.id, name: campaign.header.name, status: campaign.header.status, as_of: now, audience: campaign.results.length, unique, progression, totals: counts(events), recipient_total: rows.length, event_total: events.length, recipients: paginate ? rows.slice(offset, offset + limit) : rows, events: paginate ? sortedEvents.slice(offset, offset + limit) : sortedEvents, buckets: [...buckets].map(([time, values]) => ({ time, counts: values })), bucket_seconds: 3600 };
+    return { id: campaign.header.id, name: campaign.header.name, status: campaign.header.status, as_of: now, audience: campaign.results.length, unique: namedCounts(unique), progression: namedCounts(progression), totals: namedCounts(counts(events)), recipient_total: rows.length, event_total: events.length, recipients: (paginate ? rows.slice(offset, offset + limit) : rows).map(r => ({ ...r, counts: namedCounts(r.counts) })), events: (paginate ? sortedEvents.slice(offset, offset + limit) : sortedEvents).map(e => ({ ...e, kind: recordedKind(e.kind) })), buckets: [...buckets].map(([time, values]) => ({ time, counts: namedCounts(values) })), bucket_seconds: 3600 };
 }
 
 function summaries(data, family) {

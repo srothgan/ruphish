@@ -18,7 +18,8 @@ fn incomplete_campaign_snapshots_are_errors_instead_of_empty_lists_or_zero_metri
     assert_eq!(
         serde_json::from_value::<Analysis>(fixture["analysis"].clone())
             .unwrap()
-            .progression,
+            .progression
+            .values(),
         [1, 1, 1, 1, 0]
     );
     for kind in ["directory", "delivery", "analysis"] {
@@ -54,11 +55,12 @@ fn sparse_counts_and_explicit_empty_pages_remain_valid() {
     assert!(empty.items.is_empty());
     assert!(empty.next_after.is_none());
     let mut value = fixture["analysis"].clone();
-    value["progression"] = json!([0, 0, 0, 0, 0]);
+    value["progression"] = json!({"accepted":0,"opened":0,"clicked":0,"submitted":0,"reported":0});
     assert_eq!(
         serde_json::from_value::<Analysis>(value)
             .unwrap()
-            .progression,
+            .progression
+            .values(),
         [0; 5]
     );
 }
@@ -79,4 +81,37 @@ fn draft_null_selections_are_distinct_from_missing_read_fields() {
         broken["configuration"].as_object_mut().unwrap().remove(key);
         assert!(serde_json::from_value::<Draft>(broken).is_err(), "{key}");
     }
+}
+
+#[test]
+fn named_metrics_and_classified_observations_reject_missing_or_unknown_values() {
+    let fixture = snapshots()["analysis"].clone();
+    for field in ["accepted", "opened", "clicked", "submitted", "reported"] {
+        let mut broken = fixture.clone();
+        broken["totals"].as_object_mut().unwrap().remove(field);
+        assert!(
+            serde_json::from_value::<Analysis>(broken).is_err(),
+            "missing {field}"
+        );
+    }
+    for pointer in [
+        "/status",
+        "/recipients/0/delivery",
+        "/events/0/source",
+        "/events/0/kind/value",
+    ] {
+        let mut broken = fixture.clone();
+        *broken.pointer_mut(pointer).unwrap() = json!("unrecognized");
+        assert!(
+            serde_json::from_value::<Analysis>(broken).is_err(),
+            "{pointer}"
+        );
+    }
+    let mut imported = fixture;
+    imported["events"][0]["kind"] = json!({"type":"historical","value":"Proxied request"});
+    let value: Analysis = serde_json::from_value(imported).unwrap();
+    assert_eq!(
+        value.events[0].kind,
+        ruphish_domain::events::RecordedKind::Historical("Proxied request".into())
+    );
 }
