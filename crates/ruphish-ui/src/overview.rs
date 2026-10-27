@@ -228,7 +228,7 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
     let clear = attention.unverified_enabled_domains == 0 && attention.delivery_problems == 0;
     view! {
         <div class="dashboard-work">
-            <Card class="dashboard-campaigns" label=trs!(ui.recent_campaigns) attr:tabindex="0">
+            <Card class="dashboard-campaigns" label=trs!(ui.recent_campaigns)>
                 <div class="dashboard-section-heading">
                     <h2>
                         <a href="/campaigns">{tr!(ui.recent_campaigns)}</a>

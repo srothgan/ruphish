@@ -730,7 +730,13 @@
   .dashboard-metrics small { display: block; margin-top: var(--s2); color: var(--muted); font: var(--fs-sm)/var(--lh) var(--font-sans); letter-spacing: normal; }
   .account-app .dashboard-updated { max-width: none; margin: var(--s4) 0 0; font-size: var(--fs-sm); color: var(--muted); }
   .dashboard-work { display: grid; grid-template-columns: minmax(0,2fr) minmax(250px,1fr); gap: var(--s5); align-items: stretch; }
-  .dashboard-campaigns { max-height: 32rem; overflow-y: auto; align-self: start; }
+  /* The three-row preview sizes from its content; both cards stretch to the taller one. */
+  .dashboard-campaigns .management-table-wrap { overflow: visible; }
+  .dashboard-campaigns .management-table { min-width: 0; }
+  .dashboard-campaigns .management-table th, .dashboard-campaigns .management-table td { padding: var(--s3) var(--s2); white-space: normal; overflow-wrap: anywhere; }
+  .dashboard-campaigns .table-sort { gap: var(--s1); white-space: normal; }
+  .dashboard-campaigns .table-sort > span { min-width: 0; }
+  .dashboard-campaigns .button { max-width: 100%; padding-inline: var(--s2); white-space: normal; }
   .dashboard-campaign-meta { display: block; margin-top: var(--s1); color: var(--muted); font-size: var(--fs-sm); font-weight: var(--fw-regular); }
   .dashboard-attention-list { display: grid; gap: var(--s5); list-style: none; padding: 0; margin: 0; }
   .dashboard-attention-list p { margin: var(--s2) 0; }
