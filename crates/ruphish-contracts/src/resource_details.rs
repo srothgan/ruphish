@@ -30,14 +30,14 @@ pub struct Metadata {
 }
 
 /// Complete confirmed resource; editable inputs have separate permissive types.
-#[derive(Clone, Debug, Serialize)]
-pub struct Resource {
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Resource<T = Content> {
     /// Common identity and revision information.
     #[serde(flatten)]
     pub metadata: Metadata,
     /// Family-specific confirmed fields.
     #[serde(flatten)]
-    pub content: Content,
+    pub content: T,
 }
 
 /// Resource content selected by the endpoint, never guessed from overlapping fields.
@@ -56,14 +56,7 @@ pub enum Content {
     Profile(Profile),
 }
 
-#[derive(Deserialize)]
-struct Detail<T> {
-    #[serde(flatten)]
-    metadata: Metadata,
-    #[serde(flatten)]
-    content: T,
-}
-impl<T> Detail<T> {
+impl<T> Resource<T> {
     fn into_resource(self, content: impl FnOnce(T) -> Content) -> Resource {
         Resource {
             metadata: self.metadata,
@@ -123,8 +116,8 @@ pub struct Page {
     /// Post-submission destination.
     pub redirect_url: String,
     /// Advisory findings returned by detail reads and saves.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub warnings: Vec<PageWarning>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warnings: Option<Vec<PageWarning>>,
 }
 /// Complete static learning content.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -137,8 +130,8 @@ pub struct LearningPage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preview_html: Option<String>,
     /// Advisory findings, when supplied.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub warnings: Vec<PageWarning>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warnings: Option<Vec<PageWarning>>,
 }
 /// Custom email header.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -171,17 +164,16 @@ pub struct Profile {
 /// Decode once and retain the confirmed record. Missing required fields are errors.
 pub fn decode(kind: Kind, value: Value) -> Result<Resource, serde_json::Error> {
     match kind {
-        Kind::Group => {
-            serde_json::from_value::<Detail<Group>>(value).map(|v| v.into_resource(Content::Group))
-        }
-        Kind::Template => serde_json::from_value::<Detail<Template>>(value)
+        Kind::Group => serde_json::from_value::<Resource<Group>>(value)
+            .map(|v| v.into_resource(Content::Group)),
+        Kind::Template => serde_json::from_value::<Resource<Template>>(value)
             .map(|v| v.into_resource(Content::Template)),
         Kind::Page => {
-            serde_json::from_value::<Detail<Page>>(value).map(|v| v.into_resource(Content::Page))
+            serde_json::from_value::<Resource<Page>>(value).map(|v| v.into_resource(Content::Page))
         }
-        Kind::LearningPage => serde_json::from_value::<Detail<LearningPage>>(value)
+        Kind::LearningPage => serde_json::from_value::<Resource<LearningPage>>(value)
             .map(|v| v.into_resource(Content::LearningPage)),
-        Kind::Profile => serde_json::from_value::<Detail<Profile>>(value)
+        Kind::Profile => serde_json::from_value::<Resource<Profile>>(value)
             .map(|v| v.into_resource(Content::Profile)),
     }
 }

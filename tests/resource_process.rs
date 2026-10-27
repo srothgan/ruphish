@@ -1088,6 +1088,47 @@ fn independent_go_resource_observations_run_against_the_executable() {
             response.text().unwrap()
         );
         let mut observed: Value = response.json().unwrap();
+        if (200..300).contains(&expected_status) {
+            use ruphish_contracts::{resource_details as wire, resources as summaries};
+            let path = case["path"].as_str().unwrap();
+            let family = path.split('/').nth(2).unwrap();
+            let kind = match family {
+                "groups" => wire::Kind::Group,
+                "templates" => wire::Kind::Template,
+                "pages" => wire::Kind::Page,
+                "smtp" => wire::Kind::Profile,
+                _ => panic!("unexpected fixture family {family}"),
+            };
+            let round_trip = if path == "/api/groups/summary" {
+                serde_json::to_value(
+                    serde_json::from_value::<summaries::GroupSummaries>(observed.clone()).unwrap(),
+                )
+                .unwrap()
+            } else if path.ends_with("/summary") && family == "groups" {
+                serde_json::to_value(
+                    serde_json::from_value::<summaries::GroupSummary>(observed.clone()).unwrap(),
+                )
+                .unwrap()
+            } else if path.ends_with("/summary") {
+                serde_json::to_value(
+                    serde_json::from_value::<summaries::ResourceSummaries>(observed.clone())
+                        .unwrap(),
+                )
+                .unwrap()
+            } else if let Some(rows) = observed.as_array() {
+                serde_json::to_value(
+                    rows.iter()
+                        .map(|row| wire::decode(kind, row.clone()).unwrap())
+                        .collect::<Vec<_>>(),
+                )
+                .unwrap()
+            } else if observed.get("id").is_some() {
+                serde_json::to_value(wire::decode(kind, observed.clone()).unwrap()).unwrap()
+            } else {
+                observed.clone()
+            };
+            assert_eq!(round_trip, observed, "typed response for {id}");
+        }
         // Assert the additive error code without changing the recorded Go response.
         let expected_code = match id {
             "groups-no-name"

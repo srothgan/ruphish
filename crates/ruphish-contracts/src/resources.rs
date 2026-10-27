@@ -1,8 +1,8 @@
 //! Resource metadata responses and explicit test-delivery inputs.
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Recipient-group summary response.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GroupSummaries {
     /// Total saved groups.
     pub total: usize,
@@ -11,7 +11,7 @@ pub struct GroupSummaries {
 }
 
 /// Group metadata without recipient payloads.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GroupSummary {
     /// Persistent ID.
     pub id: i64,
@@ -25,7 +25,7 @@ pub struct GroupSummary {
 }
 
 /// Template, landing-page or sending-profile summary response.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ResourceSummaries {
     /// Total saved resources.
     pub total: usize,
@@ -34,7 +34,7 @@ pub struct ResourceSummaries {
 }
 
 /// Resource metadata without bodies, attachments or service credentials.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ResourceSummary {
     /// Persistent ID.
     pub id: i64,
@@ -45,6 +45,64 @@ pub struct ResourceSummary {
     pub modified_date: Option<String>,
     /// Unfinished campaigns referencing this resource.
     pub active_campaigns: usize,
+}
+
+/// Imported authored HTML, without a saved resource identity.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct HtmlImport {
+    /// Imported source.
+    pub html: String,
+}
+
+/// Imported email content, before it is saved as a template.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct EmailImport {
+    /// Subject expression.
+    pub subject: String,
+    /// Plain-text source.
+    pub text: String,
+    /// HTML source.
+    pub html: String,
+}
+
+/// Prepared page preview and advisory diagnostics.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PagePreview {
+    /// Prepared HTML.
+    pub html: String,
+    /// Findings, including a required empty list when no issue is found.
+    pub warnings: Vec<crate::resource_details::PageWarning>,
+}
+
+/// Advisory validation without a prepared document.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PageDiagnostics {
+    /// Findings, including a required empty list when no issue is found.
+    pub warnings: Vec<crate::resource_details::PageWarning>,
+}
+
+/// CSV import review before a group is persisted.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct CsvReview {
+    /// Valid administrator-supplied recipient rows.
+    pub targets: Vec<crate::resource_details::Recipient>,
+    /// Available source columns.
+    pub columns: Vec<String>,
+    /// Rejected source rows.
+    pub errors: Vec<CsvError>,
+}
+
+/// One rejected CSV source row.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct CsvError {
+    /// Source row number.
+    pub row: u64,
+    /// Stable rejection code.
+    pub code: crate::errors::ErrorCode,
+    /// Human-readable diagnostic.
+    pub message: String,
+    /// Source values supplied by the administrator.
+    pub fields: Vec<String>,
 }
 
 #[cfg(test)]

@@ -251,6 +251,25 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
             "{id}"
         );
         let mut actual: Value = response.json().unwrap();
+        if (200..300).contains(&case["status"].as_u64().unwrap())
+            && path.starts_with("/api/campaigns/")
+            && actual.get("success").is_none()
+        {
+            use ruphish_contracts::campaign_details as wire;
+            fn round_trip<T: serde::de::DeserializeOwned + serde::Serialize>(value: &Value) {
+                let decoded: T = serde_json::from_value(value.clone()).unwrap();
+                assert_eq!(serde_json::to_value(decoded).unwrap(), *value);
+            }
+            match path {
+                "/api/campaigns/summary" => round_trip::<wire::Summaries>(&actual),
+                path if path.ends_with("/summary") => round_trip::<wire::Summary>(&actual),
+                path if path.ends_with("/results") => round_trip::<wire::Results>(&actual),
+                "/api/campaigns/" if actual.is_array() => {
+                    round_trip::<Vec<wire::Campaign>>(&actual)
+                }
+                _ => round_trip::<wire::Campaign>(&actual),
+            }
+        }
         actual = serde_json::from_str(&serde_json::to_string(&actual).unwrap().replace(
             &origin(&base, "training.example.test"),
             "https://training.example.test",

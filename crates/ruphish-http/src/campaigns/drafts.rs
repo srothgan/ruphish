@@ -30,8 +30,8 @@ fn decode_body<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T, Rejecti
         )
     })
 }
-fn encode(d: &Draft) -> Value {
-    json!(reads::Draft {
+fn encode(d: &Draft) -> reads::Draft {
+    reads::Draft {
         id: d.id.clone(),
         revision: d.revision,
         configuration: d.configuration.clone(),
@@ -43,8 +43,8 @@ fn encode(d: &Draft) -> Value {
             "Launched".into()
         } else {
             "Draft".into()
-        }
-    })
+        },
+    }
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -103,7 +103,10 @@ async fn list(
         .flatten();
     response(
         StatusCode::OK,
-        &json!({"items":rows.iter().map(encode).collect::<Vec<_>>(),"next_after":next}),
+        &reads::Drafts {
+            items: rows.iter().map(encode).collect(),
+            next_after: next,
+        },
         None,
     )
 }
@@ -124,7 +127,7 @@ async fn remove(
         .delete_draft(caller.identity, &id, revision.revision)
         .await
         .map_err(draft_error)?;
-    response(StatusCode::OK, &json!({"success":true}), None)
+    response(StatusCode::OK, &reads::DraftRemoval { success: true }, None)
 }
 async fn launch(c: Context, Path(id): Path<String>, body: Bytes) -> Result<Response, Rejection> {
     let caller = c.api(None).await?;
@@ -137,7 +140,7 @@ async fn launch(c: Context, Path(id): Path<String>, body: Bytes) -> Result<Respo
         .launch_draft(caller.identity, &id, request.revision, input, now())
         .await
         .map_err(draft_error)?;
-    response(StatusCode::OK, &super::encode_campaign(&campaign), None)
+    response(StatusCode::OK, &super::encode_campaign(&campaign)?, None)
 }
 
 async fn prepare_draft(c: Context, body: Bytes) -> Result<Response, Rejection> {

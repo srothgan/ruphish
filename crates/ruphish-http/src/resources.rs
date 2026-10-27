@@ -11,7 +11,7 @@ use axum::{
 use ruphish_application::resources::{self as app, Content, Kind, Resource};
 use ruphish_contracts::errors::ErrorCode;
 use ruphish_contracts::legacy as wire;
-use serde_json::{Value, json};
+use ruphish_contracts::{resource_details as details, resources as summaries_wire};
 
 pub(crate) fn routes() -> Router<AuthState> {
     let mut routes = Router::new();
@@ -70,8 +70,16 @@ fn parse<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T, Rejection> {
         )
     })
 }
-fn recipients(rows: &[app::Recipient]) -> Value {
-    json!(rows.iter().map(|r|json!({"email":r.email,"first_name":r.first_name,"last_name":r.last_name,"position":r.position})).collect::<Vec<_>>())
+pub(crate) fn recipient(r: &app::Recipient) -> details::Recipient {
+    details::Recipient {
+        email: r.email.clone(),
+        first_name: r.first_name.clone(),
+        last_name: r.last_name.clone(),
+        position: r.position.clone(),
+    }
+}
+fn recipients(rows: &[app::Recipient]) -> Vec<details::Recipient> {
+    rows.iter().map(recipient).collect()
 }
 async fn import_group(
     context: Context,
@@ -127,7 +135,24 @@ async fn review_group(context: Context, body: Bytes) -> Result<Response, Rejecti
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &json!({"targets":recipients(&report.recipients),"columns":report.columns,"errors":report.errors.iter().map(|e|json!({"row":e.row,"code": match e.kind { app::RowErrorKind::Encoding => ErrorCode::CsvRowEncoding, app::RowErrorKind::Columns => ErrorCode::CsvRowColumns, app::RowErrorKind::Email => ErrorCode::CsvRowEmail },"message":e.message,"fields":e.fields})).collect::<Vec<_>>()}),
+        &summaries_wire::CsvReview {
+            targets: recipients(&report.recipients),
+            columns: report.columns,
+            errors: report
+                .errors
+                .into_iter()
+                .map(|e| summaries_wire::CsvError {
+                    row: e.row,
+                    code: match e.kind {
+                        app::RowErrorKind::Encoding => ErrorCode::CsvRowEncoding,
+                        app::RowErrorKind::Columns => ErrorCode::CsvRowColumns,
+                        app::RowErrorKind::Email => ErrorCode::CsvRowEmail,
+                    },
+                    message: e.message,
+                    fields: e.fields,
+                })
+                .collect(),
+        },
         None,
     )
 }
@@ -147,7 +172,11 @@ async fn import_email(context: Context, body: Bytes) -> Result<Response, Rejecti
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &json!({"subject":imported.subject,"text":imported.text,"html":imported.html}),
+        &summaries_wire::EmailImport {
+            subject: imported.subject,
+            text: imported.text,
+            html: imported.html,
+        },
         None,
     )
 }
@@ -165,7 +194,7 @@ async fn import_site(context: Context, body: Bytes) -> Result<Response, Rejectio
         .await
         .map_err(error)?;
     editor_identity(&context).await?;
-    response(StatusCode::OK, &json!({"html":html}), None)
+    response(StatusCode::OK, &summaries_wire::HtmlImport { html }, None)
 }
 #[derive(serde::Deserialize)]
 struct PreviewRequest {
@@ -198,24 +227,33 @@ async fn preview_page(
     } else {
         app::PagePreview::Landing(&recipient)
     };
-    let (html, warnings) = context
+    let (html, findings) = context
         .resources()
         .page_preview(&request.html, mode)
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &json!({"html":html,"warnings":warnings}),
+        &summaries_wire::PagePreview {
+            html,
+            warnings: warnings(findings),
+        },
         None,
     )
 }
 async fn validate_page(context: Context, body: Bytes) -> Result<Response, Rejection> {
     editor_identity(&context).await?;
     let request: PreviewRequest = parse(&body)?;
-    let warnings = context
+    let findings = context
         .resources()
         .page_warnings(&request.html)
         .map_err(error)?;
-    response(StatusCode::OK, &json!({"warnings":warnings}), None)
+    response(
+        StatusCode::OK,
+        &summaries_wire::PageDiagnostics {
+            warnings: warnings(findings),
+        },
+        None,
+    )
 }
 async fn preview(context: Context, body: Bytes) -> Result<Response, Rejection> {
     editor_identity(&context).await?;
@@ -234,13 +272,16 @@ async fn preview(context: Context, body: Bytes) -> Result<Response, Rejection> {
             },
         )
         .map_err(error)?;
-    let warnings = context
+    let findings = context
         .resources()
         .page_warnings(&request.html)
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &json!({"html":html,"warnings":warnings}),
+        &summaries_wire::PagePreview {
+            html,
+            warnings: warnings(findings),
+        },
         None,
     )
 }
@@ -323,7 +364,11 @@ async fn send_test(context: Context, body: Bytes) -> Result<Response, Rejection>
         })?;
     response(
         StatusCode::OK,
-        &json!({"success":true,"message":"Email Sent","data":null}),
+        &wire::Envelope::<()> {
+            success: true,
+            message: "Email Sent".into(),
+            data: None,
+        },
         None,
     )
 }
@@ -337,7 +382,11 @@ async fn test_connection(context: Context, body: Bytes) -> Result<Response, Reje
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &json!({"success":true,"message":"SMTP connection verified","data":null}),
+        &wire::Envelope::<()> {
+            success: true,
+            message: "SMTP connection verified".into(),
+            data: None,
+        },
         None,
     )
 }
@@ -469,32 +518,70 @@ pub(crate) fn response<T: serde::Serialize>(
     }
     Ok(response)
 }
-pub(crate) fn encode(r: &Resource) -> Value {
-    let mut value = json!({"id":r.id,"name":r.name,"modified_date":crate::response::stored_date(&r.modified_date)});
-    let fields = match &r.content {
-        Content::Group(targets) => {
-            json!({"targets":targets.iter().map(|t|json!({"email":t.email,"first_name":t.first_name,"last_name":t.last_name,"position":t.position})).collect::<Vec<_>>()})
-        }
-        Content::Template(t) => {
-            json!({"subject":t.subject,"text":t.text,"html":t.html,"envelope_sender":t.envelope_sender,"attachments":t.attachments.iter().map(|a|json!({"name":a.name,"type":a.mime_type,"content":a.content})).collect::<Vec<_>>()})
-        }
-        Content::LearningPage(p) => json!({"html":p.html,"public_id":p.public_id}),
-        Content::Page(p) => {
-            json!({"html":p.html,"redirect_url":p.redirect_url})
-        }
-        Content::Profile(p) => {
-            let mut v = json!({"interface_type":p.interface_type,"host":p.host,"from_address":p.from_address,"ignore_cert_errors":p.ignore_cert_errors,"headers":p.headers.iter().map(|h|json!({"key":h.key,"value":h.value})).collect::<Vec<_>>()});
-            if !p.username.is_empty() {
-                v["username"] = json!(p.username);
-            }
-            v["has_password"] = json!(!p.password.is_empty());
-            v
-        }
-    };
-    if let (Some(v), Some(f)) = (value.as_object_mut(), fields.as_object()) {
-        v.extend(f.clone());
+pub(crate) fn encode(r: &Resource) -> details::Resource {
+    details::Resource {
+        metadata: details::Metadata {
+            id: r.id,
+            name: r.name.clone(),
+            modified_date: crate::response::stored_date(&r.modified_date),
+        },
+        content: match &r.content {
+            Content::Group(targets) => details::Content::Group(details::Group {
+                targets: recipients(targets),
+            }),
+            Content::Template(t) => details::Content::Template(details::Template {
+                subject: t.subject.clone(),
+                text: t.text.clone(),
+                html: t.html.clone(),
+                envelope_sender: t.envelope_sender.clone(),
+                attachments: t
+                    .attachments
+                    .iter()
+                    .map(|a| details::Attachment {
+                        name: a.name.clone(),
+                        mime: a.mime_type.clone(),
+                        content: a.content.clone(),
+                    })
+                    .collect(),
+            }),
+            Content::LearningPage(p) => details::Content::LearningPage(details::LearningPage {
+                html: p.html.clone(),
+                public_id: p.public_id.clone(),
+                preview_html: None,
+                warnings: None,
+            }),
+            Content::Page(p) => details::Content::Page(details::Page {
+                html: p.html.clone(),
+                redirect_url: p.redirect_url.clone(),
+                warnings: None,
+            }),
+            Content::Profile(p) => details::Content::Profile(details::Profile {
+                interface_type: p.interface_type.clone(),
+                host: p.host.clone(),
+                from_address: p.from_address.clone(),
+                ignore_cert_errors: p.ignore_cert_errors,
+                headers: p
+                    .headers
+                    .iter()
+                    .map(|h| details::Header {
+                        key: h.key.clone(),
+                        value: h.value.clone(),
+                    })
+                    .collect(),
+                username: (!p.username.is_empty()).then(|| p.username.clone()),
+                has_password: !p.password.is_empty(),
+            }),
+        },
     }
-    value
+}
+pub(crate) fn warnings(values: Vec<app::PageWarning>) -> Vec<details::PageWarning> {
+    values
+        .into_iter()
+        .map(|warning| details::PageWarning {
+            code: warning.code.into(),
+            control: warning.control,
+        })
+        .collect()
 }
 fn decode(kind: Kind, bytes: &[u8]) -> Result<app::Input, Rejection> {
     let invalid = |_| {
@@ -626,7 +713,7 @@ async fn list(context: Context) -> Result<Response, Rejection> {
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &json!(values.iter().map(encode).collect::<Vec<_>>()),
+        &values.iter().map(encode).collect::<Vec<_>>(),
         None,
     )
 }
@@ -638,21 +725,21 @@ async fn read(context: Context, Path(id): Path<i64>) -> Result<Response, Rejecti
         .await
         .map_err(error)?;
     let mut wire = encode(&value);
-    if let Content::Page(page) = &value.content {
-        wire["warnings"] = json!(
+    if let details::Content::Page(page) = &mut wire.content {
+        page.warnings = Some(warnings(
             context
                 .resources()
                 .page_warnings(&page.html)
-                .map_err(error)?
-        );
+                .map_err(error)?,
+        ));
     }
-    if let Content::LearningPage(page) = &value.content {
-        let (html, warnings) = context
+    if let details::Content::LearningPage(page) = &mut wire.content {
+        let (html, findings) = context
             .resources()
             .page_preview(&page.html, app::PagePreview::Learning)
             .map_err(error)?;
-        wire["preview_html"] = json!(html);
-        wire["warnings"] = json!(warnings);
+        page.preview_html = Some(html);
+        page.warnings = Some(warnings(findings));
     }
     response(StatusCode::OK, &wire, Some(&value.modified_date))
 }
@@ -691,7 +778,7 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
             },
         ));
     }
-    let warnings = if let Content::LearningPage(page) = &value.content {
+    let findings = if let Content::LearningPage(page) = &value.content {
         Some(
             context
                 .resources()
@@ -715,8 +802,13 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
         .await
         .map_err(error)?;
     let mut wire = encode(&saved);
-    if let Some(warnings) = warnings {
-        wire["warnings"] = json!(warnings);
+    if let Some(findings) = findings {
+        let findings = Some(warnings(findings));
+        match &mut wire.content {
+            details::Content::Page(page) => page.warnings = findings,
+            details::Content::LearningPage(page) => page.warnings = findings,
+            _ => return Err(error(app::Error::Internal)),
+        }
     }
     response(
         if id.is_some() {
@@ -745,16 +837,35 @@ async fn delete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejec
     };
     response(
         StatusCode::OK,
-        &json!({"success":true,"message":message,"data":null}),
+        &wire::Envelope::<()> {
+            success: true,
+            message: message.into(),
+            data: None,
+        },
         None,
     )
 }
-fn summary(s: &app::Summary, kind: Kind) -> Value {
-    if kind == Kind::Group {
-        json!({"id":s.id,"name":s.name,"modified_date":crate::response::stored_date(&s.modified_date),"num_targets":s.num_targets})
-    } else {
-        json!({"id":s.id,"name":s.name,"modified_date":crate::response::stored_date(&s.modified_date),"active_campaigns":s.active_campaigns})
-    }
+fn group_summary_value(s: &app::Summary) -> Result<summaries_wire::GroupSummary, Rejection> {
+    Ok(summaries_wire::GroupSummary {
+        id: s.id,
+        name: s.name.clone(),
+        modified_date: crate::response::stored_date(&s.modified_date),
+        num_targets: s
+            .num_targets
+            .try_into()
+            .map_err(|_| error(app::Error::Internal))?,
+    })
+}
+fn resource_summary(s: &app::Summary) -> Result<summaries_wire::ResourceSummary, Rejection> {
+    Ok(summaries_wire::ResourceSummary {
+        id: s.id,
+        name: s.name.clone(),
+        modified_date: crate::response::stored_date(&s.modified_date),
+        active_campaigns: s
+            .active_campaigns
+            .try_into()
+            .map_err(|_| error(app::Error::Internal))?,
+    })
 }
 async fn summaries(context: Context) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
@@ -764,13 +875,33 @@ async fn summaries(context: Context) -> Result<Response, Rejection> {
         .summaries(user.identity, kind)
         .await
         .map_err(error)?;
-    let rows: Vec<_> = values.iter().map(|s| summary(s, kind)).collect();
-    let value = if kind == Kind::Group {
-        json!({"total":rows.len(),"groups":rows})
+    if kind == Kind::Group {
+        let groups = values
+            .iter()
+            .map(group_summary_value)
+            .collect::<Result<Vec<_>, _>>()?;
+        response(
+            StatusCode::OK,
+            &summaries_wire::GroupSummaries {
+                total: groups.len(),
+                groups,
+            },
+            None,
+        )
     } else {
-        json!({"total":rows.len(),"items":rows})
-    };
-    response(StatusCode::OK, &value, None)
+        let items = values
+            .iter()
+            .map(resource_summary)
+            .collect::<Result<Vec<_>, _>>()?;
+        response(
+            StatusCode::OK,
+            &summaries_wire::ResourceSummaries {
+                total: items.len(),
+                items,
+            },
+            None,
+        )
+    }
 }
 async fn group_summary(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
@@ -783,5 +914,5 @@ async fn group_summary(context: Context, Path(id): Path<i64>) -> Result<Response
         .iter()
         .find(|v| v.id == id)
         .ok_or_else(|| error(app::Error::NotFound("Group")))?;
-    response(StatusCode::OK, &summary(value, Kind::Group), None)
+    response(StatusCode::OK, &group_summary_value(value)?, None)
 }

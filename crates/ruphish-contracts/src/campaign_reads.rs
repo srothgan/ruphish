@@ -4,6 +4,18 @@ use std::collections::BTreeMap;
 
 use crate::nullable;
 
+/// Bounded execution metadata page.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Overview {
+    /// Campaign headers in the requested page.
+    pub items: Vec<Header>,
+    /// Next execution cursor, or no further page.
+    #[serde(deserialize_with = "nullable")]
+    pub next_after: Option<i64>,
+    /// Whether this process runs delivery workers.
+    pub mailer_enabled: bool,
+}
+
 /// Bounded combined draft/execution page.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Directory {
@@ -326,6 +338,23 @@ pub struct Draft {
     pub campaign_id: Option<i64>,
     /// Draft or launched.
     pub status: String,
+}
+
+/// Bounded saved-draft page.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Drafts {
+    /// Complete saved snapshots, including a legitimate empty array.
+    pub items: Vec<Draft>,
+    /// Next draft identity, or no further page.
+    #[serde(deserialize_with = "nullable")]
+    pub next_after: Option<String>,
+}
+
+/// Successful removal of a saved draft at its requested revision.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DraftRemoval {
+    /// Whether the requested removal completed.
+    pub success: bool,
 }
 
 fn draft_configuration<'de, D: serde::Deserializer<'de>>(

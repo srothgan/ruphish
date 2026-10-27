@@ -20,8 +20,8 @@ use ruphish_application::{
     resources::{Error, Kind},
 };
 use ruphish_contracts::{campaign as wire, campaign_workflow as workflow, legacy::Timestamp};
+use ruphish_contracts::{campaign_details as details, resource_details as resource};
 use ruphish_contracts::{campaign_reads as reads, errors::ErrorCode};
-use serde_json::{Value, json};
 fn now() -> i64 {
     ruphish_application::datetime::now().as_second()
 }
@@ -66,41 +66,85 @@ async fn slash(context: Context) -> Result<Response, Rejection> {
     )
         .into_response())
 }
-fn encode_result(r: &app::RecipientResult) -> Value {
-    json!({"id":r.rid,"email":r.recipient.email,"first_name":r.recipient.first_name,"last_name":r.recipient.last_name,"position":r.recipient.position,"status":r.status,"ip":r.ip,"latitude":r.latitude,"longitude":r.longitude,"reported":r.reported,"send_date":date(&r.send_date),"modified_date":date(&r.modified_date)})
+fn encode_result(r: &app::RecipientResult) -> details::Recipient {
+    details::Recipient {
+        id: r.rid.clone(),
+        recipient: crate::resources::recipient(&r.recipient),
+        status: r.status.clone(),
+        ip: r.ip.clone(),
+        latitude: r.latitude,
+        longitude: r.longitude,
+        reported: r.reported,
+        send_date: date(&r.send_date),
+        modified_date: date(&r.modified_date),
+    }
 }
-fn events(c: &app::Campaign) -> Vec<Value> {
-    c.events.iter().map(|e|json!({"campaign_id":c.id,"email":e.email,"time":date(&e.time),"message":e.message,"details":e.details})).collect()
+fn events(c: &app::Campaign) -> Vec<details::Event> {
+    c.events
+        .iter()
+        .map(|e| details::Event {
+            campaign_id: c.id,
+            email: e.email.clone(),
+            time: date(&e.time),
+            message: e.message.clone(),
+            details: e.details.clone(),
+        })
+        .collect()
 }
-fn base(c: &app::Campaign) -> Value {
-    json!({"id":c.id,"name":c.name,"status":c.status,"created_date":date(&c.created),"launch_date":date(&c.launch),"send_by_date":date(&c.send_by),"completed_date":date(&c.completed)})
+fn metadata(c: &app::Campaign) -> details::Metadata {
+    details::Metadata {
+        id: c.id,
+        name: c.name.clone(),
+        status: c.status.clone(),
+        created_date: date(&c.created),
+        launch_date: date(&c.launch),
+        send_by_date: date(&c.send_by),
+        completed_date: date(&c.completed),
+    }
 }
-fn encode_campaign(c: &app::Campaign) -> Value {
-    let mut v = base(c);
-    v["url"] = json!(c.url);
+fn encode_campaign(c: &app::Campaign) -> Result<details::Campaign, Rejection> {
+    let (mut template, mut page, mut smtp) = (None, None, None);
     for r in &c.resources {
-        v[match r.kind() {
-            Kind::Template => "template",
-            Kind::Page => "page",
-            Kind::Profile => "smtp",
-            Kind::Group => "group",
-            Kind::LearningPage => "learning_page",
-        }] = encode(r);
+        let resource::Resource { metadata, content } = encode(r);
+        match content {
+            resource::Content::Template(content) => {
+                template = Some(resource::Resource { metadata, content })
+            }
+            resource::Content::Page(content) => {
+                page = Some(resource::Resource { metadata, content })
+            }
+            resource::Content::Profile(content) => {
+                smtp = Some(resource::Resource { metadata, content })
+            }
+            _ => return Err(error(Error::Internal)),
+        }
     }
-    if !c.results.is_empty() {
-        v["results"] = json!(c.results.iter().map(encode_result).collect::<Vec<_>>());
-    }
-    if !c.events.is_empty() {
-        v["timeline"] = json!(events(c));
-    }
-    v
+    Ok(details::Campaign {
+        metadata: metadata(c),
+        url: c.url.clone(),
+        template: template.ok_or_else(|| error(Error::Internal))?,
+        page: page.ok_or_else(|| error(Error::Internal))?,
+        smtp: smtp.ok_or_else(|| error(Error::Internal))?,
+        results: c.results.iter().map(encode_result).collect(),
+        timeline: events(c),
+        groups: None,
+    })
 }
-fn encode_summary(c: &app::Campaign) -> Value {
-    let mut v = base(c);
+fn encode_summary(c: &app::Campaign) -> details::Summary {
     let [sent, opened, clicked, submitted, reported] = c.progression();
     let failed = c.results.iter().filter(|r| r.status == "Error").count();
-    v["stats"] = json!({"total":c.results.len(),"sent":sent,"opened":opened,"clicked":clicked,"submitted_data":submitted,"email_reported":reported,"error":failed});
-    v
+    details::Summary {
+        metadata: metadata(c),
+        stats: details::Counts {
+            total: c.results.len(),
+            sent,
+            opened,
+            clicked,
+            submitted_data: submitted,
+            email_reported: reported,
+            error: failed,
+        },
+    }
 }
 fn decode(context: &Context, bytes: &[u8]) -> Result<app::Create, Rejection> {
     let input: wire::Create = serde_json::from_slice(bytes).map_err(|_| {
@@ -284,16 +328,12 @@ async fn prepare_inner(context: Context, body: Bytes, draft: bool) -> Result<Res
     let launch_date = p.launch;
     let policy = read_policy(&p.policy);
     let warnings = if let ruphish_application::resources::Content::Page(page) = &p.page.content {
-        context
-            .resources()
-            .page_warnings(&page.html)
-            .map_err(error)?
-            .into_iter()
-            .map(|warning| ruphish_contracts::resource_details::PageWarning {
-                code: warning.code.into(),
-                control: warning.control,
-            })
-            .collect()
+        crate::resources::warnings(
+            context
+                .resources()
+                .page_warnings(&page.html)
+                .map_err(error)?,
+        )
     } else {
         Vec::new()
     };
@@ -334,11 +374,23 @@ async fn create(context: Context, body: Bytes) -> Result<Response, Rejection> {
         .create(user.identity, input, now())
         .await
         .map_err(launch_error)?;
-    let mut value = encode_campaign(&campaign);
-    if let Some(object) = value.as_object_mut() {
-        object.remove("timeline");
-    }
-    value["groups"] = json!(campaign.groups.iter().map(encode).collect::<Vec<_>>());
+    let mut value = encode_campaign(&campaign)?;
+    value.timeline.clear();
+    value.groups = Some(
+        campaign
+            .groups
+            .iter()
+            .map(|group| {
+                let resource::Resource { metadata, content } = encode(group);
+                match content {
+                    resource::Content::Group(content) => {
+                        Ok(resource::Resource { metadata, content })
+                    }
+                    _ => Err(error(Error::Internal)),
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    );
     response(StatusCode::CREATED, &value, None)
 }
 async fn list(context: Context) -> Result<Response, Rejection> {
@@ -351,7 +403,10 @@ async fn list(context: Context) -> Result<Response, Rejection> {
         .map_err(error)?;
     let response = response(
         StatusCode::OK,
-        &json!(rows.iter().map(encode_campaign).collect::<Vec<_>>()),
+        &rows
+            .iter()
+            .map(encode_campaign)
+            .collect::<Result<Vec<_>, _>>()?,
         None,
     )?;
     // Retain admission until the body is consumed or the client disconnects.
@@ -374,7 +429,7 @@ async fn read(context: Context, Path(id): Path<i64>) -> Result<Response, Rejecti
         .get(user.identity, id)
         .await
         .map_err(error)?;
-    response(StatusCode::OK, &encode_campaign(&c), None)
+    response(StatusCode::OK, &encode_campaign(&c)?, None)
 }
 async fn results(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
@@ -385,7 +440,13 @@ async fn results(context: Context, Path(id): Path<i64>) -> Result<Response, Reje
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &json!({"id":c.id,"name":c.name,"status":c.status,"results":c.results.iter().map(encode_result).collect::<Vec<_>>(),"timeline":events(&c)}),
+        &details::Results {
+            id: c.id,
+            name: c.name.clone(),
+            status: c.status.clone(),
+            results: c.results.iter().map(encode_result).collect(),
+            timeline: events(&c),
+        },
         None,
     )
 }
@@ -407,7 +468,10 @@ async fn summaries(context: Context) -> Result<Response, Rejection> {
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &json!({"total":rows.len(),"campaigns":rows.iter().map(encode_summary).collect::<Vec<_>>()}),
+        &details::Summaries {
+            total: rows.len(),
+            campaigns: rows.iter().map(encode_summary).collect(),
+        },
         None,
     )
 }
@@ -420,7 +484,11 @@ async fn complete(context: Context, Path(id): Path<i64>) -> Result<Response, Rej
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &json!({"success":true,"message":"Campaign completed successfully!","data":null}),
+        &ruphish_contracts::legacy::Envelope::<()> {
+            success: true,
+            message: "Campaign completed successfully!".into(),
+            data: None,
+        },
         None,
     )
 }
@@ -433,7 +501,11 @@ async fn delete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejec
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &json!({"success":true,"message":"Campaign deleted successfully!","data":null}),
+        &ruphish_contracts::legacy::Envelope::<()> {
+            success: true,
+            message: "Campaign deleted successfully!".into(),
+            data: None,
+        },
         None,
     )
 }
@@ -488,7 +560,11 @@ async fn overview(context: Context, Query(page): Query<Page>) -> Result<Response
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &json!({"items":rows.items.iter().map(encode_header).collect::<Vec<_>>(),"next_after":rows.next_after,"mailer_enabled":context.mailer_enabled()}),
+        &reads::Overview {
+            items: rows.items.iter().map(encode_header).collect(),
+            next_after: rows.next_after,
+            mailer_enabled: context.mailer_enabled(),
+        },
         None,
     )
 }
@@ -572,7 +648,7 @@ async fn deliveries(
             })
             .collect(),
     };
-    response(StatusCode::OK, &json!(value), None)
+    response(StatusCode::OK, &value, None)
 }
 #[derive(serde::Deserialize)]
 struct HistoryPage {
@@ -598,7 +674,7 @@ async fn recipient_history(
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &json!(reads::History {
+        &reads::History {
             result_id: history.result_id,
             email: history.email,
             attempts: history.attempts.iter().map(encode_attempt).collect(),
@@ -613,12 +689,12 @@ async fn recipient_history(
                         .filter(|t| *t != datetime::ZERO_TIMESTAMP)
                         .map(|t| t.as_second()),
                     message: e.message.clone(),
-                    details: e.details.clone()
+                    details: e.details.clone(),
                 })
                 .collect(),
             next_attempt: history.next_attempt,
             next_event: history.next_event,
-        }),
+        },
         None,
     )
 }
@@ -666,7 +742,11 @@ async fn resolve(
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &json!({"success":true,"message":"Delivery updated","data":null}),
+        &ruphish_contracts::legacy::Envelope::<()> {
+            success: true,
+            message: "Delivery updated".into(),
+            data: None,
+        },
         None,
     )
 }
@@ -699,7 +779,11 @@ async fn test(context: Context, body: Bytes) -> Result<Response, Rejection> {
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &json!({"success":true,"message":"Accepted by SMTP server","data":null}),
+        &ruphish_contracts::legacy::Envelope::<()> {
+            success: true,
+            message: "Accepted by SMTP server".into(),
+            data: None,
+        },
         None,
     )
 }

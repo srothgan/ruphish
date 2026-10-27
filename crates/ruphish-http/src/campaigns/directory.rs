@@ -70,10 +70,10 @@ pub(super) async fn list(
         .collect();
     response(
         StatusCode::OK,
-        &json!(reads::Directory {
+        &reads::Directory {
             items,
-            next_after: page.next_after
-        }),
+            next_after: page.next_after,
+        },
         None,
     )
 }
