@@ -576,7 +576,7 @@ fn campaign_workflow(
     let page = post(
         base,
         "/api/pages/",
-        &json!({"name":"Private page","html":"<p>Hello {{.FirstName}}</p><form><input name='password' type='password'></form>","capture_credentials":true,"capture_passwords":true}),
+        &json!({"name":"Private page","html":"<p>Hello {{.FirstName}}</p><form><input name='password' type='password'></form>"}),
     );
     let smtp_profile = post(
         base,

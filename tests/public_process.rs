@@ -284,7 +284,7 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
     let landing = post(
         &admin,
         "/api/pages/",
-        json!({"name":"Page","html":"<form><label>Password<input name='password' type='password' autocomplete='current-password'></label><button>Continue</button></form><script>authoredCanary()</script>","capture_credentials":false,"capture_passwords":false,"redirect_url":"http://example.test/finished/{{.FirstName}}"}),
+        json!({"name":"Page","html":"<form><label>Password<input name='password' type='password' autocomplete='current-password'></label><button>Continue</button></form><script>authoredCanary()</script>","redirect_url":"http://example.test/finished/{{.FirstName}}"}),
     );
     let smtp = post(
         &admin,

@@ -65,7 +65,7 @@ This body is illustrative: replace the example IDs with resources owned by the c
 
 Request fields are case-sensitive. Unknown fields, duplicate fields, invalid types and trailing JSON are rejected with `400`. Top-level legacy `groups`, `template`, `page` and `smtp` inputs are no longer accepted, including alongside `selection`. The same typed campaign input is used inside test-send and draft-launch requests.
 
-The optional `policy` contains `capture_credentials`, `capture_passwords`, and `redirect_url`. The flags are ignored compatibility inputs; every supported submission records an event and password presence. Only `redirect_url` changes effective policy. See [landing pages](landing-pages.md).
+The optional `policy` contains `redirect_url` and an optional owned `learning_page_id`. A learning page and a nonempty custom redirect are mutually exclusive. Every supported submission records an event and password presence; there are no capture settings. Campaign commands reject the retired `capture_credentials` and `capture_passwords` fields. See [landing pages](landing-pages.md).
 
 `launch_date` and `send_by_date` accept timestamp values. A missing or zero launch date means immediate launch. Alternatively, `launch_local` and `send_by_local` each contain `local` and `time_zone`. Local inputs are resolved through that IANA zone and checked for ambiguous or nonexistent civil times. Read [scheduling](../user-guide/campaigns/scheduling.md) before relying on distribution timing.
 

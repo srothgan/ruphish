@@ -24,15 +24,11 @@ pub struct Selections {
     /// Sending profile.
     pub smtp: ReviewedResource,
 }
-/// Compatibility inputs and optional redirect defaults.
+/// Optional redirect defaults.
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[serde(default)]
 pub struct Policy {
-    /// Deprecated input, ignored; submissions are always tracked.
-    pub capture_credentials: Option<bool>,
-    /// Deprecated input, ignored; password presence is always tracked.
-    pub capture_passwords: Option<bool>,
     /// Post-submission redirect override.
     pub redirect_url: Option<String>,
     /// Selected owned learning page; custom redirect must be empty when present.

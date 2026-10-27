@@ -89,8 +89,6 @@
         "name": "Local privacy page"
       },
       "policy": {
-        "capture_credentials": true,
-        "capture_passwords": true,
         "redirect_url": ""
       },
       "profile_sender": "Training <training@example.test>",
@@ -139,8 +137,6 @@
     "mailer_enabled": true,
     "next_after": null,
     "policy": {
-      "capture_credentials": true,
-      "capture_passwords": true,
       "redirect_url": ""
     }
   },

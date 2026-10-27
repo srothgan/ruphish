@@ -17,13 +17,9 @@ pub struct Selection {
     /// Reviewed modification timestamp, checked again in the launch transaction.
     pub revision: Option<String>,
 }
-/// Compatibility inputs and a redirect override resolved once per campaign.
+/// Redirect overrides resolved once per campaign.
 #[derive(Clone, Default)]
 pub struct Overrides {
-    /// Deprecated compatibility input, ignored; submissions are always tracked.
-    pub capture_credentials: Option<bool>,
-    /// Deprecated compatibility input, ignored; password presence is always tracked.
-    pub capture_passwords: Option<bool>,
     /// Explicit empty string clears the default redirect.
     pub redirect_url: Option<String>,
     /// Selected owned learning page; custom redirect must be empty when present.

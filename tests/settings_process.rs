@@ -72,7 +72,7 @@ fn campaign(c: &Client, base: &str, key: &str, origin: &str) -> Value {
         base,
         key,
         "/api/pages/",
-        &json!({"name":"Settings page","html":"<h1>Training</h1><form><input type='password' name='password'></form>","capture_credentials":true,"capture_passwords":true}),
+        &json!({"name":"Settings page","html":"<h1>Training</h1><form><input type='password' name='password'></form>"}),
     );
     let smtp = post(
         c,
@@ -166,7 +166,7 @@ fn company_policy_authorization_domains_integrations_and_closure_survive_restart
     for invalid in [
         json!([]),
         json!({"policy":{}}),
-        json!({"policy":initial["policy"],"capture_passwords":true}),
+        json!({"policy":initial["policy"],"unexpected":true}),
     ] {
         assert_eq!(
             request(

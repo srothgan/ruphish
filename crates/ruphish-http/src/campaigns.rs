@@ -152,8 +152,6 @@ fn command(context: &Context, input: wire::Create) -> Result<app::Create, Reject
         launch: timestamp(input.launch_date),
         send_by: timestamp(input.send_by_date),
         policy: app::Overrides {
-            capture_credentials: Some(true),
-            capture_passwords: Some(true),
             redirect_url: p.redirect_url,
             learning_page_id: p.learning_page_id,
         },
@@ -446,8 +444,6 @@ struct Page {
 }
 fn read_policy(p: &app::InteractionPolicy) -> reads::Policy {
     reads::Policy {
-        capture_credentials: true,
-        capture_passwords: true,
         redirect_url: p.redirect_url.clone(),
         learning_page_id: p.learning_page_id,
     }

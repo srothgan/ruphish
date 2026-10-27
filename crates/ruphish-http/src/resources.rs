@@ -466,7 +466,7 @@ pub(crate) fn encode(r: &Resource) -> Value {
         }
         Content::LearningPage(p) => json!({"html":p.html,"public_id":p.public_id}),
         Content::Page(p) => {
-            json!({"html":p.html,"capture_credentials":true,"capture_passwords":true,"redirect_url":p.redirect_url})
+            json!({"html":p.html,"redirect_url":p.redirect_url})
         }
         Content::Profile(p) => {
             let mut v = json!({"interface_type":p.interface_type,"host":p.host,"from_address":p.from_address,"ignore_cert_errors":p.ignore_cert_errors,"headers":p.headers.iter().map(|h|json!({"key":h.key,"value":h.value})).collect::<Vec<_>>()});

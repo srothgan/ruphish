@@ -140,7 +140,7 @@ pub struct EmailTemplate {
     pub attachments: Option<Vec<Attachment>>,
 }
 
-/// Persisted landing-page wire contract, with original capture flags.
+/// Landing-page wire contract.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct LandingPage {
@@ -150,10 +150,6 @@ pub struct LandingPage {
     pub name: String,
     /// Authored document source.
     pub html: String,
-    /// Ignored legacy input; true in responses because submissions are always tracked.
-    pub capture_credentials: bool,
-    /// Ignored legacy input; true in responses because password presence is always tracked.
-    pub capture_passwords: bool,
     /// Templated destination after submission.
     pub redirect_url: String,
     /// Last persisted change.

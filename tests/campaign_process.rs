@@ -307,6 +307,8 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
             match v {
                 Value::Array(rows) => rows.iter_mut().for_each(exceptions),
                 Value::Object(o) => {
+                    o.remove("capture_credentials");
+                    o.remove("capture_passwords");
                     for (k, v) in o {
                         if k == "html"
                             && v == "<html><head></head><body><p>Training</p></body></html>"
@@ -314,10 +316,6 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
                             *v = json!("<p>Training</p>");
                         } else if k == "send_date" && v == "2035-01-01T12:03:00Z" {
                             *v = json!("2035-01-01T12:05:00Z");
-                        } else if matches!(k.as_str(), "capture_credentials" | "capture_passwords")
-                        {
-                            // Approved presence-only tracking ignores the legacy capture flags.
-                            *v = json!(true);
                         } else {
                             exceptions(v)
                         }
@@ -453,7 +451,7 @@ fn resources(base: &str, address: &str) -> Value {
     let page = post(
         base,
         "/api/pages/",
-        &json!({"name":"Page","html":"<form><input name='username'><input name='password' type='password'></form>","capture_passwords":true}),
+        &json!({"name":"Page","html":"<form><input name='username'><input name='password' type='password'></form>"}),
     );
     let smtp = post(
         base,
@@ -754,21 +752,28 @@ fn reviewed_campaign_preview_test_and_duplicate_use_exact_owned_resources_withou
     let inherited = post(&base, "/api/campaigns/prepare", &input);
     let page_url = format!("/api/pages/{}", inherited["selection"]["page"]["id"]);
     let defaults = read(&base, &page_url);
-    assert_eq!(defaults["capture_credentials"], true);
-    assert_eq!(defaults["capture_passwords"], true);
+    assert!(defaults.get("capture_credentials").is_none());
+    assert!(defaults.get("capture_passwords").is_none());
     assert_eq!(
         defaults["redirect_url"],
         "https://training.example.test/finish"
     );
-    assert_eq!(inherited["policy"]["capture_passwords"], true);
-    // Legacy false flags are inert; explicit empty still clears the redirect.
-    input["policy"] =
-        json!({"capture_credentials":false,"capture_passwords":false,"redirect_url":""});
+    assert!(inherited["policy"].get("capture_passwords").is_none());
+    for field in ["capture_credentials", "capture_passwords"] {
+        let mut retired = input.clone();
+        retired["policy"] = json!({field:true});
+        let rejected = client()
+            .post(format!("{base}/api/campaigns/prepare"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&retired)
+            .send()
+            .unwrap();
+        assert_eq!(rejected.status(), 400);
+    }
+    // An explicit empty redirect clears the page default.
+    input["policy"] = json!({"redirect_url":""});
     let review = post(&base, "/api/campaigns/prepare", &input);
-    assert_eq!(
-        review["policy"],
-        json!({"capture_credentials":true,"capture_passwords":true,"redirect_url":""})
-    );
+    assert_eq!(review["policy"], json!({"redirect_url":""}));
     assert!(review["warnings"].is_array());
     assert_eq!(review["total"], 1);
     assert!(

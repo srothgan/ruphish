@@ -54,8 +54,6 @@ struct Template {
 #[derive(Deserialize, Serialize)]
 struct Page {
     html: String,
-    capture_credentials: bool,
-    capture_passwords: bool,
     redirect_url: String,
 }
 #[derive(Deserialize, Serialize)]

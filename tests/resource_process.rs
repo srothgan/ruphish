@@ -987,9 +987,15 @@ fn independent_go_resource_observations_run_against_the_executable() {
             "pages-empty-html" | "pages-capture" | "pages-no-capture" => {
                 let input: Value = serde_json::from_str(case["body"].as_str().unwrap()).unwrap();
                 expected["html"] = input.get("html").cloned().unwrap_or(json!(""));
-                // Approved presence-only tracking is unconditional; legacy flags are ignored.
-                expected["capture_credentials"] = json!(true);
-                expected["capture_passwords"] = json!(true);
+                // Retired capture flags are absent from the native response.
+                expected
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("capture_credentials");
+                expected
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("capture_passwords");
                 assert!(observed["warnings"].is_array());
                 observed.as_object_mut().unwrap().remove("warnings");
             }
@@ -1443,13 +1449,22 @@ fn legacy_resource_validation_and_page_policy_survive_round_trip_and_restart() {
             .contains("smtp configuration")
     );
     let html = "<html><head></head><body><form action='example.com'><input name='username'><input name='password' type='password'></form></body></html>";
-    let mut page: Value = client.post(format!("{base}/api/pages/")).bearer_auth("synthetic-bootstrap-token").json(&json!({"name":"Reversible settings","html":html,"capture_passwords":true,"redirect_url":"http://example.com"})).send().unwrap().error_for_status().unwrap().json().unwrap();
-    assert_eq!(page["capture_credentials"], true);
+    let mut page: Value = client
+        .post(format!("{base}/api/pages/"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(
+            &json!({"name":"Reversible settings","html":html,"redirect_url":"http://example.com"}),
+        )
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert!(page.get("capture_credentials").is_none());
     let id = page["id"].as_i64().unwrap();
-    for (credentials, passwords) in [(true, false), (false, false), (true, true)] {
-        page["capture_credentials"] = json!(credentials);
-        page["capture_passwords"] = json!(passwords);
-        page["redirect_url"] = json!("");
+    for redirect in ["", "https://example.test/finished", ""] {
+        page["redirect_url"] = json!(redirect);
         page = client
             .put(format!("{base}/api/pages/{id}"))
             .bearer_auth("synthetic-bootstrap-token")
@@ -1461,9 +1476,9 @@ fn legacy_resource_validation_and_page_policy_survive_round_trip_and_restart() {
             .json()
             .unwrap();
         assert_eq!(page["html"], html);
-        assert_eq!(page["redirect_url"], "");
-        assert_eq!(page["capture_credentials"], true);
-        assert_eq!(page["capture_passwords"], true);
+        assert_eq!(page["redirect_url"], redirect);
+        assert!(page.get("capture_credentials").is_none());
+        assert!(page.get("capture_passwords").is_none());
     }
     process.stop();
     let mut restarted = Process::start(directory.path(), "admin");
@@ -1559,12 +1574,19 @@ fn landing_diagnostics_warn_without_blocking_save_and_preserve_correct_form_sema
                 1
             );
         }
-        let saved: Value = client.post(format!("{base}/api/pages/")).bearer_auth("synthetic-bootstrap-token")
-            .json(&json!({"name":format!("Warning {index}"),"html":html,"capture_passwords":false,"capture_credentials":false}))
-            .send().unwrap().error_for_status().unwrap().json().unwrap();
+        let saved: Value = client
+            .post(format!("{base}/api/pages/"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&json!({"name":format!("Warning {index}"),"html":html}))
+            .send()
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .unwrap();
         assert_eq!(saved["html"], html);
         assert_eq!(saved["warnings"], validation["warnings"]);
-        assert_eq!(saved["capture_passwords"], true);
+        assert!(saved.get("capture_passwords").is_none());
         assert_eq!(
             read_warnings("/api/util/preview")["warnings"],
             validation["warnings"]

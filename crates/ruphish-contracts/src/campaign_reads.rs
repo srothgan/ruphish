@@ -49,10 +49,6 @@ pub struct Resource {
 /// Confirmed presence-only tracking and redirect policy.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Policy {
-    /// Compatibility output, always true; values are never collected.
-    pub capture_credentials: bool,
-    /// Compatibility output, always true; only presence is observed.
-    pub capture_passwords: bool,
     /// Post-submission redirect.
     pub redirect_url: String,
     /// Selected owned learning page; custom redirect must be empty when present.
@@ -353,11 +349,7 @@ fn draft_configuration<'de, D: serde::Deserializer<'de>>(
         || value["selection"]["groups"]
             .as_array()
             .is_none_or(|rows| rows.iter().any(|row| row.get("id").is_none()))
-        || (!value["policy"].is_null()
-            && !fields(
-                &value["policy"],
-                &["capture_credentials", "capture_passwords", "redirect_url"],
-            ))
+        || (!value["policy"].is_null() && !fields(&value["policy"], &["redirect_url"]))
         || ["launch_local", "send_by_local"]
             .iter()
             .any(|key| !value[key].is_null() && !fields(&value[key], &["local", "time_zone"]))

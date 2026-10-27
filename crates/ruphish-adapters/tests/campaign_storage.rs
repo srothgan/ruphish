@@ -348,7 +348,6 @@ async fn creation_is_atomic_deduplicated_and_idempotent_with_stable_policy() {
     let mut request = input(&fixture);
     request.send_by = Some(1_900_000_600);
     request.idempotency = Some(("review-123".into(), "independent-body-fingerprint".into()));
-    request.policy.capture_credentials = Some(false);
     request.policy.redirect_url = Some(String::new());
     let campaign = store
         .create(caller(), request.clone(), 1_900_000_000)

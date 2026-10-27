@@ -148,7 +148,7 @@ mod tests {
     fn review_requires_recipient_counts_versions_policy_schedule_and_preview() {
         let value = json!({"total":1,"duplicate_count":0,"launch_date":123,"send_by_date":null,
             "selection":{"groups":[{"id":1,"name":"Audience","revision":"v1"}],"template":{"id":2,"name":"Email","revision":"v2"},"page":{"id":3,"name":"Page","revision":"v3"},"smtp":{"id":4,"name":"SMTP","revision":"v4"}},
-            "policy":{"capture_credentials":false,"capture_passwords":false,"redirect_url":""},"mailer_enabled":true,"conflict_count":0,"conflicts":[],
+            "policy":{"redirect_url":""},"mailer_enabled":true,"conflict_count":0,"conflicts":[],
             "preview":{"subject":"Subject","html":"<p>Preview</p>","text":"Preview","visible_sender":"Sender <sender@example.test>","transport_sender":"bounce@example.test"}});
         assert!(serde_json::from_value::<Review>(value.clone()).is_ok());
         for field in value.as_object().expect("fixture").keys() {
@@ -181,7 +181,7 @@ mod tests {
         assert!(decoded.policy.is_none());
         assert_eq!(serde_json::to_value(decoded).expect("wire response"), value);
         let mut known = value.clone();
-        known["policy"] = json!({"capture_credentials":false,"capture_passwords":false,"redirect_url":"https://example.test/after"});
+        known["policy"] = json!({"redirect_url":"https://example.test/after"});
         let decoded = serde_json::from_value::<Duplicate>(known.clone()).expect("known policy");
         assert!(decoded.policy.is_some());
         assert_eq!(serde_json::to_value(decoded).expect("wire response"), known);
@@ -195,7 +195,7 @@ mod tests {
             *missing.pointer_mut(pointer).expect("fixture") = json!({});
             assert!(serde_json::from_value::<Duplicate>(missing.clone()).is_err());
         }
-        for policy in [Value::Null, json!({"capture_credentials":false})] {
+        for policy in [Value::Null, json!({"redirect_url":false})] {
             let mut missing = value.clone();
             missing["policy"] = policy;
             assert!(serde_json::from_value::<Duplicate>(missing.clone()).is_err());

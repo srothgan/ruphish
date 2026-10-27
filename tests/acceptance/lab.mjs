@@ -161,7 +161,7 @@ async function seed() {
     for (const [path, resource] of [
         ['/api/groups/', { name: 'Local browser audience', targets: [{ email: 'browser@example.test', first_name: 'Browser', last_name: 'Tester' }] }],
         ['/api/templates/', { name: 'Local privacy email', subject: 'Local exercise for {{.FirstName}}', text: 'Local practice page: {{.URL}}', html: await readFile(new URL('./email.html', import.meta.url), 'utf8') }],
-        ['/api/pages/', { name: 'Local privacy page', html: await readFile(new URL('./landing.html', import.meta.url), 'utf8'), capture_credentials: true, capture_passwords: true }],
+        ['/api/pages/', { name: 'Local privacy page', html: await readFile(new URL('./landing.html', import.meta.url), 'utf8') }],
         ['/api/smtp/', { name: 'Local inbox only', host: '172.30.53.20:1025', from_address: 'Training <training@example.test>' }],
     ]) {
         if (!(await api(path)).some(item => item.name === resource.name)) await api(path, 'POST', resource);

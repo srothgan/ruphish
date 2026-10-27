@@ -33,14 +33,10 @@ pub struct LocalTime {
     pub time_zone: String,
 }
 
-/// Presence-only interaction settings. No participant values may be stored.
+/// Post-submission destination settings.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Policy {
-    /// Inert legacy draft input; submissions are always tracked.
-    pub capture_credentials: bool,
-    /// Inert legacy draft input; presence is always tracked.
-    pub capture_passwords: bool,
     /// Optional redirect expression.
     pub redirect_url: String,
     /// Selected owned learning page; custom redirect must be empty when present.

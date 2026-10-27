@@ -160,14 +160,10 @@ mod tests {
     }
     #[test]
     fn server_normalization_becomes_the_checkpoint_after_success() {
-        let value = json!({"id":0,"capture_credentials":false,"capture_passwords":true});
+        let value = json!({"id":0,"name":"  Example  "});
         let mut d = ResourceDraft::new(value.clone(), None);
-        d.saved(
-            &value,
-            json!({"id":2,"capture_credentials":true,"capture_passwords":true}),
-            Some("v1".into()),
-        );
-        assert_eq!(d.value()["capture_credentials"], true);
+        d.saved(&value, json!({"id":2,"name":"Example"}), Some("v1".into()));
+        assert_eq!(d.value()["name"], "Example");
         assert_eq!(d.value()["id"], 2);
         assert!(!d.dirty());
     }
