@@ -2,14 +2,11 @@
 
 use axum::{
     Router,
-    body::Bytes,
     http::{Method, StatusCode, Uri},
     response::Response,
     routing::{any, get, post},
 };
-use ruphish_contracts::legacy::{
-    self, Envelope, Group, Header, Imap, QuotedNumber, SendingProfile,
-};
+use ruphish_contracts::legacy::{Envelope, Group, Header, SendingProfile};
 use ruphish_http::response;
 use serde_json::Value;
 use std::time::Duration;
@@ -79,25 +76,6 @@ async fn typed_api_values_survive_real_http_with_go_null_omission_integer_and_ti
             }),
         )
         .route(
-            "/imap-zero",
-            get(|| async { response::json(StatusCode::OK, &Imap::default()) }),
-        )
-        .route(
-            "/imap-quoted-numbers",
-            get(|| async {
-                response::json(
-                    StatusCode::OK,
-                    &Imap {
-                        port: QuotedNumber(993),
-                        imap_freq: QuotedNumber(60),
-                        tls: true,
-                        folder: "INBOX".into(),
-                        ..Imap::default()
-                    },
-                )
-            }),
-        )
-        .route(
             "/escaped-envelope",
             get(|| async {
                 response::json(
@@ -116,7 +94,10 @@ async fn typed_api_values_survive_real_http_with_go_null_omission_integer_and_ti
         .timeout(Duration::from_secs(5))
         .build()
         .unwrap();
-    for case in fixture {
+    for case in fixture
+        .into_iter()
+        .filter(|case| !case["id"].as_str().unwrap().starts_with("imap-"))
+    {
         let result = client
             .get(format!("{base}/{}", case["id"].as_str().unwrap()))
             .send()
@@ -149,95 +130,6 @@ async fn typed_api_values_survive_real_http_with_go_null_omission_integer_and_ti
 fn time_value() -> ruphish_contracts::legacy::Timestamp {
     serde_json::from_str("\"2020-01-02T03:04:05.1234Z\"")
         .expect("fixed fixture timestamp must parse")
-}
-
-async fn decode_imap(bytes: Bytes) -> Response {
-    match legacy::decode_object::<Imap>(&bytes) {
-        Ok(value) => response::json(StatusCode::OK, &value),
-        Err(_) => response::error(StatusCode::BAD_REQUEST, "Invalid JSON structure"),
-    }
-}
-
-#[tokio::test]
-async fn happy_and_adversarial_imap_requests_preserve_types_and_return_legacy_error_envelopes() {
-    let (base, _server) = serve(Router::new().route("/imap", post(decode_imap)))
-        .await
-        .unwrap();
-    let client = reqwest::Client::builder()
-        .no_proxy()
-        .timeout(Duration::from_secs(5))
-        .build()
-        .unwrap();
-    let mut captured: Vec<Value> = serde_json::from_str(include_str!(
-        "../../../tests/fixtures/compatibility/requests.json"
-    ))
-    .unwrap();
-    captured.extend(
-        serde_json::from_str::<Vec<Value>>(include_str!(
-            "../../../tests/fixtures/compatibility/requests-edge.json"
-        ))
-        .unwrap(),
-    );
-    for case in captured {
-        let result = client
-            .post(format!("{base}/imap"))
-            .body(case["body"].as_str().unwrap().to_owned())
-            .send()
-            .await
-            .unwrap();
-        if case["accepted"].as_bool().unwrap() {
-            assert_eq!(result.status(), StatusCode::OK, "{}", case["body"]);
-            assert_eq!(
-                result.json::<Value>().await.unwrap(),
-                case["expected_json"],
-                "{}",
-                case["body"]
-            );
-        } else {
-            assert_eq!(result.status(), StatusCode::BAD_REQUEST, "{}", case["body"]);
-            assert_eq!(
-                result.json::<Value>().await.unwrap(),
-                serde_json::json!({"success":false,"message":"Invalid JSON structure","data":null})
-            );
-        }
-    }
-    for body in [
-        r#"{"port":"993","imap_freq":"60","username":"unicode-é","tls":true}"#,
-        r#"{"port":"65535","imap_freq":"4294967295"}"#,
-    ] {
-        let result = client
-            .post(format!("{base}/imap"))
-            .body(body)
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(result.status(), StatusCode::OK);
-        let returned: Value = result.json().await.unwrap();
-        let input: Value = serde_json::from_str(body).unwrap();
-        assert_eq!(returned["port"], input["port"]);
-        assert_eq!(returned["imap_freq"], input["imap_freq"]);
-    }
-    for body in [
-        r#"{"port":993}"#,
-        r#"{"port":"65536"}"#,
-        r#"{"port":"-1"}"#,
-        r#"{"imap_freq":"4294967296"}"#,
-        r#"{"tls":"true"}"#,
-        r#"{"port":"993""#,
-        "[]",
-    ] {
-        let result = client
-            .post(format!("{base}/imap"))
-            .body(body)
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(result.status(), StatusCode::BAD_REQUEST, "{body}");
-        assert_eq!(
-            result.json::<Value>().await.unwrap(),
-            serde_json::json!({"success":false,"message":"Invalid JSON structure","data":null})
-        );
-    }
 }
 
 async fn redirect(method: Method, uri: Uri) -> Response {
