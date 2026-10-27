@@ -198,7 +198,7 @@ fn os_default_config_creates_sqlite_logs_and_preserves_login_across_working_dire
         auth_process::post(
             &first_browser,
             &base,
-            "/reset_password",
+            "/auth/password/reset",
             &[
                 ("password", "os-default-established-password"),
                 ("confirm_password", "os-default-established-password")
@@ -340,7 +340,7 @@ fn generated_password_reaches_noninteractive_output_and_completes_required_reset
         auth_process::post(
             &browser,
             &base,
-            "/reset_password",
+            "/auth/password/reset",
             &[
                 ("password", "established-generated-bootstrap-password"),
                 (

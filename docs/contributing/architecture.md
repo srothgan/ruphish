@@ -23,7 +23,7 @@ The workspace tests in `tests/workspace.rs` enforce allowed direct dependency ed
 
 ## HTTP surfaces
 
-The admin listener separates **`/api/`, `/auth/`, and `/internal/`**. `/api/` contains public resource and workflow endpoints, including Ruphish additions. `/auth/session` bootstraps/revalidates browser state. `/internal/` contains browser-specific account operations such as preferences and current-password changes. Legacy browser form paths remain alongside these namespaces. External clients should use the documented [public API](../api/index.md).
+The admin listener separates **`/api/`, `/auth/`, and `/internal/`**. `/api/` contains public resource and workflow endpoints, including Ruphish additions. `/auth/session` bootstraps/revalidates browser state. `/internal/` contains browser-specific account operations such as preferences and current-password changes. Session actions are under `/auth/`; browser pages have independent URLs and do not accept mutation requests. Deployment probes `/health/live` and `/health/ready` are an explicit exception to the application service namespaces and remain outside session middleware. External clients should use the documented [public API](../api/index.md).
 
 A normal resource write goes from HTTP decoding and identity resolution to an application use case, domain validation, and an authorized atomic provider write. The handler maps the confirmed result to a wire contract. The UI retains a separate editable draft until that response confirms the saved state.
 

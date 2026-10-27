@@ -9,7 +9,7 @@ async function read(path, method = 'GET', body) {
     if (!response.ok) throw new Error(`${method} ${path}: ${response.status}`);
     return response.json();
 }
-await read('/login', 'POST', { username: 'demo', password: 'demodemo' });
+await read('/auth/login', 'POST', { username: 'demo', password: 'demodemo' });
 for (const path of ['/auth/session', '/api/overview', '/api/overview/posture?window=30d', '/api/campaigns/directory', '/api/campaigns/3/delivery', '/api/campaigns/3/analysis', '/api/campaigns/3/delivery/30001/history', '/api/campaign-drafts/00000000-0000-4000-8000-000000000001', '/api/settings', '/api/users/', '/api/users/1', '/api/webhooks/', '/api/reporting-mailboxes/', '/api/domains/', '/api/starter-templates/']) responses[path] = await read(path);
 for (const family of ['groups', 'templates', 'pages', 'learning-pages', 'smtp']) {
     for (const suffix of ['summary', '1']) responses[`/api/${family}/${suffix}`] = await read(`/api/${family}/${suffix}`);

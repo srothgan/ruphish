@@ -109,9 +109,9 @@ pub fn router<S: SessionStore + Clone>(
         .with_signed(Key::from(key));
     let routes = Router::new()
         .route("/", get(page))
-        .route("/login", get(page).post(login))
-        .route("/logout", get(page).post(logout))
-        .route("/reset_password", get(page).post(password))
+        .route("/login", get(page))
+        .route("/logout", get(page))
+        .route("/reset_password", get(page))
         .route("/settings", get(page))
         .route("/settings/starter-templates", get(page))
         .route("/user", get(page))
@@ -162,8 +162,11 @@ pub fn router<S: SessionStore + Clone>(
         .route("/smtp/{id}", get(page))
         .route("/smtp/{id}/edit", get(page))
         .route("/auth/session", get(bootstrap))
-        .route("/impersonate", post(impersonate))
-        .route("/impersonate/exit", post(exit_impersonation))
+        .route("/auth/login", post(login))
+        .route("/auth/logout", post(logout))
+        .route("/auth/password/reset", post(password))
+        .route("/auth/impersonate", post(impersonate))
+        .route("/auth/impersonate/exit", post(exit_impersonation))
         .route("/api/users", get(users_slash).post(users_slash))
         .route("/api/users/", get(users).post(create))
         .route("/api/users/{id}", get(user).put(update).delete(delete))
@@ -947,7 +950,7 @@ async fn logout(context: Context, request: Request) -> Result<Response, Rejectio
 }
 async fn password(context: Context, request: Request) -> Result<Response, Rejection> {
     let input = form(request).await?;
-    let reset = context.uri.path() == "/reset_password";
+    let reset = context.uri.path() == "/auth/password/reset";
     if !reset {
         reject_internal_key(input.api_key.is_some())?;
     }

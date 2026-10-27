@@ -27,7 +27,7 @@ A campaign is an execution with a fixed audience and selected resources. Use [ca
 | GET | `/api/campaigns/{id}/delivery/{result}/history` | Recipient attempt and event history |
 | POST | `/api/campaigns/{id}/delivery/{result}` | Resolve or retry a delivery outcome |
 
-The legacy GET form of `/complete` also mutates the campaign. Use POST in new integrations. Requests in this route family have a 1 MiB body limit.
+`/complete` accepts POST only; GET and HEAD return `405` without changing campaign state. Requests in this route family have a 1 MiB body limit.
 
 ## Read a campaign
 

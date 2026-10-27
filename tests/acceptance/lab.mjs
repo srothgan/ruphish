@@ -143,17 +143,17 @@ async function establishAccount() {
         return response.json();
     }
     const initial = await browser('/auth/session');
-    await browser('/login', { username: 'admin', password: env.GOPHISH_INITIAL_ADMIN_PASSWORD, csrf_token: initial.csrf_token });
+    await browser('/auth/login', { username: 'admin', password: env.GOPHISH_INITIAL_ADMIN_PASSWORD, csrf_token: initial.csrf_token });
     const signedIn = await browser('/auth/session');
     if (signedIn.user?.password_change_required) {
         const password = randomBytes(20).toString('hex');
-        await browser('/reset_password', { password, confirm_password: password, csrf_token: signedIn.csrf_token });
+        await browser('/auth/password/reset', { password, confirm_password: password, csrf_token: signedIn.csrf_token });
         env.GOPHISH_INITIAL_ADMIN_PASSWORD = password;
         await writeFile(join(data, 'bootstrap.env'), Object.entries(env).map(([name, value]) => `${name}=${value}\n`).join(''), { mode: 0o600 });
         console.log('Completed the lab administrator first-login password change through the normal HTTP workflow.');
     }
     const current = await browser('/auth/session');
-    await browser('/logout', { csrf_token: current.csrf_token });
+    await browser('/auth/logout', { csrf_token: current.csrf_token });
 }
 
 async function seed() {

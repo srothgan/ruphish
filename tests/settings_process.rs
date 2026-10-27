@@ -210,7 +210,7 @@ fn company_policy_authorization_domains_integrations_and_closure_survive_restart
         auth_process::post(
             &browser,
             &base,
-            "/impersonate",
+            "/auth/impersonate",
             &[("username", "policy-operator")]
         )
         .status(),
@@ -236,7 +236,7 @@ fn company_policy_authorization_domains_integrations_and_closure_survive_restart
         );
     }
     assert_eq!(
-        auth_process::post(&browser, &base, "/impersonate/exit", &[]).status(),
+        auth_process::post(&browser, &base, "/auth/impersonate/exit", &[]).status(),
         200
     );
 

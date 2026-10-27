@@ -500,7 +500,7 @@ fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
                                                         .spawn(async move {
                                                             match api
                                                                 .form(
-                                                                    "/impersonate",
+                                                                    "/auth/impersonate",
                                                                     &token.get_value(),
                                                                     &[("username", name)],
                                                                 )

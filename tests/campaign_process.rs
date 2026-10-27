@@ -228,7 +228,12 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
         }
         let response = client()
             .request(
-                case["method"].as_str().unwrap().parse().unwrap(),
+                // DEC-057 retains the workflow guarantee through POST only.
+                if path.ends_with("/complete") {
+                    reqwest::Method::POST
+                } else {
+                    case["method"].as_str().unwrap().parse().unwrap()
+                },
                 format!("{base}{path}"),
             )
             .bearer_auth("synthetic-bootstrap-token")
@@ -878,6 +883,16 @@ fn campaign_ownership_read_only_and_locked_owners_hold_at_real_http_boundaries()
     let body = resources(&base, "127.0.0.1:25");
     let campaign = post(&base, "/api/campaigns/", &body);
     let id = campaign["id"].as_i64().unwrap();
+    let before = read(&base, &format!("/api/campaigns/{id}"));
+    for method in [reqwest::Method::GET, reqwest::Method::HEAD] {
+        let response = client()
+            .request(method, format!("{base}/api/campaigns/{id}/complete"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), 405);
+        assert_eq!(read(&base, &format!("/api/campaigns/{id}")), before);
+    }
     sql(
         directory.path(),
         "INSERT INTO users(username,hash,api_key,role_id,password_change_required,account_locked) SELECT 'second',hash,'second-owner-key',role_id,0,0 FROM users WHERE id=1;",
@@ -909,7 +924,7 @@ fn campaign_ownership_read_only_and_locked_owners_hold_at_real_http_boundaries()
         "INSERT INTO roles(id,slug,name,description) VALUES(99,'read-only','Read only','Synthetic'); INSERT INTO role_permissions(role_id,permission_id) SELECT 99,id FROM permissions WHERE slug='view_objects'; UPDATE users SET role_id=99 WHERE id=1;",
     );
     assert_eq!(read(&base, &format!("/api/campaigns/{id}"))["id"], id);
-    for method in ["GET", "POST"] {
+    for (method, status) in [("GET", 405), ("POST", 403)] {
         assert_eq!(
             client()
                 .request(
@@ -920,7 +935,7 @@ fn campaign_ownership_read_only_and_locked_owners_hold_at_real_http_boundaries()
                 .send()
                 .unwrap()
                 .status(),
-            403
+            status
         );
     }
     assert_eq!(

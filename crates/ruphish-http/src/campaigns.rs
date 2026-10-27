@@ -39,10 +39,7 @@ pub(crate) fn routes() -> Router<AuthState> {
         .route("/api/campaigns/{id}", get(read).delete(delete))
         .route("/api/campaigns/{id}/summary", get(summary))
         .route("/api/campaigns/{id}/results", get(results))
-        .route(
-            "/api/campaigns/{id}/complete",
-            get(complete_legacy).post(complete),
-        )
+        .route("/api/campaigns/{id}/complete", post(complete))
         .route("/api/campaigns/{id}/delivery", get(deliveries))
         .route(
             "/api/campaigns/{id}/delivery/{result}/history",
@@ -413,16 +410,6 @@ async fn summaries(context: Context) -> Result<Response, Rejection> {
         &json!({"total":rows.len(),"campaigns":rows.iter().map(encode_summary).collect::<Vec<_>>()}),
         None,
     )
-}
-async fn complete_legacy(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
-    if !context.explicit_api_key() {
-        return Err(failure(
-            StatusCode::METHOD_NOT_ALLOWED,
-            ErrorCode::MethodNotAllowed,
-            "Use POST to complete a campaign",
-        ));
-    }
-    complete(context, Path(id)).await
 }
 async fn complete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;

@@ -20,7 +20,7 @@ async function setup() {
     const storage = new Map();
     const api = createDemoApi({ now, data, storage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) } });
     const request = (path, init) => api.execute(new Request(`https://demo.example.test${path}`, init));
-    await request('/login', { method: 'POST', body: JSON.stringify({ username: 'demo', password: 'demodemo' }) });
+    await request('/auth/login', { method: 'POST', body: JSON.stringify({ username: 'demo', password: 'demodemo' }) });
     return { data, seed, request };
 }
 

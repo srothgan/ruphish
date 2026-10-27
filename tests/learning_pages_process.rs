@@ -474,7 +474,15 @@ fn learning_pages_redirect_without_tracking_survive_restart_and_reject_adversari
             .unwrap()
             .contains("Updated explanation")
     );
-    get(&admin, &format!("{campaign_path}/complete"));
+    assert_eq!(
+        client()
+            .post(format!("{admin}{campaign_path}/complete"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .send()
+            .unwrap()
+            .status(),
+        200
+    );
     assert_eq!(
         client()
             .delete(format!("{admin}/api/learning-pages/{page_id}"))

@@ -454,7 +454,7 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
         post(
             &admin,
             &base,
-            "/impersonate",
+            "/auth/impersonate",
             &[("username", "catalog-user")]
         )
         .status(),
@@ -468,7 +468,10 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
             .status(),
         403
     );
-    assert_eq!(post(&admin, &base, "/impersonate/exit", &[]).status(), 200);
+    assert_eq!(
+        post(&admin, &base, "/auth/impersonate/exit", &[]).status(),
+        200
+    );
     assert!(bootstrap(&admin, &base)["user"].is_object());
     process.stop();
     let mut restarted = Process::start(directory.path(), "admin");

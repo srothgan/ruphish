@@ -129,21 +129,21 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage, da
             } catch { return failure(400); }
         }
         if (path === '/auth/session' && method === 'GET') return json({ features: current ? features : null, preferences, csrf_token: 'demo-csrf', user: current ? { id: current.id, username: current.username, role: current.role, password_change_required: false, permissions: current.role.slug === 'admin' ? ['modify_objects', 'modify_system'] : ['modify_objects'] } : null, actor: current && current.id !== 1 ? 'demo' : null });
-        if (path === '/login' && method === 'POST') {
+        if (path === '/auth/login' && method === 'POST') {
             if (body.username !== 'demo' || body.password !== 'demodemo') return failure(401, 'AUTH_INVALID_CREDENTIALS');
             if (!saveIdentity(1)) return failure(503, 'DEMO_STORAGE_REQUIRED');
             const next = typeof body.next === 'string' && /^\/(?:$|(?:groups|templates|pages|learning-pages|smtp|campaigns|analysis|domains|webhooks|reporting-mailboxes|users|user|settings)(?:[/?]|$))/.test(body.next) && !/[\\\r\n]/.test(body.next) ? body.next : '/';
             return success(next);
         }
         if (!current) return failure(401);
-        if (path === '/logout' && method === 'POST') return saveIdentity(0) ? success('/login') : failure(503, 'DEMO_STORAGE_REQUIRED');
-        if (path === '/impersonate' && method === 'POST') {
+        if (path === '/auth/logout' && method === 'POST') return saveIdentity(0) ? success('/login') : failure(503, 'DEMO_STORAGE_REQUIRED');
+        if (path === '/auth/impersonate' && method === 'POST') {
             const target = data.users.find(u => u.username === body.username && !u.account_locked && !u.password_change_required);
             return current.id === 1 && target && saveIdentity(target.id) ? success('/') : failure(403);
         }
-        if (path === '/impersonate/exit' && method === 'POST') return saveIdentity(1) ? success('/') : failure(503);
+        if (path === '/auth/impersonate/exit' && method === 'POST') return saveIdentity(1) ? success('/') : failure(503);
         if (path === '/internal/preferences' && method === 'PUT') return json(preferences);
-        if (['/internal/password', '/reset_password'].includes(path) && method === 'POST') return success('/user');
+        if (['/internal/password', '/auth/password/reset'].includes(path) && method === 'POST') return success('/user');
         if (path === '/api/reset' && method === 'POST') return success('demo-key-not-a-real-credential');
         if (path === '/api/settings' && ['GET', 'PUT'].includes(method)) return json(settings);
         if (path === '/api/overview' && method === 'GET') return json(overview(data));

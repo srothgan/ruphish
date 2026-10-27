@@ -189,7 +189,7 @@ test('verified domain -> SMTP inbox -> public events -> completion, without part
     assert.equal((await publicRequest(`/track?rid=${rid}`)).status, 200);
     assert.equal((await api(campaignPath)).results[0].status, 'Submitted Data', 'Late image loads must not regress submission state');
     assert(!JSON.stringify(tracked).includes(canary));
-    await api(`${campaignPath}/complete`);
+    await api(`${campaignPath}/complete`, 'POST');
     const completed = await api(campaignPath);
     assert.equal((await publicRequest(`/?rid=${rid}`, { body: JSON.stringify({ ...event, event_id: 'b'.repeat(32) }) })).status, 404);
     assert.deepEqual(await api(campaignPath), completed);

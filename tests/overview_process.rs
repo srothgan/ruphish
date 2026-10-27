@@ -140,7 +140,7 @@ fn dashboard_supports_authenticated_browser_and_api_reads_restart_and_revocation
         .json()
         .unwrap();
     let login = browser
-        .post(format!("{base}/login"))
+        .post(format!("{base}/auth/login"))
         .header("origin", &base)
         .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
         .header("accept", "application/json")

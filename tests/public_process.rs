@@ -690,7 +690,7 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
     let bytes = std::fs::read(directory.path().join("installation.sqlite3")).unwrap();
     assert!(!bytes.windows(canary.len()).any(|w| w == canary.as_bytes()));
     let completed = client()
-        .get(format!("{admin}/api/campaigns/{}/complete", campaign["id"]))
+        .post(format!("{admin}/api/campaigns/{}/complete", campaign["id"]))
         .bearer_auth("synthetic-bootstrap-token")
         .send()
         .unwrap();
