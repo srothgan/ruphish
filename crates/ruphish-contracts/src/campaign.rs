@@ -55,15 +55,15 @@ pub struct Create {
     pub url: String,
     /// Owner-scoped resource IDs and optional reviewed revisions.
     pub selection: Selections,
-    /// UTC or offset timestamp; omission means now.
+    /// UTC or offset launch; exclusive with launch_local. Both absent means now.
     pub launch_date: Option<Timestamp>,
-    /// Optional initial distribution end.
+    /// UTC or offset distribution end; exclusive with send_by_local.
     pub send_by_date: Option<Timestamp>,
     /// Optional redirect defaults.
     pub policy: Option<Policy>,
-    /// Named-zone launch input.
+    /// Named-zone launch input; exclusive with launch_date.
     pub launch_local: Option<LocalTime>,
-    /// Named-zone distribution end.
+    /// Named-zone distribution end; exclusive with send_by_date.
     pub send_by_local: Option<LocalTime>,
 }
 

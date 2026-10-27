@@ -61,6 +61,92 @@ fn launch_body(base: &str, configuration: &Value, revision: &Value) -> Value {
 }
 
 #[test]
+fn conflicting_schedule_forms_reject_every_command_without_effects_then_draft_launch_recovers() {
+    let directory = workspace();
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
+    let path = "/api/campaign-drafts/conflicting-schedule-01";
+    let launch_path = format!("{path}/launch");
+    let mut config = configuration_for(&base);
+    config["launch_local"] = json!({"local":"2030-01-01T10:00","time_zone":"UTC"});
+    config["send_by_local"] = json!({"local":"2030-01-01T11:00","time_zone":"UTC"});
+    let saved = save(&base, path, Value::Null, &config, 3);
+    let mut body = launch_body(&base, &config, &saved["revision"]);
+    let before = counts(directory.path());
+    for (absolute, local, times) in [
+        (
+            "launch_date",
+            "launch_local",
+            ["2030-01-01T10:00:00Z", "2030-01-01T09:00:00Z"],
+        ),
+        (
+            "send_by_date",
+            "send_by_local",
+            ["2030-01-01T11:00:00Z", "2030-01-01T12:00:00Z"],
+        ),
+    ] {
+        for time in times {
+            let mut conflict = body["campaign"].clone();
+            conflict[absolute] = json!(time);
+            for endpoint in [
+                "/api/campaigns/prepare",
+                "/api/campaign-drafts/prepare",
+                "/api/campaigns/",
+                "/api/campaigns/test",
+                &launch_path,
+            ] {
+                let input = match endpoint {
+                    "/api/campaigns/test" => {
+                        json!({"campaign":conflict,"email":"admin@example.test"})
+                    }
+                    p if p == launch_path => {
+                        json!({"campaign":conflict,"revision":saved["revision"]})
+                    }
+                    _ => conflict.clone(),
+                };
+                let response = request(&base, "POST", endpoint, &input);
+                assert_eq!(response.status(), 400, "{endpoint}: {absolute} {time}");
+                let error: Value = response.json().unwrap();
+                let issues = error["validation"]["issues"].as_array().unwrap();
+                for field in [absolute.to_owned(), format!("{local}.local")] {
+                    assert!(
+                        issues
+                            .iter()
+                            .any(|i| i["field"] == field && i["code"] == "invalid"),
+                        "{endpoint}: {error}"
+                    );
+                }
+                assert_eq!(counts(directory.path()), before, "{endpoint}");
+                assert_eq!(read(&base, path), saved, "{endpoint}");
+            }
+        }
+        // Different boundaries may use different forms; null is absence.
+        let mut mixed = config.clone();
+        mixed[absolute] = json!(times[0]);
+        mixed[local] = Value::Null;
+        let review = post(&base, "/api/campaigns/prepare", &mixed);
+        assert_eq!(review["launch_date"], 1_893_492_000_i64);
+        assert_eq!(review["send_by_date"], 1_893_495_600_i64);
+    }
+    body["campaign"]["launch_date"] = Value::Null;
+    body["campaign"]["send_by_date"] = Value::Null;
+    let launched: Value = request(&base, "POST", &launch_path, &body)
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(launched["launch_date"], "2030-01-01T10:00:00Z");
+    assert_eq!(launched["send_by_date"], "2030-01-01T11:00:00Z");
+    let retried: Value = request(&base, "POST", &launch_path, &body)
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(launched["id"], retried["id"]);
+    assert_eq!(counts(directory.path())[..4], [1, 1, 1, 1]);
+    process.stop();
+}
+
+#[test]
 fn incomplete_review_step_draft_reopens_rejects_review_and_launch_then_recovers() {
     let directory = workspace();
     let (mut process, base) = start(&directory, &["--disable-mailer"]);

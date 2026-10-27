@@ -116,7 +116,32 @@ fn decode(context: &Context, bytes: &[u8]) -> Result<app::Create, Rejection> {
     command(context, input)
 }
 fn command(context: &Context, input: wire::Create) -> Result<app::Create, Rejection> {
+    use ruphish_application::validation::{Code, Report};
     use sha2::{Digest, Sha256};
+    let mut report = Report::default();
+    for (conflict, absolute, local) in [
+        (
+            input.launch_date.is_some() && input.launch_local.is_some(),
+            "launch_date",
+            "launch_local.local",
+        ),
+        (
+            input.send_by_date.is_some() && input.send_by_local.is_some(),
+            "send_by_date",
+            "send_by_local.local",
+        ),
+    ] {
+        if conflict {
+            for field in [absolute, local] {
+                report.reject(
+                    field,
+                    Code::Invalid,
+                    "Supply either an absolute or a local time for each schedule boundary",
+                );
+            }
+        }
+    }
+    report.finish().map_err(|r| error(Error::Validation(r)))?;
     let fingerprint = hex::encode(Sha256::digest(serde_json::to_vec(&input).map_err(
         |_| {
             failure(

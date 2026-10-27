@@ -67,7 +67,9 @@ Request fields are case-sensitive. Unknown fields, duplicate fields, invalid typ
 
 The optional `policy` contains `redirect_url` and an optional owned `learning_page_id`. A learning page and a nonempty custom redirect are mutually exclusive. Every supported submission records an event and password presence; there are no capture settings. Campaign commands reject the retired `capture_credentials` and `capture_passwords` fields. See [landing pages](landing-pages.md).
 
-`launch_date` and `send_by_date` accept timestamp values. A missing or zero launch date means immediate launch. Alternatively, `launch_local` and `send_by_local` each contain `local` and `time_zone`. Local inputs are resolved through that IANA zone and checked for ambiguous or nonexistent civil times. Read [scheduling](../user-guide/campaigns/scheduling.md) before relying on distribution timing.
+`launch_date` and `send_by_date` accept UTC or offset timestamps. Alternatively, `launch_local` and `send_by_local` each contain `local` and `time_zone`. For each boundary, supply at most one non-null representation: combining `launch_date` with `launch_local`, or `send_by_date` with `send_by_local`, returns `400` with validation issues for both fields, even if they describe the same instant. This applies to preparation, direct creation, test sends and draft launch. Different boundaries may use different representations. If both launch fields are omitted or null, launch is immediate; if both send-by fields are omitted or null, there is no distribution window.
+
+Local inputs are resolved through the named IANA zone. Repeated civil times use the first occurrence; nonexistent times shift forward. Review the resolved schedule before launching. Read [scheduling](../user-guide/campaigns/scheduling.md) before relying on distribution timing.
 
 For direct creation, supply an `Idempotency-Key` and retain it with the original request when recovering from a lost response. Do not reuse one operation's key for a different campaign request. For saved drafts, the draft identity owns launch idempotency instead.
 
