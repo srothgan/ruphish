@@ -45,6 +45,6 @@ For the restricted representation of a landing page, use [`POST /api/pages/previ
 
 ## SMTP checks
 
-`POST /api/util/test_connection` accepts a sending-profile object and returns a success envelope when connection verification succeeds. `POST /api/util/send_test_email` accepts `template`, `page`, `smtp`, `url`, and recipient fields `email`, `first_name`, `last_name`, and `position`. It returns a success envelope after accepted submission.
+`POST /api/util/test_connection` accepts a sending-profile draft and returns a success envelope when connection verification succeeds. An existing owned `id` permits retaining its saved password; supplied settings are not saved. `POST /api/util/send_test_email` accepts `template`, `page`, `smtp`, `url`, and recipient fields `email`, `first_name`, `last_name`, and `position`. Set `smtp` to `{"source":"saved","id":42}` for an owned saved profile, or `{"source":"draft","profile":{"host":"127.0.0.1:1025","from_address":"training@example.test"}}` for supplied settings. Draft profile IDs and password omission follow the connection-test rules. Profile selection never falls back by name after validation fails. The send returns a success envelope after accepted submission.
 
 Test sends are external effects. Use a controlled inbox and inspect the received message before sending another. A failed or lost response can have an uncertain SMTP outcome; do not automatically repeat it.

@@ -19,11 +19,13 @@ sidebar:
 | `interface_type` | Use `SMTP` |
 | `host` | SMTP host, optionally with a port |
 | `from_address` | Sender mailbox, optionally with a display name |
-| `username`, `password` | Optional SMTP credentials; treat returned profile data as sensitive |
+| `username` | Optional SMTP login name |
+| `password` | Write only: omit or use null to retain the saved password; a supplied string replaces it, and an empty string clears it |
+| `has_password` | Read only: whether a password is configured |
 | `ignore_cert_errors` | Whether to bypass SMTP certificate verification; keep false for normal use |
 | `headers` | Array of objects containing `key` and `value`; `[]` when empty |
 
-The response adds `id` and `modified_date`. PUT requires a matching `id`; use `If-Match` to prevent overwriting a concurrent edit.
+The response adds `id` and `modified_date`. Profile reads, save responses and nested campaign projections never return the password. PUT requires a matching `id`; use `If-Match` to prevent overwriting a concurrent edit. Password retention is resolved inside the authorized save transaction, so an unconditional edit with an omitted password retains the latest saved credential. New profiles without a password start with no configured credential.
 
 This example targets only the canonical local fixture's mail-capture container:
 
@@ -42,4 +44,4 @@ It is not a public mail server. Use it from the [local tutorial](../getting-star
 
 Port 465 uses implicit TLS; other ports negotiate STARTTLS when offered. Authentication is restricted on unencrypted connections. For exact operational behavior and trust choices, read [sending profiles](../user-guide/sending-profiles.md).
 
-`POST /api/util/test_connection` tests a profile-shaped SMTP configuration. `POST /api/util/send_test_email` sends a message with template, page, profile, URL, and recipient inputs; see [imports and previews](imports-and-previews.md). A successful SMTP submission means the server accepted responsibility, not that a person received or read the message.
+`POST /api/util/test_connection` tests supplied profile settings without saving them. Include an existing owned profile `id` to retain its password when `password` is omitted; without an ID, omitted credentials are empty. A nonzero unknown or foreign ID fails without contacting SMTP. `POST /api/util/send_test_email` sends a message with template, page, profile, URL, and recipient inputs; see [imports and previews](imports-and-previews.md). A successful SMTP submission means the server accepted responsibility, not that a person received or read the message.

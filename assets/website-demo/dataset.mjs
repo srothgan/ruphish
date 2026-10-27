@@ -34,7 +34,7 @@ export function dataset(now) {
     }));
     const smtp = ['Awareness team', 'Training team'].map((name, i) => resource(name, i, {
         interface_type: 'SMTP', host: 'smtp.example.test:587', from_address: `${name} <awareness@example.test>`,
-        username: '', password: '', headers: [], ignore_cert_errors: false,
+        username: '', has_password: false, headers: [], ignore_cert_errors: false,
     }));
     const users = source.users.map((u, i) => ({
         id: i + 1, username: u.username,

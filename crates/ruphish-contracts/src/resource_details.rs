@@ -164,9 +164,8 @@ pub struct Profile {
     /// Optional configured service login.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub username: Option<String>,
-    /// Optional configured service credential from the authorized resource API.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub password: Option<String>,
+    /// Whether a credential is configured. Its value is never returned.
+    pub has_password: bool,
 }
 
 /// Decode once and retain the confirmed record. Missing required fields are errors.

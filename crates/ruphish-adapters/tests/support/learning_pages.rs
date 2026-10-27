@@ -137,7 +137,7 @@ pub(super) async fn exercise(
     let changed = resources
         .save(
             actor,
-            changed.clone(),
+            changed.clone().into(),
             Some(page.id),
             Some(page.modified_date.clone()),
         )
@@ -147,7 +147,7 @@ pub(super) async fn exercise(
         resources
             .save(
                 actor,
-                changed.clone(),
+                changed.clone().into(),
                 Some(page.id),
                 Some(page.modified_date.clone())
             )

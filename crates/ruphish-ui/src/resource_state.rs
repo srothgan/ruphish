@@ -67,6 +67,22 @@ impl ResourceDraft {
     pub fn edit(&mut self, edit: impl FnOnce(&mut Value)) {
         edit(&mut self.value);
     }
+    /// Blank editing means keep; clearing a saved credential is a separate explicit action.
+    pub fn set_profile_password(&mut self, password: String) {
+        if password.is_empty() {
+            self.clear_profile_password(false);
+        } else {
+            self.value["password"] = Value::String(password);
+        }
+    }
+    /// Select or cancel explicit credential removal without storing a second intent flag.
+    pub fn clear_profile_password(&mut self, clear: bool) {
+        if clear {
+            self.value["password"] = Value::String(String::new());
+        } else if let Some(fields) = self.value.as_object_mut() {
+            fields.remove("password");
+        }
+    }
     /// Whether the draft differs from the server checkpoint.
     pub fn dirty(&self) -> bool {
         self.value != self.saved
@@ -92,7 +108,10 @@ impl ResourceDraft {
     pub fn merge_import(&mut self, value: &Value) {
         if let Some(fields) = value.as_object() {
             for (key, value) in fields {
-                if !matches!(key.as_str(), "id" | "modified_date" | "user_id") {
+                if !matches!(
+                    key.as_str(),
+                    "id" | "modified_date" | "user_id" | "has_password"
+                ) {
                     self.value[key] = value.clone();
                 }
             }
@@ -131,6 +150,14 @@ impl ResourceDraft {
                 self.value[key] = returned[key].clone();
             }
         }
+        if returned.get("has_password").is_some() {
+            self.value["has_password"] = returned["has_password"].clone();
+            if self.value.get("password") == submitted.get("password")
+                && let Some(fields) = self.value.as_object_mut()
+            {
+                fields.remove("password");
+            }
+        }
         self.saved = returned;
         self.revision = revision;
     }
@@ -139,6 +166,49 @@ impl ResourceDraft {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn confirmed_password_is_discarded_even_when_another_field_has_newer_edits() {
+        let mut draft = ResourceDraft::new(
+            json!({"id":8,"name":"Relay","has_password":true}),
+            Some("v1".into()),
+        );
+        draft.set_profile_password("replacement".into());
+        let submitted = draft.value().clone();
+        draft.edit(|value| value["name"] = json!("Newer name"));
+        draft.saved(
+            &submitted,
+            json!({"id":8,"name":"Relay","has_password":true}),
+            Some("v2".into()),
+        );
+        assert!(draft.value().get("password").is_none());
+        assert_eq!(draft.value()["name"], "Newer name");
+        draft.cancel();
+        assert_eq!(draft.value()["name"], "Relay");
+        assert!(draft.value().get("password").is_none());
+    }
+    #[test]
+    fn keep_clear_and_a_newer_password_remain_distinct_during_save_and_import() {
+        let mut draft = ResourceDraft::new(json!({"id":8,"has_password":true}), Some("v1".into()));
+        draft.set_profile_password(String::new());
+        assert!(draft.value().get("password").is_none());
+        draft.clear_profile_password(true);
+        assert_eq!(draft.value()["password"], "");
+        let submitted = draft.value().clone();
+        draft.set_profile_password("newer replacement".into());
+        draft.saved(
+            &submitted,
+            json!({"id":8,"has_password":false}),
+            Some("v2".into()),
+        );
+        assert_eq!(draft.value()["password"], "newer replacement");
+        assert_eq!(draft.value()["has_password"], false);
+        draft.merge_import(&json!({"id":99,"has_password":true,"host":"relay.example.test"}));
+        assert_eq!(draft.value()["id"], 8);
+        assert_eq!(draft.value()["has_password"], false);
+        draft.cancel();
+        assert!(draft.value().get("password").is_none());
+        assert_eq!(draft.value()["has_password"], false);
+    }
     #[test]
     fn late_save_preserves_newer_edits_and_cancel_uses_the_server_checkpoint() {
         let initial = json!({"id":1,"name":"A","targets":[]});

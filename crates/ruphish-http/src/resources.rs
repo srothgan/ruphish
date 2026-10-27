@@ -244,19 +244,31 @@ async fn preview(context: Context, body: Bytes) -> Result<Response, Rejection> {
         None,
     )
 }
-#[derive(serde::Deserialize, Default)]
-#[serde(default)]
+#[derive(serde::Deserialize)]
 struct TestRequest {
+    #[serde(default)]
     template: wire::EmailTemplate,
+    #[serde(default)]
     page: wire::LandingPage,
-    smtp: wire::SendingProfile,
+    smtp: ruphish_contracts::resources::TestProfile,
+    #[serde(default)]
     url: String,
+    #[serde(default)]
     email: String,
+    #[serde(default)]
     first_name: String,
+    #[serde(default)]
     last_name: String,
+    #[serde(default)]
     position: String,
 }
-fn profile(p: wire::SendingProfile) -> app::Profile {
+fn draft_profile(p: wire::SendingProfile) -> ruphish_application::delivery::ProfileSelection {
+    ruphish_application::delivery::ProfileSelection::Draft {
+        id: (p.id != 0).then_some(p.id),
+        profile: profile(p),
+    }
+}
+fn profile(p: wire::SendingProfile) -> app::Profile<Option<String>> {
     app::Profile {
         interface_type: p.interface_type,
         host: p.host,
@@ -277,7 +289,12 @@ fn profile(p: wire::SendingProfile) -> app::Profile {
 async fn send_test(context: Context, body: Bytes) -> Result<Response, Rejection> {
     let identity = editor_identity(&context).await?;
     let request: TestRequest = parse(&body)?;
-    let name = request.smtp.name.clone();
+    let selected = match request.smtp {
+        ruphish_contracts::resources::TestProfile::Saved { id } => {
+            ruphish_application::delivery::ProfileSelection::Saved(id)
+        }
+        ruphish_contracts::resources::TestProfile::Draft { profile } => draft_profile(profile),
+    };
     context
         .delivery()
         .send(
@@ -291,8 +308,7 @@ async fn send_test(context: Context, body: Bytes) -> Result<Response, Rejection>
                 },
                 template_name: request.template.name,
                 page_name: request.page.name,
-                profile_name: name,
-                profile: profile(request.smtp),
+                profile: selected,
                 url: request.url,
             },
         )
@@ -314,10 +330,9 @@ async fn send_test(context: Context, body: Bytes) -> Result<Response, Rejection>
 async fn test_connection(context: Context, body: Bytes) -> Result<Response, Rejection> {
     let identity = editor_identity(&context).await?;
     let request: wire::SendingProfile = parse(&body)?;
-    let name = request.name.clone();
     context
         .delivery()
-        .connect(identity, &name, profile(request))
+        .connect(identity, draft_profile(request))
         .await
         .map_err(error)?;
     response(
@@ -472,9 +487,7 @@ pub(crate) fn encode(r: &Resource) -> Value {
             if !p.username.is_empty() {
                 v["username"] = json!(p.username);
             }
-            if !p.password.is_empty() {
-                v["password"] = json!(p.password);
-            }
+            v["has_password"] = json!(!p.password.is_empty());
             v
         }
     };
@@ -483,7 +496,7 @@ pub(crate) fn encode(r: &Resource) -> Value {
     }
     value
 }
-fn decode(kind: Kind, bytes: &[u8]) -> Result<Resource, Rejection> {
+fn decode(kind: Kind, bytes: &[u8]) -> Result<app::Input, Rejection> {
     let invalid = |_| {
         failure(
             StatusCode::BAD_REQUEST,

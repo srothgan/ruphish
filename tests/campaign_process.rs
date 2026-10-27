@@ -314,6 +314,18 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
                 Value::Object(o) => {
                     o.remove("capture_credentials");
                     o.remove("capture_passwords");
+                    if o.contains_key("host") {
+                        let password = o.remove("password");
+                        o.insert(
+                            "has_password".into(),
+                            json!(
+                                password
+                                    .as_ref()
+                                    .and_then(Value::as_str)
+                                    .is_some_and(|v| !v.is_empty())
+                            ),
+                        );
+                    }
                     for (k, v) in o {
                         if matches!(k.as_str(), "targets" | "attachments" | "headers")
                             && v.is_null()

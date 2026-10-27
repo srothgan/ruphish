@@ -111,13 +111,94 @@ mod provider_regressions;
 #[path = "support/sorting.rs"]
 mod sorting;
 
-fn resource(name: &str, content: Content) -> Resource {
+fn resource(name: &str, content: Content) -> Input {
     Resource {
         id: 0,
         name: name.into(),
         modified_date: String::new(),
         content,
     }
+    .into()
+}
+
+async fn profile_credentials(
+    resources: &std::sync::Arc<dyn Repository>,
+    actor: auth::Identity,
+    other: auth::Identity,
+    original: Resource,
+) -> Resource {
+    let id = original.id;
+    let first = resources
+        .save(
+            actor,
+            original.map_password(|_| Some("first-secret".into())),
+            Some(id),
+            None,
+        )
+        .await
+        .unwrap();
+    let replacement = resources
+        .save(
+            actor,
+            first
+                .clone()
+                .map_password(|_| Some("replacement-secret".into())),
+            Some(id),
+            Some(first.modified_date.clone()),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        resources
+            .save(
+                actor,
+                first.clone().map_password(|_| None),
+                Some(id),
+                Some(first.modified_date.clone())
+            )
+            .await,
+        Err(Error::Changed)
+    ));
+    // An unconditional unrelated edit based on an older snapshot must retain the latest password.
+    let retained = resources
+        .save(actor, first.map_password(|_| None), Some(id), None)
+        .await
+        .unwrap();
+    assert!(matches!(&retained.content, Content::Profile(p) if p.password == "replacement-secret"));
+    assert!(matches!(
+        resources
+            .save(
+                other,
+                retained
+                    .clone()
+                    .map_password(|_| Some("foreign-secret".into())),
+                Some(id),
+                None
+            )
+            .await,
+        Err(Error::NotFound("SMTP"))
+    ));
+    let unchanged = resources.get(actor, Kind::Profile, id).await.unwrap();
+    assert!(
+        matches!(&unchanged.content, Content::Profile(p) if p.password == "replacement-secret")
+    );
+    assert_ne!(retained.modified_date, replacement.modified_date);
+    let cleared = resources
+        .save(
+            actor,
+            retained.map_password(|_| Some(String::new())),
+            Some(id),
+            Some(unchanged.modified_date),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(&cleared.content, Content::Profile(p) if p.password.is_empty()));
+    let persisted = resources.get(actor, Kind::Profile, id).await.unwrap();
+    assert!(
+        persisted == cleared,
+        "clearing must persist, not only change the save response"
+    );
+    persisted
 }
 
 async fn workflows(db: &Database) {
@@ -544,18 +625,19 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         )
         .await
         .unwrap();
+    let profile = profile_credentials(&resources, actor, normal.identity, profile).await;
     let mut change = group.clone();
     change.name = "Engineering updated".into();
     let (a, b) = tokio::join!(
         resources.save(
             actor,
-            change.clone(),
+            change.clone().into(),
             Some(group.id),
             Some(group.modified_date.clone())
         ),
         resources.save(
             actor,
-            change,
+            change.into(),
             Some(group.id),
             Some(group.modified_date.clone())
         )
@@ -1432,7 +1514,7 @@ async fn assert_failed_replacement_is_atomic(
         db.resources()
             .save(
                 actor,
-                edit,
+                edit.into(),
                 Some(original.id),
                 Some(original.modified_date.clone())
             )
@@ -1452,7 +1534,12 @@ async fn assert_failed_replacement_is_atomic(
     next.name = "Subsequent successful edit".into();
     assert!(
         db.resources()
-            .save(actor, next, Some(original.id), Some(original.modified_date))
+            .save(
+                actor,
+                next.into(),
+                Some(original.id),
+                Some(original.modified_date)
+            )
             .await
             .is_ok(),
         "a failed transaction must release its locks"
@@ -2181,7 +2268,7 @@ async fn postgres_lock_timeout_does_not_write_or_poison_connection() {
         .resources()
         .save(
             actor,
-            edit,
+            edit.into(),
             Some(original.id),
             Some(original.modified_date.clone()),
         )
@@ -2386,7 +2473,7 @@ async fn postgres_exact_revisions_and_invalid_text_preserve_original() {
     edit.name = "Next revision".into();
     let saved = db
         .resources()
-        .save(actor, edit, Some(original.id), Some(revision.into()))
+        .save(actor, edit.into(), Some(original.id), Some(revision.into()))
         .await
         .unwrap();
     assert_eq!(saved.modified_date, "2099-01-01T00:00:00.12345679Z");
@@ -2394,7 +2481,7 @@ async fn postgres_exact_revisions_and_invalid_text_preserve_original() {
         db.resources()
             .save(
                 actor,
-                original.clone(),
+                original.clone().into(),
                 Some(original.id),
                 Some(revision.into())
             )
@@ -2404,7 +2491,7 @@ async fn postgres_exact_revisions_and_invalid_text_preserve_original() {
     let mut invalid = saved.clone();
     invalid.name = "bad\0name".into();
     assert!(
-        matches!(db.resources().save(actor,invalid,Some(saved.id),Some(saved.modified_date.clone())).await,Err(Error::Invalid(code)) if code.starts_with("storage_text_invalid:"))
+        matches!(db.resources().save(actor,invalid.into(),Some(saved.id),Some(saved.modified_date.clone())).await,Err(Error::Invalid(code)) if code.starts_with("storage_text_invalid:"))
     );
     assert!(
         db.resources()
@@ -2483,7 +2570,7 @@ async fn postgres_lost_commit_acknowledgement_is_uncertain_and_not_replayed() {
         .resources()
         .save(
             actor,
-            edit.clone(),
+            edit.clone().into(),
             Some(original.id),
             Some(original.modified_date.clone()),
         )
@@ -2504,7 +2591,12 @@ async fn postgres_lost_commit_acknowledgement_is_uncertain_and_not_replayed() {
     assert_eq!(stored, edit.name);
     assert!(matches!(
         db.resources()
-            .save(actor, edit, Some(original.id), Some(original.modified_date))
+            .save(
+                actor,
+                edit.into(),
+                Some(original.id),
+                Some(original.modified_date)
+            )
             .await,
         Err(Error::Changed)
     ));
@@ -2601,8 +2693,11 @@ async fn postgres_deadlock_rolls_back_the_losing_edit_and_recovers() {
     edit.name = "Deadlocked edit".into();
     let expected = original.modified_date.clone();
     let id = original.id;
-    let writing =
-        tokio::spawn(async move { resources.save(actor, edit, Some(id), Some(expected)).await });
+    let writing = tokio::spawn(async move {
+        resources
+            .save(actor, edit.into(), Some(id), Some(expected))
+            .await
+    });
     tokio::time::timeout(std::time::Duration::from_secs(10), async {
         loop {
             sqlx::query("SELECT pg_stat_clear_snapshot()").execute(&mut *held).await.unwrap();
@@ -2634,7 +2729,12 @@ async fn postgres_deadlock_rolls_back_the_losing_edit_and_recovers() {
     edit.name = "Recovered edit".into();
     assert!(
         db.resources()
-            .save(actor, edit, Some(original.id), Some(original.modified_date))
+            .save(
+                actor,
+                edit.into(),
+                Some(original.id),
+                Some(original.modified_date)
+            )
             .await
             .is_ok()
     );

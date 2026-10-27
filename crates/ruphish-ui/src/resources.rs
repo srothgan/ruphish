@@ -236,7 +236,7 @@ impl Family {
                 json!({"id":0,"name":"","html":"","redirect_url":""})
             }
             Self::Profiles => {
-                json!({"id":0,"name":"","host":"","from_address":"","username":"","password":"","ignore_cert_errors":false,"interface_type":"SMTP","headers":[]})
+                json!({"id":0,"name":"","host":"","from_address":"","username":"","has_password":false,"ignore_cert_errors":false,"interface_type":"SMTP","headers":[]})
             }
         }
     }
@@ -577,6 +577,9 @@ fn edit(
                         load_error.set(None);
                         if duplicate.is_some() {
                             value["id"] = json!(0);
+                            if family == Family::Profiles {
+                                value["has_password"] = json!(false);
+                            }
                             value["name"] = json!(leptos_i18n::t_string!(
                                 i18n,
                                 messages.copy_name,
@@ -1398,6 +1401,16 @@ fn content_fields(
 }
 fn profile_fields(editor: Editor) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
+    let has_saved_password = Signal::derive(move || {
+        editor
+            .draft
+            .with(|d| d.value()["has_password"].as_bool().unwrap_or(false))
+    });
+    let clearing_password = Signal::derive(move || {
+        editor
+            .draft
+            .with(|d| d.value().get("password").and_then(Value::as_str) == Some(""))
+    });
 
     view! {
         <section class="resource-section">
@@ -1406,8 +1419,34 @@ fn profile_fields(editor: Editor) -> impl IntoView {
                 {editor.field("host", trs!(ui.smtp_host_and_port), "text")}
                 {editor.field("from_address", trs!(ui.sender_address), "text")}
                 {editor.field("username", trs!(ui.username_optional), "text")}
-                {editor.field("password", trs!(ui.password), "password")}
+                <SecretField
+                    required=false
+                    validation_field="password"
+                    label=trs!(ui.password)
+                    saved_hint=trs!(ui.leave_empty_to_keep_the_saved_password)
+                    has_saved_value=Signal::derive(move || {
+                        has_saved_password.get() && !clearing_password.get()
+                    })
+                    value=Signal::derive(move || editor.text("password"))
+                    on_input=Callback::new(move |value: String| {
+                        editor.validation.edited("password");
+                        editor.draft.update(|draft| draft.set_profile_password(value));
+                    })
+                />
             </div>
+            <Show when=move || has_saved_password.get()>
+                <Checkbox
+                    label=trs!(ui.clear_saved_smtp_password)
+                    checked=clearing_password
+                    on_toggle=Callback::new(move |clear| {
+                        editor.validation.edited("password");
+                        editor.draft.update(|draft| draft.clear_profile_password(clear));
+                    })
+                />
+            </Show>
+            <Show when=move || editor.draft.with(|d| d.value()["id"].as_i64().unwrap_or(0) == 0)>
+                <p>{tr!(ui.new_profile_password_hint)}</p>
+            </Show>
             <p>
                 {tr!(
                     ui.port_defaults_to_25_port_465_uses_implicit_tls_starttls_is_used_when_advertised
@@ -1886,8 +1925,7 @@ fn test_panel(
     let url = RwSignal::new(String::new());
     let busy = RwSignal::new(false);
     let message = Message::new(String::new());
-    // Persist selection identity while names and availability revalidate. The
-    // preserved test-email API still receives the latest confirmed resource name.
+    // Keep profile identity stable while names and availability revalidate.
     let profile_name = Signal::derive(move || {
         profiles
             .and_then(|read| read.data.get())
@@ -1921,7 +1959,7 @@ fn test_panel(
         {
             return;
         }
-        let profile_name = profile_name.get_untracked();
+        let profile_id = selected.get_untracked().parse::<i64>().ok();
         let page_name = page_name.get_untracked();
         busy.set(true);
         message.clear();
@@ -1943,10 +1981,15 @@ fn test_panel(
                 busy.set(false);
                 return;
             }
-            let smtp = if family == Family::Profiles {
+            let smtp = if connection {
                 editor.draft.get_untracked().value().clone()
             } else {
-                json!({"name":profile_name})
+                let id = if family == Family::Profiles {
+                    editor.draft.with_untracked(|d| d.value()["id"].as_i64())
+                } else {
+                    profile_id
+                };
+                json!({"source":"saved","id":id})
             };
             let (path, payload) = if connection {
                 ("/api/util/test_connection", smtp)

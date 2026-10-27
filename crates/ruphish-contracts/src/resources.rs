@@ -1,4 +1,4 @@
-//! Required fields in resource-list responses. Missing fields are not empty data.
+//! Resource metadata responses and explicit test-delivery inputs.
 use serde::Deserialize;
 
 /// Recipient-group summary response.
@@ -96,4 +96,20 @@ pub struct LearningPageInput {
     pub name: String,
     /// Static authored HTML.
     pub html: String,
+}
+
+/// Explicit SMTP selection for a test message; never inferred from failed validation.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(tag = "source", rename_all = "snake_case", deny_unknown_fields)]
+pub enum TestProfile {
+    /// Use the current owner-scoped saved configuration and credential.
+    Saved {
+        /// Saved sending-profile identifier.
+        id: i64,
+    },
+    /// Test supplied settings. A nonzero profile ID resolves an omitted password from that owned profile.
+    Draft {
+        /// Editable SMTP settings and optional replacement credential.
+        profile: crate::legacy::SendingProfile,
+    },
 }

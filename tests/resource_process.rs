@@ -170,6 +170,96 @@ fn recipient_csv_template_imports_reviews_and_persists_without_accepting_bad_row
 }
 
 #[test]
+fn profile_credentials_are_write_only_and_clear_only_when_requested() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = ready(&mut process);
+    unlock(directory.path());
+    let browser = client();
+    let create = browser.post(format!("{base}/api/smtp/"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&json!({"name":"Private relay","host":"127.0.0.1:1","from_address":"sender@example.test","password":"write-only-service-password"}))
+        .send().unwrap().error_for_status().unwrap();
+    let stale = create.headers()["etag"].to_str().unwrap().to_owned();
+    let mut value: Value = create.json().unwrap();
+    let id = value["id"].as_i64().unwrap();
+    let path = format!("{base}/api/smtp/{id}");
+    assert!(value.get("password").is_none());
+    assert_eq!(value["has_password"], true);
+    value["name"] = json!("Renamed relay");
+    value["password"] = Value::Null;
+    value = browser
+        .put(&path)
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&value)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(value["has_password"], true);
+    assert!(value.get("password").is_none());
+    value["password"] = json!("");
+    assert_eq!(
+        browser
+            .put(&path)
+            .bearer_auth("synthetic-bootstrap-token")
+            .header("if-match", &stale)
+            .json(&value)
+            .send()
+            .unwrap()
+            .status(),
+        412
+    );
+    value = browser
+        .put(&path)
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&value)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(value["has_password"], false);
+    assert!(value.get("password").is_none());
+    process.stop();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        let pool = sqlx::SqlitePool::connect(&format!(
+            "sqlite:{}",
+            directory.path().join("installation.sqlite3").display()
+        ))
+        .await
+        .unwrap();
+        let password: String = sqlx::query_scalar("SELECT password FROM smtp WHERE id=?")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert!(password.is_empty());
+        pool.close().await;
+    });
+    let mut reopened = Process::start(directory.path(), "admin");
+    let base = ready(&mut reopened);
+    for path in [format!("{base}/api/smtp/{id}"), format!("{base}/api/smtp/")] {
+        let response = browser
+            .get(path)
+            .bearer_auth("synthetic-bootstrap-token")
+            .send()
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .text()
+            .unwrap();
+        assert!(!response.contains("write-only-service-password"));
+        assert!(!response.contains("\"password\""));
+    }
+    reopened.stop();
+}
+
+#[test]
 fn smtp_cram_negotiates_and_delivers_without_fallback_or_secret_diagnostics() {
     use std::io::{BufRead, BufReader};
     let directory = workspace();
@@ -291,13 +381,59 @@ fn smtp_cram_negotiates_and_delivers_without_fallback_or_secret_diagnostics() {
             }
             data
         });
-        let profile = json!({"host":address.to_string(),"from_address":"sender@example.test","username":"tim","password":"tanstaaftanstaaf"});
+        let create = client().post(format!("{base}/api/smtp/"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&json!({"name":format!("Authentication {address}"),"host":address.to_string(),"from_address":"sender@example.test","username":if send {"tim"} else {"stored-identity"},"password":"initial-test-password"}))
+            .send().unwrap().error_for_status().unwrap();
+        let mut profile: Value = create.json().unwrap();
+        assert!(profile.get("password").is_none());
+        assert_eq!(profile["has_password"], true);
+        let path = format!("{base}/api/smtp/{}", profile["id"]);
+        profile["password"] = json!("tanstaaftanstaaf");
+        profile = client()
+            .put(&path)
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&profile)
+            .send()
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .unwrap();
+        // An unrelated edit sends only the read projection. The new credential must survive.
+        assert!(profile.get("password").is_none());
+        profile["name"] = json!(format!("Renamed {address}"));
+        profile = client()
+            .put(&path)
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&profile)
+            .send()
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .unwrap();
+        for read_path in [path, format!("{base}/api/smtp/")] {
+            let body = client()
+                .get(read_path)
+                .bearer_auth("synthetic-bootstrap-token")
+                .send()
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .text()
+                .unwrap();
+            assert!(!body.contains("tanstaaftanstaaf") && !body.contains("initial-test-password"));
+            assert!(!body.contains("\"password\""));
+        }
+        let profile_id = profile["id"].as_i64().unwrap();
         let (path, body) = if send {
             (
                 "send_test_email",
-                json!({"smtp":profile,"email":"recipient@example.test","first_name":"Alice"}),
+                json!({"smtp":{"source":"saved","id":profile["id"]},"email":"recipient@example.test","first_name":"Alice"}),
             )
         } else {
+            profile["username"] = json!("tim");
             ("test_connection", profile)
         };
         let response = client()
@@ -310,6 +446,21 @@ fn smtp_cram_negotiates_and_delivers_without_fallback_or_secret_diagnostics() {
         let body = response.text().unwrap();
         assert_eq!(status.is_success(), success, "{body}");
         assert!(!body.contains("tanstaaftanstaaf") && !body.contains(RESPONSE));
+        if !send {
+            let saved: Value = client()
+                .get(format!("{base}/api/smtp/{profile_id}"))
+                .bearer_auth("synthetic-bootstrap-token")
+                .send()
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .unwrap();
+            assert_eq!(
+                saved["username"], "stored-identity",
+                "connection checks must not save draft settings"
+            );
+        }
         let message = peer.join().unwrap();
         assert_eq!(!message.is_empty(), send && success);
         if send && success {
@@ -537,6 +688,7 @@ fn actual_test_delivery_composes_mime_persists_preview_and_never_records_campaig
     unlock(directory.path());
     let client = client();
     let sink = MailSink::start(None);
+    let mut profile_id = None;
     for (family, value) in [
         (
             "templates",
@@ -558,8 +710,16 @@ fn actual_test_delivery_composes_mime_persists_preview_and_never_records_campaig
             .send()
             .unwrap();
         assert_eq!(response.status(), 201, "{}", response.text().unwrap());
+        if family == "smtp" {
+            profile_id = response.json::<Value>().unwrap()["id"].as_i64();
+        }
     }
-    let response=client.post(format!("{base}/api/util/send_test_email")).bearer_auth("synthetic-bootstrap-token").json(&json!({"template":{"name":"Test mail"},"page":{"name":"Preview page"},"smtp":{"name":"Loopback","host":"bad:port","from_address":"not-mailbox"},"url":format!("{public}/landing"),"email":"recipient@example.test","first_name":"Alice","last_name":"Example"})).send().unwrap();
+    // Invalid draft data cannot silently select a saved profile with the same name.
+    assert_eq!(client.post(format!("{base}/api/util/send_test_email"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&json!({"email":"recipient@example.test","smtp":{"source":"draft","profile":{"name":"Loopback","host":"bad:port","from_address":"not-mailbox"}}}))
+        .send().unwrap().status(), 400);
+    let response=client.post(format!("{base}/api/util/send_test_email")).bearer_auth("synthetic-bootstrap-token").json(&json!({"template":{"name":"Test mail"},"page":{"name":"Preview page"},"smtp":{"source":"saved","id":profile_id.unwrap()},"url":format!("{public}/landing"),"email":"recipient@example.test","first_name":"Alice","last_name":"Example"})).send().unwrap();
     assert_eq!(response.status(), 200, "{}", response.text().unwrap());
     let (commands, bytes) = sink.result();
     assert!(
@@ -774,7 +934,7 @@ fn email_create_edit_and_preview_share_validation_without_mutating_source() {
     listener.set_nonblocking(true).unwrap();
     let response = client.post(format!("{base}/api/util/send_test_email"))
         .bearer_auth("synthetic-bootstrap-token")
-        .json(&json!({"template":{"name":"Managed tracking"},"smtp":{"host":listener.local_addr().unwrap().to_string(),"from_address":"sender@example.test"},"email":"recipient@example.test","first_name":"Unsafe","url":"http://127.0.0.1/"}))
+        .json(&json!({"template":{"name":"Managed tracking"},"smtp":{"source":"draft","profile":{"host":listener.local_addr().unwrap().to_string(),"from_address":"sender@example.test"}},"email":"recipient@example.test","first_name":"Unsafe","url":"http://127.0.0.1/"}))
         .send().unwrap();
     assert_eq!(response.status(), 400);
     assert_eq!(
@@ -810,7 +970,7 @@ fn smtp_rejections_and_read_only_permissions_do_not_claim_success_or_queue_retri
     let client = client();
     for reply in ["451 Temporary rejection\r\n", "550 Permanent rejection\r\n"] {
         let sink = MailSink::start(Some(reply));
-        let response=client.post(format!("{base}/api/util/send_test_email")).bearer_auth("synthetic-bootstrap-token").json(&json!({"smtp":{"host":sink.address.to_string(),"from_address":"sender@example.test"},"email":"recipient@example.test"})).send().unwrap();
+        let response=client.post(format!("{base}/api/util/send_test_email")).bearer_auth("synthetic-bootstrap-token").json(&json!({"smtp":{"source":"draft","profile":{"host":sink.address.to_string(),"from_address":"sender@example.test"}},"email":"recipient@example.test"})).send().unwrap();
         assert!(!response.status().is_success());
         let body: Value = response.json().unwrap();
         assert_eq!(body["success"], false);
@@ -818,7 +978,7 @@ fn smtp_rejections_and_read_only_permissions_do_not_claim_success_or_queue_retri
         assert!(bytes.is_empty());
     }
     let sink = MailSink::scenario(None, true);
-    let response = client.post(format!("{base}/api/util/send_test_email")).bearer_auth("synthetic-bootstrap-token").json(&json!({"smtp":{"host":sink.address.to_string(),"from_address":"sender@example.test"},"email":"recipient@example.test"})).send().unwrap();
+    let response = client.post(format!("{base}/api/util/send_test_email")).bearer_auth("synthetic-bootstrap-token").json(&json!({"smtp":{"source":"draft","profile":{"host":sink.address.to_string(),"from_address":"sender@example.test"}},"email":"recipient@example.test"})).send().unwrap();
     assert!(!response.status().is_success());
     assert!(response.text().unwrap().contains("outcome is unknown"));
     let (commands, bytes) = sink.result();
@@ -980,6 +1140,15 @@ fn independent_go_resource_observations_run_against_the_executable() {
             if expected.get(field).is_some_and(Value::is_null) {
                 expected[field] = json!([]);
             }
+        }
+        if expected.get("host").is_some() {
+            let password = expected.as_object_mut().unwrap().remove("password");
+            expected["has_password"] = json!(
+                password
+                    .as_ref()
+                    .and_then(Value::as_str)
+                    .is_some_and(|v| !v.is_empty())
+            );
         }
         match id {
             // Approved recipient isolation: the independently captured Go result demonstrates the defect.
@@ -1375,11 +1544,11 @@ fn legacy_resource_validation_and_page_policy_survive_round_trip_and_restart() {
     let client = client();
     for (payload, expected) in [
         (
-            json!({"smtp":{"host":"127.0.0.1:1","from_address":"from@example.com"}}),
+            json!({"smtp":{"source":"draft","profile":{"host":"127.0.0.1:1","from_address":"from@example.com"}}}),
             "No email address specified",
         ),
         (
-            json!({"email":"test@example.com","smtp":{"host":"127.0.0.1:1"}}),
+            json!({"email":"test@example.com","smtp":{"source":"draft","profile":{"host":"127.0.0.1:1"}}}),
             "No From Address specified",
         ),
     ] {

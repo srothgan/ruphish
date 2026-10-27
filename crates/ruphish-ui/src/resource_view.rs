@@ -279,7 +279,7 @@ fn body(value: Resource) -> AnyView {
                     {field(trs!(ui.username), profile.username.unwrap_or_default())}
                     {field(
                         trs!(ui.password),
-                        if profile.password.as_deref().is_none_or(str::is_empty) {
+                        if !profile.has_password {
                             leptos_i18n::t_string!(i18n, ui.not_configured).into()
                         } else {
                             leptos_i18n::t_string!(i18n, ui.configured).into()

@@ -70,8 +70,8 @@ pub struct Header {
     pub value: String,
 }
 
-/// Existing sending-profile wire fields; empty credentials are omitted.
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
+/// Sending-profile write fields; omission keeps the password and an empty password clears it.
+#[derive(Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct SendingProfile {
     /// Profile ID.
@@ -85,9 +85,9 @@ pub struct SendingProfile {
     /// SMTP login name.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub username: String,
-    /// SMTP login credential, exposed by the existing authorized API contract.
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub password: String,
+    /// New SMTP credential; omitted or null retains the saved value. Empty explicitly clears it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
     /// Sender mailbox.
     pub from_address: String,
     /// Existing certificate-verification setting.

@@ -86,9 +86,9 @@ pub struct LearningPage {
     /// Stable opaque public identity, assigned by persistence.
     pub public_id: String,
 }
-/// SMTP credentials stay in backend models and authorized legacy responses only.
+/// SMTP configuration with a credential representation chosen by its boundary.
 #[derive(Clone, Default, PartialEq, Eq)]
-pub struct Profile {
+pub struct Profile<P = String> {
     /// Legacy sending interface label.
     pub interface_type: String,
     /// SMTP destination, optionally including a port.
@@ -96,7 +96,7 @@ pub struct Profile {
     /// SMTP authentication identity.
     pub username: String,
     /// SMTP credential; never log or cache in browser storage.
-    pub password: String,
+    pub password: P,
     /// SMTP envelope sender and default visible From.
     pub from_address: String,
     /// Explicit legacy exception to SMTP certificate verification.
@@ -106,7 +106,7 @@ pub struct Profile {
 }
 /// Resource-specific content. No unrelated fields can be mixed between families.
 #[derive(Clone, PartialEq, Eq)]
-pub enum Content {
+pub enum Content<P = String> {
     /// Recipient collection.
     Group(Vec<Recipient>),
     /// Email template and attachments.
@@ -116,11 +116,11 @@ pub enum Content {
     /// Static educational content.
     LearningPage(LearningPage),
     /// SMTP connection and message headers.
-    Profile(Profile),
+    Profile(Profile<P>),
 }
-/// Persisted resource without a caller-controlled owner.
+/// Resource data without a caller-controlled owner, using stored credentials by default.
 #[derive(Clone, PartialEq, Eq)]
-pub struct Resource {
+pub struct Resource<P = String> {
     /// Persistent identifier, assigned by storage on creation.
     pub id: i64,
     /// Display name within the owning resource scope.
@@ -128,9 +128,32 @@ pub struct Resource {
     /// Server-assigned modification timestamp and conditional-write revision.
     pub modified_date: String,
     /// Resource or attachment content.
-    pub content: Content,
+    pub content: Content<P>,
 }
-impl Resource {
+impl<P> Resource<P> {
+    /// Change only the credential representation, retaining all other resource data.
+    pub fn map_password<Q>(self, map: impl FnOnce(P) -> Q) -> Resource<Q> {
+        Resource {
+            id: self.id,
+            name: self.name,
+            modified_date: self.modified_date,
+            content: match self.content {
+                Content::Group(v) => Content::Group(v),
+                Content::Template(v) => Content::Template(v),
+                Content::Page(v) => Content::Page(v),
+                Content::LearningPage(v) => Content::LearningPage(v),
+                Content::Profile(p) => Content::Profile(Profile {
+                    interface_type: p.interface_type,
+                    host: p.host,
+                    username: p.username,
+                    password: map(p.password),
+                    from_address: p.from_address,
+                    ignore_cert_errors: p.ignore_cert_errors,
+                    headers: p.headers,
+                }),
+            },
+        }
+    }
     /// Resource family, derived from content rather than separately stored state.
     pub fn kind(&self) -> Kind {
         match self.content {
@@ -169,6 +192,22 @@ impl Resource {
             },
         };
         fields.validate()
+    }
+}
+impl From<Resource> for Resource<Option<String>> {
+    fn from(value: Resource) -> Self {
+        value.map_password(Some)
+    }
+}
+impl Resource<Option<String>> {
+    /// Resolve omitted credentials from an authorized snapshot. Writes call this inside their transaction.
+    pub fn resolve_password(self, previous: Option<&Resource>) -> Resource {
+        self.map_password(|password| {
+            password.unwrap_or_else(|| match previous.map(|resource| &resource.content) {
+                Some(Content::Profile(profile)) => profile.password.clone(),
+                _ => String::new(),
+            })
+        })
     }
 }
 /// List metadata deliberately excludes bodies, attachments and credentials.

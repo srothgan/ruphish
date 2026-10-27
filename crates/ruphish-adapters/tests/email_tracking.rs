@@ -150,14 +150,14 @@ fn save_validation_and_delivery_share_active_content_rejections() {
         "<body ONLOAD='alert(1)'>Hello</body>",
     ] {
         let input = message(source);
-        let resource = Resource {
+        let resource: Resource = Resource {
             id: 0,
             name: "Example".into(),
             modified_date: String::new(),
             content: Content::Template(input.template.clone()),
         };
         assert!(
-            Validate.validate(&resource).is_err(),
+            Validate.validate(&resource.clone().into()).is_err(),
             "save accepted {source}"
         );
         assert!(
@@ -169,13 +169,13 @@ fn save_validation_and_delivery_share_active_content_rejections() {
     }
     let mut input =
         message("{{if eq .FirstName \"Unsafe\"}}<script>x</script>{{else}}<p>Hello</p>{{end}}");
-    let resource = Resource {
+    let resource: Resource = Resource {
         id: 0,
         name: "Example".into(),
         modified_date: String::new(),
         content: Content::Template(input.template.clone()),
     };
-    Validate.validate(&resource).unwrap();
+    Validate.validate(&resource.clone().into()).unwrap();
     input.recipient.first_name = "Unsafe".into();
     assert!(
         Smtp::new(Policy::default(), String::new())
@@ -199,13 +199,13 @@ fn tracker_url_is_attribute_escaped_and_oversized_rendering_fails_closed() {
         input.rid
     );
     input.template.html = "x".repeat(ruphish_adapters::resources::MAX_DOCUMENT + 1);
-    let resource = Resource {
+    let resource: Resource = Resource {
         id: 0,
         name: "Large".into(),
         modified_date: String::new(),
         content: Content::Template(input.template.clone()),
     };
-    assert!(Validate.validate(&resource).is_err());
+    assert!(Validate.validate(&resource.clone().into()).is_err());
     assert!(
         Smtp::new(Policy::default(), String::new())
             .compose(&input)

@@ -6,7 +6,7 @@ use axum::{
     response::Response,
     routing::{any, get, post},
 };
-use ruphish_contracts::legacy::{Envelope, Group, Header, SendingProfile};
+use ruphish_contracts::legacy::{Envelope, Group};
 use ruphish_http::response;
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -40,14 +40,6 @@ async fn typed_api_values_preserve_explicit_absence_collections_integer_and_time
             json!({"id":9007199254740993_i64,"name":"Ada & <Team>","modified_date":"2020-01-02T03:04:05.1234Z","targets":[]}),
         ),
         (
-            "smtp-omitted-credentials",
-            json!({"id":0,"interface_type":"","name":"","host":"","from_address":"","ignore_cert_errors":false,"headers":[],"modified_date":null}),
-        ),
-        (
-            "smtp-headers-and-credentials",
-            json!({"id":7,"interface_type":"","name":"","host":"","username":"synthetic-user","password":"synthetic-password","from_address":"","ignore_cert_errors":false,"headers":[{"key":"X-Test","value":"{{.FirstName}}"}],"modified_date":null}),
-        ),
-        (
             "escaped-envelope",
             json!({"success":false,"message":"<tag> & \u{2028}\u{2029}","data":null}),
         ),
@@ -67,28 +59,6 @@ async fn typed_api_values_preserve_explicit_absence_collections_integer_and_time
                         name: "Ada & <Team>".into(),
                         modified_date: Some(time_value()),
                         targets: vec![],
-                    },
-                )
-            }),
-        )
-        .route(
-            "/smtp-omitted-credentials",
-            get(|| async { response::json(StatusCode::OK, &SendingProfile::default()) }),
-        )
-        .route(
-            "/smtp-headers-and-credentials",
-            get(|| async {
-                response::json(
-                    StatusCode::OK,
-                    &SendingProfile {
-                        id: 7,
-                        username: "synthetic-user".into(),
-                        password: "synthetic-password".into(),
-                        headers: vec![Header {
-                            key: "X-Test".into(),
-                            value: "{{.FirstName}}".into(),
-                        }],
-                        ..SendingProfile::default()
                     },
                 )
             }),

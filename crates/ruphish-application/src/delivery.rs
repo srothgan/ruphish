@@ -24,7 +24,19 @@ pub trait Transport: Send + Sync {
     ) -> Result<Box<dyn Submission>, ruphish_domain::campaign::DeliveryFailure>;
 }
 
-/// A user-requested test, using saved names or a complete inline sending profile.
+/// Explicit profile selection, separate from validation success or failure.
+pub enum ProfileSelection {
+    /// Load the complete owned profile, including its backend-only credential.
+    Saved(i64),
+    /// Use unsaved settings; an existing identity permits retaining its saved credential.
+    Draft {
+        /// Existing profile identity, absent for a new profile.
+        id: Option<i64>,
+        /// Draft SMTP settings; an omitted password retains the saved value.
+        profile: Profile<Option<String>>,
+    },
+}
+/// A user-requested test using explicit SMTP selection and saved message content.
 pub struct TestRequest {
     /// Recipient and sample personalisation fields.
     pub recipient: Recipient,
@@ -32,10 +44,8 @@ pub struct TestRequest {
     pub template_name: String,
     /// Optional saved landing-page name.
     pub page_name: String,
-    /// Saved sending-profile name used when inline connection data is incomplete.
-    pub profile_name: String,
-    /// Selected SMTP configuration and credentials.
-    pub profile: Profile,
+    /// Explicit saved or draft SMTP selection.
+    pub profile: ProfileSelection,
     /// Base test URL, before recipient identifier insertion.
     pub url: String,
 }
@@ -208,37 +218,39 @@ impl Service {
     async fn profile(
         &self,
         caller: Identity,
-        name: &str,
-        profile: Profile,
+        selection: ProfileSelection,
     ) -> Result<Profile, Error> {
-        let mut inline = Resource {
-            id: 0,
-            name: name.into(),
-            modified_date: String::new(),
-            content: Content::Profile(profile),
-        };
-        let selected = match self.resources.validate(&mut inline) {
-            Ok(()) => inline,
-            Err(validation) => match self.named(caller, Kind::Profile, name).await {
-                Ok(saved) => saved,
-                Err(Error::NotFound(_)) => return Err(validation),
-                Err(error) => return Err(error),
-            },
+        let selected = match selection {
+            ProfileSelection::Saved(id) => self.resources.get(caller, Kind::Profile, id).await?,
+            ProfileSelection::Draft { id, profile } => {
+                let previous = if let Some(id) = id {
+                    Some(self.resources.get(caller, Kind::Profile, id).await?)
+                } else {
+                    None
+                };
+                let mut draft = Input {
+                    id: id.unwrap_or_default(),
+                    name: String::new(),
+                    modified_date: String::new(),
+                    content: Content::Profile(profile),
+                };
+                self.resources.validate(&mut draft)?;
+                draft.resolve_password(previous.as_ref())
+            }
         };
         match selected.content {
             Content::Profile(p) => Ok(p),
             _ => Err(Error::Internal),
         }
     }
-    /// Verify connectivity and authentication without sending an email.
+    /// Verify connectivity and authentication without sending an email or saving draft settings.
     pub async fn connect(
         &self,
         caller: Identity,
-        name: &str,
-        profile: Profile,
+        selection: ProfileSelection,
     ) -> Result<(), Error> {
         self.authorize(caller).await?;
-        let profile = self.profile(caller, name, profile).await?;
+        let profile = self.profile(caller, selection).await?;
         self.sender.connect(&profile).await
     }
     /// Submit one composed message without automatically retrying ambiguity.
@@ -260,9 +272,7 @@ impl Service {
         } else {
             self.named(caller, Kind::Page, &request.page_name).await?.id
         };
-        let profile = self
-            .profile(caller, &request.profile_name, request.profile)
-            .await?;
+        let profile = self.profile(caller, request.profile).await?;
         if request.recipient.email.is_empty() {
             return Err(Error::Invalid("No email address specified".into()));
         }

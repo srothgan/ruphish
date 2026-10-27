@@ -11,7 +11,7 @@ pub(crate) fn bounded(value: &str, limit: usize) -> Result<(), Error> {
     Ok(())
 }
 
-pub(crate) fn resource(value: &Resource) -> Result<(), Error> {
+pub(crate) fn resource<P>(value: &Resource<P>) -> Result<(), Error> {
     bounded(&value.name, 255)?;
     match &value.content {
         Content::Group(targets) => {
