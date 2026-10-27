@@ -9,6 +9,8 @@ use ruphish_contracts::{
     resources::ResourceSummaries,
     starter_templates::{Entry, Kind, Summary},
 };
+use ruphish_domain::reporting::SortDirection;
+use ruphish_ui::table_state::Value as SortValue;
 use ruphish_ui::{
     preview_document,
     preview_state::ContentPreview,
@@ -263,6 +265,7 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                 .into_iter()
                 .enumerate()
                 .map(move |(index, panel_id)| {
+                    let sorting = TableSorting::new(panel_id, "name", SortDirection::Asc);
                     let mut headers = vec![trs!(ui.starter_select), trs!(ui.name)];
                     if index != 0 {
                         headers.push(trs!(ui.starter_available_options));
@@ -296,6 +299,12 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                                     })
                                 />
                                 <DataTable
+                                    sorting=sorting
+                                    columns=if index == 0 {
+                                        vec!["", "name", ""]
+                                    } else {
+                                        vec!["", "name", "options", ""]
+                                    }
                                     class="starter-table"
                                     compact=true
                                     label=trs!(ui.starter_title)
@@ -303,7 +312,22 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                                     headers=headers.clone()
                                 >
                                     <For
-                                        each=move || visible.get()
+                                        each=move || {
+                                            sorting
+                                                .rows(
+                                                    visible.get(),
+                                                    |row, key| {
+                                                        if key == "options" {
+                                                            SortValue::Tuple(
+                                                                vec![row.prefill.into(), row.company_logo.is_some().into()],
+                                                            )
+                                                        } else {
+                                                            row.name.clone().into()
+                                                        }
+                                                    },
+                                                    |row| row.id.clone().into(),
+                                                )
+                                        }
                                         key=|row| row.id.clone()
                                         children=move |row| {
                                             let id = StoredValue::new(row.id);

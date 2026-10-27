@@ -108,6 +108,8 @@ async fn postgres_observation_upgrade_preserves_populated_v4_history_and_retry_t
 mod postgres_proxy;
 #[path = "support/provider_regressions.rs"]
 mod provider_regressions;
+#[path = "support/sorting.rs"]
+mod sorting;
 
 fn resource(name: &str, content: Content) -> Resource {
     Resource {

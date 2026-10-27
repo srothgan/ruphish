@@ -15,6 +15,7 @@ pub mod recipient_history;
 pub mod resource_state;
 pub mod select_options;
 pub mod session;
+pub mod table_state;
 
 #[cfg(target_arch = "wasm32")]
 pub mod browser_http;

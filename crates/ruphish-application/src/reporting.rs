@@ -2,7 +2,7 @@
 use crate::{auth::Identity, resources::Error};
 
 /// One query owns filter semantics across tables, charts and exports.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Filter {
     /// Exact recipient row identity, never an email supplied as authorization.
     pub recipient: Option<i64>,
@@ -18,10 +18,37 @@ pub struct Filter {
     pub search: String,
     /// Report source or empty for all sources.
     pub source: String,
+    /// Event ordering before pagination.
+    pub event_sort: ruphish_domain::reporting::EventSort,
+    /// Event direction, independent of recipient ordering.
+    pub event_order: ruphish_domain::reporting::SortDirection,
+    /// Recipient ordering before pagination; events retain chronological ordering.
+    pub sort: ruphish_domain::reporting::RecipientSort,
+    /// Sort direction; equal values always use ascending recipient identity.
+    pub order: ruphish_domain::reporting::SortDirection,
     /// Pagination offset, bounded at the boundary.
     pub offset: usize,
     /// Requested rows (1..200).
     pub limit: usize,
+}
+impl Default for Filter {
+    fn default() -> Self {
+        Self {
+            recipient: None,
+            recipients: Vec::new(),
+            from: None,
+            until: None,
+            event: String::new(),
+            search: String::new(),
+            source: String::new(),
+            offset: 0,
+            limit: 0,
+            sort: Default::default(),
+            order: Default::default(),
+            event_sort: Default::default(),
+            event_order: ruphish_domain::reporting::SortDirection::Desc,
+        }
+    }
 }
 /// Safe event data; no arbitrary payload or network identity.
 #[derive(Clone)]
@@ -143,3 +170,6 @@ pub trait Snapshots: Send + Sync {
         export: bool,
     ) -> Result<Analysis, Error>;
 }
+
+/// Shared ordering direction exposed to application consumers.
+pub use ruphish_domain::reporting::SortDirection;

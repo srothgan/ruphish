@@ -4,6 +4,7 @@ use crate::{
 };
 use leptos::prelude::*;
 use ruphish_contracts::overview::Snapshot;
+use ruphish_domain::reporting::SortDirection;
 use ruphish_ui::overview_state::{ChangeGoal, count_change, percentage};
 use ruphish_ui::{tr, trs};
 
@@ -217,6 +218,7 @@ pub(super) fn page() -> impl IntoView {
 }
 
 fn snapshot_sections(s: Snapshot) -> impl IntoView {
+    let sorting = TableSorting::new("recent-campaigns", "name", SortDirection::Asc);
     let api = expect_context::<crate::client::Api>();
     let i18n = ruphish_ui::localization::use_i18n();
 
@@ -250,6 +252,8 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                     </div>
                 </dl>
                 <DataTable
+                    sorting=sorting
+                    columns=vec!["name", "recipients", "clicked", "reported", ""]
                     label=trs!(ui.recent_campaigns)
                     headers=vec![
                         trs!(ui.campaign),
@@ -260,56 +264,59 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                     ]
                     empty=s.recent.is_empty()
                 >
-                    {s
-                        .recent
-                        .into_iter()
-                        .take(3)
-                        .map(|c| {
-                            let (action_href, action_label) = if c.status == "Completed" {
-                                (
-                                    format!("/analysis/{}", c.id),
-                                    leptos_i18n::t_string!(i18n, ui.analysis),
-                                )
-                            } else {
-                                (
-                                    format!("/campaigns/{}", c.id),
-                                    leptos_i18n::t_string!(i18n, ui.campaign),
-                                )
-                            };
-                            view! {
-                                <tr>
-                                    <th scope="row">
-                                        <a href=format!("/campaigns/{}", c.id)>{c.name}</a>
-                                        <span class="dashboard-campaign-meta">
-                                            {ruphish_ui::localization::event_label(i18n, &c.status)}
-                                        </span>
-                                        {(!c.launch.is_empty() && !c.launch.starts_with("0001-"))
-                                            .then(|| {
-                                                view! {
-                                                    <span class="dashboard-campaign-meta">
-                                                        {leptos_i18n::t!(
-                                                            i18n, messages.launch_arg0, arg0 = (minute(&c.launch.into())).to_string()
-                                                        )}
-                                                    </span>
-                                                }
-                                            })}
-                                    </th>
-                                    <td class="data-value">{c.recipients}</td>
-                                    <td class="data-value">
-                                        {percentage(c.outcomes.clicked, c.outcomes.delivered)}
-                                    </td>
-                                    <td class="data-value">
-                                        {percentage(c.outcomes.reported, c.outcomes.delivered)}
-                                    </td>
-                                    <td>
-                                        <ActionLink href=action_href size=ControlSize::Small>
-                                            {action_label}
-                                        </ActionLink>
-                                    </td>
-                                </tr>
-                            }
-                        })
-                        .collect_view()}
+                    {move || {
+                        ruphish_ui::overview_state::recent_campaigns(
+                                &s.recent,
+                                &sorting.current.get(),
+                            )
+                            .into_iter()
+                            .map(|c| {
+                                let (action_href, action_label) = if c.status == "Completed" {
+                                    (
+                                        format!("/analysis/{}", c.id),
+                                        leptos_i18n::t_string!(i18n, ui.analysis),
+                                    )
+                                } else {
+                                    (
+                                        format!("/campaigns/{}", c.id),
+                                        leptos_i18n::t_string!(i18n, ui.campaign),
+                                    )
+                                };
+                                view! {
+                                    <tr>
+                                        <th scope="row">
+                                            <a href=format!("/campaigns/{}", c.id)>{c.name}</a>
+                                            <span class="dashboard-campaign-meta">
+                                                {ruphish_ui::localization::event_label(i18n, &c.status)}
+                                            </span>
+                                            {(!c.launch.is_empty() && !c.launch.starts_with("0001-"))
+                                                .then(|| {
+                                                    view! {
+                                                        <span class="dashboard-campaign-meta">
+                                                            {leptos_i18n::t!(
+                                                                i18n, messages.launch_arg0, arg0 = (minute(&c.launch.into())).to_string()
+                                                            )}
+                                                        </span>
+                                                    }
+                                                })}
+                                        </th>
+                                        <td class="data-value">{c.recipients}</td>
+                                        <td class="data-value">
+                                            {percentage(c.outcomes.clicked, c.outcomes.delivered)}
+                                        </td>
+                                        <td class="data-value">
+                                            {percentage(c.outcomes.reported, c.outcomes.delivered)}
+                                        </td>
+                                        <td>
+                                            <ActionLink href=action_href size=ControlSize::Small>
+                                                {action_label}
+                                            </ActionLink>
+                                        </td>
+                                    </tr>
+                                }
+                            })
+                            .collect_view()
+                    }}
                 </DataTable>
                 {(s.campaigns.total == 0)
                     .then(|| {

@@ -1,5 +1,23 @@
 //! Dashboard rates and comparisons, independent of query ownership.
 
+/// Select the latest three campaigns before applying display ordering.
+/// The API supplies recent rows newest first; sorting must never change this window.
+pub fn recent_campaigns(
+    rows: &[ruphish_contracts::overview::RecentCampaign],
+    sort: &crate::table_state::Sort,
+) -> Vec<ruphish_contracts::overview::RecentCampaign> {
+    sort.rows(
+        rows.iter().take(3).cloned().collect(),
+        |row, key| match key {
+            "recipients" => row.recipients.into(),
+            "clicked" => crate::table_state::ratio(row.outcomes.clicked, row.outcomes.delivered),
+            "reported" => crate::table_state::ratio(row.outcomes.reported, row.outcomes.delivered),
+            _ => row.name.clone().into(),
+        },
+        |row| row.id.into(),
+    )
+}
+
 /// Undefined rates stay visibly distinct from a measured zero.
 pub fn percentage(count: i64, sent: i64) -> String {
     if sent <= 0 {

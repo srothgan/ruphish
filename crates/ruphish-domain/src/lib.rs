@@ -4,6 +4,7 @@
 pub mod account;
 pub mod campaign;
 pub mod domains;
+pub mod pagination;
 pub mod password;
 pub mod preferences;
 pub mod reporting;

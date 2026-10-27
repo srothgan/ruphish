@@ -5,6 +5,8 @@ use crate::{
 };
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use ruphish_contracts::domains::{Domain, Edit};
+use ruphish_domain::reporting::SortDirection;
+use ruphish_ui::table_state::Value as SortValue;
 use ruphish_ui::{tr, trs};
 use serde_json::json;
 
@@ -88,6 +90,7 @@ fn check_result(d: &Domain, kind: &str, passed: bool) -> &'static str {
     }
 }
 pub(super) fn list(api: Api, token: String) -> impl IntoView {
+    let sorting = TableSorting::new("domains", "name", SortDirection::Asc);
     let i18n = ruphish_ui::localization::use_i18n();
 
     let queries = expect_context::<ManagementQueries>();
@@ -146,6 +149,8 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
                 refresh=list.refresh
             />
             <DataTable
+                sorting=sorting
+                columns=vec!["name", "origin", "status", "enabled", "campaigns", ""]
                 label=trs!(ui.domains)
                 empty=Signal::derive(move || visible.with(Vec::is_empty))
                 headers=vec![
@@ -158,8 +163,18 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
                 ]
             >
                 {move || {
-                    visible
-                        .get()
+                    sorting
+                        .rows(
+                            visible.get(),
+                            |row, key| match key {
+                                "origin" => row.origin.clone().into(),
+                                "status" => state(row).into(),
+                                "enabled" => row.enabled.into(),
+                                "campaigns" => row.campaigns.into(),
+                                _ => row.name.clone().into(),
+                            },
+                            |row| row.id.into(),
+                        )
                         .into_iter()
                         .map(|d| {
                             let id = d.id;
@@ -469,6 +484,9 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
     }
 }
 fn show(api: Api, token: String, id: i64) -> impl IntoView {
+    let history_sort = TableSorting::new("domain-history", "finished", SortDirection::Desc);
+    let checks_sort = TableSorting::new("domain-checks", "name", SortDirection::Asc);
+
     let i18n = ruphish_ui::localization::use_i18n();
 
     let queries = expect_context::<ManagementQueries>();
@@ -861,6 +879,8 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                                 <DataTable
                                     label=trs!(ui.domain_verification)
                                     class="domain-verification"
+                                    sorting=checks_sort
+                                    columns=vec!["name", "result", "help", ""]
                                     headers=vec![
                                         trs!(ui.check),
                                         trs!(ui.latest_result),
@@ -868,42 +888,65 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                                         trs!(ui.dns_record),
                                     ]
                                 >
-                                    <tr>
-                                        <th scope="row">{tr!(ui.domain_control)}</th>
-                                        <td>{control_result}</td>
-                                        <td>
-                                            {tr!(
-                                                ui.publish_this_txt_record_at_your_dns_provider_and_keep_it_for_periodic_checks
-                                            )}
-                                        </td>
-                                        <td>
-                                            <div class="domain-copy-actions">
-                                                <CopyButton
-                                                    label=trs!(ui.record_name)
-                                                    value=d.txt_name.clone()
-                                                    message=message
-                                                />
-                                                <CopyButton
-                                                    label=trs!(ui.txt_value)
-                                                    value=d.txt_value.clone()
-                                                    message=message
-                                                />
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    {check_rows
-                                        .into_iter()
-                                        .map(|(name, result, help)| {
-                                            view! {
-                                                <tr>
-                                                    <th scope="row">{name}</th>
-                                                    <td>{result}</td>
-                                                    <td>{help}</td>
-                                                    <td></td>
-                                                </tr>
-                                            }
-                                        })
-                                        .collect_view()}
+                                    {move || {
+                                        let mut rows = vec![
+                                            (
+                                                leptos_i18n::t_string!(i18n, ui.domain_control),
+                                                control_result,
+                                                leptos_i18n::t_string!(
+                                                    i18n, ui.publish_this_txt_record_at_your_dns_provider_and_keep_it_for_periodic_checks
+                                                ),
+                                                true,
+                                            ),
+                                        ];
+                                        rows.extend(
+                                            check_rows
+                                                .iter()
+                                                .map(|(name, result, help)| (*name, *result, *help, false)),
+                                        );
+                                        checks_sort
+                                            .rows(
+                                                rows,
+                                                |row, key| match key {
+                                                    "result" => row.1.into(),
+                                                    "help" => row.2.into(),
+                                                    _ => row.0.into(),
+                                                },
+                                                |row| row.0.into(),
+                                            )
+                                            .into_iter()
+                                            .map(|(name, result, help, control)| {
+                                                view! {
+                                                    <tr>
+                                                        <th scope="row">{name}</th>
+                                                        <td>{result}</td>
+                                                        <td>{help}</td>
+                                                        <td>
+                                                            {if control {
+                                                                view! {
+                                                                    <div class="domain-copy-actions">
+                                                                        <CopyButton
+                                                                            label=trs!(ui.record_name)
+                                                                            value=d.txt_name.clone()
+                                                                            message=message
+                                                                        />
+                                                                        <CopyButton
+                                                                            label=trs!(ui.txt_value)
+                                                                            value=d.txt_value.clone()
+                                                                            message=message
+                                                                        />
+                                                                    </div>
+                                                                }
+                                                                    .into_any()
+                                                            } else {
+                                                                view! { <span>"\u{2014}"</span> }.into_any()
+                                                            }}
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            })
+                                            .collect_view()
+                                    }}
                                 </DataTable>
                                 <p role="status">
                                     {move || {
@@ -925,6 +968,8 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                                     )}
                                 </p>
                                 <DataTable
+                                    sorting=history_sort
+                                    columns=vec!["finished", "state", "duration", "code"]
                                     label=trs!(ui.verification_history)
                                     headers=vec![
                                         trs!(ui.finished),
@@ -933,40 +978,55 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                                         trs!(ui.details),
                                     ]
                                 >
-                                    {d
-                                        .history
-                                        .into_iter()
-                                        .map(|r| {
-                                            view! {
-                                                <tr>
-                                                    <td class="data-value">
-                                                        {r
-                                                            .finished_at
-                                                            .map(instant)
-                                                            .unwrap_or_else(|| {
-                                                                leptos_i18n::t_string!(i18n, ui.not_recorded).into()
-                                                            })}
-                                                    </td>
-                                                    <td>
-                                                        <StatusBadge tone=status_tone(
-                                                            &r.state,
-                                                        )>{outcome(&r.state)}</StatusBadge>
-                                                    </td>
-                                                    <td>
-                                                        {match (r.started_at, r.finished_at) {
-                                                            (Some(start), Some(end)) => {
-                                                                leptos_i18n::t_string!(
-                                                                    i18n, messages.count_seconds, count = (end-start).max(0)
-                                                                )
-                                                            }
-                                                            _ => leptos_i18n::t_string!(i18n, ui.not_recorded).into(),
-                                                        }}
-                                                    </td>
-                                                    <td>{check_explanation(&r.code)}</td>
-                                                </tr>
-                                            }
-                                        })
-                                        .collect_view()}
+                                    {move || {
+                                        history_sort
+                                            .rows(
+                                                d.history.clone(),
+                                                |row, key| match key {
+                                                    "state" => outcome(&row.state).into(),
+                                                    "duration" => {
+                                                        row.started_at
+                                                            .zip(row.finished_at)
+                                                            .map_or(SortValue::Missing, |(a, b)| (b - a).max(0).into())
+                                                    }
+                                                    "code" => check_explanation(&row.code).into(),
+                                                    _ => row.finished_at.map_or(SortValue::Missing, Into::into),
+                                                },
+                                                |row| row.id.into(),
+                                            )
+                                            .into_iter()
+                                            .map(|r| {
+                                                view! {
+                                                    <tr>
+                                                        <td class="data-value">
+                                                            {r
+                                                                .finished_at
+                                                                .map(instant)
+                                                                .unwrap_or_else(|| {
+                                                                    leptos_i18n::t_string!(i18n, ui.not_recorded).into()
+                                                                })}
+                                                        </td>
+                                                        <td>
+                                                            <StatusBadge tone=status_tone(
+                                                                &r.state,
+                                                            )>{outcome(&r.state)}</StatusBadge>
+                                                        </td>
+                                                        <td>
+                                                            {match (r.started_at, r.finished_at) {
+                                                                (Some(start), Some(end)) => {
+                                                                    leptos_i18n::t_string!(
+                                                                        i18n, messages.count_seconds, count = (end-start).max(0)
+                                                                    )
+                                                                }
+                                                                _ => leptos_i18n::t_string!(i18n, ui.not_recorded).into(),
+                                                            }}
+                                                        </td>
+                                                        <td>{check_explanation(&r.code)}</td>
+                                                    </tr>
+                                                }
+                                            })
+                                            .collect_view()
+                                    }}
                                 </DataTable>
                                 {(!has_result)
                                     .then(|| {

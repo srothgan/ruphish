@@ -515,7 +515,7 @@ fn fixture(path: &str) -> std::path::PathBuf {
         .join(path)
 }
 
-fn database(directory: &Path, sql: &'static str) -> Vec<sqlx::sqlite::SqliteRow> {
+fn database(directory: &Path, sql: &str) -> Vec<sqlx::sqlite::SqliteRow> {
     use sqlx::Connection;
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         let mut connection = sqlx::SqliteConnection::connect_with(
@@ -524,7 +524,10 @@ fn database(directory: &Path, sql: &'static str) -> Vec<sqlx::sqlite::SqliteRow>
         )
         .await
         .unwrap();
-        let result = sqlx::raw_sql(sql).fetch_all(&mut connection).await.unwrap();
+        let result = sqlx::raw_sql(sqlx::AssertSqlSafe(sql.to_owned()))
+            .fetch_all(&mut connection)
+            .await
+            .unwrap();
         connection.close().await.unwrap();
         result
     })

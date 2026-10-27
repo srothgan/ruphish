@@ -3,6 +3,7 @@ use super::{Api, Family, ResourceAccess, download};
 use crate::feedback::Message;
 use crate::shared::components::*;
 use leptos::prelude::*;
+use ruphish_domain::reporting::SortDirection;
 use ruphish_ui::preview_document;
 use ruphish_ui::{tr, trs};
 use serde_json::Value;
@@ -175,15 +176,18 @@ fn body(value: Value, family: Family) -> AnyView {
 
     match family {
         Family::Groups => {
-            let rows = value["targets"].as_array().cloned().unwrap_or_default();
+            let sorting = TableSorting::new("group-recipients", "email", SortDirection::Asc);
+            let rows = StoredValue::new(value["targets"].as_array().cloned().unwrap_or_default());
             view! {
                 <section>
                     <h2>
                         {leptos_i18n::t!(
-                            i18n, messages.recipients_arg0, arg0 = (rows.len()).to_string()
+                            i18n, messages.recipients_arg0, arg0 = (rows.with_value(Vec::len)).to_string()
                         )}
                     </h2>
                     <DataTable
+                        sorting=sorting
+                        columns=vec!["email", "first_name", "last_name", "position"]
                         label=trs!(ui.recipients)
                         headers=vec![
                             trs!(ui.email),
@@ -192,19 +196,22 @@ fn body(value: Value, family: Family) -> AnyView {
                             trs!(ui.position),
                         ]
                     >
-                        {rows
-                            .into_iter()
-                            .map(|row| {
-                                view! {
-                                    <tr>
-                                        <th scope="row">{text(&row, "email")}</th>
-                                        <td>{text(&row, "first_name")}</td>
-                                        <td>{text(&row, "last_name")}</td>
-                                        <td>{text(&row, "position")}</td>
-                                    </tr>
-                                }
-                            })
-                            .collect_view()}
+                        {move || {
+                            sorting
+                                .json(rows.get_value(), &[])
+                                .into_iter()
+                                .map(|row| {
+                                    view! {
+                                        <tr>
+                                            <th scope="row">{text(&row, "email")}</th>
+                                            <td>{text(&row, "first_name")}</td>
+                                            <td>{text(&row, "last_name")}</td>
+                                            <td>{text(&row, "position")}</td>
+                                        </tr>
+                                    }
+                                })
+                                .collect_view()
+                        }}
                     </DataTable>
                 </section>
             }

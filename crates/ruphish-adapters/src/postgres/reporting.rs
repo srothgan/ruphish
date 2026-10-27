@@ -160,11 +160,12 @@ impl Snapshots for Reports {
         }
         let limit = if export { 100_000 } else { f.limit };
         let offset = if export { 0 } else { f.offset };
+        let event_order = crate::reporting::event_order(f, "postgres");
         let rows = query!(format!(
             r#"
                 SELECT *
                 FROM observed
-                ORDER BY time DESC,id DESC LIMIT {limit} OFFSET {offset}
+                ORDER BY {event_order} LIMIT {limit} OFFSET {offset}
             "#
         ))
         .fetch_all(&mut *tx)
@@ -189,7 +190,9 @@ impl Snapshots for Reports {
                 password_present: safe["password_present"].as_bool(),
             });
         }
+        let recipient_order = crate::reporting::recipient_order(f, "postgres");
         let rows=query!(format!(r#"
+                SELECT * FROM (
                 SELECT a.id,a.email,CONCAT(COALESCE(a.first_name,''),' ',COALESCE(a.last_name,'')) AS name,
                     a.delivery,a.reported,
                     COALESCE(a.first_name,'') AS first_name,COALESCE(a.last_name,'') AS last_name,
@@ -207,7 +210,7 @@ impl Snapshots for Reports {
                 FROM selected a
                 LEFT JOIN observed e ON e.recipient_id=a.id
                 GROUP BY a.id,a.email,a.first_name,a.last_name,a.delivery,a.reported,a.position,a.send_date,a.modified_date
-                ORDER BY a.email,a.id LIMIT {limit} OFFSET {offset}
+                ) recipient_rows ORDER BY {recipient_order} LIMIT {limit} OFFSET {offset}
             "#)).fetch_all(&mut *tx).await.map_err(storage)?;
         let mut recipients = Vec::with_capacity(rows.len());
         for r in rows {

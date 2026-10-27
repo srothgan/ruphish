@@ -23,6 +23,161 @@ fn get(client: &reqwest::blocking::Client, base: &str, path: &str) -> Value {
     // Obtain a fresh response only in the success path (assert formatting is lazy).
     response.json().unwrap()
 }
+
+#[test]
+fn sorted_analysis_exports_and_delivery_cursors_survive_rejections_deletion_and_restart() {
+    let directory = workspace();
+    write_config(directory.path(), &configuration());
+    let mut process = Process::start(directory.path(), "admin");
+    let mut base = format!("http://{}", process.ready()["admin"].as_str().unwrap());
+    let client = client();
+    let mut setup = String::from(
+        "UPDATE users SET password_change_required=0; INSERT INTO users(id,username,api_key,role_id,password_change_required,account_locked) VALUES(2,'other-sort','other-sort-key',2,0,0); INSERT INTO ruphish_auth_state VALUES(2,0); INSERT INTO campaigns(id,user_id,name,status) VALUES(91,1,'Sorted','Completed'),(92,1,'Empty','Completed'),(93,2,'Other owner','Completed');",
+    );
+    for index in 0..55 {
+        let id = 1000 + index;
+        setup.push_str(&format!("INSERT INTO results(id,campaign_id,user_id,r_id,email,first_name,last_name,status,reported) VALUES({id},91,1,'sort-{index}','person{index:03}@example.test','Same','','Email Sent',0); INSERT INTO ruphish_delivery(result_id,campaign_id,state,due) VALUES({id},91,'accepted',{index});"));
+    }
+    setup.push_str("INSERT INTO results(id,campaign_id,user_id,r_id,email,status,reported) VALUES(2000,93,2,'other-sort','other@example.test','Email Sent',0);");
+    database(directory.path(), &setup);
+    assert_eq!(
+        client
+            .get(format!("{base}/api/campaigns/91/analysis?sort=email"))
+            .send()
+            .unwrap()
+            .status(),
+        401
+    );
+    let page = get(
+        &client,
+        &base,
+        "/api/campaigns/91/analysis?sort=email&order=desc&offset=50&limit=5",
+    );
+    assert_eq!(page["recipient_total"], 55);
+    assert_eq!(
+        page["recipients"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["id"].as_i64().unwrap())
+            .collect::<Vec<_>>(),
+        [1004, 1003, 1002, 1001, 1000]
+    );
+    let exported = request(
+        &client,
+        &base,
+        reqwest::Method::GET,
+        "/api/campaigns/91/export?format=csv&scope=recipients&sort=email&order=desc&offset=50&limit=5",
+        None,
+    );
+    assert_eq!(exported.status(), 200);
+    let csv = exported.text().unwrap();
+    assert!(csv.starts_with("Recipient ID,"));
+    let ids: Vec<i64> = csv
+        .lines()
+        .skip(1)
+        .map(|line| line.split(',').next().unwrap().parse().unwrap())
+        .collect();
+    assert_eq!(ids, (1000..1055).rev().collect::<Vec<_>>());
+    for path in [
+        "/api/campaigns/91/analysis?sort=unknown",
+        "/api/campaigns/91/analysis?sort=email%3BDROP%20TABLE%20results",
+        "/api/campaigns/91/analysis?order=descending",
+        "/api/campaigns/91/analysis?event_sort=unknown",
+        "/api/campaigns/91/export?format=csv&scope=recipients&sort=unknown",
+    ] {
+        assert_eq!(
+            request(&client, &base, reqwest::Method::GET, path, None).status(),
+            400,
+            "{path}"
+        );
+    }
+    assert_eq!(
+        request(
+            &client,
+            &base,
+            reqwest::Method::GET,
+            "/api/campaigns/93/analysis?sort=email",
+            None
+        )
+        .status(),
+        404
+    );
+    assert_eq!(
+        request(
+            &client,
+            &base,
+            reqwest::Method::GET,
+            "/api/campaigns/91/analysis?sort=name&recipient=2000",
+            None
+        )
+        .status(),
+        404
+    );
+    assert_eq!(
+        client
+            .get(format!("{base}/api/campaigns/91/delivery?sort=email"))
+            .bearer_auth("other-sort-key")
+            .send()
+            .unwrap()
+            .status(),
+        404
+    );
+    let first = get(
+        &client,
+        &base,
+        "/api/campaigns/91/delivery?sort=email&order=desc&limit=2",
+    );
+    assert_eq!(first["items"][0]["id"], 1054);
+    assert_eq!(first["items"][1]["id"], 1053);
+    let cursor = first["next_cursor"].as_str().unwrap();
+    let mut cursor_url = reqwest::Url::parse("http://fixture.test").unwrap();
+    cursor_url.query_pairs_mut().append_pair("cursor", cursor);
+    let encoded = cursor_url.query().unwrap().to_owned();
+    database(
+        directory.path(),
+        "DELETE FROM ruphish_delivery WHERE result_id=1053; DELETE FROM results WHERE id=1053;",
+    );
+    let second = get(
+        &client,
+        &base,
+        &format!("/api/campaigns/91/delivery?sort=email&order=desc&limit=2&{encoded}"),
+    );
+    assert_eq!(second["items"][0]["id"], 1052);
+    assert_eq!(second["items"][1]["id"], 1051);
+    for path in [
+        format!("/api/campaigns/91/delivery?sort=email&order=asc&{encoded}"),
+        format!("/api/campaigns/91/delivery?sort=due&order=desc&{encoded}"),
+        format!("/api/campaigns/92/delivery?sort=email&order=desc&{encoded}"),
+        format!("/api/campaigns/91/delivery?{encoded}"),
+        format!("/api/campaigns/91/delivery?sort=email&order=desc&after=1&{encoded}"),
+        "/api/campaigns/91/delivery?sort=email&cursor=%7B".into(),
+    ] {
+        assert_eq!(
+            request(&client, &base, reqwest::Method::GET, &path, None).status(),
+            400,
+            "{path}"
+        );
+    }
+    process.stop();
+    let mut process = Process::start(directory.path(), "admin");
+    base = format!("http://{}", process.ready()["admin"].as_str().unwrap());
+    let resumed = get(
+        &client,
+        &base,
+        &format!("/api/campaigns/91/delivery?sort=email&order=desc&limit=2&{encoded}"),
+    );
+    assert_eq!(resumed["items"], second["items"]);
+    assert_eq!(
+        get(
+            &client,
+            &base,
+            "/api/campaigns/92/analysis?sort=opened&order=desc"
+        )["recipient_total"],
+        0
+    );
+    process.stop();
+}
 fn wait_check(client: &reqwest::blocking::Client, base: &str, id: i64, after: i64) -> Value {
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {

@@ -106,6 +106,9 @@ pub struct Header {
 /// One consistent delivery page and campaign-wide snapshot.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Delivery {
+    /// Selection-bound continuation for explicit sorted queries.
+    #[serde(default)]
+    pub next_cursor: Option<String>,
     /// Campaign metadata.
     pub campaign: Header,
     /// Sparse state counts: omitted states have zero rows; the map itself is required.

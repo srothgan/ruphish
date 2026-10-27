@@ -83,11 +83,17 @@ Legacy summary `stats` includes `total`, `sent`, `opened`, `clicked`, `submitted
 
 The directory accepts `filter=all`, `drafts`, `active`, `completed`, or `executions` and an opaque `after` cursor. It returns `items` and `next_after`, with at most 50 rows per page. Keep cursor values opaque.
 
+For sorted directory pages, add `sort=name`, `status`, `total`, or `launch` and optional `order=asc` (default) or `desc`. Pass the returned `next_after` unchanged as the next request's `after`. The cursor is bound to the owner, filter, column and direction; clear it when any selection changes. Sorting covers the full matching directory before its 50-row page is selected. Without `sort`, the existing draft-first ID traversal remains available; `order` requires `sort`.
+
+Sorted continuations retain the boundary value and row identity, so deleting the boundary row does not invalidate traversal. Equal values use stable identities; absent audience/schedule values precede present values ascending. These are live queries, not a snapshot spanning requests: changes to names, status, schedules or audience sizes can move rows across the current boundary. Treat cursor strings as opaque and URL-encode them; malformed or mismatched sorted cursors return `400`.
+
 `/api/campaigns/overview` is a different execution-only read. It accepts numeric `after`, optional `limit` (default 50), and optional boolean `completed`. Its response contains header `items`, numeric/null `next_after`, and `mailer_enabled`. Headers include identity, status, schedule, URL, resource references, audience total, and available policy/domain-block metadata.
 
 ## Delivery and uncertain outcomes
 
 Delivery reads use numeric result-row IDs. The page includes a campaign header, sparse state `counts`, `items`, optional `next_after`, policy, `mailer_enabled`, and recent activity. Rows expose `id`, `rid`, `email`, `state`, `due` (UTC Unix seconds), `attempt_count`, `retries`, `generation`, `code`, and recent `attempts`. Missing state-count keys mean no rows in that state.
+
+To sort delivery pages, send `sort=email`, `state`, `due`, or `attempt_count` with optional `order=asc` (default) or `desc`, and `limit` from 1 to 200 (default 50). The response adds nullable `next_cursor`; supply it as `cursor` on the next request with the same campaign, owner and ordering. Do not combine a sorted cursor with a nonzero numeric `after`. Sort/filter changes start again without a cursor. Equal values use ascending result ID; due times and attempt counts sort numerically. The original numeric `after`/`next_after` path remains available when `sort` is omitted.
 
 History accepts `before_attempt` and `before_event` cursors and returns attempts, events, and separate next cursors. Attempt fields include generation, start/finish times, state, SMTP stage, optional SMTP code, and message ID.
 

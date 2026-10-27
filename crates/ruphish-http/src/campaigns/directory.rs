@@ -6,6 +6,8 @@ use app::directory::{Cursor, Filter};
 pub(super) struct QueryPage {
     after: String,
     filter: String,
+    sort: Option<ruphish_application::pagination::DirectorySort>,
+    order: Option<ruphish_application::reporting::SortDirection>,
 }
 pub(super) async fn list(
     c: Context,
@@ -22,7 +24,28 @@ pub(super) async fn list(
         "executions" => Filter::Executions,
         _ => return Err(invalid()),
     };
-    let after = Cursor::parse(&page.after).map_err(error)?;
+    let after = if let Some(sort) = page.sort {
+        Cursor {
+            sorted: Some(sorted_page(
+                sort,
+                page.order.unwrap_or_default(),
+                format!(
+                    "directory:{}:{}:{}:{}",
+                    caller.identity.id,
+                    filter.drafts(),
+                    filter.executions(),
+                    filter.completed()
+                ),
+                &page.after,
+            )?),
+            ..Default::default()
+        }
+    } else {
+        if page.order.is_some() {
+            return Err(invalid());
+        }
+        Cursor::parse(&page.after).map_err(error)?
+    };
     let page = c
         .campaigns()
         .directory(caller.identity, filter, after, 50)
@@ -53,4 +76,33 @@ pub(super) async fn list(
         }),
         None,
     )
+}
+
+/// Decode a bounded, versioned continuation and reject selection mismatches.
+pub(super) fn sorted_page<S: serde::de::DeserializeOwned + PartialEq>(
+    sort: S,
+    order: ruphish_application::reporting::SortDirection,
+    scope: String,
+    after: &str,
+) -> Result<ruphish_application::pagination::SortedPage<S>, Rejection> {
+    let invalid = || error(Error::Invalid("Invalid sorted page cursor".into()));
+    let position = if after.is_empty() {
+        None
+    } else {
+        if after.len() > 8192 {
+            return Err(invalid());
+        }
+        let cursor: ruphish_application::pagination::Cursor<S> =
+            serde_json::from_str(after).map_err(|_| invalid())?;
+        if !cursor.valid(&sort, order, &scope) {
+            return Err(invalid());
+        }
+        Some(cursor.position)
+    };
+    Ok(ruphish_application::pagination::SortedPage {
+        sort,
+        order,
+        scope,
+        after: position,
+    })
 }

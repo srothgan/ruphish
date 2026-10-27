@@ -479,12 +479,15 @@ impl Repository for Campaigns {
         tx.commit().await.map_err(storage)?;
         Ok(())
     }
-    async fn deliveries(
+    async fn deliveries_sorted(
         &self,
         caller: Identity,
         id: i64,
         after: i64,
         limit: i64,
+        sorting: Option<
+            ruphish_domain::pagination::SortedPage<ruphish_domain::pagination::DeliverySort>,
+        >,
     ) -> Result<DeliveryView, Error> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         super::resources::authorize(&mut tx, caller, false).await?;
@@ -507,7 +510,55 @@ impl Repository for Campaigns {
         .await
         .map_err(storage)?;
         let limit = limit.clamp(1, 200);
-        let mut rows=sqlx::query("SELECT d.*,r.r_id,r.email,(SELECT count(*) FROM ruphish_delivery_attempt a WHERE a.result_id=d.result_id) AS attempt_count FROM ruphish_delivery d JOIN results r ON r.id=d.result_id WHERE d.campaign_id=? AND d.result_id>? ORDER BY d.result_id LIMIT ?").bind(id).bind(after).bind(limit + 1).fetch_all(&mut *tx).await.map_err(storage)?;
+        let mut rows = if let Some(order) = &sorting {
+            let position = order.after.clone().unwrap_or_default();
+            let tail = crate::campaign_sort::tail(
+                crate::campaign_sort::delivery(order.sort),
+                order.order,
+                "sqlite",
+            )
+            .replace("campaign_id", "campaign_id_key");
+            let sql = crate::campaign_sort::placeholders(
+                format!(
+                    "{} {tail}",
+                    r#"WITH data AS (SELECT d.*,r.r_id,r.email,1 AS kind,'' AS draft_id,d.result_id AS campaign_id_key,(SELECT count(*) FROM ruphish_delivery_attempt a WHERE a.result_id=d.result_id) AS attempt_count FROM ruphish_delivery d JOIN results r ON r.id=d.result_id WHERE d.campaign_id=?)"#
+                ),
+                "sqlite",
+            );
+            sqlx::query(sqlx::AssertSqlSafe(sql))
+                .bind(id)
+                .bind(i32::from(order.after.is_some()))
+                .bind(i32::from(position.present))
+                .bind(&position.text)
+                .bind(position.number)
+                .bind(position.kind)
+                .bind(&position.draft)
+                .bind(position.id)
+                .bind(limit + 1)
+                .fetch_all(&mut *tx)
+                .await
+                .map_err(storage)?
+        } else {
+            sqlx::query("SELECT d.*,r.r_id,r.email,(SELECT count(*) FROM ruphish_delivery_attempt a WHERE a.result_id=d.result_id) AS attempt_count FROM ruphish_delivery d JOIN results r ON r.id=d.result_id WHERE d.campaign_id=? AND d.result_id>? ORDER BY d.result_id LIMIT ?").bind(id).bind(after).bind(limit + 1).fetch_all(&mut *tx).await.map_err(storage)?
+        };
+        let next_cursor = if let Some(order) = &sorting {
+            if rows.len() > limit as usize {
+                let row = &rows[limit as usize - 1];
+                let position = ruphish_domain::pagination::Position {
+                    present: row.try_get::<i64, _>("sort_present").map_err(storage)? != 0,
+                    text: row.try_get("sort_text").map_err(storage)?,
+                    number: row.try_get("sort_number").map_err(storage)?,
+                    kind: 1,
+                    draft: String::new(),
+                    id: row.try_get("result_id").map_err(storage)?,
+                };
+                Some(serde_json::to_string(&order.cursor(position)).map_err(|_| Error::Internal)?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         let has_more = rows.len() > limit as usize;
         rows.truncate(limit as usize);
         let mut items = Vec::new();
@@ -549,6 +600,7 @@ impl Repository for Campaigns {
         }
         tx.commit().await.map_err(storage)?;
         Ok(DeliveryView {
+            next_cursor,
             next_after: items.last().map(|r| r.id).filter(|_| has_more),
             activity,
             campaign,

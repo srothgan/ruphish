@@ -294,6 +294,8 @@
   .management-table.compact th, .management-table.compact td { padding: var(--s2) var(--s4); }
   .management-table thead { color: var(--muted); background: var(--canvas); }
   .management-table thead th { white-space: nowrap; }
+  .account-app .management-table .table-sort { display: inline-flex; align-items: center; justify-content: space-between; gap: var(--s2); width: 100%; min-height: var(--control-h-sm); padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: start; }
+  .table-sort-icon { flex: none; }
   .management-table tbody th { font-weight: var(--fw-semibold); }
   .management-table .row-actions { align-items: center; flex-wrap: nowrap; gap: var(--s3); }
   .management-table button { padding: 0 var(--s2); min-height: var(--control-h-sm); font-size: var(--fs-sm); }

@@ -15,8 +15,8 @@ pub(crate) struct DeliverySnapshot {
 #[derive(Clone, Copy)]
 pub(crate) struct CampaignQueries {
     overview: OverviewQueries,
-    pub directory: Query<(String, String), reads::Directory>,
-    pub delivery: Query<(String, i64), DeliverySnapshot>,
+    pub directory: Query<(String, String, String, String), reads::Directory>,
+    pub delivery: Query<(String, String, String, String), DeliverySnapshot>,
     pub analysis: Query<(i64, String), Value>,
     pub draft: Query<String, Value>,
 }
@@ -27,25 +27,36 @@ impl CampaignQueries {
             overview: expect_context(),
             directory: Query::new(
                 client,
-                move |(filter, after): (String, String)| async move {
+                move |(filter, after, sort, order): (String, String, String, String)| async move {
                     let query = url::form_urlencoded::Serializer::new(String::new())
-                        .extend_pairs([("filter", filter), ("after", after)])
+                        .extend_pairs([
+                            ("filter", filter),
+                            ("after", after),
+                            ("sort", sort),
+                            ("order", order),
+                        ])
                         .finish();
                     api.read(&format!("/api/campaigns/directory?{query}")).await
                 },
             ),
-            delivery: Query::new(client, move |(id, after): (String, i64)| async move {
-                let value: reads::Delivery = api
-                    .read(&format!("/api/campaigns/{id}/delivery?after={after}"))
-                    .await?;
-                if value.campaign.id.to_string() != id {
-                    return Err(api.invalid_read_err());
-                }
-                Ok(DeliverySnapshot {
-                    value: encoded(api, value)?,
-                    refreshed_at: ruphish_domain::datetime::now().as_second(),
-                })
-            }),
+            delivery: Query::new(
+                client,
+                move |(id, cursor, sort, order): (String, String, String, String)| async move {
+                    let query = url::form_urlencoded::Serializer::new(String::new())
+                        .extend_pairs([("cursor", cursor), ("sort", sort), ("order", order)])
+                        .finish();
+                    let value: reads::Delivery = api
+                        .read(&format!("/api/campaigns/{id}/delivery?{query}"))
+                        .await?;
+                    if value.campaign.id.to_string() != id {
+                        return Err(api.invalid_read_err());
+                    }
+                    Ok(DeliverySnapshot {
+                        value: encoded(api, value)?,
+                        refreshed_at: ruphish_domain::datetime::now().as_second(),
+                    })
+                },
+            ),
             analysis: Query::new(client, move |(id, query): (i64, String)| async move {
                 Self::read_analysis_query(api, id, &query).await
             }),
@@ -156,7 +167,7 @@ impl CampaignQueries {
         self.overview.campaigns_changed();
         self.directory.invalidate_where(|_| true);
         self.delivery
-            .invalidate_where(|(campaign, _)| campaign == id);
+            .invalidate_where(|(campaign, _, _, _)| campaign == id);
         self.analysis
             .invalidate_where(|(campaign, _)| campaign.to_string() == id);
     }
@@ -172,7 +183,8 @@ impl CampaignQueries {
             if let Ok(id) = id.parse() {
                 self.overview.campaign_deleted(id);
             }
-            self.delivery.forget_where(|(campaign, _)| campaign == id);
+            self.delivery
+                .forget_where(|(campaign, _, _, _)| campaign == id);
             self.analysis
                 .forget_where(|(campaign, _)| campaign.to_string() == id);
         }

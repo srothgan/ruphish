@@ -18,10 +18,18 @@ sidebar:
 | `event` | Exact supported event name; omit for all events |
 | `source` | `legacy`, `application`, `public`, or `mailbox`; omit for all sources |
 | `search` | Case-insensitive recipient name/email substring |
+| `sort` | Recipient column: `email` (default), `name`, `delivery`, `accepted`, `opened`, `clicked`, `submitted`, or `reported` |
+| `order` | Recipient direction: `asc` (default) or `desc` |
+| `event_sort` | Event column: `time` (default), `kind`, `source`, or `password_present` |
+| `event_order` | Event direction: `desc` (default) or `asc` |
 | `offset` | Table offset, default 0 |
 | `limit` | Requested table rows, 1–200; default 50 |
 
 Recipient filters intersect when combined. Invalid filters fail rather than silently broadening the result. Supported event filters are `Campaign Created`, `Email Sent`, `Error Sending Email`, `Email Opened`, `Clicked Link`, `Submitted Data`, `Email Reported`, and `Delivery reconciled`. Do not translate these wire values into UI labels before sending them back to the API.
+
+Sorting applies to the complete filtered collection before pagination. Recipient text uses case-sensitive Unicode order, and counts sort numerically. Equal recipient values use ascending recipient ID; equal event values use event ID in the selected direction. Presence sorts absent, false, then true in ascending order. Undated historical report flags do not contribute to the recorded report count. Unknown sort columns or directions return `400`.
+
+Changing sort or filters should reset `offset` to zero. Separate requests read current data, so new observations can move rows between pages; an offset is not a frozen snapshot. Exports use the same selected ordering across all matching rows and ignore the displayed page offset/limit.
 
 For example, `/api/campaigns/42/analysis?limit=25&offset=0` reads the first page for campaign 42. That ID is illustrative; use an execution returned by your installation.
 

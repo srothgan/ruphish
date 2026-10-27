@@ -37,6 +37,9 @@ impl Filter {
 /// Stable keyset position across both storage families.
 #[derive(Default)]
 pub struct Cursor {
+    /// Explicit sorted traversal; absent retains the original ID cursor contract.
+    pub sorted:
+        Option<ruphish_domain::pagination::SortedPage<ruphish_domain::pagination::DirectorySort>>,
     /// Zero while in drafts, one after entering executions.
     pub kind: i32,
     /// Last draft identifier, or empty at the beginning.
@@ -65,6 +68,7 @@ impl Cursor {
                 kind: 1,
                 campaign: id,
                 draft: String::new(),
+                sorted: None,
             });
         }
         Err(Error::Invalid("Invalid campaign directory cursor".into()))
