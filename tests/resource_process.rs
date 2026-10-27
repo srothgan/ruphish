@@ -14,6 +14,119 @@ fn client() -> Client {
 }
 
 #[test]
+fn recipient_csv_template_imports_reviews_and_persists_without_accepting_bad_rows() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = ready(&mut process);
+    unlock(directory.path());
+    let client = client();
+    let sample = include_str!("../crates/ruphish-ui/assets/recipient-template.csv");
+    let review = |content: &str, columns: Value| {
+        client
+            .post(format!("{base}/api/import/group/review"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&json!({"content":content,"columns":columns}))
+            .send()
+            .unwrap()
+    };
+    let response = review(sample, Value::Null);
+    assert_eq!(response.status(), 200);
+    let reviewed: Value = response.json().unwrap();
+    assert_eq!(reviewed["errors"], json!([]));
+    let targets = &reviewed["targets"];
+    assert_eq!(targets.as_array().unwrap().len(), 2);
+    let upload = |bytes: &[u8]| {
+        let mut body = b"--recipient-template-test\r\nContent-Disposition: form-data; name=\"file\"; filename=\"recipient-template.csv\"\r\nContent-Type: text/csv\r\n\r\n".to_vec();
+        body.extend_from_slice(bytes);
+        body.extend_from_slice(b"\r\n--recipient-template-test--\r\n");
+        client
+            .post(format!("{base}/api/import/group"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .header(
+                "Content-Type",
+                "multipart/form-data; boundary=recipient-template-test",
+            )
+            .body(body)
+            .send()
+            .unwrap()
+    };
+    let uploaded = upload(sample.as_bytes());
+    assert_eq!(uploaded.status(), 200);
+    assert_eq!(uploaded.json::<Value>().unwrap(), *targets);
+    let mut invalid_encoding = sample.as_bytes().to_vec();
+    invalid_encoding.extend_from_slice(b"\xff,Invalid,bad@example.test,Role\n");
+    assert_eq!(upload(&invalid_encoding).status(), 400);
+    for (index, first, last, email, position) in [
+        (0, "Alex", "Rivera", "alex@example.test", "Operations"),
+        (1, "Sam", "Lee", "sam@example.test", "Support"),
+    ] {
+        assert_eq!(targets[index]["first_name"], first);
+        assert_eq!(targets[index]["last_name"], last);
+        assert_eq!(targets[index]["email"], email);
+        assert_eq!(targets[index]["position"], position);
+    }
+    // A BOM, CRLF, Unicode and explicit reordered column mapping survive real parsing.
+    let mapped = review(
+        "\u{feff}Address,Role,Surname,Given\r\nelise@example.test,\"=1+1\",Müller,\"Élise, E\"\r\n",
+        json!(["Address", "Given", "Surname", "Role"]),
+    );
+    assert_eq!(mapped.status(), 200);
+    let mapped: Value = mapped.json().unwrap();
+    assert_eq!(mapped["errors"], json!([]));
+    assert_eq!(mapped["targets"][0]["first_name"], "Élise, E");
+    assert_eq!(mapped["targets"][0]["last_name"], "Müller");
+    assert_eq!(mapped["targets"][0]["position"], "=1+1");
+    let hostile = format!("{sample}Bad,Address,not-an-email,Role\nShort,row\n");
+    assert_eq!(upload(hostile.as_bytes()).status(), 400);
+    let rejected: Value = review(&hostile, Value::Null).json().unwrap();
+    assert_eq!(rejected["targets"], *targets);
+    assert_eq!(rejected["errors"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        review("First Name,Position\nAlex,Role\n", Value::Null).status(),
+        400
+    );
+    assert_eq!(
+        client
+            .post(format!("{base}/api/import/group/review"))
+            .json(&json!({"content":sample}))
+            .send()
+            .unwrap()
+            .status(),
+        401
+    );
+    let groups: Value = client
+        .get(format!("{base}/api/groups/"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(groups, json!([]), "review must never persist a group");
+    let saved = client
+        .post(format!("{base}/api/groups/"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&json!({"name":"CSV template audience","targets":targets}))
+        .send()
+        .unwrap();
+    assert_eq!(saved.status(), 201);
+    let saved: Value = saved.json().unwrap();
+    let id = saved["id"].as_i64().unwrap();
+    process.stop();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = ready(&mut process);
+    let persisted: Value = client
+        .get(format!("{base}/api/groups/{id}"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(persisted["targets"], saved["targets"]);
+    assert_eq!(persisted["name"], "CSV template audience");
+    process.stop();
+}
+
+#[test]
 fn smtp_starttls_verifies_certificates_before_authentication_and_reports_rejection() {
     use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
     use std::io::{BufRead, BufReader};

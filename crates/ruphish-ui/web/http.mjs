@@ -34,12 +34,18 @@ export function cancelRequest(request) { request.cancel(); }
 
 export function saveDownload(result, filename) {
     if (!(result.file instanceof Blob)) throw new Error('invalid_download');
-    const url = URL.createObjectURL(result.file);
     const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.append(anchor);
-    anchor.click();
-    anchor.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const url = URL.createObjectURL(result.file);
+    try {
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.append(anchor);
+        anchor.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+        URL.revokeObjectURL(url);
+        throw error;
+    } finally {
+        anchor.remove();
+    }
 }

@@ -388,6 +388,7 @@
     "rejected_csv_rows": "Abgelehnte CSV-Zeilen",
     "showing_up_to_20_rows_download_the_report_for_all_rejected_rows": "Bis zu 20 Zeilen werden angezeigt. Laden Sie den Bericht für alle abgelehnten Zeilen herunter.",
     "download_error_report": "Fehlerbericht herunterladen",
+    "download_recipient_csv_template": "CSV-Vorlage für Empfänger herunterladen",
     "i_reviewed_the_rejected_or_duplicate_rows_and_accept_these_omissions": "Ich habe die abgelehnten oder doppelten Zeilen geprüft und akzeptiere diese Auslassungen.",
     "this_draft_is_kept_only_in_this_tab_refreshing_or_closing_it_clears_unsaved_cont": "Dieser Entwurf bleibt nur in diesem Tab. Aktualisieren oder Schließen löscht ungespeicherte Inhalte.",
     "send_a_test_email": "Test-E-Mail senden",

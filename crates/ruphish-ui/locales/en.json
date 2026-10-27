@@ -388,6 +388,7 @@
     "rejected_csv_rows": "Rejected CSV rows",
     "showing_up_to_20_rows_download_the_report_for_all_rejected_rows": "Showing up to 20 rows. Download the report for all rejected rows.",
     "download_error_report": "Download error report",
+    "download_recipient_csv_template": "Download recipient CSV template",
     "i_reviewed_the_rejected_or_duplicate_rows_and_accept_these_omissions": "I reviewed the rejected or duplicate rows and accept these omissions.",
     "this_draft_is_kept_only_in_this_tab_refreshing_or_closing_it_clears_unsaved_cont": "This draft is kept only in this tab. Refreshing or closing it clears unsaved content.",
     "send_a_test_email": "Send a test email",
