@@ -9,13 +9,11 @@ pub mod directory;
 pub mod drafts;
 pub mod preparation;
 
-/// A name-based legacy selection or an explicitly opted-in stable UI selection.
+/// Owner-scoped resource identity and optional reviewed revision.
 #[derive(Clone, Default)]
 pub struct Selection {
-    /// Legacy name, ignored only when an additive stable ID is supplied.
-    pub name: String,
-    /// Explicit UI selection; legacy nested IDs are not interpreted this way.
-    pub id: Option<i64>,
+    /// Persistent resource identity; zero is an incomplete selection.
+    pub id: i64,
     /// Reviewed modification timestamp, checked again in the launch transaction.
     pub revision: Option<String>,
 }

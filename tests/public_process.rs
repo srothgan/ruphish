@@ -271,27 +271,27 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
     assert_eq!(missing_revision.status(), 428);
     assert_eq!(get(&admin, "/api/domains/validated/"), json!([]));
     assert_eq!(get(&admin, "/api/domains/").as_array().unwrap().len(), 1);
-    post(
+    let group = post(
         &admin,
         "/api/groups/",
         json!({"name":"Audience","targets":[{"email":"alice@example.test","first_name":"Alice"}]}),
     );
-    post(
+    let template = post(
         &admin,
         "/api/templates/",
         json!({"name":"Mail","subject":"Training","text":"Visit {{.URL}}"}),
     );
-    post(
+    let landing = post(
         &admin,
         "/api/pages/",
         json!({"name":"Page","html":"<form><label>Password<input name='password' type='password' autocomplete='current-password'></label><button>Continue</button></form><script>authoredCanary()</script>","capture_credentials":false,"capture_passwords":false,"redirect_url":"http://example.test/finished/{{.FirstName}}"}),
     );
-    post(
+    let smtp = post(
         &admin,
         "/api/smtp/",
         json!({"name":"Local","host":"127.0.0.1:1","from_address":"training@example.test"}),
     );
-    let draft = json!({"name":"Private campaign","url":origin,"groups":[{"name":"Audience"}],"template":{"name":"Mail"},"page":{"name":"Page"},"smtp":{"name":"Local"}});
+    let draft = json!({"name":"Private campaign","url":origin,"selection":{"groups":[{"id":group["id"]}],"template":{"id":template["id"]},"page":{"id":landing["id"]},"smtp":{"id":smtp["id"]}}});
     let rejected = client()
         .post(format!("{admin}/api/campaigns/"))
         .bearer_auth("synthetic-bootstrap-token")

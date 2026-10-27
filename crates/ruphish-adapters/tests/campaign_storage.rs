@@ -88,16 +88,16 @@ fn caller() -> Identity {
     Identity { id: 1, epoch: 0 }
 }
 fn input(fixture: &Fixture) -> Create {
-    let select = |name: &str| Selection {
-        name: name.into(),
+    let select = |id| Selection {
+        id,
         ..Default::default()
     };
     Create {
         name: "Campaign workflow".into(),
-        groups: vec![select("Audience"), select("Overlap")],
-        template: select("Mail"),
-        page: select("Page"),
-        profile: select("Local"),
+        groups: vec![select(1), select(2)],
+        template: select(1),
+        page: select(1),
+        profile: select(1),
         url: fixture.network.origin("training.example.test"),
         ..Default::default()
     }
@@ -796,11 +796,11 @@ async fn ten_campaigns_keep_resources_and_credentials_isolated_under_bounded_fai
         let profile=sqlx::query("INSERT INTO smtp(user_id,name,host,username,password,from_address,modified_date,ignore_cert_errors) VALUES(1,?,'127.0.0.1:25',?,?,?,'2030-01-01T00:00:00Z',0)").bind(format!("Profile {index}")).bind(format!("account-{index}")).bind(format!("service-secret-{index}")).bind(format!("transport-{index}@example.test")).execute(&db.inspection_pool()).await.unwrap().last_insert_rowid();
         let mut request = input(&fixture);
         request.template = Selection {
-            id: Some(template),
+            id: template,
             ..Default::default()
         };
         request.profile = Selection {
-            id: Some(profile),
+            id: profile,
             ..Default::default()
         };
         let campaign = store

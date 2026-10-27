@@ -766,7 +766,9 @@ pub(super) fn create(
             return;
         };
         let mut campaign = d.value;
-        campaign["selection"] = json!(review.selection);
+        campaign["selection"] = json!(ruphish_contracts::campaign::Selections::from(
+            &review.selection
+        ));
         campaign["policy"] = json!(review.policy);
         busy.set(true);
         tasks.spawn(async move {

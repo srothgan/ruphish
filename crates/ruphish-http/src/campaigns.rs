@@ -113,13 +113,16 @@ fn encode_summary(c: &app::Campaign) -> Value {
     v
 }
 fn decode(context: &Context, bytes: &[u8]) -> Result<app::Create, Rejection> {
-    let input: wire::Create = ruphish_contracts::legacy::decode_object(bytes).map_err(|_| {
+    let input: wire::Create = serde_json::from_slice(bytes).map_err(|_| {
         failure(
             StatusCode::BAD_REQUEST,
             ErrorCode::RequestInvalid,
             "Invalid JSON structure",
         )
     })?;
+    command(context, input)
+}
+fn command(context: &Context, input: wire::Create) -> Result<app::Create, Rejection> {
     use sha2::{Digest, Sha256};
     let fingerprint = hex::encode(Sha256::digest(serde_json::to_vec(&input).map_err(
         |_| {
@@ -130,9 +133,9 @@ fn decode(context: &Context, bytes: &[u8]) -> Result<app::Create, Rejection> {
             )
         },
     )?));
-    let select = |s: wire::NamedResource| app::Selection {
-        name: s.name.unwrap_or_default(),
-        ..Default::default()
+    let select = |s: wire::ReviewedResource| app::Selection {
+        id: s.id,
+        revision: s.revision,
     };
     let timestamp = |t: Option<Timestamp>| {
         t.filter(|t| *t != Timestamp::default())
@@ -140,17 +143,12 @@ fn decode(context: &Context, bytes: &[u8]) -> Result<app::Create, Rejection> {
     };
     let p = input.policy.unwrap_or_default();
     let mut result = app::Create {
-        name: input.name.unwrap_or_default(),
-        groups: input
-            .groups
-            .unwrap_or_default()
-            .into_iter()
-            .map(select)
-            .collect(),
-        template: select(input.template.unwrap_or_default()),
-        page: select(input.page.unwrap_or_default()),
-        profile: select(input.smtp.unwrap_or_default()),
-        url: input.url.unwrap_or_default(),
+        name: input.name,
+        groups: input.selection.groups.into_iter().map(select).collect(),
+        template: select(input.selection.template),
+        page: select(input.selection.page),
+        profile: select(input.selection.smtp),
+        url: input.url,
         launch: timestamp(input.launch_date),
         send_by: timestamp(input.send_by_date),
         policy: app::Overrides {
@@ -161,17 +159,6 @@ fn decode(context: &Context, bytes: &[u8]) -> Result<app::Create, Rejection> {
         },
         idempotency: None,
     };
-    if let Some(s) = input.selection {
-        let stable = |s: wire::ReviewedResource| app::Selection {
-            id: Some(s.id),
-            revision: s.revision,
-            name: String::new(),
-        };
-        result.groups = s.groups.into_iter().map(stable).collect();
-        result.template = stable(s.template);
-        result.page = stable(s.page);
-        result.profile = stable(s.smtp);
-    }
     for (local, target, field) in [
         (input.launch_local, &mut result.launch, "launch_local.local"),
         (
@@ -685,23 +672,16 @@ async fn resolve(
 
 async fn test(context: Context, body: Bytes) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
-    let value: Value = serde_json::from_slice(&body).map_err(|_| {
+    let request: wire::Test = serde_json::from_slice(&body).map_err(|_| {
         failure(
             StatusCode::BAD_REQUEST,
             ErrorCode::RequestInvalid,
             "Invalid test request",
         )
     })?;
-    let campaign = serde_json::to_vec(&value["campaign"]).map_err(|_| {
-        failure(
-            StatusCode::BAD_REQUEST,
-            ErrorCode::CampaignInvalid,
-            "Invalid campaign",
-        )
-    })?;
-    let input = decode(&context, &campaign)?;
+    let input = command(&context, request.campaign)?;
     let recipient = ruphish_application::resources::Recipient {
-        email: value["email"].as_str().unwrap_or_default().into(),
+        email: request.email,
         first_name: "Sample".into(),
         last_name: "Recipient".into(),
         position: "Training".into(),

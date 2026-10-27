@@ -619,9 +619,8 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         .unwrap();
     assert!(domains.get(actor, domain.id).await.unwrap().verified_until > now);
     let selection = |r: &Resource| campaign::Selection {
-        id: Some(r.id),
+        id: r.id,
         revision: Some(r.modified_date.clone()),
-        name: r.name.clone(),
     };
     let input = campaign::Create {
         name: "Provider acceptance".into(),
@@ -638,6 +637,29 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     let campaigns = db.campaigns();
     let review = campaigns.prepare(actor, &input, now).await.unwrap();
     assert_eq!(review.recipients.len(), 1);
+    assert_eq!(review.template.id, template.id);
+    assert_eq!(review.page.id, page.id);
+    assert_eq!(review.profile.id, profile.id);
+    assert!(
+        matches!(
+            campaigns.prepare(normal.identity, &input, now).await,
+            Err(Error::NotFound(_))
+        ),
+        "resource IDs never bypass owner-scoped selection"
+    );
+    let mut stale = input.clone();
+    stale.template.revision = Some("unreviewed-revision".into());
+    assert!(matches!(
+        campaigns.create(actor, stale, now).await,
+        Err(Error::Changed)
+    ));
+    let mut missing = input.clone();
+    missing.template.id = i64::MAX;
+    missing.template.revision = None;
+    assert!(matches!(
+        campaigns.prepare(actor, &missing, now).await,
+        Err(Error::NotFound(_))
+    ));
     assert!(
         campaigns.list(actor).await.unwrap().is_empty(),
         "review must not persist a campaign"

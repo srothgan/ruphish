@@ -1,24 +1,19 @@
-//! Campaign request contracts with additive stable selection and capture overrides.
+//! Typed campaign commands shared by browser and programmable clients.
 use crate::legacy::Timestamp;
 use serde::{Deserialize, Serialize};
-/// Legacy nested resource selection; IDs remain ignored for legacy name lookup.
-#[derive(Clone, Default, Serialize)]
-pub struct NamedResource {
-    /// Legacy lookup name.
-    pub name: Option<String>,
-    /// Parsed for legacy type compatibility, not used as a new selection mechanism.
-    pub id: Option<i64>,
-}
-/// Explicit new-UI selection, separate from legacy nested resource IDs.
+
+/// Owner-scoped resource identity, optionally bound to a reviewed revision.
 #[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ReviewedResource {
     /// Owner-scoped persistent resource ID.
     pub id: i64,
     /// Revision shown during review, if already reviewed.
     pub revision: Option<String>,
 }
-/// IDs/revisions supplied only by clients opting into exact resource selection.
+/// Ordered audience and content selections for preparation and execution.
 #[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Selections {
     /// Ordered audience collections.
     pub groups: Vec<ReviewedResource>,
@@ -31,6 +26,7 @@ pub struct Selections {
 }
 /// Compatibility inputs and optional redirect defaults.
 #[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[serde(default)]
 pub struct Policy {
     /// Deprecated input, ignored; submissions are always tracked.
@@ -45,6 +41,7 @@ pub struct Policy {
 }
 /// Local time entry resolved authoritatively on the server.
 #[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[serde(default)]
 pub struct LocalTime {
     /// Civil date/time without an offset.
@@ -52,144 +49,63 @@ pub struct LocalTime {
     /// IANA time-zone name.
     pub time_zone: String,
 }
-/// Compatible legacy creation fields with opt-in UI extensions.
-#[derive(Clone, Default, Serialize)]
+/// Campaign input shared by preparation, creation and test sends.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Create {
-    /// Campaign name.
-    pub name: Option<String>,
-    /// Legacy ordered group names.
-    pub groups: Option<Vec<NamedResource>>,
-    /// Legacy email template name.
-    pub template: Option<NamedResource>,
-    /// Legacy page name.
-    pub page: Option<NamedResource>,
-    /// Legacy sending-profile name.
-    pub smtp: Option<NamedResource>,
+    /// Campaign display name.
+    pub name: String,
     /// Public URL template.
-    pub url: Option<String>,
-    /// UTC or offset timestamp; zero/null means now.
+    pub url: String,
+    /// Owner-scoped resource IDs and optional reviewed revisions.
+    pub selection: Selections,
+    /// UTC or offset timestamp; omission means now.
     pub launch_date: Option<Timestamp>,
     /// Optional initial distribution end.
     pub send_by_date: Option<Timestamp>,
-    /// Explicit stable resource selection for the UI.
-    pub selection: Option<Selections>,
-    /// Optional capture/redirect overrides.
+    /// Optional redirect defaults.
     pub policy: Option<Policy>,
-    /// Optional named-zone launch input.
+    /// Named-zone launch input.
     pub launch_local: Option<LocalTime>,
-    /// Optional named-zone distribution end.
+    /// Named-zone distribution end.
     pub send_by_local: Option<LocalTime>,
 }
 
-impl<'de> Deserialize<'de> for NamedResource {
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        struct Fields;
-        impl<'de> serde::de::Visitor<'de> for Fields {
-            type Value = NamedResource;
-            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str("a resource object")
-            }
-            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
-                Ok(NamedResource::default())
-            }
-            fn visit_map<M: serde::de::MapAccess<'de>>(
-                self,
-                mut m: M,
-            ) -> Result<Self::Value, M::Error> {
-                let mut result = NamedResource::default();
-                while let Some(key) = m.next_key::<String>()? {
-                    match key.to_ascii_lowercase().as_str() {
-                        "name" => {
-                            if let Some(v) = m.next_value::<Option<String>>()? {
-                                result.name = Some(v);
-                            }
-                        }
-                        "id" => {
-                            if let Some(v) = m.next_value::<Option<i64>>()? {
-                                result.id = Some(v);
-                            }
-                        }
-                        _ => {
-                            m.next_value::<serde::de::IgnoredAny>()?;
-                        }
-                    }
-                }
-                Ok(result)
-            }
-        }
-        d.deserialize_any(Fields)
-    }
+/// Launch an unchanged saved draft using the same campaign input as preparation.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LaunchDraft {
+    /// Saved draft revision reviewed by the caller.
+    pub revision: i64,
+    /// Reviewed campaign command.
+    pub campaign: Create,
 }
-impl<'de> Deserialize<'de> for Create {
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        struct Fields;
-        impl<'de> serde::de::Visitor<'de> for Fields {
-            type Value = Create;
-            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str("a campaign object")
-            }
-            fn visit_map<M: serde::de::MapAccess<'de>>(
-                self,
-                mut m: M,
-            ) -> Result<Self::Value, M::Error> {
-                let mut result = Create::default();
-                while let Some(key) = m.next_key::<String>()? {
-                    macro_rules! scalar {
-                        ($field:ident,$ty:ty) => {
-                            if let Some(value) = m.next_value::<Option<$ty>>()? {
-                                result.$field = Some(value);
-                            }
-                        };
-                    }
-                    macro_rules! resource {
-                        ($field:ident) => {
-                            if let Some(value) = m.next_value::<Option<NamedResource>>()? {
-                                let current =
-                                    result.$field.get_or_insert_with(NamedResource::default);
-                                if value.name.is_some() {
-                                    current.name = value.name;
-                                }
-                                if value.id.is_some() {
-                                    current.id = value.id;
-                                }
-                            }
-                        };
-                    }
-                    match key.to_ascii_lowercase().as_str() {
-                        "name" => {
-                            scalar!(name, String);
-                        }
-                        "url" => {
-                            scalar!(url, String);
-                        }
-                        "launch_date" => {
-                            scalar!(launch_date, Timestamp);
-                        }
-                        "send_by_date" => {
-                            scalar!(send_by_date, Timestamp);
-                        }
-                        "template" => {
-                            resource!(template);
-                        }
-                        "page" => {
-                            resource!(page);
-                        }
-                        "smtp" => {
-                            resource!(smtp);
-                        }
-                        "groups" => result.groups = m.next_value()?,
-                        "selection" => result.selection = m.next_value()?,
-                        "policy" => result.policy = m.next_value()?,
-                        "launch_local" => result.launch_local = m.next_value()?,
-                        "send_by_local" => result.send_by_local = m.next_value()?,
-                        _ => {
-                            m.next_value::<serde::de::IgnoredAny>()?;
-                        }
-                    }
-                }
-                Ok(result)
-            }
+
+/// Send a reviewed campaign sample to one administrator-selected recipient.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Test {
+    /// Reviewed campaign command.
+    pub campaign: Create,
+    /// Test recipient mailbox.
+    pub email: String,
+}
+
+impl From<&crate::campaign_workflow::Selection<crate::campaign_workflow::ReviewedResource>>
+    for Selections
+{
+    fn from(
+        value: &crate::campaign_workflow::Selection<crate::campaign_workflow::ReviewedResource>,
+    ) -> Self {
+        let selected = |resource: &crate::campaign_workflow::ReviewedResource| ReviewedResource {
+            id: resource.id,
+            revision: Some(resource.revision.clone()),
+        };
+        Self {
+            groups: value.groups.iter().map(selected).collect(),
+            template: selected(&value.template),
+            page: selected(&value.page),
+            smtp: selected(&value.smtp),
         }
-        d.deserialize_map(Fields)
     }
 }

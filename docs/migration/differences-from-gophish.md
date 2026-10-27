@@ -7,10 +7,11 @@ sidebar:
 
 Ruphish keeps the campaign concepts while replacing both the server and administration interface. These changes matter when you bring across existing habits, content, or automation.
 
-The comparison baseline is Gophish 0.12.1, commit `95618469799295e2c0fec980805a2dfbb818816b`. Ruphish aims to be a compatible, drop-in replacement; the intentional differences below identify where your configuration, content, or integrations may need changes.
+The comparison baseline is Gophish 0.12.1, commit `95618469799295e2c0fec980805a2dfbb818816b`. Ruphish develops its own API while retaining supported data and template migration; the differences below identify where your configuration, content, or integrations need changes.
 
 | Area | Gophish baseline | Ruphish behavior | Required user action |
 | --- | --- | --- | --- |
+| Campaign commands | Resources selected by name; permissive JSON decoding | One ID/revision selection model; unknown, duplicate and incorrectly cased fields rejected | Use [native campaign requests](../api/campaigns.md#prepare-and-launch), including inside test-send and draft-launch bodies |
 | UI | Legacy web administration and campaign views | Leptos/WASM interface with saved drafts, delivery history/reconciliation, domains, richer analysis, and multiple mailboxes | Follow current guides and replace old screen-specific instructions |
 | Localization | No equivalent account-level language/format/zone preference workflow | English/German interface with independently persisted format and time-zone choices | Choose account preferences; keep API timestamps and names unchanged |
 | Browser API layout | Browser and administrative routes without the same three-way separation | Public `/api/`, session `/auth/`, browser-specific `/internal/`, plus retained form routes | Integrate through documented public endpoints |

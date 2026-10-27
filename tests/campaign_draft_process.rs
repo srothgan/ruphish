@@ -55,7 +55,7 @@ fn configuration_for(base: &str) -> Value {
 fn launch_body(base: &str, configuration: &Value, revision: &Value) -> Value {
     let review = post(base, "/api/campaigns/prepare", configuration);
     let mut campaign = configuration.clone();
-    campaign["selection"] = review["selection"].clone();
+    campaign["selection"] = reviewed_selection(&review);
     campaign["policy"] = review["policy"].clone();
     json!({"revision":revision,"campaign":campaign})
 }
@@ -65,7 +65,7 @@ fn incomplete_review_step_draft_reopens_rejects_review_and_launch_then_recovers(
     let directory = workspace();
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let path = "/api/campaign-drafts/incomplete-review-step-01";
-    let incomplete = json!({"name":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"redirect_url":""}});
+    let incomplete = json!({"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"redirect_url":""}});
     let saved = save(&base, path, Value::Null, &incomplete, 3);
     let before = counts(directory.path());
     process.stop();

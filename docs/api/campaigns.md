@@ -44,22 +44,26 @@ This request reads campaign details without launching or changing the campaign. 
 
 ## Prepare and launch
 
-The familiar request selects resources by name:
+Campaign requests select owned resources by ID. Use the same body for preparation and direct launch:
 
 ```json
 {
   "name": "Local exercise",
-  "groups": [{"name": "Local tutorial"}],
-  "template": {"name": "Local invitation"},
-  "page": {"name": "Local exercise"},
-  "smtp": {"name": "Local inbox"},
+  "selection": {
+    "groups": [{"id": 1}],
+    "template": {"id": 2},
+    "page": {"id": 3},
+    "smtp": {"id": 4}
+  },
   "url": "https://campaign.test:8443"
 }
 ```
 
-This body is illustrative: the named resources must exist under the caller, and the URL must be an eligible campaign origin under the current [verification policy](settings.md). Posting it to `/api/campaigns/` schedules real sending. Use the [local fixture](../getting-started/first-campaign.md) for a contained trial.
+This body is illustrative: replace the example IDs with resources owned by the caller, and the URL must be an eligible campaign origin under the current [verification policy](settings.md). Posting it to `/api/campaigns/` schedules real sending. Use the [local fixture](../getting-started/first-campaign.md) for a contained trial.
 
-New clients should use `selection` with explicit resource references: `groups` is an array, and `template`, `page`, and `smtp` are objects with `id` and an optional revision string. Preparation returns resolved selections, `total`, `duplicate_count`, `conflict_count`, conflicting recipient details, resolved policy and schedule, `mailer_enabled`, and a rendered `preview`. Carry its selected revisions into launch so changed content is detected.
+`selection` is required: `groups` is an array, and `template`, `page`, and `smtp` are objects with `id` and an optional revision string. Preparation returns resolved selections, `total`, `duplicate_count`, `conflict_count`, conflicting recipient details, resolved policy and schedule, `mailer_enabled`, and a rendered `preview`. Carry each selected `id` and `revision` into launch so changed content is detected. Review selections also include display names; omit those names from command inputs. Resource renaming does not change the selected identity. Missing or foreign-owned resources are rejected; there is no fallback lookup by name.
+
+Request fields are case-sensitive. Unknown fields, duplicate fields, invalid types and trailing JSON are rejected with `400`. Top-level legacy `groups`, `template`, `page` and `smtp` inputs are no longer accepted, including alongside `selection`. The same typed campaign input is used inside test-send and draft-launch requests.
 
 The optional `policy` contains `capture_credentials`, `capture_passwords`, and `redirect_url`. The flags are ignored compatibility inputs; every supported submission records an event and password presence. Only `redirect_url` changes effective policy. See [landing pages](landing-pages.md).
 

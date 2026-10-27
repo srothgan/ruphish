@@ -166,7 +166,9 @@ impl Draft {
         }
         let review = self.review.as_ref()?;
         let mut value = self.value.clone();
-        value["selection"] = json!(review.selection);
+        value["selection"] = json!(ruphish_contracts::campaign::Selections::from(
+            &review.selection
+        ));
         value["policy"] = json!(review.policy);
         self.launch = Some((key, value));
         self.launch.clone()
@@ -204,6 +206,28 @@ mod tests {
             value: json!({"name":"Training","policy":{"redirect_url":""}}),
             ..Default::default()
         }
+    }
+    #[test]
+    fn reviewed_launch_uses_command_references_and_retains_retry_identity() {
+        let mut draft = Draft {
+            value: json!({"name":"Training","url":"https://example.test","selection":{"groups":[],"template":{"id":1},"page":{"id":2},"smtp":{"id":3}}}),
+            ..Default::default()
+        };
+        let (ticket, _) = draft.begin_review().unwrap();
+        assert!(draft.reviewed(
+            ticket,
+            Ok(review(
+                json!({"selection":{"groups":[{"id":8,"name":"Audience","revision":"r8"}]}})
+            ))
+        ));
+        let first = draft.launch("one-operation".into()).unwrap();
+        let command: ruphish_contracts::campaign::Create =
+            serde_json::from_value(first.1.clone()).unwrap();
+        assert_eq!(command.selection.groups[0].id, 8);
+        assert_eq!(command.selection.groups[0].revision.as_deref(), Some("r8"));
+        assert_eq!(command.selection.template.revision.as_deref(), Some("v1"));
+        assert!(first.1["selection"]["template"].get("name").is_none());
+        assert_eq!(draft.launch("another-key".into()).unwrap(), first);
     }
     #[test]
     fn learning_destination_survives_landing_selection_review_and_uncertain_launch_retry() {

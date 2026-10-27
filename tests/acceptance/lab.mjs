@@ -172,10 +172,12 @@ async function seed() {
         || group?.targets?.length !== 1 || group.targets[0].email !== 'browser@example.test') {
         throw new Error('Fixture profile/audience was edited. Restore the local inbox and synthetic browser recipient before seeding. No campaign was launched.');
     }
+    const template = (await api('/api/templates/')).find(item => item.name === 'Local privacy email');
+    const page = (await api('/api/pages/')).find(item => item.name === 'Local privacy page');
     const campaign = await api('/api/campaigns/', 'POST', {
         name: `Browser acceptance ${new Date().toISOString()}`, url: 'https://good.ruphish.test:8443',
-        groups: [{ name: 'Local browser audience' }], template: { name: 'Local privacy email' },
-        page: { name: 'Local privacy page' }, smtp: { name: 'Local inbox only' },
+        selection: { groups: [{ id: group.id }], template: { id: template.id },
+            page: { id: page.id }, smtp: { id: profile.id } },
     });
     await writeFile(join(data, 'manual-campaign.json'), `${JSON.stringify(campaign, null, 2)}\n`, { mode: 0o600 });
     console.log(`Created campaign ${campaign.id}. Open http://127.0.0.1:8026 for its email; ${base}/campaigns/${campaign.id} for its history.`);

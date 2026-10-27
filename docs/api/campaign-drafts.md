@@ -48,6 +48,6 @@ List responses contain `items` and `next_after`; pages contain at most 50 drafts
 
 ## Launch the reviewed revision
 
-The launch body contains `revision` and `campaign`, where `campaign` is the full reviewed [campaign request](campaigns.md). It must match the saved draft configuration. Preparation resolves current resources and catches schedules that are no longer in the future.
+The launch body contains `revision` and `campaign`, where `campaign` is the full reviewed [native campaign request](campaigns.md#prepare-and-launch). It must match the saved draft configuration. Submit resource IDs and reviewed revisions, without the display names returned by preparation. Unknown and duplicate nested fields are rejected before launch. Preparation resolves current resources and catches schedules that are no longer in the future.
 
 Launch ties the draft to one execution. If the response is lost, retrying the same draft launch returns that execution rather than creating another. The draft identity owns this behavior; an unrelated idempotency header cannot bypass it. After launch, use the execution APIs for delivery and results.

@@ -81,7 +81,7 @@ fn campaign(c: &Client, base: &str, key: &str, origin: &str) -> Value {
         "/api/smtp/",
         &json!({"name":"Settings SMTP","interface_type":"SMTP","host":"127.0.0.1:1","from_address":"training@example.test"}),
     );
-    let input = json!({"name":"Settings campaign","groups":[{"name":group["name"]}],"template":{"name":template["name"]},"page":{"name":page["name"]},"smtp":{"name":smtp["name"]},"url":origin});
+    let input = json!({"name":"Settings campaign","selection":{"groups":[{"id":group["id"]}],"template":{"id":template["id"]},"page":{"id":page["id"]},"smtp":{"id":smtp["id"]}},"url":origin});
     post(c, base, key, "/api/campaigns/", &input)
 }
 

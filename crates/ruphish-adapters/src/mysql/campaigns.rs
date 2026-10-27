@@ -46,27 +46,7 @@ async fn selection(
     kind: Kind,
     s: &Selection,
 ) -> Result<Resource, Error> {
-    let table = match kind {
-        Kind::Group => "`groups`",
-        Kind::Template => "templates",
-        Kind::Page => "pages",
-        Kind::LearningPage => "ruphish_learning_pages",
-        Kind::Profile => "smtp",
-    };
-    let id = if let Some(id) = s.id {
-        id
-    } else {
-        sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-            "SELECT id FROM {table} WHERE user_id=? AND name=? ORDER BY id LIMIT 1"
-        )))
-        .bind(owner)
-        .bind(&s.name)
-        .fetch_optional(&mut *c)
-        .await
-        .map_err(storage)?
-        .ok_or(Error::NotFound(kind.label()))?
-    };
-    let resource = super::resources::load(c, owner, kind, id).await?;
+    let resource = super::resources::load(c, owner, kind, s.id).await?;
     if s.revision
         .as_ref()
         .is_some_and(|v| v != &resource.modified_date)

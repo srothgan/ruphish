@@ -126,17 +126,10 @@ async fn remove(
         .map_err(draft_error)?;
     response(StatusCode::OK, &json!({"success":true}), None)
 }
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Launch {
-    revision: i64,
-    campaign: Value,
-}
 async fn launch(c: Context, Path(id): Path<String>, body: Bytes) -> Result<Response, Rejection> {
     let caller = c.api(None).await?;
-    let request: Launch = decode_body(&body)?;
-    let bytes = serde_json::to_vec(&request.campaign).map_err(|_| draft_error(Error::Internal))?;
-    let mut input = super::decode(&c, &bytes)?;
+    let request: wire::LaunchDraft = decode_body(&body)?;
+    let mut input = super::command(&c, request.campaign)?;
     // Draft identity itself owns idempotency; no independent key can bypass it.
     input.idempotency = None;
     let campaign = c
