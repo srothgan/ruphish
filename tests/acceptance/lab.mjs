@@ -143,17 +143,17 @@ async function establishAccount() {
         return response.json();
     }
     const initial = await browser('/auth/session');
-    await browser('/login', { username: 'admin', password: env.GOPHISH_INITIAL_ADMIN_PASSWORD, csrf_token: initial.csrf_token });
+    await browser('/auth/login', { username: 'admin', password: env.GOPHISH_INITIAL_ADMIN_PASSWORD, csrf_token: initial.csrf_token });
     const signedIn = await browser('/auth/session');
     if (signedIn.user?.password_change_required) {
         const password = randomBytes(20).toString('hex');
-        await browser('/reset_password', { password, confirm_password: password, csrf_token: signedIn.csrf_token });
+        await browser('/auth/password/reset', { password, confirm_password: password, csrf_token: signedIn.csrf_token });
         env.GOPHISH_INITIAL_ADMIN_PASSWORD = password;
         await writeFile(join(data, 'bootstrap.env'), Object.entries(env).map(([name, value]) => `${name}=${value}\n`).join(''), { mode: 0o600 });
         console.log('Completed the lab administrator first-login password change through the normal HTTP workflow.');
     }
     const current = await browser('/auth/session');
-    await browser('/logout', { csrf_token: current.csrf_token });
+    await browser('/auth/logout', { csrf_token: current.csrf_token });
 }
 
 async function seed() {
@@ -161,7 +161,7 @@ async function seed() {
     for (const [path, resource] of [
         ['/api/groups/', { name: 'Local browser audience', targets: [{ email: 'browser@example.test', first_name: 'Browser', last_name: 'Tester' }] }],
         ['/api/templates/', { name: 'Local privacy email', subject: 'Local exercise for {{.FirstName}}', text: 'Local practice page: {{.URL}}', html: await readFile(new URL('./email.html', import.meta.url), 'utf8') }],
-        ['/api/pages/', { name: 'Local privacy page', html: await readFile(new URL('./landing.html', import.meta.url), 'utf8'), capture_credentials: true, capture_passwords: true }],
+        ['/api/pages/', { name: 'Local privacy page', html: await readFile(new URL('./landing.html', import.meta.url), 'utf8') }],
         ['/api/smtp/', { name: 'Local inbox only', host: '172.30.53.20:1025', from_address: 'Training <training@example.test>' }],
     ]) {
         if (!(await api(path)).some(item => item.name === resource.name)) await api(path, 'POST', resource);
@@ -172,10 +172,12 @@ async function seed() {
         || group?.targets?.length !== 1 || group.targets[0].email !== 'browser@example.test') {
         throw new Error('Fixture profile/audience was edited. Restore the local inbox and synthetic browser recipient before seeding. No campaign was launched.');
     }
+    const template = (await api('/api/templates/')).find(item => item.name === 'Local privacy email');
+    const page = (await api('/api/pages/')).find(item => item.name === 'Local privacy page');
     const campaign = await api('/api/campaigns/', 'POST', {
         name: `Browser acceptance ${new Date().toISOString()}`, url: 'https://good.ruphish.test:8443',
-        groups: [{ name: 'Local browser audience' }], template: { name: 'Local privacy email' },
-        page: { name: 'Local privacy page' }, smtp: { name: 'Local inbox only' },
+        selection: { groups: [{ id: group.id }], template: { id: template.id },
+            page: { id: page.id }, smtp: { id: profile.id } },
     });
     await writeFile(join(data, 'manual-campaign.json'), `${JSON.stringify(campaign, null, 2)}\n`, { mode: 0o600 });
     console.log(`Created campaign ${campaign.id}. Open http://127.0.0.1:8026 for its email; ${base}/campaigns/${campaign.id} for its history.`);

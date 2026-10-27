@@ -28,7 +28,8 @@ pub struct User {
     /// Account is disabled.
     pub account_locked: bool,
     /// Most recent successful login.
-    pub last_login: Timestamp,
+    #[serde(deserialize_with = "crate::nullable")]
+    pub last_login: Option<Timestamp>,
 }
 /// User-list projection excluding the API credential and unused login history.
 #[derive(Clone, Debug, Deserialize)]

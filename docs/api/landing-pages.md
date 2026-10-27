@@ -1,6 +1,6 @@
 ---
 title: Landing pages API
-description: Manage campaign pages and understand the privacy meaning of legacy capture flags.
+description: Manage campaign pages, redirects and event-only interaction tracking.
 sidebar:
   order: 7
 ---
@@ -19,17 +19,15 @@ sidebar:
 {
   "name": "Local exercise",
   "html": "<h1>Exercise complete</h1><p>This is a local demonstration.</p>",
-  "capture_credentials": false,
-  "capture_passwords": false,
   "redirect_url": ""
 }
 ```
 
 The saved object adds `id`, `modified_date`, and `warnings`. Updates require the matching body ID and support an ETag precondition.
 
-## Legacy flags do not enable value capture
+## Interaction tracking
 
-The field names remain for compatibility. Both flags are ignored on input and returned as `true`; every supported submission records an event and password presence. Neither pages nor campaign overrides can disable tracking or enable stored usernames, passwords, OTPs, arbitrary field values, or value derivatives.
+The API has no capture settings. Every supported submission records an event and password presence. Neither pages nor campaign overrides can disable this built-in tracking or enable stored usernames, passwords, OTPs, arbitrary field values, or value derivatives. The retired `capture_credentials` and `capture_passwords` fields are absent from responses.
 
 The authored HTML and the served participant page are different representations. Ruphish applies restrictions to served content and uses a controlled event submission path. Imported scripts, external resources, and form behavior may therefore differ from the source website. Read [landing pages](../user-guide/landing-pages.md) and [participant data](../user-guide/participant-data.md), including the current verification limits.
 

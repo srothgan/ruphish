@@ -33,14 +33,10 @@ pub struct LocalTime {
     pub time_zone: String,
 }
 
-/// Presence-only interaction settings. No participant values may be stored.
+/// Post-submission destination settings.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Policy {
-    /// Inert legacy draft input; submissions are always tracked.
-    pub capture_credentials: bool,
-    /// Inert legacy draft input; presence is always tracked.
-    pub capture_passwords: bool,
     /// Optional redirect expression.
     pub redirect_url: String,
     /// Selected owned learning page; custom redirect must be empty when present.
@@ -189,5 +185,25 @@ pub fn field_step(field: &str) -> usize {
         2
     } else {
         1
+    }
+}
+
+/// Draft launch acknowledgement, derived from its committed campaign reference.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Status {
+    /// Editable configuration without an execution.
+    Draft,
+    /// Launch committed; the draft remains available for retry reconciliation.
+    Launched,
+}
+impl Status {
+    /// The committed reference is the sole authority; no separate state is persisted.
+    pub const fn from_campaign_id(campaign_id: Option<i64>) -> Self {
+        if campaign_id.is_some() {
+            Self::Launched
+        } else {
+            Self::Draft
+        }
     }
 }

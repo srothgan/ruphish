@@ -41,7 +41,7 @@ fn sorted_recipient_edits_and_removal_keep_original_targets_and_saved_revision()
     let submitted = draft.value().clone();
     let encoded = serde_json::to_vec(&submitted).unwrap();
     let decoded: ruphish_contracts::legacy::Group = serde_json::from_slice(&encoded).unwrap();
-    let targets = decoded.targets.unwrap();
+    let targets = decoded.targets;
     assert_eq!(targets.len(), 2);
     assert_eq!(targets[1].email, "a@example.test");
     draft.saved(&submitted, submitted.clone(), Some("revision-2".into()));
@@ -150,8 +150,8 @@ fn recent_campaign_window_stays_latest_three_when_sorting_and_refreshing() {
     let row = |id, name: &str, count| RecentCampaign {
         id,
         name: name.into(),
-        status: "Completed".into(),
-        launch: String::new(),
+        status: ruphish_domain::campaign::CampaignStatus::Completed,
+        launch: None,
         recipients: count,
         outcomes: Posture {
             delivered: 100,

@@ -200,9 +200,9 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                         )
                         .await
                         .and_then(|(saved, _)| {
-                            ResourceQueries::validate_detail(api, family, &saved, None)
-                                .map_err(|e| e.message)?;
-                            saved["id"].as_i64().ok_or_else(|| api.invalid_read())
+                            ResourceQueries::decode_detail(api, family, saved, None)
+                                .map(|resource| resource.metadata.id)
+                                .map_err(|e| e.message)
                         });
                     match response {
                         Ok(id) => {

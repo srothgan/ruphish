@@ -59,12 +59,13 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
             assert.equal(response.status, 200, path);
             const value = await response.json();
             if (path === '/api/overview') assert.equal(value.recent.length, 4);
+            if (path === '/api/campaigns/3/delivery') assert.equal(value.campaign.send_by_date, null);
             if (path.includes('posture')) assert.equal(value.delivered, 937);
         }
         const memory = new Map();
         const demo = createDemoApi({ now: 1793016000, storage: { getItem: k => memory.get(k), setItem: (k, v) => memory.set(k, v), removeItem: k => memory.delete(k) } });
         const post = (path, body) => demo.execute(new Request(`https://demo.example.test${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }));
-        assert.equal((await post('/login', { username: 'demo', password: 'demodemo' })).status, 200);
+        assert.equal((await post('/auth/login', { username: 'demo', password: 'demodemo' })).status, 200);
         const exportPath = '/api/campaigns/3/export?format=csv&scope=recipients&recipients=30001,30002&limit=1&offset=1';
         const live = await fetch(`http://127.0.0.1:${port}${exportPath}`, { headers: { Authorization: `Bearer ${apiKey}` } });
         const simulated = await demo.execute(new Request(`https://demo.example.test${exportPath}`));

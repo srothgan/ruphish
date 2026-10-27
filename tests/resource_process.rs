@@ -170,6 +170,96 @@ fn recipient_csv_template_imports_reviews_and_persists_without_accepting_bad_row
 }
 
 #[test]
+fn profile_credentials_are_write_only_and_clear_only_when_requested() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = ready(&mut process);
+    unlock(directory.path());
+    let browser = client();
+    let create = browser.post(format!("{base}/api/smtp/"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&json!({"name":"Private relay","host":"127.0.0.1:1","from_address":"sender@example.test","password":"write-only-service-password"}))
+        .send().unwrap().error_for_status().unwrap();
+    let stale = create.headers()["etag"].to_str().unwrap().to_owned();
+    let mut value: Value = create.json().unwrap();
+    let id = value["id"].as_i64().unwrap();
+    let path = format!("{base}/api/smtp/{id}");
+    assert!(value.get("password").is_none());
+    assert_eq!(value["has_password"], true);
+    value["name"] = json!("Renamed relay");
+    value["password"] = Value::Null;
+    value = browser
+        .put(&path)
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&value)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(value["has_password"], true);
+    assert!(value.get("password").is_none());
+    value["password"] = json!("");
+    assert_eq!(
+        browser
+            .put(&path)
+            .bearer_auth("synthetic-bootstrap-token")
+            .header("if-match", &stale)
+            .json(&value)
+            .send()
+            .unwrap()
+            .status(),
+        412
+    );
+    value = browser
+        .put(&path)
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&value)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(value["has_password"], false);
+    assert!(value.get("password").is_none());
+    process.stop();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        let pool = sqlx::SqlitePool::connect(&format!(
+            "sqlite:{}",
+            directory.path().join("installation.sqlite3").display()
+        ))
+        .await
+        .unwrap();
+        let password: String = sqlx::query_scalar("SELECT password FROM smtp WHERE id=?")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert!(password.is_empty());
+        pool.close().await;
+    });
+    let mut reopened = Process::start(directory.path(), "admin");
+    let base = ready(&mut reopened);
+    for path in [format!("{base}/api/smtp/{id}"), format!("{base}/api/smtp/")] {
+        let response = browser
+            .get(path)
+            .bearer_auth("synthetic-bootstrap-token")
+            .send()
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .text()
+            .unwrap();
+        assert!(!response.contains("write-only-service-password"));
+        assert!(!response.contains("\"password\""));
+    }
+    reopened.stop();
+}
+
+#[test]
 fn smtp_cram_negotiates_and_delivers_without_fallback_or_secret_diagnostics() {
     use std::io::{BufRead, BufReader};
     let directory = workspace();
@@ -291,13 +381,59 @@ fn smtp_cram_negotiates_and_delivers_without_fallback_or_secret_diagnostics() {
             }
             data
         });
-        let profile = json!({"host":address.to_string(),"from_address":"sender@example.test","username":"tim","password":"tanstaaftanstaaf"});
+        let create = client().post(format!("{base}/api/smtp/"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&json!({"name":format!("Authentication {address}"),"host":address.to_string(),"from_address":"sender@example.test","username":if send {"tim"} else {"stored-identity"},"password":"initial-test-password"}))
+            .send().unwrap().error_for_status().unwrap();
+        let mut profile: Value = create.json().unwrap();
+        assert!(profile.get("password").is_none());
+        assert_eq!(profile["has_password"], true);
+        let path = format!("{base}/api/smtp/{}", profile["id"]);
+        profile["password"] = json!("tanstaaftanstaaf");
+        profile = client()
+            .put(&path)
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&profile)
+            .send()
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .unwrap();
+        // An unrelated edit sends only the read projection. The new credential must survive.
+        assert!(profile.get("password").is_none());
+        profile["name"] = json!(format!("Renamed {address}"));
+        profile = client()
+            .put(&path)
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&profile)
+            .send()
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .unwrap();
+        for read_path in [path, format!("{base}/api/smtp/")] {
+            let body = client()
+                .get(read_path)
+                .bearer_auth("synthetic-bootstrap-token")
+                .send()
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .text()
+                .unwrap();
+            assert!(!body.contains("tanstaaftanstaaf") && !body.contains("initial-test-password"));
+            assert!(!body.contains("\"password\""));
+        }
+        let profile_id = profile["id"].as_i64().unwrap();
         let (path, body) = if send {
             (
                 "send_test_email",
-                json!({"smtp":profile,"email":"recipient@example.test","first_name":"Alice"}),
+                json!({"smtp":{"source":"saved","id":profile["id"]},"email":"recipient@example.test","first_name":"Alice"}),
             )
         } else {
+            profile["username"] = json!("tim");
             ("test_connection", profile)
         };
         let response = client()
@@ -310,6 +446,21 @@ fn smtp_cram_negotiates_and_delivers_without_fallback_or_secret_diagnostics() {
         let body = response.text().unwrap();
         assert_eq!(status.is_success(), success, "{body}");
         assert!(!body.contains("tanstaaftanstaaf") && !body.contains(RESPONSE));
+        if !send {
+            let saved: Value = client()
+                .get(format!("{base}/api/smtp/{profile_id}"))
+                .bearer_auth("synthetic-bootstrap-token")
+                .send()
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .unwrap();
+            assert_eq!(
+                saved["username"], "stored-identity",
+                "connection checks must not save draft settings"
+            );
+        }
         let message = peer.join().unwrap();
         assert_eq!(!message.is_empty(), send && success);
         if send && success {
@@ -537,6 +688,7 @@ fn actual_test_delivery_composes_mime_persists_preview_and_never_records_campaig
     unlock(directory.path());
     let client = client();
     let sink = MailSink::start(None);
+    let mut profile_id = None;
     for (family, value) in [
         (
             "templates",
@@ -558,8 +710,16 @@ fn actual_test_delivery_composes_mime_persists_preview_and_never_records_campaig
             .send()
             .unwrap();
         assert_eq!(response.status(), 201, "{}", response.text().unwrap());
+        if family == "smtp" {
+            profile_id = response.json::<Value>().unwrap()["id"].as_i64();
+        }
     }
-    let response=client.post(format!("{base}/api/util/send_test_email")).bearer_auth("synthetic-bootstrap-token").json(&json!({"template":{"name":"Test mail"},"page":{"name":"Preview page"},"smtp":{"name":"Loopback","host":"bad:port","from_address":"not-mailbox"},"url":format!("{public}/landing"),"email":"recipient@example.test","first_name":"Alice","last_name":"Example"})).send().unwrap();
+    // Invalid draft data cannot silently select a saved profile with the same name.
+    assert_eq!(client.post(format!("{base}/api/util/send_test_email"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&json!({"email":"recipient@example.test","smtp":{"source":"draft","profile":{"name":"Loopback","host":"bad:port","from_address":"not-mailbox"}}}))
+        .send().unwrap().status(), 400);
+    let response=client.post(format!("{base}/api/util/send_test_email")).bearer_auth("synthetic-bootstrap-token").json(&json!({"template":{"name":"Test mail"},"page":{"name":"Preview page"},"smtp":{"source":"saved","id":profile_id.unwrap()},"url":format!("{public}/landing"),"email":"recipient@example.test","first_name":"Alice","last_name":"Example"})).send().unwrap();
     assert_eq!(response.status(), 200, "{}", response.text().unwrap());
     let (commands, bytes) = sink.result();
     assert!(
@@ -774,7 +934,7 @@ fn email_create_edit_and_preview_share_validation_without_mutating_source() {
     listener.set_nonblocking(true).unwrap();
     let response = client.post(format!("{base}/api/util/send_test_email"))
         .bearer_auth("synthetic-bootstrap-token")
-        .json(&json!({"template":{"name":"Managed tracking"},"smtp":{"host":listener.local_addr().unwrap().to_string(),"from_address":"sender@example.test"},"email":"recipient@example.test","first_name":"Unsafe","url":"http://127.0.0.1/"}))
+        .json(&json!({"template":{"name":"Managed tracking"},"smtp":{"source":"draft","profile":{"host":listener.local_addr().unwrap().to_string(),"from_address":"sender@example.test"}},"email":"recipient@example.test","first_name":"Unsafe","url":"http://127.0.0.1/"}))
         .send().unwrap();
     assert_eq!(response.status(), 400);
     assert_eq!(
@@ -810,7 +970,7 @@ fn smtp_rejections_and_read_only_permissions_do_not_claim_success_or_queue_retri
     let client = client();
     for reply in ["451 Temporary rejection\r\n", "550 Permanent rejection\r\n"] {
         let sink = MailSink::start(Some(reply));
-        let response=client.post(format!("{base}/api/util/send_test_email")).bearer_auth("synthetic-bootstrap-token").json(&json!({"smtp":{"host":sink.address.to_string(),"from_address":"sender@example.test"},"email":"recipient@example.test"})).send().unwrap();
+        let response=client.post(format!("{base}/api/util/send_test_email")).bearer_auth("synthetic-bootstrap-token").json(&json!({"smtp":{"source":"draft","profile":{"host":sink.address.to_string(),"from_address":"sender@example.test"}},"email":"recipient@example.test"})).send().unwrap();
         assert!(!response.status().is_success());
         let body: Value = response.json().unwrap();
         assert_eq!(body["success"], false);
@@ -818,7 +978,7 @@ fn smtp_rejections_and_read_only_permissions_do_not_claim_success_or_queue_retri
         assert!(bytes.is_empty());
     }
     let sink = MailSink::scenario(None, true);
-    let response = client.post(format!("{base}/api/util/send_test_email")).bearer_auth("synthetic-bootstrap-token").json(&json!({"smtp":{"host":sink.address.to_string(),"from_address":"sender@example.test"},"email":"recipient@example.test"})).send().unwrap();
+    let response = client.post(format!("{base}/api/util/send_test_email")).bearer_auth("synthetic-bootstrap-token").json(&json!({"smtp":{"source":"draft","profile":{"host":sink.address.to_string(),"from_address":"sender@example.test"}},"email":"recipient@example.test"})).send().unwrap();
     assert!(!response.status().is_success());
     assert!(response.text().unwrap().contains("outcome is unknown"));
     let (commands, bytes) = sink.result();
@@ -928,6 +1088,47 @@ fn independent_go_resource_observations_run_against_the_executable() {
             response.text().unwrap()
         );
         let mut observed: Value = response.json().unwrap();
+        if (200..300).contains(&expected_status) {
+            use ruphish_contracts::{resource_details as wire, resources as summaries};
+            let path = case["path"].as_str().unwrap();
+            let family = path.split('/').nth(2).unwrap();
+            let kind = match family {
+                "groups" => wire::Kind::Group,
+                "templates" => wire::Kind::Template,
+                "pages" => wire::Kind::Page,
+                "smtp" => wire::Kind::Profile,
+                _ => panic!("unexpected fixture family {family}"),
+            };
+            let round_trip = if path == "/api/groups/summary" {
+                serde_json::to_value(
+                    serde_json::from_value::<summaries::GroupSummaries>(observed.clone()).unwrap(),
+                )
+                .unwrap()
+            } else if path.ends_with("/summary") && family == "groups" {
+                serde_json::to_value(
+                    serde_json::from_value::<summaries::GroupSummary>(observed.clone()).unwrap(),
+                )
+                .unwrap()
+            } else if path.ends_with("/summary") {
+                serde_json::to_value(
+                    serde_json::from_value::<summaries::ResourceSummaries>(observed.clone())
+                        .unwrap(),
+                )
+                .unwrap()
+            } else if let Some(rows) = observed.as_array() {
+                serde_json::to_value(
+                    rows.iter()
+                        .map(|row| wire::decode(kind, row.clone()).unwrap())
+                        .collect::<Vec<_>>(),
+                )
+                .unwrap()
+            } else if observed.get("id").is_some() {
+                serde_json::to_value(wire::decode(kind, observed.clone()).unwrap()).unwrap()
+            } else {
+                observed.clone()
+            };
+            assert_eq!(round_trip, observed, "typed response for {id}");
+        }
         // Assert the additive error code without changing the recorded Go response.
         let expected_code = match id {
             "groups-no-name"
@@ -976,6 +1177,20 @@ fn independent_go_resource_observations_run_against_the_executable() {
         }
         normalize(&mut observed);
         let mut expected = case["json"].clone();
+        for field in ["targets", "attachments", "headers"] {
+            if expected.get(field).is_some_and(Value::is_null) {
+                expected[field] = json!([]);
+            }
+        }
+        if expected.get("host").is_some() {
+            let password = expected.as_object_mut().unwrap().remove("password");
+            expected["has_password"] = json!(
+                password
+                    .as_ref()
+                    .and_then(Value::as_str)
+                    .is_some_and(|v| !v.is_empty())
+            );
+        }
         match id {
             // Approved recipient isolation: the independently captured Go result demonstrates the defect.
             "groups-shared-after-edit" => {
@@ -987,9 +1202,15 @@ fn independent_go_resource_observations_run_against_the_executable() {
             "pages-empty-html" | "pages-capture" | "pages-no-capture" => {
                 let input: Value = serde_json::from_str(case["body"].as_str().unwrap()).unwrap();
                 expected["html"] = input.get("html").cloned().unwrap_or(json!(""));
-                // Approved presence-only tracking is unconditional; legacy flags are ignored.
-                expected["capture_credentials"] = json!(true);
-                expected["capture_passwords"] = json!(true);
+                // Retired capture flags are absent from the native response.
+                expected
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("capture_credentials");
+                expected
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("capture_passwords");
                 assert!(observed["warnings"].is_array());
                 observed.as_object_mut().unwrap().remove("warnings");
             }
@@ -1295,6 +1516,28 @@ fn groups_reject_invalid_replacements_and_stale_revisions_without_losing_data() 
             .unwrap(),
         original
     );
+    let mut null_targets = original.clone();
+    null_targets["targets"] = Value::Null;
+    assert_eq!(
+        client
+            .put(&path)
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&null_targets)
+            .send()
+            .unwrap()
+            .status(),
+        400
+    );
+    assert_eq!(
+        client
+            .get(&path)
+            .bearer_auth("synthetic-bootstrap-token")
+            .send()
+            .unwrap()
+            .json::<Value>()
+            .unwrap(),
+        original
+    );
     let mut changed = original.clone();
     changed["name"] = json!("Changed");
     assert_eq!(
@@ -1342,11 +1585,11 @@ fn legacy_resource_validation_and_page_policy_survive_round_trip_and_restart() {
     let client = client();
     for (payload, expected) in [
         (
-            json!({"smtp":{"host":"127.0.0.1:1","from_address":"from@example.com"}}),
+            json!({"smtp":{"source":"draft","profile":{"host":"127.0.0.1:1","from_address":"from@example.com"}}}),
             "No email address specified",
         ),
         (
-            json!({"email":"test@example.com","smtp":{"host":"127.0.0.1:1"}}),
+            json!({"email":"test@example.com","smtp":{"source":"draft","profile":{"host":"127.0.0.1:1"}}}),
             "No From Address specified",
         ),
     ] {
@@ -1443,13 +1686,22 @@ fn legacy_resource_validation_and_page_policy_survive_round_trip_and_restart() {
             .contains("smtp configuration")
     );
     let html = "<html><head></head><body><form action='example.com'><input name='username'><input name='password' type='password'></form></body></html>";
-    let mut page: Value = client.post(format!("{base}/api/pages/")).bearer_auth("synthetic-bootstrap-token").json(&json!({"name":"Reversible settings","html":html,"capture_passwords":true,"redirect_url":"http://example.com"})).send().unwrap().error_for_status().unwrap().json().unwrap();
-    assert_eq!(page["capture_credentials"], true);
+    let mut page: Value = client
+        .post(format!("{base}/api/pages/"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(
+            &json!({"name":"Reversible settings","html":html,"redirect_url":"http://example.com"}),
+        )
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert!(page.get("capture_credentials").is_none());
     let id = page["id"].as_i64().unwrap();
-    for (credentials, passwords) in [(true, false), (false, false), (true, true)] {
-        page["capture_credentials"] = json!(credentials);
-        page["capture_passwords"] = json!(passwords);
-        page["redirect_url"] = json!("");
+    for redirect in ["", "https://example.test/finished", ""] {
+        page["redirect_url"] = json!(redirect);
         page = client
             .put(format!("{base}/api/pages/{id}"))
             .bearer_auth("synthetic-bootstrap-token")
@@ -1461,9 +1713,9 @@ fn legacy_resource_validation_and_page_policy_survive_round_trip_and_restart() {
             .json()
             .unwrap();
         assert_eq!(page["html"], html);
-        assert_eq!(page["redirect_url"], "");
-        assert_eq!(page["capture_credentials"], true);
-        assert_eq!(page["capture_passwords"], true);
+        assert_eq!(page["redirect_url"], redirect);
+        assert!(page.get("capture_credentials").is_none());
+        assert!(page.get("capture_passwords").is_none());
     }
     process.stop();
     let mut restarted = Process::start(directory.path(), "admin");
@@ -1559,12 +1811,19 @@ fn landing_diagnostics_warn_without_blocking_save_and_preserve_correct_form_sema
                 1
             );
         }
-        let saved: Value = client.post(format!("{base}/api/pages/")).bearer_auth("synthetic-bootstrap-token")
-            .json(&json!({"name":format!("Warning {index}"),"html":html,"capture_passwords":false,"capture_credentials":false}))
-            .send().unwrap().error_for_status().unwrap().json().unwrap();
+        let saved: Value = client
+            .post(format!("{base}/api/pages/"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&json!({"name":format!("Warning {index}"),"html":html}))
+            .send()
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .unwrap();
         assert_eq!(saved["html"], html);
         assert_eq!(saved["warnings"], validation["warnings"]);
-        assert_eq!(saved["capture_passwords"], true);
+        assert!(saved.get("capture_passwords").is_none());
         assert_eq!(
             read_warnings("/api/util/preview")["warnings"],
             validation["warnings"]

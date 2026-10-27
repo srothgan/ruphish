@@ -3,10 +3,10 @@ use super::{Api, Family, ResourceAccess, download};
 use crate::feedback::Message;
 use crate::shared::components::*;
 use leptos::prelude::*;
+use ruphish_contracts::resource_details::{Content, Resource};
 use ruphish_domain::reporting::SortDirection;
 use ruphish_ui::preview_document;
 use ruphish_ui::{tr, trs};
-use serde_json::Value;
 
 pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
@@ -44,8 +44,8 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
             {move || {
                 data.get()
                     .map(|value| {
-                        let id = value["id"].as_i64().unwrap_or(0);
-                        let name = text(&value, "name");
+                        let id = value.metadata.id;
+                        let name = value.metadata.name.clone();
                         let export = value.clone();
                         let export_name = name.clone();
                         let delete_name = name.clone();
@@ -53,7 +53,7 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
                             <PageHeader
                                 title=name
                                 subtitle=leptos_i18n::t_string!(
-                                    i18n, messages.last_updated_arg0, arg0 = (crate::time_display::instant(&value["modified_date"])).to_string()
+                                    i18n, messages.last_updated_arg0, arg0 = (crate::time_display::instant(&serde_json::json!(value.metadata.modified_date))).to_string()
                                 )
                             >
                                 <ActionButton
@@ -93,7 +93,7 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
                                     )>{tr!(ui.export_json)}</ActionButton>
                                 </ResourceActions>
                             </PageHeader>
-                            <Card class="resource-read-panel">{body(value, family)}</Card>
+                            <Card class="resource-read-panel">{body(value)}</Card>
                         }
                     })
             }}
@@ -113,9 +113,6 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
     }
 }
 
-fn text(value: &Value, key: &str) -> String {
-    value[key].as_str().unwrap_or("").to_owned()
-}
 fn field(label: Signal<String>, value: String) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
@@ -134,9 +131,7 @@ fn field(label: Signal<String>, value: String) -> impl IntoView {
         </div>
     }
 }
-fn content(value: &Value) -> impl IntoView + use<> {
-    let html = text(value, "html");
-    let plain = text(value, "text");
+fn content(html: String, plain: String) -> impl IntoView + use<> {
     view! {
         <section class="resource-section">
             <h2>{tr!(ui.content)}</h2>
@@ -171,13 +166,13 @@ fn content(value: &Value) -> impl IntoView + use<> {
         </section>
     }
 }
-fn body(value: Value, family: Family) -> AnyView {
+fn body(value: Resource) -> AnyView {
     let i18n = ruphish_ui::localization::use_i18n();
 
-    match family {
-        Family::Groups => {
+    match value.content {
+        Content::Group(group) => {
             let sorting = TableSorting::new("group-recipients", "email", SortDirection::Asc);
-            let rows = StoredValue::new(value["targets"].as_array().cloned().unwrap_or_default());
+            let rows = StoredValue::new(group.targets);
             view! {
                 <section>
                     <h2>
@@ -198,15 +193,26 @@ fn body(value: Value, family: Family) -> AnyView {
                     >
                         {move || {
                             sorting
-                                .json(rows.get_value(), &[])
+                                .current
+                                .get()
+                                .rows(
+                                    rows.get_value(),
+                                    |row, key| match key {
+                                        "first_name" => row.first_name.clone().into(),
+                                        "last_name" => row.last_name.clone().into(),
+                                        "position" => row.position.clone().into(),
+                                        _ => row.email.clone().into(),
+                                    },
+                                    |row| row.email.clone().into(),
+                                )
                                 .into_iter()
                                 .map(|row| {
                                     view! {
                                         <tr>
-                                            <th scope="row">{text(&row, "email")}</th>
-                                            <td>{text(&row, "first_name")}</td>
-                                            <td>{text(&row, "last_name")}</td>
-                                            <td>{text(&row, "position")}</td>
+                                            <th scope="row">{row.email}</th>
+                                            <td>{row.first_name}</td>
+                                            <td>{row.last_name}</td>
+                                            <td>{row.position}</td>
                                         </tr>
                                     }
                                 })
@@ -217,21 +223,21 @@ fn body(value: Value, family: Family) -> AnyView {
             }
             .into_any()
         }
-        Family::Templates => {
-            let attachments = value["attachments"].as_array().cloned().unwrap_or_default();
+        Content::Template(template) => {
+            let attachments = template.attachments;
             view! {
                 <dl class="resource-facts">
-                    {field(trs!(ui.subject), text(&value, "subject"))}
+                    {field(trs!(ui.subject), template.subject)}
                     {field(
                         trs!(ui.visible_from),
-                        if text(&value, "envelope_sender").is_empty() {
+                        if template.envelope_sender.is_empty() {
                             leptos_i18n::t_string!(i18n, ui.sending_profile_address).into()
                         } else {
-                            text(&value, "envelope_sender")
+                            template.envelope_sender
                         },
                     )}
                 </dl>
-                {content(&value)}
+                {content(template.html, template.text)}
                 <section class="resource-section">
                     <h2>
                         {leptos_i18n::t!(
@@ -241,52 +247,45 @@ fn body(value: Value, family: Family) -> AnyView {
                     <ul>
                         {attachments
                             .into_iter()
-                            .map(|a| view! { <li>{text(&a, "name")}" · "{text(&a, "type")}</li> })
+                            .map(|a| view! { <li>{a.name}" · "{a.mime}</li> })
                             .collect_view()}
                     </ul>
                 </section>
             }
             .into_any()
         }
-        Family::LearningPages => {
-            let mut preview = value.clone();
-            preview["html"] = value["preview_html"].clone();
-            view! {
-                <p>{tr!(ui.learning_static_help)}</p>
-                {content(&preview)}
-            }
-            .into_any()
+        Content::LearningPage(page) => view! {
+            <p>{tr!(ui.learning_static_help)}</p>
+            {content(page.preview_html.unwrap_or_default(), String::new())}
         }
-        Family::Pages => view! {
+        .into_any(),
+        Content::Page(page) => view! {
             <section class="resource-section">
                 <h2>{tr!(ui.submission_tracking)}</h2>
                 <p>{tr!(ui.all_submissions_recorded)}</p>
                 <dl class="resource-facts">
-                    {field(trs!(ui.redirect_after_submission), text(&value, "redirect_url"))}
+                    {field(trs!(ui.redirect_after_submission), page.redirect_url)}
                 </dl>
             </section>
-            {content(&value)}
+            {content(page.html, String::new())}
         }
         .into_any(),
-        Family::Profiles => {
-            let headers = value["headers"].as_array().cloned().unwrap_or_default();
+        Content::Profile(profile) => {
+            let headers = profile.headers;
             view! {
                 <dl class="resource-facts">
-                    {field(trs!(ui.smtp_host), text(&value, "host"))}
-                    {field(trs!(ui.sender_address), text(&value, "from_address"))}
-                    {field(trs!(ui.username), text(&value, "username"))}
+                    {field(trs!(ui.smtp_host), profile.host)}
+                    {field(trs!(ui.sender_address), profile.from_address)}
+                    {field(trs!(ui.username), profile.username.unwrap_or_default())}
                     {field(
                         trs!(ui.password),
-                        if text(&value, "password").is_empty() {
+                        if !profile.has_password {
                             leptos_i18n::t_string!(i18n, ui.not_configured).into()
                         } else {
                             leptos_i18n::t_string!(i18n, ui.configured).into()
                         },
                     )}
-                    {field(
-                        trs!(ui.ignore_certificate_errors),
-                        yes_no(&value, "ignore_cert_errors"),
-                    )}
+                    {field(trs!(ui.ignore_certificate_errors), yes_no(profile.ignore_cert_errors))}
                 </dl>
                 <section class="resource-section">
                     <h2>{tr!(ui.additional_headers)}</h2>
@@ -296,8 +295,8 @@ fn body(value: Value, family: Family) -> AnyView {
                             .map(|row| {
                                 view! {
                                     <div>
-                                        <dt>{text(&row, "key")}</dt>
-                                        <dd>{text(&row, "value")}</dd>
+                                        <dt>{row.key}</dt>
+                                        <dd>{row.value}</dd>
                                     </div>
                                 }
                             })
@@ -309,10 +308,10 @@ fn body(value: Value, family: Family) -> AnyView {
         }
     }
 }
-fn yes_no(value: &Value, key: &str) -> String {
+fn yes_no(value: bool) -> String {
     let i18n = ruphish_ui::localization::use_i18n();
 
-    if value[key].as_bool().unwrap_or(false) {
+    if value {
         leptos_i18n::t_string!(i18n, ui.yes)
     } else {
         leptos_i18n::t_string!(i18n, ui.no)

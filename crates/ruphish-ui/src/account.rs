@@ -300,7 +300,7 @@ fn login(api: Api, token: String) -> impl IntoView {
                 .unwrap_or_else(|| "/".into());
             let result = api
                 .form(
-                    "/login",
+                    "/auth/login",
                     &token.get_value(),
                     &[
                         ("username", username.get_untracked()),
@@ -429,7 +429,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
                 return;
             }
             match api.form(path, &token.get_value(), &[]).await {
-                Ok(_) if path == "/logout" => api.mark_signed_out(),
+                Ok(_) if path == "/auth/logout" => api.mark_signed_out(),
                 Ok(value) => navigate(value["data"].as_str().unwrap_or("/login")),
                 Err(error) => message.error(error),
             }
@@ -473,7 +473,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
                     <p>{tr!(ui.exit_impersonation_to_manage_accounts_and_credentials)}</p>
                     <ActionButton
                         disabled=Signal::derive(move || action_busy.get())
-                        on_click=move |_| action("/impersonate/exit")
+                        on_click=move |_| action("/auth/impersonate/exit")
                     >
                         {tr!(ui.exit_impersonation)}
                     </ActionButton>
@@ -596,7 +596,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
                             <ActionButton
                                 style=ButtonStyle::Primary
                                 disabled=Signal::derive(move || action_busy.get())
-                                on_click=move |_| action("/logout")
+                                on_click=move |_| action("/auth/logout")
                             >
                                 {tr!(ui.sign_out_2)}
                             </ActionButton>
@@ -874,7 +874,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
                                 </span>
                                 <ActionButton
                                     disabled=Signal::derive(move || action_busy.get())
-                                    on_click=move |_| action("/impersonate/exit")
+                                    on_click=move |_| action("/auth/impersonate/exit")
                                 >
                                     {tr!(ui.exit_impersonation)}
                                 </ActionButton>
@@ -939,7 +939,7 @@ fn password_form(api: Api, token: String, required: bool) -> impl IntoView {
         let navigate_account = navigate_account.clone();
         spawn_local(async move {
             let path = if required {
-                "/reset_password"
+                "/auth/password/reset"
             } else {
                 "/internal/password"
             };

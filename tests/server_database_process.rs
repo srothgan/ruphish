@@ -181,7 +181,7 @@ pub(super) fn exercise(mut database_config: Value, mut fault: impl FnMut(&Path, 
             &client,
             &base,
             &format!("/api/campaigns/{campaign_id}/analysis")
-        )["totals"][4],
+        )["totals"]["reported"],
         1
     );
     process.stop();
@@ -241,11 +241,14 @@ pub(super) fn exercise(mut database_config: Value, mut fault: impl FnMut(&Path, 
         &format!("/api/campaigns/{campaign_id}/analysis"),
     );
     assert_eq!(
-        analysis["totals"][4], 1,
+        analysis["totals"]["reported"], 1,
         "acknowledgement retry must not duplicate reports"
     );
     assert!(!analysis.to_string().contains("PARTICIPANT-CANARY"));
-    assert_eq!(analysis["totals"], json!([2, 2, 1, 1, 1]));
+    assert_eq!(
+        analysis["totals"],
+        json!({"accepted":2,"opened":2,"clicked":1,"submitted":1,"reported":1})
+    );
     assert_eq!(
         get(
             &client,
@@ -441,20 +444,34 @@ fn uncertain_delivery(
     fault: &mut impl FnMut(&Path, Fault<'_>),
 ) {
     let smtp = campaign_process::probe_many(1);
-    post(
+    let group = post(
         base,
         "/api/groups/",
         &json!({"name":"Recovery audience","targets":[{"email":"alice@example.test"}]}),
     );
-    post(
+    let profile = post(
         base,
         "/api/smtp/",
         &json!({"name":"Recovery SMTP","host":smtp.address,"from_address":"training@example.test"}),
     );
+    let templates = get(&client(), base, "/api/templates/");
+    let template = templates
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["name"] == "Personalized")
+        .unwrap();
+    let pages = get(&client(), base, "/api/pages/");
+    let page = pages
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["name"] == "Private page")
+        .unwrap();
     let campaign = post(
         base,
         "/api/campaigns/",
-        &json!({"name":"Uncertain acceptance","url":campaign_process::origin(base, "training.example.test"),"groups":[{"name":"Recovery audience"}],"template":{"name":"Personalized"},"page":{"name":"Private page"},"smtp":{"name":"Recovery SMTP"}}),
+        &json!({"name":"Uncertain acceptance","url":campaign_process::origin(base, "training.example.test"),"selection":{"groups":[{"id":group["id"]}],"template":{"id":template["id"]},"page":{"id":page["id"]},"smtp":{"id":profile["id"]}}}),
     );
     let id = campaign["id"].as_i64().unwrap();
     let message = smtp.received.recv_timeout(Duration::from_secs(20)).unwrap();
@@ -504,7 +521,7 @@ fn uncertain_delivery(
     let item = &delivery["items"][0];
     assert_eq!(item["attempts"].as_array().unwrap().len(), 1);
     assert_eq!(
-        get(&client(), base, &format!("/api/campaigns/{id}/analysis"))["totals"][0],
+        get(&client(), base, &format!("/api/campaigns/{id}/analysis"))["totals"]["accepted"],
         0,
         "unconfirmed delivery is not counted as accepted"
     );
@@ -520,12 +537,12 @@ fn uncertain_delivery(
         1
     );
     assert_eq!(
-        get(&client(), base, &format!("/api/campaigns/{id}/analysis"))["totals"][0],
+        get(&client(), base, &format!("/api/campaigns/{id}/analysis"))["totals"]["accepted"],
         1
     );
     assert_eq!(
         get(&client(), base, &format!("/api/campaigns/{id}/analysis"))["progression"],
-        json!([1, 0, 0, 0, 0]),
+        json!({"accepted":1,"opened":0,"clicked":0,"submitted":0,"reported":0}),
         "the same address in another campaign must not inherit its interactions"
     );
     let stale = request(
@@ -537,7 +554,7 @@ fn uncertain_delivery(
     );
     assert_eq!(stale.status(), 412);
     assert_eq!(
-        get(&client(), base, &format!("/api/campaigns/{id}/analysis"))["totals"][0],
+        get(&client(), base, &format!("/api/campaigns/{id}/analysis"))["totals"]["accepted"],
         1
     );
 }
@@ -549,27 +566,27 @@ fn campaign_workflow(
     fault: &mut impl FnMut(&Path, Fault<'_>),
 ) -> (i64, String) {
     let smtp = campaign_process::probe_many(2);
-    post(
+    let group = post(
         base,
         "/api/groups/",
         &json!({"name":"Delivery audience","targets":[{"email":"alice@example.test","first_name":"Alice"},{"email":"bob@example.test","first_name":"Bob"}]}),
     );
-    post(
+    let template = post(
         base,
         "/api/templates/",
         &json!({"name":"Personalized","subject":"Hello {{.FirstName}}","text":"Visit {{.URL}}","html":"<a href='{{.URL}}'>Training</a>{{.Tracker}}"}),
     );
-    post(
+    let page = post(
         base,
         "/api/pages/",
-        &json!({"name":"Private page","html":"<p>Hello {{.FirstName}}</p><form><input name='password' type='password'></form>","capture_credentials":true,"capture_passwords":true}),
+        &json!({"name":"Private page","html":"<p>Hello {{.FirstName}}</p><form><input name='password' type='password'></form>"}),
     );
-    post(
+    let smtp_profile = post(
         base,
         "/api/smtp/",
         &json!({"name":"Loopback SMTP","host":smtp.address,"from_address":"Training <training@example.test>"}),
     );
-    let draft = json!({"name":"Provider delivery","url":campaign_process::origin(base, "training.example.test"),"groups":[{"name":"Delivery audience"}],"template":{"name":"Personalized"},"page":{"name":"Private page"},"smtp":{"name":"Loopback SMTP"}});
+    let draft = json!({"name":"Provider delivery","url":campaign_process::origin(base, "training.example.test"),"selection":{"groups":[{"id":group["id"]}],"template":{"id":template["id"]},"page":{"id":page["id"]},"smtp":{"id":smtp_profile["id"]}}});
     // Every write boundary must roll back, including children written before the injected failure.
     for table in [
         "campaigns",
@@ -718,7 +735,7 @@ fn campaign_workflow(
     assert!(failed.status().is_server_error());
     assert_eq!(
         get(&client(), base, &format!("/api/campaigns/{id}/analysis"))["totals"],
-        json!([2, 0, 0, 0, 0])
+        json!({"accepted":2,"opened":0,"clicked":0,"submitted":0,"reported":0})
     );
     fault(directory, Fault::RestoreInsert("ruphish_webhook_jobs"));
     // Submission first, then click/open: cumulative metrics must not regress or count the same recipient twice.
@@ -733,8 +750,14 @@ fn campaign_workflow(
         );
     }
     let submitted = get(&client(), base, &format!("/api/campaigns/{id}/analysis"));
-    assert_eq!(submitted["totals"], json!([2, 0, 0, 1, 0]));
-    assert_eq!(submitted["progression"], json!([2, 1, 1, 1, 0]));
+    assert_eq!(
+        submitted["totals"],
+        json!({"accepted":2,"opened":0,"clicked":0,"submitted":1,"reported":0})
+    );
+    assert_eq!(
+        submitted["progression"],
+        json!({"accepted":2,"opened":1,"clicked":1,"submitted":1,"reported":0})
+    );
     let page = request_public(reqwest::Method::GET, &url).send().unwrap();
     assert_eq!(page.status(), 200);
     assert!(page.text().unwrap().contains("Hello Alice"));
@@ -769,9 +792,18 @@ fn campaign_workflow(
         415
     );
     let analysis = get(&client(), base, &format!("/api/campaigns/{id}/analysis"));
-    assert_eq!(analysis["totals"], json!([2, 2, 1, 1, 0]));
-    assert_eq!(analysis["unique"], json!([2, 1, 1, 1, 0]));
-    assert_eq!(analysis["progression"], json!([2, 1, 1, 1, 0]));
+    assert_eq!(
+        analysis["totals"],
+        json!({"accepted":2,"opened":2,"clicked":1,"submitted":1,"reported":0})
+    );
+    assert_eq!(
+        analysis["unique"],
+        json!({"accepted":2,"opened":1,"clicked":1,"submitted":1,"reported":0})
+    );
+    assert_eq!(
+        analysis["progression"],
+        json!({"accepted":2,"opened":1,"clicked":1,"submitted":1,"reported":0})
+    );
     let page1 = get(
         &client(),
         base,
@@ -791,7 +823,10 @@ fn campaign_workflow(
         &format!("/api/campaigns/{id}/analysis?search=BOB"),
     );
     assert_eq!(selected["recipient_total"], 1);
-    assert_eq!(selected["totals"], json!([1, 0, 0, 0, 0]));
+    assert_eq!(
+        selected["totals"],
+        json!({"accepted":1,"opened":0,"clicked":0,"submitted":0,"reported":0})
+    );
     let bad = request(
         &client(),
         base,
@@ -815,7 +850,10 @@ fn campaign_workflow(
         base,
         &format!("/api/campaigns/{id}/analysis?search=nobody"),
     );
-    assert_eq!(empty["totals"], json!([0, 0, 0, 0, 0]));
+    assert_eq!(
+        empty["totals"],
+        json!({"accepted":0,"opened":0,"clicked":0,"submitted":0,"reported":0})
+    );
     for format in ["csv", "xlsx"] {
         let response = request(
             &client(),

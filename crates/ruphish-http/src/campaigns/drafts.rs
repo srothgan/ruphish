@@ -30,21 +30,17 @@ fn decode_body<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T, Rejecti
         )
     })
 }
-fn encode(d: &Draft) -> Value {
-    json!(reads::Draft {
+fn encode(d: &Draft) -> reads::Draft {
+    reads::Draft {
         id: d.id.clone(),
         revision: d.revision,
-        configuration: d.configuration.clone(),
+        configuration: (&d.configuration).into(),
         step: d.step,
         created: datetime::utc_seconds(d.created).ok(),
         modified: datetime::utc_seconds(d.modified).ok(),
         campaign_id: d.campaign_id,
-        status: if d.campaign_id.is_some() {
-            "Launched".into()
-        } else {
-            "Draft".into()
-        }
-    })
+        status: app::drafts::Status::from_campaign_id(d.campaign_id),
+    }
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -103,7 +99,10 @@ async fn list(
         .flatten();
     response(
         StatusCode::OK,
-        &json!({"items":rows.iter().map(encode).collect::<Vec<_>>(),"next_after":next}),
+        &reads::Drafts {
+            items: rows.iter().map(encode).collect(),
+            next_after: next,
+        },
         None,
     )
 }
@@ -124,19 +123,12 @@ async fn remove(
         .delete_draft(caller.identity, &id, revision.revision)
         .await
         .map_err(draft_error)?;
-    response(StatusCode::OK, &json!({"success":true}), None)
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Launch {
-    revision: i64,
-    campaign: Value,
+    response(StatusCode::OK, &reads::DraftRemoval { success: true }, None)
 }
 async fn launch(c: Context, Path(id): Path<String>, body: Bytes) -> Result<Response, Rejection> {
     let caller = c.api(None).await?;
-    let request: Launch = decode_body(&body)?;
-    let bytes = serde_json::to_vec(&request.campaign).map_err(|_| draft_error(Error::Internal))?;
-    let mut input = super::decode(&c, &bytes)?;
+    let request: wire::LaunchDraft = decode_body(&body)?;
+    let mut input = super::command(&c, request.campaign)?;
     // Draft identity itself owns idempotency; no independent key can bypass it.
     input.idempotency = None;
     let campaign = c
@@ -144,7 +136,7 @@ async fn launch(c: Context, Path(id): Path<String>, body: Bytes) -> Result<Respo
         .launch_draft(caller.identity, &id, request.revision, input, now())
         .await
         .map_err(draft_error)?;
-    response(StatusCode::OK, &super::encode_campaign(&campaign), None)
+    response(StatusCode::OK, &super::encode_campaign(&campaign)?, None)
 }
 
 async fn prepare_draft(c: Context, body: Bytes) -> Result<Response, Rejection> {

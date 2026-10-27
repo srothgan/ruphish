@@ -66,18 +66,6 @@ impl Progression {
     }
 }
 
-/// Only recognized observations can be selected by reporting clients.
-pub const EVENT_TYPES: &[&str] = &[
-    "Campaign Created",
-    "Email Sent",
-    "Error Sending Email",
-    "Email Opened",
-    "Clicked Link",
-    "Submitted Data",
-    "Email Reported",
-    "Delivery reconciled",
-];
-
 /// Validate an inclusive start/exclusive end window and bounded query size.
 pub fn valid_window(from: Option<i64>, until: Option<i64>, limit: usize) -> bool {
     (1..=200).contains(&limit) && !matches!((from, until), (Some(a), Some(b)) if a >= b)
@@ -136,4 +124,42 @@ pub enum EventSort {
     Source,
     /// Optional credential-presence flag, never participant values.
     PasswordPresent,
+}
+
+/// Recorded observation provenance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Source {
+    /// Imported event history.
+    #[serde(rename = "legacy")]
+    Legacy,
+    /// Application-generated observation.
+    #[serde(rename = "application")]
+    Application,
+    /// Public tracking endpoint.
+    #[serde(rename = "public")]
+    Public,
+    /// Verified reporting mailbox.
+    #[serde(rename = "mailbox")]
+    Mailbox,
+}
+impl Source {
+    /// Decode the stored identifier; invalid state is not silently defaulted.
+    pub fn from_stored(value: &str) -> Option<Self> {
+        match value {
+            "legacy" => Some(Self::Legacy),
+            "application" => Some(Self::Application),
+            "public" => Some(Self::Public),
+            "mailbox" => Some(Self::Mailbox),
+            _ => None,
+        }
+    }
+    /// Stable value used by storage, presentation and tabular exports.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Legacy => "legacy",
+            Self::Application => "application",
+            Self::Public => "public",
+            Self::Mailbox => "mailbox",
+        }
+    }
 }

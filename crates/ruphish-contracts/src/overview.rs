@@ -25,9 +25,10 @@ pub struct RecentCampaign {
     /// Display name.
     pub name: String,
     /// Lifecycle state.
-    pub status: String,
-    /// Scheduled launch as stored (ISO-8601), or empty when unset.
-    pub launch: String,
+    pub status: ruphish_domain::campaign::CampaignStatus,
+    /// Normalized UTC launch, or explicitly unknown.
+    #[serde(deserialize_with = "crate::nullable")]
+    pub launch: Option<String>,
     /// Audience size.
     pub recipients: i64,
     /// SMTP-accepted recipients and cumulative progression for this campaign.

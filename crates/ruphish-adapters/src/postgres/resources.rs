@@ -341,7 +341,7 @@ impl Repository for Resources {
     async fn save(
         &self,
         caller: Identity,
-        mut value: Resource,
+        value: Input,
         existing: Option<i64>,
         expected: Option<String>,
     ) -> Result<Resource, Error> {
@@ -361,6 +361,7 @@ impl Repository for Resources {
             }
             None
         };
+        let mut value = value.resolve_password(old.as_ref());
         if old.as_ref().is_none_or(|o| o.name != value.name) {
             let duplicate: bool = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
                 "SELECT EXISTS(SELECT 1 FROM {} WHERE user_id=$1 AND name=$2)",

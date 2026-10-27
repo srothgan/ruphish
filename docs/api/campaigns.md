@@ -27,7 +27,7 @@ A campaign is an execution with a fixed audience and selected resources. Use [ca
 | GET | `/api/campaigns/{id}/delivery/{result}/history` | Recipient attempt and event history |
 | POST | `/api/campaigns/{id}/delivery/{result}` | Resolve or retry a delivery outcome |
 
-The legacy GET form of `/complete` also mutates the campaign. Use POST in new integrations. Requests in this route family have a 1 MiB body limit.
+`/complete` accepts POST only; GET and HEAD return `405` without changing campaign state. Requests in this route family have a 1 MiB body limit.
 
 ## Read a campaign
 
@@ -44,26 +44,32 @@ This request reads campaign details without launching or changing the campaign. 
 
 ## Prepare and launch
 
-The familiar request selects resources by name:
+Campaign requests select owned resources by ID. Use the same body for preparation and direct launch:
 
 ```json
 {
   "name": "Local exercise",
-  "groups": [{"name": "Local tutorial"}],
-  "template": {"name": "Local invitation"},
-  "page": {"name": "Local exercise"},
-  "smtp": {"name": "Local inbox"},
+  "selection": {
+    "groups": [{"id": 1}],
+    "template": {"id": 2},
+    "page": {"id": 3},
+    "smtp": {"id": 4}
+  },
   "url": "https://campaign.test:8443"
 }
 ```
 
-This body is illustrative: the named resources must exist under the caller, and the URL must be an eligible campaign origin under the current [verification policy](settings.md). Posting it to `/api/campaigns/` schedules real sending. Use the [local fixture](../getting-started/first-campaign.md) for a contained trial.
+This body is illustrative: replace the example IDs with resources owned by the caller, and the URL must be an eligible campaign origin under the current [verification policy](settings.md). Posting it to `/api/campaigns/` schedules real sending. Use the [local fixture](../getting-started/first-campaign.md) for a contained trial.
 
-New clients should use `selection` with explicit resource references: `groups` is an array, and `template`, `page`, and `smtp` are objects with `id` and an optional revision string. Preparation returns resolved selections, `total`, `duplicate_count`, `conflict_count`, conflicting recipient details, resolved policy and schedule, `mailer_enabled`, and a rendered `preview`. Carry its selected revisions into launch so changed content is detected.
+`selection` is required: `groups` is an array, and `template`, `page`, and `smtp` are objects with `id` and an optional revision string. Preparation returns resolved selections, `total`, `duplicate_count`, `conflict_count`, conflicting recipient details, resolved policy and schedule, `mailer_enabled`, and a rendered `preview`. Carry each selected `id` and `revision` into launch so changed content is detected. Review selections also include display names; omit those names from command inputs. Resource renaming does not change the selected identity. Missing or foreign-owned resources are rejected; there is no fallback lookup by name.
 
-The optional `policy` contains `capture_credentials`, `capture_passwords`, and `redirect_url`. The flags are ignored compatibility inputs; every supported submission records an event and password presence. Only `redirect_url` changes effective policy. See [landing pages](landing-pages.md).
+Request fields are case-sensitive. Unknown fields, duplicate fields, invalid types and trailing JSON are rejected with `400`. Top-level legacy `groups`, `template`, `page` and `smtp` inputs are no longer accepted, including alongside `selection`. The same typed campaign input is used inside test-send and draft-launch requests.
 
-`launch_date` and `send_by_date` accept timestamp values. A missing or zero launch date means immediate launch. Alternatively, `launch_local` and `send_by_local` each contain `local` and `time_zone`. Local inputs are resolved through that IANA zone and checked for ambiguous or nonexistent civil times. Read [scheduling](../user-guide/campaigns/scheduling.md) before relying on distribution timing.
+The optional `policy` contains `redirect_url` and an optional owned `learning_page_id`. A learning page and a nonempty custom redirect are mutually exclusive. Every supported submission records an event and password presence; there are no capture settings. Campaign commands reject the retired `capture_credentials` and `capture_passwords` fields. See [landing pages](landing-pages.md).
+
+`launch_date` and `send_by_date` accept UTC or offset timestamps. Alternatively, `launch_local` and `send_by_local` each contain `local` and `time_zone`. For each boundary, supply at most one non-null representation: combining `launch_date` with `launch_local`, or `send_by_date` with `send_by_local`, returns `400` with validation issues for both fields, even if they describe the same instant. This applies to preparation, direct creation, test sends and draft launch. Different boundaries may use different representations. If both launch fields are omitted or null, launch is immediate; if both send-by fields are omitted or null, there is no distribution window.
+
+Local inputs are resolved through the named IANA zone. Repeated civil times use the first occurrence; nonexistent times shift forward. Review the resolved schedule before launching. Read [scheduling](../user-guide/campaigns/scheduling.md) before relying on distribution timing.
 
 For direct creation, supply an `Idempotency-Key` and retain it with the original request when recovering from a lost response. Do not reuse one operation's key for a different campaign request. For saved drafts, the draft identity owns launch idempotency instead.
 
@@ -77,7 +83,7 @@ Set `policy.learning_page_id` to an owned [learning page](learning-pages.md) to 
 
 ## Read results
 
-Legacy campaign detail includes identity, lifecycle timestamps, URL, selected resources, and available `results` and `timeline`. Empty results or timeline fields may be omitted. Result `id` is the opaque recipient tracking ID. Legacy network-location fields are not a source of participant identity; do not build new tracking around them.
+Campaign detail includes identity, lifecycle timestamps, URL, selected resources, and available `results` and `timeline`. Absent lifecycle dates return `null`, including `send_by_date` and `completed_date`. Empty results or timeline fields may be omitted. Result `id` is the opaque recipient tracking ID. Legacy network-location fields are not a source of participant identity; do not build new tracking around them.
 
 Legacy summary `stats` includes `total`, `sent`, `opened`, `clicked`, `submitted_data`, `email_reported`, and `error`. These use progression semantics. Use [analysis](analysis-and-exports.md) for observed event counts, filters, and exportable rows; do not combine the two models as if they were identical metrics.
 
@@ -87,15 +93,15 @@ For sorted directory pages, add `sort=name`, `status`, `total`, or `launch` and 
 
 Sorted continuations retain the boundary value and row identity, so deleting the boundary row does not invalidate traversal. Equal values use stable identities; absent audience/schedule values precede present values ascending. These are live queries, not a snapshot spanning requests: changes to names, status, schedules or audience sizes can move rows across the current boundary. Treat cursor strings as opaque and URL-encode them; malformed or mismatched sorted cursors return `400`.
 
-`/api/campaigns/overview` is a different execution-only read. It accepts numeric `after`, optional `limit` (default 50), and optional boolean `completed`. Its response contains header `items`, numeric/null `next_after`, and `mailer_enabled`. Headers include identity, status, schedule, URL, resource references, audience total, and available policy/domain-block metadata.
+`/api/campaigns/overview` is a different execution-only read. It accepts numeric `after`, optional `limit` (default 50), and optional boolean `completed`. Its response contains header `items`, numeric/null `next_after`, and `mailer_enabled`. Headers include identity, status, schedule, URL, resource references, audience total, and available policy/domain-block metadata. Unknown historical policy is `null`, including in the editable copy returned by `/api/campaigns/{id}/draft`; `{}` is not a policy value.
 
 ## Delivery and uncertain outcomes
 
-Delivery reads use numeric result-row IDs. The page includes a campaign header, sparse state `counts`, `items`, optional `next_after`, policy, `mailer_enabled`, and recent activity. Rows expose `id`, `rid`, `email`, `state`, `due` (UTC Unix seconds), `attempt_count`, `retries`, `generation`, `code`, and recent `attempts`. Missing state-count keys mean no rows in that state.
+Delivery reads use numeric result-row IDs. The page includes a campaign header, sparse state `counts`, `items`, optional `next_after`, policy, `mailer_enabled`, and recent activity. Rows expose `id`, `rid`, `email`, `state`, `due` (UTC Unix seconds), `attempt_count`, `retries`, `generation`, `code`, and recent `attempts`. Missing state-count keys mean no rows in that state. Queue states are `ready`, `preparing`, `submitting`, `retry`, `accepted`, `failed`, `unknown`, `blocked`, and `cancelled`. They are separate from campaign lifecycle (`Created`, `Queued`, `In progress`, `Emails Sent`, `Completed`) and draft state (`draft`, `launched`). The directory's `kind` selects the corresponding lifecycle; a draft cannot have an execution status.
 
 To sort delivery pages, send `sort=email`, `state`, `due`, or `attempt_count` with optional `order=asc` (default) or `desc`, and `limit` from 1 to 200 (default 50). The response adds nullable `next_cursor`; supply it as `cursor` on the next request with the same campaign, owner and ordering. Do not combine a sorted cursor with a nonzero numeric `after`. Sort/filter changes start again without a cursor. Equal values use ascending result ID; due times and attempt counts sort numerically. The original numeric `after`/`next_after` path remains available when `sort` is omitted.
 
-History accepts `before_attempt` and `before_event` cursors and returns attempts, events, and separate next cursors. Attempt fields include generation, start/finish times, state, SMTP stage, optional SMTP code, and message ID.
+History accepts `before_attempt` and `before_event` cursors and returns attempts, events, and separate next cursors. Attempt fields include generation, start/finish times, state, SMTP stage, optional SMTP code, and message ID. Attempt states are `preparing`, `submitting`, `retry`, `accepted`, `failed`, `unknown`, `blocked`, `cancelled`, and `abandoned`. An abandoned attempt means its preparation lease expired before submission; `ready` belongs to the queue, not an attempt.
 
 A resolution POST contains the current `generation` and an `action`: `confirm_accepted` or `resend_unknown` for an unknown outcome, or `retry` for an eligible failed/blocked result. Reload before resolving a stale generation. An unknown outcome can mean SMTP accepted the message before the connection failed; resending may produce a duplicate.
 

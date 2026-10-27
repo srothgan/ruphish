@@ -3,6 +3,9 @@ use crate::auth::{AccountError, Identity};
 pub use ruphish_domain::resources::*;
 use std::sync::Arc;
 
+/// Resource write intent: absent password keeps the saved credential; an empty value clears it.
+pub type Input = Resource<Option<String>>;
+
 /// Safe public resource failure.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -90,7 +93,7 @@ pub trait Repository: Send + Sync {
     async fn save(
         &self,
         caller: Identity,
-        resource: Resource,
+        resource: Input,
         existing: Option<i64>,
         expected: Option<String>,
     ) -> Result<Resource, Error>;
@@ -119,7 +122,7 @@ pub trait Validator: Send + Sync {
         mode: PagePreview<'_>,
     ) -> Result<(String, Vec<PageWarning>), Error>;
     /// Check content rules without persisting or performing delivery.
-    fn validate(&self, resource: &Resource) -> Result<(), Error>;
+    fn validate(&self, resource: &Input) -> Result<(), Error>;
     /// Inspect the processed landing document without storing diagnostic state.
     fn page_warnings(&self, html: &str) -> Result<Vec<PageWarning>, Error>;
 }
@@ -233,7 +236,7 @@ impl Service {
     pub async fn save(
         &self,
         caller: Identity,
-        mut value: Resource,
+        mut value: Input,
         id: Option<i64>,
         expected: Option<String>,
     ) -> Result<Resource, Error> {
@@ -241,7 +244,7 @@ impl Service {
         self.repository.save(caller, value, id, expected).await
     }
     /// Apply the same authoritative validation to saved resources and inline profiles.
-    pub fn validate(&self, value: &mut Resource) -> Result<(), Error> {
+    pub fn validate(&self, value: &mut Input) -> Result<(), Error> {
         value.validation().finish()?;
         self.validator.validate(value)
     }

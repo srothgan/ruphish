@@ -105,7 +105,7 @@ fn demo_responses_decode_through_the_existing_contracts() {
         if family != "groups" {
             decode::<resources::ResourceSummaries>(&values, &format!("/api/{family}/summary"));
         }
-        resource_details::validate(kind, &values[format!("/api/{family}/1")])
+        resource_details::decode(kind, values[format!("/api/{family}/1")].clone())
             .expect("complete resource detail");
     }
 }

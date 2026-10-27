@@ -10,9 +10,9 @@ pub fn validate(input: &Create, now: i64) -> Result<i64, Error> {
     ruphish_domain::campaign::Fields {
         name: &input.name,
         groups: !input.groups.is_empty(),
-        template: !input.template.name.is_empty() || input.template.id.is_some(),
-        page: !input.page.name.is_empty() || input.page.id.is_some(),
-        smtp: !input.profile.name.is_empty() || input.profile.id.is_some(),
+        template: input.template.id > 0,
+        page: input.page.id > 0,
+        smtp: input.profile.id > 0,
         launch,
         send_by: input.send_by,
     }

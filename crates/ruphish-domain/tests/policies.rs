@@ -1,28 +1,35 @@
 //! Decisions remain independent of the provider and transport implementation.
 #![allow(clippy::unwrap_used, reason = "Independent policy assertions")]
 
-use ruphish_domain::{account::*, campaign::resolve_delivery, integrations::*};
+use ruphish_domain::{
+    account::*,
+    campaign::{DeliveryState, resolve_delivery},
+    integrations::*,
+};
 
 #[test]
 fn manual_recovery_never_retries_an_uncertain_delivery_without_explicit_consent() {
     assert_eq!(
-        resolve_delivery("unknown", "confirm_accepted").unwrap(),
-        "accepted"
+        resolve_delivery(DeliveryState::Unknown, "confirm_accepted").unwrap(),
+        DeliveryState::Accepted
     );
     assert_eq!(
-        resolve_delivery("unknown", "resend_unknown").unwrap(),
-        "ready"
+        resolve_delivery(DeliveryState::Unknown, "resend_unknown").unwrap(),
+        DeliveryState::Ready
     );
-    for state in ["failed", "blocked"] {
-        assert_eq!(resolve_delivery(state, "retry").unwrap(), "ready");
+    for state in [DeliveryState::Failed, DeliveryState::Blocked] {
+        assert_eq!(
+            resolve_delivery(state, "retry").unwrap(),
+            DeliveryState::Ready
+        );
     }
     for (state, action) in [
-        ("unknown", "retry"),
-        ("accepted", "retry"),
-        ("submitting", "retry"),
-        ("ready", "confirm_accepted"),
-        ("failed", "confirm_accepted"),
-        ("unknown", "invented"),
+        (DeliveryState::Unknown, "retry"),
+        (DeliveryState::Accepted, "retry"),
+        (DeliveryState::Submitting, "retry"),
+        (DeliveryState::Ready, "confirm_accepted"),
+        (DeliveryState::Failed, "confirm_accepted"),
+        (DeliveryState::Unknown, "invented"),
     ] {
         assert!(resolve_delivery(state, action).is_err());
     }

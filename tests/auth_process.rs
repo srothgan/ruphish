@@ -41,7 +41,7 @@ pub(super) fn sign_in(client: &Client, base: &str, username: &str, password: &st
     post(
         client,
         base,
-        "/login",
+        "/auth/login",
         &[("username", username), ("password", password)],
     )
 }
@@ -53,7 +53,7 @@ pub(super) fn setup(client: &Client, base: &str) -> Value {
     let reset = post(
         client,
         base,
-        "/reset_password",
+        "/auth/password/reset",
         &[
             ("password", "established-admin-password"),
             ("confirm_password", "established-admin-password"),
@@ -64,6 +64,64 @@ pub(super) fn setup(client: &Client, base: &str) -> Value {
 }
 fn admin_key() -> &'static str {
     "synthetic-bootstrap-token"
+}
+
+#[test]
+fn session_services_use_grouped_post_routes_and_pages_cannot_mutate_identity() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = endpoint(&mut process);
+    let admin = browser();
+    let initial = setup(&admin, &base);
+    for (path, expected) in [
+        ("/login", 405),
+        ("/logout", 405),
+        ("/reset_password", 405),
+        ("/impersonate", 404),
+        ("/impersonate/exit", 404),
+    ] {
+        let response = post(
+            &admin,
+            &base,
+            path,
+            &[
+                ("username", "admin"),
+                ("password", "established-admin-password"),
+            ],
+        );
+        assert_eq!(response.status(), expected, "{path}");
+    }
+    for path in [
+        "/auth/login",
+        "/auth/logout",
+        "/auth/password/reset",
+        "/auth/impersonate",
+        "/auth/impersonate/exit",
+    ] {
+        for method in [reqwest::Method::GET, reqwest::Method::HEAD] {
+            assert_eq!(
+                admin
+                    .request(method, format!("{base}{path}"))
+                    .send()
+                    .unwrap()
+                    .status(),
+                405,
+                "{path}"
+            );
+        }
+    }
+    for path in ["/login", "/logout"] {
+        assert_eq!(
+            admin.get(format!("{base}{path}")).send().unwrap().status(),
+            200
+        );
+    }
+    let current = bootstrap(&admin, &base);
+    assert_eq!(current["user"], initial["user"]);
+    assert_eq!(current["actor"], initial["actor"]);
+    assert_eq!(post(&admin, &base, "/auth/logout", &[]).status(), 200);
+    assert!(bootstrap(&admin, &base)["user"].is_null());
+    process.stop();
 }
 
 #[test]
@@ -294,7 +352,7 @@ fn dedicated_user_pages_preserve_browser_crud_and_reject_unauthorized_access() {
         post(
             &admin,
             &base,
-            "/impersonate",
+            "/auth/impersonate",
             &[("username", "renamed-user")]
         )
         .status(),
@@ -565,7 +623,7 @@ fn browser_detail_navigation_preserves_ownership_and_handles_deleted_records() {
             .unwrap();
         assert!(list.as_array().unwrap().iter().all(|row| row["id"] != id));
     }
-    assert_eq!(post(&member, &base, "/logout", &[]).status(), 200);
+    assert_eq!(post(&member, &base, "/auth/logout", &[]).status(), 200);
     assert_eq!(
         member
             .get(format!("{base}/groups/999999"))
@@ -630,7 +688,7 @@ fn account_routes_preserve_setup_and_reauthenticated_password_changes() {
         post(
             &client,
             &base,
-            "/reset_password",
+            "/auth/password/reset",
             &[
                 ("password", "established-admin-password"),
                 ("confirm_password", "established-admin-password")
@@ -652,9 +710,12 @@ fn account_routes_preserve_setup_and_reauthenticated_password_changes() {
             404
         );
     }
-    for method in [reqwest::Method::GET, reqwest::Method::POST] {
+    for (method, path) in [
+        (reqwest::Method::GET, "/reset_password"),
+        (reqwest::Method::POST, "/auth/password/reset"),
+    ] {
         let response = client
-            .request(method, format!("{base}/reset_password"))
+            .request(method, format!("{base}{path}"))
             .header(
                 "x-csrf-token",
                 bootstrap(&client, &base)["csrf_token"].as_str().unwrap(),
@@ -690,7 +751,7 @@ fn account_routes_preserve_setup_and_reauthenticated_password_changes() {
             .status(),
         405
     );
-    assert_eq!(post(&client, &base, "/logout", &[]).status(), 200);
+    assert_eq!(post(&client, &base, "/auth/logout", &[]).status(), 200);
     assert_eq!(password_page().status(), 307);
     assert_eq!(
         sign_in(&client, &base, "admin", "established-admin-password").status(),
@@ -972,7 +1033,7 @@ fn self_deletion_and_stale_browser_requests_cannot_remove_accounts() {
         bad_key.json::<Value>().unwrap()["message"],
         "Invalid API Key"
     );
-    assert_eq!(post(&first, &base, "/logout", &[]).status(), 200);
+    assert_eq!(post(&first, &base, "/auth/logout", &[]).status(), 200);
     for id in [target_id, other_id, 1] {
         let stale = delete(&first, id, csrf);
         assert_eq!(stale.status(), 401);
@@ -1077,7 +1138,7 @@ fn browser_reset_restart_csrf_rotation_and_logout_are_persistent() {
     assert!(bootstrap(&browser, &base)["user"].is_null());
     assert_eq!(
         browser
-            .post(format!("{base}/login"))
+            .post(format!("{base}/auth/login"))
             .form(&[
                 ("username", "admin"),
                 ("password", "synthetic-bootstrap-password")
@@ -1136,7 +1197,7 @@ fn browser_reset_restart_csrf_rotation_and_logout_are_persistent() {
     let token = initial["csrf_token"].as_str().unwrap();
     assert_eq!(
         browser
-            .post(format!("{base}/reset_password"))
+            .post(format!("{base}/auth/password/reset"))
             .header("x-csrf-token", token)
             .header("origin", "https://untrusted.invalid")
             .form(&[
@@ -1160,7 +1221,7 @@ fn browser_reset_restart_csrf_rotation_and_logout_are_persistent() {
             post(
                 &browser,
                 &base,
-                "/reset_password",
+                "/auth/password/reset",
                 &[("password", candidate), ("confirm_password", confirmation)]
             )
             .status(),
@@ -1171,7 +1232,7 @@ fn browser_reset_restart_csrf_rotation_and_logout_are_persistent() {
         post(
             &browser,
             &base,
-            "/reset_password",
+            "/auth/password/reset",
             &[
                 ("password", "established-admin-password"),
                 ("confirm_password", "established-admin-password")
@@ -1242,7 +1303,7 @@ fn browser_reset_restart_csrf_rotation_and_logout_are_persistent() {
             .status(),
         200
     );
-    assert_eq!(post(&browser, &base, "/logout", &[]).status(), 200);
+    assert_eq!(post(&browser, &base, "/auth/logout", &[]).status(), 200);
     assert!(bootstrap(&browser, &base)["user"].is_null());
     assert_eq!(
         browser
@@ -1321,7 +1382,7 @@ fn accounts_permissions_locking_impersonation_and_atomic_last_admin() {
         400
     );
     assert_eq!(
-        post(&admin, &base, "/impersonate", &[("username", "alice")]).status(),
+        post(&admin, &base, "/auth/impersonate", &[("username", "alice")]).status(),
         200
     );
     let mode = bootstrap(&admin, &base);
@@ -1363,7 +1424,10 @@ fn accounts_permissions_locking_impersonation_and_atomic_last_admin() {
         .status(),
         403
     );
-    assert_eq!(post(&admin, &base, "/impersonate/exit", &[]).status(), 200);
+    assert_eq!(
+        post(&admin, &base, "/auth/impersonate/exit", &[]).status(),
+        200
+    );
     assert_eq!(bootstrap(&admin, &base)["user"]["username"], "admin");
     let response = admin
         .put(format!("{base}/api/users/{alice_id}"))
@@ -1526,7 +1590,7 @@ fn malformed_credentials_rate_limits_and_storage_failures_fail_closed() {
         .to_owned();
     assert_eq!(
         browser
-            .post(format!("{base}/login"))
+            .post(format!("{base}/auth/login"))
             .header("x-csrf-token", token)
             .header("x-forwarded-for", "198.51.100.99")
             .form(&[
@@ -1542,10 +1606,10 @@ fn malformed_credentials_rate_limits_and_storage_failures_fail_closed() {
         directory.path(),
         "CREATE TRIGGER reject_session_delete BEFORE DELETE ON ruphish_sessions BEGIN SELECT RAISE(ABORT,'synthetic storage failure'); END;",
     );
-    assert_eq!(post(&browser, &base, "/logout", &[]).status(), 500);
+    assert_eq!(post(&browser, &base, "/auth/logout", &[]).status(), 500);
     assert_eq!(bootstrap(&browser, &base)["user"]["username"], "admin");
     database(directory.path(), "DROP TRIGGER reject_session_delete;");
-    assert_eq!(post(&browser, &base, "/logout", &[]).status(), 200);
+    assert_eq!(post(&browser, &base, "/auth/logout", &[]).status(), 200);
     assert!(bootstrap(&browser, &base)["user"].is_null());
     process.stop();
 }
@@ -1562,7 +1626,20 @@ fn go_account_observations_match_except_approved_account_security_policies() {
     let cases: Vec<Value> =
         serde_json::from_str(include_str!("fixtures/authentication/http.json")).unwrap();
     let mut user_key = String::new();
-    for case in cases {
+    for mut case in cases {
+        fn absent_dates(value: &mut Value) {
+            match value {
+                Value::Array(rows) => rows.iter_mut().for_each(absent_dates),
+                Value::Object(fields) => {
+                    if fields.get("last_login") == Some(&json!("0001-01-01T00:00:00Z")) {
+                        fields.insert("last_login".into(), Value::Null);
+                    }
+                    fields.values_mut().for_each(absent_dates);
+                }
+                _ => {}
+            }
+        }
+        absent_dates(&mut case["json"]);
         let key = if case["key"] == "<created-user-key>" {
             &user_key
         } else {
@@ -1791,7 +1868,7 @@ fn two_processes_share_revocation_and_mixed_hashes_survive_migration() {
         200
     );
     assert_eq!(
-        post(&first_browser, &second_base, "/logout", &[]).status(),
+        post(&first_browser, &second_base, "/auth/logout", &[]).status(),
         200
     );
     assert!(bootstrap(&first_browser, &first_base)["user"].is_null());
@@ -1869,7 +1946,13 @@ fn read_only_permissions_redirects_validation_and_security_headers() {
         403
     );
     assert_eq!(
-        post(&reader, &base, "/impersonate", &[("username", "admin")]).status(),
+        post(
+            &reader,
+            &base,
+            "/auth/impersonate",
+            &[("username", "admin")]
+        )
+        .status(),
         403
     );
     assert_eq!(
@@ -1904,7 +1987,7 @@ fn read_only_permissions_redirects_validation_and_security_headers() {
         .to_owned();
     let redirect = admin
         .post(format!(
-            "{base}/login?next=https://outside.invalid/settings?discard=1"
+            "{base}/auth/login?next=https://outside.invalid/settings?discard=1"
         ))
         .form(&[
             ("username", "admin"),
@@ -1986,7 +2069,7 @@ fn verified_https_cookie_tampering_expiry_and_logout_replay() {
             .is_null()
     );
     // Forced setup does not trap the user in a session: explicit logout remains available.
-    assert_eq!(post(&browser, &base, "/logout", &[]).status(), 200);
+    assert_eq!(post(&browser, &base, "/auth/logout", &[]).status(), 200);
     assert!(
         plain
             .get(format!("{base}/auth/session"))
@@ -2072,7 +2155,7 @@ fn inherited_login_redirects_and_role_method_cases_use_real_operations() {
         .to_owned();
     for (query, expected) in [("", "/"), ("?next=/campaigns", "/campaigns")] {
         let response = fresh
-            .post(format!("{base}/login{query}"))
+            .post(format!("{base}/auth/login{query}"))
             .form(&[
                 ("username", "admin"),
                 ("password", "established-admin-password"),
@@ -2205,7 +2288,7 @@ fn browser_origin_checks_support_http1_and_http2_over_verified_tls() {
             format!("https://localhost:{}", address.port().saturating_sub(1)),
         ] {
             let denied = browser
-                .post(format!("{base}/login"))
+                .post(format!("{base}/auth/login"))
                 .header("origin", &origin)
                 .header("sec-fetch-site", "same-origin")
                 .header("x-csrf-token", &token)
@@ -2238,7 +2321,7 @@ fn browser_origin_checks_support_http1_and_http2_over_verified_tls() {
                 post(
                     &browser,
                     &base,
-                    "/reset_password",
+                    "/auth/password/reset",
                     &[
                         ("password", "established-admin-password"),
                         ("confirm_password", "established-admin-password")
@@ -2256,7 +2339,7 @@ fn browser_origin_checks_support_http1_and_http2_over_verified_tls() {
                 post(
                     &browser,
                     &base,
-                    "/reset_password",
+                    "/auth/password/reset",
                     &[
                         ("password", "http2-reset-password"),
                         ("confirm_password", "http2-reset-password")
@@ -2280,7 +2363,7 @@ fn browser_origin_checks_support_http1_and_http2_over_verified_tls() {
             .unwrap();
         assert_eq!(rotated.version(), version);
         assert_eq!(rotated.status(), 200);
-        assert_eq!(post(&browser, &base, "/logout", &[]).status(), 200);
+        assert_eq!(post(&browser, &base, "/auth/logout", &[]).status(), 200);
         assert!(bootstrap(&browser, &base)["user"].is_null());
     }
     process.stop();

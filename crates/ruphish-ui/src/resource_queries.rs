@@ -5,6 +5,7 @@ use crate::{
 };
 use leptos::prelude::*;
 use leptos_fetch::QueryClient;
+use ruphish_contracts::resource_details::Resource;
 use ruphish_contracts::resources::{GroupSummaries, ResourceSummaries};
 use ruphish_ui::api_error::ApiError;
 use ruphish_ui::query::{Query, QueryView};
@@ -14,7 +15,7 @@ use serde_json::Value;
 pub(crate) struct SummaryRow {
     pub id: i64,
     pub name: String,
-    pub modified_date: String,
+    pub modified_date: Option<String>,
     pub count: usize,
 }
 
@@ -23,7 +24,7 @@ pub(crate) struct ResourceQueries {
     overview: OverviewQueries,
     campaigns: CampaignQueries,
     summaries: Query<Family, Vec<SummaryRow>>,
-    pub details: Query<(Family, String), (Value, Option<String>)>,
+    pub details: Query<(Family, String), (Resource, Option<String>)>,
 }
 
 impl ResourceQueries {
@@ -71,21 +72,21 @@ impl ResourceQueries {
         api: Api,
         family: Family,
         id: &str,
-    ) -> Result<(Value, Option<String>), ApiError> {
+    ) -> Result<(Resource, Option<String>), ApiError> {
         let result = api
             .read_resource(&format!("/api/{}/{id}", family.route()))
             .await?;
-        Self::validate_detail(api, family, &result.0, id.parse().ok())?;
-        Ok(result)
+        let resource = Self::decode_detail(api, family, result.0, id.parse().ok())?;
+        Ok((resource, result.1))
     }
 
-    pub fn validate_detail(
+    pub fn decode_detail(
         api: Api,
         family: Family,
-        value: &Value,
+        value: Value,
         expected_id: Option<i64>,
-    ) -> Result<(), ApiError> {
-        use ruphish_contracts::resource_details::{Kind, validate};
+    ) -> Result<Resource, ApiError> {
+        use ruphish_contracts::resource_details::{Kind, decode};
         let kind = match family {
             Family::Groups => Kind::Group,
             Family::Templates => Kind::Template,
@@ -93,14 +94,12 @@ impl ResourceQueries {
             Family::LearningPages => Kind::LearningPage,
             Family::Profiles => Kind::Profile,
         };
-        validate(kind, value).map_err(|_| api.invalid_read_err())?;
-        if value["id"]
-            .as_i64()
-            .is_none_or(|id| id <= 0 || expected_id.is_some_and(|expected| id != expected))
-        {
+        let resource = decode(kind, value).map_err(|_| api.invalid_read_err())?;
+        let id = resource.metadata.id;
+        if id <= 0 || expected_id.is_some_and(|expected| id != expected) {
             return Err(api.invalid_read_err());
         }
-        Ok(())
+        Ok(resource)
     }
 
     pub fn list(self, family: Family) -> QueryView<Vec<SummaryRow>> {

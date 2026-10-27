@@ -131,8 +131,6 @@ pub(super) async fn exercise(
     ));
     let review = store.prepare(actor, &input, now).await.unwrap();
     input.policy = campaign::Overrides {
-        capture_credentials: Some(true),
-        capture_passwords: Some(true),
         redirect_url: Some(review.policy.redirect_url.clone()),
         learning_page_id: review.policy.learning_page_id,
     };
@@ -143,21 +141,17 @@ pub(super) async fn exercise(
             groups: input
                 .groups
                 .iter()
-                .map(|r| Reference { id: r.id.unwrap() })
+                .map(|r| Reference { id: r.id })
                 .collect(),
             template: Reference {
-                id: input.template.id.unwrap(),
+                id: input.template.id,
             },
-            page: Reference {
-                id: input.page.id.unwrap(),
-            },
+            page: Reference { id: input.page.id },
             smtp: Reference {
-                id: input.profile.id.unwrap(),
+                id: input.profile.id,
             },
         },
         policy: Some(DraftPolicy {
-            capture_credentials: true,
-            capture_passwords: true,
             redirect_url: review.policy.redirect_url,
             learning_page_id: review.policy.learning_page_id,
         }),

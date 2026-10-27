@@ -4,7 +4,7 @@ use crate::{
 };
 use leptos::prelude::*;
 use ruphish_contracts::overview::Snapshot;
-use ruphish_domain::reporting::SortDirection;
+use ruphish_domain::{campaign::CampaignStatus, reporting::SortDirection};
 use ruphish_ui::overview_state::{ChangeGoal, count_change, percentage};
 use ruphish_ui::{tr, trs};
 
@@ -254,7 +254,9 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                             )
                             .into_iter()
                             .map(|c| {
-                                let (action_href, action_label) = if c.status == "Completed" {
+                                let (action_href, action_label) = if c.status
+                                    == CampaignStatus::Completed
+                                {
                                     (
                                         format!("/analysis/{}", c.id),
                                         leptos_i18n::t_string!(i18n, ui.analysis),
@@ -270,14 +272,18 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                                         <th scope="row">
                                             <a href=format!("/campaigns/{}", c.id)>{c.name}</a>
                                             <span class="dashboard-campaign-meta">
-                                                {ruphish_ui::localization::event_label(i18n, &c.status)}
+                                                {ruphish_ui::localization::event_label(
+                                                    i18n,
+                                                    c.status.as_str(),
+                                                )}
                                             </span>
-                                            {(!c.launch.is_empty() && !c.launch.starts_with("0001-"))
-                                                .then(|| {
+                                            {c
+                                                .launch
+                                                .map(|launch| {
                                                     view! {
                                                         <span class="dashboard-campaign-meta">
                                                             {leptos_i18n::t!(
-                                                                i18n, messages.launch_arg0, arg0 = (minute(&c.launch.into())).to_string()
+                                                                i18n, messages.launch_arg0, arg0 = (minute(&launch.into())).to_string()
                                                             )}
                                                         </span>
                                                     }

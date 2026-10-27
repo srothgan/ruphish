@@ -33,12 +33,6 @@ The first successful poll checkpoints existing messages. New forwarded content m
 
 Matched outcomes commit before mailbox acknowledgement. Retrying acknowledgement must not create another report event. Deletion, when enabled, requires UID-scoped behavior rather than a broad mailbox expunge. Read [reporting mailboxes](../user-guide/reporting-mailboxes.md) before enabling it.
 
-Legacy `/api/imap/` GET/POST and `/api/imap/validate` remain compatibility surfaces. New integrations should use the resource routes above; a legacy validation GET is rejected instead of initiating an external check.
-
-GET `/api/imap/` returns an array containing the caller's lowest-ID mailbox, or `[]`. Its compatibility shape uses string `port` and `imap_freq`, `delete_reported_campaign_email` instead of `delete_reported`, and `last_login`/`modified_date`. `password` is always empty and `has_password` indicates whether a secret exists; `ignore_cert_errors` reports the saved certificate policy.
-
-POST `/api/imap/` accepts `enabled`, `host`, string `port`, `username`, optional `password`, `tls`, `ignore_cert_errors`, `folder`, `restrict_domain`, `delete_reported_campaign_email`, and string `imap_freq`. It updates that lowest-ID mailbox or creates one. Empty folder becomes `INBOX`; invalid/out-of-range frequency falls back to 60 seconds. An empty password preserves the existing one. `ignore_cert_errors: true` explicitly skips certificate chain and hostname verification; omitted or false enables verification. Successful save returns `201` with a success envelope.
-
-POST `/api/imap/validate` takes the same compatibility settings without saving them. Successful validation returns `201`; an integration failure can return `200` with `success: false`, `code`, and `message`. This legacy exception means HTTP success alone is insufficient: inspect the envelope. Prefer the resource-specific validation route for new code.
+The singleton `/api/imap/` and `/api/imap/validate` routes have been removed. Use the reporting-mailbox resources above with numeric `port` and `frequency`, explicit mailbox IDs and revision-checked edits. Create or update a mailbox before validating its saved configuration.
 
 An email-client reporting button can instead call the recipient's public [report endpoint](participant-endpoints.md). That uses a campaign tracking identity, not an administrative API key, and is separate from IMAP polling.

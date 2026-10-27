@@ -169,11 +169,7 @@ fn api_timestamp_values_reach_locale_display_without_losing_their_instant() {
             "19/10/2026, 04:53 (UTC+09:00)"
         );
     }
-    for value in [
-        serde_json::Value::Null,
-        json!(""),
-        json!("0001-01-01T00:00:00Z"),
-    ] {
+    for value in [serde_json::Value::Null, json!("")] {
         assert_eq!(instant(&value).unwrap(), None);
     }
     for value in [
@@ -385,7 +381,7 @@ fn import_draft_capacity_and_expired_session_fail_without_overwriting_retained_w
 
 #[wasm_bindgen_test]
 async fn campaign_launch_retry_preserves_reviewed_body_key_and_browser_auth_boundary() {
-    let body = json!({"name":"Reviewed campaign","selection":{"template":{"id":9,"revision":"review-v1"}}});
+    let body = json!({"name":"Reviewed campaign","url":"https://training.example.test","selection":{"groups":[{"id":4,"revision":"group-v1"}],"template":{"id":9,"revision":"review-v1"},"page":{"id":6,"revision":"page-v1"},"smtp":{"id":7,"revision":"smtp-v1"}}});
     for _ in 0..2 {
         let request = ruphish_ui::browser_http::launch_request(
             "https://admin.example.test/api/campaigns/",
@@ -406,9 +402,16 @@ async fn campaign_launch_retry_preserves_reviewed_body_key_and_browser_auth_boun
             request.headers().get("x-csrf-token").as_deref(),
             Some("csrf-canary")
         );
+        let sent = request.text().await.unwrap();
         assert_eq!(
-            serde_json::from_str::<serde_json::Value>(&request.text().await.unwrap()).unwrap(),
+            serde_json::from_str::<serde_json::Value>(&sent).unwrap(),
             body
+        );
+        let command: ruphish_contracts::campaign::Create = serde_json::from_str(&sent).unwrap();
+        assert_eq!(command.selection.template.id, 9);
+        assert_eq!(
+            command.selection.template.revision.as_deref(),
+            Some("review-v1")
         );
     }
 }

@@ -32,6 +32,11 @@ pub(crate) fn delivery_update(
         getrandom::fill(&mut jitter).map_err(|_| Error::Internal)?;
     }
     Ok(ruphish_domain::campaign::delivery_update(
-        current, completed, retries, now, outcome, jitter[0],
+        ruphish_domain::campaign::DeliveryState::from_stored(current).ok_or(Error::Internal)?,
+        completed,
+        retries,
+        now,
+        outcome,
+        jitter[0],
     ))
 }

@@ -156,7 +156,7 @@ fn post(base: &str, path: &str, body: &Value) -> Value {
     value
 }
 fn read(base: &str, path: &str) -> Value {
-    client()
+    let value: Value = client()
         .get(format!("{base}{path}"))
         .bearer_auth("synthetic-bootstrap-token")
         .send()
@@ -164,7 +164,18 @@ fn read(base: &str, path: &str) -> Value {
         .error_for_status()
         .unwrap()
         .json()
-        .unwrap()
+        .unwrap();
+    let route = path.split('?').next().unwrap_or(path);
+    if route.ends_with("/delivery") {
+        let snapshot: ruphish_contracts::campaign_reads::Delivery =
+            serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(snapshot).unwrap(), value);
+    } else if route.ends_with("/history") {
+        let snapshot: ruphish_contracts::campaign_reads::History =
+            serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(snapshot).unwrap(), value);
+    }
+    value
 }
 fn normalize(value: &mut Value) {
     match value {
@@ -172,7 +183,7 @@ fn normalize(value: &mut Value) {
         Value::Object(object) => {
             for (key, value) in object.iter_mut() {
                 if matches!(key.as_str(), "created_date" | "modified_date" | "time")
-                    || (key == "completed_date" && value != "0001-01-01T00:00:00Z")
+                    || (key == "completed_date" && !value.is_null())
                 {
                     *value = json!("<time>");
                 } else if matches!(key.as_str(), "latitude" | "longitude") {
@@ -196,16 +207,50 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
     for case in cases {
         let id = case["id"].as_str().unwrap();
         let path = case["path"].as_str().unwrap();
+        let mut body = case["body"].as_str().unwrap().to_owned();
+        if path == "/api/campaigns/"
+            && case["method"] == "POST"
+            && let Ok(mut input) = serde_json::from_str::<Value>(&body)
+        {
+            // DEC-055: translate the historical name-only fixture into native IDs.
+            // Fixture resources have independent fixed IDs; missing inputs stay incomplete.
+            let reference =
+                |value: &Value| json!({"id": if value["name"].is_string() { 1 } else { 0 }});
+            let groups = input["groups"]
+                .as_array()
+                .map(|groups| {
+                    groups
+                        .iter()
+                        .map(|g| json!({"id": if g["name"] == "Overlap" { 2 } else { 1 }}))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            input["selection"] = json!({"groups":groups,"template":reference(&input["template"]),"page":reference(&input["page"]),"smtp":reference(&input["smtp"])});
+            if input["name"].is_null() {
+                input["name"] = json!("");
+            }
+            if input["url"].is_null() {
+                input["url"] = json!("");
+            }
+            for key in ["groups", "template", "page", "smtp"] {
+                input.as_object_mut().unwrap().remove(key);
+            }
+            body = serde_json::to_string(&input).unwrap();
+        }
         let response = client()
             .request(
-                case["method"].as_str().unwrap().parse().unwrap(),
+                // DEC-057 retains the workflow guarantee through POST only.
+                if path.ends_with("/complete") {
+                    reqwest::Method::POST
+                } else {
+                    case["method"].as_str().unwrap().parse().unwrap()
+                },
                 format!("{base}{path}"),
             )
             .bearer_auth("synthetic-bootstrap-token")
             .header("content-type", "application/json")
-            // Only the fixture's transport port changes; recorded wire expectations
-            // remain independent and are checked after restoring the recorded origin.
-            .body(case["body"].as_str().unwrap().replace(
+            // Recorded response expectations remain independent of native request adaptation.
+            .body(body.replace(
                 "https://training.example.test",
                 &origin(&base, "training.example.test"),
             ))
@@ -217,6 +262,25 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
             "{id}"
         );
         let mut actual: Value = response.json().unwrap();
+        if (200..300).contains(&case["status"].as_u64().unwrap())
+            && path.starts_with("/api/campaigns/")
+            && actual.get("success").is_none()
+        {
+            use ruphish_contracts::campaign_details as wire;
+            fn round_trip<T: serde::de::DeserializeOwned + serde::Serialize>(value: &Value) {
+                let decoded: T = serde_json::from_value(value.clone()).unwrap();
+                assert_eq!(serde_json::to_value(decoded).unwrap(), *value);
+            }
+            match path {
+                "/api/campaigns/summary" => round_trip::<wire::Summaries>(&actual),
+                path if path.ends_with("/summary") => round_trip::<wire::Summary>(&actual),
+                path if path.ends_with("/results") => round_trip::<wire::Results>(&actual),
+                "/api/campaigns/" if actual.is_array() => {
+                    round_trip::<Vec<wire::Campaign>>(&actual)
+                }
+                _ => round_trip::<wire::Campaign>(&actual),
+            }
+        }
         actual = serde_json::from_str(&serde_json::to_string(&actual).unwrap().replace(
             &origin(&base, "training.example.test"),
             "https://training.example.test",
@@ -278,17 +342,33 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
             match v {
                 Value::Array(rows) => rows.iter_mut().for_each(exceptions),
                 Value::Object(o) => {
+                    o.remove("capture_credentials");
+                    o.remove("capture_passwords");
+                    if o.contains_key("host") {
+                        let password = o.remove("password");
+                        o.insert(
+                            "has_password".into(),
+                            json!(
+                                password
+                                    .as_ref()
+                                    .and_then(Value::as_str)
+                                    .is_some_and(|v| !v.is_empty())
+                            ),
+                        );
+                    }
                     for (k, v) in o {
-                        if k == "html"
+                        if matches!(k.as_str(), "targets" | "attachments" | "headers")
+                            && v.is_null()
+                        {
+                            *v = json!([]);
+                        } else if v == "0001-01-01T00:00:00Z" {
+                            *v = Value::Null;
+                        } else if k == "html"
                             && v == "<html><head></head><body><p>Training</p></body></html>"
                         {
                             *v = json!("<p>Training</p>");
                         } else if k == "send_date" && v == "2035-01-01T12:03:00Z" {
                             *v = json!("2035-01-01T12:05:00Z");
-                        } else if matches!(k.as_str(), "capture_credentials" | "capture_passwords")
-                        {
-                            // Approved presence-only tracking ignores the legacy capture flags.
-                            *v = json!(true);
                         } else {
                             exceptions(v)
                         }
@@ -405,28 +485,33 @@ pub(super) fn origin(base: &str, host: &str) -> String {
         .to_owned()
 }
 
+fn reviewed_selection(review: &Value) -> Value {
+    let select = |r: &Value| json!({"id":r["id"],"revision":r["revision"]});
+    let selections = &review["selection"];
+    json!({"groups":selections["groups"].as_array().unwrap().iter().map(select).collect::<Vec<_>>(),"template":select(&selections["template"]),"page":select(&selections["page"]),"smtp":select(&selections["smtp"])})
+}
 fn resources(base: &str, address: &str) -> Value {
-    post(
+    let group = post(
         base,
         "/api/groups/",
         &json!({"name":"Audience","targets":[{"email":"alice@example.test","first_name":"Alice","last_name":"Example"}]}),
     );
-    post(
+    let template = post(
         base,
         "/api/templates/",
         &json!({"name":"Mail","subject":"Hello {{.FirstName}}","text":"Training link: {{.URL}}"}),
     );
-    post(
+    let page = post(
         base,
         "/api/pages/",
-        &json!({"name":"Page","html":"<form><input name='username'><input name='password' type='password'></form>","capture_passwords":true}),
+        &json!({"name":"Page","html":"<form><input name='username'><input name='password' type='password'></form>"}),
     );
-    post(
+    let smtp = post(
         base,
         "/api/smtp/",
         &json!({"name":"Local","host":address,"from_address":"Training <training@example.test>"}),
     );
-    json!({"name":"Training","groups":[{"name":"Audience"}],"template":{"name":"Mail"},"page":{"name":"Page"},"smtp":{"name":"Local"},"url":origin(base, "training.example.test")})
+    json!({"name":"Training","selection":{"groups":[{"id":group["id"]}],"template":{"id":template["id"]},"page":{"id":page["id"]},"smtp":{"id":smtp["id"]}},"url":origin(base, "training.example.test")})
 }
 fn wait_state(base: &str, id: i64, state: &str) -> Value {
     let deadline = Instant::now() + Duration::from_secs(15);
@@ -467,6 +552,21 @@ fn executable_launch_delivers_personalized_mail_once_and_persists_acceptance_acr
     assert_eq!(response.status(), 200);
     // Unknown input must not leak into the persistent launch fingerprint.
     body["unused"] = json!({"password":"synthetic-launch-secret-canary"});
+    let rejected = client()
+        .post(format!("{base}/api/campaigns/"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .header("idempotency-key", "process-launch-1")
+        .json(&body)
+        .send()
+        .unwrap();
+    assert_eq!(rejected.status(), 400);
+    assert!(
+        !rejected
+            .text()
+            .unwrap()
+            .contains("synthetic-launch-secret-canary")
+    );
+    body.as_object_mut().unwrap().remove("unused");
     let launch = || {
         client()
             .post(format!("{base}/api/campaigns/"))
@@ -705,21 +805,28 @@ fn reviewed_campaign_preview_test_and_duplicate_use_exact_owned_resources_withou
     let inherited = post(&base, "/api/campaigns/prepare", &input);
     let page_url = format!("/api/pages/{}", inherited["selection"]["page"]["id"]);
     let defaults = read(&base, &page_url);
-    assert_eq!(defaults["capture_credentials"], true);
-    assert_eq!(defaults["capture_passwords"], true);
+    assert!(defaults.get("capture_credentials").is_none());
+    assert!(defaults.get("capture_passwords").is_none());
     assert_eq!(
         defaults["redirect_url"],
         "https://training.example.test/finish"
     );
-    assert_eq!(inherited["policy"]["capture_passwords"], true);
-    // Legacy false flags are inert; explicit empty still clears the redirect.
-    input["policy"] =
-        json!({"capture_credentials":false,"capture_passwords":false,"redirect_url":""});
+    assert!(inherited["policy"].get("capture_passwords").is_none());
+    for field in ["capture_credentials", "capture_passwords"] {
+        let mut retired = input.clone();
+        retired["policy"] = json!({field:true});
+        let rejected = client()
+            .post(format!("{base}/api/campaigns/prepare"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&retired)
+            .send()
+            .unwrap();
+        assert_eq!(rejected.status(), 400);
+    }
+    // An explicit empty redirect clears the page default.
+    input["policy"] = json!({"redirect_url":""});
     let review = post(&base, "/api/campaigns/prepare", &input);
-    assert_eq!(
-        review["policy"],
-        json!({"capture_credentials":true,"capture_passwords":true,"redirect_url":""})
-    );
+    assert_eq!(review["policy"], json!({"redirect_url":""}));
     assert!(review["warnings"].is_array());
     assert_eq!(review["total"], 1);
     assert!(
@@ -733,7 +840,7 @@ fn reviewed_campaign_preview_test_and_duplicate_use_exact_owned_resources_withou
             || !review.to_string().contains("synthetic-bootstrap-password")
     );
     let mut campaign = input.clone();
-    campaign["selection"] = review["selection"].clone();
+    campaign["selection"] = reviewed_selection(&review);
     sql(
         directory.path(),
         "UPDATE templates SET modified_date='2032-01-01T00:00:00Z'",
@@ -746,7 +853,7 @@ fn reviewed_campaign_preview_test_and_duplicate_use_exact_owned_resources_withou
         .unwrap();
     assert_eq!(stale.status(), 412);
     let review = post(&base, "/api/campaigns/prepare", &input);
-    campaign["selection"] = review["selection"].clone();
+    campaign["selection"] = reviewed_selection(&review);
     let endpoint = base.clone();
     let request = campaign.clone();
     let send = std::thread::spawn(move || {
@@ -769,6 +876,8 @@ fn reviewed_campaign_preview_test_and_duplicate_use_exact_owned_resources_withou
             .is_empty()
     );
     let created = post(&base, "/api/campaigns/", &campaign);
+    assert!(created["send_by_date"].is_null());
+    assert!(created["completed_date"].is_null());
     let draft = read(&base, &format!("/api/campaigns/{}/draft", created["id"]));
     assert_eq!(draft["policy"], review["policy"]);
     assert_eq!(read(&base, &page_url), defaults);
@@ -816,6 +925,16 @@ fn campaign_ownership_read_only_and_locked_owners_hold_at_real_http_boundaries()
     let body = resources(&base, "127.0.0.1:25");
     let campaign = post(&base, "/api/campaigns/", &body);
     let id = campaign["id"].as_i64().unwrap();
+    let before = read(&base, &format!("/api/campaigns/{id}"));
+    for method in [reqwest::Method::GET, reqwest::Method::HEAD] {
+        let response = client()
+            .request(method, format!("{base}/api/campaigns/{id}/complete"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), 405);
+        assert_eq!(read(&base, &format!("/api/campaigns/{id}")), before);
+    }
     sql(
         directory.path(),
         "INSERT INTO users(username,hash,api_key,role_id,password_change_required,account_locked) SELECT 'second',hash,'second-owner-key',role_id,0,0 FROM users WHERE id=1;",
@@ -847,7 +966,7 @@ fn campaign_ownership_read_only_and_locked_owners_hold_at_real_http_boundaries()
         "INSERT INTO roles(id,slug,name,description) VALUES(99,'read-only','Read only','Synthetic'); INSERT INTO role_permissions(role_id,permission_id) SELECT 99,id FROM permissions WHERE slug='view_objects'; UPDATE users SET role_id=99 WHERE id=1;",
     );
     assert_eq!(read(&base, &format!("/api/campaigns/{id}"))["id"], id);
-    for method in ["GET", "POST"] {
+    for (method, status) in [("GET", 405), ("POST", 403)] {
         assert_eq!(
             client()
                 .request(
@@ -858,7 +977,7 @@ fn campaign_ownership_read_only_and_locked_owners_hold_at_real_http_boundaries()
                 .send()
                 .unwrap()
                 .status(),
-            403
+            status
         );
     }
     assert_eq!(
@@ -887,35 +1006,70 @@ fn campaign_ownership_read_only_and_locked_owners_hold_at_real_http_boundaries()
 }
 
 #[test]
-fn campaign_json_preserves_go_field_case_duplicate_merging_and_null_semantics() {
+fn campaign_commands_reject_ambiguous_json_without_creating_work() {
     let directory = workspace();
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
-    let _ = resources(&base, "127.0.0.1:25");
-    let raw = r#"{"NaMe":"Training","name":null,"groups":[{"NAME":"Audience"}],"template":{"NAME":"Mail"},"template":{},"page":{"name":"Page"},"smtp":{"name":"Local"},"url":"https://example.test"}"#;
-    let response = client()
-        .post(format!("{base}/api/campaigns/"))
-        .bearer_auth("synthetic-bootstrap-token")
-        .header("content-type", "application/json")
-        .body(raw.replace("https://example.test", &origin(&base, "example.test")))
-        .send()
-        .unwrap();
-    assert_eq!(response.status(), 201);
-    let value: Value = response.json().unwrap();
-    assert_eq!(value["name"], "Training");
-    assert_eq!(value["template"]["name"], "Mail");
-    for body in ["[]", r#"{"name":12}"#, r#"{"template":[]}"#] {
-        assert_eq!(
-            client()
-                .post(format!("{base}/api/campaigns/"))
+    let input = resources(&base, "127.0.0.1:25");
+    let valid = serde_json::to_string(&input).unwrap();
+    let mut bodies = vec![
+        "null".into(),
+        "[]".into(),
+        "{}".into(),
+        valid.replacen("\"name\":", "\"Name\":", 1),
+        valid.replacen("\"name\":", "\"name\":null,\"name\":", 1),
+        valid.replacen("\"id\":", "\"id\":null,\"id\":", 1),
+        format!("{valid} {{}}"),
+    ];
+    for (field, value) in [
+        ("groups", json!([{"name":"Audience"}])),
+        ("template", json!({"name":"Mail","id":1})),
+        ("unexpected", json!(true)),
+        ("name", Value::Null),
+        ("selection", Value::Null),
+    ] {
+        let mut invalid = input.clone();
+        invalid[field] = value;
+        bodies.push(serde_json::to_string(&invalid).unwrap());
+    }
+    let mut named = input.clone();
+    named["selection"]["template"]["name"] = json!("Mail");
+    bodies.push(serde_json::to_string(&named).unwrap());
+    // Both direct commands and nested commands must retain strict decoding.
+    for body in bodies {
+        for (path, body) in [
+            ("/api/campaigns/", body.clone()),
+            ("/api/campaigns/prepare", body.clone()),
+            (
+                "/api/campaigns/test",
+                format!(r#"{{"campaign":{body},"email":"test@example.test"}}"#),
+            ),
+            (
+                "/api/campaign-drafts/strict-command-test/launch",
+                format!(r#"{{"revision":1,"campaign":{body}}}"#),
+            ),
+        ] {
+            let response = client()
+                .post(format!("{base}{path}"))
                 .bearer_auth("synthetic-bootstrap-token")
                 .header("content-type", "application/json")
                 .body(body)
                 .send()
-                .unwrap()
-                .status(),
-            400
-        );
+                .unwrap();
+            assert_eq!(response.status(), 400, "{path}");
+        }
     }
+    assert!(
+        read(&base, "/api/campaigns/")
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(post(&base, "/api/campaigns/prepare", &input)["total"], 1);
+    let created = post(&base, "/api/campaigns/", &input);
+    assert_eq!(
+        created["template"]["id"],
+        input["selection"]["template"]["id"]
+    );
     process.stop();
 }
 
@@ -951,12 +1105,19 @@ fn local_campaign_times_resolve_on_server_and_survive_review_launch_and_restart(
         };
         assert_eq!(utc(&review["launch_date"]), expected);
         assert_eq!(utc(&review["send_by_date"]), expected_end);
-        // The removed prototype field is an ignored unknown field, never a policy override.
+        // Removed prototype fields cannot silently alter or bypass schedule policy.
         body["launch_local"]["ambiguity"] = json!("later");
-        assert_eq!(
-            post(&base, "/api/campaigns/prepare", &body)["launch_date"],
-            review["launch_date"]
-        );
+        let rejected = client()
+            .post(format!("{base}/api/campaigns/prepare"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&body)
+            .send()
+            .unwrap();
+        assert_eq!(rejected.status(), 400);
+        body["launch_local"]
+            .as_object_mut()
+            .unwrap()
+            .remove("ambiguity");
         let campaign = post(&base, "/api/campaigns/", &body);
         assert_eq!(campaign["launch_date"], expected);
         assert_eq!(campaign["send_by_date"], expected_end);
@@ -1026,11 +1187,11 @@ fn repeated_campaign_review_recovers_after_validation_failure_without_creating_w
     let valid = resources(&base, "127.0.0.1:1");
     for field in ["name", "groups", "template"] {
         let mut invalid = valid.clone();
-        invalid[field] = match field {
-            "groups" => json!([]),
-            "template" => json!({"name":""}),
-            _ => json!(""),
-        };
+        match field {
+            "groups" => invalid["selection"][field] = json!([]),
+            "template" => invalid["selection"][field] = json!({"id":0}),
+            _ => invalid[field] = json!(""),
+        }
         let response = client()
             .post(format!("{base}/api/campaigns/prepare"))
             .bearer_auth("synthetic-bootstrap-token")
@@ -1079,12 +1240,12 @@ fn campaign_pages_only_offer_next_when_another_owned_row_exists() {
     let targets: Vec<_> = (0..201)
         .map(|n| json!({"email":format!("recipient-{n}@example.test")}))
         .collect();
-    post(
+    let group = post(
         &base,
         "/api/groups/",
         &json!({"name":"Pagination audience","targets":targets}),
     );
-    body["groups"] = json!([{"name":"Pagination audience"}]);
+    body["selection"]["groups"] = json!([{"id":group["id"]}]);
     let mut campaigns = Vec::new();
     for n in 0..4 {
         body["name"] = json!(format!("Pagination {n}"));
@@ -1200,12 +1361,12 @@ fn campaign_context_and_recipient_history_are_complete_bounded_and_owner_scoped(
     let directory = workspace();
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let mut body = resources(&base, "127.0.0.1:1");
-    post(
+    let group = post(
         &base,
         "/api/groups/",
         &json!({"name":"Two recipients","targets":[{"email":"alice@example.test"},{"email":"bob@example.test"}]}),
     );
-    body["groups"] = json!([{"name":"Two recipients"}]);
+    body["selection"]["groups"] = json!([{"id":group["id"]}]);
     body["launch_date"] = json!("2030-05-01T09:25:00Z");
     body["send_by_date"] = json!("2030-05-01T10:25:00Z");
     let campaign = post(&base, "/api/campaigns/", &body);

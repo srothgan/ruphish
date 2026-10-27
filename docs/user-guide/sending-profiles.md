@@ -17,6 +17,8 @@ The default port is 25. Port 465 uses implicit TLS; other SMTP connections use S
 
 Ruphish automatically chooses CRAM-MD5, PLAIN or LOGIN from the server's advertised authentication mechanisms, in that preference order. Connection checks, test emails and campaign delivery use the same negotiation. A rejected credential or malformed challenge fails the attempt without falling back to another mechanism. CRAM-MD5 is supported for relay compatibility; it does not replace TLS.
 
+Saved passwords are never returned to the browser. Leave the password field blank to retain the current value, enter a new value to replace it, or select **Clear the saved password** to remove it on save. New and copied profiles need a password entered if their SMTP service requires one; resource exports do not include saved passwords. Connection tests use unsaved settings and can retain the password from the owned saved profile without saving those edits.
+
 ## Understand the sender fields
 
 The profile supplies the SMTP envelope sender. A template can override the visible From header through its legacy `envelope_sender` field. These are distinct identities; verify both when diagnosing a rejected sender or unexpected message appearance.

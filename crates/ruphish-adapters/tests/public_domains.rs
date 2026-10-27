@@ -175,7 +175,10 @@ async fn observation_upgrade_preserves_history_retry_tombstones_and_repeated_eve
         recipient
             .events
             .iter()
-            .filter(|event| event.kind == "Submitted Data")
+            .filter(|event| event.kind
+                == ruphish_domain::events::RecordedKind::Known(
+                    ruphish_domain::events::Kind::FormSubmitted
+                ))
             .count(),
         3
     );

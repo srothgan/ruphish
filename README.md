@@ -12,7 +12,7 @@ Ruphish is a phishing-simulation application with a native Rust server and a Rus
 
 **[Try the demo](https://demo.ruphish.com/)** with username `demo` and password `demodemo`.
 
-Ruphish aims to be a compatible, drop-in replacement for Gophish while adding a new interface, persistent campaign drafts, verified domains, richer analysis, and explicit delivery recovery. Full compatibility cannot be guaranteed for every integration or deployment; review the [documented differences](https://ruphish.com/docs/migration/differences-from-gophish/) before migrating.
+Ruphish is a successor to Gophish with its own API, a new interface, persistent campaign drafts, verified domains, richer analysis, and explicit delivery recovery. Migration preserves supported database histories and authored Go-template behavior. Adapt automation to the documented Ruphish API and review the [documented differences](https://ruphish.com/docs/migration/differences-from-gophish/) before migrating.
 
 ![Ruphish dashboard showing campaign outcomes, recent campaigns, and deliveries needing review.](assets/dashboard.png)
 
@@ -24,7 +24,7 @@ Ruphish aims to be a compatible, drop-in replacement for Gophish while adding a 
 - Explore campaign and recipient timelines, distinguish observed events from summary metrics, and export CSV or XLSX reports.
 - Process reported messages through multiple IMAP mailboxes and deliver signed events to webhooks.
 - Use English or German interface text with independent date-format and time-zone preferences.
-- Automate workflows through compatible resource endpoints and Ruphish's added APIs.
+- Automate workflows through Ruphish's HTTP API.
 
 Participant tracking is designed around interaction events and optional presence booleans. Entered usernames, passwords, OTPs, and arbitrary form values are outside the supported collection model. Read [participant data](https://ruphish.com/docs/user-guide/participant-data/) for behavior and verification limits.
 

@@ -101,6 +101,10 @@ async fn recipient_exports_preserve_audience_fields_and_stored_dates_across_page
         .unwrap();
     assert_eq!(page.recipients.len(), 1);
     assert_eq!(page.recipients[0].id, 9002);
+    assert_eq!(
+        page.recipients[0].delivery, None,
+        "no native queue record is not an ambiguous SMTP outcome"
+    );
     let download = reports
         .export(caller(), campaign, selected(), "csv", "recipients")
         .await
@@ -117,6 +121,7 @@ async fn recipient_exports_preserve_audience_fields_and_stored_dates_across_page
         &rows[row][headers.iter().position(|name| name == column).unwrap()]
     };
     assert_eq!(cell(0, "Recipient ID"), "9001");
+    assert_eq!(cell(0, "Delivery"), "historical");
     assert_eq!(cell(0, "First Name"), "Élise, \"E\"");
     assert_eq!(cell(0, "Last Name"), "Müller");
     assert_eq!(cell(0, "Position"), "'=1+1");
@@ -284,7 +289,7 @@ async fn observations_filters_and_exports_preserve_evidence_without_credentials_
         "same-time events must paginate deterministically"
     );
     let mut selected = filter();
-    selected.event = "Email Reported".into();
+    selected.event = Some(ruphish_domain::events::Kind::EmailReported);
     let selected = reports
         .analysis(caller(), campaign, selected)
         .await
@@ -292,9 +297,6 @@ async fn observations_filters_and_exports_preserve_evidence_without_credentials_
     assert_eq!(selected.progression, [0, 0, 0, 0, 1]);
     assert_eq!(selected.event_total, 2);
     assert_eq!(selected.recipient_total, 1);
-    let mut invalid = filter();
-    invalid.event = "' OR 1=1--".into();
-    assert!(reports.analysis(caller(), campaign, invalid).await.is_err());
     assert!(
         reports
             .analysis(Identity { id: 2, epoch: 0 }, campaign, filter())

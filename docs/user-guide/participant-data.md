@@ -28,7 +28,7 @@ Password presence is true when the submitted form has at least one named, enable
 
 ## Legacy names and historical data
 
-The API retains `capture_credentials` and `capture_passwords` for compatibility. Both flags are ignored on input and returned as `true` for pages and effective campaign policies. Submissions and password presence are always tracked; the flags cannot enable raw-value collection.
+The API has no capture settings. Supported submissions and password presence are always tracked; entered values are never collected by the built-in event collector. Pages and effective campaign policies no longer expose the retired capture flags.
 
 Supported upgrades remove legacy opaque captured details and location data from active application records. Recovery copies deliberately preserve the original and can still contain data captured by Gophish. Old backups, old logs, reverse proxies, and external copies are not sanitized by upgrading Ruphish. Handle them through your own retention and access controls.
 

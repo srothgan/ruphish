@@ -280,7 +280,7 @@ async fn exercise(db: &Database) {
             reporting::Filter {
                 sort: RecipientSort::Opened,
                 order: SortDirection::Desc,
-                event: "Email Opened".into(),
+                event: Some(ruphish_domain::events::Kind::EmailOpened),
                 limit: 1,
                 offset: 1,
                 ..Default::default()
@@ -397,6 +397,57 @@ async fn exercise(db: &Database) {
     );
 }
 
+// Native transport absence must be distinct from an ambiguous submitted attempt.
+const MISSING_TRANSPORT: &str = "DELETE FROM ruphish_delivery WHERE result_id=9002; UPDATE ruphish_delivery SET state='unknown' WHERE result_id=9005;";
+async fn historical_transport(db: &Database) {
+    let actor = db.accounts().by_name("admin").await.unwrap().identity;
+    for (order, expected) in [
+        (SortDirection::Asc, vec![9002, 9001, 9003, 9004, 9005]),
+        (SortDirection::Desc, vec![9005, 9004, 9001, 9003, 9002]),
+    ] {
+        let snapshot = db
+            .reporting()
+            .analysis(
+                actor,
+                900,
+                reporting::Filter {
+                    sort: RecipientSort::Delivery,
+                    order,
+                    limit: 50,
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            snapshot
+                .recipients
+                .iter()
+                .map(|row| row.id)
+                .collect::<Vec<_>>(),
+            expected
+        );
+        assert_eq!(
+            snapshot
+                .recipients
+                .iter()
+                .find(|row| row.id == 9002)
+                .unwrap()
+                .delivery,
+            None
+        );
+        assert_eq!(
+            snapshot
+                .recipients
+                .iter()
+                .find(|row| row.id == 9005)
+                .unwrap()
+                .delivery,
+            Some(ruphish_domain::campaign::DeliveryState::Unknown)
+        );
+    }
+}
+
 #[tokio::test]
 async fn sqlite_sorted_tables_cover_complete_sets_and_exports() {
     let dir = tempfile::tempdir().unwrap();
@@ -414,6 +465,11 @@ async fn sqlite_sorted_tables_cover_complete_sets_and_exports() {
     .unwrap();
     sqlx::raw_sql(SETUP).execute(&mut inspect).await.unwrap();
     exercise(&db).await;
+    sqlx::raw_sql(MISSING_TRANSPORT)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    historical_transport(&db).await;
     db.close().await;
 }
 #[tokio::test]
@@ -426,6 +482,11 @@ async fn mysql_sorted_tables_cover_complete_sets_and_exports() {
     bootstrap_sorting(&db).await;
     sqlx::raw_sql(SETUP).execute(&mut inspect).await.unwrap();
     exercise(&db).await;
+    sqlx::raw_sql(MISSING_TRANSPORT)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    historical_transport(&db).await;
     db.close().await;
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
         "DROP DATABASE `{}`",
@@ -446,6 +507,11 @@ async fn postgres_sorted_tables_cover_complete_sets_and_exports() {
     let mut inspect = postgres_inspect(&config).await;
     sqlx::raw_sql(SETUP).execute(&mut inspect).await.unwrap();
     exercise(&db).await;
+    sqlx::raw_sql(MISSING_TRANSPORT)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    historical_transport(&db).await;
     db.close().await;
     inspect.close().await.unwrap();
     postgres_cleanup(&mut admin, &config).await;

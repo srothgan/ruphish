@@ -227,13 +227,13 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
         let response = send(Method::POST, &format!("/api/{family}/"), resource);
         assert_eq!(response.status(), 201, "{id}: {}", response.text().unwrap());
         let created: Value = response.json().unwrap();
-        ruphish_contracts::resource_details::validate(
+        ruphish_contracts::resource_details::decode(
             match family {
                 "templates" => ruphish_contracts::resource_details::Kind::Template,
                 "learning-pages" => ruphish_contracts::resource_details::Kind::LearningPage,
                 _ => ruphish_contracts::resource_details::Kind::Page,
             },
-            &created,
+            created.clone(),
         )
         .unwrap();
         assert_eq!(created["html"], resource["html"]);
@@ -454,7 +454,7 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
         post(
             &admin,
             &base,
-            "/impersonate",
+            "/auth/impersonate",
             &[("username", "catalog-user")]
         )
         .status(),
@@ -468,7 +468,10 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
             .status(),
         403
     );
-    assert_eq!(post(&admin, &base, "/impersonate/exit", &[]).status(), 200);
+    assert_eq!(
+        post(&admin, &base, "/auth/impersonate/exit", &[]).status(),
+        200
+    );
     assert!(bootstrap(&admin, &base)["user"].is_object());
     process.stop();
     let mut restarted = Process::start(directory.path(), "admin");

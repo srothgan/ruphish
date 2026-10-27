@@ -53,7 +53,7 @@ pub(super) fn menu(
                 busy.set(false);
                 return;
             }
-            match api.form("/logout", &token.get_value(), &[]).await {
+            match api.form("/auth/logout", &token.get_value(), &[]).await {
                 Ok(_) => api.mark_signed_out(),
                 Err(error) => {
                     message.error(error);

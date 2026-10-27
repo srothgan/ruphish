@@ -37,14 +37,31 @@ fn filter(f: &Filter) -> Result<app::Filter, Rejection> {
                 )
             })?
     };
+    let invalid = || {
+        failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::AnalysisFilterInvalid,
+            "analysis_invalid_filter",
+        )
+    };
+    let event = if f.event.is_empty() {
+        None
+    } else {
+        Some(app::Kind::from_key(&f.event).ok_or_else(invalid)?)
+    };
+    let source = if f.source.is_empty() {
+        None
+    } else {
+        Some(app::Source::from_stored(&f.source).ok_or_else(invalid)?)
+    };
     Ok(app::Filter {
         recipient: f.recipient,
         recipients,
         from: f.from,
         until: f.until,
-        event: f.event.clone(),
+        event,
         search: f.search.clone(),
-        source: f.source.clone(),
+        source,
         event_sort: f.event_sort,
         event_order: f.event_order,
         sort: f.sort,
@@ -82,9 +99,9 @@ async fn read(
         status: a.status,
         as_of: a.as_of,
         audience: a.audience,
-        unique: a.unique,
-        progression: a.progression,
-        totals: a.totals,
+        unique: a.unique.into(),
+        progression: a.progression.into(),
+        totals: a.totals.into(),
         recipient_total: a.recipient_total,
         event_total: a.event_total,
         bucket_seconds: a.bucket_seconds,
@@ -96,7 +113,7 @@ async fn read(
                 email: r.email,
                 name: r.name,
                 delivery: r.delivery,
-                counts: r.counts,
+                counts: r.counts.into(),
                 historical_reported: r.historical_reported,
             })
             .collect(),
@@ -118,7 +135,7 @@ async fn read(
             .into_iter()
             .map(|b| reads::Bucket {
                 time: b.time,
-                counts: b.counts,
+                counts: b.counts.into(),
             })
             .collect(),
     };

@@ -1,7 +1,6 @@
 //! Complete preparation and duplication responses, separate from permissive writes.
 use crate::{campaign_reads::Policy, nullable};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 /// Complete resource selections for a review or editable copy.
@@ -101,7 +100,7 @@ pub struct Review {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-/// Editable campaign copy; an empty policy means the legacy policy is unknown.
+/// Editable campaign copy; null policy means the historical policy is unknown.
 pub struct Duplicate {
     /// Display name.
     pub name: String,
@@ -109,34 +108,9 @@ pub struct Duplicate {
     pub url: String,
     /// Resolved resource selections.
     pub selection: Selection<Reference>,
-    #[serde(
-        deserialize_with = "duplicate_policy",
-        serialize_with = "serialize_duplicate_policy"
-    )]
+    #[serde(deserialize_with = "nullable")]
     /// Effective tracking policy, or unknown legacy policy for a copy.
     pub policy: Option<Policy>,
-}
-
-fn duplicate_policy<'de, D: serde::Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Option<Policy>, D::Error> {
-    let value = Value::deserialize(deserializer)?;
-    if value.as_object().is_some_and(serde_json::Map::is_empty) {
-        return Ok(None);
-    }
-    serde_json::from_value(value)
-        .map(Some)
-        .map_err(serde::de::Error::custom)
-}
-fn serialize_duplicate_policy<S: serde::Serializer>(
-    value: &Option<Policy>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    use serde::ser::SerializeMap;
-    match value {
-        Some(policy) => policy.serialize(serializer),
-        None => serializer.serialize_map(Some(0))?.end(),
-    }
 }
 
 #[cfg(test)]
@@ -148,7 +122,7 @@ mod tests {
     fn review_requires_recipient_counts_versions_policy_schedule_and_preview() {
         let value = json!({"total":1,"duplicate_count":0,"launch_date":123,"send_by_date":null,
             "selection":{"groups":[{"id":1,"name":"Audience","revision":"v1"}],"template":{"id":2,"name":"Email","revision":"v2"},"page":{"id":3,"name":"Page","revision":"v3"},"smtp":{"id":4,"name":"SMTP","revision":"v4"}},
-            "policy":{"capture_credentials":false,"capture_passwords":false,"redirect_url":""},"mailer_enabled":true,"conflict_count":0,"conflicts":[],
+            "policy":{"redirect_url":""},"mailer_enabled":true,"conflict_count":0,"conflicts":[],
             "preview":{"subject":"Subject","html":"<p>Preview</p>","text":"Preview","visible_sender":"Sender <sender@example.test>","transport_sender":"bounce@example.test"}});
         assert!(serde_json::from_value::<Review>(value.clone()).is_ok());
         for field in value.as_object().expect("fixture").keys() {
@@ -176,12 +150,12 @@ mod tests {
 
     #[test]
     fn duplication_preserves_explicit_unknown_policy_but_rejects_lost_selections() {
-        let value = json!({"name":"Copy","url":"https://example.test","selection":{"groups":[{"id":1}],"template":{"id":2},"page":{"id":0},"smtp":{"id":4}},"policy":{}});
+        let value = json!({"name":"Copy","url":"https://example.test","selection":{"groups":[{"id":1}],"template":{"id":2},"page":{"id":0},"smtp":{"id":4}},"policy":null});
         let decoded = serde_json::from_value::<Duplicate>(value.clone()).expect("fixture");
         assert!(decoded.policy.is_none());
         assert_eq!(serde_json::to_value(decoded).expect("wire response"), value);
         let mut known = value.clone();
-        known["policy"] = json!({"capture_credentials":false,"capture_passwords":false,"redirect_url":"https://example.test/after"});
+        known["policy"] = json!({"redirect_url":"https://example.test/after"});
         let decoded = serde_json::from_value::<Duplicate>(known.clone()).expect("known policy");
         assert!(decoded.policy.is_some());
         assert_eq!(serde_json::to_value(decoded).expect("wire response"), known);
@@ -195,7 +169,7 @@ mod tests {
             *missing.pointer_mut(pointer).expect("fixture") = json!({});
             assert!(serde_json::from_value::<Duplicate>(missing.clone()).is_err());
         }
-        for policy in [Value::Null, json!({"capture_credentials":false})] {
+        for policy in [json!({}), json!({"redirect_url":false})] {
             let mut missing = value.clone();
             missing["policy"] = policy;
             assert!(serde_json::from_value::<Duplicate>(missing.clone()).is_err());

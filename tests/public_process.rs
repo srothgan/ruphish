@@ -271,27 +271,27 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
     assert_eq!(missing_revision.status(), 428);
     assert_eq!(get(&admin, "/api/domains/validated/"), json!([]));
     assert_eq!(get(&admin, "/api/domains/").as_array().unwrap().len(), 1);
-    post(
+    let group = post(
         &admin,
         "/api/groups/",
         json!({"name":"Audience","targets":[{"email":"alice@example.test","first_name":"Alice"}]}),
     );
-    post(
+    let template = post(
         &admin,
         "/api/templates/",
         json!({"name":"Mail","subject":"Training","text":"Visit {{.URL}}"}),
     );
-    post(
+    let landing = post(
         &admin,
         "/api/pages/",
-        json!({"name":"Page","html":"<form><label>Password<input name='password' type='password' autocomplete='current-password'></label><button>Continue</button></form><script>authoredCanary()</script>","capture_credentials":false,"capture_passwords":false,"redirect_url":"http://example.test/finished/{{.FirstName}}"}),
+        json!({"name":"Page","html":"<form><label>Password<input name='password' type='password' autocomplete='current-password'></label><button>Continue</button></form><script>authoredCanary()</script>","redirect_url":"http://example.test/finished/{{.FirstName}}"}),
     );
-    post(
+    let smtp = post(
         &admin,
         "/api/smtp/",
         json!({"name":"Local","host":"127.0.0.1:1","from_address":"training@example.test"}),
     );
-    let draft = json!({"name":"Private campaign","url":origin,"groups":[{"name":"Audience"}],"template":{"name":"Mail"},"page":{"name":"Page"},"smtp":{"name":"Local"}});
+    let draft = json!({"name":"Private campaign","url":origin,"selection":{"groups":[{"id":group["id"]}],"template":{"id":template["id"]},"page":{"id":landing["id"]},"smtp":{"id":smtp["id"]}}});
     let rejected = client()
         .post(format!("{admin}/api/campaigns/"))
         .bearer_auth("synthetic-bootstrap-token")
@@ -641,9 +641,9 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
         &admin,
         &format!("/api/campaigns/{}/analysis?limit=100", campaign["id"]),
     );
-    assert_eq!(analysis["unique"][3], 1);
-    assert_eq!(analysis["progression"][3], 1);
-    assert_eq!(analysis["totals"][3], 4);
+    assert_eq!(analysis["unique"]["submitted"], 1);
+    assert_eq!(analysis["progression"]["submitted"], 1);
+    assert_eq!(analysis["totals"]["submitted"], 4);
     assert_eq!(
         get(
             &admin,
@@ -659,13 +659,13 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
             campaign["id"]
         ),
     );
-    assert_eq!(recipient_analysis["totals"][3], 4);
+    assert_eq!(recipient_analysis["totals"]["submitted"], 4);
     assert_eq!(
         recipient_analysis["events"]
             .as_array()
             .unwrap()
             .iter()
-            .filter(|event| event["kind"] == "Submitted Data")
+            .filter(|event| event["kind"] == json!({"type":"known","value":"form_submitted"}))
             .count(),
         4
     );
@@ -690,7 +690,7 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
     let bytes = std::fs::read(directory.path().join("installation.sqlite3")).unwrap();
     assert!(!bytes.windows(canary.len()).any(|w| w == canary.as_bytes()));
     let completed = client()
-        .get(format!("{admin}/api/campaigns/{}/complete", campaign["id"]))
+        .post(format!("{admin}/api/campaigns/{}/complete", campaign["id"]))
         .bearer_auth("synthetic-bootstrap-token")
         .send()
         .unwrap();

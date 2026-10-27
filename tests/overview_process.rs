@@ -140,7 +140,7 @@ fn dashboard_supports_authenticated_browser_and_api_reads_restart_and_revocation
         .json()
         .unwrap();
     let login = browser
-        .post(format!("{base}/login"))
+        .post(format!("{base}/auth/login"))
         .header("origin", &base)
         .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
         .header("accept", "application/json")
@@ -218,6 +218,10 @@ fn progression_is_shared_across_summaries_without_inventing_recorded_events() {
     database(dir.path(), "UPDATE users SET password_change_required=0;
         INSERT INTO campaigns(id,user_id,name,status) VALUES(1,1,'Progression','Completed'),(2,1,'No acceptance','Completed'),(3,2,'Other owner','Completed');
         INSERT INTO users(id,username,api_key,role_id,password_change_required,account_locked) VALUES(2,'other','other-key',2,0,0); INSERT INTO ruphish_auth_state VALUES(2,0);");
+    database(
+        dir.path(),
+        "UPDATE campaigns SET launch_date='0001-01-01T00:00:00Z' WHERE id=1",
+    );
     // Repeated observations precede the later acceptance. Neither insertion
     // order nor duplicates may change unique progression or create timestamps.
     database(
@@ -284,16 +288,25 @@ fn progression_is_shared_across_summaries_without_inventing_recorded_events() {
             assert_eq!(p[field], count, "{field}");
         }
         let a = fetch("/api/campaigns/1/analysis");
-        assert_eq!(a["progression"], json!([6, 4, 3, 2, 1]));
-        assert_eq!(a["unique"], json!([6, 1, 1, 2, 1]));
+        assert_eq!(
+            a["progression"],
+            json!({"accepted":6,"opened":4,"clicked":3,"submitted":2,"reported":1})
+        );
+        assert_eq!(
+            a["unique"],
+            json!({"accepted":6,"opened":1,"clicked":1,"submitted":2,"reported":1})
+        );
         // Unassigned observations still appear in raw history and exports.
-        assert_eq!(a["totals"], json!([14, 2, 3, 5, 2]));
+        assert_eq!(
+            a["totals"],
+            json!({"accepted":14,"opened":2,"clicked":3,"submitted":5,"reported":2})
+        );
         assert_eq!(a["event_total"], 26);
         let chart_opens: i64 = a["buckets"]
             .as_array()
             .unwrap()
             .iter()
-            .map(|b| b["counts"][1].as_i64().unwrap())
+            .map(|b| b["counts"]["opened"].as_i64().unwrap())
             .sum();
         assert_eq!(chart_opens, 2);
         let s = fetch("/api/campaigns/1/summary");
@@ -318,14 +331,30 @@ fn progression_is_shared_across_summaries_without_inventing_recorded_events() {
             .iter()
             .find(|c| c["id"] == 1)
             .unwrap();
+        assert!(
+            recent["launch"].is_null(),
+            "historical zero dates must become explicit absence"
+        );
         assert_eq!(recent["outcomes"]["opened"], 4);
         assert_eq!(recent["outcomes"]["clicked"], 3);
-        let filtered = fetch("/api/campaigns/1/analysis?event=Submitted%20Data&limit=1");
-        assert_eq!(filtered["progression"], json!([0, 2, 2, 2, 0]));
-        assert_eq!(filtered["unique"], json!([0, 0, 0, 2, 0]));
+        let filtered = fetch("/api/campaigns/1/analysis?event=form_submitted&limit=1");
+        assert_eq!(
+            filtered["progression"],
+            json!({"accepted":0,"opened":2,"clicked":2,"submitted":2,"reported":0})
+        );
+        assert_eq!(
+            filtered["unique"],
+            json!({"accepted":0,"opened":0,"clicked":0,"submitted":2,"reported":0})
+        );
         let recipient = fetch("/api/campaigns/1/analysis?recipient=5");
-        assert_eq!(recipient["progression"], json!([1, 1, 1, 1, 0]));
-        assert_eq!(recipient["recipients"][0]["counts"], json!([2, 0, 0, 2, 0]));
+        assert_eq!(
+            recipient["progression"],
+            json!({"accepted":1,"opened":1,"clicked":1,"submitted":1,"reported":0})
+        );
+        assert_eq!(
+            recipient["recipients"][0]["counts"],
+            json!({"accepted":2,"opened":0,"clicked":0,"submitted":2,"reported":0})
+        );
         let unsent = fetch("/api/campaigns/2/summary");
         assert_eq!(unsent["stats"]["sent"], 0);
         assert_eq!(unsent["stats"]["opened"], 1);

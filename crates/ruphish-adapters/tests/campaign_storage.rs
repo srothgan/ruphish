@@ -88,16 +88,16 @@ fn caller() -> Identity {
     Identity { id: 1, epoch: 0 }
 }
 fn input(fixture: &Fixture) -> Create {
-    let select = |name: &str| Selection {
-        name: name.into(),
+    let select = |id| Selection {
+        id,
         ..Default::default()
     };
     Create {
         name: "Campaign workflow".into(),
-        groups: vec![select("Audience"), select("Overlap")],
-        template: select("Mail"),
-        page: select("Page"),
-        profile: select("Local"),
+        groups: vec![select(1), select(2)],
+        template: select(1),
+        page: select(1),
+        profile: select(1),
         url: fixture.network.origin("training.example.test"),
         ..Default::default()
     }
@@ -348,7 +348,6 @@ async fn creation_is_atomic_deduplicated_and_idempotent_with_stable_policy() {
     let mut request = input(&fixture);
     request.send_by = Some(1_900_000_600);
     request.idempotency = Some(("review-123".into(), "independent-body-fingerprint".into()));
-    request.policy.capture_credentials = Some(false);
     request.policy.redirect_url = Some(String::new());
     let campaign = store
         .create(caller(), request.clone(), 1_900_000_000)
@@ -451,13 +450,26 @@ async fn competing_claims_recover_preparation_but_never_resend_expired_submissio
         .await
         .unwrap();
     assert_eq!(state, "unknown");
+    let history = a
+        .recipient_history(caller(), campaign.id, recovered.result_id, None, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        history
+            .attempts
+            .iter()
+            .map(|attempt| attempt.state.as_str())
+            .collect::<Vec<_>>(),
+        ["unknown", "abandoned"]
+    );
+
     a.complete(caller(), campaign.id, 1_900_002_104)
         .await
         .unwrap();
     // A late confirmed outcome is truth, but cannot reopen the completed campaign.
     b.finish(&recovered, Ok(()), 1_900_002_105).await.unwrap();
     assert_eq!(
-        a.get(caller(), campaign.id).await.unwrap().status,
+        a.get(caller(), campaign.id).await.unwrap().status.as_str(),
         "Completed"
     );
     assert!(a.claim(1_900_003_000).await.unwrap().is_none());
@@ -681,13 +693,13 @@ async fn persisted_retry_budget_exhausts_and_cannot_resurrect_after_restart() {
             .items
             .remove(0);
         if attempt < 8 {
-            assert_eq!(row.state, "retry");
+            assert_eq!(row.state.as_str(), "retry");
             let minimum = 120 * (1i64 << attempt);
             assert!((now + minimum..=now + minimum + minimum / 10).contains(&row.due));
             assert!(store.claim(row.due - 1).await.unwrap().is_none());
             now = row.due;
         } else {
-            assert_eq!(row.state, "failed");
+            assert_eq!(row.state.as_str(), "failed");
             assert_eq!(row.code, "delivery_retry_exhausted");
             assert_eq!(row.retries, 8);
             assert_eq!(row.attempts.len(), 9);
@@ -728,12 +740,12 @@ async fn resource_changes_owner_lock_and_completion_fence_unsubmitted_work() {
         .deliveries(caller(), campaign.id, 0, 10)
         .await
         .unwrap();
-    assert!(view.items.iter().all(|r| r.state == "cancelled"));
+    assert!(view.items.iter().all(|r| r.state.as_str() == "cancelled"));
     assert!(
         view.items
             .iter()
             .flat_map(|r| &r.attempts)
-            .all(|a| a.state == "cancelled")
+            .all(|a| a.state.as_str() == "cancelled")
     );
     let second = store
         .create(caller(), input(&fixture), 1_900_000_010)
@@ -796,11 +808,11 @@ async fn ten_campaigns_keep_resources_and_credentials_isolated_under_bounded_fai
         let profile=sqlx::query("INSERT INTO smtp(user_id,name,host,username,password,from_address,modified_date,ignore_cert_errors) VALUES(1,?,'127.0.0.1:25',?,?,?,'2030-01-01T00:00:00Z',0)").bind(format!("Profile {index}")).bind(format!("account-{index}")).bind(format!("service-secret-{index}")).bind(format!("transport-{index}@example.test")).execute(&db.inspection_pool()).await.unwrap().last_insert_rowid();
         let mut request = input(&fixture);
         request.template = Selection {
-            id: Some(template),
+            id: template,
             ..Default::default()
         };
         request.profile = Selection {
-            id: Some(profile),
+            id: profile,
             ..Default::default()
         };
         let campaign = store
@@ -852,7 +864,7 @@ async fn ten_campaigns_keep_resources_and_credentials_isolated_under_bounded_fai
     assert_eq!(seen.len(), 20);
     for id in campaigns.keys() {
         let c = store.get(caller(), *id).await.unwrap();
-        assert!(c.results.iter().all(|r| r.status == "Email Sent"));
+        assert!(c.results.iter().all(|r| r.status.as_str() == "Email Sent"));
         assert_eq!(
             c.events
                 .iter()
@@ -887,7 +899,9 @@ async fn outcome_projection_preserves_engagement_and_deleted_campaigns_cannot_be
         .unwrap();
     store.finish(&claim, Ok(()), 1_900_000_001).await.unwrap();
     assert_eq!(
-        store.get(caller(), c.id).await.unwrap().results[0].status,
+        store.get(caller(), c.id).await.unwrap().results[0]
+            .status
+            .as_str(),
         "Clicked Link"
     );
     let second = store.claim(1_900_000_002).await.unwrap().unwrap();

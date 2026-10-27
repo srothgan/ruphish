@@ -301,6 +301,8 @@
     "signing_secret": "Signaturgeheimnis",
     "leave_empty_to_keep_the_saved_secret": "Leer lassen, um das gespeicherte Geheimnis beizubehalten.",
     "service_account_password": "Passwort des Dienstkontos",
+    "clear_saved_smtp_password": "Gespeichertes Passwort entfernen",
+    "new_profile_password_hint": "Geben Sie bei einem neuen oder kopierten Profil ein Passwort ein, falls die SMTP-Authentifizierung eines erfordert.",
     "leave_empty_to_keep_the_saved_password": "Leer lassen, um das gespeicherte Passwort beizubehalten.",
     "check_mailbox_now": "Postfach jetzt prüfen",
     "destination": "Ziel",

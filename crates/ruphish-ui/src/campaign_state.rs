@@ -97,19 +97,13 @@ impl Draft {
         self.page_request
     }
     /// Apply only complete defaults from the currently requested page; failures block review.
-    pub fn page_loaded(&mut self, request: (i64, u64), page: Option<&Value>) -> bool {
+    pub fn page_loaded(&mut self, request: (i64, u64), page: Option<(i64, &str)>) -> bool {
         if self.page_request != Some(request) || self.launch.is_some() {
             return false;
         }
         self.page_request = None;
-        if let Some(page) = page.filter(|page| {
-            page["id"].as_i64() == Some(request.0) && page["redirect_url"].is_string()
-        }) {
-            self.edit(|v| {
-                v["policy"] = json!({
-                    "redirect_url":page["redirect_url"]
-                });
-            });
+        if let Some((_, redirect_url)) = page.filter(|(id, _)| *id == request.0) {
+            self.edit(|v| v["policy"] = json!({"redirect_url":redirect_url}));
         }
         true
     }
@@ -166,7 +160,9 @@ impl Draft {
         }
         let review = self.review.as_ref()?;
         let mut value = self.value.clone();
-        value["selection"] = json!(review.selection);
+        value["selection"] = json!(ruphish_contracts::campaign::Selections::from(
+            &review.selection
+        ));
         value["policy"] = json!(review.policy);
         self.launch = Some((key, value));
         self.launch.clone()
@@ -194,7 +190,7 @@ mod tests {
         }
         let mut value = json!({"total":1,"duplicate_count":0,"launch_date":123,"send_by_date":null,
             "selection":{"groups":[],"template":{"id":1,"name":"Template","revision":"v1"},"page":{"id":2,"name":"Page","revision":"v1"},"smtp":{"id":3,"name":"SMTP","revision":"v1"}},
-            "policy":{"capture_credentials":true,"capture_passwords":true,"redirect_url":""},"mailer_enabled":true,"conflict_count":0,"conflicts":[],
+            "policy":{"redirect_url":""},"mailer_enabled":true,"conflict_count":0,"conflicts":[],
             "preview":{"subject":"Subject","html":"<p>Preview</p>","text":"Preview","visible_sender":"Sender","transport_sender":"Sender"}});
         merge(&mut value, patch);
         serde_json::from_value(value).unwrap()
@@ -204,6 +200,28 @@ mod tests {
             value: json!({"name":"Training","policy":{"redirect_url":""}}),
             ..Default::default()
         }
+    }
+    #[test]
+    fn reviewed_launch_uses_command_references_and_retains_retry_identity() {
+        let mut draft = Draft {
+            value: json!({"name":"Training","url":"https://example.test","selection":{"groups":[],"template":{"id":1},"page":{"id":2},"smtp":{"id":3}}}),
+            ..Default::default()
+        };
+        let (ticket, _) = draft.begin_review().unwrap();
+        assert!(draft.reviewed(
+            ticket,
+            Ok(review(
+                json!({"selection":{"groups":[{"id":8,"name":"Audience","revision":"r8"}]}})
+            ))
+        ));
+        let first = draft.launch("one-operation".into()).unwrap();
+        let command: ruphish_contracts::campaign::Create =
+            serde_json::from_value(first.1.clone()).unwrap();
+        assert_eq!(command.selection.groups[0].id, 8);
+        assert_eq!(command.selection.groups[0].revision.as_deref(), Some("r8"));
+        assert_eq!(command.selection.template.revision.as_deref(), Some("v1"));
+        assert!(first.1["selection"]["template"].get("name").is_none());
+        assert_eq!(draft.launch("another-key".into()).unwrap(), first);
     }
     #[test]
     fn learning_destination_survives_landing_selection_review_and_uncertain_launch_retry() {
@@ -232,7 +250,7 @@ mod tests {
         let page = d.select_page(7).unwrap();
         assert!(flow.update(&mut d, true, false, true, 0).is_none());
         assert!(d.launch("premature".into()).is_none());
-        d.page_loaded(page, Some(&json!({"id":7,"redirect_url":""})));
+        d.page_loaded(page, Some((7, "")));
         let (first, sent) = flow.update(&mut d, true, false, true, 0).unwrap();
         assert_eq!(sent["selection"]["page"]["id"], 7);
         assert!(flow.update(&mut d, true, false, true, 0).is_none());
@@ -285,7 +303,7 @@ mod tests {
         let mut flow = ReviewFlow::default();
         let mut d = campaign_draft();
         let (request, _) = flow.update(&mut d, true, false, true, 0).unwrap();
-        d.reviewed(request, Ok(review(json!({"selection":{"template":{"id":7,"revision":"v1"}},"policy":{"capture_passwords":false}}))));
+        d.reviewed(request, Ok(review(json!({"selection":{"template":{"id":7,"revision":"v1"}},"policy":{"redirect_url":""}}))));
         let original = d.launch("original".into()).unwrap();
         assert!(flow.update(&mut d, true, false, true, 0).is_none());
         assert!(flow.update(&mut d, true, true, true, 1).is_none());
@@ -295,7 +313,7 @@ mod tests {
         let (fresh, _) = flow.update(&mut d, true, false, true, 2).unwrap();
         assert!(d.launch("not-ready".into()).is_none());
         assert!(!d.reviewed(request, Ok(review(json!({"total":999})))));
-        d.reviewed(fresh, Ok(review(json!({"selection":{"template":{"id":7,"revision":"v2"}},"policy":{"capture_passwords":false}}))));
+        d.reviewed(fresh, Ok(review(json!({"selection":{"template":{"id":7,"revision":"v2"}},"policy":{"redirect_url":""}}))));
         let (key, body) = d.launch("new-attempt".into()).unwrap();
         assert_eq!(key, "new-attempt");
         assert_eq!(body["selection"]["template"]["revision"], "v2");
@@ -308,10 +326,7 @@ mod tests {
         };
         let request = d.select_page(12).unwrap();
         assert!(!d.policy_ready());
-        assert!(d.page_loaded(
-            request,
-            Some(&json!({"id":12,"redirect_url":"https://training.example.test/finish"}))
-        ));
+        assert!(d.page_loaded(request, Some((12, "https://training.example.test/finish"))));
         assert_eq!(
             d.value["policy"],
             json!({"redirect_url":"https://training.example.test/finish"})
@@ -328,10 +343,7 @@ mod tests {
             ))
         ));
         let (_, body) = d.launch("stable-key".into()).unwrap();
-        assert_eq!(
-            body["policy"],
-            json!({"capture_credentials":true,"capture_passwords":true,"redirect_url":""})
-        );
+        assert_eq!(body["policy"], json!({"redirect_url":""}));
         assert!(d.select_page(13).is_none());
         assert_eq!(d.launch("different-key".into()).unwrap().1, body);
     }
@@ -346,22 +358,22 @@ mod tests {
         d.edit(|v| v["name"] = json!("Keep this campaign name"));
         assert!(!d.page_loaded(old, None));
         assert_eq!(d.page_request, Some(current));
-        assert!(!d.page_loaded(old, Some(&json!({"id":1,"redirect_url":"old"}))));
-        assert!(d.page_loaded(current, Some(&json!({"id":2,"redirect_url":""}))));
+        assert!(!d.page_loaded(old, Some((1, "old"))));
+        assert!(d.page_loaded(current, Some((2, ""))));
         assert_eq!(d.value["name"], "Keep this campaign name");
         assert_eq!(d.value["policy"], json!({"redirect_url":""}));
         let retry = d.select_page(2).unwrap();
         assert!(!d.page_loaded(current, None));
         assert!(d.page_loaded(retry, None));
         assert!(!d.policy_ready());
-        for response in [json!({"id":2}), json!({"id":3,"redirect_url":"wrong page"})] {
+        for response in [None, Some((3, "wrong page"))] {
             let retry = d.select_page(2).unwrap();
-            assert!(d.page_loaded(retry, Some(&response)));
+            assert!(d.page_loaded(retry, response));
             assert!(!d.policy_ready());
         }
         let retry = d.select_page(2).unwrap();
         assert!(d.select_page(0).is_none());
-        assert!(!d.page_loaded(retry, Some(&json!({"id":2,"redirect_url":"late"}))));
+        assert!(!d.page_loaded(retry, Some((2, "late"))));
         assert!(d.policy_ready());
         assert_eq!(d.value["policy"], json!({"redirect_url":""}));
     }
@@ -419,7 +431,7 @@ mod tests {
             ..Default::default()
         };
         let (request, _) = d.begin_review().unwrap();
-        d.reviewed(request,Ok(review(json!({"selection":{"template":{"id":7,"revision":"v1"}},"policy":{"capture_passwords":true}}))));
+        d.reviewed(request,Ok(review(json!({"selection":{"template":{"id":7,"revision":"v1"}},"policy":{"redirect_url":""}}))));
         let first = d.launch("first-key".into());
         assert!(d.begin_review().is_none());
         d.clear_review();

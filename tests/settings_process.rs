@@ -72,7 +72,7 @@ fn campaign(c: &Client, base: &str, key: &str, origin: &str) -> Value {
         base,
         key,
         "/api/pages/",
-        &json!({"name":"Settings page","html":"<h1>Training</h1><form><input type='password' name='password'></form>","capture_credentials":true,"capture_passwords":true}),
+        &json!({"name":"Settings page","html":"<h1>Training</h1><form><input type='password' name='password'></form>"}),
     );
     let smtp = post(
         c,
@@ -81,7 +81,7 @@ fn campaign(c: &Client, base: &str, key: &str, origin: &str) -> Value {
         "/api/smtp/",
         &json!({"name":"Settings SMTP","interface_type":"SMTP","host":"127.0.0.1:1","from_address":"training@example.test"}),
     );
-    let input = json!({"name":"Settings campaign","groups":[{"name":group["name"]}],"template":{"name":template["name"]},"page":{"name":page["name"]},"smtp":{"name":smtp["name"]},"url":origin});
+    let input = json!({"name":"Settings campaign","selection":{"groups":[{"id":group["id"]}],"template":{"id":template["id"]},"page":{"id":page["id"]},"smtp":{"id":smtp["id"]}},"url":origin});
     post(c, base, key, "/api/campaigns/", &input)
 }
 
@@ -166,7 +166,7 @@ fn company_policy_authorization_domains_integrations_and_closure_survive_restart
     for invalid in [
         json!([]),
         json!({"policy":{}}),
-        json!({"policy":initial["policy"],"capture_passwords":true}),
+        json!({"policy":initial["policy"],"unexpected":true}),
     ] {
         assert_eq!(
             request(
@@ -210,7 +210,7 @@ fn company_policy_authorization_domains_integrations_and_closure_survive_restart
         auth_process::post(
             &browser,
             &base,
-            "/impersonate",
+            "/auth/impersonate",
             &[("username", "policy-operator")]
         )
         .status(),
@@ -236,7 +236,7 @@ fn company_policy_authorization_domains_integrations_and_closure_survive_restart
         );
     }
     assert_eq!(
-        auth_process::post(&browser, &base, "/impersonate/exit", &[]).status(),
+        auth_process::post(&browser, &base, "/auth/impersonate/exit", &[]).status(),
         200
     );
 

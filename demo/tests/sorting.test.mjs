@@ -20,7 +20,7 @@ async function setup() {
     const storage = new Map();
     const api = createDemoApi({ now, data, storage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) } });
     const request = (path, init) => api.execute(new Request(`https://demo.example.test${path}`, init));
-    await request('/login', { method: 'POST', body: JSON.stringify({ username: 'demo', password: 'demodemo' }) });
+    await request('/auth/login', { method: 'POST', body: JSON.stringify({ username: 'demo', password: 'demodemo' }) });
     return { data, seed, request };
 }
 
@@ -42,9 +42,9 @@ test('analysis sorts complete filtered sets and downloads, preserving identities
         const csv = await (await request(`${path}/export?format=csv&scope=recipients&sort=${sort}&order=${order}&limit=2&offset=2`)).text();
         assert.deepEqual(csv.trim().split(/\r?\n/).slice(1).map(line => Number(line.split(',')[0].replaceAll('"', ''))), expected);
     }
-    const filtered = await (await request(`${path}/analysis?sort=opened&order=desc&event=Email%20Opened&limit=1&offset=1`)).json();
+    const filtered = await (await request(`${path}/analysis?sort=opened&order=desc&event=email_opened&limit=1&offset=1`)).json();
     assert.deepEqual(filtered.recipients.map(row => row.id), [104]); assert.equal(filtered.recipient_total, 2);
-    for (const query of ['sort=unknown', 'sort=name%3BDROP%20TABLE%20results', 'order=ascending', 'event_sort=secret', 'event_order=DESC']) {
+    for (const query of ['sort=unknown', 'sort=name%3BDROP%20TABLE%20results', 'order=ascending', 'event_sort=secret', 'event_order=DESC', 'event=Email%20Opened', 'event=unknown', 'source=unknown']) {
         for (const endpoint of ['analysis', 'export?format=csv&scope=recipients']) {
             const response = await request(`${path}/${endpoint}${endpoint.includes('?') ? '&' : '?'}${query}`);
             assert.equal(response.status, 400, query);
@@ -91,4 +91,37 @@ test('event pages order actual instants across zones and retain nanoseconds', as
         ids.push(...(await response.json()).events.map(row => row.id));
     }
     assert.deepEqual(ids, [201, 204, 202, 203]);
+});
+
+
+test('reporting uses named metrics and retains unrecognized history without inventing actions', async () => {
+    const { seed, request } = await setup();
+    seed.results[0].events.push({ id: 205, recipient_id: 101, email: seed.results[0].email, kind: 'Proxied request', source: 'legacy', password_present: null, time: '2026-01-01T00:00:01Z' });
+    const response = await request(`/api/campaigns/${seed.header.id}/analysis`);
+    assert.equal(response.status, 200);
+    const value = await response.json();
+    assert.deepEqual(value.totals, { accepted: 0, opened: 3, clicked: 0, submitted: 1, reported: 0 });
+    assert.deepEqual(value.progression, { accepted: 0, opened: 3, clicked: 1, submitted: 1, reported: 0 });
+    assert.equal(value.event_total, 5);
+    assert.deepEqual(value.events.find(e => e.id === 205).kind, { type: 'historical', value: 'Proxied request' });
+    assert.deepEqual(value.events.find(e => e.id === 204).kind, { type: 'known', value: 'form_submitted' });
+    const csv = await (await request(`/api/campaigns/${seed.header.id}/export?scope=events&format=csv`)).text();
+    assert.match(csv, /Proxied request/);
+    assert.match(csv, /Submitted Data/);
+    assert.doesNotMatch(csv, /\[object Object\]/);
+});
+
+test('absent native transport stays null and sorts separately from unknown acceptance', async () => {
+    const { seed, request } = await setup();
+    seed.results.find(row => row.id === 102).state = null;
+    seed.results.find(row => row.id === 105).state = 'unknown';
+    const path = `/api/campaigns/${seed.header.id}`;
+    for (const [order, expected] of [['asc', [102, 101, 103, 104, 105]], ['desc', [105, 104, 101, 103, 102]]]) {
+        const value = await (await request(`${path}/analysis?sort=delivery&order=${order}`)).json();
+        assert.deepEqual(value.recipients.map(row => row.id), expected);
+        assert.equal(value.recipients.find(row => row.id === 102).delivery, null);
+        assert.equal(value.recipients.find(row => row.id === 105).delivery, 'unknown');
+    }
+    const csv = await (await request(`${path}/export?format=csv&scope=recipients&sort=delivery`)).text();
+    assert.match(csv, /"102","a@example.test","Same","historical"/);
 });

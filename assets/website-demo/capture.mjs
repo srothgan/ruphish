@@ -19,11 +19,11 @@ export async function capture(base, password, destination) {
       return response.json();
     }
     const initial = await request('/auth/session');
-    await request('/login', { username: 'demo', password, csrf_token: initial.csrf_token });
+    await request('/auth/login', { username: 'demo', password, csrf_token: initial.csrf_token });
     const signedIn = await request('/auth/session');
     if (signedIn.user?.password_change_required) {
       const replacement = randomBytes(24).toString('hex');
-      await request('/reset_password', { password: replacement, confirm_password: replacement, csrf_token: signedIn.csrf_token });
+      await request('/auth/password/reset', { password: replacement, confirm_password: replacement, csrf_token: signedIn.csrf_token });
     }
 
     const overview = await request('/api/overview');
@@ -62,7 +62,7 @@ export async function capture(base, password, destination) {
     await page.evaluate(() => document.fonts.ready);
     await page.screenshot({ path: destination, fullPage: false, animations: 'disabled' });
     const current = await request('/auth/session');
-    await request('/logout', { csrf_token: current.csrf_token });
+    await request('/auth/logout', { csrf_token: current.csrf_token });
     console.log('Dashboard loaded: four campaigns, six groups, two reporting mailboxes, twelve delivery failures, 937 emails sent.');
   } finally {
     await browser.close();

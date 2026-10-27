@@ -83,7 +83,7 @@ pub struct Entry {
     /// Display name.
     pub name: String,
     /// Draft or execution lifecycle.
-    pub status: String,
+    pub state: super::DirectoryState,
     /// Audience snapshot size; absent before launch.
     pub total: Option<i64>,
     /// Actual execution schedule; absent for unscheduled drafts.

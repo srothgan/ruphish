@@ -18,7 +18,7 @@ test('the generated browser bundle logs in and reads real starter content withou
             assert.equal(response.status, 200, path);
             return JSON.parse(response.body);
         };
-        await read('/login', { username: 'demo', password: 'demodemo' });
+        await read('/auth/login', { username: 'demo', password: 'demodemo' });
         assert.equal((await read('/auth/session')).user.username, 'demo');
         assert.match((await read('/api/templates/1')).html, /Microsoft/);
         assert.match((await read('/api/pages/1')).html, /Sign in to your account/);

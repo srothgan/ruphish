@@ -132,9 +132,12 @@ test('verified domain -> SMTP inbox -> public events -> completion, without part
     const run = randomUUID();
     const email = `protocol-${run}@example.test`;
     const group = await api('/api/groups/', 'POST', { name: `Protocol ${run}`, targets: [{ email, first_name: 'Protocol' }] });
+    const template = (await api('/api/templates/')).find(item => item.name === 'Local privacy email');
+    const page = (await api('/api/pages/')).find(item => item.name === 'Local privacy page');
+    const profile = profiles.find(item => item.name === 'Local inbox only');
     const campaign = await api('/api/campaigns/', 'POST', {
-        name: `Protocol ${run}`, url: origin, groups: [{ name: group.name }],
-        template: { name: 'Local privacy email' }, page: { name: 'Local privacy page' }, smtp: { name: 'Local inbox only' },
+        name: `Protocol ${run}`, url: origin,
+        selection: { groups: [{ id: group.id }], template: { id: template.id }, page: { id: page.id }, smtp: { id: profile.id } },
     });
     const campaignPath = `/api/campaigns/${campaign.id}`;
     const rid = campaign.results[0].id;
@@ -186,7 +189,7 @@ test('verified domain -> SMTP inbox -> public events -> completion, without part
     assert.equal((await publicRequest(`/track?rid=${rid}`)).status, 200);
     assert.equal((await api(campaignPath)).results[0].status, 'Submitted Data', 'Late image loads must not regress submission state');
     assert(!JSON.stringify(tracked).includes(canary));
-    await api(`${campaignPath}/complete`);
+    await api(`${campaignPath}/complete`, 'POST');
     const completed = await api(campaignPath);
     assert.equal((await publicRequest(`/?rid=${rid}`, { body: JSON.stringify({ ...event, event_id: 'b'.repeat(32) }) })).status, 404);
     assert.deepEqual(await api(campaignPath), completed);

@@ -1,5 +1,11 @@
 //! Authorized reporting snapshots and integration boundaries.
 use crate::{auth::Identity, resources::Error};
+/// Canonical identities shared by reporting boundaries.
+pub use ruphish_domain::{
+    campaign::{CampaignStatus, DeliveryState},
+    events::{Kind, RecordedKind},
+    reporting::Source,
+};
 
 /// One query owns filter semantics across tables, charts and exports.
 #[derive(Clone)]
@@ -13,11 +19,11 @@ pub struct Filter {
     /// Exclusive UTC Unix seconds.
     pub until: Option<i64>,
     /// Exact recognized event type.
-    pub event: String,
+    pub event: Option<ruphish_domain::events::Kind>,
     /// Case-insensitive recipient name/email substring.
     pub search: String,
-    /// Report source or empty for all sources.
-    pub source: String,
+    /// Report source, or no restriction.
+    pub source: Option<Source>,
     /// Event ordering before pagination.
     pub event_sort: ruphish_domain::reporting::EventSort,
     /// Event direction, independent of recipient ordering.
@@ -38,9 +44,9 @@ impl Default for Filter {
             recipients: Vec::new(),
             from: None,
             until: None,
-            event: String::new(),
+            event: None,
             search: String::new(),
-            source: String::new(),
+            source: None,
             offset: 0,
             limit: 0,
             sort: Default::default(),
@@ -62,9 +68,9 @@ pub struct Event {
     /// Normalized UTC timestamp.
     pub time: String,
     /// Recognized event name, or historical event name.
-    pub kind: String,
+    pub kind: RecordedKind,
     /// Provenance of the observation.
-    pub source: String,
+    pub source: Source,
     /// Presence only; absence is distinct from false.
     pub password_present: Option<bool>,
 }
@@ -88,7 +94,7 @@ pub struct Recipient {
     /// Stored result modification time, independent of the selected event window.
     pub modified_date: Option<String>,
     /// Current transport outcome, not inferred from engagement.
-    pub delivery: String,
+    pub delivery: Option<DeliveryState>,
     /// Counts in the selected window: accepted, opened, clicked, submitted, reported.
     pub counts: [i64; 5],
     /// Historical legacy reported state without observed evidence.
@@ -108,7 +114,7 @@ pub struct Analysis {
     /// Campaign display name.
     pub name: String,
     /// Lifecycle state.
-    pub status: String,
+    pub status: CampaignStatus,
     /// Snapshot time in UTC Unix seconds.
     pub as_of: i64,
     /// Campaign audience, before filters.

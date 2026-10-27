@@ -12,7 +12,7 @@ fn request(base: &str, method: &str, path: &str, body: &Value) -> reqwest::block
         .unwrap()
 }
 fn save(base: &str, path: &str, revision: Value, configuration: &Value, step: i64) -> Value {
-    request(
+    let value: Value = request(
         base,
         "PUT",
         path,
@@ -21,7 +21,11 @@ fn save(base: &str, path: &str, revision: Value, configuration: &Value, step: i6
     .error_for_status()
     .unwrap()
     .json()
-    .unwrap()
+    .unwrap();
+    let confirmed: ruphish_contracts::campaign_reads::Draft =
+        serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(serde_json::to_value(confirmed).unwrap(), value);
+    value
 }
 fn counts(directory: &Path) -> Vec<i64> {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
@@ -55,9 +59,95 @@ fn configuration_for(base: &str) -> Value {
 fn launch_body(base: &str, configuration: &Value, revision: &Value) -> Value {
     let review = post(base, "/api/campaigns/prepare", configuration);
     let mut campaign = configuration.clone();
-    campaign["selection"] = review["selection"].clone();
+    campaign["selection"] = reviewed_selection(&review);
     campaign["policy"] = review["policy"].clone();
     json!({"revision":revision,"campaign":campaign})
+}
+
+#[test]
+fn conflicting_schedule_forms_reject_every_command_without_effects_then_draft_launch_recovers() {
+    let directory = workspace();
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
+    let path = "/api/campaign-drafts/conflicting-schedule-01";
+    let launch_path = format!("{path}/launch");
+    let mut config = configuration_for(&base);
+    config["launch_local"] = json!({"local":"2030-01-01T10:00","time_zone":"UTC"});
+    config["send_by_local"] = json!({"local":"2030-01-01T11:00","time_zone":"UTC"});
+    let saved = save(&base, path, Value::Null, &config, 3);
+    let mut body = launch_body(&base, &config, &saved["revision"]);
+    let before = counts(directory.path());
+    for (absolute, local, times) in [
+        (
+            "launch_date",
+            "launch_local",
+            ["2030-01-01T10:00:00Z", "2030-01-01T09:00:00Z"],
+        ),
+        (
+            "send_by_date",
+            "send_by_local",
+            ["2030-01-01T11:00:00Z", "2030-01-01T12:00:00Z"],
+        ),
+    ] {
+        for time in times {
+            let mut conflict = body["campaign"].clone();
+            conflict[absolute] = json!(time);
+            for endpoint in [
+                "/api/campaigns/prepare",
+                "/api/campaign-drafts/prepare",
+                "/api/campaigns/",
+                "/api/campaigns/test",
+                &launch_path,
+            ] {
+                let input = match endpoint {
+                    "/api/campaigns/test" => {
+                        json!({"campaign":conflict,"email":"admin@example.test"})
+                    }
+                    p if p == launch_path => {
+                        json!({"campaign":conflict,"revision":saved["revision"]})
+                    }
+                    _ => conflict.clone(),
+                };
+                let response = request(&base, "POST", endpoint, &input);
+                assert_eq!(response.status(), 400, "{endpoint}: {absolute} {time}");
+                let error: Value = response.json().unwrap();
+                let issues = error["validation"]["issues"].as_array().unwrap();
+                for field in [absolute.to_owned(), format!("{local}.local")] {
+                    assert!(
+                        issues
+                            .iter()
+                            .any(|i| i["field"] == field && i["code"] == "invalid"),
+                        "{endpoint}: {error}"
+                    );
+                }
+                assert_eq!(counts(directory.path()), before, "{endpoint}");
+                assert_eq!(read(&base, path), saved, "{endpoint}");
+            }
+        }
+        // Different boundaries may use different forms; null is absence.
+        let mut mixed = config.clone();
+        mixed[absolute] = json!(times[0]);
+        mixed[local] = Value::Null;
+        let review = post(&base, "/api/campaigns/prepare", &mixed);
+        assert_eq!(review["launch_date"], 1_893_492_000_i64);
+        assert_eq!(review["send_by_date"], 1_893_495_600_i64);
+    }
+    body["campaign"]["launch_date"] = Value::Null;
+    body["campaign"]["send_by_date"] = Value::Null;
+    let launched: Value = request(&base, "POST", &launch_path, &body)
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(launched["launch_date"], "2030-01-01T10:00:00Z");
+    assert_eq!(launched["send_by_date"], "2030-01-01T11:00:00Z");
+    let retried: Value = request(&base, "POST", &launch_path, &body)
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(launched["id"], retried["id"]);
+    assert_eq!(counts(directory.path())[..4], [1, 1, 1, 1]);
+    process.stop();
 }
 
 #[test]
@@ -65,7 +155,7 @@ fn incomplete_review_step_draft_reopens_rejects_review_and_launch_then_recovers(
     let directory = workspace();
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let path = "/api/campaign-drafts/incomplete-review-step-01";
-    let incomplete = json!({"name":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"redirect_url":""}});
+    let incomplete = json!({"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"redirect_url":""}});
     let saved = save(&base, path, Value::Null, &incomplete, 3);
     let before = counts(directory.path());
     process.stop();
@@ -140,7 +230,7 @@ fn campaign_draft_survives_restart_rejects_bad_input_and_launches_once_after_rol
     let incomplete =
         json!({"name":"Incomplete training","launch_local":{"local":"2026-","time_zone":""}});
     let saved = save(&base, path, Value::Null, &incomplete, 2);
-    assert_eq!(saved["status"], "Draft");
+    assert_eq!(saved["status"], "draft");
     assert_eq!(
         counts(directory.path()),
         before,
@@ -224,7 +314,9 @@ fn campaign_draft_survives_restart_rejects_bad_input_and_launches_once_after_rol
             .unwrap()
             .is_empty()
     );
-    assert_eq!(read(&base, path)["campaign_id"], a["id"]);
+    let launched = read(&base, path);
+    assert_eq!(launched["campaign_id"], a["id"]);
+    assert_eq!(launched["status"], "launched");
     assert_eq!(
         request(
             &base,

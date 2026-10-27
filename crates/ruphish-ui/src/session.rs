@@ -32,7 +32,7 @@ impl SessionMonitor {
     }
     /// A rejected login is an inline form error; protected-request 401s end the view.
     pub fn response(&mut self, path: &str, status: u16) {
-        if self.action == SessionAction::Continue && status == 401 && path != "/login" {
+        if self.action == SessionAction::Continue && status == 401 && path != "/auth/login" {
             self.action = SessionAction::SignIn;
         }
     }
@@ -127,7 +127,7 @@ mod tests {
     fn invalid_login_and_transient_failures_remain_inline_without_redirect_loops() {
         let mut monitor = SessionMonitor::default();
         for status in [401, 403, 429, 503] {
-            monitor.response("/login", status);
+            monitor.response("/auth/login", status);
         }
         monitor.response("/api/users/", 500);
         assert_eq!(monitor.action(), SessionAction::Continue);
@@ -139,7 +139,7 @@ mod tests {
         let mut monitor = SessionMonitor::default();
         monitor.observe(&signed_in);
         for status in [403, 500, 503] {
-            monitor.response("/logout", status);
+            monitor.response("/auth/logout", status);
             assert_eq!(monitor.action(), SessionAction::Continue);
         }
         monitor.signed_out();

@@ -55,7 +55,7 @@ pub(crate) fn recipient_order(filter: &Filter, provider: &str) -> String {
     let (column, text) = match filter.sort {
         S::Email => ("email", true),
         S::Name => ("TRIM(name)", true),
-        S::Delivery => ("delivery", true),
+        S::Delivery => ("COALESCE(delivery,'')", true),
         S::Accepted => ("accepted", false),
         S::Opened => ("opened", false),
         S::Clicked => ("clicked", false),

@@ -16,7 +16,7 @@ fn storage(error: sqlx::Error) -> Error {
     crate::sqlite::resource_error(error)
 }
 const CTE: &str = r#"WITH audience AS (
- SELECT r.*,COALESCE(d.state,'historical') AS delivery FROM results r LEFT JOIN ruphish_delivery d ON d.result_id=r.id
+ SELECT r.*,d.state AS delivery FROM results r LEFT JOIN ruphish_delivery d ON d.result_id=r.id
  WHERE r.campaign_id=?1 AND (?4 IS NULL OR r.id=?4) AND (?6='' OR instr(lower(r.email||' '||COALESCE(r.first_name,'')||' '||COALESCE(r.last_name,'')),lower(?6))>0)
  AND (?8='[]' OR r.id IN (SELECT value FROM json_each(?8)))
 ), observed AS (
@@ -48,9 +48,6 @@ impl Snapshots for Reports {
             || f.search.len() > 256
             || f.recipients.len() > 200
             || f.recipients.iter().any(|id| *id <= 0)
-            || (!f.event.is_empty()
-                && !ruphish_domain::reporting::EVENT_TYPES.contains(&f.event.as_str()))
-            || !["", "legacy", "application", "public", "mailbox"].contains(&f.source.as_str())
         {
             return Err(Error::Invalid("analysis_invalid_filter".into()));
         }
@@ -94,9 +91,17 @@ impl Snapshots for Reports {
                     .bind(f.from)
                     .bind(f.until)
                     .bind(f.recipient)
-                    .bind(&f.event)
+                    .bind(
+                        f.event
+                            .map(ruphish_domain::events::Kind::label)
+                            .unwrap_or_default(),
+                    )
                     .bind(&f.search)
-                    .bind(&f.source)
+                    .bind(
+                        f.source
+                            .map(ruphish_domain::reporting::Source::as_str)
+                            .unwrap_or_default(),
+                    )
                     .bind(&selected_ids)
             };
         }
@@ -183,8 +188,13 @@ impl Snapshots for Reports {
                 recipient_id: r.try_get("recipient_id").map_err(storage)?,
                 email: r.try_get("email").map_err(storage)?,
                 time: r.try_get("time").map_err(storage)?,
-                kind: r.try_get("message").map_err(storage)?,
-                source: r.try_get("source").map_err(storage)?,
+                kind: ruphish_domain::events::RecordedKind::from_label(
+                    r.try_get("message").map_err(storage)?,
+                ),
+                source: ruphish_domain::reporting::Source::from_stored(
+                    &r.try_get::<String, _>("source").map_err(storage)?,
+                )
+                .ok_or(Error::Internal)?,
                 password_present: safe["password_present"].as_bool(),
             });
         }
@@ -220,7 +230,14 @@ impl Snapshots for Reports {
                     .map_err(storage)?
                     .trim()
                     .into(),
-                delivery: r.try_get("delivery").map_err(storage)?,
+                delivery: r
+                    .try_get::<Option<String>, _>("delivery")
+                    .map_err(storage)?
+                    .map(|state| {
+                        ruphish_domain::campaign::DeliveryState::from_stored(&state)
+                            .ok_or(Error::Internal)
+                    })
+                    .transpose()?,
                 first_name: r.try_get("first_name").map_err(storage)?,
                 last_name: r.try_get("last_name").map_err(storage)?,
                 position: r.try_get("position").map_err(storage)?,
@@ -282,7 +299,10 @@ impl Snapshots for Reports {
         let result = Analysis {
             id,
             name: campaign.try_get("name").map_err(storage)?,
-            status: campaign.try_get("status").map_err(storage)?,
+            status: ruphish_domain::campaign::CampaignStatus::from_stored(
+                &campaign.try_get::<String, _>("status").map_err(storage)?,
+            )
+            .ok_or(Error::Internal)?,
             as_of: ruphish_application::datetime::now().as_second(),
             audience,
             unique,

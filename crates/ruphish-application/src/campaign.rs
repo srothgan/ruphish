@@ -9,23 +9,17 @@ pub mod directory;
 pub mod drafts;
 pub mod preparation;
 
-/// A name-based legacy selection or an explicitly opted-in stable UI selection.
+/// Owner-scoped resource identity and optional reviewed revision.
 #[derive(Clone, Default)]
 pub struct Selection {
-    /// Legacy name, ignored only when an additive stable ID is supplied.
-    pub name: String,
-    /// Explicit UI selection; legacy nested IDs are not interpreted this way.
-    pub id: Option<i64>,
+    /// Persistent resource identity; zero is an incomplete selection.
+    pub id: i64,
     /// Reviewed modification timestamp, checked again in the launch transaction.
     pub revision: Option<String>,
 }
-/// Compatibility inputs and a redirect override resolved once per campaign.
+/// Redirect overrides resolved once per campaign.
 #[derive(Clone, Default)]
 pub struct Overrides {
-    /// Deprecated compatibility input, ignored; submissions are always tracked.
-    pub capture_credentials: Option<bool>,
-    /// Deprecated compatibility input, ignored; password presence is always tracked.
-    pub capture_passwords: Option<bool>,
     /// Explicit empty string clears the default redirect.
     pub redirect_url: Option<String>,
     /// Selected owned learning page; custom redirect must be empty when present.
@@ -125,7 +119,7 @@ pub struct Campaign {
     /// Display name.
     pub name: String,
     /// Lifecycle; finishing SMTP work does not complete the campaign.
-    pub status: String,
+    pub status: CampaignStatus,
     /// Creation timestamp.
     pub created: String,
     /// Launch timestamp.
@@ -191,7 +185,7 @@ pub struct DeliveryView {
     /// Compact campaign metadata; does not load bodies or legacy result arrays.
     pub campaign: CampaignHeader,
     /// State/count pairs over the whole campaign.
-    pub counts: Vec<(String, i64)>,
+    pub counts: Vec<(DeliveryState, i64)>,
     /// Requested bounded page in result-ID order.
     pub items: Vec<DeliveryItem>,
 }
@@ -213,7 +207,7 @@ pub struct CampaignHeader {
     /// Display name.
     pub name: String,
     /// Lifecycle state.
-    pub status: String,
+    pub status: CampaignStatus,
     /// Initial launch timestamp.
     pub launch: String,
     /// Initial distribution end, or Go zero time when unset.
@@ -270,7 +264,7 @@ pub struct DeliveryItem {
     /// Snapshot mailbox.
     pub email: String,
     /// Delivery state, separate from campaign lifecycle and engagement.
-    pub state: String,
+    pub state: DeliveryState,
     /// Next or last due UTC seconds.
     pub due: i64,
     /// Automatic retries consumed.
@@ -291,7 +285,7 @@ pub struct Attempt {
     /// Ended UTC seconds, if known.
     pub finished: Option<i64>,
     /// Current or terminal attempt state.
-    pub state: String,
+    pub state: AttemptState,
     /// Last protocol phase.
     pub stage: String,
     /// Explicit peer response code.

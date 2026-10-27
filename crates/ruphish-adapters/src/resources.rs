@@ -121,7 +121,7 @@ impl Validator for Validate {
         )?
         .warnings)
     }
-    fn validate(&self, resource: &Resource) -> Result<(), Error> {
+    fn validate(&self, resource: &Input) -> Result<(), Error> {
         let context = sample();
         match &resource.content {
             Content::Group(targets) => {

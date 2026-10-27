@@ -63,7 +63,7 @@ function setup(storage = new Map(), data) {
         const response = await api.execute(new Request(`https://demo.example.test${path}`, { method, ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }) }));
         return { status: response.status, value: await response.json() };
     };
-    return { api, request, storage, store, login: () => request('/login', 'POST', { username: 'demo', password: 'demodemo' }) };
+    return { api, request, storage, store, login: () => request('/auth/login', 'POST', { username: 'demo', password: 'demodemo' }) };
 }
 
 test('recipient CSV downloads retain fields, stored dates and all selected pages with safe spreadsheet text', async t => {
@@ -183,22 +183,22 @@ test('login survives a fresh page, stores no password, and logout revokes the de
     const f = setup();
     assert.equal((await f.request('/auth/session')).value.user, null);
     assert.equal((await f.request('/api/overview')).status, 401);
-    assert.equal((await f.request('/login', 'POST', { username: 'demo', password: 'wrong' })).status, 401);
+    assert.equal((await f.request('/auth/login', 'POST', { username: 'demo', password: 'wrong' })).status, 401);
     assert.equal((await f.login()).status, 200);
     assert.equal((await setup(f.storage).request('/auth/session')).value.user.username, 'demo');
     assert.deepEqual([...f.storage.values()], ['1']);
-    await f.request('/logout', 'POST');
+    await f.request('/auth/logout', 'POST');
     assert.equal((await setup(f.storage).request('/api/groups/summary')).status, 401);
 });
 
 test('login rejects unsafe next destinations and reports unavailable storage', async () => {
     const f = setup();
     for (const next of ['//evil.example', '/\\evil.example', 'https://evil.example', '/login']) {
-        assert.equal((await f.request('/login', 'POST', { username: 'demo', password: 'demodemo', next })).value.data, '/');
+        assert.equal((await f.request('/auth/login', 'POST', { username: 'demo', password: 'demodemo', next })).value.data, '/');
     }
-    assert.equal((await f.request('/login', 'POST', { username: 'demo', password: 'demodemo', next: '/groups/1' })).value.data, '/groups/1');
+    assert.equal((await f.request('/auth/login', 'POST', { username: 'demo', password: 'demodemo', next: '/groups/1' })).value.data, '/groups/1');
     const api = createDemoApi({ now });
-    const response = await api.execute(new Request('https://demo.example.test/login', { method: 'POST', body: new URLSearchParams({ username: 'demo', password: 'demodemo' }) }));
+    const response = await api.execute(new Request('https://demo.example.test/auth/login', { method: 'POST', body: new URLSearchParams({ username: 'demo', password: 'demodemo' }) }));
     assert.equal(response.status, 503);
     assert.equal((await response.json()).code, 'DEMO_STORAGE_REQUIRED');
 });

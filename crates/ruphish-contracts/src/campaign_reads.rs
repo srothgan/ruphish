@@ -1,8 +1,21 @@
 //! Complete campaign read contracts shared by HTTP encoders and browser queries.
+pub mod draft;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crate::nullable;
+
+/// Bounded execution metadata page.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Overview {
+    /// Campaign headers in the requested page.
+    pub items: Vec<Header>,
+    /// Next execution cursor, or no further page.
+    #[serde(deserialize_with = "nullable")]
+    pub next_after: Option<i64>,
+    /// Whether this process runs delivery workers.
+    pub mailer_enabled: bool,
+}
 
 /// Bounded combined draft/execution page.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -19,15 +32,14 @@ pub struct Directory {
 pub struct DirectoryRow {
     /// Draft identity or decimal execution identity.
     pub id: String,
-    /// Draft or campaign.
-    pub kind: String,
     /// Conditional draft revision; null for executions.
     #[serde(deserialize_with = "nullable")]
     pub revision: Option<i64>,
     /// Display name; drafts may be untitled.
     pub name: String,
-    /// Lifecycle state.
-    pub status: String,
+    /// Entry kind selects the corresponding lifecycle.
+    #[serde(flatten)]
+    pub state: ruphish_domain::campaign::DirectoryState,
     /// Confirmed audience size; null before launch.
     #[serde(deserialize_with = "nullable")]
     pub total: Option<i64>,
@@ -49,10 +61,6 @@ pub struct Resource {
 /// Confirmed presence-only tracking and redirect policy.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Policy {
-    /// Compatibility output, always true; values are never collected.
-    pub capture_credentials: bool,
-    /// Compatibility output, always true; only presence is observed.
-    pub capture_passwords: bool,
     /// Post-submission redirect.
     pub redirect_url: String,
     /// Selected owned learning page; custom redirect must be empty when present.
@@ -68,11 +76,13 @@ pub struct Header {
     /// Display name.
     pub name: String,
     /// Lifecycle state.
-    pub status: String,
+    pub status: ruphish_domain::campaign::CampaignStatus,
     /// Preserved timestamp.
-    pub launch_date: String,
-    /// Distribution end; Go zero time when absent.
-    pub send_by_date: String,
+    #[serde(deserialize_with = "nullable")]
+    pub launch_date: Option<String>,
+    /// Distribution end; null when absent.
+    #[serde(deserialize_with = "nullable")]
+    pub send_by_date: Option<String>,
     /// Public campaign URL.
     pub url: String,
     /// Selected email template.
@@ -112,7 +122,7 @@ pub struct Delivery {
     /// Campaign metadata.
     pub campaign: Header,
     /// Sparse state counts: omitted states have zero rows; the map itself is required.
-    pub counts: BTreeMap<String, i64>,
+    pub counts: BTreeMap<ruphish_domain::campaign::DeliveryState, i64>,
     /// Recipients in the requested page.
     pub items: Vec<DeliveryRow>,
     /// Next recipient cursor.
@@ -139,7 +149,7 @@ pub struct DeliveryRow {
     /// Total persisted attempts.
     pub attempt_count: i64,
     /// Transport state.
-    pub state: String,
+    pub state: ruphish_domain::campaign::DeliveryState,
     /// Next or last due UTC seconds.
     pub due: i64,
     /// Automatic retries consumed.
@@ -163,7 +173,7 @@ pub struct Attempt {
     #[serde(deserialize_with = "nullable")]
     pub finished: Option<i64>,
     /// Recorded outcome.
-    pub state: String,
+    pub state: ruphish_domain::campaign::AttemptState,
     /// Protocol stage if known.
     pub stage: String,
     /// SMTP response if known.
@@ -179,7 +189,8 @@ pub struct Activity {
     /// Event identity.
     pub id: i64,
     /// Preserved timestamp.
-    pub time: String,
+    #[serde(deserialize_with = "nullable")]
+    pub time: Option<String>,
     /// Administrator-supplied recipient address.
     pub email: String,
     /// Event kind.
@@ -213,7 +224,8 @@ pub struct HistoryEvent {
     /// Event identity.
     pub id: i64,
     /// Preserved timestamp.
-    pub time: String,
+    #[serde(deserialize_with = "nullable")]
+    pub time: Option<String>,
     /// UTC seconds if parseable.
     #[serde(deserialize_with = "nullable")]
     pub at: Option<i64>,
@@ -231,17 +243,17 @@ pub struct Analysis {
     /// Campaign display name.
     pub name: String,
     /// Lifecycle state.
-    pub status: String,
+    pub status: ruphish_domain::campaign::CampaignStatus,
     /// Snapshot UTC seconds.
     pub as_of: i64,
     /// Unfiltered audience size.
     pub audience: i64,
     /// Unique recipients per observed event type.
-    pub unique: [i64; 5],
+    pub unique: crate::reporting::Counts,
     /// Cumulative recipient progression.
-    pub progression: [i64; 5],
+    pub progression: crate::reporting::Counts,
     /// Raw event counts.
-    pub totals: [i64; 5],
+    pub totals: crate::reporting::Counts,
     /// Matching recipients before pagination.
     pub recipient_total: i64,
     /// Matching events before pagination.
@@ -265,10 +277,11 @@ pub struct AnalysisRecipient {
     pub email: String,
     /// Administrator-supplied name.
     pub name: String,
-    /// Transport outcome.
-    pub delivery: String,
+    /// Transport outcome, or null when no native delivery record exists.
+    #[serde(deserialize_with = "nullable")]
+    pub delivery: Option<ruphish_domain::campaign::DeliveryState>,
     /// Observed event counts.
-    pub counts: [i64; 5],
+    pub counts: crate::reporting::Counts,
     /// Legacy report state without an observed timestamp.
     pub historical_reported: bool,
 }
@@ -286,9 +299,9 @@ pub struct AnalysisEvent {
     /// Normalized UTC timestamp.
     pub time: String,
     /// Event kind.
-    pub kind: String,
+    pub kind: ruphish_domain::events::RecordedKind,
     /// Observation provenance.
-    pub source: String,
+    pub source: ruphish_domain::reporting::Source,
     /// Presence only, when recorded.
     #[serde(deserialize_with = "nullable")]
     pub password_present: Option<bool>,
@@ -300,7 +313,7 @@ pub struct Bucket {
     /// UTC bucket start.
     pub time: i64,
     /// Observed event counts.
-    pub counts: [i64; 5],
+    pub counts: crate::reporting::Counts,
 }
 
 /// Persisted draft snapshot; configuration may deliberately be incomplete.
@@ -310,9 +323,8 @@ pub struct Draft {
     pub id: String,
     /// Conditional-write revision.
     pub revision: i64,
-    /// Incomplete input; saving never authorizes launch.
-    #[serde(deserialize_with = "draft_configuration")]
-    pub configuration: ruphish_domain::campaign_draft::Configuration,
+    /// Complete saved structure whose values may still be unfinished; saving never authorizes launch.
+    pub configuration: draft::Configuration,
     /// Last editing step.
     pub step: i64,
     /// UTC creation timestamp.
@@ -325,46 +337,24 @@ pub struct Draft {
     #[serde(deserialize_with = "nullable")]
     pub campaign_id: Option<i64>,
     /// Draft or launched.
-    pub status: String,
+    pub status: ruphish_domain::campaign_draft::Status,
 }
 
-fn draft_configuration<'de, D: serde::Deserializer<'de>>(
-    deserializer: D,
-) -> Result<ruphish_domain::campaign_draft::Configuration, D::Error> {
-    let value = serde_json::Value::deserialize(deserializer)?;
-    let fields = |value: &serde_json::Value, names: &[&str]| {
-        names.iter().all(|name| value.get(*name).is_some())
-    };
-    let invalid = || serde::de::Error::custom("Incomplete campaign draft configuration");
-    if !fields(
-        &value,
-        &[
-            "name",
-            "url",
-            "selection",
-            "policy",
-            "launch_local",
-            "send_by_local",
-        ],
-    ) || !fields(&value["selection"], &["groups", "template", "page", "smtp"])
-        || ["template", "page", "smtp"]
-            .iter()
-            .any(|key| value["selection"][key].get("id").is_none())
-        || value["selection"]["groups"]
-            .as_array()
-            .is_none_or(|rows| rows.iter().any(|row| row.get("id").is_none()))
-        || (!value["policy"].is_null()
-            && !fields(
-                &value["policy"],
-                &["capture_credentials", "capture_passwords", "redirect_url"],
-            ))
-        || ["launch_local", "send_by_local"]
-            .iter()
-            .any(|key| !value[key].is_null() && !fields(&value[key], &["local", "time_zone"]))
-    {
-        return Err(invalid());
-    }
-    serde_json::from_value(value).map_err(serde::de::Error::custom)
+/// Bounded saved-draft page.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Drafts {
+    /// Complete saved snapshots, including a legitimate empty array.
+    pub items: Vec<Draft>,
+    /// Next draft identity, or no further page.
+    #[serde(deserialize_with = "nullable")]
+    pub next_after: Option<String>,
+}
+
+/// Successful removal of a saved draft at its requested revision.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DraftRemoval {
+    /// Whether the requested removal completed.
+    pub success: bool,
 }
 
 #[cfg(test)]

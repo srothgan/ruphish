@@ -12,11 +12,11 @@ pub struct Filter {
     pub from: Option<i64>,
     /// Exclusive UTC seconds.
     pub until: Option<i64>,
-    /// Event name.
+    /// Event identifier supplied by the client; the HTTP boundary validates it.
     pub event: String,
     /// Recipient search.
     pub search: String,
-    /// Observation source.
+    /// Observation source supplied by the client; the HTTP boundary validates it.
     pub source: String,
     /// Event ordering before pagination.
     pub event_sort: ruphish_domain::reporting::EventSort,
@@ -54,5 +54,44 @@ impl Default for Filter {
             format: "csv".into(),
             scope: "events".into(),
         }
+    }
+}
+
+/// Named observation metrics. The enclosing field defines whether these are raw
+/// totals, unique observed recipients or cumulative recipient progression.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Counts {
+    /// Recorded SMTP acceptances; never inferred from engagement.
+    pub accepted: i64,
+    /// Image fetches, or cumulative open progression in a progression field.
+    pub opened: i64,
+    /// Landing visits, or cumulative click progression in a progression field.
+    pub clicked: i64,
+    /// Form submissions, independent of entered-value contents.
+    pub submitted: i64,
+    /// Reports, independent of interaction progression.
+    pub reported: i64,
+}
+impl From<[i64; 5]> for Counts {
+    fn from([accepted, opened, clicked, submitted, reported]: [i64; 5]) -> Self {
+        Self {
+            accepted,
+            opened,
+            clicked,
+            submitted,
+            reported,
+        }
+    }
+}
+impl Counts {
+    /// Presentation order for the five chart series or table columns.
+    pub const fn values(self) -> [i64; 5] {
+        [
+            self.accepted,
+            self.opened,
+            self.clicked,
+            self.submitted,
+            self.reported,
+        ]
     }
 }

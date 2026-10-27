@@ -56,7 +56,7 @@ async fn snapshot(context: Context) -> Result<Response, Rejection> {
                 id: c.id,
                 name: c.name,
                 status: c.status,
-                launch: c.launch,
+                launch: crate::response::stored_date(&c.launch),
                 recipients: c.recipients,
                 outcomes: counts(c.outcomes),
             })

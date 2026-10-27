@@ -179,7 +179,7 @@ fn imported_resources_keep_supported_fields_but_never_inherit_identity() {
         ),
         (
             "pages",
-            json!({"name":"Page","html":"<form><input name='name'></form>","capture_credentials":true,"capture_passwords":true,"redirect_url":"https://example.test/done"}),
+            json!({"name":"Page","html":"<form><input name='name'></form>","redirect_url":"https://example.test/done"}),
         ),
         (
             "smtp",
@@ -274,7 +274,7 @@ fn incomplete_content_imports_remain_drafts_and_invalid_imports_are_rejected() {
     .unwrap();
     assert_eq!(mail.fields["name"], "");
     assert_eq!(mail.fields["envelope_sender"], "");
-    assert!(mail.fields["attachments"].is_null());
+    assert_eq!(mail.fields["attachments"], json!([]));
     assert!(
         mail.review
             .notes
@@ -287,7 +287,7 @@ fn incomplete_content_imports_remain_drafts_and_invalid_imports_are_rejected() {
         json!({"html":"<form><input name='password'></form>"}),
     )
     .unwrap();
-    assert_eq!(page.fields["capture_passwords"], false);
+    assert!(page.fields.get("capture_passwords").is_none());
     assert_eq!(page.fields["redirect_url"], "");
     for (family, format, input) in [
         ("smtp", "json", json!({"targets":[]})),

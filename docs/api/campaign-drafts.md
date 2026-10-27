@@ -40,7 +40,7 @@ Choose a random draft ID of 16–64 ASCII letters, digits, or hyphens. Send this
 }
 ```
 
-The response contains `id`, `revision`, `configuration`, `step`, creation/modification timestamps, optional `campaign_id`, and `status` (`Draft` or `Launched`). Save the returned revision and send it with the next edit. Steps range from 0 through 3. A stale edit fails instead of overwriting another editor's work.
+The response contains `id`, `revision`, `configuration`, `step`, creation/modification timestamps, optional `campaign_id`, and `status` (`draft` or `launched`). Save the returned revision and send it with the next edit. Steps range from 0 through 3. A stale edit fails instead of overwriting another editor's work.
 
 Configuration is a closed schema: unknown fields are rejected. Resource references contain IDs only; do not embed resource bodies, recipients, passwords, or API keys. Zero means unselected. The name is limited to 255 characters, URL and redirect to 8,192, and group selections to 1,000. Local schedule objects contain `local` and `time_zone`.
 
@@ -48,6 +48,6 @@ List responses contain `items` and `next_after`; pages contain at most 50 drafts
 
 ## Launch the reviewed revision
 
-The launch body contains `revision` and `campaign`, where `campaign` is the full reviewed [campaign request](campaigns.md). It must match the saved draft configuration. Preparation resolves current resources and catches schedules that are no longer in the future.
+The launch body contains `revision` and `campaign`, where `campaign` is the full reviewed [native campaign request](campaigns.md#prepare-and-launch). It must match the saved draft configuration. Submit resource IDs and reviewed revisions, without the display names returned by preparation. Unknown and duplicate nested fields are rejected before launch. Preparation resolves current resources and catches schedules that are no longer in the future.
 
 Launch ties the draft to one execution. If the response is lost, retrying the same draft launch returns that execution rather than creating another. The draft identity owns this behavior; an unrelated idempotency header cannot bypass it. After launch, use the execution APIs for delivery and results.

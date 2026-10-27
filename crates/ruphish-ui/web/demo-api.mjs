@@ -1,6 +1,7 @@
 // Browser-only simulation of the existing wire contracts. No HTTP fallback or persistent resources.
 import { dataset, DAY, iso, policy, features } from '../../../assets/website-demo/dataset.mjs';
 import { exportResponse } from './demo-export.mjs';
+import { namedCounts, eventKinds, recordedKind } from './demo-reporting.mjs';
 import { reviewCsv } from './demo-csv.mjs';
 import { recipientOrder, eventOrder, keyset } from './demo-sorting.mjs';
 
@@ -33,20 +34,22 @@ export function overview(data) {
 }
 
 export function analysis(campaign, query, now, paginate = true) {
+    if (query.get('event') && !Object.values(eventKinds).includes(query.get('event'))) throw new Error('Invalid event');
+    if (query.get('source') && !['legacy', 'application', 'public', 'mailbox'].includes(query.get('source'))) throw new Error('Invalid source');
     const from = Number(query.get('from') ?? 0), until = Number(query.get('until') ?? now);
     const selected = new Set((query.get('recipients') ?? '').split(',').filter(Boolean).map(Number));
     const search = (query.get('search') ?? '').toLocaleLowerCase();
     const results = campaign.results.filter(r => (!query.has('recipient') || r.id === Number(query.get('recipient'))) && (!selected.size || selected.has(r.id)) && (!search || `${r.email} ${r.first_name} ${r.last_name}`.toLocaleLowerCase().includes(search)));
     const events = results.flatMap(r => r.events).filter(e => {
         const at = Date.parse(e.time) / 1000;
-        return at >= from && at < until && (!query.get('event') || query.get('event') === e.kind) && (!query.get('source') || query.get('source') === e.source);
+        return at >= from && at < until && (!query.get('event') || query.get('event') === eventKinds[e.kind]) && (!query.get('source') || query.get('source') === e.source);
     }).sort(byTime);
     const eventMap = new Map();
     for (const e of events) {
         if (!eventMap.has(e.recipient_id)) eventMap.set(e.recipient_id, []);
         eventMap.get(e.recipient_id).push(e);
     }
-    const unorderedRows = results.filter(r => (!query.get('event') && !query.get('source')) || eventMap.has(r.id)).sort((a, b) => a.email < b.email ? -1 : a.email > b.email ? 1 : a.id - b.id).map(r => ({ id: r.id, email: r.email, name: `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim(), first_name: r.first_name, last_name: r.last_name, position: r.position, send_date: r.send_date, modified_date: r.modified_date, delivery: r.state, counts: counts(eventMap.get(r.id) ?? []), historical_reported: false }));
+    const unorderedRows = results.filter(r => (!query.get('event') && !query.get('source')) || eventMap.has(r.id)).sort((a, b) => a.email < b.email ? -1 : a.email > b.email ? 1 : a.id - b.id).map(r => ({ id: r.id, email: r.email, name: `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim(), first_name: r.first_name, last_name: r.last_name, position: r.position, send_date: r.send_date, modified_date: r.modified_date, delivery: r.state ?? null, counts: counts(eventMap.get(r.id) ?? []), historical_reported: false }));
     const rows = recipientOrder(unorderedRows, query);
     const sortedEvents = eventOrder(events, query);
     const unique = sum(rows.map(r => r.counts.map(n => Number(n > 0))));
@@ -55,10 +58,11 @@ export function analysis(campaign, query, now, paginate = true) {
     for (const e of events) {
         const time = Math.floor(Date.parse(e.time) / 1000 / 3600) * 3600;
         if (!buckets.has(time)) buckets.set(time, [0, 0, 0, 0, 0]);
-        buckets.get(time)[kinds.indexOf(e.kind)]++;
+        const index = kinds.indexOf(e.kind);
+        if (index >= 0) buckets.get(time)[index]++;
     }
     const offset = Math.max(0, Number(query.get('offset') ?? 0)), limit = Math.max(1, Math.min(200, Number(query.get('limit') ?? 50)));
-    return { id: campaign.header.id, name: campaign.header.name, status: campaign.header.status, as_of: now, audience: campaign.results.length, unique, progression, totals: counts(events), recipient_total: rows.length, event_total: events.length, recipients: paginate ? rows.slice(offset, offset + limit) : rows, events: paginate ? sortedEvents.slice(offset, offset + limit) : sortedEvents, buckets: [...buckets].map(([time, values]) => ({ time, counts: values })), bucket_seconds: 3600 };
+    return { id: campaign.header.id, name: campaign.header.name, status: campaign.header.status, as_of: now, audience: campaign.results.length, unique: namedCounts(unique), progression: namedCounts(progression), totals: namedCounts(counts(events)), recipient_total: rows.length, event_total: events.length, recipients: (paginate ? rows.slice(offset, offset + limit) : rows).map(r => ({ ...r, counts: namedCounts(r.counts) })), events: (paginate ? sortedEvents.slice(offset, offset + limit) : sortedEvents).map(e => ({ ...e, kind: recordedKind(e.kind) })), buckets: [...buckets].map(([time, values]) => ({ time, counts: namedCounts(values) })), bucket_seconds: 3600 };
 }
 
 function summaries(data, family) {
@@ -125,21 +129,21 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage, da
             } catch { return failure(400); }
         }
         if (path === '/auth/session' && method === 'GET') return json({ features: current ? features : null, preferences, csrf_token: 'demo-csrf', user: current ? { id: current.id, username: current.username, role: current.role, password_change_required: false, permissions: current.role.slug === 'admin' ? ['modify_objects', 'modify_system'] : ['modify_objects'] } : null, actor: current && current.id !== 1 ? 'demo' : null });
-        if (path === '/login' && method === 'POST') {
+        if (path === '/auth/login' && method === 'POST') {
             if (body.username !== 'demo' || body.password !== 'demodemo') return failure(401, 'AUTH_INVALID_CREDENTIALS');
             if (!saveIdentity(1)) return failure(503, 'DEMO_STORAGE_REQUIRED');
             const next = typeof body.next === 'string' && /^\/(?:$|(?:groups|templates|pages|learning-pages|smtp|campaigns|analysis|domains|webhooks|reporting-mailboxes|users|user|settings)(?:[/?]|$))/.test(body.next) && !/[\\\r\n]/.test(body.next) ? body.next : '/';
             return success(next);
         }
         if (!current) return failure(401);
-        if (path === '/logout' && method === 'POST') return saveIdentity(0) ? success('/login') : failure(503, 'DEMO_STORAGE_REQUIRED');
-        if (path === '/impersonate' && method === 'POST') {
+        if (path === '/auth/logout' && method === 'POST') return saveIdentity(0) ? success('/login') : failure(503, 'DEMO_STORAGE_REQUIRED');
+        if (path === '/auth/impersonate' && method === 'POST') {
             const target = data.users.find(u => u.username === body.username && !u.account_locked && !u.password_change_required);
             return current.id === 1 && target && saveIdentity(target.id) ? success('/') : failure(403);
         }
-        if (path === '/impersonate/exit' && method === 'POST') return saveIdentity(1) ? success('/') : failure(503);
+        if (path === '/auth/impersonate/exit' && method === 'POST') return saveIdentity(1) ? success('/') : failure(503);
         if (path === '/internal/preferences' && method === 'PUT') return json(preferences);
-        if (['/internal/password', '/reset_password'].includes(path) && method === 'POST') return success('/user');
+        if (['/internal/password', '/auth/password/reset'].includes(path) && method === 'POST') return success('/user');
         if (path === '/api/reset' && method === 'POST') return success('demo-key-not-a-real-credential');
         if (path === '/api/settings' && ['GET', 'PUT'].includes(method)) return json(settings);
         if (path === '/api/overview' && method === 'GET') return json(overview(data));
@@ -151,7 +155,7 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage, da
             return json({ window, since, as_of: now, ...posture(results, since ?? 0, now + 1), previous });
         }
         if (path === '/api/campaigns/directory' && method === 'GET') {
-            const all = [...data.drafts.map(d => ({ id: d.id, kind: 'draft', revision: d.revision, name: d.configuration.name, status: 'Draft', total: null, launch_date: null })), ...data.campaigns.map(c => ({ id: String(c.header.id), kind: 'campaign', revision: null, name: c.header.name, status: c.header.status, total: c.header.total, launch_date: c.header.launch_date }))];
+            const all = [...data.drafts.map(d => ({ id: d.id, kind: 'draft', revision: d.revision, name: d.configuration.name, status: 'draft', total: null, launch_date: null })), ...data.campaigns.map(c => ({ id: String(c.header.id), kind: 'campaign', revision: null, name: c.header.name, status: c.header.status, total: c.header.total, launch_date: c.header.launch_date }))];
             const filter = url.searchParams.get('filter') ?? '';
             const filtered = all.filter(r => !filter || filter === 'all' || (filter === 'drafts' ? r.kind === 'draft' : filter === 'executions' ? r.kind === 'campaign' : filter === 'active' ? ['In progress', 'Queued'].includes(r.status) : filter === 'completed' ? r.status === 'Completed' : false));
             try {

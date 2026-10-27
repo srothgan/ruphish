@@ -17,7 +17,7 @@ pub(crate) struct CampaignQueries {
     overview: OverviewQueries,
     pub directory: Query<(String, String, String, String), reads::Directory>,
     pub delivery: Query<(String, String, String, String), DeliverySnapshot>,
-    pub analysis: Query<(i64, String), Value>,
+    pub analysis: Query<(i64, String), reads::Analysis>,
     pub draft: Query<String, Value>,
 }
 
@@ -131,7 +131,7 @@ impl CampaignQueries {
         api: Api,
         id: i64,
         filter: &Filter,
-    ) -> Result<Value, ApiError> {
+    ) -> Result<reads::Analysis, ApiError> {
         let snapshot = self.analysis.fetch(Self::analysis_key(id, filter)).await;
         if let Some(error) = snapshot.error {
             return Err(error);
@@ -139,14 +139,18 @@ impl CampaignQueries {
         snapshot.data.ok_or_else(|| api.invalid_read_err())
     }
 
-    async fn read_analysis_query(api: Api, id: i64, query: &str) -> Result<Value, ApiError> {
+    async fn read_analysis_query(
+        api: Api,
+        id: i64,
+        query: &str,
+    ) -> Result<reads::Analysis, ApiError> {
         let value: reads::Analysis = api
             .read(&format!("/api/campaigns/{id}/analysis?{query}"))
             .await?;
         if value.id != id {
             return Err(api.invalid_read_err());
         }
-        encoded(api, value)
+        Ok(value)
     }
 
     pub async fn read_draft(api: Api, id: &str) -> Result<Value, ApiError> {
@@ -184,7 +188,15 @@ impl CampaignQueries {
     pub fn deleted(self, kind: &str, id: &str) {
         self.directory.confirmed_where(
             |_| true,
-            |page| page.items.retain(|row| row.kind != kind || row.id != id),
+            |page| {
+                page.items.retain(|row| {
+                    let row_kind = match row.state {
+                        ruphish_domain::campaign::DirectoryState::Draft(_) => "draft",
+                        ruphish_domain::campaign::DirectoryState::Campaign(_) => "campaign",
+                    };
+                    row_kind != kind || row.id != id
+                });
+            },
         );
         if kind == "draft" {
             self.draft.forget(id.to_owned());

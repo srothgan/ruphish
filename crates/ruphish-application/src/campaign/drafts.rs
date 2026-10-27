@@ -1,6 +1,6 @@
 //! Durable drafts and the single transition into campaign execution.
 use crate::{auth::Identity, campaign::Create, resources::Error};
-pub use ruphish_domain::campaign_draft::Configuration;
+pub use ruphish_domain::campaign_draft::{Configuration, Status};
 
 /// A saved draft; a campaign reference fences all subsequent edits and launches.
 #[derive(Clone)]
@@ -99,15 +99,11 @@ pub fn validate_launch(
         || c.url != input.url
         || launch != input.launch
         || end != input.send_by
-        || c.selection
-            .groups
-            .iter()
-            .map(|s| Some(s.id))
-            .collect::<Vec<_>>()
+        || c.selection.groups.iter().map(|s| s.id).collect::<Vec<_>>()
             != input.groups.iter().map(|s| s.id).collect::<Vec<_>>()
-        || Some(c.selection.template.id) != input.template.id
-        || Some(c.selection.page.id) != input.page.id
-        || Some(c.selection.smtp.id) != input.profile.id
+        || c.selection.template.id != input.template.id
+        || c.selection.page.id != input.page.id
+        || c.selection.smtp.id != input.profile.id
         || policy.learning_page_id != input.policy.learning_page_id
         || Some(&policy.redirect_url) != input.policy.redirect_url.as_ref()
     {

@@ -20,7 +20,7 @@ async fn exact_text(db: &Database) {
             .resources()
             .save(
                 actor,
-                edit,
+                edit.into(),
                 Some(original.id),
                 Some(original.modified_date.clone()),
             )
@@ -53,7 +53,7 @@ async fn exact_text(db: &Database) {
         template.subject = subject;
         template.attachments.clear();
         assert!(
-            matches!(db.resources().save(actor, edit.clone(), Some(original.id), Some(original.modified_date.clone())).await,
+            matches!(db.resources().save(actor, edit.clone().into(), Some(original.id), Some(original.modified_date.clone())).await,
             Err(Error::Invalid(code)) if code.starts_with("storage_text_invalid:"))
         );
         assert!(
@@ -65,7 +65,7 @@ async fn exact_text(db: &Database) {
             "rejected replacement must preserve body, attachments and revision"
         );
         assert!(matches!(
-            db.resources().save(actor, edit, None, None).await,
+            db.resources().save(actor, edit.into(), None, None).await,
             Err(Error::Invalid(_))
         ));
         assert_eq!(
@@ -156,7 +156,7 @@ async fn busy_operations(db: &Database, actor: auth::Identity, original: &Resour
         .resources()
         .save(
             actor,
-            original.clone(),
+            original.clone().into(),
             Some(original.id),
             Some(original.modified_date.clone()),
         )

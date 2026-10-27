@@ -32,6 +32,6 @@ Operation-specific invariants still apply after permission checks, including a r
 
 ## Browser sessions
 
-`/auth/session` supplies browser session bootstrap data. Legacy browser form paths such as `/login`, `/logout`, and `/reset_password` also remain. `/internal/` includes browser account operations such as password and preference changes. Session cookies and CSRF checks protect that flow; an API key is not a replacement for every browser-specific requirement.
+`/auth/session` supplies browser session bootstrap data. Session actions use POST `/auth/login`, `/auth/logout`, `/auth/password/reset`, `/auth/impersonate` and `/auth/impersonate/exit`. The corresponding browser pages keep `/login`, `/logout` and `/reset_password`; those page URLs accept no mutation requests. `/internal/` includes browser account operations such as password and preference changes. Session cookies and CSRF checks protect that flow; an API key is not a replacement for every browser-specific requirement.
 
 External clients should use documented `/api/` routes. See [users and API keys](users-and-api-keys.md) for key rotation and account management.

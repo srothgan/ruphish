@@ -7,10 +7,11 @@ sidebar:
 
 Ruphish keeps the campaign concepts while replacing both the server and administration interface. These changes matter when you bring across existing habits, content, or automation.
 
-The comparison baseline is Gophish 0.12.1, commit `95618469799295e2c0fec980805a2dfbb818816b`. Ruphish aims to be a compatible, drop-in replacement; the intentional differences below identify where your configuration, content, or integrations may need changes.
+The comparison baseline is Gophish 0.12.1, commit `95618469799295e2c0fec980805a2dfbb818816b`. Ruphish develops its own API while retaining supported data and template migration; the differences below identify where your configuration, content, or integrations need changes.
 
 | Area | Gophish baseline | Ruphish behavior | Required user action |
 | --- | --- | --- | --- |
+| Campaign commands | Resources selected by name; permissive JSON decoding | One ID/revision selection model; unknown, duplicate and incorrectly cased fields rejected | Use [native campaign requests](../api/campaigns.md#prepare-and-launch), including inside test-send and draft-launch bodies |
 | UI | Legacy web administration and campaign views | Leptos/WASM interface with saved drafts, delivery history/reconciliation, domains, richer analysis, and multiple mailboxes | Follow current guides and replace old screen-specific instructions |
 | Localization | No equivalent account-level language/format/zone preference workflow | English/German interface with independently persisted format and time-zone choices | Choose account preferences; keep API timestamps and names unchanged |
 | Browser API layout | Browser and administrative routes without the same three-way separation | Public `/api/`, session `/auth/`, browser-specific `/internal/`, plus retained form routes | Integrate through documented public endpoints |
@@ -22,7 +23,7 @@ The comparison baseline is Gophish 0.12.1, commit `95618469799295e2c0fec980805a2
 | Reporting | Legacy result state and event history | Separate observed counts, progression, filtered analysis, and defined exports | Recheck denominators and raw-versus-derived comparisons |
 | Webhook consumers | Signed event payload concept | Durable attempts, stable event identity, bounded retries, no ordering guarantee | Verify exact-body signatures and deduplicate by installation/event |
 
-Familiar wire names are not always current UI labels: `smtp` means sending profiles, `pages` means landing pages, and group `targets` are recipients. `capture_credentials` and `capture_passwords` are ignored compatibility inputs; page and effective campaign responses return both as true. The template field `envelope_sender` is a visible-sender override. These wire names remain; do not rename JSON fields to match a translated label.
+Familiar wire names are not always current UI labels: `smtp` means sending profiles, `pages` means landing pages, and group `targets` are recipients. The inert `capture_credentials` and `capture_passwords` settings have been removed from current contracts; built-in submission and presence tracking remains unconditional. The template field `envelope_sender` is a visible-sender override. These wire names remain; do not rename JSON fields to match a translated label.
 
 ## A broader administration interface
 

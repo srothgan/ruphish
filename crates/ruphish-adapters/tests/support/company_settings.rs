@@ -87,8 +87,7 @@ async fn input(db: &Database, actor: auth::Identity, origin: &str) -> campaign::
         .await
         .unwrap();
     let select = |r: Resource| campaign::Selection {
-        id: Some(r.id),
-        name: r.name,
+        id: r.id,
         revision: Some(r.modified_date),
     };
     campaign::Create {
@@ -477,7 +476,7 @@ pub(super) async fn exercise(db: &Database) {
         Err(Error::Conflict(_))
     ));
     assert_ne!(
-        campaigns.get(who, first.id).await.unwrap().status,
+        campaigns.get(who, first.id).await.unwrap().status.as_str(),
         "Completed"
     );
     let review = settings.preview_closure(who, now + 3612).await.unwrap();
@@ -493,7 +492,7 @@ pub(super) async fn exercise(db: &Database) {
     assert_eq!(result.cancelled_deliveries, 3);
     for (owner, id) in [(who, first.id), (other, second.id), (who, third.id)] {
         let closed = campaigns.get(owner, id).await.unwrap();
-        assert_eq!(closed.status, "Completed");
+        assert_eq!(closed.status.as_str(), "Completed");
         assert_eq!(closed.results.len(), 1);
     }
     assert!(
@@ -521,7 +520,7 @@ pub(super) async fn exercise(db: &Database) {
     assert_eq!(replay.completed_at, result.completed_at);
     assert_eq!(replay.campaigns, 3);
     assert_ne!(
-        campaigns.get(who, later.id).await.unwrap().status,
+        campaigns.get(who, later.id).await.unwrap().status.as_str(),
         "Completed"
     );
 }
@@ -696,7 +695,7 @@ async fn sqlite_policy_and_closure_roll_back_all_related_writes() {
     );
     for id in [a.id, b.id] {
         assert_ne!(
-            db.campaigns().get(who, id).await.unwrap().status,
+            db.campaigns().get(who, id).await.unwrap().status.as_str(),
             "Completed"
         );
         assert_eq!(
@@ -705,7 +704,8 @@ async fn sqlite_policy_and_closure_roll_back_all_related_writes() {
                 .await
                 .unwrap()
                 .items[0]
-                .state,
+                .state
+                .as_str(),
             "ready"
         );
     }
@@ -957,7 +957,7 @@ async fn assert_upgraded(db: &Database) {
     assert_eq!(db.domains().list(who).await.unwrap().len(), 1);
     assert_eq!(db.integrations().webhooks(who).await.unwrap().len(), 1);
     assert_eq!(
-        db.campaigns().get(who, 1).await.unwrap().status,
+        db.campaigns().get(who, 1).await.unwrap().status.as_str(),
         "Completed"
     );
 }
@@ -979,16 +979,23 @@ async fn contention_setup(
         .unwrap()
         .identity;
     let settings = db.settings().get(admin).await.unwrap();
-    let select = |name: &str| campaign::Selection {
-        name: name.into(),
-        ..Default::default()
+    let resources = db.resources();
+    let selected = |resource: &Resource| campaign::Selection {
+        id: resource.id,
+        revision: Some(resource.modified_date.clone()),
     };
+    let groups = resources.list(other, Kind::Group).await.unwrap();
+    let templates = resources.list(other, Kind::Template).await.unwrap();
+    let pages = resources.list(other, Kind::Page).await.unwrap();
+    let profiles = resources.list(other, Kind::Profile).await.unwrap();
     let launch = campaign::Create {
         name: "Concurrent policy change".into(),
-        groups: vec![select("Audience")],
-        template: select("Email"),
-        page: select("Page"),
-        profile: select("SMTP"),
+        groups: vec![selected(
+            groups.iter().find(|r| r.name == "Audience").unwrap(),
+        )],
+        template: selected(templates.iter().find(|r| r.name == "Email").unwrap()),
+        page: selected(pages.iter().find(|r| r.name == "Page").unwrap()),
+        profile: selected(profiles.iter().find(|r| r.name == "SMTP").unwrap()),
         url: "https://other-policy.example.test".into(),
         ..Default::default()
     };

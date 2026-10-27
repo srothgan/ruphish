@@ -85,3 +85,11 @@ pub fn slash_redirect(
     }
     Ok(response)
 }
+/// Normalize a stored date; absent or unparseable historical dates remain unknown.
+pub(crate) fn stored_date(value: &str) -> Option<String> {
+    use ruphish_application::datetime;
+    datetime::parse_stored(value)
+        .ok()
+        .filter(|value| *value != datetime::ZERO_TIMESTAMP)
+        .map(datetime::utc)
+}

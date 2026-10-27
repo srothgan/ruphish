@@ -2,7 +2,6 @@
 use crate::{
     analysis_chart::{ActivityChart, Bucket, labels},
     campaign_queries::CampaignQueries,
-    campaigns::{array, text},
     client::Api,
     feedback::Message,
     shared::components::*,
@@ -15,17 +14,6 @@ use ruphish_domain::reporting::SortDirection;
 use ruphish_ui::analysis_state::address;
 use ruphish_ui::{tr, trs};
 use serde_json::Value;
-
-const EVENTS: [&str; 8] = [
-    "Campaign Created",
-    "Email Sent",
-    "Error Sending Email",
-    "Email Opened",
-    "Clicked Link",
-    "Submitted Data",
-    "Email Reported",
-    "Delivery reconciled",
-];
 
 pub(super) fn page(api: Api) -> impl IntoView {
     let params = use_params_map();
@@ -107,7 +95,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
         move || CampaignQueries::analysis_key(id, &filters.get()),
         ruphish_ui::query::document_visible(),
     );
-    let data = Signal::derive(move || read.data.get().unwrap_or(Value::Null));
+    let data = read.data;
     let loading = read.fetching;
     let loaded = Signal::derive(move || read.data.with(Option::is_some));
     let message = Message::new(String::new());
@@ -199,22 +187,17 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                 .await
                 .map_err(|e| e.message)
                 .map(|value| {
-                    let rows = array(&value, "recipients")
+                    let rows = value
+                        .recipients
                         .into_iter()
-                        .filter_map(|r| {
-                            Some((
-                                r["id"].as_i64()?,
-                                ruphish_ui::select_options::recipient_label(
-                                    &text(&r, "name"),
-                                    &text(&r, "email"),
-                                ),
-                            ))
+                        .map(|r| {
+                            (
+                                r.id,
+                                ruphish_ui::select_options::recipient_label(&r.name, &r.email),
+                            )
                         })
                         .collect();
-                    (
-                        rows,
-                        value["recipient_total"].as_u64().unwrap_or(0) as usize,
-                    )
+                    (rows, value.recipient_total as usize)
                 });
             option_state.try_update(|state| state.finish(request, result));
         });
@@ -297,22 +280,31 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
         });
     };
     let chart = Signal::derive(move || {
-        array(&data.get(), "buckets")
-            .into_iter()
-            .map(|b| Bucket {
-                time: b["time"].as_i64().unwrap_or(0),
-                counts: std::array::from_fn(|i| b["counts"][i].as_i64().unwrap_or(0)),
-            })
-            .collect::<Vec<_>>()
+        data.with(|value| {
+            value
+                .as_ref()
+                .map(|v| {
+                    v.buckets
+                        .iter()
+                        .map(|b| Bucket {
+                            time: b.time,
+                            counts: b.counts.values(),
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default()
+        })
     });
     let total = Signal::derive(move || {
-        data.get()[if recipient.is_some() {
-            "event_total"
-        } else {
-            "recipient_total"
-        }]
-        .as_u64()
-        .unwrap_or(0) as usize
+        data.with(|value| {
+            value.as_ref().map_or(0, |v| {
+                if recipient.is_some() {
+                    v.event_total
+                } else {
+                    v.recipient_total
+                }
+            })
+        }) as usize
     });
     let content = view! {
         <ManagementPage>
@@ -336,7 +328,8 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
             </BackLink>
             <PageHeader
                 title=Signal::derive(move || {
-                    let name = text(&data.get(), "name");
+                    let name = data
+                        .with(|v| v.as_ref().map(|v| v.name.clone()).unwrap_or_default());
                     if name.is_empty() {
                         leptos_i18n::t_string!(i18n, ui.campaign).into()
                     } else {
@@ -346,7 +339,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                 subtitle=Signal::derive(move || {
                     if loaded.get() {
                         leptos_i18n::t_string!(
-                            i18n, messages.updated_arg0, arg0 = (minute(&data.get()["as_of"])).to_string()
+                            i18n, messages.updated_arg0, arg0 = (minute(&serde_json::json!(data.with(|v| v.as_ref().map(|v| v.as_of))))).to_string()
                         )
                     } else if loading.get() {
                         leptos_i18n::t_string!(i18n, ui.loading_analysis).into()
@@ -432,12 +425,16 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                         on_change=Callback::new(move |v| selected_event.set(v))
                     >
                         <option value="">{tr!(ui.all_events)}</option>
-                        {EVENTS
+                        {ruphish_domain::events::Kind::ALL
                             .into_iter()
                             .map(|e| {
                                 view! {
-                                    <option value=e>
-                                        {move || ruphish_ui::localization::event_label(i18n, e)}
+                                    <option value=e
+                                        .key()>
+                                        {move || ruphish_ui::localization::event_label(
+                                            i18n,
+                                            e.label(),
+                                        )}
                                     </option>
                                 }
                             })
@@ -505,9 +502,11 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                         view! {
                             <h2 class="analysis-recipient-title">
                                 {move || {
-                                    array(&data.get(), "recipients")
-                                        .first()
-                                        .map(|r| text(r, "email"))
+                                    data.with(|v| {
+                                            v.as_ref()
+                                                .and_then(|v| v.recipients.first())
+                                                .map(|r| r.email.clone())
+                                        })
                                         .unwrap_or_else(|| {
                                             leptos_i18n::t_string!(i18n, ui.recipient_details).into()
                                         })
@@ -525,20 +524,26 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                                     <span>{move || label.get()}</span>
                                     <strong>
                                         {move || {
-                                            data.get()[if recipient.is_some() {
-                                                    "totals"
-                                                } else {
-                                                    "progression"
-                                                }][i]
-                                                .as_i64()
-                                                .unwrap_or(0)
+                                            data.with(|v| {
+                                                v.as_ref()
+                                                    .map_or(
+                                                        0,
+                                                        |v| {
+                                                            if recipient.is_some() {
+                                                                v.totals.values()[i]
+                                                            } else {
+                                                                v.progression.values()[i]
+                                                            }
+                                                        },
+                                                    )
+                                            })
                                         }}
                                     </strong>
                                     <Show when=move || recipient.is_none()>
                                         <small>
                                             {move || {
                                                 leptos_i18n::t_string!(
-                                                    i18n, messages.arg0_recorded_events, arg0 = (data.get()["totals"][i].as_i64().unwrap_or(0)).to_string()
+                                                    i18n, messages.arg0_recorded_events, arg0 = (data.with(|v| v.as_ref().map_or(0, |v| v.totals.values()[i]))).to_string()
                                                 )
                                             }}
                                         </small>
@@ -553,7 +558,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                     <p class="analysis-context">
                         {move || {
                             leptos_i18n::t_string!(
-                                i18n, messages.recipient_progression_within_the_selected_filters_opens_include_clicks_and_submi, arg0 = (data.get()["audience"]).to_string()
+                                i18n, messages.recipient_progression_within_the_selected_filters_opens_include_clicks_and_submi, arg0 = (data.with(|v| v.as_ref().map_or(0, |v| v.audience))).to_string()
                             )
                         }}
                     </p>
@@ -561,7 +566,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                 <ActivityChart
                     data=chart
                     interval=Signal::derive(move || {
-                        data.get()["bucket_seconds"].as_i64().unwrap_or(60).max(60)
+                        data.with(|v| v.as_ref().map_or(60, |v| v.bucket_seconds)).max(60)
                     })
                 /> <details class="analysis-explanation">
                     <summary>{tr!(ui.what_these_observations_mean)}</summary>
@@ -609,32 +614,34 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                             ]
                         >
                             {move || {
-                                array(&data.get(), "recipients")
+                                data.with(|v| {
+                                        v.as_ref().map(|v| v.recipients.clone()).unwrap_or_default()
+                                    })
                                     .into_iter()
                                     .map(|row| {
                                         let mut filter = filters.get();
                                         filter.offset = 0;
                                         let href = address(
-                                            &format!("/analysis/{id}/recipients/{}", row["id"]),
+                                            &format!("/analysis/{id}/recipients/{}", row.id),
                                             &filter,
                                             false,
                                         );
                                         view! {
                                             <tr>
-                                                <td>{text(&row, "email")}</td>
-                                                <td>{text(&row, "name")}</td>
+                                                <td>{row.email}</td>
+                                                <td>{row.name}</td>
                                                 <td>
                                                     {ruphish_ui::localization::delivery_label(
                                                         i18n,
-                                                        &text(&row, "delivery"),
+                                                        row.delivery.map_or("historical", |state| state.as_str()),
                                                     )}
                                                 </td>
                                                 {(0..5)
                                                     .map(|i| {
                                                         view! {
                                                             <td>
-                                                                {row["counts"][i].as_i64().unwrap_or(0)}
-                                                                {(i == 4 && row["historical_reported"] == true)
+                                                                {row.counts.values()[i]}
+                                                                {(i == 4 && row.historical_reported)
                                                                     .then(|| {
                                                                         view! {
                                                                             <small>{tr!(ui.legacy_report_time_unknown)}</small>
@@ -669,22 +676,24 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                             ]
                         >
                             {move || {
-                                array(&data.get(), "events")
+                                data.with(|v| {
+                                        v.as_ref().map(|v| v.events.clone()).unwrap_or_default()
+                                    })
                                     .into_iter()
                                     .map(|e| {
                                         view! {
                                             <tr>
-                                                <td>{minute(&e["time"])}</td>
+                                                <td>{minute(&Value::String(e.time))}</td>
                                                 <td>
                                                     {ruphish_ui::localization::event_label(
                                                         i18n,
-                                                        &text(&e, "kind"),
+                                                        e.kind.label(),
                                                     )}
                                                 </td>
-                                                <td>{text(&e, "source")}</td>
+                                                <td>{e.source.as_str()}</td>
                                                 <td>
-                                                    {e["password_present"]
-                                                        .as_bool()
+                                                    {e
+                                                        .password_present
                                                         .map(|v| {
                                                             if v {
                                                                 leptos_i18n::t_string!(i18n, ui.password_field_was_nonempty)

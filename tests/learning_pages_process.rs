@@ -280,18 +280,18 @@ fn learning_pages_redirect_without_tracking_survive_restart_and_reject_adversari
             .unwrap();
         assert!(!response.status().is_success());
     }
-    post(
+    let group = post(
         &admin,
         "/api/groups/",
         json!({"name":"Audience","targets":[{"email":"alice@example.test","first_name":"Alice"}]}),
     );
-    post(
+    let template = post(
         &admin,
         "/api/templates/",
         json!({"name":"Mail","subject":"Training","text":"Visit {{.URL}}"}),
     );
     let landing_source = "<!doctype html><html lang='en'><head><title>Landing for {{.FirstName}}</title><style>.lesson{color:navy}</style></head><body><main class='lesson'><section><h1>Hello {{.FirstName}}</h1><form action='https://outside.invalid'><input type='password' name='password'><button>Continue</button></form></section></main><script>unsafe()</script><img src='https://outside.invalid/pixel' onerror='unsafe()'></body></html>";
-    post(
+    let landing = post(
         &admin,
         "/api/pages/",
         json!({"name":"Landing","html":landing_source,"redirect_url":"https://example.test/default/{{.FirstName}}"}),
@@ -301,12 +301,12 @@ fn learning_pages_redirect_without_tracking_survive_restart_and_reject_adversari
         "/api/pages/preview",
         json!({"html":landing_source,"recipient":{"email":"alice@example.test","first_name":"Alice"}}),
     );
-    post(
+    let smtp = post(
         &admin,
         "/api/smtp/",
         json!({"name":"Local","host":"127.0.0.1:1","from_address":"training@example.test"}),
     );
-    let mut draft = json!({"name":"Learning campaign","url":origin,"groups":[{"name":"Audience"}],"template":{"name":"Mail"},"page":{"name":"Landing"},"smtp":{"name":"Local"},"policy":{"learning_page_id":page_id}});
+    let mut draft = json!({"name":"Learning campaign","url":origin,"selection":{"groups":[{"id":group["id"]}],"template":{"id":template["id"]},"page":{"id":landing["id"]},"smtp":{"id":smtp["id"]}},"policy":{"learning_page_id":page_id}});
     for policy in [
         json!({"learning_page_id":0}),
         json!({"learning_page_id":-1}),
@@ -474,7 +474,15 @@ fn learning_pages_redirect_without_tracking_survive_restart_and_reject_adversari
             .unwrap()
             .contains("Updated explanation")
     );
-    get(&admin, &format!("{campaign_path}/complete"));
+    assert_eq!(
+        client()
+            .post(format!("{admin}{campaign_path}/complete"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .send()
+            .unwrap()
+            .status(),
+        200
+    );
     assert_eq!(
         client()
             .delete(format!("{admin}/api/learning-pages/{page_id}"))
