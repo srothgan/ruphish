@@ -7,7 +7,7 @@ export const features = Object.freeze(source.features);
 export const ZERO = '0001-01-01T00:00:00Z';
 export const iso = seconds => new Date(seconds * 1000).toISOString();
 export const draftId = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-export const policy = { capture_credentials: true, capture_passwords: true, redirect_url: '' };
+export const policy = { redirect_url: '' };
 
 export function dataset(now) {
     if (!Number.isSafeInteger(now) || now <= 0) throw new Error('A fixed positive snapshot time is required');
