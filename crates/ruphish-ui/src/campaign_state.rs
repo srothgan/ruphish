@@ -97,19 +97,13 @@ impl Draft {
         self.page_request
     }
     /// Apply only complete defaults from the currently requested page; failures block review.
-    pub fn page_loaded(&mut self, request: (i64, u64), page: Option<&Value>) -> bool {
+    pub fn page_loaded(&mut self, request: (i64, u64), page: Option<(i64, &str)>) -> bool {
         if self.page_request != Some(request) || self.launch.is_some() {
             return false;
         }
         self.page_request = None;
-        if let Some(page) = page.filter(|page| {
-            page["id"].as_i64() == Some(request.0) && page["redirect_url"].is_string()
-        }) {
-            self.edit(|v| {
-                v["policy"] = json!({
-                    "redirect_url":page["redirect_url"]
-                });
-            });
+        if let Some((_, redirect_url)) = page.filter(|(id, _)| *id == request.0) {
+            self.edit(|v| v["policy"] = json!({"redirect_url":redirect_url}));
         }
         true
     }
@@ -256,7 +250,7 @@ mod tests {
         let page = d.select_page(7).unwrap();
         assert!(flow.update(&mut d, true, false, true, 0).is_none());
         assert!(d.launch("premature".into()).is_none());
-        d.page_loaded(page, Some(&json!({"id":7,"redirect_url":""})));
+        d.page_loaded(page, Some((7, "")));
         let (first, sent) = flow.update(&mut d, true, false, true, 0).unwrap();
         assert_eq!(sent["selection"]["page"]["id"], 7);
         assert!(flow.update(&mut d, true, false, true, 0).is_none());
@@ -332,10 +326,7 @@ mod tests {
         };
         let request = d.select_page(12).unwrap();
         assert!(!d.policy_ready());
-        assert!(d.page_loaded(
-            request,
-            Some(&json!({"id":12,"redirect_url":"https://training.example.test/finish"}))
-        ));
+        assert!(d.page_loaded(request, Some((12, "https://training.example.test/finish"))));
         assert_eq!(
             d.value["policy"],
             json!({"redirect_url":"https://training.example.test/finish"})
@@ -367,22 +358,22 @@ mod tests {
         d.edit(|v| v["name"] = json!("Keep this campaign name"));
         assert!(!d.page_loaded(old, None));
         assert_eq!(d.page_request, Some(current));
-        assert!(!d.page_loaded(old, Some(&json!({"id":1,"redirect_url":"old"}))));
-        assert!(d.page_loaded(current, Some(&json!({"id":2,"redirect_url":""}))));
+        assert!(!d.page_loaded(old, Some((1, "old"))));
+        assert!(d.page_loaded(current, Some((2, ""))));
         assert_eq!(d.value["name"], "Keep this campaign name");
         assert_eq!(d.value["policy"], json!({"redirect_url":""}));
         let retry = d.select_page(2).unwrap();
         assert!(!d.page_loaded(current, None));
         assert!(d.page_loaded(retry, None));
         assert!(!d.policy_ready());
-        for response in [json!({"id":2}), json!({"id":3,"redirect_url":"wrong page"})] {
+        for response in [None, Some((3, "wrong page"))] {
             let retry = d.select_page(2).unwrap();
-            assert!(d.page_loaded(retry, Some(&response)));
+            assert!(d.page_loaded(retry, response));
             assert!(!d.policy_ready());
         }
         let retry = d.select_page(2).unwrap();
         assert!(d.select_page(0).is_none());
-        assert!(!d.page_loaded(retry, Some(&json!({"id":2,"redirect_url":"late"}))));
+        assert!(!d.page_loaded(retry, Some((2, "late"))));
         assert!(d.policy_ready());
         assert_eq!(d.value["policy"], json!({"redirect_url":""}));
     }

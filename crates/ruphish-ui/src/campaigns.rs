@@ -525,10 +525,23 @@ fn load_page_defaults(
             &id.to_string(),
         )
         .await
-        .map(|(value, _)| value)
+        .and_then(|(resource, _)| match resource.content {
+            ruphish_contracts::resource_details::Content::Page(page) => {
+                Ok((resource.metadata.id, page.redirect_url))
+            }
+            _ => Err(api.invalid_read_err()),
+        })
         .map_err(|e| e.message);
         let accepted = draft
-            .try_update(|d| d.page_loaded(request, result.as_ref().ok()))
+            .try_update(|d| {
+                d.page_loaded(
+                    request,
+                    result
+                        .as_ref()
+                        .ok()
+                        .map(|(id, redirect)| (*id, redirect.as_str())),
+                )
+            })
             .unwrap_or(false);
         if accepted && !draft.with(Draft::policy_ready) {
             message.error(match result {

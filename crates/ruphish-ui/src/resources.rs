@@ -241,7 +241,7 @@ impl Family {
         }
     }
 }
-fn download(value: &Value, name: &str, message: Message) {
+fn download(value: &impl serde::Serialize, name: &str, message: Message) {
     let i18n = ruphish_ui::localization::use_i18n();
 
     match serde_json::to_vec_pretty(value) {
@@ -568,7 +568,11 @@ fn edit(
             if let Some(target) = target {
                 match crate::resource_queries::ResourceQueries::read_detail(api, family, &target)
                     .await
-                {
+                    .and_then(|(resource, revision)| {
+                        serde_json::to_value(resource)
+                            .map(|value| (value, revision))
+                            .map_err(|_| api.invalid_read_err())
+                    }) {
                     Ok((mut value, revision)) => {
                         load_error.set(None);
                         if duplicate.is_some() {
@@ -792,7 +796,10 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
         )
         .await
         .and_then(|(value, revision)| {
-            ResourceQueries::validate_detail(api, family, &value, (id != 0).then_some(id))?;
+            let resource =
+                ResourceQueries::decode_detail(api, family, value, (id != 0).then_some(id))?;
+            // Editing owns an incomplete JSON document, separate from confirmed read records.
+            let value = serde_json::to_value(resource).map_err(|_| api.invalid_read_err())?;
             Ok((value, revision))
         });
     editor.busy.set(false);
