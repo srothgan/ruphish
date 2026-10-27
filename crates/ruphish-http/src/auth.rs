@@ -1227,11 +1227,11 @@ fn role(role: &ruphish_application::auth::Role) -> Role {
 }
 fn wire(user: Account) -> Result<User, Rejection> {
     let timestamp = if user.last_login.starts_with("0001-01-01") || user.last_login.is_empty() {
-        Timestamp::default()
+        None
     } else {
-        Timestamp(
+        Some(Timestamp(
             datetime::parse_stored(&user.last_login).map_err(|_| auth_error(Error::Internal))?,
-        )
+        ))
     };
     Ok(User {
         id: user.identity.id,

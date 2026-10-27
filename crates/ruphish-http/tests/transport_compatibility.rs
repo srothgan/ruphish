@@ -8,7 +8,7 @@ use axum::{
 };
 use ruphish_contracts::legacy::{Envelope, Group, Header, SendingProfile};
 use ruphish_http::response;
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::time::Duration;
 
 struct Server(tokio::task::JoinHandle<()>);
@@ -29,14 +29,32 @@ async fn serve(router: Router) -> Result<(String, Server), Box<dyn std::error::E
 }
 
 #[tokio::test]
-async fn typed_api_values_survive_real_http_with_go_null_omission_integer_and_time_semantics() {
-    let fixture: Vec<Value> = serde_json::from_str(include_str!(
-        "../../../tests/fixtures/compatibility/wire.json"
-    ))
-    .unwrap();
+async fn typed_api_values_preserve_explicit_absence_collections_integer_and_time_precision() {
+    let fixture = [
+        (
+            "default-group",
+            json!({"id":0,"name":"","modified_date":null,"targets":[]}),
+        ),
+        (
+            "empty-targets",
+            json!({"id":9007199254740993_i64,"name":"Ada & <Team>","modified_date":"2020-01-02T03:04:05.1234Z","targets":[]}),
+        ),
+        (
+            "smtp-omitted-credentials",
+            json!({"id":0,"interface_type":"","name":"","host":"","from_address":"","ignore_cert_errors":false,"headers":[],"modified_date":null}),
+        ),
+        (
+            "smtp-headers-and-credentials",
+            json!({"id":7,"interface_type":"","name":"","host":"","username":"synthetic-user","password":"synthetic-password","from_address":"","ignore_cert_errors":false,"headers":[{"key":"X-Test","value":"{{.FirstName}}"}],"modified_date":null}),
+        ),
+        (
+            "escaped-envelope",
+            json!({"success":false,"message":"<tag> & \u{2028}\u{2029}","data":null}),
+        ),
+    ];
     let router = Router::new()
         .route(
-            "/nil-targets",
+            "/default-group",
             get(|| async { response::json(StatusCode::OK, &Group::default()) }),
         )
         .route(
@@ -47,8 +65,8 @@ async fn typed_api_values_survive_real_http_with_go_null_omission_integer_and_ti
                     &Group {
                         id: 9007199254740993,
                         name: "Ada & <Team>".into(),
-                        modified_date: time_value(),
-                        targets: Some(vec![]),
+                        modified_date: Some(time_value()),
+                        targets: vec![],
                     },
                 )
             }),
@@ -66,10 +84,10 @@ async fn typed_api_values_survive_real_http_with_go_null_omission_integer_and_ti
                         id: 7,
                         username: "synthetic-user".into(),
                         password: "synthetic-password".into(),
-                        headers: Some(vec![Header {
+                        headers: vec![Header {
                             key: "X-Test".into(),
                             value: "{{.FirstName}}".into(),
-                        }]),
+                        }],
                         ..SendingProfile::default()
                     },
                 )
@@ -94,28 +112,20 @@ async fn typed_api_values_survive_real_http_with_go_null_omission_integer_and_ti
         .timeout(Duration::from_secs(5))
         .build()
         .unwrap();
-    for case in fixture
-        .into_iter()
-        .filter(|case| !case["id"].as_str().unwrap().starts_with("imap-"))
-    {
-        let result = client
-            .get(format!("{base}/{}", case["id"].as_str().unwrap()))
-            .send()
-            .await
-            .unwrap();
+    for (id, expected) in fixture {
+        let result = client.get(format!("{base}/{id}")).send().await.unwrap();
         assert_eq!(result.status(), StatusCode::OK);
         assert_eq!(result.headers()["content-type"], "application/json");
         assert_eq!(result.headers()["access-control-allow-origin"], "*");
         let body = result.text().await.unwrap();
         assert_eq!(
             serde_json::from_str::<Value>(&body).unwrap(),
-            case["expected_json"],
-            "{}",
-            case["id"]
+            expected,
+            "{id}"
         );
         assert!(!body.contains("user_id"));
         assert!(!body.contains("SMTPId"));
-        if case["id"] == "escaped-envelope" {
+        if id == "escaped-envelope" {
             assert!(
                 body.contains("\\u003c")
                     && body.contains("\\u0026")

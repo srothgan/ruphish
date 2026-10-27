@@ -381,7 +381,9 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
                             visible.get(),
                             |row, key| match key {
                                 "count" => row.count.into(),
-                                "modified_date" => sort_timestamp(&row.modified_date),
+                                "modified_date" => {
+                                    sort_timestamp(row.modified_date.as_deref().unwrap_or_default())
+                                }
                                 _ => row.name.clone().into(),
                             },
                             |row| row.id.into(),
@@ -398,7 +400,7 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
                                     <td>{v.count}</td>
                                     <td>
                                         {crate::time_display::instant(
-                                            &Value::String(v.modified_date),
+                                            &serde_json::json!(v.modified_date),
                                         )}
                                     </td>
                                     <td>

@@ -81,7 +81,7 @@ Set `policy.learning_page_id` to an owned [learning page](learning-pages.md) to 
 
 ## Read results
 
-Legacy campaign detail includes identity, lifecycle timestamps, URL, selected resources, and available `results` and `timeline`. Empty results or timeline fields may be omitted. Result `id` is the opaque recipient tracking ID. Legacy network-location fields are not a source of participant identity; do not build new tracking around them.
+Campaign detail includes identity, lifecycle timestamps, URL, selected resources, and available `results` and `timeline`. Absent lifecycle dates return `null`, including `send_by_date` and `completed_date`. Empty results or timeline fields may be omitted. Result `id` is the opaque recipient tracking ID. Legacy network-location fields are not a source of participant identity; do not build new tracking around them.
 
 Legacy summary `stats` includes `total`, `sent`, `opened`, `clicked`, `submitted_data`, `email_reported`, and `error`. These use progression semantics. Use [analysis](analysis-and-exports.md) for observed event counts, filters, and exportable rows; do not combine the two models as if they were identical metrics.
 
@@ -91,7 +91,7 @@ For sorted directory pages, add `sort=name`, `status`, `total`, or `launch` and 
 
 Sorted continuations retain the boundary value and row identity, so deleting the boundary row does not invalidate traversal. Equal values use stable identities; absent audience/schedule values precede present values ascending. These are live queries, not a snapshot spanning requests: changes to names, status, schedules or audience sizes can move rows across the current boundary. Treat cursor strings as opaque and URL-encode them; malformed or mismatched sorted cursors return `400`.
 
-`/api/campaigns/overview` is a different execution-only read. It accepts numeric `after`, optional `limit` (default 50), and optional boolean `completed`. Its response contains header `items`, numeric/null `next_after`, and `mailer_enabled`. Headers include identity, status, schedule, URL, resource references, audience total, and available policy/domain-block metadata.
+`/api/campaigns/overview` is a different execution-only read. It accepts numeric `after`, optional `limit` (default 50), and optional boolean `completed`. Its response contains header `items`, numeric/null `next_after`, and `mailer_enabled`. Headers include identity, status, schedule, URL, resource references, audience total, and available policy/domain-block metadata. Unknown historical policy is `null`, including in the editable copy returned by `/api/campaigns/{id}/draft`; `{}` is not a policy value.
 
 ## Delivery and uncertain outcomes
 

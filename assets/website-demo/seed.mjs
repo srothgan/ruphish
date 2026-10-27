@@ -1,6 +1,6 @@
 // The SQL consumer of the same complete dataset used by the public browser demo.
 import { randomBytes } from 'node:crypto';
-import { dataset, DAY, ZERO, iso, features } from './dataset.mjs';
+import { dataset, DAY, iso, features } from './dataset.mjs';
 
 export function seed(db, now = Math.floor(Date.now() / 1000)) {
   const data = dataset(now);
@@ -40,7 +40,7 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
     }
     for (const { header: c, results } of data.campaigns) {
       const launch = Date.parse(c.launch_date) / 1000;
-      run('INSERT INTO campaigns(id,user_id,name,created_date,completed_date,template_id,page_id,status,url,smtp_id,launch_date,send_by_date) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', c.id, owner, c.name, iso(launch - DAY), c.status === 'Completed' ? iso(launch + DAY) : ZERO, c.template.id, c.page.id, c.status, c.url, c.smtp.id, c.launch_date, c.send_by_date);
+      run('INSERT INTO campaigns(id,user_id,name,created_date,completed_date,template_id,page_id,status,url,smtp_id,launch_date,send_by_date) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', c.id, owner, c.name, iso(launch - DAY), c.status === 'Completed' ? iso(launch + DAY) : '', c.template.id, c.page.id, c.status, c.url, c.smtp.id, c.launch_date, c.send_by_date ?? '');
       run('INSERT INTO ruphish_campaign_policy(campaign_id,redirect_url) VALUES(?,?)', c.id, c.policy.redirect_url);
       run('INSERT INTO ruphish_campaign_domains(campaign_id,domain_id) VALUES(?,?)', c.id, c.domain_id);
       for (const [ordinal, group] of data.groups.slice(0, 4).entries()) run('INSERT INTO ruphish_campaign_groups(campaign_id,ordinal,group_id) VALUES(?,?,?)', c.id, ordinal, group.id);

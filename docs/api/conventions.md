@@ -23,9 +23,9 @@ Resource names must be unique for new resources and renames within their owner a
 
 ## Time and missing values
 
-Legacy resource timestamps use timestamp strings. New analysis, domain, integration, and delivery fields may use UTC Unix seconds; each reference identifies them. Local scheduling inputs pair a local date/time with an IANA time-zone identifier. Do not apply the display locale's time zone to an API timestamp.
+Resource timestamps use UTC RFC3339 strings, with explicit `null` for absent or unknown dates. An account with no recorded login likewise returns `last_login: null`; the year-0001 sentinel is not an API representation of absence. New analysis, domain, integration, and delivery fields may use UTC Unix seconds; each reference identifies them. Local scheduling inputs pair a local date/time with an IANA time-zone identifier. Do not apply the display locale's time zone to an API timestamp.
 
-Some legacy lists serialize as `null` or omit fields when empty. In particular, campaign `results` and `timeline` can be absent. Do not assume every collection is always an array. New paginated APIs expose their continuation field explicitly.
+Resource `targets`, `attachments` and `headers` are arrays and return `[]` when empty, including immediately after saving. Collection inputs accept arrays, not `null`. Campaign `results` and `timeline` can still be absent. Do not assume every collection is always an array. New paginated APIs expose their continuation field explicitly.
 
 ## Pagination and retries
 

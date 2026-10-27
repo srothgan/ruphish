@@ -14,15 +14,9 @@ pub struct Envelope<T> {
     pub data: Option<T>,
 }
 
-/// An RFC3339 timestamp with Go's zero value and trimmed fractional seconds.
+/// An explicit RFC3339 instant, normalized to UTC on output.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Timestamp(pub datetime::Timestamp);
-
-impl Default for Timestamp {
-    fn default() -> Self {
-        Self(datetime::ZERO_TIMESTAMP)
-    }
-}
 
 impl Serialize for Timestamp {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -32,9 +26,7 @@ impl Serialize for Timestamp {
 
 impl<'de> Deserialize<'de> for Timestamp {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let Some(value) = Option::<String>::deserialize(deserializer)? else {
-            return Ok(Self::default());
-        };
+        let value = String::deserialize(deserializer)?;
         datetime::parse(&value)
             .map(Self)
             .map_err(serde::de::Error::custom)
@@ -55,7 +47,7 @@ pub struct Recipient {
     pub position: String,
 }
 
-/// A group response with a deliberate distinction between null and empty targets.
+/// Group fields used by resource writes and imports.
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Group {
@@ -64,9 +56,9 @@ pub struct Group {
     /// Group name.
     pub name: String,
     /// Last modification time.
-    pub modified_date: Timestamp,
-    /// None preserves a nil Go slice; Some(empty) preserves an empty slice.
-    pub targets: Option<Vec<Recipient>>,
+    pub modified_date: Option<Timestamp>,
+    /// Recipient records; an empty collection is an empty array.
+    pub targets: Vec<Recipient>,
 }
 
 /// Custom SMTP header without internal IDs.
@@ -100,10 +92,10 @@ pub struct SendingProfile {
     pub from_address: String,
     /// Existing certificate-verification setting.
     pub ignore_cert_errors: bool,
-    /// Null or populated custom headers.
-    pub headers: Option<Vec<Header>>,
+    /// Custom headers; empty when none are configured.
+    pub headers: Vec<Header>,
     /// Modification time.
-    pub modified_date: Timestamp,
+    pub modified_date: Option<Timestamp>,
 }
 
 /// Attachment bytes are base64 on the existing API, without persistence IDs.
@@ -135,9 +127,9 @@ pub struct EmailTemplate {
     /// Authoritative HTML source.
     pub html: String,
     /// Existing modification timestamp.
-    pub modified_date: Timestamp,
-    /// None preserves the existing nil-slice wire representation.
-    pub attachments: Option<Vec<Attachment>>,
+    pub modified_date: Option<Timestamp>,
+    /// Attachments; empty when none are configured.
+    pub attachments: Vec<Attachment>,
 }
 
 /// Landing-page wire contract.
@@ -153,7 +145,7 @@ pub struct LandingPage {
     /// Templated destination after submission.
     pub redirect_url: String,
     /// Last persisted change.
-    pub modified_date: Timestamp,
+    pub modified_date: Option<Timestamp>,
 }
 
 /// Serialize JSON using Go's HTML/line-separator escaping convention.

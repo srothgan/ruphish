@@ -4,7 +4,6 @@ import { starterContent } from './starter-content.mjs';
 
 export const DAY = 86400;
 export const features = Object.freeze(source.features);
-export const ZERO = '0001-01-01T00:00:00Z';
 export const iso = seconds => new Date(seconds * 1000).toISOString();
 export const draftId = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 export const policy = { redirect_url: '' };
@@ -76,7 +75,7 @@ export function dataset(now) {
         const status = c.ago < 0 ? 'Queued' : c.complete ? 'Completed' : 'In progress';
         const template = templates[index % templates.length];
         const header = {
-            id, name: c.name, status, launch_date: iso(launch), send_by_date: ZERO, url: domains[0].origin,
+            id, name: c.name, status, launch_date: iso(launch), send_by_date: null, url: domains[0].origin,
             template: { id: template.id, name: template.name }, page: { id: 1, name: pages[0].name }, smtp: { id: 1, name: smtp[0].name },
             subject: template.subject, profile_sender: smtp[0].from_address, template_sender: '',
             total: c.size + c.failed, policy, domain_id: 1, domain_block: null,

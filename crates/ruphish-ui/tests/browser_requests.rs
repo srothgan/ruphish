@@ -169,11 +169,7 @@ fn api_timestamp_values_reach_locale_display_without_losing_their_instant() {
             "19/10/2026, 04:53 (UTC+09:00)"
         );
     }
-    for value in [
-        serde_json::Value::Null,
-        json!(""),
-        json!("0001-01-01T00:00:00Z"),
-    ] {
+    for value in [serde_json::Value::Null, json!("")] {
         assert_eq!(instant(&value).unwrap(), None);
     }
     for value in [

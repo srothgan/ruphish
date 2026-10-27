@@ -976,6 +976,11 @@ fn independent_go_resource_observations_run_against_the_executable() {
         }
         normalize(&mut observed);
         let mut expected = case["json"].clone();
+        for field in ["targets", "attachments", "headers"] {
+            if expected.get(field).is_some_and(Value::is_null) {
+                expected[field] = json!([]);
+            }
+        }
         match id {
             // Approved recipient isolation: the independently captured Go result demonstrates the defect.
             "groups-shared-after-edit" => {
@@ -1286,6 +1291,28 @@ fn groups_reject_invalid_replacements_and_stale_revisions_without_losing_data() 
             .put(&path)
             .bearer_auth("synthetic-bootstrap-token")
             .json(&invalid)
+            .send()
+            .unwrap()
+            .status(),
+        400
+    );
+    assert_eq!(
+        client
+            .get(&path)
+            .bearer_auth("synthetic-bootstrap-token")
+            .send()
+            .unwrap()
+            .json::<Value>()
+            .unwrap(),
+        original
+    );
+    let mut null_targets = original.clone();
+    null_targets["targets"] = Value::Null;
+    assert_eq!(
+        client
+            .put(&path)
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&null_targets)
             .send()
             .unwrap()
             .status(),

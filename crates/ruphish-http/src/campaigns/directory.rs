@@ -65,7 +65,7 @@ pub(super) async fn list(
             name: row.name,
             status: row.status,
             total: row.total,
-            launch_date: row.launch.as_deref().map(date),
+            launch_date: row.launch.as_deref().and_then(date),
         })
         .collect();
     response(

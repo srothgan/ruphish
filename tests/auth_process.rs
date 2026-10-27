@@ -1562,7 +1562,20 @@ fn go_account_observations_match_except_approved_account_security_policies() {
     let cases: Vec<Value> =
         serde_json::from_str(include_str!("fixtures/authentication/http.json")).unwrap();
     let mut user_key = String::new();
-    for case in cases {
+    for mut case in cases {
+        fn absent_dates(value: &mut Value) {
+            match value {
+                Value::Array(rows) => rows.iter_mut().for_each(absent_dates),
+                Value::Object(fields) => {
+                    if fields.get("last_login") == Some(&json!("0001-01-01T00:00:00Z")) {
+                        fields.insert("last_login".into(), Value::Null);
+                    }
+                    fields.values_mut().for_each(absent_dates);
+                }
+                _ => {}
+            }
+        }
+        absent_dates(&mut case["json"]);
         let key = if case["key"] == "<created-user-key>" {
             &user_key
         } else {

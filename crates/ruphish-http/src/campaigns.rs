@@ -1,6 +1,7 @@
 //! Legacy campaign routes with explicit mutation permissions and additive UI metadata.
 mod directory;
 mod drafts;
+use crate::response::stored_date as date;
 use crate::{
     auth::{AuthState, Context, Rejection, failure},
     resources::{encode, error, response},
@@ -68,14 +69,6 @@ async fn slash(context: Context) -> Result<Response, Rejection> {
     )
         .into_response())
 }
-fn date(value: &str) -> String {
-    if value.is_empty() {
-        return "0001-01-01T00:00:00Z".into();
-    }
-    datetime::parse_stored(value)
-        .map(datetime::utc)
-        .unwrap_or_else(|_| value.replacen(' ', "T", 1))
-}
 fn encode_result(r: &app::RecipientResult) -> Value {
     json!({"id":r.rid,"email":r.recipient.email,"first_name":r.recipient.first_name,"last_name":r.recipient.last_name,"position":r.recipient.position,"status":r.status,"ip":r.ip,"latitude":r.latitude,"longitude":r.longitude,"reported":r.reported,"send_date":date(&r.send_date),"modified_date":date(&r.modified_date)})
 }
@@ -137,10 +130,7 @@ fn command(context: &Context, input: wire::Create) -> Result<app::Create, Reject
         id: s.id,
         revision: s.revision,
     };
-    let timestamp = |t: Option<Timestamp>| {
-        t.filter(|t| *t != Timestamp::default())
-            .map(|t| t.0.as_second())
-    };
+    let timestamp = |t: Option<Timestamp>| t.map(|t| t.0.as_second());
     let p = input.policy.unwrap_or_default();
     let mut result = app::Create {
         name: input.name,
@@ -606,7 +596,10 @@ async fn recipient_history(
                 .map(|e| reads::HistoryEvent {
                     id: e.id,
                     time: date(&e.time),
-                    at: datetime::parse_stored(&e.time).ok().map(|t| t.as_second()),
+                    at: datetime::parse_stored(&e.time)
+                        .ok()
+                        .filter(|t| *t != datetime::ZERO_TIMESTAMP)
+                        .map(|t| t.as_second()),
                     message: e.message.clone(),
                     details: e.details.clone()
                 })

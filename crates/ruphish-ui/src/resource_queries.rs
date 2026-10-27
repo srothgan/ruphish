@@ -14,7 +14,7 @@ use serde_json::Value;
 pub(crate) struct SummaryRow {
     pub id: i64,
     pub name: String,
-    pub modified_date: String,
+    pub modified_date: Option<String>,
     pub count: usize,
 }
 

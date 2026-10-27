@@ -4,18 +4,18 @@ use ruphish_domain::datetime::{self, Error, TimeZone, Timestamp};
 use serde::Serialize;
 use serde_json::Value;
 
-/// Missing legacy dates are different from invalid timestamps.
+/// Explicitly absent dates are different from invalid timestamps.
 pub fn instant(value: &Value) -> Result<Option<Timestamp>, Error> {
     let parsed = match value {
         Value::Null => return Ok(None),
-        Value::String(value) if value.is_empty() || value == datetime::ZERO => return Ok(None),
+        Value::String(value) if value.is_empty() => return Ok(None),
         Value::String(value) => datetime::parse_stored(value)?,
         Value::Number(value) => {
             datetime::from_seconds(value.as_i64().ok_or(Error::InvalidInstant)?)?
         }
         _ => return Err(Error::InvalidInstant),
     };
-    Ok((parsed != datetime::ZERO_TIMESTAMP).then_some(parsed))
+    Ok(Some(parsed))
 }
 
 /// Parse a local filter edit, preserving the original exact instant when the
@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn missing_invalid_and_real_epoch_values_remain_distinct() {
-        for value in [Value::Null, json!(""), json!(datetime::ZERO)] {
+        for value in [Value::Null, json!("")] {
             assert_eq!(instant(&value).unwrap(), None);
         }
         for value in [

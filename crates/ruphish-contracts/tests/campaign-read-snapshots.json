@@ -92,7 +92,7 @@
         "redirect_url": ""
       },
       "profile_sender": "Training <training@example.test>",
-      "send_by_date": "0001-01-01T00:00:00Z",
+      "send_by_date": null,
       "smtp": {
         "id": 1,
         "name": "Local inbox only"

@@ -274,7 +274,7 @@ fn incomplete_content_imports_remain_drafts_and_invalid_imports_are_rejected() {
     .unwrap();
     assert_eq!(mail.fields["name"], "");
     assert_eq!(mail.fields["envelope_sender"], "");
-    assert!(mail.fields["attachments"].is_null());
+    assert_eq!(mail.fields["attachments"], json!([]));
     assert!(
         mail.review
             .notes

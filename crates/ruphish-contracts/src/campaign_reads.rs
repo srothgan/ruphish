@@ -66,9 +66,11 @@ pub struct Header {
     /// Lifecycle state.
     pub status: String,
     /// Preserved timestamp.
-    pub launch_date: String,
-    /// Distribution end; Go zero time when absent.
-    pub send_by_date: String,
+    #[serde(deserialize_with = "nullable")]
+    pub launch_date: Option<String>,
+    /// Distribution end; null when absent.
+    #[serde(deserialize_with = "nullable")]
+    pub send_by_date: Option<String>,
     /// Public campaign URL.
     pub url: String,
     /// Selected email template.
@@ -175,7 +177,8 @@ pub struct Activity {
     /// Event identity.
     pub id: i64,
     /// Preserved timestamp.
-    pub time: String,
+    #[serde(deserialize_with = "nullable")]
+    pub time: Option<String>,
     /// Administrator-supplied recipient address.
     pub email: String,
     /// Event kind.
@@ -209,7 +212,8 @@ pub struct HistoryEvent {
     /// Event identity.
     pub id: i64,
     /// Preserved timestamp.
-    pub time: String,
+    #[serde(deserialize_with = "nullable")]
+    pub time: Option<String>,
     /// UTC seconds if parseable.
     #[serde(deserialize_with = "nullable")]
     pub at: Option<i64>,

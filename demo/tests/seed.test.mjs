@@ -59,6 +59,7 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
             assert.equal(response.status, 200, path);
             const value = await response.json();
             if (path === '/api/overview') assert.equal(value.recent.length, 4);
+            if (path === '/api/campaigns/3/delivery') assert.equal(value.campaign.send_by_date, null);
             if (path.includes('posture')) assert.equal(value.delivered, 937);
         }
         const memory = new Map();

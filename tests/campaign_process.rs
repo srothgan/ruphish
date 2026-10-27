@@ -172,7 +172,7 @@ fn normalize(value: &mut Value) {
         Value::Object(object) => {
             for (key, value) in object.iter_mut() {
                 if matches!(key.as_str(), "created_date" | "modified_date" | "time")
-                    || (key == "completed_date" && value != "0001-01-01T00:00:00Z")
+                    || (key == "completed_date" && !value.is_null())
                 {
                     *value = json!("<time>");
                 } else if matches!(key.as_str(), "latitude" | "longitude") {
@@ -310,7 +310,13 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
                     o.remove("capture_credentials");
                     o.remove("capture_passwords");
                     for (k, v) in o {
-                        if k == "html"
+                        if matches!(k.as_str(), "targets" | "attachments" | "headers")
+                            && v.is_null()
+                        {
+                            *v = json!([]);
+                        } else if v == "0001-01-01T00:00:00Z" {
+                            *v = Value::Null;
+                        } else if k == "html"
                             && v == "<html><head></head><body><p>Training</p></body></html>"
                         {
                             *v = json!("<p>Training</p>");
@@ -823,6 +829,8 @@ fn reviewed_campaign_preview_test_and_duplicate_use_exact_owned_resources_withou
             .is_empty()
     );
     let created = post(&base, "/api/campaigns/", &campaign);
+    assert!(created["send_by_date"].is_null());
+    assert!(created["completed_date"].is_null());
     let draft = read(&base, &format!("/api/campaigns/{}/draft", created["id"]));
     assert_eq!(draft["policy"], review["policy"]);
     assert_eq!(read(&base, &page_url), defaults);

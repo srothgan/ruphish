@@ -21,7 +21,8 @@ pub enum Kind {
 struct Detail<T> {
     id: i64,
     name: String,
-    modified_date: String,
+    #[serde(deserialize_with = "crate::nullable")]
+    modified_date: Option<String>,
     #[serde(flatten)]
     content: T,
 }

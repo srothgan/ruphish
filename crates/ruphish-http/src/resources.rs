@@ -266,7 +266,6 @@ fn profile(p: wire::SendingProfile) -> app::Profile {
         ignore_cert_errors: p.ignore_cert_errors,
         headers: p
             .headers
-            .unwrap_or_default()
             .into_iter()
             .map(|h| app::Header {
                 key: h.key,
@@ -456,7 +455,7 @@ pub(crate) fn response<T: serde::Serialize>(
     Ok(response)
 }
 pub(crate) fn encode(r: &Resource) -> Value {
-    let mut value = json!({"id":r.id,"name":r.name,"modified_date":r.modified_date});
+    let mut value = json!({"id":r.id,"name":r.name,"modified_date":crate::response::stored_date(&r.modified_date)});
     let fields = match &r.content {
         Content::Group(targets) => {
             json!({"targets":targets.iter().map(|t|json!({"email":t.email,"first_name":t.first_name,"last_name":t.last_name,"position":t.position})).collect::<Vec<_>>()})
@@ -501,7 +500,6 @@ fn decode(kind: Kind, bytes: &[u8]) -> Result<Resource, Rejection> {
                 modified_date: String::new(),
                 content: Content::Group(
                     v.targets
-                        .unwrap_or_default()
                         .into_iter()
                         .map(|t| app::Recipient {
                             email: t.email,
@@ -526,7 +524,6 @@ fn decode(kind: Kind, bytes: &[u8]) -> Result<Resource, Rejection> {
                     envelope_sender: v.envelope_sender,
                     attachments: v
                         .attachments
-                        .unwrap_or_default()
                         .into_iter()
                         .map(|a| app::Attachment {
                             name: a.name,
@@ -577,7 +574,6 @@ fn decode(kind: Kind, bytes: &[u8]) -> Result<Resource, Rejection> {
                     ignore_cert_errors: v.ignore_cert_errors,
                     headers: v
                         .headers
-                        .unwrap_or_default()
                         .into_iter()
                         .map(|h| app::Header {
                             key: h.key,
@@ -666,14 +662,6 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
             .map_err(error)?;
     }
     let value = decode(kind, &body)?;
-    let nullable = match kind {
-        Kind::Template => Some("attachments"),
-        Kind::Profile => Some("headers"),
-        _ => None,
-    };
-    let preserve_nil = nullable.is_some_and(|field| {
-        serde_json::from_slice::<Value>(&body).is_ok_and(|v| v[field].is_null())
-    });
     if id.is_some_and(|id| value.id != id) {
         return Err(failure(
             if kind == Kind::Group {
@@ -717,9 +705,6 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
     if let Some(warnings) = warnings {
         wire["warnings"] = json!(warnings);
     }
-    if preserve_nil && let Some(field) = nullable {
-        wire[field] = Value::Null;
-    }
     response(
         if id.is_some() {
             StatusCode::OK
@@ -753,9 +738,9 @@ async fn delete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejec
 }
 fn summary(s: &app::Summary, kind: Kind) -> Value {
     if kind == Kind::Group {
-        json!({"id":s.id,"name":s.name,"modified_date":s.modified_date,"num_targets":s.num_targets})
+        json!({"id":s.id,"name":s.name,"modified_date":crate::response::stored_date(&s.modified_date),"num_targets":s.num_targets})
     } else {
-        json!({"id":s.id,"name":s.name,"modified_date":s.modified_date,"active_campaigns":s.active_campaigns})
+        json!({"id":s.id,"name":s.name,"modified_date":crate::response::stored_date(&s.modified_date),"active_campaigns":s.active_campaigns})
     }
 }
 async fn summaries(context: Context) -> Result<Response, Rejection> {

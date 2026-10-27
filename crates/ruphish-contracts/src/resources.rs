@@ -18,7 +18,8 @@ pub struct GroupSummary {
     /// Saved name.
     pub name: String,
     /// Modification instant in the preserved wire format.
-    pub modified_date: String,
+    #[serde(deserialize_with = "crate::nullable")]
+    pub modified_date: Option<String>,
     /// Confirmed recipient count.
     pub num_targets: usize,
 }
@@ -40,7 +41,8 @@ pub struct ResourceSummary {
     /// Saved name.
     pub name: String,
     /// Modification instant in the preserved wire format.
-    pub modified_date: String,
+    #[serde(deserialize_with = "crate::nullable")]
+    pub modified_date: Option<String>,
     /// Unfinished campaigns referencing this resource.
     pub active_campaigns: usize,
 }

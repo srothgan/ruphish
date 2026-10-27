@@ -21,7 +21,7 @@ sidebar:
 | `from_address` | Sender mailbox, optionally with a display name |
 | `username`, `password` | Optional SMTP credentials; treat returned profile data as sensitive |
 | `ignore_cert_errors` | Whether to bypass SMTP certificate verification; keep false for normal use |
-| `headers` | Array of objects containing `key` and `value`; may be null in legacy data |
+| `headers` | Array of objects containing `key` and `value`; `[]` when empty |
 
 The response adds `id` and `modified_date`. PUT requires a matching `id`; use `If-Match` to prevent overwriting a concurrent edit.
 
