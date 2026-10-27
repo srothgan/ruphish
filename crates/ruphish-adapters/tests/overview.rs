@@ -153,7 +153,7 @@ async fn snapshot_tracks_queued_launches_expiry_current_delivery_issues_and_inve
 
     for (id, status, at) in [
         (3, "Queued", NOW + 10),
-        (4, "Scheduled", NOW + 50),
+        (4, "Queued", NOW + 50),
         (5, "Queued", NOW - 1),
         (6, "Completed", NOW + 20),
         (7, "In progress", NOW - 100),
