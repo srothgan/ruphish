@@ -50,6 +50,8 @@ pub struct MailboxConfig {
     pub password: String,
     /// TLS requirement.
     pub tls: bool,
+    /// Explicitly skip server certificate chain and hostname verification; TLS is still required.
+    pub ignore_cert_errors: bool,
     /// Selected IMAP folder.
     pub folder: String,
     /// Allowed report sender domain.

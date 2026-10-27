@@ -170,6 +170,162 @@ fn recipient_csv_template_imports_reviews_and_persists_without_accepting_bad_row
 }
 
 #[test]
+fn smtp_cram_negotiates_and_delivers_without_fallback_or_secret_diagnostics() {
+    use std::io::{BufRead, BufReader};
+    let directory = workspace();
+    let mut config = configuration();
+    config["logging"]["level"] = json!("trace");
+    write_config(directory.path(), &config);
+    let mut process = Process::start(directory.path(), "admin");
+    let base = ready(&mut process);
+    unlock(directory.path());
+    // RFC 2195's independent vector; peers never call the production HMAC helper.
+    const RESPONSE: &str = "dGltIGI5MTNhNjAyYzdlZGE3YTQ5NWI0ZTZlNzMzNGQzODkw";
+    for (capabilities, challenge, result, send, success) in [
+        (
+            "CRAM-MD5",
+            "PDE4OTYuNjk3MTcwOTUyQHBvc3RvZmZpY2UucmVzdG9uLm1jaS5uZXQ+",
+            "235 Accepted",
+            false,
+            true,
+        ),
+        (
+            "LOGIN PLAIN CRAM-MD5",
+            "PDE4OTYuNjk3MTcwOTUyQHBvc3RvZmZpY2UucmVzdG9uLm1jaS5uZXQ+",
+            "235 Accepted",
+            true,
+            true,
+        ),
+        ("PLAIN LOGIN", "", "235 Accepted", false, true),
+        ("LOGIN", "", "235 Accepted", false, true),
+        ("CRAM-MD5 PLAIN", "***", "235 Accepted", true, false),
+        ("CRAM-MD5 PLAIN", "", "235 Accepted", false, false),
+        (
+            "CRAM-MD5 LOGIN",
+            "PDE4OTYuNjk3MTcwOTUyQHBvc3RvZmZpY2UucmVzdG9uLm1jaS5uZXQ+",
+            "535 rejected-tanstaaftanstaaf",
+            true,
+            false,
+        ),
+        (
+            "CRAM-MD5",
+            "PDE4OTYuNjk3MTcwOTUyQHBvc3RvZmZpY2UucmVzdG9uLm1jaS5uZXQ+",
+            "334 unexpected challenge",
+            false,
+            false,
+        ),
+    ] {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let peer = std::thread::spawn(move || {
+            let (socket, _) = listener.accept().unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(10)))
+                .unwrap();
+            let mut peer = BufReader::new(socket);
+            peer.get_mut().write_all(b"220 fixture ESMTP\r\n").unwrap();
+            let mut authenticating = 0;
+            let mut authenticated = false;
+            let mut data = Vec::new();
+            loop {
+                let mut line = String::new();
+                if peer.read_line(&mut line).unwrap_or(0) == 0 {
+                    break;
+                }
+                let reply = if authenticating == 1 {
+                    assert_eq!(line.trim_end(), RESPONSE);
+                    authenticating = 0;
+                    authenticated = result.starts_with("235");
+                    result.to_owned()
+                } else if authenticating == 2 {
+                    assert_eq!(line.trim_end(), "dGlt");
+                    authenticating = 3;
+                    "334 UGFzc3dvcmQ6".into()
+                } else if authenticating == 3 {
+                    assert_eq!(line.trim_end(), "dGFuc3RhYWZ0YW5zdGFhZg==");
+                    authenticating = 0;
+                    authenticated = true;
+                    "235 Accepted".into()
+                } else if line.starts_with("EHLO ") {
+                    format!("250-fixture\r\n250 AUTH {capabilities}")
+                } else if line == "AUTH CRAM-MD5\r\n" {
+                    authenticating = 1;
+                    format!("334 {challenge}")
+                } else if capabilities == "PLAIN LOGIN" && line.starts_with("AUTH PLAIN ") {
+                    assert_eq!(line.trim_end(), "AUTH PLAIN AHRpbQB0YW5zdGFhZnRhbnN0YWFm");
+                    authenticated = true;
+                    "235 Accepted".into()
+                } else if capabilities == "LOGIN" && line == "AUTH LOGIN\r\n" {
+                    authenticating = 2;
+                    "334 VXNlcm5hbWU6".into()
+                } else if line == "QUIT\r\n" {
+                    peer.get_mut().write_all(b"221 Bye\r\n").unwrap();
+                    break;
+                } else {
+                    assert!(
+                        authenticated,
+                        "no fallback AUTH or delivery after failed authentication"
+                    );
+                    if line == "DATA\r\n" {
+                        peer.get_mut().write_all(b"354 Content\r\n").unwrap();
+                        loop {
+                            let mut line = String::new();
+                            assert!(peer.read_line(&mut line).unwrap() > 0);
+                            if line == ".\r\n" {
+                                break;
+                            }
+                            data.extend_from_slice(line.as_bytes());
+                        }
+                    } else {
+                        assert!(
+                            line == "NOOP\r\n"
+                                || line.starts_with("MAIL FROM:")
+                                || line.starts_with("RCPT TO:")
+                        );
+                    }
+                    "250 OK".into()
+                };
+                peer.get_mut()
+                    .write_all(format!("{reply}\r\n").as_bytes())
+                    .unwrap();
+            }
+            data
+        });
+        let profile = json!({"host":address.to_string(),"from_address":"sender@example.test","username":"tim","password":"tanstaaftanstaaf"});
+        let (path, body) = if send {
+            (
+                "send_test_email",
+                json!({"smtp":profile,"email":"recipient@example.test","first_name":"Alice"}),
+            )
+        } else {
+            ("test_connection", profile)
+        };
+        let response = client()
+            .post(format!("{base}/api/util/{path}"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&body)
+            .send()
+            .unwrap();
+        let status = response.status();
+        let body = response.text().unwrap();
+        assert_eq!(status.is_success(), success, "{body}");
+        assert!(!body.contains("tanstaaftanstaaf") && !body.contains(RESPONSE));
+        let message = peer.join().unwrap();
+        assert_eq!(!message.is_empty(), send && success);
+        if send && success {
+            assert!(
+                String::from_utf8(message)
+                    .unwrap()
+                    .contains("recipient@example.test")
+            );
+        }
+    }
+    process.stop();
+    let log = std::fs::read_to_string(directory.path().join("server.log")).unwrap();
+    assert!(!log.contains("tanstaaftanstaaf") && !log.contains(RESPONSE));
+}
+
+#[test]
 fn smtp_starttls_verifies_certificates_before_authentication_and_reports_rejection() {
     use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
     use std::io::{BufRead, BufReader};
@@ -227,6 +383,14 @@ fn smtp_starttls_verifies_certificates_before_authentication_and_reports_rejecti
             if encrypted.read_line(&mut line).is_err() || line.is_empty() {
                 return false;
             }
+            assert!(line.starts_with("EHLO "));
+            encrypted
+                .get_mut()
+                .write_all(b"250-loopback\r\n250 AUTH PLAIN\r\n")
+                .unwrap();
+            encrypted.get_mut().flush().unwrap();
+            line.clear();
+            encrypted.read_line(&mut line).unwrap();
             assert!(line.starts_with("EHLO "));
             encrypted
                 .get_mut()

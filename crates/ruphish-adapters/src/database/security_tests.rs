@@ -58,12 +58,78 @@ fn mailbox(name: &str) -> MailboxEdit {
         username: "synthetic".into(),
         password: Some("synthetic-password".into()),
         tls: true,
+        ignore_cert_errors: false,
         folder: "INBOX".into(),
         restrict_domain: String::new(),
         delete_reported: false,
         frequency: 60,
         revision: None,
     }
+}
+
+#[tokio::test]
+async fn mailbox_certificate_edits_fence_claims_without_resetting_receipts() {
+    let (_dir, db, pool) = fixture().await;
+    let repo = db.integrations();
+    let worker = Integrations::new(pool.clone(), Policy::default());
+    let mut initial = mailbox("Certificate policy");
+    initial.ignore_cert_errors = true;
+    let saved = repo.save_mailbox(admin(), None, initial).await.unwrap();
+    sqlx::query("UPDATE ruphish_mailboxes SET initialized=1,uidvalidity=41,last_uid=12 WHERE id=?")
+        .bind(saved.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO ruphish_mailbox_messages VALUES(?,41,12,'matched','passed',0)")
+        .bind(saved.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let claim = worker.claim_mailbox(1_800_000_000).await.unwrap().unwrap();
+    assert!(claim.config.ignore_cert_errors);
+    let mut edit = mailbox("Certificate policy");
+    edit.revision = Some(saved.revision);
+    edit.password = None;
+    let updated = repo
+        .save_mailbox(admin(), Some(saved.id), edit)
+        .await
+        .unwrap();
+    assert!(!updated.ignore_cert_errors);
+    assert!(worker.mailbox_current(&claim.config).await.is_err());
+    worker
+        .finish_mailbox(&claim, "passed", 1_800_000_100, 1_800_000_001)
+        .await
+        .unwrap();
+    let next = worker.claim_mailbox(1_800_000_002).await.unwrap().unwrap();
+    assert!(!next.config.ignore_cert_errors);
+    assert!(next.config.initialized);
+    assert_eq!((next.config.validity, next.config.last), (41, 12));
+    assert_eq!(
+        worker
+            .pending_acknowledgements(&next.config, 41)
+            .await
+            .unwrap(),
+        vec![12]
+    );
+    assert!(
+        repo.save_mailbox(admin(), Some(saved.id), {
+            let mut stale = mailbox("Certificate policy");
+            stale.revision = Some(saved.revision);
+            stale.ignore_cert_errors = true;
+            stale
+        })
+        .await
+        .is_err()
+    );
+    assert!(
+        !repo
+            .mailbox(admin(), saved.id)
+            .await
+            .unwrap()
+            .ignore_cert_errors
+    );
+    pool.close().await;
+    db.close().await;
 }
 
 #[tokio::test]

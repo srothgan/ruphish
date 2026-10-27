@@ -353,6 +353,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         username: "service".into(),
         password: Some("fixture-mail-secret".into()),
         tls: true,
+        ignore_cert_errors: false,
         folder: "INBOX".into(),
         restrict_domain: String::new(),
         delete_reported: false,
@@ -419,6 +420,20 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
             .is_err(),
         "duplicate names are rejected"
     );
+    let mut bypass = mail_edit(Some(mailbox.revision));
+    bypass.ignore_cert_errors = true;
+    let mailbox = integrations
+        .save_mailbox(actor, Some(mailbox.id), bypass)
+        .await
+        .unwrap();
+    assert!(mailbox.ignore_cert_errors);
+    assert!(
+        integrations
+            .mailbox(actor, mailbox.id)
+            .await
+            .unwrap()
+            .ignore_cert_errors
+    );
     let (a, b) = tokio::join!(
         integrations.save_mailbox(actor, Some(mailbox.id), mail_edit(Some(mailbox.revision))),
         integrations.save_mailbox(actor, Some(mailbox.id), mail_edit(Some(mailbox.revision)))
@@ -431,6 +446,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     integrations.poll_mailboxes().await.unwrap();
     let mailbox = integrations.mailbox(actor, mailbox.id).await.unwrap();
     assert!(!mailbox.running);
+    assert!(!mailbox.ignore_cert_errors);
     assert_eq!(mailbox.history.len(), 1);
     assert!(mailbox.history[0].finished.is_some());
     assert_ne!(
@@ -1877,6 +1893,10 @@ async fn mysql_legacy_queue_quarantines_ambiguity_and_retains_service_configurat
     let (mut inspector, config) = fixture().await;
     latest_legacy(&mut inspector).await;
     sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id) VALUES(17,'legacy','preserved-hash','preserved-key',1); INSERT INTO pages(id,user_id,name,html,capture_credentials,capture_passwords,redirect_url) VALUES(10,17,'Page','<p>Training</p>',1,1,''); INSERT INTO campaigns(id,user_id,name,page_id,status,url) VALUES(13,17,'Queue',10,'In progress','https://training.example.test'); INSERT INTO results(id,campaign_id,user_id,r_id,email,status) VALUES(41,13,17,'pending','pending@example.test','Sending'),(42,13,17,'inflight','inflight@example.test','Sending'),(43,13,17,'duplicate','a@example.test','Sending'),(44,13,17,'duplicate','b@example.test','Sending'); INSERT INTO mail_logs(id,campaign_id,user_id,send_date,send_attempt,r_id,processing) VALUES(51,13,17,'2026-01-01 00:00:00',2,'pending',0),(52,13,17,'2026-01-01 01:00:00',3,'inflight',1),(53,13,17,'2026-01-01 02:00:00',0,'duplicate',0),(54,13,17,'2026-01-01 03:00:00',99,'missing',0); INSERT INTO imap(user_id,host,port,username,password,tls,enabled,folder,restrict_domain,delete_reported_campaign_email,imap_freq,modified_date,last_login) VALUES(17,'imap.example.test',993,'service','service-secret',1,1,'Reports','example.test',0,120,'2020-01-01 00:00:00','2020-01-02 00:00:00')").execute(&mut inspector).await.unwrap();
+    sqlx::query("UPDATE imap SET ignore_cert_errors=1")
+        .execute(&mut inspector)
+        .await
+        .unwrap();
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
         .unwrap();
@@ -1928,7 +1948,7 @@ async fn mysql_legacy_queue_quarantines_ambiguity_and_retains_service_configurat
     let mailboxes = db.integrations().mailboxes(actor).await.unwrap();
     assert_eq!(mailboxes.len(), 1);
     let mailbox = &mailboxes[0];
-    assert!(mailbox.enabled && mailbox.has_password && mailbox.tls);
+    assert!(mailbox.enabled && mailbox.has_password && mailbox.tls && mailbox.ignore_cert_errors);
     assert_eq!(mailbox.folder, "Reports");
     assert_eq!(mailbox.frequency, 120);
     assert_eq!(mailbox.last_login, "2020-01-02T00:00:00Z");

@@ -411,5 +411,6 @@
   ["index", "users", "PRIMARY", 1, "id", 0, null, "BTREE", "YES", null],
   ["index", "users", "users_0", 1, "username", 0, null, "BTREE", "YES", null],
   ["index", "users", "users_1", 1, "api_key", 0, null, "BTREE", "YES", null],
-  ["index", "webhooks", "PRIMARY", 1, "id", 0, null, "BTREE", "YES", null]
+  ["index", "webhooks", "PRIMARY", 1, "id", 0, null, "BTREE", "YES", null],
+  ["column", "ruphish_mailboxes", "ignore_cert_errors", 26, "tinyint(1)", "NO", "0", "", "", null]
 ]

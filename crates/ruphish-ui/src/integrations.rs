@@ -150,7 +150,7 @@ impl Record {
                 json!({"name":v.name,"url":v.url,"is_active":v.is_active,"revision":v.revision})
             }
             Self::Mailbox(v) => {
-                json!({"name":v.name,"enabled":v.enabled,"host":v.host,"port":v.port,"username":v.username,"tls":v.tls,"folder":v.folder,"restrict_domain":v.restrict_domain,"delete_reported":v.delete_reported,"frequency":v.frequency,"revision":v.revision})
+                json!({"name":v.name,"enabled":v.enabled,"host":v.host,"port":v.port,"username":v.username,"tls":v.tls,"ignore_cert_errors":v.ignore_cert_errors,"folder":v.folder,"restrict_domain":v.restrict_domain,"delete_reported":v.delete_reported,"frequency":v.frequency,"revision":v.revision})
             }
         }
     }
@@ -408,7 +408,7 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
     let initial = if kind.webhook() {
         json!({"name":"","url":"","is_active":true,"revision":null})
     } else {
-        json!({"name":"","enabled":true,"host":"","port":993,"username":"","tls":true,"folder":"INBOX","restrict_domain":"","delete_reported":false,"frequency":60,"revision":null})
+        json!({"name":"","enabled":true,"host":"","port":993,"username":"","tls":true,"ignore_cert_errors":false,"folder":"INBOX","restrict_domain":"","delete_reported":false,"frequency":60,"revision":null})
     };
     let draft = RwSignal::new(initial.clone());
     let baseline = RwSignal::new(initial);
@@ -602,6 +602,14 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                                     "tls",
                                     trs!(ui.use_implicit_tls_otherwise_starttls_is_required),
                                 )}
+                                {checkbox(
+                                    draft,
+                                    "ignore_cert_errors",
+                                    trs!(ui.skip_certificate_verification),
+                                )}
+                                <p class="field-hint">
+                                    {tr!(ui.skip_certificate_verification_help)}
+                                </p>
                             </section>
                             <section class="resource-section">
                                 <h2>{tr!(ui.service_account)}</h2>
@@ -919,6 +927,16 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                                             leptos_i18n::t_string!(
                                                 i18n, messages.transport_port, transport = if mailbox.get().is_some_and(|v| v.tls) { "TLS" } else { "STARTTLS" }, port = mailbox.get().map(|v| v.port.to_string()).unwrap_or_default()
                                             )
+                                        }}
+                                    </dd>
+                                    <dt>{tr!(ui.certificate_verification)}</dt>
+                                    <dd>
+                                        {move || {
+                                            if mailbox.get().is_some_and(|v| v.ignore_cert_errors) {
+                                                trs!(ui.certificate_verification_skipped)
+                                            } else {
+                                                trs!(ui.certificate_verification_enabled)
+                                            }
                                         }}
                                     </dd>
                                     <dt>{tr!(ui.check_interval)}</dt>

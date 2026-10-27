@@ -16,6 +16,11 @@
     "native_name": "Deutsch"
   },
   "ui": {
+    "skip_certificate_verification": "Zertifikatsprüfung überspringen",
+    "skip_certificate_verification_help": "Für kontrollierte Testumgebungen. Die Verbindung bleibt verschlüsselt, aber die Identität des Mailservers wird nicht überprüft.",
+    "certificate_verification": "Zertifikatsprüfung",
+    "certificate_verification_skipped": "Übersprungen",
+    "certificate_verification_enabled": "Aktiviert",
     "campaign_steps": "Kampagnenschritte",
     "learning_pages": "Lernseiten",
     "learning_page": "Lernseite",
@@ -1058,7 +1063,7 @@
     "campaign_invalid": "Prüfen Sie die Kampagneneinstellungen.",
     "launch_key_invalid": "Die Startkennung ist ungültig. Öffnen Sie den Kampagnenentwurf erneut.",
     "delivery_action_invalid": "Diese Versandaktion ist ungültig. Aktualisieren Sie den Versandstatus.",
-    "mailbox_tls_required": "Das Zertifikat des Mailservers muss geprüft werden.",
+    "mailbox_tls_required": "Der Mailserver muss TLS unterstützen.",
     "mailbox_port_invalid": "Wählen Sie einen gültigen Mailserver-Port.",
     "analysis_filter_invalid": "Prüfen Sie die gewählten Auswertungsfilter.",
     "overview_window_invalid": "Wählen Sie einen verfügbaren Auswertungszeitraum.",

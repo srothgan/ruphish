@@ -5,7 +5,6 @@ use lettre::{
     address::Envelope,
     transport::smtp::{
         Error as SmtpError,
-        authentication::{Credentials, Mechanism},
         client::{AsyncSmtpConnection, TlsParameters},
         commands::{Data, Mail, Rcpt},
         extension::{ClientId, Extension, MailBodyParameter, MailParameter},
@@ -19,7 +18,7 @@ use ruphish_domain::campaign::{DeliveryFailure, FailureKind, Stage};
 use std::time::Duration;
 use tokio::time::timeout;
 
-fn failure(error: SmtpError, stage: Stage) -> DeliveryFailure {
+pub(super) fn failure(error: SmtpError, stage: Stage) -> DeliveryFailure {
     let code = error.status().and_then(|c| c.to_string().parse().ok());
     let kind = if error.is_transient() {
         FailureKind::Retryable
@@ -117,14 +116,10 @@ impl Smtp {
             }
             timeout(
                 Duration::from_secs(300),
-                connection.auth(
-                    &[Mechanism::Plain, Mechanism::Login],
-                    &Credentials::new(profile.username.clone(), profile.password.clone()),
-                ),
+                super::authentication::authenticate(&mut connection, &hello, profile),
             )
             .await
-            .map_err(|_| timed_out(Stage::Authentication))?
-            .map_err(|e| failure(e, Stage::Authentication))?;
+            .map_err(|_| timed_out(Stage::Authentication))??;
         }
         Ok(connection)
     }

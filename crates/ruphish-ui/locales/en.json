@@ -16,6 +16,11 @@
     "native_name": "English"
   },
   "ui": {
+    "skip_certificate_verification": "Skip certificate verification",
+    "skip_certificate_verification_help": "For controlled test environments. The connection stays encrypted, but the mail server's identity is not verified.",
+    "certificate_verification": "Certificate verification",
+    "certificate_verification_skipped": "Skipped",
+    "certificate_verification_enabled": "Enabled",
     "campaign_steps": "Campaign steps",
     "learning_pages": "Learning pages",
     "learning_page": "Learning page",
@@ -1058,7 +1063,7 @@
     "campaign_invalid": "Review the campaign settings before continuing.",
     "launch_key_invalid": "The launch identifier is invalid. Reopen the campaign draft.",
     "delivery_action_invalid": "This delivery action is invalid. Refresh the delivery state.",
-    "mailbox_tls_required": "Mail server certificate verification is required.",
+    "mailbox_tls_required": "The mail server must support TLS.",
     "mailbox_port_invalid": "Choose a valid mail server port.",
     "analysis_filter_invalid": "Check the selected analysis filters.",
     "overview_window_invalid": "Choose an available reporting period.",

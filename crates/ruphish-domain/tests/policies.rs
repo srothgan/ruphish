@@ -80,6 +80,7 @@ fn mailbox() -> MailboxEdit {
         username: "service".into(),
         password: None,
         tls: true,
+        ignore_cert_errors: false,
         folder: "INBOX".into(),
         restrict_domain: String::new(),
         delete_reported: false,

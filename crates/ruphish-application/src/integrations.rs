@@ -36,6 +36,8 @@ pub struct Mailbox {
     pub has_password: bool,
     /// Implicit TLS, otherwise required STARTTLS.
     pub tls: bool,
+    /// Explicitly skip server certificate chain and hostname verification; TLS is still required.
+    pub ignore_cert_errors: bool,
     /// Folder.
     pub folder: String,
     /// Optional domain filter.

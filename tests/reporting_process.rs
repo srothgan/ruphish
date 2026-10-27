@@ -399,6 +399,152 @@ fn verified_imap_reports_survive_ack_failure_restart_and_uid_reset_without_messa
 }
 
 #[test]
+fn mailbox_certificate_policy_covers_tls_modes_legacy_api_and_restart() {
+    for (name, expired, trusted, starttls, verified) in [
+        ("127.0.0.1", false, true, false, true),
+        ("127.0.0.1", false, false, false, false),
+        ("wrong.example.test", false, true, false, false),
+        ("127.0.0.1", true, true, false, false),
+        ("127.0.0.1", false, false, true, false),
+    ] {
+        let directory = workspace();
+        let peer = mailbox::Mailbox::configured(name, expired, starttls);
+        if trusted {
+            std::fs::write(directory.path().join("mailbox-ca.pem"), &peer.certificate).unwrap();
+        }
+        let mut config = configuration();
+        config["logging"]["level"] = json!("trace");
+        write_config(directory.path(), &config);
+        let mut process = Process::start(directory.path(), "admin");
+        let mut base = format!("http://{}", process.ready()["admin"].as_str().unwrap());
+        database(
+            directory.path(),
+            "UPDATE users SET password_change_required=0; UPDATE ruphish_settings SET reporting_mailboxes_enabled=1;",
+        );
+        let client = client();
+        let mut draft = json!({"name":"Certificate policy","enabled":false,"host":"127.0.0.1","port":peer.address.port(),"username":"service","password":"MAILBOX-SECRET-CANARY","tls":!starttls,"folder":"INBOX","frequency":60});
+        let response = request(
+            &client,
+            &base,
+            reqwest::Method::POST,
+            "/api/reporting-mailboxes/",
+            Some(&draft),
+        );
+        assert_eq!(response.status(), 201);
+        let mut saved: Value = response.json().unwrap();
+        assert_eq!(saved["ignore_cert_errors"], false);
+        let id = saved["id"].as_i64().unwrap();
+        let path = format!("/api/reporting-mailboxes/{id}");
+        let response = request(
+            &client,
+            &base,
+            reqwest::Method::POST,
+            &format!("{path}/validate"),
+            None,
+        );
+        assert_eq!(
+            response.status().is_success(),
+            verified,
+            "{name}, expired={expired}, trusted={trusted}, starttls={starttls}"
+        );
+        assert_eq!(peer.state.lock().unwrap().logins, usize::from(verified));
+        draft["revision"] = saved["revision"].clone();
+        draft["ignore_cert_errors"] = json!(true);
+        draft["enabled"] = json!(true);
+        draft.as_object_mut().unwrap().remove("password");
+        let response = request(&client, &base, reqwest::Method::PUT, &path, Some(&draft));
+        assert_eq!(response.status(), 200);
+        saved = response.json().unwrap();
+        assert_eq!(saved["ignore_cert_errors"], true);
+        assert!(saved.get("password").is_none());
+        let checked = wait_check(&client, &base, id, 0);
+        assert_eq!(checked["code"], "passed");
+        assert_eq!(
+            get(&client, &base, "/api/imap/")[0]["ignore_cert_errors"],
+            true
+        );
+        process.stop();
+        process = Process::start(directory.path(), "admin");
+        base = format!("http://{}", process.ready()["admin"].as_str().unwrap());
+        saved = get(&client, &base, &path);
+        assert_eq!(saved["ignore_cert_errors"], true);
+        assert_eq!(
+            request(
+                &client,
+                &base,
+                reqwest::Method::POST,
+                &format!("{path}/validate"),
+                None
+            )
+            .status(),
+            200
+        );
+        // Disabling bypass restores verification and preserves the scan checkpoint.
+        let checkpoint = database(
+            directory.path(),
+            "SELECT uidvalidity,last_uid,initialized FROM ruphish_mailboxes",
+        );
+        draft["revision"] = saved["revision"].clone();
+        draft["ignore_cert_errors"] = json!(false);
+        draft["enabled"] = json!(false);
+        assert_eq!(
+            request(&client, &base, reqwest::Method::PUT, &path, Some(&draft)).status(),
+            200
+        );
+        let after = database(
+            directory.path(),
+            "SELECT uidvalidity,last_uid,initialized FROM ruphish_mailboxes",
+        );
+        for field in ["uidvalidity", "last_uid", "initialized"] {
+            assert_eq!(
+                checkpoint[0].get::<i64, _>(field),
+                after[0].get::<i64, _>(field)
+            );
+        }
+        assert_eq!(
+            request(
+                &client,
+                &base,
+                reqwest::Method::POST,
+                &format!("{path}/validate"),
+                None
+            )
+            .status()
+            .is_success(),
+            verified
+        );
+        // Legacy clients can explicitly save and validate the same option.
+        let legacy = json!({"enabled":false,"host":"127.0.0.1","port":peer.address.port().to_string(),"username":"service","password":"MAILBOX-SECRET-CANARY","tls":!starttls,"ignore_cert_errors":true,"folder":"INBOX","imap_freq":"60"});
+        assert_eq!(
+            request(
+                &client,
+                &base,
+                reqwest::Method::POST,
+                "/api/imap/validate",
+                Some(&legacy)
+            )
+            .status(),
+            201
+        );
+        assert_eq!(
+            request(
+                &client,
+                &base,
+                reqwest::Method::POST,
+                "/api/imap/",
+                Some(&legacy)
+            )
+            .status(),
+            201
+        );
+        assert_eq!(get(&client, &base, &path)["ignore_cert_errors"], true);
+        process.stop();
+        let log = std::fs::read_to_string(directory.path().join("server.log")).unwrap();
+        assert!(!log.contains("MAILBOX-SECRET-CANARY"));
+    }
+}
+
+#[test]
 fn reporting_api_rejects_cross_owner_admin_only_stale_and_malformed_requests() {
     let directory = workspace();
     let mut process = Process::start(directory.path(), "admin");
@@ -496,7 +642,7 @@ fn reporting_api_rejects_cross_owner_admin_only_stale_and_malformed_requests() {
         assert_eq!(response.status(), 400);
         assert!(!response.text().unwrap().contains("INPUT-CANARY"));
     }
-    let mailbox = json!({"name":"Owner mailbox","enabled":false,"host":"127.0.0.1","port":993,"username":"service","password":"MAILBOX-SECRET-CANARY","tls":true,"folder":"INBOX","frequency":60});
+    let mailbox = json!({"name":"Owner mailbox","ignore_cert_errors":true,"enabled":false,"host":"127.0.0.1","port":993,"username":"service","password":"MAILBOX-SECRET-CANARY","tls":true,"folder":"INBOX","frequency":60});
     let saved = request(
         &client,
         &base,

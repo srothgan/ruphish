@@ -1,4 +1,5 @@
 //! Shared MIME composition and checked SMTP submission.
+mod authentication;
 mod transport;
 use crate::{
     outbound::Policy,

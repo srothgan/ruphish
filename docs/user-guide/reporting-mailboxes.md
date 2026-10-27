@@ -13,7 +13,7 @@ If reporting mailboxes are disabled in company settings, an administrator must e
 
 Save, then choose **Validate connection**. Saving alone does not test the credentials. Validation checks TLS, authentication, and folder access without importing reports. Enable polling and use **Check mailbox now** to queue a check; an accepted check is not a completed poll.
 
-Certificate and hostname validation remain enabled. An installation operator can supply trusted roots for a private mail service. Do not solve a trust failure by requesting an insecure certificate bypass.
+Certificate and hostname validation are enabled by default. An installation operator can supply trusted roots for a private mail service. For a controlled test environment, enable **Skip certificate verification** in the mailbox connection settings. The connection remains encrypted, but the mail server's identity is not verified. The saved choice appears in mailbox details and applies to validation and polling. Turn it off to restore verification; changing it preserves the mailbox checkpoint and pending acknowledgements.
 
 ## Send a report
 

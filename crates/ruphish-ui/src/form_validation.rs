@@ -140,6 +140,7 @@ pub fn integration(value: &Value, webhook: bool, has_secret: bool) -> Report {
             username: text(value, "username").into(),
             password: supplied,
             tls: value["tls"].as_bool().unwrap_or(false),
+            ignore_cert_errors: value["ignore_cert_errors"].as_bool().unwrap_or(false),
             folder: text(value, "folder").into(),
             restrict_domain: text(value, "restrict_domain").into(),
             delete_reported: value["delete_reported"].as_bool().unwrap_or(false),

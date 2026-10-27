@@ -63,6 +63,7 @@ fn mailbox_row(r: PgRow) -> Result<Mailbox, Error> {
         username: text(&r, "username")?,
         has_password: !text(&r, "password")?.is_empty(),
         tls: r.try_get("tls").map_err(db)?,
+        ignore_cert_errors: r.try_get("ignore_cert_errors").map_err(db)?,
         folder: text(&r, "folder")?,
         restrict_domain: text(&r, "restrict_domain")?,
         delete_reported: r.try_get("delete_reported").map_err(db)?,
@@ -420,7 +421,7 @@ impl Repository for Integrations {
             sqlx::query(
                 r#"
                 UPDATE ruphish_mailboxes
-                SET name=$1,enabled=$2,host=$3,port=$4,username=$5,password=$6,tls=$7,folder=$8,
+                SET ignore_cert_errors=$16,name=$1,enabled=$2,host=$3,port=$4,username=$5,password=$6,tls=$7,folder=$8,
                     restrict_domain=$9,delete_reported=$10,frequency=$11,revision=revision+1,
                     lease=0,next_check=0,failures=0,code='',modified_date=to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
                     initialized=CASE WHEN $12 THEN FALSE ELSE initialized END,
@@ -444,6 +445,7 @@ impl Repository for Integrations {
             .bind(changed)
             .bind(changed)
             .bind(id)
+            .bind(e.ignore_cert_errors)
             .execute(&mut *tx)
             .await
             .map_err(db)?;
@@ -460,8 +462,8 @@ impl Repository for Integrations {
                 .password
                 .ok_or_else(|| invalid("mailbox_password_required"))?;
             sqlx::query(r#"
-                INSERT INTO ruphish_mailboxes(owner_id,name,enabled,host,port,username,password,tls,folder,restrict_domain,delete_reported,frequency)
-                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id"#)
+                INSERT INTO ruphish_mailboxes(owner_id,name,enabled,host,port,username,password,tls,folder,restrict_domain,delete_reported,frequency,ignore_cert_errors)
+                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id"#)
 .bind(who.id)
 .bind(&e.name)
 .bind(e.enabled)
@@ -474,6 +476,7 @@ impl Repository for Integrations {
 .bind(&e.restrict_domain)
 .bind(e.delete_reported)
 .bind(i64::from(e.frequency))
+.bind(e.ignore_cert_errors)
 .fetch_one(&mut *tx)
 .await
 .map_err(db)?
@@ -609,6 +612,7 @@ impl Repository for Integrations {
             username: edit.username,
             password,
             tls: edit.tls,
+            ignore_cert_errors: edit.ignore_cert_errors,
             folder: edit.folder,
             restrict: edit.restrict_domain,
             delete: false,

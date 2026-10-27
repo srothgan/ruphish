@@ -52,6 +52,7 @@ fn mailbox(mailbox: app::Mailbox) -> wire::Mailbox {
         username: mailbox.username,
         has_password: mailbox.has_password,
         tls: mailbox.tls,
+        ignore_cert_errors: mailbox.ignore_cert_errors,
         folder: mailbox.folder,
         restrict_domain: mailbox.restrict_domain,
         delete_reported: mailbox.delete_reported,
@@ -186,6 +187,8 @@ struct MailEdit {
     username: String,
     password: Option<String>,
     tls: bool,
+    #[serde(default)]
+    ignore_cert_errors: bool,
     folder: String,
     #[serde(default)]
     restrict_domain: String,
@@ -267,6 +270,7 @@ async fn save_mailbox(
                 username: edit.username,
                 password: edit.password,
                 tls: edit.tls,
+                ignore_cert_errors: edit.ignore_cert_errors,
                 folder: edit.folder,
                 restrict_domain: edit.restrict_domain,
                 delete_reported: edit.delete_reported,
@@ -431,7 +435,7 @@ async fn legacy_get(context: Context) -> Result<Response, Rejection> {
                 "password": "",
                 "has_password": mailbox.has_password,
                 "tls": mailbox.tls,
-                "ignore_cert_errors": false,
+                "ignore_cert_errors": mailbox.ignore_cert_errors,
                 "folder": mailbox.folder,
                 "restrict_domain": mailbox.restrict_domain,
                 "delete_reported_campaign_email": mailbox.delete_reported,
@@ -492,13 +496,6 @@ struct LegacyMailboxEdit {
 }
 fn legacy_edit(body: &[u8]) -> Result<app::MailboxEdit, Rejection> {
     let value: LegacyMailboxEdit = decode(body)?;
-    if value.ignore_cert_errors {
-        return Err(failure(
-            StatusCode::BAD_REQUEST,
-            ErrorCode::MailboxTlsRequired,
-            "mailbox_tls_verification_required",
-        ));
-    }
     Ok(app::MailboxEdit {
         name: "Reporting mailbox".into(),
         enabled: value.enabled,
@@ -513,6 +510,7 @@ fn legacy_edit(body: &[u8]) -> Result<app::MailboxEdit, Rejection> {
         username: value.username,
         password: (!value.password.is_empty()).then_some(value.password),
         tls: value.tls,
+        ignore_cert_errors: value.ignore_cert_errors,
         folder: if value.folder.is_empty() {
             "INBOX".into()
         } else {

@@ -491,6 +491,7 @@ async fn mailbox_edits_are_owner_scoped_revision_checked_and_secret_preserving()
         username: "service".into(),
         password: Some("MAILBOX-CANARY".into()),
         tls: true,
+        ignore_cert_errors: false,
         folder: "INBOX".into(),
         restrict_domain: String::new(),
         delete_reported: false,
@@ -502,6 +503,7 @@ async fn mailbox_edits_are_owner_scoped_revision_checked_and_secret_preserving()
         .await
         .unwrap();
     assert!(mailbox.has_password);
+    assert!(!mailbox.ignore_cert_errors);
     assert!(
         integrations
             .mailbox(Identity { id: 2, epoch: 0 }, mailbox.id)
@@ -512,11 +514,13 @@ async fn mailbox_edits_are_owner_scoped_revision_checked_and_secret_preserving()
     update.password = None;
     update.revision = Some(mailbox.revision);
     update.name = "Renamed reports".into();
+    update.ignore_cert_errors = true;
     let updated = integrations
         .save_mailbox(caller(), Some(mailbox.id), update)
         .await
         .unwrap();
     assert!(updated.has_password);
+    assert!(updated.ignore_cert_errors);
     let mut stale = edit();
     stale.revision = Some(mailbox.revision);
     assert!(
@@ -577,7 +581,7 @@ async fn legacy_mailbox_and_location_migration_is_recoverable_and_idempotent() {
     let mut legacy = sqlx::SqliteConnection::connect_with(&options)
         .await
         .unwrap();
-    sqlx::raw_sql("UPDATE results SET ip='192.0.2.42',latitude=51.5,longitude=7.2; INSERT INTO imap(user_id,host,port,username,password,tls,enabled,folder,imap_freq,modified_date,last_login) VALUES(1,'imap.example.test',993,'reports','LEGACY-SERVICE-SECRET',1,1,'Reports',60,'2025-01-02T03:04:05.123456789Z','2025-01-03T04:05:06Z'); INSERT INTO imap(user_id,host,port,enabled) VALUES(1,'',99999,1);").execute(&mut legacy).await.unwrap();
+    sqlx::raw_sql("UPDATE results SET ip='192.0.2.42',latitude=51.5,longitude=7.2; INSERT INTO imap(user_id,host,port,username,password,tls,enabled,folder,imap_freq,modified_date,last_login,ignore_cert_errors) VALUES(1,'imap.example.test',993,'reports','LEGACY-SERVICE-SECRET',1,1,'Reports',60,'2025-01-02T03:04:05.123456789Z','2025-01-03T04:05:06Z',1); INSERT INTO imap(user_id,host,port,enabled) VALUES(1,'',99999,1);").execute(&mut legacy).await.unwrap();
     legacy.close().await.unwrap();
     let db = DatabaseFixture::open(&path, "").await.unwrap();
     let backup = db.backup_path().unwrap().to_path_buf();
@@ -590,6 +594,12 @@ async fn legacy_mailbox_and_location_migration_is_recoverable_and_idempotent() {
     );
     assert!(rows.iter().any(|r| !r.enabled));
     let imported = rows.iter().find(|r| r.enabled).unwrap();
+    assert!(imported.ignore_cert_errors);
+    assert!(
+        rows.iter()
+            .filter(|r| !r.enabled)
+            .all(|r| !r.ignore_cert_errors)
+    );
     assert_eq!(imported.modified_date, "2025-01-02T03:04:05.123456789Z");
     assert_eq!(imported.last_login, "2025-01-03T04:05:06Z");
     let locations: i64 = sqlx::query_scalar(
@@ -608,6 +618,7 @@ async fn legacy_mailbox_and_location_migration_is_recoverable_and_idempotent() {
     db.close().await;
     let reopened = DatabaseFixture::open(&path, "").await.unwrap();
     let again = reopened.integrations().mailboxes(caller()).await.unwrap();
+    assert!(again.iter().find(|r| r.enabled).unwrap().ignore_cert_errors);
     assert_eq!(ids, again.iter().map(|r| r.id).collect::<Vec<_>>());
     reopened.close().await;
     let mut original = sqlx::SqliteConnection::connect_with(
@@ -784,6 +795,7 @@ async fn mailbox_disconnects_back_off_across_restart_and_invalid_claims_do_not_c
                 username: "service".into(),
                 password: Some("SERVICE-CANARY".into()),
                 tls: false,
+                ignore_cert_errors: false,
                 folder: "INBOX".into(),
                 restrict_domain: String::new(),
                 delete_reported: false,
