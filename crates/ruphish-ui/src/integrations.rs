@@ -5,6 +5,8 @@ use crate::{
 };
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use leptos_router::hooks::{use_navigate, use_params_map};
+use ruphish_domain::reporting::SortDirection;
+use ruphish_ui::table_state::Value as SortValue;
 use ruphish_ui::view_tasks::ViewTasks;
 use ruphish_ui::{tr, trs};
 use serde_json::{Value, json};
@@ -155,6 +157,11 @@ impl Record {
 }
 
 pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
+    let sorting = TableSorting::new(
+        format!("integrations-{}", kind.path()),
+        "name",
+        SortDirection::Asc,
+    );
     let i18n = ruphish_ui::localization::use_i18n();
 
     let queries = expect_context::<ManagementQueries>();
@@ -227,6 +234,8 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
                 refresh=list.refresh
             />
             <DataTable
+                sorting=sorting
+                columns=vec!["name", "destination", "enabled", "status", ""]
                 label=Signal::derive(move || kind.title().to_owned())
                 empty=Signal::derive(move || visible.with(Vec::is_empty))
                 headers=vec![
@@ -238,8 +247,19 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
                 ]
             >
                 {move || {
-                    visible
-                        .get()
+                    sorting
+                        .rows(
+                            visible.get(),
+                            |row, key| match key {
+                                "destination" => row.destination().into(),
+                                "enabled" => row.enabled().into(),
+                                "status" => {
+                                    (if row.running() { "checking" } else { row.code() }).into()
+                                }
+                                _ => row.name().into(),
+                            },
+                            |row| row.id().into(),
+                        )
                         .into_iter()
                         .map(|row| {
                             let href = format!("{}/{}", kind.path(), row.id());
@@ -791,6 +811,11 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
             busy.set(false);
         });
     };
+    let history_sort = TableSorting::new(
+        format!("integration-history-{}", kind.path()),
+        "started",
+        SortDirection::Desc,
+    );
     let content = view! {
         <ManagementPage>
             <BackLink href=kind.path()>{move || kind.back_label()}</BackLink>
@@ -985,6 +1010,12 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                     }}
                 </h2>
                 <DataTable
+                    sorting=history_sort
+                    columns=if kind.webhook() {
+                        vec!["started", "finished", "code", "status", "event_id", "attempt"]
+                    } else {
+                        vec!["started", "finished", "code", "matched", "rejected"]
+                    }
                     label=trs!(ui.integration_history)
                     headers=if kind.webhook() {
                         vec![
@@ -1006,10 +1037,31 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                     }
                 >
                     {move || {
-                        value
-                            .get()
-                            .map(Record::history)
-                            .unwrap_or_default()
+                        history_sort
+                            .rows(
+                                value.get().map(Record::history).unwrap_or_default(),
+                                |row, key| match key {
+                                    "finished" => {
+                                        row.finished.map_or(SortValue::Missing, Into::into)
+                                    }
+                                    "code" => row.code.clone().into(),
+                                    "status" => {
+                                        row.status
+                                            .map_or(
+                                                SortValue::Missing,
+                                                |v| SortValue::Number(i128::from(v)),
+                                            )
+                                    }
+                                    "event_id" => {
+                                        row.event_id.map_or(SortValue::Missing, Into::into)
+                                    }
+                                    "attempt" => row.attempt.map_or(SortValue::Missing, Into::into),
+                                    "matched" => row.matched.into(),
+                                    "rejected" => row.rejected.into(),
+                                    _ => row.started.into(),
+                                },
+                                |row| row.id.into(),
+                            )
                             .into_iter()
                             .map(|run| {
                                 view! {

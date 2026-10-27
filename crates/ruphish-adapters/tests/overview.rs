@@ -176,15 +176,6 @@ async fn snapshot_tracks_queued_launches_expiry_current_delivery_issues_and_inve
         .execute(&pool).await.unwrap();
     let s = repo.snapshot(OWNER, NOW).await.unwrap();
     assert_eq!(
-        s.campaigns,
-        CampaignCounts {
-            total: 6,
-            active: 3,
-            scheduled: 2,
-            completed: 1
-        }
-    );
-    assert_eq!(
         s.recent.iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![7, 6, 5, 4, 3]
     );
@@ -204,8 +195,6 @@ async fn snapshot_tracks_queued_launches_expiry_current_delivery_issues_and_inve
         }
     );
     let later = repo.snapshot(OWNER, NOW + 10).await.unwrap();
-    assert_eq!(later.campaigns.scheduled, 1);
-    assert_eq!(later.campaigns.active, 4);
     assert_eq!(later.attention.next_launch.as_ref().map(|n| n.id), Some(4));
     assert_eq!(later.inventory.domains_verified, 0);
     assert_eq!(later.attention.unverified_enabled_domains, 4);
@@ -254,7 +243,7 @@ async fn empty_data_revoked_identities_and_missing_permissions_are_not_fake_zero
         .execute(&pool)
         .await
         .unwrap();
-    assert_eq!(repo.snapshot(OWNER, NOW).await.unwrap().campaigns.total, 0);
+    assert!(repo.snapshot(OWNER, NOW).await.unwrap().recent.is_empty());
     for caller in [Identity { id: 999, epoch: 0 }, Identity { id: 1, epoch: 1 }] {
         assert!(repo.snapshot(caller, NOW).await.is_err());
         assert!(repo.posture(caller, Window::All, NOW).await.is_err());

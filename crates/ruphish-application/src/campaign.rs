@@ -182,6 +182,8 @@ pub struct Claim {
 }
 /// Bounded delivery rows with operational counts, independent of legacy engagement.
 pub struct DeliveryView {
+    /// Selection-bound continuation for explicit sorted queries.
+    pub next_cursor: Option<String>,
     /// Cursor for another page only when additional owned rows exist.
     pub next_after: Option<i64>,
     /// Most recent fifty sanitized activity records, newest first.
@@ -368,6 +370,19 @@ pub trait Repository: drafts::Repository + Send + Sync {
         id: i64,
         after: i64,
         limit: i64,
+    ) -> Result<DeliveryView, Error> {
+        self.deliveries_sorted(caller, id, after, limit, None).await
+    }
+    /// Read a globally sorted delivery page without changing legacy ID cursors.
+    async fn deliveries_sorted(
+        &self,
+        caller: Identity,
+        id: i64,
+        after: i64,
+        limit: i64,
+        sorting: Option<
+            ruphish_domain::pagination::SortedPage<ruphish_domain::pagination::DeliverySort>,
+        >,
     ) -> Result<DeliveryView, Error>;
     /// Read recipient history after authorization, bounded to 100 items per stream.
     async fn recipient_history(

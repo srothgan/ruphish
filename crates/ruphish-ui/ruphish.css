@@ -294,6 +294,14 @@
   .management-table.compact th, .management-table.compact td { padding: var(--s2) var(--s4); }
   .management-table thead { color: var(--muted); background: var(--canvas); }
   .management-table thead th { white-space: nowrap; }
+  .account-app .management-table .table-sort { display: inline-flex; align-items: center; justify-content: flex-start; gap: var(--s2); width: 100%; min-height: var(--control-h-sm); padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: start; }
+  .table-sort-icon { flex: none; width: .75rem; height: 1rem; fill: currentColor; color: var(--canvas); }
+  .management-table thead th:hover .table-sort-icon,
+  .management-table thead th:focus-within .table-sort-icon,
+  .management-table thead th[aria-sort="ascending"] .table-sort-icon,
+  .management-table thead th[aria-sort="descending"] .table-sort-icon { color: var(--muted); }
+  .management-table thead th[aria-sort="ascending"] .table-sort-up,
+  .management-table thead th[aria-sort="descending"] .table-sort-down { fill: var(--ink); }
   .management-table tbody th { font-weight: var(--fw-semibold); }
   .management-table .row-actions { align-items: center; flex-wrap: nowrap; gap: var(--s3); }
   .management-table button { padding: 0 var(--s2); min-height: var(--control-h-sm); font-size: var(--fs-sm); }
@@ -722,11 +730,13 @@
   .dashboard-metrics small { display: block; margin-top: var(--s2); color: var(--muted); font: var(--fs-sm)/var(--lh) var(--font-sans); letter-spacing: normal; }
   .account-app .dashboard-updated { max-width: none; margin: var(--s4) 0 0; font-size: var(--fs-sm); color: var(--muted); }
   .dashboard-work { display: grid; grid-template-columns: minmax(0,2fr) minmax(250px,1fr); gap: var(--s5); align-items: stretch; }
-  .dashboard-campaigns { max-height: 32rem; overflow-y: auto; align-self: start; }
-  .dashboard-lifecycle { display: flex; flex-wrap: wrap; gap: var(--s5); margin: 0 0 var(--s5); }
-  .dashboard-lifecycle > div { display: flex; align-items: baseline; gap: var(--s2); }
-  .dashboard-lifecycle dt { color: var(--muted); font-size: var(--fs-sm); }
-  .dashboard-lifecycle dd { margin: 0; font-family: var(--font-mono); }
+  /* The three-row preview sizes from its content; both cards stretch to the taller one. */
+  .dashboard-campaigns .management-table-wrap { overflow: visible; }
+  .dashboard-campaigns .management-table { min-width: 0; }
+  .dashboard-campaigns .management-table th, .dashboard-campaigns .management-table td { padding: var(--s3) var(--s2); white-space: normal; overflow-wrap: anywhere; }
+  .dashboard-campaigns .table-sort { gap: var(--s1); white-space: normal; }
+  .dashboard-campaigns .table-sort > span { min-width: 0; }
+  .dashboard-campaigns .button { max-width: 100%; padding-inline: var(--s2); white-space: normal; }
   .dashboard-campaign-meta { display: block; margin-top: var(--s1); color: var(--muted); font-size: var(--fs-sm); font-weight: var(--fw-regular); }
   .dashboard-attention-list { display: grid; gap: var(--s5); list-style: none; padding: 0; margin: 0; }
   .dashboard-attention-list p { margin: var(--s2) 0; }
@@ -736,10 +746,10 @@
   .dashboard-next p { margin: var(--s2) 0 0; color: var(--muted); }
   .dashboard-inventory { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: var(--s3) var(--s5); list-style: none; margin: 0; padding: 0; }
   .dashboard-inventory li { display: flex; align-items: baseline; gap: var(--s2); }
-  .dashboard-metric-value { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s3); }
-  .dashboard-metrics .dashboard-change { margin: 0; }
-  .dashboard-metrics .dashboard-change.improving { color: var(--success); }
-  .dashboard-metrics .dashboard-change.worsening { color: var(--danger); }
+  .dashboard-metric-value { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s3); line-height: 1; }
+  .dashboard-metrics .dashboard-change { display: inline-flex; margin: 0; padding: 2px 6px; border-radius: var(--r-pill); background: var(--canvas); font-weight: var(--fw-semibold); white-space: nowrap; }
+  .dashboard-metrics .dashboard-change.improving { background: var(--success); color: var(--paper); }
+  .dashboard-metrics .dashboard-change.worsening { background: var(--danger); color: var(--paper); }
   .dashboard-inventory a { color: var(--teal-600); text-decoration: underline; text-underline-offset: .15em; }
   .dashboard-inventory a:hover { color: var(--teal-700); }
   @media (max-width: 1200px) { .dashboard-work { grid-template-columns: minmax(0,1fr); } .dashboard-metrics { grid-template-columns: repeat(3,minmax(0,1fr)); } }

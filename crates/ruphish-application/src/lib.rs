@@ -20,3 +20,6 @@ pub use ruphish_domain::datetime;
 
 /// Pure validation results exposed to transport adapters.
 pub use ruphish_domain::validation;
+
+/// Shared sorted-continuation rules used by transport and storage adapters.
+pub use ruphish_domain::pagination;

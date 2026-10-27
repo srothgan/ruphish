@@ -27,22 +27,6 @@ impl Repository for Overview {
         super::resources::authorize(&mut tx, caller, false).await?;
         let owner = caller.id;
 
-        // The persisted future state is Queued; scheduled/active are derived at
-        // the snapshot time, so a delayed worker cannot leave stale counts.
-        let row = sqlx::query(
-            "SELECT count(*) AS total, \
-             COALESCE(CAST(sum(status='Completed') AS SIGNED),0) AS completed, \
-             COALESCE(CAST(sum(status!='Completed' AND COALESCE((CASE WHEN launch_date>='1000' THEN TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',CAST(REPLACE(LEFT(launch_date,19),'T',' ') AS DATETIME)) END),0)>?) AS SIGNED),0) AS scheduled, \
-             COALESCE(CAST(sum(status!='Completed' AND COALESCE((CASE WHEN launch_date>='1000' THEN TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',CAST(REPLACE(LEFT(launch_date,19),'T',' ') AS DATETIME)) END),0)<=?) AS SIGNED),0) AS active \
-             FROM campaigns WHERE user_id=?",
-        ).bind(now).bind(now).bind(owner).fetch_one(&mut *tx).await.map_err(storage)?;
-        let campaigns = CampaignCounts {
-            total: row.try_get("total").map_err(storage)?,
-            active: row.try_get("active").map_err(storage)?,
-            scheduled: row.try_get("scheduled").map_err(storage)?,
-            completed: row.try_get("completed").map_err(storage)?,
-        };
-
         // Recent campaigns, newest first, with audience size.
         let rows = sqlx::query(
             "SELECT id,name,status,launch_date,\
@@ -163,7 +147,6 @@ impl Repository for Overview {
             .map_err(|e| Error::Storage(crate::mysql::commit_error(e)))?;
         Ok(Snapshot {
             as_of: now,
-            campaigns,
             recent,
             inventory,
             attention: Attention {

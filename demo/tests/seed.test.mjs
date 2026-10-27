@@ -58,7 +58,7 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
             const response = await fetch(`http://127.0.0.1:${port}${path}`, { headers: { Authorization: `Bearer ${apiKey}` } });
             assert.equal(response.status, 200, path);
             const value = await response.json();
-            if (path === '/api/overview') assert.equal(value.campaigns.total, 4);
+            if (path === '/api/overview') assert.equal(value.recent.length, 4);
             if (path.includes('posture')) assert.equal(value.delivered, 937);
         }
         const memory = new Map();

@@ -108,6 +108,8 @@ async fn postgres_observation_upgrade_preserves_populated_v4_history_and_retry_t
 mod postgres_proxy;
 #[path = "support/provider_regressions.rs"]
 mod provider_regressions;
+#[path = "support/sorting.rs"]
+mod sorting;
 
 fn resource(name: &str, content: Content) -> Resource {
     Resource {
@@ -987,8 +989,8 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
             .snapshot(actor, now + 10)
             .await
             .unwrap()
-            .campaigns
-            .total,
+            .recent
+            .len(),
         1
     );
     campaigns

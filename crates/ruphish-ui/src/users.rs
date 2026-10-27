@@ -5,6 +5,7 @@ use crate::shared::components::*;
 use crate::{feedback::Message, management_queries::ManagementQueries};
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use ruphish_contracts::auth::{User, UserEdit};
+use ruphish_domain::reporting::SortDirection;
 use ruphish_ui::{tr, trs};
 
 #[derive(Clone, Copy)]
@@ -397,6 +398,7 @@ fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
             .filter(|user| user.username.to_lowercase().contains(&needle))
             .collect::<Vec<_>>()
     });
+    let sorting = TableSorting::new("users", "username", SortDirection::Asc);
     view! {
         <ManagementPage>
             <PageHeader
@@ -426,13 +428,34 @@ fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
                 refresh=list.refresh
             />
             <DataTable
+                sorting=sorting
+                columns=vec!["username", "role", "status", ""]
                 label=trs!(ui.users)
                 empty=Signal::derive(move || visible.with(Vec::is_empty))
                 headers=vec![trs!(ui.user), trs!(ui.role), trs!(ui.status), trs!(ui.actions)]
             >
                 {move || {
-                    visible
-                        .get()
+                    sorting
+                        .rows(
+                            visible.get(),
+                            |row, key| match key {
+                                "role" => {
+                                    ruphish_ui::localization::role_label(i18n, &row.role).into()
+                                }
+                                "status" => {
+                                    (if row.account_locked {
+                                        "locked"
+                                    } else if row.password_change_required {
+                                        "password_setup"
+                                    } else {
+                                        "active"
+                                    })
+                                        .into()
+                                }
+                                _ => row.username.clone().into(),
+                            },
+                            |row| row.id.into(),
+                        )
                         .into_iter()
                         .map(|user| {
                             let id = user.id;

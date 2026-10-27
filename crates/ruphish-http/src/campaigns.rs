@@ -507,15 +507,48 @@ async fn overview(context: Context, Query(page): Query<Page>) -> Result<Response
         None,
     )
 }
+#[derive(Default, serde::Deserialize)]
+#[serde(default)]
+struct DeliveryPage {
+    after: i64,
+    limit: Option<i64>,
+    sort: Option<ruphish_application::pagination::DeliverySort>,
+    order: Option<ruphish_application::reporting::SortDirection>,
+    cursor: String,
+}
 async fn deliveries(
     context: Context,
     Path(id): Path<i64>,
-    Query(page): Query<Page>,
+    query: Result<Query<DeliveryPage>, axum::extract::rejection::QueryRejection>,
 ) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
+    let invalid = || error(Error::Invalid("Invalid delivery page query".into()));
+    let Query(page) = query.map_err(|_| invalid())?;
+    let sorting = if let Some(sort) = page.sort {
+        if page.after != 0 || page.limit.is_some_and(|limit| !(1..=200).contains(&limit)) {
+            return Err(invalid());
+        }
+        Some(directory::sorted_page(
+            sort,
+            page.order.unwrap_or_default(),
+            format!("delivery:{}:{id}", user.identity.id),
+            &page.cursor,
+        )?)
+    } else {
+        if !page.cursor.is_empty() || page.order.is_some() {
+            return Err(invalid());
+        }
+        None
+    };
     let view = context
         .campaigns()
-        .deliveries(user.identity, id, page.after, page.limit.unwrap_or(50))
+        .deliveries_sorted(
+            user.identity,
+            id,
+            page.after,
+            page.limit.unwrap_or(50),
+            sorting,
+        )
         .await
         .map_err(error)?;
     let campaign = &view.campaign;
@@ -539,6 +572,7 @@ async fn deliveries(
             })
             .collect(),
         next_after: view.next_after,
+        next_cursor: view.next_cursor,
         policy: campaign.policy.as_ref().map(read_policy),
         mailer_enabled: context.mailer_enabled(),
         activity: view

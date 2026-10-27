@@ -2,6 +2,7 @@
 import { dataset, DAY, iso, policy, features } from '../../../assets/website-demo/dataset.mjs';
 import { exportResponse } from './demo-export.mjs';
 import { reviewCsv } from './demo-csv.mjs';
+import { recipientOrder, eventOrder, keyset } from './demo-sorting.mjs';
 
 const kinds = ['Email Sent', 'Email Opened', 'Clicked Link', 'Submitted Data', 'Email Reported'];
 const families = ['groups', 'templates', 'pages', 'learning-pages', 'smtp', 'domains', 'users', 'webhooks', 'reporting-mailboxes'];
@@ -25,7 +26,6 @@ export function overview(data) {
     const scheduled = headers.filter(c => c.status === 'Queued').sort((a, b) => a.launch_date.localeCompare(b.launch_date));
     return {
         as_of: data.now,
-        campaigns: { total: headers.length, active: headers.filter(c => c.status === 'In progress').length, scheduled: scheduled.length, completed: headers.filter(c => c.status === 'Completed').length },
         recent: [...data.campaigns].reverse().map(c => ({ id: c.header.id, name: c.header.name, status: c.header.status, launch: c.header.launch_date, recipients: c.results.length, outcomes: posture(c.results) })),
         inventory: { templates: data.templates.length, pages: data.pages.length, groups: data.groups.length, profiles: data.smtp.length, domains: data.domains.length, domains_verified: data.domains.filter(d => d.eligible).length, reporting_mailboxes: data['reporting-mailboxes'].length },
         attention: { unverified_enabled_domains: data.domains.filter(d => d.enabled && !d.eligible).length, delivery_problems: data.campaigns.filter(c => c.header.status !== 'Completed').flatMap(c => c.results).filter(r => r.state === 'failed').length, next_launch: scheduled.length ? { id: scheduled[0].id, name: scheduled[0].name, launch: scheduled[0].launch_date } : null },
@@ -46,7 +46,9 @@ export function analysis(campaign, query, now, paginate = true) {
         if (!eventMap.has(e.recipient_id)) eventMap.set(e.recipient_id, []);
         eventMap.get(e.recipient_id).push(e);
     }
-    const rows = results.filter(r => (!query.get('event') && !query.get('source')) || eventMap.has(r.id)).sort((a, b) => a.email < b.email ? -1 : a.email > b.email ? 1 : a.id - b.id).map(r => ({ id: r.id, email: r.email, name: `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim(), first_name: r.first_name, last_name: r.last_name, position: r.position, send_date: r.send_date, modified_date: r.modified_date, delivery: r.state, counts: counts(eventMap.get(r.id) ?? []), historical_reported: false }));
+    const unorderedRows = results.filter(r => (!query.get('event') && !query.get('source')) || eventMap.has(r.id)).sort((a, b) => a.email < b.email ? -1 : a.email > b.email ? 1 : a.id - b.id).map(r => ({ id: r.id, email: r.email, name: `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim(), first_name: r.first_name, last_name: r.last_name, position: r.position, send_date: r.send_date, modified_date: r.modified_date, delivery: r.state, counts: counts(eventMap.get(r.id) ?? []), historical_reported: false }));
+    const rows = recipientOrder(unorderedRows, query);
+    const sortedEvents = eventOrder(events, query);
     const unique = sum(rows.map(r => r.counts.map(n => Number(n > 0))));
     const progression = sum(rows.map(r => [Number(r.counts[0] > 0), Number(r.counts[1] + r.counts[2] + r.counts[3] > 0), Number(r.counts[2] + r.counts[3] > 0), Number(r.counts[3] > 0), Number(r.counts[4] > 0)]));
     const buckets = new Map();
@@ -56,7 +58,7 @@ export function analysis(campaign, query, now, paginate = true) {
         buckets.get(time)[kinds.indexOf(e.kind)]++;
     }
     const offset = Math.max(0, Number(query.get('offset') ?? 0)), limit = Math.max(1, Math.min(200, Number(query.get('limit') ?? 50)));
-    return { id: campaign.header.id, name: campaign.header.name, status: campaign.header.status, as_of: now, audience: campaign.results.length, unique, progression, totals: counts(events), recipient_total: rows.length, event_total: events.length, recipients: paginate ? rows.slice(offset, offset + limit) : rows, events: paginate ? [...events].reverse().slice(offset, offset + limit) : events, buckets: [...buckets].map(([time, values]) => ({ time, counts: values })), bucket_seconds: 3600 };
+    return { id: campaign.header.id, name: campaign.header.name, status: campaign.header.status, as_of: now, audience: campaign.results.length, unique, progression, totals: counts(events), recipient_total: rows.length, event_total: events.length, recipients: paginate ? rows.slice(offset, offset + limit) : rows, events: paginate ? sortedEvents.slice(offset, offset + limit) : sortedEvents, buckets: [...buckets].map(([time, values]) => ({ time, counts: values })), bucket_seconds: 3600 };
 }
 
 function summaries(data, family) {
@@ -64,11 +66,21 @@ function summaries(data, family) {
     return { total: rows.length, [family === 'groups' ? 'groups' : 'items']: rows };
 }
 
-function delivery(campaign, query) {
-    const after = Number(query.get('after') ?? 0), matches = campaign.results.filter(r => r.id > after), page = matches.slice(0, 50);
+function delivery(campaign, query, owner) {
+    const after = Number(query.get('after') ?? 0), requestedLimit = Number(query.get('limit') ?? 50);
+    if (!Number.isSafeInteger(after) || !Number.isSafeInteger(requestedLimit) || (query.has('sort') && (requestedLimit < 1 || requestedLimit > 200))) throw new Error('Invalid page');
+    const limit = Math.max(1, Math.min(200, requestedLimit));
+    const matches = campaign.results.filter(r => r.id > after);
+    let page = matches.slice(0, limit), nextCursor = null;
+    if (query.has('sort')) {
+        if (after !== 0) throw new Error('Mixed cursors');
+        const selected = keyset(campaign.results.map(row => ({ ...row, attempt_count: row.attempts.length })), query, ['email', 'state', 'due', 'attempt_count'], `delivery:${owner}:${campaign.header.id}`, limit, 'cursor');
+        page = selected.items;
+        nextCursor = selected.cursor;
+    } else if (query.has('order') || query.get('cursor')) throw new Error('Missing sort');
     const counts = {};
     for (const r of campaign.results) counts[r.state] = (counts[r.state] ?? 0) + 1;
-    return { campaign: campaign.header, counts, items: page.map(r => ({ id: r.id, rid: r.rid, email: r.email, attempt_count: r.attempts.length, state: r.state, due: r.due, retries: 0, generation: 1, code: r.state === 'failed' ? 'smtp_permanent_rejection' : '', attempts: r.attempts })), next_after: matches.length > page.length ? page.at(-1).id : null, policy: campaign.header.policy, mailer_enabled: false, activity: campaign.results.flatMap(r => r.events).sort(byTime).slice(-25).reverse().map(e => ({ id: e.id, time: e.time, email: e.email, message: e.kind, details: JSON.stringify(e.password_present === null ? {} : { password_present: e.password_present }) })) };
+    return { campaign: campaign.header, counts, items: page.map(r => ({ id: r.id, rid: r.rid, email: r.email, attempt_count: r.attempts.length, state: r.state, due: r.due, retries: 0, generation: 1, code: r.state === 'failed' ? 'smtp_permanent_rejection' : '', attempts: r.attempts })), next_after: query.has('sort') ? (nextCursor ? page.at(-1).id : null) : (matches.length > page.length ? page.at(-1).id : null), next_cursor: nextCursor, policy: campaign.header.policy, mailer_enabled: false, activity: campaign.results.flatMap(r => r.events).sort(byTime).slice(-25).reverse().map(e => ({ id: e.id, time: e.time, email: e.email, message: e.kind, details: JSON.stringify(e.password_present === null ? {} : { password_present: e.password_present }) })) };
 }
 
 function review(data, input) {
@@ -142,7 +154,20 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage, da
             const all = [...data.drafts.map(d => ({ id: d.id, kind: 'draft', revision: d.revision, name: d.configuration.name, status: 'Draft', total: null, launch_date: null })), ...data.campaigns.map(c => ({ id: String(c.header.id), kind: 'campaign', revision: null, name: c.header.name, status: c.header.status, total: c.header.total, launch_date: c.header.launch_date }))];
             const filter = url.searchParams.get('filter') ?? '';
             const filtered = all.filter(r => !filter || filter === 'all' || (filter === 'drafts' ? r.kind === 'draft' : filter === 'executions' ? r.kind === 'campaign' : filter === 'active' ? ['In progress', 'Queued'].includes(r.status) : filter === 'completed' ? r.status === 'Completed' : false));
-            return json({ items: url.searchParams.get('after') ? [] : filtered, next_after: null });
+            try {
+                if (!['', 'all', 'drafts', 'executions', 'active', 'completed'].includes(filter)) return failure(400);
+                if (url.searchParams.has('sort')) {
+                    const draft = !['executions', 'active', 'completed'].includes(filter), execution = filter !== 'drafts', completed = filter === 'completed' ? 1 : filter === 'active' ? 2 : 0;
+                    const page = keyset(filtered.map(row => ({ ...row, launch: row.launch_date })), url.searchParams, ['name', 'status', 'total', 'launch'], `directory:${current.id}:${draft}:${execution}:${completed}`, 50);
+                    return json({ items: page.items.map(({ launch, ...row }) => row), next_after: page.cursor });
+                }
+                if (url.searchParams.has('order')) return failure(400);
+                const after = url.searchParams.get('after');
+                const start = after ? filtered.findIndex(row => `${row.kind}:${row.id}` === after) + 1 : 0;
+                if (after && !start) return failure(400);
+                const items = filtered.slice(start, start + 50);
+                return json({ items, next_after: filtered.length > start + 50 ? `${items.at(-1).kind}:${items.at(-1).id}` : null });
+            } catch { return failure(400); }
         }
         if (path === '/api/campaigns/complete-all/preview' && method === 'POST') return json({ token: 'demo-confirmation', expires_at: now + 600, campaigns: 2, pending_deliveries: 12 });
         if (path === '/api/campaigns/complete-all' && method === 'POST') return body.token === 'demo-confirmation' && body.confirmation === 'CLOSE ALL' ? json({ campaigns: 2, cancelled_deliveries: 12, completed_at: now }) : failure(400);
@@ -165,8 +190,12 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage, da
         if (campaignMatch) {
             const c = data.campaigns.find(c => c.header.id === Number(campaignMatch[1])), operation = campaignMatch[2] ?? '';
             if (!c) return failure(404);
-            if (method === 'GET' && operation === 'delivery') return json(delivery(c, url.searchParams));
-            if (method === 'GET' && operation === 'analysis') return json(analysis(c, url.searchParams, now));
+            if (method === 'GET' && operation === 'delivery') {
+                try { return json(delivery(c, url.searchParams, current.id)); } catch { return failure(400); }
+            }
+            if (method === 'GET' && operation === 'analysis') {
+                try { return json(analysis(c, url.searchParams, now)); } catch { return failure(400, 'ANALYSIS_FILTER_INVALID'); }
+            }
             if (method === 'GET' && operation === 'draft') return json({ name: c.header.name, url: c.header.url, selection: { groups: [{ id: 1 }], template: { id: c.header.template.id }, page: { id: 1 }, smtp: { id: 1 } }, policy });
             const history = operation.match(/^delivery\/(\d+)\/history$/);
             if (method === 'GET' && history) {
@@ -182,7 +211,7 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage, da
                 const limit = Number(url.searchParams.get('limit') ?? 50), offset = Number(url.searchParams.get('offset') ?? 0);
                 const invalidWindow = url.searchParams.has('from') && url.searchParams.has('until') && Number(url.searchParams.get('from')) >= Number(url.searchParams.get('until'));
                 if (invalidNumber || invalidWindow || limit < 1 || limit > 200 || offset < 0 || offset > 1000000 || selected.length > 200 || ids.some(id => !/^\d+$/.test(id) || !c.results.some(r => r.id === Number(id)))) return failure(400, 'ANALYSIS_FILTER_INVALID');
-                return exportResponse(analysis(c, url.searchParams, now, false), url.searchParams);
+                try { return exportResponse(analysis(c, url.searchParams, now, false), url.searchParams); } catch { return failure(400, 'ANALYSIS_FILTER_INVALID'); }
             }
             return failure(405);
         }

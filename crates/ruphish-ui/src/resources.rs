@@ -4,6 +4,8 @@ use crate::feedback::Message;
 use crate::resource_queries::ResourceQueries;
 use crate::shared::components::*;
 use leptos::{html, prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
+use ruphish_domain::reporting::SortDirection;
+use ruphish_ui::table_state::{scalar as sort_scalar, timestamp as sort_timestamp};
 use ruphish_ui::{
     import_drafts::{ImportDrafts, ImportedDraft},
     import_state::{ImportError, ImportReview},
@@ -283,6 +285,11 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
             .filter(|v| v.name.to_lowercase().contains(&needle))
             .collect::<Vec<_>>()
     });
+    let sorting = TableSorting::new(
+        format!("resources-{}", family.route()),
+        "name",
+        SortDirection::Asc,
+    );
     view! {
         <ManagementPage>
             <PageHeader
@@ -353,6 +360,8 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
                 refresh=list.refresh
             />
             <DataTable
+                sorting=sorting
+                columns=vec!["name", "count", "modified_date", ""]
                 label=Signal::derive(move || family.title().to_owned())
                 empty=Signal::derive(move || visible.with(Vec::is_empty))
                 headers=vec![
@@ -367,8 +376,16 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
                 ]
             >
                 {move || {
-                    visible
-                        .get()
+                    sorting
+                        .rows(
+                            visible.get(),
+                            |row, key| match key {
+                                "count" => row.count.into(),
+                                "modified_date" => sort_timestamp(&row.modified_date),
+                                _ => row.name.clone().into(),
+                            },
+                            |row| row.id.into(),
+                        )
                         .into_iter()
                         .map(|v| {
                             let id = v.id;
@@ -816,6 +833,7 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
     }
 }
 fn group_fields(editor: Editor) -> impl IntoView {
+    let sorting = TableSorting::new("group-editor", "email", SortDirection::Asc);
     let i18n = ruphish_ui::localization::use_i18n();
 
     view! {
@@ -846,6 +864,8 @@ fn group_fields(editor: Editor) -> impl IntoView {
             </div>
             <ValidationAnchor field="targets" />
             <DataTable
+                sorting=sorting
+                columns=vec!["email", "first_name", "last_name", "position", ""]
                 label=trs!(ui.recipients)
                 headers=vec![
                     trs!(ui.email),
@@ -858,9 +878,21 @@ fn group_fields(editor: Editor) -> impl IntoView {
             >
                 <For
                     each=move || {
-                        0..editor
+                        editor
                             .draft
-                            .with(|d| d.value()["targets"].as_array().map_or(0, Vec::len))
+                            .with(|draft| {
+                                let rows = draft
+                                    .value()["targets"]
+                                    .as_array()
+                                    .cloned()
+                                    .unwrap_or_default();
+                                sorting
+                                    .rows(
+                                        (0..rows.len()).collect(),
+                                        |index, key| sort_scalar(&rows[*index][key]),
+                                        |index| (*index).into(),
+                                    )
+                            })
                     }
                     key=|i| *i
                     children=move |index| {

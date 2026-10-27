@@ -54,7 +54,7 @@ jobs:
           browser: 'true'
           cache-group: browser-demo
       - run: npm ci --prefix crates/ruphish-ui/web
-      - run: node --test demo/tests/api.test.mjs demo/tests/preview.test.mjs
+      - run: node --test demo/tests/api.test.mjs demo/tests/sorting.test.mjs demo/tests/preview.test.mjs
       - run: cargo test -p ruphish-ui --test demo_contracts --features demo --locked
       - run: cargo clippy -p ruphish-ui --test demo_contracts --features demo --locked -- -D warnings
       - run: node crates/ruphish-ui/web/build-demo.mjs

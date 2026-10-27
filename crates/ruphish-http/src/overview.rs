@@ -49,12 +49,6 @@ async fn snapshot(context: Context) -> Result<Response, Rejection> {
         .map_err(error)?;
     json(wire::Snapshot {
         as_of: s.as_of,
-        campaigns: wire::CampaignCounts {
-            total: s.campaigns.total,
-            active: s.campaigns.active,
-            scheduled: s.campaigns.scheduled,
-            completed: s.campaigns.completed,
-        },
         recent: s
             .recent
             .into_iter()

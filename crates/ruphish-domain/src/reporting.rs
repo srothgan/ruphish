@@ -82,3 +82,58 @@ pub const EVENT_TYPES: &[&str] = &[
 pub fn valid_window(from: Option<i64>, until: Option<i64>, limit: usize) -> bool {
     (1..=200).contains(&limit) && !matches!((from, until), (Some(a), Some(b)) if a >= b)
 }
+
+/// Stable recipient columns accepted by analysis and export APIs.
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum RecipientSort {
+    /// Audience email address.
+    #[default]
+    Email,
+    /// Audience display name.
+    Name,
+    /// Current delivery state.
+    Delivery,
+    /// Recorded SMTP acceptances.
+    Accepted,
+    /// Recorded opens.
+    Opened,
+    /// Recorded visits.
+    Clicked,
+    /// Recorded submissions.
+    Submitted,
+    /// Recorded reports, excluding undated historical flags.
+    Reported,
+}
+
+/// Explicit ordering direction, shared by browser tables and API queries.
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum SortDirection {
+    /// Lowest values first.
+    #[default]
+    Asc,
+    /// Highest values first.
+    Desc,
+}
+
+/// Event-table ordering, independent of the recipient-table selection.
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum EventSort {
+    /// Observation instant.
+    #[default]
+    Time,
+    /// Recorded event kind.
+    Kind,
+    /// Observation provenance.
+    Source,
+    /// Optional credential-presence flag, never participant values.
+    PasswordPresent,
+}

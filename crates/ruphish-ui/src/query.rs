@@ -2,7 +2,7 @@
 use crate::api_error::ApiError;
 use leptos::prelude::*;
 use leptos_fetch::{QueryClient, QueryOptions, QueryScopeLocal};
-use std::{fmt::Debug, hash::Hash, time::Duration};
+use std::{cell::RefCell, collections::HashMap, fmt::Debug, hash::Hash, rc::Rc, time::Duration};
 
 /// Install at the app root: reuse reads for 30 seconds and revalidate on focus.
 /// Session termination hides the shell and navigates to a new document/cache.
@@ -38,17 +38,31 @@ pub struct Snapshot<T> {
     pub error: Option<ApiError>,
 }
 
-fn scope<K, T, F, Fut>(client: QueryClient, fetch: F) -> QueryScopeLocal<K, Snapshot<T>>
+fn scope<K, T, F, Fut>(
+    client: QueryClient,
+    fetch: F,
+    polls: Polls<K>,
+) -> QueryScopeLocal<K, Snapshot<T>>
 where
-    K: Clone + Hash + Debug + 'static,
+    K: Clone + Eq + Hash + Debug + 'static,
     T: Clone + Debug + 'static,
     F: Fn(K) -> Fut + Clone + 'static,
     Fut: Future<Output = Result<T, ApiError>> + 'static,
 {
     QueryScopeLocal::new(move |key: K| {
         let fetch = fetch.clone();
+        let polls = polls.clone();
         async move {
-            match fetch(key.clone()).await {
+            let result = fetch(key.clone()).await;
+            if let Some(poll) = polls.borrow_mut().get_mut(&key) {
+                poll.failures = if result.is_err() {
+                    (poll.failures + 1).min(5)
+                } else {
+                    0
+                };
+                poll.next = js_sys::Date::now() + 5000.0 * 2f64.powi(poll.failures as i32);
+            }
+            match result {
                 Ok(data) => Snapshot {
                     data: Some(data),
                     error: None,
@@ -57,7 +71,7 @@ where
                     // Read at completion so confirmed mutation updates are retained.
                     // Reconstructing this scope preserves the fetcher's type identity.
                     data: client
-                        .get_cached_query(scope(client, fetch), key)
+                        .get_cached_query(scope(client, fetch, polls), key)
                         .and_then(|s| s.data)
                         .filter(|_| !error.is_terminal()),
                     error: Some(error),
@@ -71,6 +85,7 @@ where
 pub struct Query<K: 'static, T: 'static> {
     client: QueryClient,
     scope: StoredValue<QueryScopeLocal<K, Snapshot<T>>, LocalStorage>,
+    polls: StoredValue<Polls<K>, LocalStorage>,
 }
 impl<K, T> Copy for Query<K, T> {}
 impl<K, T> Clone for Query<K, T> {
@@ -81,7 +96,7 @@ impl<K, T> Clone for Query<K, T> {
 
 impl<K, T> Query<K, T>
 where
-    K: Clone + Hash + Debug + Send + Sync + 'static,
+    K: Clone + Eq + Hash + Debug + Send + Sync + 'static,
     T: Clone + Debug + Send + Sync + 'static,
 {
     /// Retain typed keys and fetcher identity; never construct keys in views.
@@ -90,9 +105,11 @@ where
         F: Fn(K) -> Fut + Clone + 'static,
         Fut: Future<Output = Result<T, ApiError>> + 'static,
     {
+        let polls = Rc::new(RefCell::new(HashMap::new()));
         Self {
             client,
-            scope: StoredValue::new_local(scope(client, fetch)),
+            scope: StoredValue::new_local(scope(client, fetch, polls.clone())),
+            polls: StoredValue::new_local(polls),
         }
     }
 
@@ -121,6 +138,83 @@ where
             fetching,
             refresh: Callback::new(move |()| self.invalidate(key())),
         }
+    }
+
+    /// Poll the visible selection without cancelling an in-flight read. Scheduling
+    /// belongs to the shared query key, so multiple consumers cannot multiply reads.
+    /// Each consumer releases its timer and lease when its route/key is disposed.
+    pub fn observe_polling(
+        self,
+        key: impl Fn() -> K + Clone + Send + Sync + 'static,
+        enabled: Signal<bool>,
+    ) -> QueryView<T> {
+        let view = self.observe(key.clone());
+        Effect::new(move |_| {
+            let current = key();
+            let polls = self.polls.get_value();
+            polls
+                .borrow_mut()
+                .entry(current.clone())
+                .or_insert_with(|| PollSchedule {
+                    consumers: 0,
+                    failures: 0,
+                    next: js_sys::Date::now() + 5000.0,
+                })
+                .consumers += 1;
+            let release = current.clone();
+            on_cleanup(move || {
+                let polls = self.polls.get_value();
+                let mut polls = polls.borrow_mut();
+                if let Some(poll) = polls.get_mut(&release) {
+                    poll.consumers -= 1;
+                    if poll.consumers == 0 {
+                        polls.remove(&release);
+                    }
+                }
+            });
+            if let Ok(timer) = set_interval_with_handle(
+                move || {
+                    if !enabled.get_untracked()
+                        || view.fetching.get_untracked()
+                        || view
+                            .failure
+                            .with_untracked(|e| e.as_ref().is_some_and(ApiError::is_terminal))
+                    {
+                        return;
+                    }
+                    let polls = self.polls.get_value();
+                    let due = {
+                        let mut polls = polls.borrow_mut();
+                        let Some(poll) = polls.get_mut(&current) else {
+                            return;
+                        };
+                        let now = js_sys::Date::now();
+                        if now < poll.next {
+                            false
+                        } else {
+                            // Claim before invalidation: a second subscriber's tick cannot
+                            // race the reactive fetching notification.
+                            poll.next = now + 5000.0 * 2f64.powi(poll.failures as i32);
+                            true
+                        }
+                    };
+                    if due {
+                        self.invalidate(current.clone());
+                    }
+                },
+                Duration::from_secs(1),
+            ) {
+                on_cleanup(move || timer.clear());
+            }
+        });
+        view
+    }
+
+    /// Read through the same cache and in-flight request as subscribed consumers.
+    pub async fn fetch(self, key: K) -> Snapshot<T> {
+        self.client
+            .fetch_query_local(self.scope.get_value(), key)
+            .await
     }
 
     /// Invalidation cancels obsolete in-flight reads and refetches active consumers.
@@ -221,4 +315,21 @@ impl<T: Send + Sync> Clone for QueryView<T> {
     fn clone(&self) -> Self {
         *self
     }
+}
+
+#[derive(Default)]
+struct PollSchedule {
+    consumers: usize,
+    failures: u32,
+    next: f64,
+}
+type Polls<K> = Rc<RefCell<HashMap<K, PollSchedule>>>;
+
+/// Sample document visibility whenever the periodic scheduler checks eligibility.
+pub fn document_visible() -> Signal<bool> {
+    Signal::derive(|| {
+        web_sys::window()
+            .and_then(|w| w.document())
+            .is_some_and(|d| !d.hidden())
+    })
 }

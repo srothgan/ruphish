@@ -3,6 +3,7 @@ use crate::campaign_queries::CampaignQueries;
 use crate::{client::Api, feedback::Message, resources::ResourceAccess, shared::components::*};
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use leptos_router::hooks::{use_navigate, use_params_map, use_query_map};
+use ruphish_domain::reporting::SortDirection;
 use ruphish_ui::campaign_state::Draft;
 use ruphish_ui::{tr, trs};
 use serde_json::{Value, json};
@@ -36,10 +37,33 @@ fn list_mode(api: Api, analysis: bool, token: String) -> impl IntoView {
     let filter = RwSignal::new(String::from(if analysis { "executions" } else { "all" }));
     let queries = expect_context::<CampaignQueries>();
     let cursors = RwSignal::new(vec![String::new()]);
+    let preference = TableSorting::new(
+        if analysis {
+            "analysis-directory"
+        } else {
+            "campaign-directory"
+        },
+        "name",
+        SortDirection::Asc,
+    );
+    let sorting = TableSorting {
+        current: preference.current,
+        change: Callback::new(move |column: String| {
+            batch(move || {
+                cursors.set(vec![String::new()]);
+                preference.change.run(column);
+            })
+        }),
+    };
     let after = Memo::new(move |_| cursors.with(|v| v.last().cloned().unwrap_or_default()));
-    let read = queries
-        .directory
-        .observe(move || (filter.get(), after.get()));
+    let read = queries.directory.observe(move || {
+        (
+            filter.get(),
+            after.get(),
+            sorting.current.get().column,
+            sorting.order(),
+        )
+    });
     let rows = Signal::derive(move || {
         read.data
             .get()
@@ -162,6 +186,8 @@ fn list_mode(api: Api, analysis: bool, token: String) -> impl IntoView {
                 </Show>
             </TableToolbar>
             <DataTable
+                sorting=sorting
+                columns=vec!["name", "status", "total", "launch", ""]
                 label=trs!(ui.campaigns)
                 empty=Signal::derive(move || rows.get().is_empty())
                 headers=vec![
@@ -1586,11 +1612,31 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
     let navigate = use_navigate();
     let can_edit = editable();
     let queries = expect_context::<CampaignQueries>();
-    let cursors = RwSignal::new(Vec::<i64>::new());
-    let after = Memo::new(move |_| cursors.with(|v| v.last().copied().unwrap_or(0)));
-    let read = queries
-        .delivery
-        .observe(move || (id.get_value(), after.get()));
+    let cursors = RwSignal::new(Vec::<String>::new());
+    let preference = TableSorting::new("campaign-delivery", "email", SortDirection::Asc);
+    let sorting = TableSorting {
+        current: preference.current,
+        change: Callback::new(move |column: String| {
+            batch(move || {
+                cursors.set(Vec::new());
+                preference.change.run(column);
+            })
+        }),
+    };
+    let after = Memo::new(move |_| cursors.with(|v| v.last().cloned().unwrap_or_default()));
+    let busy = RwSignal::new(false);
+    let visible = ruphish_ui::query::document_visible();
+    let read = queries.delivery.observe_polling(
+        move || {
+            (
+                id.get_value(),
+                after.get(),
+                sorting.current.get().column,
+                sorting.order(),
+            )
+        },
+        Signal::derive(move || visible.get() && !busy.get()),
+    );
     let data = Signal::derive(move || {
         read.data
             .get()
@@ -1599,52 +1645,16 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
     });
     let confirmed = Signal::derive(move || read.data.with(Option::is_some));
     let next = Signal::derive(move || {
-        data.get()["next_after"]
-            .as_i64()
-            .filter(|next| *next > after.get())
+        data.get()["next_cursor"]
+            .as_str()
+            .map(str::to_owned)
+            .filter(|next| *next != after.get())
     });
     let loading = read.fetching;
     let tasks = ruphish_ui::view_tasks::ViewTasks::default();
-    let busy = RwSignal::new(false);
     let message = Message::new(String::new());
-    let failures = StoredValue::new(0u32);
-    let next_poll = StoredValue::new(0f64);
-    let was_fetching = StoredValue::new(false);
     let action = RwSignal::new(None::<(String, Value)>);
-    Effect::new(move |_| {
-        let fetching = read.fetching.get();
-        if !fetching && was_fetching.get_value() {
-            failures.update_value(|n| {
-                *n = if read.error.get_untracked().is_some() {
-                    (*n + 1).min(5)
-                } else {
-                    0
-                }
-            });
-            next_poll
-                .set_value(js_sys::Date::now() + 5000.0 * 2f64.powi(failures.get_value() as i32));
-        }
-        was_fetching.set_value(fetching);
-    });
-    if let Ok(timer) = set_interval_with_handle(
-        move || {
-            if !loading.get_untracked()
-                && !read
-                    .failure
-                    .with_untracked(|e| e.as_ref().is_some_and(|e| e.is_terminal()))
-                && !busy.get_untracked()
-                && js_sys::Date::now() >= next_poll.get_value()
-                && web_sys::window()
-                    .and_then(|w| w.document())
-                    .is_some_and(|d| !d.hidden())
-            {
-                read.refresh.run(());
-            }
-        },
-        std::time::Duration::from_secs(1),
-    ) {
-        on_cleanup(move || timer.clear());
-    }
+    let activity_sort = TableSorting::new("campaign-activity", "time", SortDirection::Desc);
     let duplicate = move |_| {
         if busy.get_untracked() {
             return;
@@ -1819,6 +1829,8 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
             }>
                 {move || campaign_context(&data.get()["campaign"])} {delivery_progress(data)}
                 <DataTable
+                    sorting=sorting
+                    columns=vec!["", "email", "state", "due", "attempt_count"]
                     label=trs!(ui.campaign_delivery)
                     headers=vec![
                         trs!(ui.history),
@@ -1877,11 +1889,14 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
                         )}
                     </p>
                     <DataTable
+                        sorting=activity_sort
+                        columns=vec!["time", "email", "message"]
                         label=trs!(ui.campaign_activity)
                         headers=vec![trs!(ui.time), trs!(ui.recipient), trs!(ui.event)]
                     >
                         {move || {
-                            array(&data.get(), "activity")
+                            activity_sort
+                                .json(array(&data.get(), "activity"), &["time"])
                                 .into_iter()
                                 .map(|e| {
                                     view! {

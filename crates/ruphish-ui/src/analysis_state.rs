@@ -23,6 +23,20 @@ pub fn query(filter: &Filter, export: bool) -> String {
             pairs.push((key, value.clone()));
         }
     }
+    let sort = serde_json::to_value(filter.sort).unwrap_or_default();
+    let order = serde_json::to_value(filter.order).unwrap_or_default();
+    if filter.sort != Default::default() || filter.order != Default::default() {
+        pairs.push(("sort", sort.as_str().unwrap_or("email").to_owned()));
+        pairs.push(("order", order.as_str().unwrap_or("asc").to_owned()));
+    }
+    if filter.event_sort != Default::default()
+        || filter.event_order != ruphish_domain::reporting::SortDirection::Desc
+    {
+        let sort = serde_json::to_value(filter.event_sort).unwrap_or_default();
+        let order = serde_json::to_value(filter.event_order).unwrap_or_default();
+        pairs.push(("event_sort", sort.as_str().unwrap_or("time").to_owned()));
+        pairs.push(("event_order", order.as_str().unwrap_or("desc").to_owned()));
+    }
     if !export {
         if filter.offset != 0 {
             pairs.push(("offset", filter.offset.to_string()));

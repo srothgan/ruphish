@@ -100,7 +100,7 @@ The default UI build is the production application. Its existing tests continue 
 For the shared dataset and demo transport, use the functional and real-contract checks:
 
 ```sh
-node --test --test-concurrency=1 demo/tests/api.test.mjs demo/tests/preview.test.mjs
+node --test --test-concurrency=1 demo/tests/api.test.mjs demo/tests/sorting.test.mjs demo/tests/preview.test.mjs
 cargo test -p ruphish-ui --test demo_contracts --features demo --locked
 cargo clippy -p ruphish-ui --test demo_contracts --features demo --locked -- -D warnings
 ```

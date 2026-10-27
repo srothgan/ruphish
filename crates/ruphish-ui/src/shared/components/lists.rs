@@ -113,10 +113,87 @@ pub(crate) fn ListEmptyState(
     }
 }
 
+/// Session-local sort preferences survive route navigation without persisting resource data.
+#[derive(Clone, Copy)]
+pub(crate) struct TablePreferences(
+    RwSignal<std::collections::HashMap<String, ruphish_ui::table_state::Sort>>,
+);
+impl TablePreferences {
+    pub fn provide() {
+        provide_context(Self(RwSignal::new(Default::default())));
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct TableSorting {
+    pub current: Signal<ruphish_ui::table_state::Sort>,
+    pub change: Callback<String>,
+}
+impl TableSorting {
+    pub fn new(
+        name: impl Into<String>,
+        column: &str,
+        order: ruphish_domain::reporting::SortDirection,
+    ) -> Self {
+        let name = StoredValue::new(name.into());
+        let initial = StoredValue::new(ruphish_ui::table_state::Sort {
+            column: column.into(),
+            order,
+        });
+        let preferences = expect_context::<TablePreferences>();
+        let current = Signal::derive(move || {
+            preferences
+                .0
+                .with(|v| v.get(&name.get_value()).cloned())
+                .unwrap_or_else(|| initial.get_value())
+        });
+        Self {
+            current,
+            change: Callback::new(move |column: String| {
+                let next = current.get_untracked().select(&column);
+                preferences.0.update(|v| {
+                    v.insert(name.get_value(), next);
+                });
+            }),
+        }
+    }
+    pub fn order(&self) -> String {
+        if self.current.get().order == ruphish_domain::reporting::SortDirection::Asc {
+            "asc".into()
+        } else {
+            "desc".into()
+        }
+    }
+    pub fn rows<T>(
+        &self,
+        rows: Vec<T>,
+        value: impl Fn(&T, &str) -> ruphish_ui::table_state::Value,
+        identity: impl Fn(&T) -> ruphish_ui::table_state::Value,
+    ) -> Vec<T> {
+        self.current.get().rows(rows, value, identity)
+    }
+    pub fn json(&self, rows: Vec<serde_json::Value>, dates: &[&str]) -> Vec<serde_json::Value> {
+        self.rows(
+            rows,
+            |row, column| {
+                if dates.contains(&column) {
+                    ruphish_ui::table_state::timestamp(row[column].as_str().unwrap_or_default())
+                } else {
+                    ruphish_ui::table_state::scalar(&row[column])
+                }
+            },
+            |row| ruphish_ui::table_state::scalar(&row["id"]),
+        )
+    }
+}
+
 #[component]
 pub(crate) fn DataTable(
     #[prop(into)] label: Signal<String>,
     headers: Vec<Signal<String>>,
+    /// Empty keys identify action-only columns.
+    columns: Vec<&'static str>,
+    sorting: TableSorting,
     children: Children,
     #[prop(default = "")] class: &'static str,
     #[prop(default = false)] compact: bool,
@@ -137,7 +214,37 @@ pub(crate) fn DataTable(
                     <tr>
                         {headers
                             .into_iter()
-                            .map(|name| view! { <th scope="col">{move || name.get()}</th> })
+                            .zip(columns)
+                            .map(|(name, key)| {
+                                if key.is_empty() {
+                                    view! { <th scope="col">{move || name.get()}</th> }.into_any()
+                                } else {
+                                    view! {
+                                        <th
+                                            scope="col"
+                                            aria-sort=move || sorting.current.get().aria(key)
+                                        >
+                                            <button
+                                                type="button"
+                                                class="table-sort"
+                                                on:click=move |_| sorting.change.run(key.to_owned())
+                                            >
+                                                <svg
+                                                    class="table-sort-icon"
+                                                    viewBox="0 0 12 16"
+                                                    aria-hidden="true"
+                                                    focusable="false"
+                                                >
+                                                    <path class="table-sort-up" d="M6 1 11 6H1Z" />
+                                                    <path class="table-sort-down" d="M1 10H11L6 15Z" />
+                                                </svg>
+                                                <span>{move || name.get()}</span>
+                                            </button>
+                                        </th>
+                                    }
+                                        .into_any()
+                                }
+                            })
                             .collect_view()}
                     </tr>
                 </thead>

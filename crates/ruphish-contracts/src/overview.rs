@@ -17,19 +17,6 @@ pub struct Posture {
     pub credentials_entered: i64,
 }
 
-/// Campaign lifecycle counts for the owner.
-#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct CampaignCounts {
-    /// All campaigns the owner holds.
-    pub total: i64,
-    /// Campaigns currently sending or in progress.
-    pub active: i64,
-    /// Campaigns scheduled to start later.
-    pub scheduled: i64,
-    /// Campaigns that have finished.
-    pub completed: i64,
-}
-
 /// A recent campaign row for the dashboard list.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct RecentCampaign {
@@ -94,8 +81,6 @@ pub struct Attention {
 pub struct Snapshot {
     /// Server time used consistently for expiry and launch calculations.
     pub as_of: i64,
-    /// Lifecycle counts.
-    pub campaigns: CampaignCounts,
     /// Most recent campaigns, newest first.
     pub recent: Vec<RecentCampaign>,
     /// Resource inventory.

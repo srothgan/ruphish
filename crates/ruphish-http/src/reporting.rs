@@ -45,6 +45,10 @@ fn filter(f: &Filter) -> Result<app::Filter, Rejection> {
         event: f.event.clone(),
         search: f.search.clone(),
         source: f.source.clone(),
+        event_sort: f.event_sort,
+        event_order: f.event_order,
+        sort: f.sort,
+        order: f.order,
         offset: f.offset,
         limit: f.limit,
     })

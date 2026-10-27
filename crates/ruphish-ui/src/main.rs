@@ -68,6 +68,7 @@ fn main() {
                 let _ = html.set_attribute("lang", locale.as_str());
             }
         });
+        shared::components::TablePreferences::provide();
         view! { <Router>{account::app}</Router> }
     });
 }

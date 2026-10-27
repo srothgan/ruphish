@@ -11,6 +11,7 @@ use crate::{
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use leptos_router::hooks::{use_navigate, use_params_map, use_query_map};
 use ruphish_contracts::reporting::Filter;
+use ruphish_domain::reporting::SortDirection;
 use ruphish_ui::analysis_state::address;
 use ruphish_ui::{tr, trs};
 use serde_json::Value;
@@ -79,6 +80,19 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
             event: get("event").unwrap_or_default(),
             search: get("search").unwrap_or_default(),
             source: get("source").unwrap_or_default(),
+            event_sort: get("event_sort")
+                .and_then(|v| serde_json::from_value(Value::String(v)).ok())
+                .unwrap_or_default(),
+            event_order: get("event_order")
+                .and_then(|v| serde_json::from_value(Value::String(v)).ok())
+                .unwrap_or(SortDirection::Desc),
+            sort: get("sort")
+                .and_then(|v| serde_json::from_value(Value::String(v)).ok())
+                .unwrap_or_default(),
+            order: get("order")
+                .and_then(|v| serde_json::from_value(Value::String(v)).ok())
+                .unwrap_or_default(),
+            limit: get("limit").and_then(|s| s.parse().ok()).unwrap_or(50),
             offset: get("offset").and_then(|s| s.parse().ok()).unwrap_or(0),
             ..Default::default()
         }
@@ -89,9 +103,10 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
     let from = RwSignal::new(String::new());
     let until = RwSignal::new(String::new());
     let queries = expect_context::<CampaignQueries>();
-    let read = queries
-        .analysis
-        .observe(move || CampaignQueries::analysis_key(id, &filters.get()));
+    let read = queries.analysis.observe_polling(
+        move || CampaignQueries::analysis_key(id, &filters.get()),
+        ruphish_ui::query::document_visible(),
+    );
     let data = Signal::derive(move || read.data.get().unwrap_or(Value::Null));
     let loading = read.fetching;
     let loaded = Signal::derive(move || read.data.with(Option::is_some));
@@ -103,6 +118,58 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                 Default::default(),
             )
         })
+    };
+    let event_sorting = TableSorting {
+        current: Signal::derive(move || ruphish_ui::table_state::Sort {
+            column: serde_json::to_value(filters.get().event_sort)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_owned))
+                .unwrap_or_default(),
+            order: filters.get().event_order,
+        }),
+        change: Callback::new(move |column: String| {
+            let mut filter = filters.get_untracked();
+            let current = ruphish_ui::table_state::Sort {
+                column: serde_json::to_value(filter.event_sort)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_owned))
+                    .unwrap_or_default(),
+                order: filter.event_order,
+            }
+            .select(&column);
+            if let Ok(sort) = serde_json::from_value(Value::String(column)) {
+                filter.event_sort = sort;
+                filter.event_order = current.order;
+                filter.offset = 0;
+                go(filter);
+            }
+        }),
+    };
+    let sorting = TableSorting {
+        current: Signal::derive(move || ruphish_ui::table_state::Sort {
+            column: serde_json::to_value(filters.get().sort)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_owned))
+                .unwrap_or_default(),
+            order: filters.get().order,
+        }),
+        change: Callback::new(move |column: String| {
+            let mut filter = filters.get_untracked();
+            let current = ruphish_ui::table_state::Sort {
+                column: serde_json::to_value(filter.sort)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_owned))
+                    .unwrap_or_default(),
+                order: filter.order,
+            }
+            .select(&column);
+            if let Ok(sort) = serde_json::from_value(Value::String(column)) {
+                filter.sort = sort;
+                filter.order = current.order;
+                filter.offset = 0;
+                go(filter);
+            }
+        }),
     };
     Effect::new(move |_| {
         let filter = filters.get();
@@ -127,7 +194,8 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                 offset: request.offset,
                 ..Default::default()
             };
-            let result = CampaignQueries::read_analysis(api, id, &filter)
+            let result = queries
+                .read_analysis(api, id, &filter)
                 .await
                 .map_err(|e| e.message)
                 .map(|value| {
@@ -184,6 +252,10 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                     until,
                     event: selected_event.get_untracked(),
                     source: source.get_untracked(),
+                    event_sort: filters.get_untracked().event_sort,
+                    event_order: filters.get_untracked().event_order,
+                    sort: filters.get_untracked().sort,
+                    order: filters.get_untracked().order,
                     ..Default::default()
                 };
                 if filter == filters.get_untracked() {
@@ -512,8 +584,21 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                     view! {
                         <DataTable
                             label=trs!(ui.recipient_observations)
+                            sorting=sorting
+                            columns=vec![
+                                "email",
+                                "name",
+                                "delivery",
+                                "accepted",
+                                "opened",
+                                "clicked",
+                                "submitted",
+                                "reported",
+                                "",
+                            ]
                             headers=vec![
                                 trs!(ui.recipient),
+                                trs!(ui.name),
                                 trs!(ui.delivery),
                                 trs!(ui.accepted),
                                 trs!(ui.opened),
@@ -536,9 +621,8 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                                         );
                                         view! {
                                             <tr>
-                                                <td>
-                                                    {text(&row, "email")}<small>{text(&row, "name")}</small>
-                                                </td>
+                                                <td>{text(&row, "email")}</td>
+                                                <td>{text(&row, "name")}</td>
                                                 <td>
                                                     {ruphish_ui::localization::delivery_label(
                                                         i18n,
@@ -574,6 +658,8 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                 } else {
                     view! {
                         <DataTable
+                            sorting=event_sorting
+                            columns=vec!["time", "kind", "source", "password_present"]
                             label=trs!(ui.recipient_events)
                             headers=vec![
                                 trs!(ui.time),
@@ -637,34 +723,23 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                         }
                     }}
                 </span>
-                <div class="management-actions">
-                    <ActionButton
-                        disabled=Signal::derive(move || {
-                            loading.get() || filters.get().offset == 0
-                        })
-                        on_click=move |_| {
-                            let mut f = filters.get_untracked();
-                            f.offset = f.offset.saturating_sub(f.limit);
-                            go(f);
-                        }
-                    >
-                        {tr!(ui.previous_page)}
-                    </ActionButton>
-                    <ActionButton
-                        disabled=Signal::derive(move || {
-                            loading.get() || !loaded.get()
-                                || filters.get().offset.saturating_add(filters.get().limit)
-                                    >= total.get()
-                        })
-                        on_click=move |_| {
-                            let mut f = filters.get_untracked();
-                            f.offset += f.limit;
-                            go(f);
-                        }
-                    >
-                        {tr!(ui.next_page)}
-                    </ActionButton>
-                </div>
+                <PaginationControls
+                    disabled=Signal::derive(move || loading.get() || !loaded.get())
+                    has_previous=Signal::derive(move || filters.get().offset > 0)
+                    has_next=Signal::derive(move || {
+                        filters.get().offset.saturating_add(filters.get().limit) < total.get()
+                    })
+                    on_previous=Callback::new(move |()| {
+                        let mut filter = filters.get_untracked();
+                        filter.offset = filter.offset.saturating_sub(filter.limit);
+                        go(filter);
+                    })
+                    on_next=Callback::new(move |()| {
+                        let mut filter = filters.get_untracked();
+                        filter.offset = filter.offset.saturating_add(filter.limit);
+                        go(filter);
+                    })
+                />
             </div>
         </ManagementPage>
     };

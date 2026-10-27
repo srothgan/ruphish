@@ -25,22 +25,6 @@ impl Repository for Overview {
         super::resources::authorize(&mut tx, caller, false).await?;
         let owner = caller.id;
 
-        // The persisted future state is Queued; scheduled/active are derived at
-        // the snapshot time, so a delayed worker cannot leave stale counts.
-        let row = sqlx::query(
-            "SELECT count(*) AS total, \
-             COALESCE(sum(status='Completed'),0) AS completed, \
-             COALESCE(sum(status!='Completed' AND COALESCE(unixepoch(launch_date),0)>?2),0) AS scheduled, \
-             COALESCE(sum(status!='Completed' AND COALESCE(unixepoch(launch_date),0)<=?2),0) AS active \
-             FROM campaigns WHERE user_id=?1",
-        ).bind(owner).bind(now).fetch_one(&mut *tx).await.map_err(storage)?;
-        let campaigns = CampaignCounts {
-            total: row.try_get("total").map_err(storage)?,
-            active: row.try_get("active").map_err(storage)?,
-            scheduled: row.try_get("scheduled").map_err(storage)?,
-            completed: row.try_get("completed").map_err(storage)?,
-        };
-
         // Recent campaigns, newest first, with audience size.
         let rows = sqlx::query(
             "SELECT id,name,status,launch_date,\
@@ -159,7 +143,6 @@ impl Repository for Overview {
         tx.commit().await.map_err(storage)?;
         Ok(Snapshot {
             as_of: now,
-            campaigns,
             recent,
             inventory,
             attention: Attention {

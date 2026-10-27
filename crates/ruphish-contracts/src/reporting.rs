@@ -18,6 +18,14 @@ pub struct Filter {
     pub search: String,
     /// Observation source.
     pub source: String,
+    /// Event ordering before pagination.
+    pub event_sort: ruphish_domain::reporting::EventSort,
+    /// Event direction, independent of recipient ordering.
+    pub event_order: ruphish_domain::reporting::SortDirection,
+    /// Recipient ordering before pagination, independent of event ordering.
+    pub sort: ruphish_domain::reporting::RecipientSort,
+    /// Sort direction; equal values always use ascending recipient identity.
+    pub order: ruphish_domain::reporting::SortDirection,
     /// Row offset.
     pub offset: usize,
     /// Page length.
@@ -37,6 +45,10 @@ impl Default for Filter {
             event: String::new(),
             search: String::new(),
             source: String::new(),
+            event_sort: Default::default(),
+            event_order: ruphish_domain::reporting::SortDirection::Desc,
+            sort: Default::default(),
+            order: Default::default(),
             offset: 0,
             limit: 50,
             format: "csv".into(),
