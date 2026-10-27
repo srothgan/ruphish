@@ -32,7 +32,6 @@ fn dashboard_supports_authenticated_browser_and_api_reads_restart_and_revocation
     assert_eq!(response.status(), 200);
     assert_eq!(response.headers()["cache-control"], "no-store");
     let empty: Snapshot = response.json().unwrap();
-    assert_eq!(empty.campaigns.total, 0);
     assert!(empty.recent.is_empty());
     database(
         dir.path(),
@@ -46,7 +45,6 @@ fn dashboard_supports_authenticated_browser_and_api_reads_restart_and_revocation
         INSERT INTO events(campaign_id,email,kind,time,metadata) VALUES(1,'previous@example.test','email_sent',datetime('now','-10 days'),''),(1,'previous@example.test','email_opened',datetime('now','-9 days'),''),(1,'previous@example.test','email_reported',datetime('now'),''); UPDATE events SET recipient_id=(SELECT min(r.id) FROM results r WHERE r.campaign_id=events.campaign_id AND r.email=events.email HAVING count(*)=1) WHERE recipient_id IS NULL;"#,
     );
     let snapshot: Snapshot = read(&base, "/api/overview", key).json().unwrap();
-    assert_eq!(snapshot.campaigns.completed, 1);
     assert_eq!(snapshot.recent[0].outcomes.opened, 2);
     for path in [
         "/api/overview/posture",
@@ -123,7 +121,6 @@ fn dashboard_supports_authenticated_browser_and_api_reads_restart_and_revocation
     let other: Snapshot = read(&base, "/api/overview", Some("other-key"))
         .json()
         .unwrap();
-    assert_eq!(other.campaigns.total, 0);
     assert!(other.recent.is_empty());
     let other: PostureResponse = read(&base, "/api/overview/posture", Some("other-key"))
         .json()
@@ -196,7 +193,6 @@ fn dashboard_supports_authenticated_browser_and_api_reads_restart_and_revocation
     );
     base = format!("http://{}", process.ready()["admin"].as_str().unwrap());
     let restored: Snapshot = read(&base, "/api/overview", key).json().unwrap();
-    assert_eq!(restored.campaigns, snapshot.campaigns);
     assert_eq!(restored.recent, snapshot.recent);
     process.stop();
     let logs = std::fs::read_to_string(dir.path().join("server.log")).unwrap();

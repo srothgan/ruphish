@@ -28,7 +28,7 @@ export async function capture(base, password, destination) {
 
     const overview = await request('/api/overview');
     const metrics = await request('/api/overview/posture?window=30d');
-    assert.equal(overview.campaigns.total, 4);
+    assert.equal(overview.recent.length, 4);
     assert.equal(overview.inventory.groups, 6);
     assert.equal(overview.inventory.reporting_mailboxes, 2);
     assert.equal(overview.attention.delivery_problems, 12);

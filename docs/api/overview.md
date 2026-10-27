@@ -16,7 +16,7 @@ Only `/api/overview/posture` accepts `window=all`, `7d`, `30d`, or `365d`. Its A
 
 ## Overview snapshot
 
-`as_of` is UTC Unix seconds. `campaigns` contains total, active, scheduled, and completed counts. `recent` contains at most five campaigns with identity, status, launch, recipients, and outcome counts. `inventory` counts templates, pages, groups, profiles, domains, verified domains, and reporting mailboxes.
+`as_of` is UTC Unix seconds. `recent` contains at most five campaigns with identity, status, launch, recipients, and outcome counts. `inventory` counts templates, pages, groups, profiles, domains, verified domains, and reporting mailboxes.
 
 `attention` contains enabled unverified-domain and delivery-problem counts, plus the next launch when one exists. These are navigation cues; open the relevant campaign or domain for the actionable state.
 

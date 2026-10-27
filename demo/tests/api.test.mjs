@@ -226,7 +226,7 @@ test('all resource mutations resolve to real sample IDs without changing any rea
 test('dashboard, filters, pagination and recipient drill-downs share the same records', async () => {
     const f = setup(); await f.login();
     const overview = (await f.request('/api/overview')).value;
-    assert.equal(overview.campaigns.total, 4);
+    assert.equal(overview.recent.length, 4);
     assert.equal(overview.inventory.groups, 6);
     assert.equal(overview.attention.delivery_problems, 12);
     assert.equal((await f.request('/api/overview/posture?window=30d')).value.delivered, 937);

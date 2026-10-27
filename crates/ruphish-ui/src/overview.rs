@@ -222,6 +222,7 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
     let api = expect_context::<crate::client::Api>();
     let i18n = ruphish_ui::localization::use_i18n();
 
+    let no_campaigns = s.recent.is_empty();
     let inventory = s.inventory;
     let attention = s.attention;
     let clear = attention.unverified_enabled_domains == 0 && attention.delivery_problems == 0;
@@ -233,24 +234,6 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                         <a href="/campaigns">{tr!(ui.recent_campaigns)}</a>
                     </h2>
                 </div>
-                <dl class="dashboard-lifecycle">
-                    <div>
-                        <dt>{tr!(ui.active)}</dt>
-                        <dd>{s.campaigns.active}</dd>
-                    </div>
-                    <div>
-                        <dt>{tr!(ui.scheduled)}</dt>
-                        <dd>{s.campaigns.scheduled}</dd>
-                    </div>
-                    <div>
-                        <dt>{tr!(ui.completed)}</dt>
-                        <dd>{s.campaigns.completed}</dd>
-                    </div>
-                    <div>
-                        <dt>{tr!(ui.total)}</dt>
-                        <dd>{s.campaigns.total}</dd>
-                    </div>
-                </dl>
                 <DataTable
                     sorting=sorting
                     columns=vec!["name", "recipients", "clicked", "reported", ""]
@@ -262,7 +245,7 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                         trs!(ui.reported),
                         trs!(ui.actions),
                     ]
-                    empty=s.recent.is_empty()
+                    empty=no_campaigns
                 >
                     {move || {
                         ruphish_ui::overview_state::recent_campaigns(
@@ -318,7 +301,7 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                             .collect_view()
                     }}
                 </DataTable>
-                {(s.campaigns.total == 0)
+                {no_campaigns
                     .then(|| {
                         view! {
                             <EmptyState title=trs!(ui.no_campaigns_yet)>

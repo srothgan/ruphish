@@ -26,7 +26,6 @@ export function overview(data) {
     const scheduled = headers.filter(c => c.status === 'Queued').sort((a, b) => a.launch_date.localeCompare(b.launch_date));
     return {
         as_of: data.now,
-        campaigns: { total: headers.length, active: headers.filter(c => c.status === 'In progress').length, scheduled: scheduled.length, completed: headers.filter(c => c.status === 'Completed').length },
         recent: [...data.campaigns].reverse().map(c => ({ id: c.header.id, name: c.header.name, status: c.header.status, launch: c.header.launch_date, recipients: c.results.length, outcomes: posture(c.results) })),
         inventory: { templates: data.templates.length, pages: data.pages.length, groups: data.groups.length, profiles: data.smtp.length, domains: data.domains.length, domains_verified: data.domains.filter(d => d.eligible).length, reporting_mailboxes: data['reporting-mailboxes'].length },
         attention: { unverified_enabled_domains: data.domains.filter(d => d.enabled && !d.eligible).length, delivery_problems: data.campaigns.filter(c => c.header.status !== 'Completed').flatMap(c => c.results).filter(r => r.state === 'failed').length, next_launch: scheduled.length ? { id: scheduled[0].id, name: scheduled[0].name, launch: scheduled[0].launch_date } : null },

@@ -989,8 +989,8 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
             .snapshot(actor, now + 10)
             .await
             .unwrap()
-            .campaigns
-            .total,
+            .recent
+            .len(),
         1
     );
     campaigns

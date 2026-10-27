@@ -229,14 +229,16 @@ pub(crate) fn DataTable(
                                                 class="table-sort"
                                                 on:click=move |_| sorting.change.run(key.to_owned())
                                             >
+                                                <svg
+                                                    class="table-sort-icon"
+                                                    viewBox="0 0 12 16"
+                                                    aria-hidden="true"
+                                                    focusable="false"
+                                                >
+                                                    <path class="table-sort-up" d="M6 1 11 6H1Z" />
+                                                    <path class="table-sort-down" d="M1 10H11L6 15Z" />
+                                                </svg>
                                                 <span>{move || name.get()}</span>
-                                                <span class="table-sort-icon" aria-hidden="true">
-                                                    {move || match sorting.current.get().aria(key) {
-                                                        "ascending" => "\u{2191}",
-                                                        "descending" => "\u{2193}",
-                                                        _ => "\u{2195}",
-                                                    }}
-                                                </span>
                                             </button>
                                         </th>
                                     }
