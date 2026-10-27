@@ -36,7 +36,7 @@ jobs:
           node-version: '26.8.1'
           package-manager-cache: false
       - name: Check gate behavior and fixture initialization
-        run: node --test .github/scripts/validation.test.mjs tests/acceptance/init.test.mjs
+        run: node --test .github/scripts/*.test.mjs demo/tests/vercel-output.test.mjs tests/acceptance/init.test.mjs
       - name: Lint workflows
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck="" -pyflakes=""
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -116,35 +116,6 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: admin-distribution
-          path: dist/admin/
-          retention-days: 2
-          if-no-files-found: error
-
-  demo:
-    name: Static demo contracts and build
-    needs: changes
-    if: needs.changes.outputs.product == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/toolchain
-        with:
-          browser: 'true'
-          cache-group: browser-demo
-      - run: npm ci --prefix crates/ruphish-ui/web
-      - run: node --test demo/tests/api.test.mjs demo/tests/preview.test.mjs
-      - run: cargo test -p ruphish-ui --test demo_contracts --features demo --locked
-      - run: cargo clippy -p ruphish-ui --test demo_contracts --features demo --locked -- -D warnings
-      - run: node crates/ruphish-ui/web/build-demo.mjs
-      - run: node --test demo/tests/bundle.test.mjs
-      - run: trunk build --locked --features demo
-      - run: cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --features demo --locked -- -D warnings
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: demo-distribution
           path: dist/admin/
           retention-days: 2
           if-no-files-found: error
@@ -337,7 +308,7 @@ jobs:
 
   gate:
     name: Validation gate
-    needs: [changes, website, assets, demo, native, database, platforms, dependencies, public]
+    needs: [changes, website, assets, native, database, platforms, dependencies, public]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -356,7 +327,6 @@ jobs:
           const required = {
             website: groups.website,
             assets: groups.product,
-            demo: groups.product,
             native: groups.product,
             platforms: groups.product,
             database: groups.persistence,

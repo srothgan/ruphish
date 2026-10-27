@@ -3,7 +3,7 @@ title: Public demo
 description: Build and maintain the static administration demo and its shared synthetic dataset.
 ---
 
-The public demo uses the real Leptos administration UI with one extended synthetic dataset and simulated writes. The intended address is `https://demo.ruphish.com`. The Astro website remains a separate application at `https://www.ruphish.com`. Vercel project creation, deployment, and domain setup are left to the user.
+The public demo uses the real Leptos administration UI with one extended synthetic dataset and simulated writes at `https://demo.ruphish.com`. The Astro website remains a separate application at `https://www.ruphish.com`. GitHub Actions prepares the demo artifact; deployment to the separate Vercel demo project is opt-in until its protected environments and credentials are configured.
 
 ## Visitor journey
 
@@ -64,7 +64,7 @@ Campaign drafts remain an intentionally stateless demonstration: saving a new dr
 - `crates/ruphish-ui/src/shared/components/toasts.rs`: shared demo notifications; feature modules announce success only after their normal response validation.
 - `crates/ruphish-ui/src/account.rs`, locale files, and shared CSS: demo notice, credentials, accessible feedback, and translations.
 - `demo/tests/` and `crates/ruphish-ui/tests/demo_contracts.rs`: independent demo functionality, real DTO decoding, static routing, and installed SQLite seed/reopen checks.
-- `.github/workflows/validation.yml`: separate normal and demo jobs, Cargo caches, and distribution artifacts. Shared dataset changes select the product checks through `.github/paths.yml`.
+- `.github/workflows/demo.yml`: dedicated demo path selection, contracts, optimized build, Cargo cache, deployment artifact and gate. Normal application checks remain in `.github/workflows/validation.yml`. Shared dataset changes select the product checks through `.github/paths.yml`.
 
 ## Build and validation
 
@@ -72,37 +72,47 @@ See [local demo instructions](../../demo/README.md) for building and previewing 
 
 Both local modes use Trunk's existing `dist/.stage` staging and final `dist/admin` directory. Build sequentially and rebuild the intended mode before consuming this directory. CI uses separate jobs and artifact names so a demo artifact cannot satisfy the normal product asset cache.
 
-## Vercel build settings
+## GitHub build and Vercel deployment
 
-Use a separate `ruphish-demo` project connected to this repository, with `main` as its production branch after the demo changes are merged. Configure the following [Vercel build settings](https://vercel.com/docs/builds/configure-a-build):
+The `demo` group in [the shared path selection](../../.github/paths.yml) selects UI/domain/contracts, embedded starter content, demo data, manifests, the workspace lockfile, toolchain and deployment/build inputs. Backend implementation, backend tests and website/documentation-only changes do not select the demo. `Cargo.lock` deliberately remains a broad trigger: even a backend dependency update can select the demo. Fork and Dependabot PRs keep the same relevant build/test coverage. The website retains its existing Vercel path filter for `website/` and `docs/`.
 
-| Setting | Value |
-| --- | --- |
-| Application preset | Other |
-| Root directory | `./` (repository root) |
-| Output directory | `dist/admin` |
-| Install Command override | Enabled; use the command below |
-| Build Command override | Enabled; use the command below |
-
-Copy each command as a single line. The install command is 239 characters and the build command is 165 characters, both below the dashboard's 256-character field limit.
-
-### Install Command
+[The dedicated demo workflow](../../.github/workflows/demo.yml) runs the demo contracts and browser checks, builds the optimized demo, and packages it once. Its only jobs are Demo paths, Static demo contracts and build, and Demo gate; it does not instantiate normal application jobs. The normal application keeps its separate development artifact and tests in [shared validation](../../.github/workflows/validation.yml). The deployment build uses these direct commands after dependency installation:
 
 ```sh
-export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH" && rustup install 1.99.1 --target wasm32-unknown-unknown && cargo +1.99.1 install trunk --version 0.21.14 --locked --profile dev -j1 && npm ci --include=dev --prefix crates/ruphish-ui/web
+node crates/ruphish-ui/web/build-demo.mjs
+trunk build --locked --release --features demo
+node demo/vercel-output.mjs
 ```
 
-The Vercel environment used for this project already provides `rustup` and sets `CARGO_HOME` to `/rust`. Reuse that installation rather than running the rustup installer again or assuming an environment file exists at `$HOME/.cargo/env`. Installing the toolchain explicitly avoids rustup's deprecated automatic toolchain installation. Keep these version arguments aligned with [`rust-toolchain.toml`](../../rust-toolchain.toml) and [`Trunk.toml`](../../Trunk.toml); retain `--locked` when installing Trunk.
+The [Trunk action](../../.github/actions/trunk/action.yml) downloads the official Linux x64 binary for the version in `Trunk.toml`, verifies the committed SHA-256 checksum, and checks its reported version. When updating Trunk, review and update the checksum from the matching [official release](https://github.com/trunk-rs/trunk/releases). Other local platforms retain their normal tool installation. The [toolchain action](../../.github/actions/toolchain/action.yml) caches Cargo registry/git downloads, `target` and installed tools. Restore keys prefer matching dependencies and fall back to the same OS, architecture, toolchain and job group; Cargo decides which changed inputs require recompilation. GitHub cache eviction and branch access rules still apply, so cold builds remain possible. See [GitHub's cache reference](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching).
 
-### Build Command
+[`vercel-output.mjs`](../../demo/vercel-output.mjs) verifies the asset manifest and copies only the static distribution into `.vercel/output/static`, with [Build Output API v3 configuration](https://vercel.com/docs/build-output-api/configuration). It preserves JS/MJS/WASM MIME types, serves extensionless application routes through `index.html`, rejects backend namespaces and missing asset files, and marks the demo `noindex`. It refuses stale output directories, unmanifested files and altered assets. The `demo-vercel-output` artifact contains this directory, including its routing configuration, and is retained for two days. Packaging tests exercise these rules locally; hosted behavior still requires deployment verification.
 
-```sh
-export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH" && node crates/ruphish-ui/web/build-demo.mjs && CARGO_BUILD_JOBS=1 trunk build --locked --release --features demo
-```
+The [CI workflow](../../.github/workflows/pr.yml) calls the dedicated demo workflow alongside normal source validation. As soon as the selected demo has built and validated its artifact, the deployment job can request environment approval; it does not wait for the other checks or `PR gate`. After approval, it downloads that exact run's artifact and executes `vercel deploy --prebuilt --yes` (plus `--prod` for main). Preview and production follow the same independent path. The PR gate still requires both source and demo validation, but deployment is a separate check and can succeed even if another suite fails. Nightly and release checks reuse the same demo workflow with full selection, without deployment or comments. The deploy job does not check out application code or rebuild it. [Vercel documents prebuilt uploads](https://vercel.com/docs/cli/deploy#prebuilt) as skipping its remote build. The pinned CLI version is maintained in that job; version 65.3.1 also accepts `VERCEL_TOKEN` from the environment, verified against the installed CLI implementation.
 
-The build command sets its own tool path because the install and build commands run separately. It generates the demo transport before Trunk builds the optimized public WASM artifact. Local development and ordinary validation continue to use the development build documented above.
+### Activation and credentials
 
-These commands cover installation and compilation, not a verified deployment. Application-route rewrites are still required for direct visits and refreshes on nested pages such as `/campaigns/3`; asset files must remain directly accessible, and missing assets and API URLs must not return the application HTML. Domain assignment to `demo.ruphish.com` is a separate project setting.
+Keep Vercel's existing Git deployment path active until the workflow has passed and its credentials are ready. The new deploy job is disabled unless the repository variable `DEMO_DEPLOY_ENABLED` is exactly `true`. No Vercel build-setting change is required for prebuilt uploads; after cutover, the old install/build commands are unused by this workflow.
+
+Configure these GitHub repository variables and environment secrets without committing credentials:
+
+| Location | Name | Value |
+| --- | --- | --- |
+| Repository variable | `VERCEL_ORG_ID` | The Vercel team ID owning the demo project |
+| Repository variable | `VERCEL_DEMO_PROJECT_ID` | The `ruphish-demo` project ID, never the website project ID |
+| Repository variable | `DEMO_DEPLOY_ENABLED` | `true` only when activation is ready |
+| `demo-production` environment secret | `VERCEL_TOKEN` | A Vercel token authorized for the demo project's team |
+| `demo-preview` environment secret | `VERCEL_TOKEN` | A Vercel token authorized for preview deployment |
+
+Create the `demo-production` environment with deployment restricted to `main` and a required maintainer reviewer. Create `demo-preview` with a required maintainer reviewer; review the exact PR commit and workflow before releasing its secret. For this single-maintainer repository, self-review must remain allowed if the maintainer will approve their own deployments. [GitHub environment protection](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments) withholds environment secrets until approval. Tokens belong in those environments, not in general repository secrets or Dependabot secrets.
+
+Pushes to main publish production after approval. Same-repository, non-Dependabot PRs can publish previews after approval. Fork and Dependabot PRs build and test without publishing or receiving the deployment credential; their merged changes use the normal main deployment path. A manual run of the CI workflow on main forces validation and can publish even when no input paths changed. Manual runs on other branches do not deploy. The GitHub environment's deployment URL links to the result.
+
+For eligible PR previews, `github-actions[bot]` maintains one comment through Building when a run starts and the canonical path filter selects the demo; Awaiting approval after the demo artifact is ready; Deploying when the approved deployment job starts; and Ready with the preview URL after deployment, or Build failed/Deployment failed with workflow logs. Each update includes the source commit and run link. Reporting uses the automatic GitHub token with `pull-requests: write`. The initial reporting job also has `contents: read` to read the path filter without executing repository code. The Deploying update runs inside the protected deployment job before artifact upload; it has a one-minute timeout and a comment failure does not fail deployment. The Vercel credential remains scoped to the actual deploy step. Reporting jobs are ordered, and comment metadata rejects updates older than an already recorded run, attempt or stage. Neither building nor deployment depends on a reporting job. Cancelled runs, closed PRs and superseded PR commits are skipped; unrelated check failures do not affect demo status. Production deployments do not post PR comments.
+
+For cutover, first verify a prebuilt preview with the manual acceptance list below. Enable the deploy job, then disconnect only the `ruphish-demo` project's Git repository integration in Vercel before merging the workflow, so the main push does not trigger a second source build. Keep the project and its existing domain; CLI uploads target it by ID. Leave `ruphish-website` connected. If publication fails or a newer unrelated push cancels an earlier CI build, rerun CI manually on main. Disabling `DEMO_DEPLOY_ENABLED` stops new GitHub publications; reconnecting the demo Git integration restores the previous Vercel build path. This repository change alone neither disconnects Vercel nor proves a hosted deployment succeeded.
+
+Standard GitHub-hosted runner time is free for this public repository; cache and artifact storage have separate limits. Short artifact retention and separate build caches reduce repeated work but do not guarantee a particular warm-build duration. See [GitHub Actions billing](https://docs.github.com/en/actions/concepts/billing-and-usage).
 
 ## Manual acceptance
 

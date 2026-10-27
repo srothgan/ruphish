@@ -1,0 +1,91 @@
+name: Demo validation
+
+on:
+  workflow_call:
+    outputs:
+      demo_changed:
+        description: Whether this run selected the demo
+        value: ${{ jobs.changes.outputs.demo }}
+    inputs:
+      full:
+        type: boolean
+        default: false
+        description: Build and validate the demo regardless of changed paths
+
+permissions:
+  contents: read
+
+env:
+  NO_COLOR: 'true'
+  CARGO_TERM_COLOR: never
+
+jobs:
+  changes:
+    name: Demo paths
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      demo: ${{ inputs.full && 'true' || steps.paths.outputs.demo }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: paths
+        if: ${{ !inputs.full }}
+        with:
+          token: ''
+          base: ${{ github.base_ref || github.ref_name }}
+          filters: .github/paths.yml
+
+  build:
+    name: Static demo contracts and build
+    needs: changes
+    if: needs.changes.outputs.demo == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/toolchain
+        with:
+          browser: 'true'
+          cache-group: browser-demo
+      - run: npm ci --prefix crates/ruphish-ui/web
+      - run: node --test demo/tests/api.test.mjs demo/tests/preview.test.mjs
+      - run: cargo test -p ruphish-ui --test demo_contracts --features demo --locked
+      - run: cargo clippy -p ruphish-ui --test demo_contracts --features demo --locked -- -D warnings
+      - run: node crates/ruphish-ui/web/build-demo.mjs
+      - run: node --test demo/tests/bundle.test.mjs
+      - run: trunk build --locked --release --features demo
+      - run: cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --features demo --locked -- -D warnings
+      - run: node demo/vercel-output.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: demo-vercel-output
+          path: .vercel/output/
+          include-hidden-files: true
+          retention-days: 2
+          if-no-files-found: error
+
+  gate:
+    name: Demo gate
+    needs: [changes, build]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require the selected demo build to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node --input-type=module <<'NODE'
+          const jobs = JSON.parse(process.env.RESULTS);
+          if (jobs.changes.result !== 'success') throw new Error('Demo path selection failed or was cancelled');
+          const selected = jobs.changes.outputs.demo;
+          if (!['true', 'false'].includes(selected)) throw new Error('Missing demo path output');
+          const expected = selected === 'true' ? 'success' : 'skipped';
+          if (jobs.build.result !== expected) throw new Error('Demo build: expected ' + expected + ', got ' + jobs.build.result);
+          NODE
