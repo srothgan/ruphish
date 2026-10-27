@@ -28,6 +28,8 @@ pub struct MailboxEdit {
     pub password: Option<String>,
     /// Implicit TLS; false requires STARTTLS.
     pub tls: bool,
+    /// Explicitly skip server certificate chain and hostname verification; TLS is still required.
+    pub ignore_cert_errors: bool,
     /// Folder to monitor.
     pub folder: String,
     /// Optional From-domain matching filter, not authenticated identity.

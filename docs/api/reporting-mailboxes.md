@@ -17,9 +17,11 @@ Reporting mailboxes match reported messages to campaign recipients. Multiple mai
 
 ## Configuration
 
-Writes contain `name`, `enabled`, `host`, `port`, `username`, optional `password`, `tls`, `folder`, `restrict_domain`, `delete_reported`, `frequency`, and expected `revision` for edits. Unknown fields are rejected. Poll frequency is in seconds, from 30 through 31,540,000.
+Writes contain `name`, `enabled`, `host`, `port`, `username`, optional `password`, `tls`, optional `ignore_cert_errors`, `folder`, `restrict_domain`, `delete_reported`, `frequency`, and expected `revision` for edits. Unknown fields are rejected. Poll frequency is in seconds, from 30 through 31,540,000.
 
 `tls: true` selects implicit TLS; false selects STARTTLS, not unencrypted authentication. Username/password authentication is supported. OAuth is not part of this interface. Omitting a password on an edit retains the saved secret; responses expose `has_password`, not the password.
+
+`ignore_cert_errors` defaults to false. Explicitly enabling it skips server certificate chain, validity and hostname checks while retaining encryption and TLS handshake signature verification. The same policy applies to validation and background polling; there is no automatic bypass or plaintext fallback. Editing the policy increments the configuration revision and preserves UID checkpoints and pending acknowledgements. Workers recheck the revision before sending credentials and committing results; authentication already authorized when an edit commits may be in flight.
 
 Responses add `id`, `revision`, `last_check`, `last_success`, `next_check`, `running`, `code`, and recent `history`. Run timestamps use UTC Unix seconds. History includes fixed outcome codes and matched/rejected counts; a successful connection test does not mean a report was matched.
 
@@ -33,9 +35,9 @@ Matched outcomes commit before mailbox acknowledgement. Retrying acknowledgement
 
 Legacy `/api/imap/` GET/POST and `/api/imap/validate` remain compatibility surfaces. New integrations should use the resource routes above; a legacy validation GET is rejected instead of initiating an external check.
 
-GET `/api/imap/` returns an array containing the caller's lowest-ID mailbox, or `[]`. Its compatibility shape uses string `port` and `imap_freq`, `delete_reported_campaign_email` instead of `delete_reported`, and `last_login`/`modified_date`. `password` is always empty and `has_password` indicates whether a secret exists; `ignore_cert_errors` is always false.
+GET `/api/imap/` returns an array containing the caller's lowest-ID mailbox, or `[]`. Its compatibility shape uses string `port` and `imap_freq`, `delete_reported_campaign_email` instead of `delete_reported`, and `last_login`/`modified_date`. `password` is always empty and `has_password` indicates whether a secret exists; `ignore_cert_errors` reports the saved certificate policy.
 
-POST `/api/imap/` accepts `enabled`, `host`, string `port`, `username`, optional `password`, `tls`, `ignore_cert_errors`, `folder`, `restrict_domain`, `delete_reported_campaign_email`, and string `imap_freq`. It updates that lowest-ID mailbox or creates one. Empty folder becomes `INBOX`; invalid/out-of-range frequency falls back to 60 seconds. An empty password preserves the existing one. `ignore_cert_errors: true` is rejected. Successful save returns `201` with a success envelope.
+POST `/api/imap/` accepts `enabled`, `host`, string `port`, `username`, optional `password`, `tls`, `ignore_cert_errors`, `folder`, `restrict_domain`, `delete_reported_campaign_email`, and string `imap_freq`. It updates that lowest-ID mailbox or creates one. Empty folder becomes `INBOX`; invalid/out-of-range frequency falls back to 60 seconds. An empty password preserves the existing one. `ignore_cert_errors: true` explicitly skips certificate chain and hostname verification; omitted or false enables verification. Successful save returns `201` with a success envelope.
 
 POST `/api/imap/validate` takes the same compatibility settings without saving them. Successful validation returns `201`; an integration failure can return `200` with `success: false`, `code`, and `message`. This legacy exception means HTTP success alone is insufficient: inspect the envelope. Prefer the resource-specific validation route for new code.
 

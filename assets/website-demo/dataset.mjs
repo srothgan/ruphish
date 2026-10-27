@@ -65,7 +65,7 @@ export function dataset(now) {
     }));
     const mailboxes = source.mailboxes.map((name, i) => ({
         id: i + 1, name, enabled: i === 0, host: 'imap.example.test', port: 993,
-        username: `reports${i + 1}@example.test`, has_password: true, tls: true, folder: 'INBOX',
+        username: `reports${i + 1}@example.test`, has_password: true, tls: true, ignore_cert_errors: false, folder: 'INBOX',
         restrict_domain: 'example.test', delete_reported: false, frequency: 300, revision: 1,
         last_check: now - 300, last_success: now - 300, next_check: now + 300, running: false,
         code: i === 0 ? 'ok' : 'connection_failed', history: [run(i + 1, i !== 0, false)],

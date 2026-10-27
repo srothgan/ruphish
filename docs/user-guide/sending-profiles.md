@@ -15,6 +15,8 @@ A sending profile tells Ruphish how to connect to your SMTP service. You need it
 
 The default port is 25. Port 465 uses implicit TLS; other SMTP connections use STARTTLS when advertised. Authentication requires encryption except for loopback test services. Private/internal destinations also need the installation's [outbound allowance](../administration/outbound-connections.md); changing the hostname alone does not bypass it.
 
+Ruphish automatically chooses CRAM-MD5, PLAIN or LOGIN from the server's advertised authentication mechanisms, in that preference order. Connection checks, test emails and campaign delivery use the same negotiation. A rejected credential or malformed challenge fails the attempt without falling back to another mechanism. CRAM-MD5 is supported for relay compatibility; it does not replace TLS.
+
 ## Understand the sender fields
 
 The profile supplies the SMTP envelope sender. A template can override the visible From header through its legacy `envelope_sender` field. These are distinct identities; verify both when diagnosing a rejected sender or unexpected message appearance.

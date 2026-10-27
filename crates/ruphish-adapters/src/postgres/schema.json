@@ -241,6 +241,7 @@
     ["ruphish_mailboxes", "last_login", "character varying", "NO", 40, "NO", "'0001-01-01T00:00:00Z'::character varying", "C"],
     ["ruphish_mailboxes", "failures", "bigint", "NO", null, "NO", "0", null],
     ["ruphish_mailboxes", "code", "character varying", "NO", 255, "NO", "''::character varying", "C"],
+    ["ruphish_mailboxes", "ignore_cert_errors", "boolean", "NO", null, "NO", "false", null],
     ["ruphish_profile_cooldown", "profile_id", "bigint", "NO", null, "NO", null, null],
     ["ruphish_profile_cooldown", "until_time", "bigint", "NO", null, "NO", null, null],
     ["ruphish_profile_cooldown", "revision", "character varying", "NO", 255, "NO", null, "C"],

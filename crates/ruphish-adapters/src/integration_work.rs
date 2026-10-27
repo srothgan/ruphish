@@ -94,7 +94,10 @@ async fn poll_mailbox(
     claim: &MailboxClaim,
 ) -> Result<(), &'static str> {
     let c = &claim.config;
-    let (mut session, mailbox) = mailbox_transport::connect(policy, c).await?;
+    store.mailbox_current(c).await?;
+    let (mut session, mailbox) =
+        mailbox_transport::connect_checked(policy, c, store.mailbox_current(c)).await?;
+    store.mailbox_current(c).await?;
     store.mailbox_login(c).await?;
     let validity = i64::from(mailbox.uid_validity.ok_or("mailbox_uidvalidity_missing")?);
     let next = mailbox.uid_next.ok_or("mailbox_uidnext_missing")?;

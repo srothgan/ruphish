@@ -314,6 +314,9 @@ fn probe() -> Probe {
     probe_many(1)
 }
 pub(super) fn probe_many(count: usize) -> Probe {
+    probe_auth(count, false)
+}
+fn probe_auth(count: usize, cram: bool) -> Probe {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap().to_string();
     let (sent, received) = mpsc::channel();
@@ -325,15 +328,33 @@ pub(super) fn probe_many(count: usize) -> Probe {
                 .set_read_timeout(Some(Duration::from_secs(15)))
                 .unwrap();
             let mut io = BufReader::new(stream);
+            let mut challenge = false;
+            let mut authenticated = !cram;
             io.get_mut().write_all(b"220 local ESMTP\r\n").unwrap();
             loop {
                 let mut line = String::new();
                 if io.read_line(&mut line).unwrap_or(0) == 0 {
                     continue 'connections;
                 }
-                let response = if line.starts_with("EHLO") {
-                    "250-local\r\n250 8BITMIME\r\n"
+                let response = if challenge {
+                    assert_eq!(
+                        line.trim_end(),
+                        "dGltIGI5MTNhNjAyYzdlZGE3YTQ5NWI0ZTZlNzMzNGQzODkw"
+                    );
+                    challenge = false;
+                    authenticated = true;
+                    "235 Accepted\r\n"
+                } else if line.starts_with("EHLO") {
+                    if cram {
+                        "250-local\r\n250-8BITMIME\r\n250 AUTH CRAM-MD5 PLAIN\r\n"
+                    } else {
+                        "250-local\r\n250 8BITMIME\r\n"
+                    }
+                } else if cram && line == "AUTH CRAM-MD5\r\n" {
+                    challenge = true;
+                    "334 PDE4OTYuNjk3MTcwOTUyQHBvc3RvZmZpY2UucmVzdG9uLm1jaS5uZXQ+\r\n"
                 } else if line.starts_with("DATA") {
+                    assert!(authenticated);
                     io.get_mut().write_all(b"354 Continue\r\n").unwrap();
                     let mut body = String::new();
                     loop {
@@ -422,8 +443,21 @@ fn wait_state(base: &str, id: i64, state: &str) -> Value {
 fn executable_launch_delivers_personalized_mail_once_and_persists_acceptance_across_restart() {
     let directory = workspace();
     let (mut process, base) = start(&directory, &[]);
-    let smtp = probe();
+    let smtp = probe_auth(1, true);
     let mut body = resources(&base, &smtp.address);
+    let mut profile = read(&base, "/api/smtp/1");
+    profile["username"] = json!("tim");
+    profile["password"] = json!("tanstaaftanstaaf");
+    assert_eq!(
+        client()
+            .put(format!("{base}/api/smtp/1"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&profile)
+            .send()
+            .unwrap()
+            .status(),
+        200
+    );
     // Exercise managed tracking through the real queued-delivery worker, with no
     // authored tracker and a fragment rather than a pre-wrapped HTML document.
     let response = client().put(format!("{base}/api/templates/1"))

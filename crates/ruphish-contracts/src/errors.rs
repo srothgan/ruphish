@@ -104,7 +104,7 @@ pub enum ErrorCode {
     LaunchKeyInvalid,
     /// This delivery action is invalid. Refresh the delivery state.
     DeliveryActionInvalid,
-    /// Mail server certificate verification is required.
+    /// The mail server must support TLS.
     MailboxTlsRequired,
     /// Choose a valid mail server port.
     MailboxPortInvalid,

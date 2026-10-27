@@ -16,6 +16,7 @@ pub(super) fn config(r: &PgRow) -> Result<Config, Error> {
         username: text(r, "username")?,
         password: text(r, "password")?,
         tls: r.try_get("tls").map_err(db)?,
+        ignore_cert_errors: r.try_get("ignore_cert_errors").map_err(db)?,
         folder: text(r, "folder")?,
         restrict: text(r, "restrict_domain")?,
         delete: r.try_get("delete_reported").map_err(db)?,

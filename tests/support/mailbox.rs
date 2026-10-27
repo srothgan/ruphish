@@ -28,10 +28,13 @@ pub struct Mailbox {
 }
 impl Mailbox {
     pub fn new() -> Self {
+        Self::configured("127.0.0.1", false, false)
+    }
+    pub fn configured(name: &str, expired: bool, starttls: bool) -> Self {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
-        let material = super::tls_fixture::server_certificate(&["127.0.0.1"]);
+        let material = super::tls_fixture::server_certificate_expiry(&[name], expired);
         let certificate = material.cert.pem();
         let key = rustls::pki_types::PrivatePkcs8KeyDer::from(material.signing_key.serialize_der());
         let config = Arc::new(
@@ -59,12 +62,29 @@ impl Mailbox {
                 socket
                     .set_write_timeout(Some(Duration::from_secs(3)))
                     .unwrap();
+                let socket = if starttls {
+                    let mut peer = BufReader::new(socket);
+                    peer.get_mut().write_all(b"* OK fixture ready\r\n").unwrap();
+                    let mut line = String::new();
+                    if peer.read_line(&mut line).ok().is_none_or(|n| n == 0) {
+                        continue;
+                    }
+                    let (tag, command) = line.trim_end().split_once(' ').unwrap();
+                    assert_eq!(command, "STARTTLS");
+                    peer.get_mut()
+                        .write_all(format!("{tag} OK start TLS\r\n").as_bytes())
+                        .unwrap();
+                    peer.into_inner()
+                } else {
+                    socket
+                };
                 let connection = rustls::ServerConnection::new(config.clone()).unwrap();
                 let mut peer = BufReader::new(rustls::StreamOwned::new(connection, socket));
-                if peer
-                    .get_mut()
-                    .write_all(b"* OK fixture IMAP ready\r\n")
-                    .is_err()
+                if !starttls
+                    && peer
+                        .get_mut()
+                        .write_all(b"* OK fixture IMAP ready\r\n")
+                        .is_err()
                 {
                     continue;
                 }

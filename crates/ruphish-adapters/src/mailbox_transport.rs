@@ -7,10 +7,65 @@ use async_imap::imap_proto::{AttributeValue, MailboxDatum, Response, Status};
 use mail_parser::MimeHeaders;
 use ruphish_application::integrations::work::MailboxConfig as Config;
 use std::{collections::BTreeSet, sync::Arc};
+use tokio_rustls::rustls;
+
+// Skip identity/trust checks only; still verify possession of the certificate key.
+#[derive(Debug)]
+struct UnverifiedServer;
+impl rustls::client::danger::ServerCertVerifier for UnverifiedServer {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &rustls::pki_types::CertificateDer<'_>,
+        _intermediates: &[rustls::pki_types::CertificateDer<'_>],
+        _server_name: &rustls::pki_types::ServerName<'_>,
+        _ocsp: &[u8],
+        _now: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
+    }
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        signature: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls12_signature(
+            message,
+            cert,
+            signature,
+            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+        )
+    }
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        signature: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls13_signature(
+            message,
+            cert,
+            signature,
+            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+        )
+    }
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        rustls::crypto::ring::default_provider()
+            .signature_verification_algorithms
+            .supported_schemes()
+    }
+}
 type Session = async_imap::Session<Limited<tokio_rustls::client::TlsStream<tokio::net::TcpStream>>>;
 pub(crate) async fn connect(
     policy: &Policy,
     c: &Config,
+) -> Result<(Session, async_imap::types::Mailbox), &'static str> {
+    connect_checked(policy, c, async { Ok(()) }).await
+}
+pub(crate) async fn connect_checked(
+    policy: &Policy,
+    c: &Config,
+    authorize: impl std::future::Future<Output = Result<(), &'static str>>,
 ) -> Result<(Session, async_imap::types::Mailbox), &'static str> {
     let addresses = policy
         .resolve(&c.host, c.port)
@@ -52,9 +107,14 @@ pub(crate) async fn connect(
             .add(certificate)
             .map_err(|_| "mailbox_invalid_trust_store")?;
     }
-    let config = tokio_rustls::rustls::ClientConfig::builder()
+    let mut config = tokio_rustls::rustls::ClientConfig::builder()
         .with_root_certificates(roots)
         .with_no_client_auth();
+    if c.ignore_cert_errors {
+        config
+            .dangerous()
+            .set_certificate_verifier(Arc::new(UnverifiedServer));
+    }
     let name = tokio_rustls::rustls::pki_types::ServerName::try_from(c.host.clone())
         .map_err(|_| "mailbox_invalid_host")?;
     let tls = tokio_rustls::TlsConnector::from(Arc::new(config))
@@ -69,6 +129,9 @@ pub(crate) async fn connect(
             .map_err(|_| "mailbox_protocol_error")?
             .ok_or("mailbox_protocol_error")?;
     }
+    // An edit committed during DNS/TLS setup wins before credentials are sent.
+    // Once authorized, authentication may already be in flight when another edit commits.
+    authorize.await?;
     let mut session = client
         .login(&c.username, &c.password)
         .await
