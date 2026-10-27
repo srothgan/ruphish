@@ -29,7 +29,7 @@ rcgen = "0.14.10"
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "stream"] }
 ruphish-application = { version = "0.1.0-dev", path = "../ruphish-application" }
 ruphish-domain = { version = "0.1.0-dev", path = "../ruphish-domain" }
-rust_xlsxwriter = { version = "0.100", features = ["constant_memory"] }
+rust_xlsxwriter = { version = "0.101", features = ["constant_memory"] }
 rustls-native-certs = "0.8"
 scraper = { version = "0.27", default-features = false, features = ["errors"] }
 serde = { version = "1.0.229", features = ["derive"] }
