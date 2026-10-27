@@ -566,62 +566,6 @@ impl Repository for Integrations {
             .map_err(|e| Error::Storage(crate::postgres::commit_error(e)))?;
         crate::integration_work::validate_mailbox(&self.policy, &config).await
     }
-    async fn validate_mailbox_settings(
-        &self,
-        who: Identity,
-        edit: MailboxEdit,
-    ) -> Result<(), Error> {
-        edit.validation().finish().map_err(Error::Validation)?;
-        let mut tx = crate::postgres::locks::write(&self.pool)
-            .await
-            .map_err(db)?;
-        authorize(&mut tx, who, true, false).await?;
-        super::settings::require_integration(&mut tx, true).await?;
-        // Only reuse the saved secret for the same account and endpoint.
-        let password = match edit.password {
-            Some(password) => password,
-            None => sqlx::query_scalar::<_, String>(
-                r#"
-                SELECT password
-                FROM ruphish_mailboxes
-                WHERE owner_id=$1
-                AND host=$2
-                AND port=$3
-                AND username=$4
-                ORDER BY id LIMIT 1
-            "#,
-            )
-            .bind(who.id)
-            .bind(&edit.host)
-            .bind(i64::from(edit.port))
-            .bind(&edit.username)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(db)?
-            .ok_or_else(|| invalid("mailbox_password_required"))?,
-        };
-        tx.commit()
-            .await
-            .map_err(|e| Error::Storage(crate::postgres::commit_error(e)))?;
-        let config = ruphish_application::integrations::work::MailboxConfig {
-            id: 0,
-            owner: who.id,
-            revision: 0,
-            host: edit.host,
-            port: edit.port,
-            username: edit.username,
-            password,
-            tls: edit.tls,
-            ignore_cert_errors: edit.ignore_cert_errors,
-            folder: edit.folder,
-            restrict: edit.restrict_domain,
-            delete: false,
-            validity: 0,
-            last: 0,
-            initialized: false,
-        };
-        crate::integration_work::validate_mailbox(&self.policy, &config).await
-    }
     async fn resume_mailbox(&self, who: Identity, id: i64, revision: i64) -> Result<(), Error> {
         let mut tx = crate::postgres::locks::write(&self.pool)
             .await

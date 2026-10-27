@@ -129,12 +129,6 @@ pub trait Repository: Send + Sync {
     ) -> Result<(), Error>;
     /// Validate connection and folder without ingesting messages.
     async fn validate_mailbox(&self, caller: Identity, id: i64) -> Result<(), Error>;
-    /// Validate supplied legacy settings without saving or ingesting messages.
-    async fn validate_mailbox_settings(
-        &self,
-        caller: Identity,
-        edit: MailboxEdit,
-    ) -> Result<(), Error>;
     /// Explicitly resume with new arrivals after the server changes UIDVALIDITY.
     async fn resume_mailbox(&self, caller: Identity, id: i64, revision: i64) -> Result<(), Error>;
     /// Schedule an immediate check; coalesce active work.
