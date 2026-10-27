@@ -151,7 +151,7 @@ fn recent_campaign_window_stays_latest_three_when_sorting_and_refreshing() {
         id,
         name: name.into(),
         status: "Completed".into(),
-        launch: String::new(),
+        launch: None,
         recipients: count,
         outcomes: Posture {
             delivered: 100,

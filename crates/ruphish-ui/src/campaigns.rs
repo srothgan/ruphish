@@ -2239,7 +2239,7 @@ fn campaign_context(c: &Value) -> impl IntoView + use<> {
                 </div> <div>
                     <dt>{tr!(ui.initial_distribution_end)}</dt>
                     <dd>
-                        {if text(&c, "send_by_date").starts_with("0001-") {
+                        {if c["send_by_date"].is_null() {
                             leptos_i18n::t_string!(i18n, ui.no_distribution_window).into()
                         } else {
                             instant(&c["send_by_date"])

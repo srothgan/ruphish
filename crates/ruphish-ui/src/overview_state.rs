@@ -100,6 +100,17 @@ mod tests {
             .as_object_mut()
             .map(|v| v.remove("next_launch"));
         assert!(serde_json::from_value::<Snapshot>(snapshot).is_err());
+        let mut recent = serde_json::json!({"id":1,"name":"Historical","status":"Completed","launch":null,"recipients":0,"outcomes":{"delivered":0,"opened":0,"clicked":0,"reported":0,"credentials_entered":0}});
+        assert!(
+            serde_json::from_value::<ruphish_contracts::overview::RecentCampaign>(recent.clone())
+                .unwrap()
+                .launch
+                .is_none()
+        );
+        recent.as_object_mut().unwrap().remove("launch");
+        assert!(
+            serde_json::from_value::<ruphish_contracts::overview::RecentCampaign>(recent).is_err()
+        );
     }
     #[test]
     fn outcome_trends_distinguish_reporting_from_risky_interactions_and_send_volume() {

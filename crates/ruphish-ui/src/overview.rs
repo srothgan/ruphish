@@ -272,12 +272,13 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                                             <span class="dashboard-campaign-meta">
                                                 {ruphish_ui::localization::event_label(i18n, &c.status)}
                                             </span>
-                                            {(!c.launch.is_empty() && !c.launch.starts_with("0001-"))
-                                                .then(|| {
+                                            {c
+                                                .launch
+                                                .map(|launch| {
                                                     view! {
                                                         <span class="dashboard-campaign-meta">
                                                             {leptos_i18n::t!(
-                                                                i18n, messages.launch_arg0, arg0 = (minute(&c.launch.into())).to_string()
+                                                                i18n, messages.launch_arg0, arg0 = (minute(&launch.into())).to_string()
                                                             )}
                                                         </span>
                                                     }

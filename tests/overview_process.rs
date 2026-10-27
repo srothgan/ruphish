@@ -218,6 +218,10 @@ fn progression_is_shared_across_summaries_without_inventing_recorded_events() {
     database(dir.path(), "UPDATE users SET password_change_required=0;
         INSERT INTO campaigns(id,user_id,name,status) VALUES(1,1,'Progression','Completed'),(2,1,'No acceptance','Completed'),(3,2,'Other owner','Completed');
         INSERT INTO users(id,username,api_key,role_id,password_change_required,account_locked) VALUES(2,'other','other-key',2,0,0); INSERT INTO ruphish_auth_state VALUES(2,0);");
+    database(
+        dir.path(),
+        "UPDATE campaigns SET launch_date='0001-01-01T00:00:00Z' WHERE id=1",
+    );
     // Repeated observations precede the later acceptance. Neither insertion
     // order nor duplicates may change unique progression or create timestamps.
     database(
@@ -318,6 +322,10 @@ fn progression_is_shared_across_summaries_without_inventing_recorded_events() {
             .iter()
             .find(|c| c["id"] == 1)
             .unwrap();
+        assert!(
+            recent["launch"].is_null(),
+            "historical zero dates must become explicit absence"
+        );
         assert_eq!(recent["outcomes"]["opened"], 4);
         assert_eq!(recent["outcomes"]["clicked"], 3);
         let filtered = fetch("/api/campaigns/1/analysis?event=Submitted%20Data&limit=1");

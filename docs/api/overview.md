@@ -18,6 +18,8 @@ Only `/api/overview/posture` accepts `window=all`, `7d`, `30d`, or `365d`. Its A
 
 `as_of` is UTC Unix seconds. `recent` contains at most five campaigns with identity, status, launch, recipients, and outcome counts. `inventory` counts templates, pages, groups, profiles, domains, verified domains, and reporting mailboxes.
 
+Recent campaign rows use `launch: null` when the scheduled time is unknown or absent; known launch times are normalized UTC strings.
+
 `attention` contains enabled unverified-domain and delivery-problem counts, plus the next launch when one exists. These are navigation cues; open the relevant campaign or domain for the actionable state.
 
 ## Posture snapshot
