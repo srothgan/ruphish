@@ -3,7 +3,11 @@ use leptos::prelude::*;
 use leptos_fetch::{QueryClient, QueryOptions};
 use ruphish_ui::api_error::ApiError;
 use ruphish_ui::query::Query;
-use std::{cell::Cell, rc::Rc, time::Duration};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+    time::Duration,
+};
 use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::JsFuture;
 use wasm_bindgen_test::wasm_bindgen_test;
@@ -51,6 +55,242 @@ async fn until(owner: &Owner, condition: impl Fn() -> bool + 'static) {
 }
 fn client() -> QueryClient {
     QueryClient::new().with_options(QueryOptions::new().with_gc_time(Duration::MAX))
+}
+
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = r#"
+let original, now, intervals, serial;
+export function startPollClock() {
+  globalThis.Window ??= class { static [Symbol.hasInstance](value) { return value === globalThis; } };
+  original = { now: Date.now, set: globalThis.setInterval, clear: globalThis.clearInterval };
+  now = 1000000; intervals = new Map(); serial = 0;
+  Date.now = () => now;
+  globalThis.setInterval = (callback, delay) => { if (delay !== 1000) throw new Error('Unexpected polling interval'); intervals.set(++serial, callback); return serial; };
+  globalThis.clearInterval = id => intervals.delete(id);
+}
+export function advancePollClock(ms) { now += ms; for (const callback of [...intervals.values()]) callback(); }
+export function pollTimerCount() { return intervals.size; }
+export function restorePollClock() { Date.now = original.now; globalThis.setInterval = original.set; globalThis.clearInterval = original.clear; }
+"#)]
+extern "C" {
+    fn startPollClock();
+    fn advancePollClock(ms: u32);
+    fn pollTimerCount() -> usize;
+    fn restorePollClock();
+}
+struct PollClock;
+impl Drop for PollClock {
+    fn drop(&mut self) {
+        restorePollClock();
+    }
+}
+
+#[wasm_bindgen_test]
+async fn periodic_reads_share_work_back_off_preserve_completed_data_and_release_navigation_timers()
+{
+    let _ = any_spawner::Executor::init_wasm_bindgen();
+    startPollClock();
+    let _clock = PollClock;
+    let app = Owner::new();
+    let first_page = app.child();
+    let second_page = app.child();
+    let calls = Rc::new(Cell::new(0));
+    let status = Rc::new(Cell::new(200));
+    let release = Gate::new();
+    let started = Gate::new();
+    let hold = Rc::new(Cell::new(false));
+    let (query, visible) = app.with(|| {
+        let (calls, status, hold, release, started) = (calls.clone(), status.clone(), hold.clone(), release.clone(), started.clone());
+        (Query::new(client(), move |key: (u8, String)| {
+            calls.set(calls.get() + 1);
+            let (count, status, hold, release, started) = (calls.get(), status.get(), hold.get(), release.clone(), started.clone());
+            async move {
+                if hold { started.release(); release.wait().await; }
+                if status != 200 { return Err(ApiError::http(status, "TEST_FAILURE".into(), "Temporary".into())); }
+                Ok(serde_json::json!({"id":key.0,"filter":key.1,"status":"Completed","revision":count}))
+            }
+        }), RwSignal::new(true))
+    });
+    let first = first_page.with(|| {
+        query.observe_polling(
+            || (7, "sort=opened&order=desc&offset=50&recipients=9".into()),
+            visible.into(),
+        )
+    });
+    let second = second_page.with(|| {
+        query.observe_polling(
+            || (7, "sort=opened&order=desc&offset=50&recipients=9".into()),
+            visible.into(),
+        )
+    });
+    until(&app, move || {
+        first.data.get().is_some() && second.data.get().is_some() && !first.fetching.get()
+    })
+    .await;
+    assert_eq!(calls.get(), 1);
+    advancePollClock(4999);
+    any_spawner::Executor::tick().await;
+    assert_eq!(calls.get(), 1);
+    advancePollClock(1);
+    until(&app, move || {
+        first.data.get().is_some_and(|data| data["revision"] == 2) && !first.fetching.get()
+    })
+    .await;
+    assert_eq!(calls.get(), 2, "two observers produce one periodic read");
+    assert_eq!(
+        second.data.get_untracked().unwrap()["filter"],
+        "sort=opened&order=desc&offset=50&recipients=9"
+    );
+    visible.set(false);
+    advancePollClock(5000);
+    any_spawner::Executor::tick().await;
+    assert_eq!(calls.get(), 2, "hidden views do not poll");
+    visible.set(true);
+    hold.set(true);
+    advancePollClock(1);
+    started.wait().await;
+    advancePollClock(160000);
+    any_spawner::Executor::tick().await;
+    assert_eq!(
+        calls.get(),
+        3,
+        "a slow read is neither restarted nor duplicated"
+    );
+    release.release();
+    hold.set(false);
+    until(&app, move || {
+        !first.fetching.get() && first.data.get().is_some_and(|data| data["revision"] == 3)
+    })
+    .await;
+    status.set(503);
+    advancePollClock(5000);
+    until(&app, move || {
+        !first.fetching.get() && first.failure.get().is_some()
+    })
+    .await;
+    assert_eq!(first.data.get_untracked().unwrap()["revision"], 3);
+    for delay in [10000, 20000, 40000, 80000, 160000, 160000] {
+        let previous = calls.get();
+        advancePollClock(delay - 1);
+        any_spawner::Executor::tick().await;
+        assert_eq!(calls.get(), previous, "backoff must not fire early");
+        advancePollClock(1);
+        let watched = calls.clone();
+        until(&app, move || {
+            !first.fetching.get() && watched.get() == previous + 1
+        })
+        .await;
+        assert_eq!(first.data.get_untracked().unwrap()["revision"], 3);
+    }
+    status.set(200);
+    advancePollClock(160000);
+    until(&app, move || {
+        !first.fetching.get() && first.failure.get().is_none()
+    })
+    .await;
+    let recovered = calls.get();
+    advancePollClock(5000);
+    until(&app, move || {
+        !first.fetching.get()
+            && first
+                .data
+                .get()
+                .is_some_and(|data| data["revision"] == recovered + 1)
+    })
+    .await;
+    status.set(403);
+    advancePollClock(5000);
+    until(&app, move || {
+        !first.fetching.get() && first.failure.get().is_some_and(|error| error.status == 403)
+    })
+    .await;
+    let forbidden = calls.get();
+    assert!(first.data.get_untracked().is_none());
+    advancePollClock(1000000);
+    any_spawner::Executor::tick().await;
+    assert_eq!(
+        calls.get(),
+        forbidden,
+        "terminal errors stop periodic reads"
+    );
+    first_page.cleanup();
+    assert_eq!(pollTimerCount(), 1);
+    second_page.cleanup();
+    assert_eq!(pollTimerCount(), 0);
+    advancePollClock(1000000);
+    assert_eq!(calls.get(), forbidden);
+    app.cleanup();
+}
+
+#[wasm_bindgen_test]
+async fn polling_navigation_keeps_selection_and_shares_pending_selector_reads() {
+    let _ = any_spawner::Executor::init_wasm_bindgen();
+    startPollClock();
+    let _clock = PollClock;
+    let app = Owner::new();
+    let page = app.child();
+    let calls = Rc::new(RefCell::new(Vec::new()));
+    let release = Gate::new();
+    let started = Gate::new();
+    let (query, selected) = app.with(|| {
+        let (calls, release, started) = (calls.clone(), release.clone(), started.clone());
+        (
+            Query::new(client(), move |key: u8| {
+                calls.borrow_mut().push(key);
+                let release = release.clone();
+                let started = started.clone();
+                async move {
+                    if key == 1 {
+                        started.release();
+                        release.wait().await;
+                    }
+                    Ok(key)
+                }
+            }),
+            RwSignal::new(1u8),
+        )
+    });
+    let view = page.with(|| query.observe_polling(move || selected.get(), Signal::derive(|| true)));
+    started.wait().await;
+    let selector_done = Gate::new();
+    let done = selector_done.clone();
+    app.with(|| {
+        leptos::task::spawn_local(async move {
+            let result = query.fetch(1).await;
+            assert_eq!(result.data, Some(1));
+            assert!(result.error.is_none());
+            done.release();
+        })
+    });
+    any_spawner::Executor::tick().await;
+    assert_eq!(
+        *calls.borrow(),
+        [1],
+        "selector shares the pending analysis read"
+    );
+    selected.set(2);
+    until(&app, move || {
+        view.data.get() == Some(2) && !view.fetching.get()
+    })
+    .await;
+    assert_eq!(pollTimerCount(), 1, "old selection releases its timer");
+    release.release();
+    selector_done.wait().await;
+    assert_eq!(
+        view.data.get_untracked(),
+        Some(2),
+        "old response cannot replace the current selection"
+    );
+    advancePollClock(5000);
+    let observed = calls.clone();
+    until(&app, move || {
+        !view.fetching.get() && observed.borrow().as_slice() == [1, 2, 2]
+    })
+    .await;
+    page.cleanup();
+    assert_eq!(pollTimerCount(), 0);
+    advancePollClock(1000000);
+    assert_eq!(*calls.borrow(), [1, 2, 2]);
+    app.cleanup();
 }
 
 #[wasm_bindgen_test]

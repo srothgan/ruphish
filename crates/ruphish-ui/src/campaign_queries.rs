@@ -126,8 +126,17 @@ impl CampaignQueries {
         (id, analysis_state::query(filter, false))
     }
 
-    pub async fn read_analysis(api: Api, id: i64, filter: &Filter) -> Result<Value, ApiError> {
-        Self::read_analysis_query(api, id, &analysis_state::query(filter, false)).await
+    pub async fn read_analysis(
+        self,
+        api: Api,
+        id: i64,
+        filter: &Filter,
+    ) -> Result<Value, ApiError> {
+        let snapshot = self.analysis.fetch(Self::analysis_key(id, filter)).await;
+        if let Some(error) = snapshot.error {
+            return Err(error);
+        }
+        snapshot.data.ok_or_else(|| api.invalid_read_err())
     }
 
     async fn read_analysis_query(api: Api, id: i64, query: &str) -> Result<Value, ApiError> {

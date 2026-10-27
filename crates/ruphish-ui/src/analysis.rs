@@ -103,9 +103,10 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
     let from = RwSignal::new(String::new());
     let until = RwSignal::new(String::new());
     let queries = expect_context::<CampaignQueries>();
-    let read = queries
-        .analysis
-        .observe(move || CampaignQueries::analysis_key(id, &filters.get()));
+    let read = queries.analysis.observe_polling(
+        move || CampaignQueries::analysis_key(id, &filters.get()),
+        ruphish_ui::query::document_visible(),
+    );
     let data = Signal::derive(move || read.data.get().unwrap_or(Value::Null));
     let loading = read.fetching;
     let loaded = Signal::derive(move || read.data.with(Option::is_some));
@@ -193,7 +194,8 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                 offset: request.offset,
                 ..Default::default()
             };
-            let result = CampaignQueries::read_analysis(api, id, &filter)
+            let result = queries
+                .read_analysis(api, id, &filter)
                 .await
                 .map_err(|e| e.message)
                 .map(|value| {

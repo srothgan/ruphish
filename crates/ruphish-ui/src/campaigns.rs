@@ -1624,14 +1624,19 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
         }),
     };
     let after = Memo::new(move |_| cursors.with(|v| v.last().cloned().unwrap_or_default()));
-    let read = queries.delivery.observe(move || {
-        (
-            id.get_value(),
-            after.get(),
-            sorting.current.get().column,
-            sorting.order(),
-        )
-    });
+    let busy = RwSignal::new(false);
+    let visible = ruphish_ui::query::document_visible();
+    let read = queries.delivery.observe_polling(
+        move || {
+            (
+                id.get_value(),
+                after.get(),
+                sorting.current.get().column,
+                sorting.order(),
+            )
+        },
+        Signal::derive(move || visible.get() && !busy.get()),
+    );
     let data = Signal::derive(move || {
         read.data
             .get()
@@ -1647,46 +1652,8 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
     });
     let loading = read.fetching;
     let tasks = ruphish_ui::view_tasks::ViewTasks::default();
-    let busy = RwSignal::new(false);
     let message = Message::new(String::new());
-    let failures = StoredValue::new(0u32);
-    let next_poll = StoredValue::new(0f64);
-    let was_fetching = StoredValue::new(false);
     let action = RwSignal::new(None::<(String, Value)>);
-    Effect::new(move |_| {
-        let fetching = read.fetching.get();
-        if !fetching && was_fetching.get_value() {
-            failures.update_value(|n| {
-                *n = if read.error.get_untracked().is_some() {
-                    (*n + 1).min(5)
-                } else {
-                    0
-                }
-            });
-            next_poll
-                .set_value(js_sys::Date::now() + 5000.0 * 2f64.powi(failures.get_value() as i32));
-        }
-        was_fetching.set_value(fetching);
-    });
-    if let Ok(timer) = set_interval_with_handle(
-        move || {
-            if !loading.get_untracked()
-                && !read
-                    .failure
-                    .with_untracked(|e| e.as_ref().is_some_and(|e| e.is_terminal()))
-                && !busy.get_untracked()
-                && js_sys::Date::now() >= next_poll.get_value()
-                && web_sys::window()
-                    .and_then(|w| w.document())
-                    .is_some_and(|d| !d.hidden())
-            {
-                read.refresh.run(());
-            }
-        },
-        std::time::Duration::from_secs(1),
-    ) {
-        on_cleanup(move || timer.clear());
-    }
     let activity_sort = TableSorting::new("campaign-activity", "time", SortDirection::Desc);
     let duplicate = move |_| {
         if busy.get_untracked() {
