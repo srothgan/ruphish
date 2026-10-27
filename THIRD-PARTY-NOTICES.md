@@ -37,7 +37,7 @@ Browser dependency notices are preserved in [web/THIRD-PARTY-NOTICES.txt](crates
 
 HTML rewriting uses lol_html and its unmodified selector/CSS parser dependencies. MPL-2.0 is accepted only for the exact versions listed in `deny.toml`; the general allowlist remains unchanged. License texts and upstream source locations are retained here. Distribution remains deferred and must include the applicable notices and source availability for covered dependencies. No upstream dependency source was modified.
 
-- `lol_html-3.0.1`: [LICENSE](#lol_html-301-license); unmodified upstream source: https://docs.rs/crate/lol_html/3.0.1/source/.
+- `lol_html-3.0.2`: [LICENSE](#lol_html-302-license); unmodified upstream source: https://docs.rs/crate/lol_html/3.0.2/source/.
 - `cssparser-0.36.0`: [LICENSE](#cssparser-0360-license); unmodified upstream source: https://docs.rs/crate/cssparser/0.36.0/source/.
 - `cssparser-macros-0.6.1`: [LICENSE](#cssparser-0360-license); unmodified upstream source: https://docs.rs/crate/cssparser-macros/0.6.1/source/.
 - `dtoa-short-0.3.5`: [LICENSE](#cssparser-0380-license); unmodified upstream source: https://docs.rs/crate/dtoa-short/0.3.5/source/.
@@ -45,14 +45,13 @@ HTML rewriting uses lol_html and its unmodified selector/CSS parser dependencies
 - `encoding_rs-0.8.42`: [LICENSE-MIT](#encoding_rs-0842-license-mit); unmodified upstream source: https://docs.rs/crate/encoding_rs/0.8.42/source/.
 - `encoding_rs-0.8.42`: [LICENSE-WHATWG](#encoding_rs-0842-license-whatwg); unmodified upstream source: https://docs.rs/crate/encoding_rs/0.8.42/source/.
 - `quoted_printable-0.5.2`: [LICENSE](#quoted_printable-052-license); unmodified upstream source: https://docs.rs/crate/quoted_printable/0.5.2/source/.
-- `webpki-roots-1.0.10`: [LICENSE](#webpki-root-certs-1010-license); unmodified upstream source: https://docs.rs/crate/webpki-roots/1.0.10/source/.
+- `webpki-roots-1.0.11`: [LICENSE](#webpki-root-certs-1010-license); unmodified upstream source: https://docs.rs/crate/webpki-roots/1.0.11/source/.
 - `webpki-root-certs-1.0.10`: [LICENSE](#webpki-root-certs-1010-license); unmodified upstream source: https://docs.rs/crate/webpki-root-certs/1.0.10/source/.
 - `selectors-0.37.0`: source-file MPL-2.0 notices and [license text](#cssparser-0360-license); unmodified source: https://docs.rs/crate/selectors/0.37.0/source/.
 
-- `cssparser-0.38.0`: [LICENSE](#cssparser-0380-license); unmodified Ammonia dependency, source: https://docs.rs/crate/cssparser/0.38.0/source/.
-- `cssparser-0.37.0`: [LICENSE](#cssparser-0360-license); unmodified landing-page diagnostics dependency, source: https://docs.rs/crate/cssparser/0.37.0/source/.
+- `cssparser-0.38.0`: [LICENSE](#cssparser-0380-license); unmodified Ammonia and landing-page diagnostics dependency, source: https://docs.rs/crate/cssparser/0.38.0/source/.
 - `cssparser-macros-0.7.1`: [LICENSE](#cssparser-0360-license); unmodified source: https://docs.rs/crate/cssparser-macros/0.7.1/source/.
-- `selectors-0.38.0`: source-file MPL-2.0 notices and [license text](#cssparser-0360-license); unmodified source: https://docs.rs/crate/selectors/0.38.0/source/.
+- `selectors-0.41.0`: source-file MPL-2.0 notices and [license text](#cssparser-0360-license); unmodified source: https://docs.rs/crate/selectors/0.41.0/source/.
 
 ## Dependency license texts
 
@@ -1090,9 +1089,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### lol_html-3.0.1-LICENSE
+### lol_html-3.0.2-LICENSE
 
-Preserved from `lol_html-3.0.1-LICENSE.txt`.
+Preserved from `lol_html-3.0.2-LICENSE.txt`.
 
 ```text
 Copyright (C) 2019, Cloudflare, Inc.
@@ -1145,7 +1144,7 @@ PERFORMANCE OF THIS SOFTWARE.
 
 ### webpki-root-certs-1.0.10-LICENSE
 
-Preserved from `webpki-root-certs-1.0.10-LICENSE.txt`, `webpki-roots-1.0.10-LICENSE.txt`.
+Preserved from `webpki-root-certs-1.0.10-LICENSE.txt`, `webpki-roots-1.0.11-LICENSE.txt`.
 
 ```text
 # Community Data License Agreement - Permissive - Version 2.0
