@@ -470,7 +470,7 @@ fn analysis_multiselect_filters_chart_pages_and_exports_and_rejects_invalid_iden
         (91,'a@example.test','2026-10-31T12:00:01Z','email_reported','{}'); UPDATE events SET recipient_id=(SELECT min(r.id) FROM results r WHERE r.campaign_id=events.campaign_id AND r.email=events.email HAVING count(*)=1) WHERE recipient_id IS NULL;");
     database(
         directory.path(),
-        "UPDATE results SET first_name='Alice',last_name='Example' WHERE id=91",
+        "UPDATE results SET first_name='Alice',last_name='Example',position='=1+1',send_date='2026-10-01T14:00:00.123456789+02:00',modified_date='2026-10-02T01:00:00-03:00' WHERE id=91",
     );
     let by_name = get(
         &client,
@@ -547,6 +547,32 @@ fn analysis_multiselect_filters_chart_pages_and_exports_and_rejects_invalid_iden
     let csv = csv.text().unwrap();
     assert!(csv.contains("a@example.test") && csv.contains("b@example.test"));
     assert!(!csv.contains("c@example.test") && !csv.contains("outside@example.test"));
+    let recipients = request(
+        &client,
+        &base,
+        reqwest::Method::GET,
+        "/api/campaigns/91/export?recipients=91,92&limit=1&offset=1&format=csv&scope=recipients",
+        None,
+    );
+    assert_eq!(recipients.status(), 200);
+    let csv = recipients.text().unwrap();
+    let mut lines = csv.lines();
+    assert!(
+        lines
+            .next()
+            .unwrap()
+            .ends_with(",First Name,Last Name,Position,Send Date (UTC),Modified Date (UTC)")
+    );
+    let rows: Vec<_> = lines.collect();
+    assert_eq!(
+        rows.len(),
+        2,
+        "download must include all selected recipients"
+    );
+    assert!(
+        rows[0]
+            .ends_with(",Alice,Example,'=1+1,2026-10-01T12:00:00.123456789Z,2026-10-02T04:00:00Z")
+    );
     let excel = request(
         &client,
         &base,

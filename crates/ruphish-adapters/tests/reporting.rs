@@ -47,6 +47,178 @@ fn filter() -> Filter {
 }
 
 #[tokio::test]
+async fn recipient_exports_preserve_audience_fields_and_stored_dates_across_pages() {
+    let (_directory, database) = fixture().await;
+    let pool = database.inspection_pool();
+    let campaign: i64 = sqlx::query_scalar("SELECT id FROM campaigns ORDER BY id LIMIT 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    for (id, email, first, last, position, sent, modified) in [
+        (
+            9001,
+            "export-a@example.test",
+            "Élise, \"E\"",
+            "Müller",
+            "=1+1",
+            Some("2026-10-19 14:00:00.123456789+02:00"),
+            Some("2026-10-20T01:00:00-03:00"),
+        ),
+        (
+            9002,
+            "export-b@example.test",
+            "",
+            "",
+            "",
+            Some("0001-01-01T00:00:00Z"),
+            None,
+        ),
+        (
+            9003,
+            "export-c@example.test",
+            "",
+            "",
+            "Analyst",
+            None,
+            Some("invalid legacy date"),
+        ),
+    ] {
+        sqlx::query("INSERT INTO results(id,campaign_id,user_id,r_id,email,first_name,last_name,position,send_date,modified_date,status,reported) VALUES(?,?,1,?,?,?,?,?,?,?,'Scheduled',0)")
+            .bind(id).bind(campaign).bind(format!("export-{id}")).bind(email)
+            .bind(first).bind(last).bind(position).bind(sent).bind(modified)
+            .execute(&pool).await.unwrap();
+    }
+    let selected = || Filter {
+        recipients: vec![9001, 9002, 9003],
+        limit: 1,
+        offset: 1,
+        ..Default::default()
+    };
+    let reports = database.reporting();
+    let page = reports
+        .analysis(caller(), campaign, selected())
+        .await
+        .unwrap();
+    assert_eq!(page.recipients.len(), 1);
+    assert_eq!(page.recipients[0].id, 9002);
+    let download = reports
+        .export(caller(), campaign, selected(), "csv", "recipients")
+        .await
+        .unwrap();
+    let mut reader = csv::Reader::from_reader(download.bytes.as_slice());
+    let headers = reader.headers().unwrap().clone();
+    let rows = reader.records().collect::<Result<Vec<_>, _>>().unwrap();
+    assert_eq!(
+        rows.len(),
+        3,
+        "exports include all selected pages and no other recipients"
+    );
+    let cell = |row: usize, column: &str| {
+        &rows[row][headers.iter().position(|name| name == column).unwrap()]
+    };
+    assert_eq!(cell(0, "Recipient ID"), "9001");
+    assert_eq!(cell(0, "First Name"), "Élise, \"E\"");
+    assert_eq!(cell(0, "Last Name"), "Müller");
+    assert_eq!(cell(0, "Position"), "'=1+1");
+    assert_eq!(cell(0, "Send Date (UTC)"), "2026-10-19T12:00:00.123456789Z");
+    assert_eq!(cell(0, "Modified Date (UTC)"), "2026-10-20T04:00:00Z");
+    assert_eq!(
+        cell(0, "Accepted events"),
+        "0",
+        "a stored send date is not delivery evidence"
+    );
+    for column in [
+        "First Name",
+        "Last Name",
+        "Position",
+        "Send Date (UTC)",
+        "Modified Date (UTC)",
+    ] {
+        assert_eq!(cell(1, column), "");
+    }
+    assert_eq!(cell(2, "Send Date (UTC)"), "");
+    assert_eq!(
+        cell(2, "Modified Date (UTC)"),
+        "",
+        "invalid historical dates are not fabricated"
+    );
+    let excel = reports
+        .export(caller(), campaign, selected(), "xlsx", "recipients")
+        .await
+        .unwrap();
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(excel.bytes)).unwrap();
+    let mut sheet = String::new();
+    std::io::Read::read_to_string(
+        &mut archive.by_name("xl/worksheets/sheet2.xml").unwrap(),
+        &mut sheet,
+    )
+    .unwrap();
+    for (address, expected) in [
+        ("K2", "Élise, \"E\""),
+        ("L2", "Müller"),
+        ("M2", "=1+1"),
+        ("N2", "2026-10-19T12:00:00.123456789Z"),
+        ("O2", "2026-10-20T04:00:00Z"),
+        ("M4", "Analyst"),
+    ] {
+        let cell = sheet
+            .split(&format!("r=\"{address}\" "))
+            .nth(1)
+            .unwrap()
+            .split("</c>")
+            .next()
+            .unwrap();
+        assert!(cell.contains("t=\"inlineStr\""), "{address} must be text");
+        assert!(
+            cell.contains(&format!("<t>{expected}</t>")),
+            "{address}: {cell}"
+        );
+    }
+    assert!(
+        !sheet.contains("<f>"),
+        "position text must not become a formula"
+    );
+    assert!(
+        reports
+            .export(
+                Identity { id: 2, epoch: 0 },
+                campaign,
+                selected(),
+                "csv",
+                "recipients"
+            )
+            .await
+            .is_err()
+    );
+    let mut empty = selected();
+    empty.search = "not-an-export-recipient".into();
+    let empty = reports
+        .export(caller(), campaign, empty, "csv", "recipients")
+        .await
+        .unwrap();
+    assert_eq!(
+        csv::Reader::from_reader(empty.bytes.as_slice())
+            .records()
+            .count(),
+        0
+    );
+    sqlx::query("UPDATE results SET position=? WHERE id IN (9001,9002)")
+        .bind("x".repeat(17 * 1024 * 1024))
+        .execute(&pool)
+        .await
+        .unwrap();
+    for format in ["csv", "xlsx"] {
+        assert!(
+            matches!(
+                reports.export(caller(), campaign, selected(), format, "recipients").await,
+                Err(ruphish_application::resources::Error::Invalid(message)) if message.contains("32 MiB")
+            ),
+            "legacy position fields must count toward the export input bound"
+        );
+    }
+}
+
+#[tokio::test]
 async fn observations_filters_and_exports_preserve_evidence_without_credentials_or_locations() {
     let (_directory, database) = fixture().await;
     let pool = database.inspection_pool();

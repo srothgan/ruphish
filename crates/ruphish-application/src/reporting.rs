@@ -50,6 +50,16 @@ pub struct Recipient {
     pub email: String,
     /// Display name from campaign audience.
     pub name: String,
+    /// Original first name from the campaign audience.
+    pub first_name: String,
+    /// Original last name from the campaign audience.
+    pub last_name: String,
+    /// Original position from the campaign audience.
+    pub position: String,
+    /// Stored legacy send date: scheduled, retry or accepted time, not inferred delivery.
+    pub send_date: Option<String>,
+    /// Stored result modification time, independent of the selected event window.
+    pub modified_date: Option<String>,
     /// Current transport outcome, not inferred from engagement.
     pub delivery: String,
     /// Counts in the selected window: accepted, opened, clicked, submitted, reported.

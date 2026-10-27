@@ -9,11 +9,13 @@ Set the campaign-analysis filters first, then choose **Recipients CSV**, **Event
 
 | Download | Contents |
 | --- | --- |
-| Recipients CSV | Recipient identity and delivery/observed outcome counts |
+| Recipients CSV | Recipient identity, separate first/last names, position, stored send/modification dates, and delivery/observed outcome counts |
 | Events CSV | Individual observations, their time/source, and attributable recipient |
 | Excel | Summary, Recipients, and Events sheets using the same filters |
 
 Exports keep machine-readable timestamps; the minute precision of a chart label does not reduce stored/exported precision. Presence metadata is a boolean where recorded. Captured participant values, request IPs, and location data are not export fields.
+
+Recipient dates are exported in UTC from the stored campaign results, independently of the selected event window. Missing, zero or invalid historical dates are blank. A send date can describe scheduled or retry work as well as an accepted send; check the delivery state and observed acceptance count before interpreting it as delivery evidence. Excel includes the same recipient columns as CSV.
 
 Each sheet is limited to 100,000 rows and the snapshot input to 32 MiB. Narrow the filters when the export exceeds a limit. Spreadsheet-sensitive CSV cells are neutralized, and Excel text is written as text. If your downstream process compares literal cell values, account for that CSV protection rather than stripping it automatically in a spreadsheet.
 

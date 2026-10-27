@@ -147,7 +147,7 @@ impl Snapshots for Reports {
         }
         let size = query!(r#"
                 SELECT COALESCE((SELECT sum(length(CAST(COALESCE(email,'')||COALESCE(time,'')||COALESCE(message,'')||COALESCE(details,'') AS BLOB)))
-                FROM observed),0) + COALESCE((SELECT sum(length(CAST(COALESCE(email,'')||COALESCE(first_name,'')||COALESCE(last_name,'') AS BLOB)))
+                FROM observed),0) + COALESCE((SELECT sum(length(CAST(COALESCE(email,'')||COALESCE(first_name,'')||COALESCE(last_name,'')||COALESCE(position,'')||COALESCE(send_date,'')||COALESCE(modified_date,'') AS BLOB)))
                 FROM selected),0) AS bytes
             "#)
             .fetch_one(&mut *tx).await.map_err(storage)?.try_get::<i64,_>("bytes").map_err(storage)?;
@@ -190,6 +190,8 @@ impl Snapshots for Reports {
         let rows=query!(format!(r#"
                 SELECT a.id,a.email,COALESCE(a.first_name,'')||' '||COALESCE(a.last_name,'') AS name,
                     a.delivery,a.reported,
+                    COALESCE(a.first_name,'') AS first_name,COALESCE(a.last_name,'') AS last_name,
+                    COALESCE(a.position,'') AS position,a.send_date,a.modified_date,
                     sum(CASE WHEN e.message='Email Sent' THEN 1 ELSE 0 END) AS accepted,
                     sum(CASE WHEN e.message='Email Opened' THEN 1 ELSE 0 END) AS opened,
                     sum(CASE WHEN e.message='Clicked Link' THEN 1 ELSE 0 END) AS clicked,
@@ -216,6 +218,11 @@ impl Snapshots for Reports {
                     .trim()
                     .into(),
                 delivery: r.try_get("delivery").map_err(storage)?,
+                first_name: r.try_get("first_name").map_err(storage)?,
+                last_name: r.try_get("last_name").map_err(storage)?,
+                position: r.try_get("position").map_err(storage)?,
+                send_date: r.try_get("send_date").map_err(storage)?,
+                modified_date: r.try_get("modified_date").map_err(storage)?,
                 counts: [
                     r.try_get("accepted").map_err(storage)?,
                     r.try_get("opened").map_err(storage)?,
