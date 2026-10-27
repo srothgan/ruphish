@@ -779,6 +779,12 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
     editor.busy.set(false);
     match result {
         Ok((value, revision)) => {
+            #[cfg(feature = "demo")]
+            api.notifications.show(if id == 0 {
+                DemoNotice::Created
+            } else {
+                DemoNotice::Saved
+            });
             editor.diagnostics.set(warnings_for(&value));
             if let Some(id) = value["id"].as_i64() {
                 queries.saved(family, id);

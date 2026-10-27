@@ -1,0 +1,22 @@
+name: Precompiled Trunk
+description: Install the Linux x64 release pinned by Trunk.toml with a reviewed checksum.
+runs:
+  using: composite
+  steps:
+    - name: Install and verify Trunk
+      shell: bash
+      run: |
+        test "$RUNNER_OS/$RUNNER_ARCH" = Linux/X64
+        version=$(sed -n 's/^trunk-version = "=\([^"]*\)"/\1/p' Trunk.toml)
+        test -n "$version"
+        if [ -x .ci-tools/bin/trunk ] && [ "$(.ci-tools/bin/trunk --version)" = "trunk $version" ]; then
+          exit 0
+        fi
+        archive="trunk-x86_64-unknown-linux-gnu.tar.gz"
+        download=$(mktemp -d)
+        curl --fail --silent --show-error --location --retry 3 "https://github.com/trunk-rs/trunk/releases/download/v$version/$archive" --output "$download/$archive"
+        checksum=$(cat .github/actions/trunk/linux-x64.sha256)
+        printf '%s  %s\n' "$checksum" "$download/$archive" | sha256sum --check --strict
+        mkdir -p .ci-tools/bin
+        tar -xzf "$download/$archive" -C .ci-tools/bin trunk
+        test "$(.ci-tools/bin/trunk --version)" = "trunk $version"

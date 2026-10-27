@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-Run the executable from the working directory that owns your relative configuration, asset, and database paths. Replace the dummy configuration path below. In a source checkout:
+Run `ruphish` without arguments to read or create the [OS user configuration](configuration.md#default-locations-and-explicit-configuration). In a source checkout, use `cargo run -p ruphish --locked` from the product root so development assets are available. For an explicit installation, replace the dummy configuration path below and choose the working directory that owns its relative paths:
 
 ```sh
 export RUPHISH_CONFIG='/path/to/config.json'
@@ -17,7 +17,7 @@ The `--` separates Cargo options from Ruphish options. A directly invoked develo
 
 | Option | Default | Behavior |
 | --- | --- | --- |
-| `--config PATH` | `./config.json` | Load configuration from PATH |
+| `--config PATH` | OS user configuration | Load an existing file from PATH; when omitted, read or create the OS configuration with SQLite defaults |
 | `--mode all` | `all` | Run administration and public listeners |
 | `--mode admin` | — | Run administration only |
 | `--mode phish` | — | Run public handling only |

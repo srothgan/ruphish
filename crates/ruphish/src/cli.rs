@@ -20,9 +20,9 @@ impl Mode {
 #[derive(Parser)]
 #[command(name = "ruphish", version = env!("CARGO_PKG_VERSION"), disable_help_flag = true, disable_version_flag = true, color = clap::ColorChoice::Never)]
 pub(crate) struct Arguments {
-    /// Location of config.json, relative to the working directory.
-    #[arg(long, default_value = "./config.json")]
-    pub(crate) config: PathBuf,
+    /// Read an existing config file; otherwise use/create the OS user configuration.
+    #[arg(long)]
+    pub(crate) config: Option<PathBuf>,
     /// Run the selected administrative/public listeners.
     #[arg(long, value_enum, default_value = "all")]
     pub(crate) mode: Mode,

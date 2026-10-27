@@ -85,6 +85,11 @@ services:
         VERSION: ${RUPHISH_IMAGE_VERSION:-local-development}
         REVISION: ${RUPHISH_IMAGE_REVISION:-unknown}
     command: [--config, /lab/data/config.json]
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "5"
     env_file: ./data/bootstrap.env
     volumes:
       - ./data:/lab/data

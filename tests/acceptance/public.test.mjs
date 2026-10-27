@@ -192,7 +192,7 @@ test('verified domain -> SMTP inbox -> public events -> completion, without part
     assert.deepEqual(await api(campaignPath), completed);
     // Inspect restricted files as their container owner, including the live SQLite WAL.
     for (const file of await readdir(data)) {
-        if (file.startsWith('ruphish.db') || file === 'ruphish.log') {
+        if (file.startsWith('ruphish.db') || file === 'ruphish.log' || /^ruphish\.log\.[1-9]\d*$/.test(file)) {
             const scan = spawnSync('docker', [
                 'compose', '-f', fileURLToPath(new URL('./compose.yaml', import.meta.url)),
                 'exec', '-T', 'app', 'sh', '-c',

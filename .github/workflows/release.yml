@@ -25,9 +25,14 @@ jobs:
     with:
       full: true
 
+  demo:
+    uses: ./.github/workflows/demo.yml
+    with:
+      full: true
+
   assets:
     name: Optimized browser distribution
-    needs: source
+    needs: [source, demo]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -80,7 +85,7 @@ jobs:
 
   gate:
     name: Release gate
-    needs: [source, assets, native]
+    needs: [source, demo, assets, native]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5

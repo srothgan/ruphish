@@ -2,6 +2,7 @@
 **
 !Cargo.toml
 !Cargo.lock
+!config.example.json
 !rust-toolchain.toml
 !Trunk.toml
 !.cargo/

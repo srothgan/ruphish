@@ -270,6 +270,10 @@ pub fn trend_label(context: leptos_i18n::I18nContext<Locale>, tone: &str) -> Str
 
 /// Translate a received error once, retaining its stable support code.
 pub fn failure_label(context: leptos_i18n::I18nContext<Locale>, code: &str) -> String {
+    #[cfg(feature = "demo")]
+    if code == "DEMO_STORAGE_REQUIRED" {
+        return leptos_i18n::t_string!(context, demo.storage_required).to_string();
+    }
     use ruphish_contracts::errors::ErrorCode;
     let parsed = serde_json::from_value::<ErrorCode>(serde_json::Value::String(code.to_owned()));
     let text = match parsed {

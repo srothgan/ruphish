@@ -3,7 +3,8 @@ use gloo_net::http::Request;
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen(module = "/web/http.mjs")]
+#[cfg_attr(not(feature = "demo"), wasm_bindgen(module = "/web/http.mjs"))]
+#[cfg_attr(feature = "demo", wasm_bindgen(module = "/web/generated/demo.js"))]
 extern "C" {
     #[wasm_bindgen(js_name = startRequest)]
     fn start_request(

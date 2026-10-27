@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "features": { "verification_enabled": true, "reporting_mailboxes_enabled": true, "webhooks_enabled": true },
+  "first_names": ["Alex", "Sam", "Robin", "Morgan", "Jamie", "Taylor", "Casey", "Avery"],
+  "last_names": ["Rivera", "Lee", "Meyer", "Brooks", "Patel", "Winter", "Chen", "Berg"],
+  "departments": ["Operations", "Engineering", "Finance", "People & culture"],
+  "campaigns": [
+    { "name": "Quarterly awareness baseline", "ago": 54, "size": 400, "opened": 260, "clicked": 72, "submitted": 28, "reported": 44, "complete": true, "failed": 0 },
+    { "name": "Benefits enrollment", "ago": 21, "size": 617, "opened": 320, "clicked": 48, "submitted": 12, "reported": 140, "complete": true, "failed": 0 },
+    { "name": "Delivery notification", "ago": 2, "size": 320, "opened": 170, "clicked": 22, "submitted": 6, "reported": 98, "complete": false, "failed": 12 }
+  ],
+  "templates": [
+    { "starter": "microsoft-shared-document", "name": "Microsoft 365 - Shared document (EN)", "brand": "Microsoft" },
+    { "starter": "google-account-security", "name": "Google Account - Account security (EN)", "brand": "Google" },
+    { "starter": "docusign-signature-request", "name": "Docusign - Signature request (EN)", "brand": "Docusign" },
+    { "starter": "workday-employee-document", "name": "Workday - Employee document (EN)", "brand": "Workday" }
+  ],
+  "pages": [
+    { "starter": "microsoft-side-panel", "name": "Microsoft - Sign in (side panel)", "brand": "Microsoft", "company_logo": { "selector": ".microsoft", "height": 36, "context": "Entra company branding" } },
+    { "starter": "google-workspace", "name": "Google - Sign in (wide)", "brand": "Google" }
+  ],
+  "learning_pages": [
+    { "starter": "slam", "name": "SLAM (EN)", "brand": "Ruphish" },
+    { "starter": "stop-challenge-protect", "name": "Stop, Challenge, Protect (EN)", "brand": "Ruphish" },
+    { "starter": "recognize-resist-report-delete", "name": "Recognize, Resist and Report, Delete (EN)", "brand": "Ruphish" }
+  ],
+  "users": [
+    { "username": "demo", "role": "admin" },
+    { "username": "alex.security", "role": "admin" },
+    { "username": "sam.training", "role": "user" },
+    { "username": "robin.operations", "role": "user" },
+    { "username": "former.operator", "role": "user", "locked": true },
+    { "username": "new.operator", "role": "user", "reset": true }
+  ],
+  "webhooks": [
+    { "name": "Security event stream", "path": "security", "active": true, "failed": false },
+    { "name": "Training notifications", "path": "training", "active": false, "failed": false },
+    { "name": "Analytics delivery", "path": "analytics", "active": true, "failed": true }
+  ],
+  "mailboxes": ["Security reports", "Training reports"],
+  "drafts": ["New starter awareness", "Quarterly follow-up"],
+  "scheduled": "Upcoming awareness exercise"
+}

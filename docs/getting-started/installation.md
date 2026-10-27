@@ -9,7 +9,7 @@ The intended installation options are a release binary and a Docker image. Both 
 
 ## Release binary
 
-> TODO before publication: Publish the release binaries and document supported platforms, download links, integrity checks, included configuration, and first startup. Verify the packaged administration interface and upgrade procedure. Release binaries are not available yet.
+> TODO before publication: Publish the release binaries and document supported platforms, download links, integrity checks, generated configuration, and first startup. Verify the packaged administration interface and upgrade procedure. Release binaries are not available yet.
 
 ## Docker image
 
@@ -47,33 +47,23 @@ Trunk writes the completed administration assets to `dist/admin/`. Keep that dis
 
 ## Configure a fresh local instance
 
-Copy the example only when `config.json` does not already exist. PowerShell:
-
-```powershell
-$env:RUPHISH_CONFIG = './config.json'
-if (-not (Test-Path -LiteralPath $env:RUPHISH_CONFIG)) {
-    Copy-Item -LiteralPath config.example.json -Destination $env:RUPHISH_CONFIG
-}
-$env:GOPHISH_INITIAL_ADMIN_PASSWORD = Read-Host 'Temporary administrator password' -MaskInput
-cargo run -p ruphish --locked -- --config $env:RUPHISH_CONFIG --mode all
-```
-
-The masked prompt requires PowerShell 7. `RUPHISH_CONFIG` is an example-shell variable passed through `--config`, not an automatic configuration override. In a POSIX shell, prepare the file with:
+Run from the product root after building the administration assets:
 
 ```sh
-export RUPHISH_CONFIG='./config.json'
-test -e "$RUPHISH_CONFIG" || cp config.example.json "$RUPHISH_CONFIG"
+cargo run -p ruphish --locked
 ```
 
-Then export `GOPHISH_INITIAL_ADMIN_PASSWORD` using your preferred secret-input mechanism before starting the application:
+On first startup, Ruphish creates `config.json` in the [OS configuration directory](../administration/configuration.md#default-locations-and-explicit-configuration), selects SQLite, and creates the required data and log directories. Later starts read that file without rewriting it. Startup prints the selected paths. Edit the file and restart to change listeners, logging, or the database provider.
+
+The generated settings bind administration to `https://127.0.0.1:3333` and the public listener to `http://127.0.0.1:8081`. SQLite, generated certificates and logs use absolute paths in the OS application directories, so restarting from a different working directory preserves the same installation. Development builds still load administration assets from `dist/admin` under the working directory until release asset embedding is implemented.
+
+For an existing local configuration or an explicitly managed installation, pass its path:
 
 ```sh
-cargo run -p ruphish --locked -- --config "$RUPHISH_CONFIG" --mode all
+cargo run -p ruphish --locked -- --config ./config.json
 ```
 
-Choose your own temporary password; do not reuse tutorial credentials.
-
-The example binds the administration listener to `https://127.0.0.1:3333` and the public listener to `http://127.0.0.1:8081`. Its SQLite file is `ruphish.db`. Relative paths are resolved from the process working directory, even when the configuration file is elsewhere.
+That file must exist. Relative paths inside an explicitly selected configuration retain their working-directory meaning. This mode does not create a per-user installation. The [configuration reference](../administration/configuration.md) provides a copyable JSON example; downloading a separate example file is unnecessary.
 
 The public HTTP example is enough to start the application, but campaign origins require HTTPS and an enabled owned domain. Verification is additionally required when enabled in [company settings](../administration/settings.md). Use the local fixture for the tutorial, or configure [listeners and TLS](../administration/listeners-and-tls.md) for your domain.
 
@@ -83,13 +73,13 @@ For automated monitoring, use the [liveness and readiness probes](../administrat
 
 Wait for the `RUPHISH_READY` message on stderr, then open the administration address. For locally generated development certificates, inspect the certificate before accepting a browser exception. Do not use that development trust arrangement as your public TLS setup.
 
-Sign in as `admin` using the temporary password you supplied. Complete the required password change. The application does not print passwords or API tokens. If the first startup generated an inaccessible temporary password, stop it and restart with `GOPHISH_INITIAL_ADMIN_PASSWORD` set.
+Sign in as `admin` using the temporary password printed to startup stderr. Alternatively, supply your own temporary password through `GOPHISH_INITIAL_ADMIN_PASSWORD` before starting. Generated password output works for both terminal and noninteractive launches, including Docker. Complete the required password change. Generated passwords bypass the application log file, but container logs or redirected stderr can retain this deliberate startup output. Supplied passwords and API tokens are never printed.
 
-After stopping the process, remove the temporary variable from your shell with `Remove-Item Env:GOPHISH_INITIAL_ADMIN_PASSWORD` in PowerShell or `unset GOPHISH_INITIAL_ADMIN_PASSWORD` in a POSIX shell. An established account password is preserved on subsequent starts.
+If you supplied a temporary password, remove the temporary variable from your shell after stopping the process, using `Remove-Item Env:GOPHISH_INITIAL_ADMIN_PASSWORD` in PowerShell or `unset GOPHISH_INITIAL_ADMIN_PASSWORD` in a POSIX shell. An established account password is preserved on subsequent starts.
 
 ## Stop and restart
 
-Press Ctrl+C for orderly shutdown. Start again from the same working directory with the same configuration. Keep the database, configuration, certificate keys, and assets intact.
+Press Ctrl+C for orderly shutdown. Start again using the same OS account or explicit configuration. Source builds still need their administration assets in the working directory; explicit configurations also retain working-directory-relative paths. Keep the database, configuration, certificate keys, and assets intact.
 
 For an existing database, read [migration](../migration/index.md) before startup. Do not test an upgrade against your only copy.
 

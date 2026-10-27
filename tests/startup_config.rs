@@ -70,3 +70,36 @@ fn selected_listeners_require_explicit_addresses_and_typos_are_rejected() {
     config.phish.listen_url = "127.0.0.1:0".into();
     assert!(config.validate(Mode::All).is_ok());
 }
+
+#[test]
+fn rotation_settings_validate_and_legacy_null_merge_semantics_remain_intact() {
+    for body in [
+        r#"{"logging":{"max_size_bytes":-1}}"#,
+        r#"{"logging":{"max_files":"five"}}"#,
+        r#"{"logging":{"max_size_bytes":1.5}}"#,
+    ] {
+        assert!(decode(body.as_bytes()).is_err());
+    }
+    let mut config = decode(include_bytes!("../config.example.json")).unwrap();
+    assert_eq!(config.logging.rotation().max_size_bytes, 10 * 1024 * 1024);
+    assert_eq!(config.logging.rotation().max_files, 5);
+    for field in ["max_size_bytes", "max_files"] {
+        merge(
+            &mut config,
+            format!(r#"{{"logging":{{"{field}":0}}}}"#).as_bytes(),
+        )
+        .unwrap();
+        assert!(config.validate(Mode::All).is_err());
+        config = decode(include_bytes!("../config.example.json")).unwrap();
+    }
+    merge(
+        &mut config,
+        br#"{"logging":{"max_size_bytes":2048,"MAX_FILES":2},"logging":{"max_size_bytes":null}}"#,
+    )
+    .unwrap();
+    assert_eq!(config.logging.rotation().max_size_bytes, 2048);
+    assert_eq!(config.logging.rotation().max_files, 2);
+    merge(&mut config, br#"{"logging":null}"#).unwrap();
+    assert!(config.logging.filename.as_os_str().is_empty());
+    assert_eq!(config.logging.rotation().max_files, 5);
+}

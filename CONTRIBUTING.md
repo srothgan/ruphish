@@ -4,9 +4,9 @@ Start with the behavior you want to improve and the people it affects. A useful 
 
 Participation follows the [Code of Conduct](CODE_OF_CONDUCT.md), which also explains how to report conduct concerns privately.
 
-- For code changes, follow [development setup](https://ruphish.vercel.app/docs/contributing/setup/) and the [architecture boundaries](https://ruphish.vercel.app/docs/contributing/architecture/).
-- For documentation, follow the [documentation guide](https://ruphish.vercel.app/docs/contributing/documentation/). Small corrections are welcome; larger changes should keep user tasks, API contracts, and contributor instructions distinct.
-- For translations, use the [localization guide](https://ruphish.vercel.app/docs/contributing/localization/).
+- For code changes, follow [development setup](https://ruphish.com/docs/contributing/setup/) and the [architecture boundaries](https://ruphish.com/docs/contributing/architecture/).
+- For documentation, follow the [documentation guide](https://ruphish.com/docs/contributing/documentation/). Small corrections are welcome; larger changes should keep user tasks, API contracts, and contributor instructions distinct.
+- For translations, use the [localization guide](https://ruphish.com/docs/contributing/localization/).
 - For a defect report, use the [bug report form](https://github.com/srothgan/ruphish/issues/new?template=bug_report.yml). Describe what happened, how to reproduce it, and the version/environment you know. Relevant redacted errors are helpful; never include API keys, service credentials, participant input, or a live database.
 
 ## Propose a change
@@ -21,7 +21,7 @@ Understand the changes you submit, explain their behavior, and verify the affect
 
 1. Establish the scope. Read the relevant source, tests, and [AGENTS.md](AGENTS.md), and follow the workflow through authorization, persistence, external effects, failure, and restart.
 2. Make a focused change with tests appropriate to the affected behavior. Update affected user documentation or API references with the implementation, and preserve attribution for reused material.
-3. Use [validation](https://ruphish.vercel.app/docs/contributing/testing/validation/) to choose and run checks for the changed guarantees. Report exact commands and outcomes, including ignored or unavailable checks. A documentation-only change needs relevant link/example checks, not a product build. Browser appearance and interaction review is manual.
+3. Use [validation](https://ruphish.com/docs/contributing/testing/validation/) to choose and run checks for the changed guarantees. Report exact commands and outcomes, including ignored or unavailable checks. A documentation-only change needs relevant link/example checks, not a product build. Browser appearance and interaction review is manual.
 4. Review your diff for unrelated changes, generated output, credentials, and unintended behavior. Check that the implementation, tests, and documentation describe the same result.
 5. Submit a pull request explaining the concrete problem and resulting behavior. Link related issues and scope discussions where available, and include validation results and remaining limitations.
 

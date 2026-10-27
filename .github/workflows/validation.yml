@@ -36,7 +36,7 @@ jobs:
           node-version: '26.8.1'
           package-manager-cache: false
       - name: Check gate behavior and fixture initialization
-        run: node --test .github/scripts/validation.test.mjs tests/acceptance/init.test.mjs
+        run: node --test .github/scripts/*.test.mjs demo/tests/vercel-output.test.mjs tests/acceptance/init.test.mjs
       - name: Lint workflows
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck="" -pyflakes=""
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -68,7 +68,7 @@ jobs:
           cache: npm
           cache-dependency-path: website/package-lock.json
       - run: npm ci
-      - run: node --test tools/docs.test.mjs tools/ignore-build.test.mjs
+      - run: node --test tools/docs.test.mjs tools/ignore-build.test.mjs tools/navigation.test.mjs
       - run: npx astro check
       - run: npx astro build
       - run: node tools/check-site.mjs
@@ -143,6 +143,8 @@ jobs:
         run: cargo clippy --workspace --exclude ruphish-ui --all-targets --locked -- -D warnings
       - name: Complete native and executable functionality
         run: cargo test --workspace --exclude ruphish-ui --locked -- --nocapture
+      - name: Shared demo dataset against the real SQLite executable
+        run: node --test demo/tests/seed.test.mjs
       - name: Bounded audience performance measurement
         if: inputs.full
         run: cargo test -p ruphish-adapters --test campaign_storage measure_launch_read_claim_and_compose_at_legacy_audience_sizes --locked -- --ignored --exact --nocapture
