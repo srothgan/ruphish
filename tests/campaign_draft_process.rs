@@ -12,7 +12,7 @@ fn request(base: &str, method: &str, path: &str, body: &Value) -> reqwest::block
         .unwrap()
 }
 fn save(base: &str, path: &str, revision: Value, configuration: &Value, step: i64) -> Value {
-    request(
+    let value: Value = request(
         base,
         "PUT",
         path,
@@ -21,7 +21,11 @@ fn save(base: &str, path: &str, revision: Value, configuration: &Value, step: i6
     .error_for_status()
     .unwrap()
     .json()
-    .unwrap()
+    .unwrap();
+    let confirmed: ruphish_contracts::campaign_reads::Draft =
+        serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(serde_json::to_value(confirmed).unwrap(), value);
+    value
 }
 fn counts(directory: &Path) -> Vec<i64> {
     tokio::runtime::Runtime::new().unwrap().block_on(async {

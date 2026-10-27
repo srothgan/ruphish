@@ -1,4 +1,5 @@
 //! Complete campaign read contracts shared by HTTP encoders and browser queries.
+pub mod draft;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -322,9 +323,8 @@ pub struct Draft {
     pub id: String,
     /// Conditional-write revision.
     pub revision: i64,
-    /// Incomplete input; saving never authorizes launch.
-    #[serde(deserialize_with = "draft_configuration")]
-    pub configuration: ruphish_domain::campaign_draft::Configuration,
+    /// Complete saved structure whose values may still be unfinished; saving never authorizes launch.
+    pub configuration: draft::Configuration,
     /// Last editing step.
     pub step: i64,
     /// UTC creation timestamp.
@@ -355,41 +355,6 @@ pub struct Drafts {
 pub struct DraftRemoval {
     /// Whether the requested removal completed.
     pub success: bool,
-}
-
-fn draft_configuration<'de, D: serde::Deserializer<'de>>(
-    deserializer: D,
-) -> Result<ruphish_domain::campaign_draft::Configuration, D::Error> {
-    let value = serde_json::Value::deserialize(deserializer)?;
-    let fields = |value: &serde_json::Value, names: &[&str]| {
-        names.iter().all(|name| value.get(*name).is_some())
-    };
-    let invalid = || serde::de::Error::custom("Incomplete campaign draft configuration");
-    if !fields(
-        &value,
-        &[
-            "name",
-            "url",
-            "selection",
-            "policy",
-            "launch_local",
-            "send_by_local",
-        ],
-    ) || !fields(&value["selection"], &["groups", "template", "page", "smtp"])
-        || ["template", "page", "smtp"]
-            .iter()
-            .any(|key| value["selection"][key].get("id").is_none())
-        || value["selection"]["groups"]
-            .as_array()
-            .is_none_or(|rows| rows.iter().any(|row| row.get("id").is_none()))
-        || (!value["policy"].is_null() && !fields(&value["policy"], &["redirect_url"]))
-        || ["launch_local", "send_by_local"]
-            .iter()
-            .any(|key| !value[key].is_null() && !fields(&value[key], &["local", "time_zone"]))
-    {
-        return Err(invalid());
-    }
-    serde_json::from_value(value).map_err(serde::de::Error::custom)
 }
 
 #[cfg(test)]

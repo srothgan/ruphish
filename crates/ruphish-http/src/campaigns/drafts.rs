@@ -34,7 +34,7 @@ fn encode(d: &Draft) -> reads::Draft {
     reads::Draft {
         id: d.id.clone(),
         revision: d.revision,
-        configuration: d.configuration.clone(),
+        configuration: (&d.configuration).into(),
         step: d.step,
         created: datetime::utc_seconds(d.created).ok(),
         modified: datetime::utc_seconds(d.modified).ok(),

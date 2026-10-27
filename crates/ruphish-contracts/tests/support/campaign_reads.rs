@@ -84,6 +84,76 @@ fn draft_null_selections_are_distinct_from_missing_read_fields() {
 }
 
 #[test]
+fn saved_draft_structure_is_complete_even_when_values_are_unfinished() {
+    use ruphish_domain::campaign_draft::Configuration as Input;
+    // Incomplete writes are legitimate; confirmed reads must spell out their defaults.
+    let input: Input = serde_json::from_value(json!({})).unwrap();
+    assert!(serde_json::from_value::<draft::Configuration>(json!({})).is_err());
+    assert_eq!(
+        serde_json::to_value(draft::Configuration::from(&input)).unwrap(),
+        json!({"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":null,"launch_local":null,"send_by_local":null})
+    );
+    let saved = json!({
+        "name":"", "url":"", "selection":{"groups":[{"id":0}],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},
+        "policy":{"redirect_url":"","learning_page_id":7},
+        "launch_local":{"local":"","time_zone":"Europe/Berlin"},
+        "send_by_local":{"local":"2035-01-02T12:00","time_zone":""}
+    });
+    let input: Input = serde_json::from_value(saved.clone()).unwrap();
+    assert_eq!(
+        serde_json::to_value(draft::Configuration::from(&input)).unwrap(),
+        saved
+    );
+    let confirmed: draft::Configuration = serde_json::from_value(saved.clone()).unwrap();
+    // This is the editor boundary: complete reads remain usable as unfinished input.
+    let reopened: Input = serde_json::from_value(serde_json::to_value(confirmed).unwrap()).unwrap();
+    assert_eq!(reopened, input);
+    for (object, field) in [
+        ("/selection", "groups"),
+        ("/selection", "template"),
+        ("/selection", "page"),
+        ("/selection", "smtp"),
+        ("/selection/groups/0", "id"),
+        ("/selection/template", "id"),
+        ("/selection/page", "id"),
+        ("/selection/smtp", "id"),
+        ("/policy", "redirect_url"),
+        ("/launch_local", "local"),
+        ("/launch_local", "time_zone"),
+        ("/send_by_local", "local"),
+        ("/send_by_local", "time_zone"),
+    ] {
+        let mut broken = saved.clone();
+        broken
+            .pointer_mut(object)
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .remove(field);
+        assert!(
+            serde_json::from_value::<draft::Configuration>(broken).is_err(),
+            "{object}/{field}"
+        );
+    }
+    for object in [
+        "",
+        "/selection",
+        "/selection/groups/0",
+        "/selection/template",
+        "/policy",
+        "/launch_local",
+        "/send_by_local",
+    ] {
+        let mut broken = saved.clone();
+        broken.pointer_mut(object).unwrap()["unexpected"] = json!(true);
+        assert!(
+            serde_json::from_value::<draft::Configuration>(broken).is_err(),
+            "{object}"
+        );
+    }
+}
+
+#[test]
 fn named_metrics_and_classified_observations_reject_missing_or_unknown_values() {
     let fixture = snapshots()["analysis"].clone();
     for field in ["accepted", "opened", "clicked", "submitted", "reported"] {
