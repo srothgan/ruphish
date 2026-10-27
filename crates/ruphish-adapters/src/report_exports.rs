@@ -1,5 +1,15 @@
 //! Spreadsheet output from an authorized, immutable analysis snapshot.
 use ruphish_application::{reporting::*, resources::Error};
+
+fn date(value: Option<&str>) -> String {
+    use ruphish_application::datetime;
+    value
+        .and_then(|value| datetime::parse_stored(value).ok())
+        .filter(|value| *value != datetime::ZERO_TIMESTAMP)
+        .map(datetime::utc)
+        .unwrap_or_default()
+}
+
 fn recipients(a: &Analysis) -> Vec<Vec<String>> {
     let mut rows = vec![
         vec![
@@ -13,6 +23,11 @@ fn recipients(a: &Analysis) -> Vec<Vec<String>> {
             "Submission events",
             "Report events",
             "Historical reported",
+            "First Name",
+            "Last Name",
+            "Position",
+            "Send Date (UTC)",
+            "Modified Date (UTC)",
         ]
         .into_iter()
         .map(str::to_owned)
@@ -27,6 +42,13 @@ fn recipients(a: &Analysis) -> Vec<Vec<String>> {
         ];
         v.extend(r.counts.iter().map(ToString::to_string));
         v.push(r.historical_reported.to_string());
+        v.extend([
+            r.first_name.clone(),
+            r.last_name.clone(),
+            r.position.clone(),
+            date(r.send_date.as_deref()),
+            date(r.modified_date.as_deref()),
+        ]);
         v
     }));
     rows

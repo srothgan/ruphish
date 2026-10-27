@@ -1,6 +1,7 @@
 // Browser-only simulation of the existing wire contracts. No HTTP fallback or persistent resources.
 import { dataset, DAY, iso, policy, features } from '../../../assets/website-demo/dataset.mjs';
-import { workbook } from './demo-export.mjs';
+import { exportResponse } from './demo-export.mjs';
+import { reviewCsv } from './demo-csv.mjs';
 
 const kinds = ['Email Sent', 'Email Opened', 'Clicked Link', 'Submitted Data', 'Email Reported'];
 const families = ['groups', 'templates', 'pages', 'learning-pages', 'smtp', 'domains', 'users', 'webhooks', 'reporting-mailboxes'];
@@ -38,14 +39,14 @@ export function analysis(campaign, query, now, paginate = true) {
     const results = campaign.results.filter(r => (!query.has('recipient') || r.id === Number(query.get('recipient'))) && (!selected.size || selected.has(r.id)) && (!search || `${r.email} ${r.first_name} ${r.last_name}`.toLocaleLowerCase().includes(search)));
     const events = results.flatMap(r => r.events).filter(e => {
         const at = Date.parse(e.time) / 1000;
-        return at >= from && at <= until && (!query.get('event') || query.get('event') === e.kind) && (!query.get('source') || query.get('source') === e.source);
+        return at >= from && at < until && (!query.get('event') || query.get('event') === e.kind) && (!query.get('source') || query.get('source') === e.source);
     }).sort(byTime);
     const eventMap = new Map();
     for (const e of events) {
         if (!eventMap.has(e.recipient_id)) eventMap.set(e.recipient_id, []);
         eventMap.get(e.recipient_id).push(e);
     }
-    const rows = results.filter(r => (!query.get('event') && !query.get('source')) || eventMap.has(r.id)).map(r => ({ id: r.id, email: r.email, name: `${r.first_name} ${r.last_name}`, delivery: r.state, counts: counts(eventMap.get(r.id) ?? []), historical_reported: false }));
+    const rows = results.filter(r => (!query.get('event') && !query.get('source')) || eventMap.has(r.id)).sort((a, b) => a.email < b.email ? -1 : a.email > b.email ? 1 : a.id - b.id).map(r => ({ id: r.id, email: r.email, name: `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim(), first_name: r.first_name, last_name: r.last_name, position: r.position, send_date: r.send_date, modified_date: r.modified_date, delivery: r.state, counts: counts(eventMap.get(r.id) ?? []), historical_reported: false }));
     const unique = sum(rows.map(r => r.counts.map(n => Number(n > 0))));
     const progression = sum(rows.map(r => [Number(r.counts[0] > 0), Number(r.counts[1] + r.counts[2] + r.counts[3] > 0), Number(r.counts[2] + r.counts[3] > 0), Number(r.counts[3] > 0), Number(r.counts[4] > 0)]));
     const buckets = new Map();
@@ -84,8 +85,7 @@ function review(data, input) {
     return { warnings: [], total, duplicate_count: targets.length - total, launch_date: data.now, send_by_date: null, selection, policy: { ...policy, ...(input.policy ?? {}) }, mailer_enabled: false, conflict_count: 0, conflicts: [], preview: { subject: template.subject, html: '<h1>Demo campaign preview</h1><p>This is a sample preview. No messages will be sent.</p>', text: template.text, visible_sender: smtp.from_address, transport_sender: smtp.from_address } };
 }
 
-export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage } = {}) {
-    const data = dataset(now);
+export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage, data = dataset(now) } = {}) {
     const key = 'ruphish-demo-session-v1';
     const readIdentity = () => {
         try { return Number(storage?.getItem(key)) || 0; } catch { return 0; }
@@ -107,7 +107,7 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage } =
         if (!['GET', 'HEAD'].includes(method)) {
             try {
                 const raw = await request.text();
-                if (raw.length > 8 * 1024 * 1024) return failure(413);
+                if (new TextEncoder().encode(raw).length > 8 * 1024 * 1024) return failure(413);
                 body = raw ? request.headers.get('content-type')?.includes('application/x-www-form-urlencoded') ? Object.fromEntries(new URLSearchParams(raw)) : JSON.parse(raw) : {};
                 if (!body || Array.isArray(body) || typeof body !== 'object') return failure(400);
             } catch { return failure(400); }
@@ -175,7 +175,15 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage } =
                 return json({ result_id: r.id, email: r.email, attempts: r.attempts, events: r.events.map(e => ({ id: e.id, time: e.time, at: Date.parse(e.time) / 1000, message: e.kind, details: JSON.stringify(e.password_present === null ? {} : { password_present: e.password_present }) })), next_attempt: null, next_event: null });
             }
             if ((method === 'DELETE' && !operation) || (method === 'POST' && (operation === 'complete' || /^delivery\/\d+$/.test(operation)))) return success();
-            if (method === 'GET' && operation === 'export') return exportResponse(analysis(c, url.searchParams, now, false), url.searchParams);
+            if (method === 'GET' && operation === 'export') {
+                const selected = url.searchParams.get('recipients') ? url.searchParams.get('recipients').split(',') : [];
+                const ids = [...selected, ...(url.searchParams.has('recipient') ? [url.searchParams.get('recipient')] : [])];
+                const invalidNumber = ['from', 'until', 'offset', 'limit'].some(key => url.searchParams.has(key) && (!/^-?\d+$/.test(url.searchParams.get(key)) || !Number.isSafeInteger(Number(url.searchParams.get(key)))));
+                const limit = Number(url.searchParams.get('limit') ?? 50), offset = Number(url.searchParams.get('offset') ?? 0);
+                const invalidWindow = url.searchParams.has('from') && url.searchParams.has('until') && Number(url.searchParams.get('from')) >= Number(url.searchParams.get('until'));
+                if (invalidNumber || invalidWindow || limit < 1 || limit > 200 || offset < 0 || offset > 1000000 || selected.length > 200 || ids.some(id => !/^\d+$/.test(id) || !c.results.some(r => r.id === Number(id)))) return failure(400, 'ANALYSIS_FILTER_INVALID');
+                return exportResponse(analysis(c, url.searchParams, now, false), url.searchParams);
+            }
             return failure(405);
         }
         if (['/api/util/preview', '/api/pages/preview', '/api/learning-pages/preview'].includes(path) && method === 'POST') return json({ html: '<h1>Sample preview</h1><p>The public demo displays sample content. Submitted content is not sent to a server.</p>', warnings: [] });
@@ -183,7 +191,10 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage } =
         if (['/api/util/test_connection', '/api/util/send_test_email'].includes(path) && method === 'POST') return success();
         if (path === '/api/import/site' && method === 'POST') return json({ html: data.pages[0].html });
         if (path === '/api/import/email' && method === 'POST') return json({ ...data.templates[0], id: 0 });
-        if (path === '/api/import/group/review' && method === 'POST') return json({ targets: data.groups[4].targets, errors: [], duplicates: 0 });
+        if (path === '/api/import/group/review' && method === 'POST') {
+            try { return json(reviewCsv(body)); }
+            catch { return failure(400, 'CSV_INVALID'); }
+        }
         if (path.startsWith('/api/starter-templates') && method === 'GET') {
             const entries = data.starters;
             if (path === '/api/starter-templates') return json(entries.map(e => e.summary));
@@ -214,18 +225,4 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage } =
         return failure(404);
     }
     return { execute };
-}
-
-function exportResponse(value, query) {
-    const format = query.get('format') ?? 'csv', scope = query.get('scope') ?? 'recipients';
-    const rows = scope === 'events' ? value.events.map(e => ({ email: e.email, time: e.time, event: e.kind, source: e.source, password_present: e.password_present })) : value.recipients.map(r => ({ email: r.email, name: r.name, delivery: r.delivery, sent: r.counts[0], opened: r.counts[1], clicked: r.counts[2], submitted: r.counts[3], reported: r.counts[4] }));
-    if (format === 'json') return json(scope === 'all' ? value : rows);
-    if (format === 'xlsx') return new Response(workbook([
-        ['Recipients', value.recipients.map(r => ({ email: r.email, name: r.name, delivery: r.delivery, sent: r.counts[0], opened: r.counts[1], clicked: r.counts[2], submitted: r.counts[3], reported: r.counts[4] }))],
-        ['Events', value.events.map(e => ({ email: e.email, time: e.time, event: e.kind, source: e.source, password_present: e.password_present }))],
-    ]), { headers: { 'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } });
-    if (format !== 'csv') return failure(400, 'DEMO_EXPORT_FORMAT');
-    const columns = Object.keys(rows[0] ?? { email: '', name: '' });
-    const cell = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
-    return new Response([columns, ...rows.map(r => columns.map(k => r[k]))].map(r => r.map(cell).join(',')).join('\r\n'), { headers: { 'content-type': 'text/csv;charset=utf-8' } });
 }

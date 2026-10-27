@@ -34,6 +34,17 @@ test('spreadsheet download contains separate recipient and event sheets with saf
     const response = await f.api.execute(new Request('https://demo.example.test/api/campaigns/3/export?format=xlsx&scope=all'));
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-type'), /spreadsheetml/);
+    const entries = await workbookEntries(response);
+    assert.ok(entries.has('xl/worksheets/sheet3.xml'));
+    assert.match(entries.get('xl/workbook.xml'), /name="Summary"/);
+    assert.match(entries.get('xl/workbook.xml'), /name="Recipients"/);
+    assert.match(entries.get('xl/workbook.xml'), /name="Events"/);
+    assert.match(entries.get('xl/worksheets/sheet2.xml'), /person001@example.test/);
+    assert.match(entries.get('xl/worksheets/sheet3.xml'), /Submitted Data/);
+    assert.ok([...entries.values()].every(xml => !xml.includes('<f>')));
+});
+
+async function workbookEntries(response) {
     const bytes = new Uint8Array(await response.arrayBuffer()), view = new DataView(bytes.buffer), entries = new Map();
     let offset = 0;
     while (view.getUint32(offset, true) === 0x04034b50) {
@@ -42,23 +53,131 @@ test('spreadsheet download contains separate recipient and event sheets with saf
         entries.set(new TextDecoder().decode(bytes.slice(offset + 30, offset + 30 + nameLength)), new TextDecoder().decode(bytes.slice(start, start + length)));
         offset = start + length;
     }
-    assert.equal(entries.size, 6);
-    assert.match(entries.get('xl/workbook.xml'), /name="Recipients"/);
-    assert.match(entries.get('xl/workbook.xml'), /name="Events"/);
-    assert.match(entries.get('xl/worksheets/sheet1.xml'), /person001@example.test/);
-    assert.match(entries.get('xl/worksheets/sheet2.xml'), /Submitted Data/);
-    assert.ok([...entries.values()].every(xml => !xml.includes('<f>')));
-});
+    return entries;
+}
 
-function setup(storage = new Map()) {
+function setup(storage = new Map(), data) {
     const store = { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
-    const api = createDemoApi({ now, storage: store });
+    const api = createDemoApi({ now, storage: store, data });
     const request = async (path, method = 'GET', body) => {
         const response = await api.execute(new Request(`https://demo.example.test${path}`, { method, ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }) }));
         return { status: response.status, value: await response.json() };
     };
     return { api, request, storage, store, login: () => request('/login', 'POST', { username: 'demo', password: 'demodemo' }) };
 }
+
+test('recipient CSV downloads retain fields, stored dates and all selected pages with safe spreadsheet text', async t => {
+    t.mock.method(globalThis, 'fetch', () => { throw new Error('No network'); });
+    const data = dataset(now);
+    Object.assign(data.campaigns[2].results[0], { first_name: 'Élise, "E"', last_name: 'Müller', position: ' =1+1', send_date: '2026-10-01T14:00:00.123456789+02:00', modified_date: '2026-10-02T01:00:00-03:00', password: 'never-export-this', ip: 'never-export-this' });
+    Object.assign(data.campaigns[2].results[1], { first_name: '', last_name: '@command', position: '\ttext', send_date: '0001-01-01T00:00:00Z', modified_date: 'invalid date' });
+    const f = setup(new Map(), data);
+    const path = `/api/campaigns/3/export?format=csv&scope=recipients&recipients=30002,30001&limit=1&offset=1&from=${now}`;
+    const download = path => f.api.execute(new Request(`https://demo.example.test${path}`));
+    assert.equal((await download(path)).status, 401);
+    await f.login();
+    const response = await download(path);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-disposition'), 'attachment; filename="campaign-3.csv"');
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    const content = await response.text();
+    assert.ok(!content.includes('never-export-this'));
+    const review = await f.request('/api/import/group/review', 'POST', { content });
+    assert.equal(review.status, 200);
+    assert.deepEqual(review.value.columns, ['Recipient ID', 'Email', 'Name', 'Delivery', 'Accepted events', 'Open events', 'Click events', 'Submission events', 'Report events', 'Historical reported', 'First Name', 'Last Name', 'Position', 'Send Date (UTC)', 'Modified Date (UTC)']);
+    assert.deepEqual(review.value.errors, []);
+    assert.deepEqual(review.value.targets, [
+        { email: 'person001@example.test', first_name: 'Élise, "E"', last_name: 'Müller', position: "' =1+1" },
+        { email: 'person002@example.test', first_name: '', last_name: "'@command", position: "'\ttext" },
+    ]);
+    const dates = await f.request('/api/import/group/review', 'POST', { content, columns: ['Email', 'Send Date (UTC)', 'Modified Date (UTC)', 'Open events'] });
+    assert.deepEqual(dates.value.targets.map(r => [r.first_name, r.last_name, r.position]), [['2026-10-01T12:00:00.123456789Z', '2026-10-02T04:00:00Z', '0'], ['', '', '0']]);
+    const empty = await (await download('/api/campaigns/3/export?format=csv&search=does-not-exist')).text();
+    const emptyReview = await f.request('/api/import/group/review', 'POST', { content: empty });
+    assert.deepEqual(emptyReview.value.columns, review.value.columns);
+    assert.deepEqual(emptyReview.value.targets, []);
+    for (const query of ['format=csv&scope=all', 'format=unsupported', 'scope=unknown', 'recipients=10001', 'recipients=bogus', 'recipients=30001,,30002', `recipients=${Array(201).fill('30001').join(',')}`, 'format=xlsx&from=not-a-time', 'format=xlsx&from=2&until=1', 'format=xlsx&until=1.5', 'limit=0', 'offset=-1']) {
+        assert.equal((await download(`/api/campaigns/3/export?${query}`)).status, 400, query);
+    }
+    assert.equal((await download('/api/campaigns/999/export?format=csv')).status, 404);
+});
+
+test('CSV review uses supplied bytes, reports bad rows and never persists submitted recipients', async t => {
+    t.mock.method(globalThis, 'fetch', () => { throw new Error('No network'); });
+    const f = setup();
+    const cases = JSON.parse(readFileSync(new URL('../recipient-csv-cases.json', import.meta.url), 'utf8'));
+    const sample = readFileSync(new URL('../../crates/ruphish-ui/assets/recipient-template.csv', import.meta.url), 'utf8');
+    assert.equal((await f.request('/api/import/group/review', 'POST', { content: sample })).status, 401);
+    await f.login();
+    const original = (await f.request('/api/groups/')).value;
+    for (const scenario of cases) {
+        const body = { ...scenario.request, ...(scenario.template ? { content: sample } : {}) };
+        const response = await f.request('/api/import/group/review', 'POST', body);
+        assert.equal(response.status, scenario.status, scenario.name);
+        if (response.status === 200) {
+            assert.deepEqual(response.value.targets, scenario.targets, scenario.name);
+            assert.deepEqual(response.value.errors.map(({ row, code }) => ({ row, code })), scenario.errors, scenario.name);
+        }
+    }
+    const imported = (await f.request('/api/import/group/review', 'POST', { content: sample })).value;
+    assert.equal((await f.request('/api/groups/', 'POST', { name: 'Private import', targets: imported.targets })).status, 201);
+    assert.deepEqual((await f.request('/api/groups/')).value, original);
+    const reopened = setup(f.storage);
+    assert.deepEqual((await reopened.request('/api/groups/')).value, original);
+    assert.deepEqual([...f.storage.values()], ['1']);
+    for (const body of [
+        { content: `Email\n${'a@example.test\n'.repeat(100001)}` },
+        { content: `${['Email', ...Array(1024).fill('Extra')].join(',')}\n` },
+        { content: 'Email\na@example.test', columns: ['é'.repeat(513), '', '', ''] },
+        { content: 'é'.repeat(4 * 1024 * 1024 + 1) },
+    ]) assert.ok((await f.request('/api/import/group/review', 'POST', body)).status >= 400);
+    assert.deepEqual((await f.request('/api/import/group/review', 'POST', { content: sample })).value.targets, cases[0].targets, 'failure must not poison a later review');
+});
+
+test('XLSX exports preserve typed recipient cells, scope and empty schemas without formulas or inferred dates', async () => {
+    const data = dataset(now), first = data.campaigns[2].results[0], second = data.campaigns[2].results[1];
+    Object.assign(first, { first_name: 'Élise <E>', last_name: 'Müller', position: '=1+1', send_date: '2026-10-01T14:00:00.123456789+02:00', modified_date: '2026-10-02T01:00:00-03:00' });
+    Object.assign(second, { first_name: '', last_name: '', position: '', send_date: null, modified_date: '2026-02-30T01:00:00Z' });
+    const f = setup(new Map(), data); await f.login();
+    const read = query => f.api.execute(new Request(`https://demo.example.test/api/campaigns/3/export?format=xlsx&${query}`));
+    const response = await read(`scope=recipients&recipients=30001,30002&limit=1&offset=1&from=${now}`);
+    assert.equal(response.status, 200);
+    const entries = await workbookEntries(response);
+    const book = entries.get('xl/workbook.xml');
+    assert.match(book, /name="Summary"/);
+    assert.match(book, /name="Recipients"/);
+    assert.doesNotMatch(book, /name="Events"/);
+    const rows = [...entries.get('xl/worksheets/sheet2.xml').matchAll(/<row>(.*?)<\/row>/gs)].map(m => m[1]);
+    assert.equal(rows.length, 3, 'both selected recipients are exported despite pagination');
+    for (const header of ['First Name', 'Last Name', 'Position', 'Send Date (UTC)', 'Modified Date (UTC)']) assert.ok(rows[0].includes(`>${header}</t>`));
+    assert.match(rows[1], /<c><v>30001<\/v><\/c>/);
+    for (const text of ['Élise &lt;E&gt;', 'Müller', '=1+1', '2026-10-01T12:00:00.123456789Z', '2026-10-02T04:00:00Z']) assert.ok(rows[1].includes(`<c t="inlineStr"><is><t xml:space="preserve">${text}</t></is></c>`));
+    assert.match(rows[2], /(?:<c t="inlineStr"><is><t xml:space="preserve"><\/t><\/is><\/c>){5}$/);
+    assert.ok([...entries.values()].every(xml => !xml.includes('<f>')));
+    const empty = await workbookEntries(await read('scope=events&search=does-not-exist'));
+    assert.doesNotMatch(empty.get('xl/workbook.xml'), /name="Recipients"/);
+    const events = empty.get('xl/worksheets/sheet2.xml');
+    assert.match(events, />Event ID<\/t>/);
+    assert.match(events, />Password present<\/t>/);
+    assert.equal([...events.matchAll(/<row>/g)].length, 1);
+});
+
+test('event downloads share exclusive time bounds and retain the event schema when no rows match', async () => {
+    const data = dataset(now), firstEvent = data.campaigns[2].results[0].events[0];
+    const at = Date.parse(firstEvent.time) / 1000;
+    const f = setup(new Map(), data); await f.login();
+    const download = async bounds => {
+        const response = await f.api.execute(new Request(`https://demo.example.test/api/campaigns/3/export?format=csv&scope=events&recipient=30001&${bounds}`));
+        assert.equal(response.status, 200);
+        return (await f.request('/api/import/group/review', 'POST', { content: await response.text(), columns: ['Email', 'Event', 'Time (UTC)', 'Password present'] })).value;
+    };
+    const before = await download(`until=${at}`), during = await download(`from=${at}&until=${at + 1}`);
+    assert.deepEqual(before.columns, ['Event ID', 'Recipient ID', 'Email', 'Time (UTC)', 'Event', 'Source', 'Password present']);
+    assert.deepEqual(before.targets, []);
+    assert.deepEqual(during.targets, [{ email: 'person001@example.test', first_name: 'Email Sent', last_name: firstEvent.time, position: '' }]);
+    const analysis = await f.request(`/api/campaigns/3/analysis?recipient=30001&from=${at}&until=${at + 1}`);
+    assert.equal(analysis.value.event_total, 1);
+});
 
 test('login survives a fresh page, stores no password, and logout revokes the demo session', async () => {
     const f = setup();

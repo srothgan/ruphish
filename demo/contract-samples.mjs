@@ -1,4 +1,5 @@
 // Exercise the real demo dispatcher for Rust contract validation; stdout is synthetic JSON only.
+import { readFileSync } from 'node:fs';
 import { createDemoApi } from '../crates/ruphish-ui/web/demo-api.mjs';
 const memory = new Map();
 const api = createDemoApi({ now: 1793016000, storage: { getItem: k => memory.get(k), setItem: (k, v) => memory.set(k, v), removeItem: k => memory.delete(k) } });
@@ -15,4 +16,10 @@ for (const family of ['groups', 'templates', 'pages', 'learning-pages', 'smtp'])
 }
 responses.review = await read('/api/campaign-drafts/prepare', 'POST', responses['/api/campaign-drafts/00000000-0000-4000-8000-000000000001'].configuration);
 responses.closure = await read('/api/campaigns/complete-all', 'POST', { token: 'demo-confirmation', confirmation: 'CLOSE ALL' });
+const csvCases = JSON.parse(readFileSync(new URL('./recipient-csv-cases.json', import.meta.url), 'utf8'));
+responses.csv_reviews = [];
+for (const scenario of csvCases.filter(c => c.status === 200)) {
+    const body = { ...scenario.request, ...(scenario.template ? { content: readFileSync(new URL('../crates/ruphish-ui/assets/recipient-template.csv', import.meta.url), 'utf8') } : {}) };
+    responses.csv_reviews.push(await read('/api/import/group/review', 'POST', body));
+}
 process.stdout.write(JSON.stringify(responses));

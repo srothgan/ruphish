@@ -8,7 +8,9 @@ import { resolve, join } from 'node:path';
 import { createServer } from 'node:net';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as delay } from 'node:timers/promises';
+import { dataset } from '../../assets/website-demo/dataset.mjs';
 import { seed } from '../../assets/website-demo/seed.mjs';
+import { createDemoApi } from '../../crates/ruphish-ui/web/demo-api.mjs';
 
 test('the sole dataset seeds installed SQLite schema, survives reopen, and disables outbound integrations', async () => {
     const state = await mkdtemp(join(tmpdir(), 'ruphish-demo-seed-'));
@@ -48,7 +50,7 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
         await start(); await stop();
         let db = new DatabaseSync(database), apiKey;
         try {
-            seed(db);
+            seed(db, 1793016000);
             apiKey = db.prepare("SELECT api_key FROM users WHERE username='demo'").get().api_key;
         } finally { db.close(); }
         await start();
@@ -59,12 +61,32 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
             if (path === '/api/overview') assert.equal(value.campaigns.total, 4);
             if (path.includes('posture')) assert.equal(value.delivered, 937);
         }
+        const memory = new Map();
+        const demo = createDemoApi({ now: 1793016000, storage: { getItem: k => memory.get(k), setItem: (k, v) => memory.set(k, v), removeItem: k => memory.delete(k) } });
+        const post = (path, body) => demo.execute(new Request(`https://demo.example.test${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }));
+        assert.equal((await post('/login', { username: 'demo', password: 'demodemo' })).status, 200);
+        const exportPath = '/api/campaigns/3/export?format=csv&scope=recipients&recipients=30001,30002&limit=1&offset=1';
+        const live = await fetch(`http://127.0.0.1:${port}${exportPath}`, { headers: { Authorization: `Bearer ${apiKey}` } });
+        const simulated = await demo.execute(new Request(`https://demo.example.test${exportPath}`));
+        assert.equal(live.status, 200); assert.equal(simulated.status, 200);
+        const liveCsv = await live.text(), demoCsv = await simulated.text();
+        for (const columns of [null, ['Email', 'Send Date (UTC)', 'Modified Date (UTC)', 'Accepted events']]) {
+            const actual = await (await post('/api/import/group/review', { content: liveCsv, columns })).json();
+            const sample = await (await post('/api/import/group/review', { content: demoCsv, columns })).json();
+            assert.deepEqual(sample, actual, 'demo exports must match real server headers and recipient values');
+            assert.equal(actual.targets.length, 2);
+            assert.deepEqual(actual.errors, []);
+        }
         await stop();
         db = new DatabaseSync(database);
         try {
             const count = table => db.prepare(`SELECT count(*) AS n FROM ${table}`).get().n;
             assert.equal(count('users'), 6);
             assert.equal(count('campaigns'), 4);
+            const recipient = dataset(1793016000).campaigns[2].results[0];
+            const stored = db.prepare('SELECT send_date,modified_date FROM results WHERE id=?').get(recipient.id);
+            assert.equal(stored.send_date, recipient.send_date);
+            assert.equal(stored.modified_date, recipient.modified_date);
             assert.equal(count('groups'), 6);
             assert.equal(count('webhooks'), 3);
             assert.equal(count('ruphish_mailboxes'), 2);

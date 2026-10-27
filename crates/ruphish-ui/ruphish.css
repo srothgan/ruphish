@@ -577,7 +577,7 @@
   .resource-read-panel summary { margin-top: var(--s4); }
   .saved-content-preview { display: block; width: 100%; min-height: 420px; border: 1px solid var(--line); border-radius: var(--r-sm); }
   .import-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
-  .import-fields > label, .import-fields > button { margin: var(--s3) 0; }
+  .import-fields > label, .import-fields > button, .import-fields > .management-actions { margin: var(--s3) 0; }
   .import-actions { display: flex; justify-content: space-between; gap: var(--s4); margin-top: var(--s5); }
   .import-summary { border: 1px solid var(--teal-600); border-radius: var(--r-md); background: var(--paper); padding: var(--s5) var(--s5); margin-bottom: var(--s5); }
   .import-summary h2 { margin-top: 0; }

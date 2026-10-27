@@ -146,6 +146,11 @@ fn canonical<T: DeserializeOwned + Serialize>(value: Value) -> Result<Value, Imp
     serde_json::to_value(typed).map_err(|_| ImportError::WrongResourceType)
 }
 
+/// Initial selection for a newly opened resource import dialog.
+pub fn initial_format(family: &str) -> &'static str {
+    if family == "groups" { "csv" } else { "json" }
+}
+
 /// Prepare a new resource from a supported import result. The server still validates Create.
 pub fn prepare_creation(
     family: &str,

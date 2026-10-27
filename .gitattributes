@@ -1,5 +1,7 @@
 # Match both Rust formatters on every platform.
 *.rs text eol=lf
+# Keep the embedded recipient download identical across platform checkouts.
+crates/ruphish-ui/assets/recipient-template.csv text eol=lf
 # Preserve the exact bytes used by fixture manifests and copied SQL provenance.
 tests/fixtures/** -text
 crates/ruphish-adapters/migrations/gophish/** -text

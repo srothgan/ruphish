@@ -193,3 +193,27 @@ pub fn save_file(value: &JsValue, filename: &str) -> Result<(), String> {
         .into()
     })
 }
+
+/// Download a UTF-8 recipient CSV sample through the browser's native save workflow.
+pub fn download_recipient_template() -> Result<(), String> {
+    let create = || -> Result<JsValue, JsValue> {
+        let parts = js_sys::Array::new();
+        parts.push(&js_sys::Uint8Array::from(
+            include_bytes!("../assets/recipient-template.csv").as_slice(),
+        ));
+        let options = web_sys::BlobPropertyBag::new();
+        options.set_type("text/csv;charset=utf-8");
+        let blob = web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &options)?;
+        let result = js_sys::Object::new();
+        js_sys::Reflect::set(&result, &JsValue::from_str("file"), &blob)?;
+        Ok(result.into())
+    };
+    let value = create().map_err(|_| {
+        leptos_i18n::td_string!(
+            crate::localization::current_locale(),
+            ui.the_browser_could_not_save_this_export
+        )
+        .to_owned()
+    })?;
+    save_file(&value, "recipient-template.csv")
+}

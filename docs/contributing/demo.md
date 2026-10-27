@@ -13,7 +13,9 @@ The public demo uses the real Leptos administration UI with one extended synthet
 4. Creation returns an existing sample ID. Existing resource navigation opens that sample detail page; user management retains its normal return to the list. New campaign drafts use the designated sample draft UUID, and simulated launch returns a sample campaign ID.
 5. Refetch or reload and see the original sample data. Export synthetic results as CSV, JSON, or XLSX. Sign out through the normal account flow.
 
-Preview, import, SMTP, domain-verification, webhook, and mailbox actions return explicitly simulated sample responses. They do not render submitted templates through a backend, fetch submitted URLs, deliver messages, or contact integrations. A successful simulation does not assert that a real backend would accept the submitted content.
+CSV import review parses the supplied content locally, including the downloadable recipient template, mapped headers, quoted fields and row errors. It feeds the normal draft review and duplicate handling; saving still returns a simulated sample resource and never persists imported recipients. Shared acceptance cases exercise both the demo review and the real server. Other imports, previews, SMTP, domain-verification, webhook, and mailbox actions return explicitly simulated sample responses. They do not render submitted templates through a backend, fetch submitted URLs, deliver messages, or contact integrations. A successful simulation does not assert that a real backend would accept arbitrary submitted content.
+
+Recipient CSV/XLSX exports include the production columns for separate names, position and stored send/modification dates. Exports preserve filtering across all pages, normalize stored dates to UTC, leave absent or invalid dates blank, and protect spreadsheet-sensitive values. XLSX includes a Summary sheet and the requested Recipients/Events sheets, including their headers when empty. The shared synthetic dataset supplies explicit result dates to both the demo and its SQL seeder; exports do not infer missing dates from observations.
 
 ## Build mode and production behavior
 
@@ -60,7 +62,8 @@ Campaign drafts remain an intentionally stateless demonstration: saving a new dr
 - `assets/website-demo/`: the single scenario source, materializer, SQL seeder, and existing screenshot recorder.
 - `crates/ruphish-ui/web/demo-api.mjs`: explicit demo endpoints, read projections, and nonpersistent responses.
 - `crates/ruphish-ui/web/demo-http.mjs` and `build-demo.mjs`: browser-only request executor and generated bundle.
-- `crates/ruphish-ui/web/demo-export.mjs`: synthetic XLSX workbook serialization.
+- `crates/ruphish-ui/web/demo-export.mjs`: synthetic CSV/XLSX serialization with production export columns.
+- `crates/ruphish-ui/web/demo-csv.mjs`: bounded, nonpersistent CSV review for the demo; `demo/recipient-csv-cases.json` supplies shared real-server/demo acceptance expectations.
 - `crates/ruphish-ui/src/shared/components/toasts.rs`: shared demo notifications; feature modules announce success only after their normal response validation.
 - `crates/ruphish-ui/src/account.rs`, locale files, and shared CSS: demo notice, credentials, accessible feedback, and translations.
 - `demo/tests/` and `crates/ruphish-ui/tests/demo_contracts.rs`: independent demo functionality, real DTO decoding, static routing, and installed SQLite seed/reopen checks.

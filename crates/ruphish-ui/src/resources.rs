@@ -1473,7 +1473,7 @@ fn import_panel(api: Api, token: String, family: Family, open: RwSignal<bool>) -
 
     let token = StoredValue::new(token);
     let content = RwSignal::new(String::new());
-    let mode = RwSignal::new("json".to_owned());
+    let mode = RwSignal::new(ruphish_ui::import_state::initial_format(family.route()).to_owned());
     let busy = RwSignal::new(false);
     let message = Message::new(String::new());
     let file = NodeRef::<html::Input>::new();
@@ -1641,11 +1641,23 @@ fn import_panel(api: Api, token: String, family: Family, open: RwSignal<bool>) -
                     }
                     on:change=read
                 />
-                <ActionButton on_click=move |_| {
-                    if let Some(file) = file.get() {
-                        file.click();
-                    }
-                }>{tr!(ui.choose_file)}</ActionButton>
+                <div class="management-actions">
+                    <ActionButton on_click=move |_| {
+                        if let Some(file) = file.get() {
+                            file.click();
+                        }
+                    }>{tr!(ui.choose_file)}</ActionButton>
+                    {matches!(family, Family::Groups)
+                        .then(|| {
+                            view! {
+                                <ActionButton on_click=move |_| {
+                                    if let Err(error) = ruphish_ui::browser_http::download_recipient_template() {
+                                        message.error(error);
+                                    }
+                                }>{tr!(ui.download_recipient_csv_template)}</ActionButton>
+                            }
+                        })}
+                </div>
                 <Select
                     label=trs!(ui.import_format)
                     value=mode

@@ -449,7 +449,8 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     let recipient = Recipient {
         email: "élise@example.test".into(),
         first_name: "Élise".into(),
-        ..Recipient::default()
+        last_name: "Müller".into(),
+        position: "=1+1".into(),
     };
     let group_input = resource("Engineering", Content::Group(vec![recipient]));
     let (a, b) = tokio::join!(
@@ -796,6 +797,30 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     assert_eq!(filtered.totals, [0, 0, 0, 1, 0]);
     assert_eq!(filtered.recipients.len(), 1);
     assert_eq!(filtered.events.len(), 1);
+    let recipient_csv = db
+        .reporting()
+        .export(actor, campaign.id, filter(), "csv", "recipients")
+        .await
+        .unwrap();
+    let mut reader = csv::Reader::from_reader(recipient_csv.bytes.as_slice());
+    let headers = reader.headers().unwrap().clone();
+    let row = reader.records().next().unwrap().unwrap();
+    let field = |name: &str| &row[headers.iter().position(|h| h == name).unwrap()];
+    assert_eq!(field("First Name"), "Élise");
+    assert_eq!(field("Last Name"), "Müller");
+    assert_eq!(field("Position"), "'=1+1");
+    assert_eq!(
+        field("Send Date (UTC)"),
+        ruphish_application::datetime::Timestamp::from_second(now)
+            .unwrap()
+            .to_string()
+    );
+    assert_eq!(
+        field("Modified Date (UTC)"),
+        ruphish_application::datetime::Timestamp::from_second(now + 3)
+            .unwrap()
+            .to_string()
+    );
     let mut invalid = filter();
     invalid.recipients = vec![i64::MAX];
     assert!(matches!(
