@@ -32,15 +32,14 @@ pub struct Directory {
 pub struct DirectoryRow {
     /// Draft identity or decimal execution identity.
     pub id: String,
-    /// Draft or campaign.
-    pub kind: String,
     /// Conditional draft revision; null for executions.
     #[serde(deserialize_with = "nullable")]
     pub revision: Option<i64>,
     /// Display name; drafts may be untitled.
     pub name: String,
-    /// Lifecycle state.
-    pub status: String,
+    /// Entry kind selects the corresponding lifecycle.
+    #[serde(flatten)]
+    pub state: ruphish_domain::campaign::DirectoryState,
     /// Confirmed audience size; null before launch.
     #[serde(deserialize_with = "nullable")]
     pub total: Option<i64>,
@@ -77,7 +76,7 @@ pub struct Header {
     /// Display name.
     pub name: String,
     /// Lifecycle state.
-    pub status: String,
+    pub status: ruphish_domain::campaign::CampaignStatus,
     /// Preserved timestamp.
     #[serde(deserialize_with = "nullable")]
     pub launch_date: Option<String>,
@@ -123,7 +122,7 @@ pub struct Delivery {
     /// Campaign metadata.
     pub campaign: Header,
     /// Sparse state counts: omitted states have zero rows; the map itself is required.
-    pub counts: BTreeMap<String, i64>,
+    pub counts: BTreeMap<ruphish_domain::campaign::DeliveryState, i64>,
     /// Recipients in the requested page.
     pub items: Vec<DeliveryRow>,
     /// Next recipient cursor.
@@ -150,7 +149,7 @@ pub struct DeliveryRow {
     /// Total persisted attempts.
     pub attempt_count: i64,
     /// Transport state.
-    pub state: String,
+    pub state: ruphish_domain::campaign::DeliveryState,
     /// Next or last due UTC seconds.
     pub due: i64,
     /// Automatic retries consumed.
@@ -174,7 +173,7 @@ pub struct Attempt {
     #[serde(deserialize_with = "nullable")]
     pub finished: Option<i64>,
     /// Recorded outcome.
-    pub state: String,
+    pub state: ruphish_domain::campaign::AttemptState,
     /// Protocol stage if known.
     pub stage: String,
     /// SMTP response if known.
@@ -244,7 +243,7 @@ pub struct Analysis {
     /// Campaign display name.
     pub name: String,
     /// Lifecycle state.
-    pub status: ruphish_domain::reporting::CampaignStatus,
+    pub status: ruphish_domain::campaign::CampaignStatus,
     /// Snapshot UTC seconds.
     pub as_of: i64,
     /// Unfiltered audience size.
@@ -278,8 +277,9 @@ pub struct AnalysisRecipient {
     pub email: String,
     /// Administrator-supplied name.
     pub name: String,
-    /// Transport outcome.
-    pub delivery: ruphish_domain::reporting::DeliveryState,
+    /// Transport outcome, or null when no native delivery record exists.
+    #[serde(deserialize_with = "nullable")]
+    pub delivery: Option<ruphish_domain::campaign::DeliveryState>,
     /// Observed event counts.
     pub counts: crate::reporting::Counts,
     /// Legacy report state without an observed timestamp.
@@ -337,7 +337,7 @@ pub struct Draft {
     #[serde(deserialize_with = "nullable")]
     pub campaign_id: Option<i64>,
     /// Draft or launched.
-    pub status: String,
+    pub status: ruphish_domain::campaign_draft::Status,
 }
 
 /// Bounded saved-draft page.

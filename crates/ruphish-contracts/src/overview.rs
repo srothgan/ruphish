@@ -25,7 +25,7 @@ pub struct RecentCampaign {
     /// Display name.
     pub name: String,
     /// Lifecycle state.
-    pub status: String,
+    pub status: ruphish_domain::campaign::CampaignStatus,
     /// Normalized UTC launch, or explicitly unknown.
     #[serde(deserialize_with = "crate::nullable")]
     pub launch: Option<String>,

@@ -188,7 +188,15 @@ impl CampaignQueries {
     pub fn deleted(self, kind: &str, id: &str) {
         self.directory.confirmed_where(
             |_| true,
-            |page| page.items.retain(|row| row.kind != kind || row.id != id),
+            |page| {
+                page.items.retain(|row| {
+                    let row_kind = match row.state {
+                        ruphish_domain::campaign::DirectoryState::Draft(_) => "draft",
+                        ruphish_domain::campaign::DirectoryState::Campaign(_) => "campaign",
+                    };
+                    row_kind != kind || row.id != id
+                });
+            },
         );
         if kind == "draft" {
             self.draft.forget(id.to_owned());

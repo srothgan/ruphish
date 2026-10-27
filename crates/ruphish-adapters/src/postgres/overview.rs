@@ -42,7 +42,10 @@ impl Repository for Overview {
             recent.push(RecentCampaign {
                 id: r.try_get("id").map_err(storage)?,
                 name: r.try_get("name").map_err(storage)?,
-                status: r.try_get("status").map_err(storage)?,
+                status: ruphish_domain::campaign::CampaignStatus::from_stored(
+                    &r.try_get::<String, _>("status").map_err(storage)?,
+                )
+                .ok_or(Error::Internal)?,
                 launch: r
                     .try_get::<Option<String>, _>("launch_date")
                     .map_err(storage)?

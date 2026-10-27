@@ -243,12 +243,12 @@ impl Queue for Campaigns {
         else {
             return Ok(());
         };
-        sqlx::query("UPDATE ruphish_delivery SET state=?,due=?,retries=?,lease_until=0,code=?,stage=?,smtp_code=? WHERE result_id=? AND generation=?").bind(state).bind(next).bind(count).bind(code).bind(&stage).bind(smtp_code).bind(claim.result_id).bind(claim.generation).execute(&mut *tx).await.map_err(storage)?;
-        sqlx::query("UPDATE ruphish_delivery_attempt SET state=?,finished=?,stage=?,smtp_code=? WHERE result_id=? AND generation=?").bind(state).bind(now).bind(stage).bind(smtp_code).bind(claim.result_id).bind(claim.generation).execute(&mut *tx).await.map_err(storage)?;
+        sqlx::query("UPDATE ruphish_delivery SET state=?,due=?,retries=?,lease_until=0,code=?,stage=?,smtp_code=? WHERE result_id=? AND generation=?").bind(state.as_str()).bind(next).bind(count).bind(code).bind(&stage).bind(smtp_code).bind(claim.result_id).bind(claim.generation).execute(&mut *tx).await.map_err(storage)?;
+        sqlx::query("UPDATE ruphish_delivery_attempt SET state=?,finished=?,stage=?,smtp_code=? WHERE result_id=? AND generation=?").bind(state.as_str()).bind(now).bind(stage).bind(smtp_code).bind(claim.result_id).bind(claim.generation).execute(&mut *tx).await.map_err(storage)?;
         if cooldown {
-            sqlx::query("INSERT INTO ruphish_profile_cooldown VALUES(?,?,?,?) AS incoming ON DUPLICATE KEY UPDATE until_time=GREATEST(ruphish_profile_cooldown.until_time,incoming.until_time),revision=incoming.revision,blocked=incoming.blocked").bind(row.try_get::<i64,_>("smtp_id").map_err(storage)?).bind(next).bind(text(&row,"profile_revision")?).bind(state=="blocked").execute(&mut *tx).await.map_err(storage)?;
+            sqlx::query("INSERT INTO ruphish_profile_cooldown VALUES(?,?,?,?) AS incoming ON DUPLICATE KEY UPDATE until_time=GREATEST(ruphish_profile_cooldown.until_time,incoming.until_time),revision=incoming.revision,blocked=incoming.blocked").bind(row.try_get::<i64,_>("smtp_id").map_err(storage)?).bind(next).bind(text(&row,"profile_revision")?).bind(state == DeliveryState::Blocked).execute(&mut *tx).await.map_err(storage)?;
         }
-        sqlx::query("UPDATE results SET status=CASE WHEN status IN ('Email Opened','Clicked Link','Submitted Data') THEN status ELSE ? END,send_date=CASE WHEN ? IN ('accepted','retry') THEN ? ELSE send_date END,modified_date=? WHERE id=?").bind(status).bind(state).bind(stamp(if state=="retry" {next} else {now})?).bind(stamp(now)?).bind(claim.result_id).execute(&mut *tx).await.map_err(storage)?;
+        sqlx::query("UPDATE results SET status=CASE WHEN status IN ('Email Opened','Clicked Link','Submitted Data') THEN status ELSE ? END,send_date=CASE WHEN ? IN ('accepted','retry') THEN ? ELSE send_date END,modified_date=? WHERE id=?").bind(status).bind(state.as_str()).bind(stamp(if state == DeliveryState::Retry {next} else {now})?).bind(stamp(now)?).bind(claim.result_id).execute(&mut *tx).await.map_err(storage)?;
         let details = outcome
             .as_ref()
             .err()

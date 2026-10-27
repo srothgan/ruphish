@@ -49,8 +49,17 @@ fn incomplete_campaign_snapshots_are_errors_instead_of_empty_lists_or_zero_metri
 fn sparse_counts_and_explicit_empty_pages_remain_valid() {
     let fixture = snapshots();
     let delivery: Delivery = serde_json::from_value(fixture["delivery"].clone()).unwrap();
-    assert_eq!(delivery.counts.get("accepted"), Some(&1));
-    assert!(!delivery.counts.contains_key("failed"));
+    assert_eq!(
+        delivery
+            .counts
+            .get(&ruphish_domain::campaign::DeliveryState::Accepted),
+        Some(&1)
+    );
+    assert!(
+        !delivery
+            .counts
+            .contains_key(&ruphish_domain::campaign::DeliveryState::Failed)
+    );
     let empty: Directory = serde_json::from_value(json!({"items":[],"next_after":null})).unwrap();
     assert!(empty.items.is_empty());
     assert!(empty.next_after.is_none());
@@ -67,7 +76,7 @@ fn sparse_counts_and_explicit_empty_pages_remain_valid() {
 
 #[test]
 fn draft_null_selections_are_distinct_from_missing_read_fields() {
-    let value = json!({"id":"draft-fixture-001", "revision":1,"step":0,"created":null,"modified":null,"campaign_id":null,"status":"Draft", "configuration":{"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":null,"launch_local":null,"send_by_local":null}});
+    let value = json!({"id":"draft-fixture-001", "revision":1,"step":0,"created":null,"modified":null,"campaign_id":null,"status":"draft", "configuration":{"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":null,"launch_local":null,"send_by_local":null}});
     assert!(serde_json::from_value::<Draft>(value.clone()).is_ok());
     for key in [
         "name",
@@ -184,4 +193,61 @@ fn named_metrics_and_classified_observations_reject_missing_or_unknown_values() 
         value.events[0].kind,
         ruphish_domain::events::RecordedKind::Historical("Proxied request".into())
     );
+}
+
+#[test]
+fn lifecycle_transport_and_history_states_cannot_be_interchanged() {
+    let fixture = snapshots();
+    for (pointer, invalid) in [
+        ("/campaign/status", "draft"),
+        ("/campaign/status", "accepted"),
+        ("/items/0/state", "Completed"),
+        ("/items/0/state", "historical"),
+        ("/items/0/state", "abandoned"),
+    ] {
+        let mut value = fixture["delivery"].clone();
+        *value.pointer_mut(pointer).unwrap() = json!(invalid);
+        assert!(
+            serde_json::from_value::<Delivery>(value).is_err(),
+            "{pointer}: {invalid}"
+        );
+    }
+    let mut value = fixture["delivery"].clone();
+    value["counts"]["invented"] = json!(1);
+    assert!(serde_json::from_value::<Delivery>(value).is_err());
+    for (kind, status, valid) in [
+        ("draft", "draft", true),
+        ("draft", "launched", true),
+        ("campaign", "Completed", true),
+        ("campaign", "Emails Sent", true),
+        ("draft", "Completed", false),
+        ("draft", "Draft", false),
+        ("draft", "Launched", false),
+        ("campaign", "draft", false),
+        ("invented", "draft", false),
+    ] {
+        let mut value = fixture["directory"]["items"][0].clone();
+        value["kind"] = json!(kind);
+        value["status"] = json!(status);
+        assert_eq!(
+            serde_json::from_value::<DirectoryRow>(value).is_ok(),
+            valid,
+            "{kind}: {status}"
+        );
+    }
+    use ruphish_domain::campaign::AttemptState;
+    assert_eq!(
+        serde_json::from_value::<AttemptState>(json!("abandoned")).unwrap(),
+        AttemptState::Abandoned
+    );
+    assert!(serde_json::from_value::<AttemptState>(json!("ready")).is_err());
+    let mut value = fixture["analysis"].clone();
+    value["recipients"][0]["delivery"] = Value::Null;
+    let absent: Analysis = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(absent.recipients[0].delivery, None);
+    value["recipients"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("delivery");
+    assert!(serde_json::from_value::<Analysis>(value).is_err());
 }

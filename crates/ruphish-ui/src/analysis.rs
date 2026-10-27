@@ -633,7 +633,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                                                 <td>
                                                     {ruphish_ui::localization::delivery_label(
                                                         i18n,
-                                                        row.delivery.as_str(),
+                                                        row.delivery.map_or("historical", |state| state.as_str()),
                                                     )}
                                                 </td>
                                                 {(0..5)

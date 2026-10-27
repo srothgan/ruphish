@@ -150,7 +150,7 @@ fn recent_campaign_window_stays_latest_three_when_sorting_and_refreshing() {
     let row = |id, name: &str, count| RecentCampaign {
         id,
         name: name.into(),
-        status: "Completed".into(),
+        status: ruphish_domain::campaign::CampaignStatus::Completed,
         launch: None,
         recipients: count,
         outcomes: Posture {

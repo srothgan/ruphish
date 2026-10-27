@@ -20,8 +20,18 @@ fn request(
 fn get(client: &reqwest::blocking::Client, base: &str, path: &str) -> Value {
     let response = request(client, base, reqwest::Method::GET, path, None);
     assert_eq!(response.status(), 200, "{}", response.text().unwrap());
-    // Obtain a fresh response only in the success path (assert formatting is lazy).
-    response.json().unwrap()
+    let value: Value = response.json().unwrap();
+    if path
+        .split('?')
+        .next()
+        .unwrap_or(path)
+        .ends_with("/analysis")
+    {
+        let snapshot: ruphish_contracts::campaign_reads::Analysis =
+            serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(snapshot).unwrap(), value);
+    }
+    value
 }
 
 #[test]

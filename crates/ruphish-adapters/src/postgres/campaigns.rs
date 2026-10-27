@@ -243,7 +243,7 @@ async fn load_aggregate(
         groups,
         id,
         name: text(&row, "name")?,
-        status: text(&row, "status")?,
+        status: CampaignStatus::from_stored(&text(&row, "status")?).ok_or(Error::Internal)?,
         created: text(&row, "created_date")?,
         launch: text(&row, "launch_date")?,
         send_by: text(&row, "send_by_date")?,
@@ -275,7 +275,7 @@ async fn header(c: &mut PgConnection, owner: i64, id: i64) -> Result<CampaignHea
         domain_block,
         id,
         name: text(&row, "name")?,
-        status: text(&row, "status")?,
+        status: CampaignStatus::from_stored(&text(&row, "status")?).ok_or(Error::Internal)?,
         launch: text(&row, "launch_date")?,
         send_by: text(&row, "send_by_date")?,
         url: text(&row, "url")?,
@@ -518,13 +518,22 @@ impl Repository for Campaigns {
             return Err(Error::NotFound("Campaign"));
         }
         let campaign = header(&mut tx, caller.id, id).await?;
-        let counts = sqlx::query_as(
+        let counts: Vec<(String, i64)> = sqlx::query_as(
             "SELECT state,count(*) FROM ruphish_delivery WHERE campaign_id=$1 GROUP BY state",
         )
         .bind(id)
         .fetch_all(&mut *tx)
         .await
         .map_err(storage)?;
+        let counts = counts
+            .into_iter()
+            .map(|(state, count)| {
+                Ok((
+                    DeliveryState::from_stored(&state).ok_or(Error::Internal)?,
+                    count,
+                ))
+            })
+            .collect::<Result<_, Error>>()?;
         let limit = limit.clamp(1, 200);
         let mut rows = if let Some(order) = &sorting {
             let position = order.after.clone().unwrap_or_default();
@@ -589,7 +598,7 @@ impl Repository for Campaigns {
                 id: result_id,
                 rid: text(&row, "r_id")?,
                 email: text(&row, "email")?,
-                state: text(&row, "state")?,
+                state: DeliveryState::from_stored(&text(&row, "state")?).ok_or(Error::Internal)?,
                 due: row.try_get("due").map_err(storage)?,
                 retries: row.try_get("retries").map_err(storage)?,
                 generation: row.try_get("generation").map_err(storage)?,
@@ -702,17 +711,17 @@ impl Repository for Campaigns {
         if row.try_get::<i64, _>("generation").map_err(storage)? != generation {
             return Err(Error::Changed);
         }
-        let state = text(&row, "state")?;
+        let state = DeliveryState::from_stored(&text(&row, "state")?).ok_or(Error::Internal)?;
         let target =
-            resolve_delivery(&state, action).map_err(|error| Error::Invalid(error.to_string()))?;
-        sqlx::query("UPDATE ruphish_delivery SET state=$1,generation=generation+1,lease_until=0,due=$2,retries=0,code='' WHERE result_id=$3").bind(target).bind(now).bind(result).execute(&mut *tx).await.map_err(storage)?;
+            resolve_delivery(state, action).map_err(|error| Error::Invalid(error.to_string()))?;
+        sqlx::query("UPDATE ruphish_delivery SET state=$1,generation=generation+1,lease_until=0,due=$2,retries=0,code='' WHERE result_id=$3").bind(target.as_str()).bind(now).bind(result).execute(&mut *tx).await.map_err(storage)?;
         sqlx::query("DELETE FROM ruphish_profile_cooldown WHERE profile_id=$1")
             .bind(row.try_get::<i64, _>("smtp_id").map_err(storage)?)
             .execute(&mut *tx)
             .await
             .map_err(storage)?;
-        sqlx::query("UPDATE results SET status=CASE WHEN status IN ('Email Opened','Clicked Link','Submitted Data') THEN status ELSE $1 END,send_date=$2,modified_date=$3 WHERE id=$4").bind(if target=="accepted" {"Email Sent"} else {"Sending"}).bind(stamp(now)?).bind(stamp(now)?).bind(result).execute(&mut *tx).await.map_err(storage)?;
-        if target == "accepted" {
+        sqlx::query("UPDATE results SET status=CASE WHEN status IN ('Email Opened','Clicked Link','Submitted Data') THEN status ELSE $1 END,send_date=$2,modified_date=$3 WHERE id=$4").bind(if target == DeliveryState::Accepted {"Email Sent"} else {"Sending"}).bind(stamp(now)?).bind(stamp(now)?).bind(result).execute(&mut *tx).await.map_err(storage)?;
+        if target == DeliveryState::Accepted {
             let inserted = sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id) SELECT r.campaign_id,r.email,$1,'email_sent',$2,r.id FROM results r WHERE r.id=$3 AND NOT EXISTS(SELECT 1 FROM event_history e WHERE e.campaign_id=r.campaign_id AND e.recipient_id=r.id AND e.message='Email Sent') RETURNING id")
                 .bind(stamp(now)?)
                 .bind(serde_json::json!({"action":action,"actor":caller.id}).to_string())
@@ -747,7 +756,7 @@ fn decode_attempt(a: PgRow) -> Result<Attempt, Error> {
         generation: a.try_get("generation").map_err(storage)?,
         started: a.try_get("started").map_err(storage)?,
         finished: a.try_get("finished").map_err(storage)?,
-        state: text(&a, "state")?,
+        state: AttemptState::from_stored(&text(&a, "state")?).ok_or(Error::Internal)?,
         stage: text(&a, "stage")?,
         smtp_code: a.try_get("smtp_code").map_err(storage)?,
         message_id: text(&a, "message_id")?,

@@ -110,3 +110,18 @@ test('reporting uses named metrics and retains unrecognized history without inve
     assert.match(csv, /Submitted Data/);
     assert.doesNotMatch(csv, /\[object Object\]/);
 });
+
+test('absent native transport stays null and sorts separately from unknown acceptance', async () => {
+    const { seed, request } = await setup();
+    seed.results.find(row => row.id === 102).state = null;
+    seed.results.find(row => row.id === 105).state = 'unknown';
+    const path = `/api/campaigns/${seed.header.id}`;
+    for (const [order, expected] of [['asc', [102, 101, 103, 104, 105]], ['desc', [105, 104, 101, 103, 102]]]) {
+        const value = await (await request(`${path}/analysis?sort=delivery&order=${order}`)).json();
+        assert.deepEqual(value.recipients.map(row => row.id), expected);
+        assert.equal(value.recipients.find(row => row.id === 102).delivery, null);
+        assert.equal(value.recipients.find(row => row.id === 105).delivery, 'unknown');
+    }
+    const csv = await (await request(`${path}/export?format=csv&scope=recipients&sort=delivery`)).text();
+    assert.match(csv, /"102","a@example.test","Same","historical"/);
+});

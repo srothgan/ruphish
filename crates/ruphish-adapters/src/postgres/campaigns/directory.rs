@@ -25,7 +25,7 @@ impl Campaigns {
                 format!(
                     "{} {}",
                     r#"WITH data AS (
-SELECT 0 AS kind,id AS draft_id,CAST(0 AS BIGINT) AS campaign_id,name,'Draft' AS status,NULL AS total,NULL AS launch_date,revision
+SELECT 0 AS kind,id AS draft_id,CAST(0 AS BIGINT) AS campaign_id,name,'draft' AS status,NULL AS total,NULL AS launch_date,revision
 FROM ruphish_campaign_drafts WHERE owner_id=? AND campaign_id IS NULL AND ?=1
 UNION ALL
 SELECT 1 AS kind,'' AS draft_id,c.id AS campaign_id,c.name,COALESCE(c.status,'') AS status,(SELECT COUNT(*) FROM results r WHERE r.campaign_id=c.id) AS total,c.launch_date,NULL AS revision
@@ -59,7 +59,7 @@ FROM campaigns c WHERE c.user_id=? AND ?=1 AND (?=0 OR (?=1 AND c.status='Comple
                 .await
                 .map_err(storage)?
         } else {
-            sqlx::query("SELECT 0 AS kind,id AS draft_id,NULL AS campaign_id,name,'Draft' AS status,NULL AS total,NULL AS launch_date,revision
+            sqlx::query("SELECT 0 AS kind,id AS draft_id,NULL AS campaign_id,name,'draft' AS status,NULL AS total,NULL AS launch_date,revision
 FROM ruphish_campaign_drafts WHERE owner_id=$1 AND campaign_id IS NULL AND $2=1 AND $3=0 AND id>$4
 UNION ALL
 SELECT 1 AS kind,'' AS draft_id,c.id AS campaign_id,c.name,COALESCE(c.status,'') AS status,(SELECT COUNT(*) FROM results r WHERE r.campaign_id=c.id) AS total,c.launch_date,NULL AS revision
@@ -105,7 +105,18 @@ ORDER BY kind,draft_id,campaign_id LIMIT $11")
                     .try_get::<Option<String>, _>("name")
                     .map_err(storage)?
                     .unwrap_or_default(),
-                status: row.try_get("status").map_err(storage)?,
+                state: if revision.is_some() {
+                    ruphish_domain::campaign::DirectoryState::Draft(
+                        ruphish_domain::campaign_draft::Status::Draft,
+                    )
+                } else {
+                    ruphish_domain::campaign::DirectoryState::Campaign(
+                        ruphish_domain::campaign::CampaignStatus::from_stored(
+                            &row.try_get::<String, _>("status").map_err(storage)?,
+                        )
+                        .ok_or(Error::Internal)?,
+                    )
+                },
                 total: row.try_get("total").map_err(storage)?,
                 launch: row.try_get("launch_date").map_err(storage)?,
             });

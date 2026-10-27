@@ -230,7 +230,7 @@ fn campaign_draft_survives_restart_rejects_bad_input_and_launches_once_after_rol
     let incomplete =
         json!({"name":"Incomplete training","launch_local":{"local":"2026-","time_zone":""}});
     let saved = save(&base, path, Value::Null, &incomplete, 2);
-    assert_eq!(saved["status"], "Draft");
+    assert_eq!(saved["status"], "draft");
     assert_eq!(
         counts(directory.path()),
         before,
@@ -314,7 +314,9 @@ fn campaign_draft_survives_restart_rejects_bad_input_and_launches_once_after_rol
             .unwrap()
             .is_empty()
     );
-    assert_eq!(read(&base, path)["campaign_id"], a["id"]);
+    let launched = read(&base, path);
+    assert_eq!(launched["campaign_id"], a["id"]);
+    assert_eq!(launched["status"], "launched");
     assert_eq!(
         request(
             &base,

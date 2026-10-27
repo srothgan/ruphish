@@ -476,7 +476,7 @@ pub(super) async fn exercise(db: &Database) {
         Err(Error::Conflict(_))
     ));
     assert_ne!(
-        campaigns.get(who, first.id).await.unwrap().status,
+        campaigns.get(who, first.id).await.unwrap().status.as_str(),
         "Completed"
     );
     let review = settings.preview_closure(who, now + 3612).await.unwrap();
@@ -492,7 +492,7 @@ pub(super) async fn exercise(db: &Database) {
     assert_eq!(result.cancelled_deliveries, 3);
     for (owner, id) in [(who, first.id), (other, second.id), (who, third.id)] {
         let closed = campaigns.get(owner, id).await.unwrap();
-        assert_eq!(closed.status, "Completed");
+        assert_eq!(closed.status.as_str(), "Completed");
         assert_eq!(closed.results.len(), 1);
     }
     assert!(
@@ -520,7 +520,7 @@ pub(super) async fn exercise(db: &Database) {
     assert_eq!(replay.completed_at, result.completed_at);
     assert_eq!(replay.campaigns, 3);
     assert_ne!(
-        campaigns.get(who, later.id).await.unwrap().status,
+        campaigns.get(who, later.id).await.unwrap().status.as_str(),
         "Completed"
     );
 }
@@ -695,7 +695,7 @@ async fn sqlite_policy_and_closure_roll_back_all_related_writes() {
     );
     for id in [a.id, b.id] {
         assert_ne!(
-            db.campaigns().get(who, id).await.unwrap().status,
+            db.campaigns().get(who, id).await.unwrap().status.as_str(),
             "Completed"
         );
         assert_eq!(
@@ -704,7 +704,8 @@ async fn sqlite_policy_and_closure_roll_back_all_related_writes() {
                 .await
                 .unwrap()
                 .items[0]
-                .state,
+                .state
+                .as_str(),
             "ready"
         );
     }
@@ -956,7 +957,7 @@ async fn assert_upgraded(db: &Database) {
     assert_eq!(db.domains().list(who).await.unwrap().len(), 1);
     assert_eq!(db.integrations().webhooks(who).await.unwrap().len(), 1);
     assert_eq!(
-        db.campaigns().get(who, 1).await.unwrap().status,
+        db.campaigns().get(who, 1).await.unwrap().status.as_str(),
         "Completed"
     );
 }

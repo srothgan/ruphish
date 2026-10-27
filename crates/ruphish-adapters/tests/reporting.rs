@@ -101,6 +101,10 @@ async fn recipient_exports_preserve_audience_fields_and_stored_dates_across_page
         .unwrap();
     assert_eq!(page.recipients.len(), 1);
     assert_eq!(page.recipients[0].id, 9002);
+    assert_eq!(
+        page.recipients[0].delivery, None,
+        "no native queue record is not an ambiguous SMTP outcome"
+    );
     let download = reports
         .export(caller(), campaign, selected(), "csv", "recipients")
         .await
@@ -117,6 +121,7 @@ async fn recipient_exports_preserve_audience_fields_and_stored_dates_across_page
         &rows[row][headers.iter().position(|name| name == column).unwrap()]
     };
     assert_eq!(cell(0, "Recipient ID"), "9001");
+    assert_eq!(cell(0, "Delivery"), "historical");
     assert_eq!(cell(0, "First Name"), "Élise, \"E\"");
     assert_eq!(cell(0, "Last Name"), "Müller");
     assert_eq!(cell(0, "Position"), "'=1+1");

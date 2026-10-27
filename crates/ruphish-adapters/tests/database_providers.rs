@@ -810,7 +810,8 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
             .await
             .unwrap()
             .items[0]
-            .state,
+            .state
+            .as_str(),
         "preparing",
         "late completion cannot overwrite the new lease"
     );
@@ -830,7 +831,8 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
                 .await
                 .unwrap()
                 .items[0]
-                .state,
+                .state
+                .as_str(),
             "accepted"
         );
         assert!(
@@ -1160,7 +1162,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         .deliveries(actor, uncertain.id, 0, 50)
         .await
         .unwrap();
-    assert_eq!(state.items[0].state, "unknown");
+    assert_eq!(state.items[0].state.as_str(), "unknown");
     assert!(
         campaigns
             .resolve(
@@ -1192,7 +1194,8 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
             .await
             .unwrap()
             .items[0]
-            .state,
+            .state
+            .as_str(),
         "ready",
         "an outcome from the pre-reconciliation generation cannot overwrite the operator decision"
     );
@@ -1204,8 +1207,8 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         .await
         .unwrap();
     assert_eq!(history.attempts.len(), 2);
-    assert_eq!(history.attempts[0].state, "accepted");
-    assert_eq!(history.attempts[1].state, "unknown");
+    assert_eq!(history.attempts[0].state.as_str(), "accepted");
+    assert_eq!(history.attempts[1].state.as_str(), "unknown");
     campaigns.delete(actor, uncertain.id).await.unwrap();
     assert!(campaigns.get(actor, uncertain.id).await.is_err());
 }

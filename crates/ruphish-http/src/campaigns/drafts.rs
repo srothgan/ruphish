@@ -39,11 +39,7 @@ fn encode(d: &Draft) -> reads::Draft {
         created: datetime::utc_seconds(d.created).ok(),
         modified: datetime::utc_seconds(d.modified).ok(),
         campaign_id: d.campaign_id,
-        status: if d.campaign_id.is_some() {
-            "Launched".into()
-        } else {
-            "Draft".into()
-        },
+        status: app::drafts::Status::from_campaign_id(d.campaign_id),
     }
 }
 #[derive(Deserialize)]

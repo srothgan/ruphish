@@ -16,7 +16,7 @@ fn storage(error: sqlx::Error) -> Error {
     crate::mysql::resource_error(error)
 }
 const CTE: &str = r#"WITH parameters AS (SELECT ? AS campaign, ? AS since, ? AS until_time, ? AS recipient, CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_0900_bin AS event_kind, CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_0900_bin AS search, CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_0900_bin AS source_filter, CAST(? AS JSON) AS ids), audience AS (
- SELECT r.*,COALESCE(d.state,'historical') AS delivery FROM results r LEFT JOIN ruphish_delivery d ON d.result_id=r.id
+ SELECT r.*,d.state AS delivery FROM results r LEFT JOIN ruphish_delivery d ON d.result_id=r.id
  WHERE r.campaign_id=(SELECT campaign FROM parameters) AND ((SELECT recipient FROM parameters) IS NULL OR r.id=(SELECT recipient FROM parameters)) AND ((SELECT search FROM parameters)='' OR instr(lower(CONCAT(r.email,' ',COALESCE(r.first_name,''),' ',COALESCE(r.last_name,''))),lower((SELECT search FROM parameters)))>0)
  AND (JSON_LENGTH((SELECT ids FROM parameters))=0 OR r.id IN (SELECT selected_ids.value FROM parameters p JOIN JSON_TABLE(p.ids,'$[*]' COLUMNS(value BIGINT PATH '$')) selected_ids ON TRUE))
 ), observed AS (
@@ -232,10 +232,14 @@ impl Snapshots for Reports {
                     .map_err(storage)?
                     .trim()
                     .into(),
-                delivery: ruphish_domain::reporting::DeliveryState::from_stored(
-                    &r.try_get::<String, _>("delivery").map_err(storage)?,
-                )
-                .ok_or(Error::Internal)?,
+                delivery: r
+                    .try_get::<Option<String>, _>("delivery")
+                    .map_err(storage)?
+                    .map(|state| {
+                        ruphish_domain::campaign::DeliveryState::from_stored(&state)
+                            .ok_or(Error::Internal)
+                    })
+                    .transpose()?,
                 first_name: r.try_get("first_name").map_err(storage)?,
                 last_name: r.try_get("last_name").map_err(storage)?,
                 position: r.try_get("position").map_err(storage)?,
@@ -297,7 +301,7 @@ impl Snapshots for Reports {
         let result = Analysis {
             id,
             name: campaign.try_get("name").map_err(storage)?,
-            status: ruphish_domain::reporting::CampaignStatus::from_stored(
+            status: ruphish_domain::campaign::CampaignStatus::from_stored(
                 &campaign.try_get::<String, _>("status").map_err(storage)?,
             )
             .ok_or(Error::Internal)?,

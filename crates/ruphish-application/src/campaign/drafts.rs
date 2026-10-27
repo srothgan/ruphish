@@ -1,6 +1,6 @@
 //! Durable drafts and the single transition into campaign execution.
 use crate::{auth::Identity, campaign::Create, resources::Error};
-pub use ruphish_domain::campaign_draft::Configuration;
+pub use ruphish_domain::campaign_draft::{Configuration, Status};
 
 /// A saved draft; a campaign reference fences all subsequent edits and launches.
 #[derive(Clone)]

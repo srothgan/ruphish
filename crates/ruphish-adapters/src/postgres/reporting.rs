@@ -16,7 +16,7 @@ fn storage(error: sqlx::Error) -> Error {
     crate::postgres::resource_error(error)
 }
 const CTE: &str = r#"WITH parameters AS (SELECT $1::bigint AS campaign, $2::bigint AS since, $3::bigint AS until_time, $4::bigint AS recipient, $5::text AS event_kind, $6::text AS search, $7::text AS source_filter, $8::bigint[] AS ids), audience AS (
- SELECT r.*,COALESCE(d.state,'historical') AS delivery FROM results r LEFT JOIN ruphish_delivery d ON d.result_id=r.id
+ SELECT r.*,d.state AS delivery FROM results r LEFT JOIN ruphish_delivery d ON d.result_id=r.id
  WHERE r.campaign_id=(SELECT campaign FROM parameters) AND ((SELECT recipient FROM parameters) IS NULL OR r.id=(SELECT recipient FROM parameters)) AND ((SELECT search FROM parameters)='' OR strpos(lower(CONCAT(r.email,' ',COALESCE(r.first_name,''),' ',COALESCE(r.last_name,''))),lower((SELECT search FROM parameters)))>0)
  AND (cardinality((SELECT ids FROM parameters))=0 OR r.id=ANY((SELECT ids FROM parameters)::bigint[]))
 ), observed AS (
@@ -232,10 +232,14 @@ impl Snapshots for Reports {
                     .map_err(storage)?
                     .trim()
                     .into(),
-                delivery: ruphish_domain::reporting::DeliveryState::from_stored(
-                    &r.try_get::<String, _>("delivery").map_err(storage)?,
-                )
-                .ok_or(Error::Internal)?,
+                delivery: r
+                    .try_get::<Option<String>, _>("delivery")
+                    .map_err(storage)?
+                    .map(|state| {
+                        ruphish_domain::campaign::DeliveryState::from_stored(&state)
+                            .ok_or(Error::Internal)
+                    })
+                    .transpose()?,
                 first_name: r.try_get("first_name").map_err(storage)?,
                 last_name: r.try_get("last_name").map_err(storage)?,
                 position: r.try_get("position").map_err(storage)?,
@@ -297,7 +301,7 @@ impl Snapshots for Reports {
         let result = Analysis {
             id,
             name: campaign.try_get("name").map_err(storage)?,
-            status: ruphish_domain::reporting::CampaignStatus::from_stored(
+            status: ruphish_domain::campaign::CampaignStatus::from_stored(
                 &campaign.try_get::<String, _>("status").map_err(storage)?,
             )
             .ok_or(Error::Internal)?,

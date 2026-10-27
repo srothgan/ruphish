@@ -187,3 +187,23 @@ pub fn field_step(field: &str) -> usize {
         1
     }
 }
+
+/// Draft launch acknowledgement, derived from its committed campaign reference.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Status {
+    /// Editable configuration without an execution.
+    Draft,
+    /// Launch committed; the draft remains available for retry reconciliation.
+    Launched,
+}
+impl Status {
+    /// The committed reference is the sole authority; no separate state is persisted.
+    pub const fn from_campaign_id(campaign_id: Option<i64>) -> Self {
+        if campaign_id.is_some() {
+            Self::Launched
+        } else {
+            Self::Draft
+        }
+    }
+}

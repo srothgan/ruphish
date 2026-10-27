@@ -49,7 +49,7 @@ export function analysis(campaign, query, now, paginate = true) {
         if (!eventMap.has(e.recipient_id)) eventMap.set(e.recipient_id, []);
         eventMap.get(e.recipient_id).push(e);
     }
-    const unorderedRows = results.filter(r => (!query.get('event') && !query.get('source')) || eventMap.has(r.id)).sort((a, b) => a.email < b.email ? -1 : a.email > b.email ? 1 : a.id - b.id).map(r => ({ id: r.id, email: r.email, name: `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim(), first_name: r.first_name, last_name: r.last_name, position: r.position, send_date: r.send_date, modified_date: r.modified_date, delivery: r.state, counts: counts(eventMap.get(r.id) ?? []), historical_reported: false }));
+    const unorderedRows = results.filter(r => (!query.get('event') && !query.get('source')) || eventMap.has(r.id)).sort((a, b) => a.email < b.email ? -1 : a.email > b.email ? 1 : a.id - b.id).map(r => ({ id: r.id, email: r.email, name: `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim(), first_name: r.first_name, last_name: r.last_name, position: r.position, send_date: r.send_date, modified_date: r.modified_date, delivery: r.state ?? null, counts: counts(eventMap.get(r.id) ?? []), historical_reported: false }));
     const rows = recipientOrder(unorderedRows, query);
     const sortedEvents = eventOrder(events, query);
     const unique = sum(rows.map(r => r.counts.map(n => Number(n > 0))));
@@ -155,7 +155,7 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage, da
             return json({ window, since, as_of: now, ...posture(results, since ?? 0, now + 1), previous });
         }
         if (path === '/api/campaigns/directory' && method === 'GET') {
-            const all = [...data.drafts.map(d => ({ id: d.id, kind: 'draft', revision: d.revision, name: d.configuration.name, status: 'Draft', total: null, launch_date: null })), ...data.campaigns.map(c => ({ id: String(c.header.id), kind: 'campaign', revision: null, name: c.header.name, status: c.header.status, total: c.header.total, launch_date: c.header.launch_date }))];
+            const all = [...data.drafts.map(d => ({ id: d.id, kind: 'draft', revision: d.revision, name: d.configuration.name, status: 'draft', total: null, launch_date: null })), ...data.campaigns.map(c => ({ id: String(c.header.id), kind: 'campaign', revision: null, name: c.header.name, status: c.header.status, total: c.header.total, launch_date: c.header.launch_date }))];
             const filter = url.searchParams.get('filter') ?? '';
             const filtered = all.filter(r => !filter || filter === 'all' || (filter === 'drafts' ? r.kind === 'draft' : filter === 'executions' ? r.kind === 'campaign' : filter === 'active' ? ['In progress', 'Queued'].includes(r.status) : filter === 'completed' ? r.status === 'Completed' : false));
             try {

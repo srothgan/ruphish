@@ -156,7 +156,7 @@ fn post(base: &str, path: &str, body: &Value) -> Value {
     value
 }
 fn read(base: &str, path: &str) -> Value {
-    client()
+    let value: Value = client()
         .get(format!("{base}{path}"))
         .bearer_auth("synthetic-bootstrap-token")
         .send()
@@ -164,7 +164,18 @@ fn read(base: &str, path: &str) -> Value {
         .error_for_status()
         .unwrap()
         .json()
-        .unwrap()
+        .unwrap();
+    let route = path.split('?').next().unwrap_or(path);
+    if route.ends_with("/delivery") {
+        let snapshot: ruphish_contracts::campaign_reads::Delivery =
+            serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(snapshot).unwrap(), value);
+    } else if route.ends_with("/history") {
+        let snapshot: ruphish_contracts::campaign_reads::History =
+            serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(snapshot).unwrap(), value);
+    }
+    value
 }
 fn normalize(value: &mut Value) {
     match value {

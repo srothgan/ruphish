@@ -16,7 +16,7 @@ fn storage(error: sqlx::Error) -> Error {
     crate::sqlite::resource_error(error)
 }
 const CTE: &str = r#"WITH audience AS (
- SELECT r.*,COALESCE(d.state,'historical') AS delivery FROM results r LEFT JOIN ruphish_delivery d ON d.result_id=r.id
+ SELECT r.*,d.state AS delivery FROM results r LEFT JOIN ruphish_delivery d ON d.result_id=r.id
  WHERE r.campaign_id=?1 AND (?4 IS NULL OR r.id=?4) AND (?6='' OR instr(lower(r.email||' '||COALESCE(r.first_name,'')||' '||COALESCE(r.last_name,'')),lower(?6))>0)
  AND (?8='[]' OR r.id IN (SELECT value FROM json_each(?8)))
 ), observed AS (
@@ -230,10 +230,14 @@ impl Snapshots for Reports {
                     .map_err(storage)?
                     .trim()
                     .into(),
-                delivery: ruphish_domain::reporting::DeliveryState::from_stored(
-                    &r.try_get::<String, _>("delivery").map_err(storage)?,
-                )
-                .ok_or(Error::Internal)?,
+                delivery: r
+                    .try_get::<Option<String>, _>("delivery")
+                    .map_err(storage)?
+                    .map(|state| {
+                        ruphish_domain::campaign::DeliveryState::from_stored(&state)
+                            .ok_or(Error::Internal)
+                    })
+                    .transpose()?,
                 first_name: r.try_get("first_name").map_err(storage)?,
                 last_name: r.try_get("last_name").map_err(storage)?,
                 position: r.try_get("position").map_err(storage)?,
@@ -295,7 +299,7 @@ impl Snapshots for Reports {
         let result = Analysis {
             id,
             name: campaign.try_get("name").map_err(storage)?,
-            status: ruphish_domain::reporting::CampaignStatus::from_stored(
+            status: ruphish_domain::campaign::CampaignStatus::from_stored(
                 &campaign.try_get::<String, _>("status").map_err(storage)?,
             )
             .ok_or(Error::Internal)?,

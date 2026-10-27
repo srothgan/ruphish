@@ -1,4 +1,6 @@
 //! Campaign delivery rules independent of sockets, storage and wall clocks.
+mod state;
+pub use state::{AttemptState, CampaignStatus, DeliveryState, DirectoryState};
 
 /// Evidence-based handling of a failed delivery attempt.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -90,7 +92,7 @@ pub fn retry_delay(retries: u32, jitter: u8) -> Option<i64> {
 /// One decision for all providers; persistence fences generation before applying it.
 pub struct DeliveryUpdate {
     /// Durable queue state.
-    pub state: &'static str,
+    pub state: DeliveryState,
     /// Earliest next attempt in UTC seconds.
     pub next: i64,
     /// Consumed retry budget.
@@ -108,14 +110,16 @@ pub struct DeliveryUpdate {
 }
 /// Late failures cannot replace uncertainty; acceptance requires an armed delivery.
 pub fn delivery_update(
-    current: &str,
+    current: DeliveryState,
     completed: bool,
     retries: u32,
     now: i64,
     outcome: &Result<(), DeliveryFailure>,
     jitter: u8,
 ) -> Option<DeliveryUpdate> {
-    if (current == "unknown" && outcome.is_err()) || (current == "preparing" && outcome.is_ok()) {
+    if (current == DeliveryState::Unknown && outcome.is_err())
+        || (current == DeliveryState::Preparing && outcome.is_ok())
+    {
         return None;
     }
     let mut next = now;
@@ -124,46 +128,46 @@ pub fn delivery_update(
     let mut stage = String::new();
     let mut smtp_code = None;
     let state = match outcome {
-        Ok(()) => "accepted",
+        Ok(()) => DeliveryState::Accepted,
         Err(e) => {
             stage = format!("{:?}", e.stage);
             smtp_code = e.smtp_code;
             match e.kind {
                 FailureKind::Unknown => {
                     code = "delivery_outcome_unknown";
-                    "unknown"
+                    DeliveryState::Unknown
                 }
                 FailureKind::Permanent => {
                     code = "smtp_permanent_rejection";
-                    "failed"
+                    DeliveryState::Failed
                 }
                 FailureKind::Blocked => {
                     code = "smtp_profile_blocked";
-                    "blocked"
+                    DeliveryState::Blocked
                 }
-                FailureKind::Retryable if completed => "cancelled",
+                FailureKind::Retryable if completed => DeliveryState::Cancelled,
                 FailureKind::Retryable => {
                     if let Some(delay) = retry_delay(retries, jitter) {
                         next = now.saturating_add(delay);
                         count += 1;
                         code = "smtp_temporary_rejection";
-                        "retry"
+                        DeliveryState::Retry
                     } else {
                         code = "delivery_retry_exhausted";
-                        "failed"
+                        DeliveryState::Failed
                     }
                 }
             }
         }
     };
-    let cooldown = state == "blocked"
-        || (state == "retry"
+    let cooldown = state == DeliveryState::Blocked
+        || (state == DeliveryState::Retry
             && outcome.as_ref().err().is_some_and(|e| {
                 matches!(e.stage, Stage::Connect | Stage::Tls | Stage::Authentication)
             }));
     let status = match state {
-        "accepted" => "Email Sent",
-        "retry" => "Retrying",
+        DeliveryState::Accepted => "Email Sent",
+        DeliveryState::Retry => "Retrying",
         _ => "Error",
     };
     Some(DeliveryUpdate {
@@ -184,10 +188,14 @@ pub fn delivery_update(
 pub struct ResolutionError;
 
 /// Manual recovery is separate from automatic transport outcome processing.
-pub fn resolve_delivery(state: &str, action: &str) -> Result<&'static str, ResolutionError> {
+pub fn resolve_delivery(
+    state: DeliveryState,
+    action: &str,
+) -> Result<DeliveryState, ResolutionError> {
     match (state, action) {
-        ("unknown", "confirm_accepted") => Ok("accepted"),
-        ("unknown", "resend_unknown") | ("failed" | "blocked", "retry") => Ok("ready"),
+        (DeliveryState::Unknown, "confirm_accepted") => Ok(DeliveryState::Accepted),
+        (DeliveryState::Unknown, "resend_unknown")
+        | (DeliveryState::Failed | DeliveryState::Blocked, "retry") => Ok(DeliveryState::Ready),
         _ => Err(ResolutionError),
     }
 }

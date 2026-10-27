@@ -92,7 +92,7 @@ pub struct RecentCampaign {
     /// Display name.
     pub name: String,
     /// Lifecycle state.
-    pub status: String,
+    pub status: ruphish_domain::campaign::CampaignStatus,
     /// Scheduled launch as stored (ISO-8601), or empty when unset.
     pub launch: String,
     /// Audience size.

@@ -40,7 +40,7 @@ Choose a random draft ID of 16–64 ASCII letters, digits, or hyphens. Send this
 }
 ```
 
-The response contains `id`, `revision`, `configuration`, `step`, creation/modification timestamps, optional `campaign_id`, and `status` (`Draft` or `Launched`). Save the returned revision and send it with the next edit. Steps range from 0 through 3. A stale edit fails instead of overwriting another editor's work.
+The response contains `id`, `revision`, `configuration`, `step`, creation/modification timestamps, optional `campaign_id`, and `status` (`draft` or `launched`). Save the returned revision and send it with the next edit. Steps range from 0 through 3. A stale edit fails instead of overwriting another editor's work.
 
 Configuration is a closed schema: unknown fields are rejected. Resource references contain IDs only; do not embed resource bodies, recipients, passwords, or API keys. Zero means unselected. The name is limited to 255 characters, URL and redirect to 8,192, and group selections to 1,000. Local schedule objects contain `local` and `time_zone`.
 

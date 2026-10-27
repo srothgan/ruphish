@@ -81,7 +81,7 @@ export function exportResponse(value, query) {
         const rows = scope === 'events' ? value.events.map(e => ({ email: e.email, time: e.time, event: eventLabel(e.kind), source: e.source, password_present: e.password_present })) : value.recipients.map(r => ({ email: r.email, name: r.name, delivery: r.delivery, sent: r.counts.accepted, opened: r.counts.opened, clicked: r.counts.clicked, submitted: r.counts.submitted, reported: r.counts.reported }));
         return new Response(JSON.stringify(scope === 'all' ? value : rows), { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
     }
-    const recipients = [recipientHeaders, ...value.recipients.map(r => [r.id, r.email, r.name, r.delivery, ...countValues(r.counts), String(r.historical_reported), r.first_name ?? '', r.last_name ?? '', r.position ?? '', storedDate(r.send_date), storedDate(r.modified_date)])];
+    const recipients = [recipientHeaders, ...value.recipients.map(r => [r.id, r.email, r.name, r.delivery ?? 'historical', ...countValues(r.counts), String(r.historical_reported), r.first_name ?? '', r.last_name ?? '', r.position ?? '', storedDate(r.send_date), storedDate(r.modified_date)])];
     const events = [eventHeaders, ...value.events.map(e => [e.id, e.recipient_id ?? '', e.email, e.time, eventLabel(e.kind), e.source, e.password_present === null ? '' : String(e.password_present)])];
     let bytes, mime;
     if (format === 'csv') {

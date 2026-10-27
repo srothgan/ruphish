@@ -2,8 +2,9 @@
 use crate::{auth::Identity, resources::Error};
 /// Canonical identities shared by reporting boundaries.
 pub use ruphish_domain::{
+    campaign::{CampaignStatus, DeliveryState},
     events::{Kind, RecordedKind},
-    reporting::{CampaignStatus, DeliveryState, Source},
+    reporting::Source,
 };
 
 /// One query owns filter semantics across tables, charts and exports.
@@ -93,7 +94,7 @@ pub struct Recipient {
     /// Stored result modification time, independent of the selected event window.
     pub modified_date: Option<String>,
     /// Current transport outcome, not inferred from engagement.
-    pub delivery: DeliveryState,
+    pub delivery: Option<DeliveryState>,
     /// Counts in the selected window: accepted, opened, clicked, submitted, reported.
     pub counts: [i64; 5],
     /// Historical legacy reported state without observed evidence.

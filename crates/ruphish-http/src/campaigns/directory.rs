@@ -56,14 +56,9 @@ pub(super) async fn list(
         .into_iter()
         .map(|row| reads::DirectoryRow {
             id: row.id,
-            kind: if row.revision.is_some() {
-                "draft".into()
-            } else {
-                "campaign".into()
-            },
             revision: row.revision,
             name: row.name,
-            status: row.status,
+            state: row.state,
             total: row.total,
             launch_date: row.launch.as_deref().and_then(date),
         })

@@ -38,7 +38,9 @@ fn recipients(a: &Analysis) -> Vec<Vec<String>> {
             r.id.to_string(),
             r.email.clone(),
             r.name.clone(),
-            r.delivery.as_str().into(),
+            r.delivery
+                .map_or("historical", |state| state.as_str())
+                .into(),
         ];
         v.extend(r.counts.iter().map(ToString::to_string));
         v.push(r.historical_reported.to_string());

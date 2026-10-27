@@ -450,13 +450,26 @@ async fn competing_claims_recover_preparation_but_never_resend_expired_submissio
         .await
         .unwrap();
     assert_eq!(state, "unknown");
+    let history = a
+        .recipient_history(caller(), campaign.id, recovered.result_id, None, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        history
+            .attempts
+            .iter()
+            .map(|attempt| attempt.state.as_str())
+            .collect::<Vec<_>>(),
+        ["unknown", "abandoned"]
+    );
+
     a.complete(caller(), campaign.id, 1_900_002_104)
         .await
         .unwrap();
     // A late confirmed outcome is truth, but cannot reopen the completed campaign.
     b.finish(&recovered, Ok(()), 1_900_002_105).await.unwrap();
     assert_eq!(
-        a.get(caller(), campaign.id).await.unwrap().status,
+        a.get(caller(), campaign.id).await.unwrap().status.as_str(),
         "Completed"
     );
     assert!(a.claim(1_900_003_000).await.unwrap().is_none());
@@ -680,13 +693,13 @@ async fn persisted_retry_budget_exhausts_and_cannot_resurrect_after_restart() {
             .items
             .remove(0);
         if attempt < 8 {
-            assert_eq!(row.state, "retry");
+            assert_eq!(row.state.as_str(), "retry");
             let minimum = 120 * (1i64 << attempt);
             assert!((now + minimum..=now + minimum + minimum / 10).contains(&row.due));
             assert!(store.claim(row.due - 1).await.unwrap().is_none());
             now = row.due;
         } else {
-            assert_eq!(row.state, "failed");
+            assert_eq!(row.state.as_str(), "failed");
             assert_eq!(row.code, "delivery_retry_exhausted");
             assert_eq!(row.retries, 8);
             assert_eq!(row.attempts.len(), 9);
@@ -727,12 +740,12 @@ async fn resource_changes_owner_lock_and_completion_fence_unsubmitted_work() {
         .deliveries(caller(), campaign.id, 0, 10)
         .await
         .unwrap();
-    assert!(view.items.iter().all(|r| r.state == "cancelled"));
+    assert!(view.items.iter().all(|r| r.state.as_str() == "cancelled"));
     assert!(
         view.items
             .iter()
             .flat_map(|r| &r.attempts)
-            .all(|a| a.state == "cancelled")
+            .all(|a| a.state.as_str() == "cancelled")
     );
     let second = store
         .create(caller(), input(&fixture), 1_900_000_010)
@@ -851,7 +864,7 @@ async fn ten_campaigns_keep_resources_and_credentials_isolated_under_bounded_fai
     assert_eq!(seen.len(), 20);
     for id in campaigns.keys() {
         let c = store.get(caller(), *id).await.unwrap();
-        assert!(c.results.iter().all(|r| r.status == "Email Sent"));
+        assert!(c.results.iter().all(|r| r.status.as_str() == "Email Sent"));
         assert_eq!(
             c.events
                 .iter()
@@ -886,7 +899,9 @@ async fn outcome_projection_preserves_engagement_and_deleted_campaigns_cannot_be
         .unwrap();
     store.finish(&claim, Ok(()), 1_900_000_001).await.unwrap();
     assert_eq!(
-        store.get(caller(), c.id).await.unwrap().results[0].status,
+        store.get(caller(), c.id).await.unwrap().results[0]
+            .status
+            .as_str(),
         "Clicked Link"
     );
     let second = store.claim(1_900_000_002).await.unwrap().unwrap();

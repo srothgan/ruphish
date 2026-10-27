@@ -10,7 +10,7 @@ pub struct Metadata {
     /// Display name.
     pub name: String,
     /// Campaign lifecycle.
-    pub status: String,
+    pub status: ruphish_domain::campaign::CampaignStatus,
     /// Creation timestamp, or explicitly unknown.
     #[serde(deserialize_with = "nullable")]
     pub created_date: Option<String>,
@@ -100,7 +100,7 @@ pub struct Results {
     /// Display name.
     pub name: String,
     /// Campaign lifecycle.
-    pub status: String,
+    pub status: ruphish_domain::campaign::CampaignStatus,
     /// Immutable audience with projected outcomes.
     pub results: Vec<Recipient>,
     /// Committed observation history.

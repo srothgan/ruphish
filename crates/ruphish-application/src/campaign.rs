@@ -119,7 +119,7 @@ pub struct Campaign {
     /// Display name.
     pub name: String,
     /// Lifecycle; finishing SMTP work does not complete the campaign.
-    pub status: String,
+    pub status: CampaignStatus,
     /// Creation timestamp.
     pub created: String,
     /// Launch timestamp.
@@ -185,7 +185,7 @@ pub struct DeliveryView {
     /// Compact campaign metadata; does not load bodies or legacy result arrays.
     pub campaign: CampaignHeader,
     /// State/count pairs over the whole campaign.
-    pub counts: Vec<(String, i64)>,
+    pub counts: Vec<(DeliveryState, i64)>,
     /// Requested bounded page in result-ID order.
     pub items: Vec<DeliveryItem>,
 }
@@ -207,7 +207,7 @@ pub struct CampaignHeader {
     /// Display name.
     pub name: String,
     /// Lifecycle state.
-    pub status: String,
+    pub status: CampaignStatus,
     /// Initial launch timestamp.
     pub launch: String,
     /// Initial distribution end, or Go zero time when unset.
@@ -264,7 +264,7 @@ pub struct DeliveryItem {
     /// Snapshot mailbox.
     pub email: String,
     /// Delivery state, separate from campaign lifecycle and engagement.
-    pub state: String,
+    pub state: DeliveryState,
     /// Next or last due UTC seconds.
     pub due: i64,
     /// Automatic retries consumed.
@@ -285,7 +285,7 @@ pub struct Attempt {
     /// Ended UTC seconds, if known.
     pub finished: Option<i64>,
     /// Current or terminal attempt state.
-    pub state: String,
+    pub state: AttemptState,
     /// Last protocol phase.
     pub stage: String,
     /// Explicit peer response code.
