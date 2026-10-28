@@ -1,4 +1,4 @@
-//! Corrections target one observation; they never lock a recipient outcome.
+//! Direct edits to individual events; automatic observations continue independently.
 use crate::{
     datetime,
     events::{Kind, RecordedKind},
@@ -14,7 +14,7 @@ pub struct Presence {
     /// Explicit password presence, if known.
     pub password_present: Option<bool>,
 }
-/// Original or effective evidence. Unrecognized imported kinds remain inspectable.
+/// Current event values. Unrecognized imported kinds remain read-only.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Fact {
     /// Recorded occurrence instant; imported unparseable values remain unchanged.
@@ -39,90 +39,68 @@ pub struct Value {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Change {
-    /// Caller-generated identity retained unchanged after an uncertain response.
+    /// Caller-generated identity used to deduplicate creation retries.
     pub request_id: String,
     /// Target identity; null only for an addition.
     pub event_id: Option<i64>,
-    /// Reviewed event revision; zero for an uncorrected observation or addition.
+    /// Reviewed row version; zero for a new event.
     pub revision: i64,
     /// The operation to perform.
     pub action: Action,
-    /// Required for add/edit and forbidden for exclude/restore.
+    /// Required for add/edit and forbidden for delete.
     pub value: Option<Value>,
 }
-/// Restore returns to the original values and includes the event again.
+/// The supported direct mutations of one event row.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Action {
-    /// Add an operator entry.
+    /// Create a manually recorded event.
     Add,
-    /// Replace occurrence/type/presence on a specific event.
+    /// Update the current values.
     Edit,
-    /// Exclude one event from effective results.
-    Exclude,
-    /// Restore its original values and inclusion.
-    Restore,
+    /// Permanently delete the event.
+    Delete,
 }
-/// Original evidence and current correction state for a stable identity.
+/// Current event row, with no retained original or audit revisions.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Record {
     /// Persistent event identity.
     pub id: i64,
-    /// More specific system source, or `operator`.
+    /// Origin stays unchanged when an event is edited.
     pub source: String,
-    /// Latest committed correction revision.
+    /// Row version for rejecting concurrent edits; not an edited indicator.
     pub revision: i64,
-    /// Immutable evidence.
-    pub original: Fact,
-    /// Current effective values, also retained while excluded.
+    /// True after an operator has actually changed this event's values.
+    pub edited: bool,
+    /// Current event values.
     pub current: Fact,
-    /// Whether this event is omitted from effective results.
-    pub excluded: bool,
 }
 impl Record {
-    /// Corrections do not change the event's origin.
-    pub fn edited(&self) -> bool {
-        let same_time = match (
-            datetime::parse_stored(&self.original.time),
-            datetime::parse_stored(&self.current.time),
-        ) {
-            (Ok(a), Ok(b)) => a == b,
-            _ => self.original.time == self.current.time,
-        };
-        !same_time
-            || self.original.kind != self.current.kind
-            || self.original.presence != self.current.presence
-    }
     /// SMTP, lifecycle and unrecognized imported records are read-only.
     pub fn editable(&self) -> bool {
-        matches!(self.original.kind, RecordedKind::Known(kind) if editable(kind))
+        matches!(self.current.kind, RecordedKind::Known(kind) if editable(kind))
     }
 }
-/// One immutable audit revision, with server action time separate from occurrence time.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Audit {
-    /// Revision committed by this action.
-    pub revision: i64,
-    /// Authenticated operator, including the real actor during impersonation.
-    pub actor: i64,
-    /// Server UTC action seconds.
-    pub performed_at: i64,
-    /// Mutation intent.
-    pub action: Action,
-    /// Previous state; absent for an addition.
-    pub before: Option<Record>,
-    /// Committed state.
-    pub after: Record,
+impl Fact {
+    /// Equal instants with different UTC offsets are unchanged values.
+    pub fn same_values(&self, other: &Self) -> bool {
+        let same_time = match (
+            datetime::parse_stored(&self.time),
+            datetime::parse_stored(&other.time),
+        ) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => self.time == other.time,
+        };
+        same_time && self.kind == other.kind && self.presence == other.presence
+    }
 }
-/// Bounded audit inspection alongside the current record.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Inspection {
-    /// Current state, independent of the audit page.
-    pub record: Record,
-    /// Up to fifty most recent revisions in this page.
-    pub audit: Vec<Audit>,
-    /// Exclusive revision cursor for older audit records.
-    pub next_before: Option<i64>,
+/// Confirmed mutation result. Deleted rows have no current record.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Outcome {
+    /// Affected identity, including for deletion.
+    pub id: i64,
+    /// Current row after create/update; null after deletion.
+    pub event: Option<Record>,
 }
 /// Supported result observations; SMTP and lifecycle retain their own controls.
 pub const fn editable(kind: Kind) -> bool {

@@ -65,7 +65,7 @@ fn events(a: &Analysis) -> Vec<Vec<String>> {
             "Event",
             "Source",
             "Password present",
-            "Correction revision",
+            "Edited",
         ]
         .into_iter()
         .map(str::to_owned)
@@ -82,7 +82,7 @@ fn events(a: &Analysis) -> Vec<Vec<String>> {
             e.password_present
                 .map(|v| v.to_string())
                 .unwrap_or_default(),
-            e.revision.to_string(),
+            e.edited.to_string(),
         ]
     }));
     rows

@@ -368,7 +368,7 @@ pub(crate) fn EventHistory(data: Signal<Option<Results>>) -> impl IntoView {
                                                             leptos_i18n::t_string!(i18n,ui.event_system)
                                                         }}
                                                     </span>
-                                                    {(event.revision > 0)
+                                                    {(event.edited)
                                                         .then(|| view! { <span>{tr!(ui.event_edited)}</span> })}
                                                 </div>
                                             </div>

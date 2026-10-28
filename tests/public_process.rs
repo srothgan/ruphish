@@ -510,7 +510,7 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
         .find(|e| e["message"] == "Clicked Link")
         .unwrap();
     let correction=client().post(format!("{admin}/api/campaigns/{}/recipients/{recipient}/events",campaign["id"]))
-        .bearer_auth("synthetic-bootstrap-token").json(&json!({"request_id":"real-public-click-correction","event_id":event["id"],"revision":0,"action":"exclude","value":null})).send().unwrap();
+        .bearer_auth("synthetic-bootstrap-token").json(&json!({"request_id":"real-public-click-correction","event_id":event["id"],"revision":0,"action":"delete","value":null})).send().unwrap();
     assert_eq!(correction.status(), 200, "{}", correction.text().unwrap());
     assert_eq!(
         get(
@@ -526,7 +526,7 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
             &format!("/api/campaigns/{}/results", campaign["id"])
         )["totals"]["clicked"],
         1,
-        "A new real landing request contributes independently of the excluded observation"
+        "A new real landing request contributes independently of the deleted observation"
     );
     assert!(html.contains("name=\"password\""));
     assert!(!html.contains("authoredCanary"));

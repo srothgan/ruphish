@@ -59,8 +59,8 @@ impl Default for Filter {
 /// Safe event data; no arbitrary payload or network identity.
 #[derive(Clone)]
 pub struct Event {
-    /// Latest applied correction revision; zero means original evidence.
-    pub revision: i64,
+    /// Whether an operator has changed the event values since creation.
+    pub edited: bool,
     /// Durable event identity.
     pub id: i64,
     /// Associated recipient identity if resolvable.

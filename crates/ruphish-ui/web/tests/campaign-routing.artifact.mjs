@@ -9,7 +9,7 @@ const fixture = fileURLToPath(new URL('./support/campaign-routing.mjs', import.m
 // Runs the built application in JSDOM with the existing synthetic API, never a live server.
 // Build the development distribution with `trunk build --locked` first.
 for (const scenario of ['completed-entry', 'completed-direct', 'active-entry', 'queued-entry',
-  'bookmark', 'dashboard', 'directory', 'missing', 'forbidden', 'retry', 'invalid', 'new']) {
+  'event-editor', 'bookmark', 'dashboard', 'directory', 'missing', 'forbidden', 'retry', 'invalid', 'new']) {
   test(`campaign routing: ${scenario}`, async () => {
     await execute(process.execPath, [fixture, scenario], { timeout: 30000, maxBuffer: 1024 * 1024 });
   });

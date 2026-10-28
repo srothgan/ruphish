@@ -797,20 +797,21 @@
 .campaign-sections a[aria-current="page"] { border-bottom-color:currentColor; font-weight:600; }
 
 @layer features {
-  .event-editor { display: grid; gap: var(--s5); padding: var(--s5); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper); }
-  .event-editor h3, .event-editor > p { margin: 0; }
-  .event-edit-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--s4) var(--s5); max-width: 44rem; }
-  .event-edit-fields > .form-field { min-width: 0; margin: 0; }
-  .event-edit-fields input, .event-edit-fields .select-control { width: 100%; }
-  .event-presence-fields { min-width: 0; margin: 0; padding: 0; border: 0; }
-  .event-presence-fields legend { padding: 0; margin-bottom: var(--s3); font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--muted); }
-  .event-editor .management-footer { margin: 0; padding: var(--s4) 0 0; border-top: 1px solid var(--line); }
+  .event-review > .management-table-wrap { margin-top: var(--s4); }
+  .event-correction { display: grid; gap: var(--s6); min-width: 0; margin: var(--s5) 0; padding: var(--s5); background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md); }
+  .event-correction-heading h3, .event-correction > p { margin: 0; }
+  .event-correction-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2) var(--s5); max-width: 44rem; }
+  .event-correction-fields > .form-field { display: grid; grid-template-rows: subgrid; grid-row: span 3; gap: var(--s2); min-width: 0; margin: 0; }
+  .event-correction-fields--presence > .form-field { grid-row: span 2; }
+  .event-correction .form-field input, .event-correction .form-field select, .event-correction .select-control, .event-correction .form-field > small { width: 100%; min-width: 0; margin: 0; }
+  .event-correction .form-field input, .event-correction .form-field select { min-height: var(--control-h); }
+  .event-correction-presence { min-width: 0; margin: 0; padding: 0; border: 0; }
+  .event-correction-presence legend { margin-bottom: var(--s4); padding: 0; font-size: var(--fs-sm); font-weight: var(--fw-semibold); }
+  .event-correction-actions { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: center; padding-top: var(--s5); border-top: 1px solid var(--line); }
   @media (max-width: 700px) {
-    .event-editor { max-width: calc(100vw - 6rem); }
-    .event-edit-fields { grid-template-columns: minmax(0, 1fr); }
+    .event-correction-fields { grid-template-columns: minmax(0, 1fr); row-gap: var(--s3); }
   }
 }
-.event-excluded { opacity: .7; }
 
 @layer features {
 /* Campaign review and analysis share a quiet frame, not an editing table. */

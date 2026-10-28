@@ -18,11 +18,11 @@ const byTime = (a, b) => a.time.localeCompare(b.time) || a.id - b.id;
 
 
 const eventFact = e => ({time:e.time,kind:recordedKind(e.kind),presence:{username_present:e.username_present??null,password_present:e.password_present??null}});
-const eventRecord = e => ({id:e.id,source:e.source,revision:e.revision??0,original:e.original??eventFact(e),current:eventFact(e),excluded:e.excluded??false});
+const eventRecord = e => ({id:e.id,source:e.source,revision:e.revision??0,edited:e.edited??false,current:eventFact(e)});
 
 function posture(results, since = 0, until = Infinity) {
     const rows = results.filter(r => r.state === 'accepted' && r.due >= since && r.due < until);
-    const flags = sum(rows.map(r => counts(r.events.filter(e => !e.excluded && Date.parse(e.time) / 1000 < until)).map(n => Number(n > 0))));
+    const flags = sum(rows.map(r => counts(r.events.filter(e => Date.parse(e.time) / 1000 < until)).map(n => Number(n > 0))));
     return { delivered: rows.length, opened: flags[1], clicked: flags[2], credentials_entered: flags[3], reported: flags[4] };
 }
 
@@ -47,7 +47,7 @@ export function analysis(campaign, query, now, paginate = true) {
     const results = campaign.results.filter(r => (!query.has('recipient') || r.id === Number(query.get('recipient'))) && (!selected.size || selected.has(r.id)) && (!search || `${r.email} ${r.first_name} ${r.last_name}`.toLocaleLowerCase().includes(search)));
     const events = results.flatMap(r => r.events).filter(e => {
         const at = Date.parse(e.time) / 1000;
-        return !e.excluded && at >= from && at < until && (!selectedEvents.length || selectedEvents.includes(eventKinds[e.kind])) && (!query.get('source') || query.get('source') === e.source);
+        return at >= from && at < until && (!selectedEvents.length || selectedEvents.includes(eventKinds[e.kind])) && (!query.get('source') || query.get('source') === e.source);
     }).sort(byTime);
     const eventMap = new Map();
     for (const e of events) {
@@ -67,7 +67,7 @@ export function analysis(campaign, query, now, paginate = true) {
         if (index >= 0) buckets.get(time)[index]++;
     }
     const offset = Math.max(0, Number(query.get('offset') ?? 0)), limit = Math.max(1, Math.min(200, Number(query.get('limit') ?? 50)));
-    return { first_observed: namedCounts(kinds.map(kind => { const times = events.filter(e => e.kind === kind).map(e => Date.parse(e.time)/1000); return times.length ? Math.min(...times) : null; })), last_observed: namedCounts(kinds.map(kind => { const times = events.filter(e => e.kind === kind).map(e => Date.parse(e.time)/1000); return times.length ? Math.max(...times) : null; })), id: campaign.header.id, name: campaign.header.name, status: campaign.header.status, as_of: now, audience: campaign.results.length, unique: namedCounts(unique), progression: namedCounts(progression), totals: namedCounts(counts(events)), recipient_total: rows.length, event_total: events.length, recipients: (paginate ? rows.slice(offset, offset + limit) : rows).map(r => ({ ...r, counts: namedCounts(r.counts) })), events: (paginate ? sortedEvents.slice(offset, offset + limit) : sortedEvents).map(e => ({ id:e.id,recipient_id:e.recipient_id,email:e.email,time:e.time,source:e.source,password_present:e.password_present??null,revision:e.revision??0,kind:recordedKind(e.kind) })), buckets: [...buckets].map(([time, values]) => ({ time, counts: namedCounts(values) })), bucket_seconds: 3600 };
+    return { first_observed: namedCounts(kinds.map(kind => { const times = events.filter(e => e.kind === kind).map(e => Date.parse(e.time)/1000); return times.length ? Math.min(...times) : null; })), last_observed: namedCounts(kinds.map(kind => { const times = events.filter(e => e.kind === kind).map(e => Date.parse(e.time)/1000); return times.length ? Math.max(...times) : null; })), id: campaign.header.id, name: campaign.header.name, status: campaign.header.status, as_of: now, audience: campaign.results.length, unique: namedCounts(unique), progression: namedCounts(progression), totals: namedCounts(counts(events)), recipient_total: rows.length, event_total: events.length, recipients: (paginate ? rows.slice(offset, offset + limit) : rows).map(r => ({ ...r, counts: namedCounts(r.counts) })), events: (paginate ? sortedEvents.slice(offset, offset + limit) : sortedEvents).map(e => ({ id:e.id,recipient_id:e.recipient_id,email:e.email,time:e.time,source:e.source,password_present:e.password_present??null,edited:e.edited??false,kind:recordedKind(e.kind) })), buckets: [...buckets].map(([time, values]) => ({ time, counts: namedCounts(values) })), bucket_seconds: 3600 };
 }
 
 function summaries(data, family) {
@@ -107,8 +107,8 @@ function review(data, input) {
 }
 
 export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage, data = dataset(now) } = {}) {
-    const eventAudits = new Map(), eventRetries = new Map();
     const key = 'ruphish-demo-session-v1';
+    let nextEventId = Math.max(0, ...data.campaigns.flatMap(c => c.results.flatMap(r => r.events.map(e => e.id)))) + 1;
     const readIdentity = () => {
         try { return Number(storage?.getItem(key)) || 0; } catch { return 0; }
     };
@@ -208,56 +208,46 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage, da
                 try { return json(analysis(c, url.searchParams, now)); } catch { return failure(400, 'ANALYSIS_FILTER_INVALID'); }
             }
             if (method === 'GET' && operation === 'draft') return json({ name: c.header.name, url: c.header.url, selection: { groups: [{ id: 1 }], template: { id: c.header.template.id }, page: { id: 1 }, smtp: { id: 1 } }, policy });
-            const eventRoute = operation.match(/^recipients\/(\d+)\/events(?:\/(\d+))?$/);
+            const eventRoute = operation.match(/^recipients\/(\d+)\/events$/);
             if (eventRoute) {
                 const r=c.results.find(r=>r.id===Number(eventRoute[1]));
-                if (!r) return failure(404);
-                if (method==='GET' && eventRoute[2]) {
-                    const e=r.events.find(e=>e.id===Number(eventRoute[2]));
-                    if (!e) return failure(404);
-                    const audit=(eventAudits.get(e.id)??[]).filter(a=>a.revision<Number(url.searchParams.get('before')??Infinity)).slice().reverse();
-                    return json({record:eventRecord(e),audit:audit.slice(0,50),next_before:audit.length>50?audit[49].revision:null});
-                }
-                if (method!=='POST' || eventRoute[2]) return failure(405);
-                const serialized=JSON.stringify([c.header.id,r.id,body]), retryKey=`${current.id}:${body.request_id}`;
-                if (eventRetries.has(retryKey)) {
-                    const prior=eventRetries.get(retryKey);
-                    return prior.request===serialized?json(prior.record):failure(412,'RESOURCE_CHANGED');
-                }
+                if (!r || method!=='POST') return failure(404);
                 if (!/^[a-zA-Z0-9-]{16,64}$/.test(body.request_id??'') || !Number.isSafeInteger(body.revision) || body.revision<0 || Object.keys(body).some(k=>!['request_id','event_id','revision','action','value'].includes(k))) return failure(400);
                 const add=body.action==='add', edit=body.action==='edit';
-                if (!['add','edit','exclude','restore'].includes(body.action) || add!==(body.event_id===null) || (add && body.revision!==0) || (add||edit)!==(body.value!==null)) return failure(400);
-                let e=add?null:r.events.find(e=>e.id===body.event_id);
-                if (!add && !e) return failure(404);
-                if (e && body.revision!==(e.revision??0)) return failure(412,'RESOURCE_CHANGED');
+                if (!['add','edit','delete'].includes(body.action) || add!==(body.event_id===null) || (add && body.revision!==0) || (add||edit)!==(body.value!==null)) return failure(400);
                 const allowed=['email_opened','link_clicked','form_submitted','email_reported'];
-                if (e && !allowed.includes(eventKinds[e.original?eventLabel(e.original.kind):e.kind])) return failure(400);
+                let next;
                 if (add||edit) {
                     const v=body.value, at=Date.parse(v.time)/1000;
                     if (!allowed.includes(v.kind) || !Number.isFinite(at) || !/(Z|[+-]\d{2}:\d{2})$/.test(v.time) || at>now || at<Date.parse(c.header.launch_date)/1000 || (c.header.status==='Completed' && at>Date.parse(c.header.launch_date)/1000+DAY) || Object.keys(v).some(k=>!['kind','time','presence'].includes(k)) || !v.presence || Object.keys(v.presence).some(k=>!['username_present','password_present'].includes(k)) || Object.values(v.presence).some(v=>v!==null&&typeof v!=='boolean') || (v.kind!=='form_submitted' && Object.values(v.presence).some(v=>v!==null))) return failure(400);
+                    next={time:new Date(v.time).toISOString(),kind:eventLabel({type:'known',value:v.kind}),username_present:v.presence.username_present??null,password_present:v.presence.password_present??null};
                 }
-                const before=e?copy(eventRecord(e)):null;
-                if (e) e.original??=copy(eventFact(e));
+                const same=e=>next && Date.parse(e.time)===Date.parse(next.time) && e.kind===next.kind && (e.username_present??null)===next.username_present && (e.password_present??null)===next.password_present;
+                const result=e=>json({id:e.id,event:eventRecord(e)});
                 if (add) {
-                    const id=Math.max(0,...data.campaigns.flatMap(c=>c.results.flatMap(r=>r.events.map(e=>e.id))))+1;
-                    e={id,recipient_id:r.id,email:r.email,source:'operator',revision:0};r.events.push(e);
+                    const prior=r.events.find(e=>e.create_key===body.request_id);
+                    if (prior) return (prior.revision??0)===0 && same(prior)?result(prior):failure(412,'RESOURCE_CHANGED');
+                    const id=nextEventId++;
+                    const e={id,recipient_id:r.id,email:r.email,source:'operator',revision:0,edited:false,create_key:body.request_id,...next};
+                    r.events.push(e);
+                    return result(e);
                 }
-                if (add||edit) Object.assign(e,{time:new Date(body.value.time).toISOString(),kind:eventLabel({type:'known',value:body.value.kind}),username_present:body.value.presence.username_present??null,password_present:body.value.presence.password_present??null});
-                if (add) e.original=copy(eventFact(e));
-                if (body.action==='exclude') e.excluded=true;
-                if (body.action==='restore') Object.assign(e,{time:e.original.time,kind:eventLabel(e.original.kind),...e.original.presence,excluded:false});
-                e.revision=(e.revision??0)+1;
-                const after=copy(eventRecord(e));
-                if (!eventAudits.has(e.id)) eventAudits.set(e.id,[]);
-                eventAudits.get(e.id).push({revision:e.revision,actor:current.id,performed_at:now,action:body.action,before,after});
-                eventRetries.set(retryKey,{request:serialized,record:after});
-                return json(after);
+                const e=r.events.find(e=>e.id===body.event_id);
+                if (!e) return failure(404);
+                if (!allowed.includes(eventKinds[e.kind])) return failure(400);
+                if (body.revision!==(e.revision??0)) return edit && body.revision+1===e.revision && same(e)?result(e):failure(412,'RESOURCE_CHANGED');
+                if (body.action==='delete') {
+                    r.events=r.events.filter(row=>row.id!==e.id);
+                    return json({id:e.id,event:null});
+                }
+                if (!same(e)) Object.assign(e,next,{edited:true,revision:(e.revision??0)+1});
+                return result(e);
             }
             const history = operation.match(/^recipients\/(\d+)\/history$/);
             if (method === 'GET' && history) {
                 const r = c.results.find(r => r.id === Number(history[1]));
                 if (!r) return failure(404);
-                return json({ result_id: r.id, email: r.email, attempts: r.attempts, events: r.events.map(e => ({ correction:eventRecord(e), id: e.id, time: e.time, at: Date.parse(e.time) / 1000, message: e.kind, details: JSON.stringify(e.password_present === null ? {} : { password_present: e.password_present }) })), next_attempt: null, next_event: null });
+                return json({ result_id: r.id, email: r.email, attempts: r.attempts, events: r.events.map(e => ({ record:eventRecord(e), id: e.id, time: e.time, at: Date.parse(e.time) / 1000, message: e.kind, details: JSON.stringify(e.password_present === null ? {} : { password_present: e.password_present }) })), next_attempt: null, next_event: null });
             }
             if ((method === 'DELETE' && !operation) || (method === 'POST' && (operation === 'complete' || /^delivery\/\d+$/.test(operation)))) return success();
             if (method === 'GET' && operation === 'export') {
@@ -269,7 +259,7 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage, da
                 if (invalidNumber || invalidWindow || limit < 1 || limit > 200 || offset < 0 || offset > 1000000 || selected.length > 200 || ids.some(id => !/^\d+$/.test(id) || !c.results.some(r => r.id === Number(id)))) return failure(400, 'ANALYSIS_FILTER_INVALID');
                 try { return exportResponse(analysis(c, url.searchParams, now, false), url.searchParams); } catch { return failure(400, 'ANALYSIS_FILTER_INVALID'); }
             }
-            return failure(405);
+            return failure(404);
         }
         if (['/api/util/preview', '/api/pages/preview', '/api/learning-pages/preview'].includes(path) && method === 'POST') return json({ html: '<h1>Sample preview</h1><p>The public demo displays sample content. Submitted content is not sent to a server.</p>', warnings: [] });
         if (['/api/pages/validate', '/api/learning-pages/validate'].includes(path) && method === 'POST') return json({ warnings: [] });

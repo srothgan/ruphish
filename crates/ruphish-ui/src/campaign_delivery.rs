@@ -238,12 +238,23 @@ pub(super) fn recipient_detail(
     let i18n = ruphish_ui::localization::use_i18n();
     let editing = RwSignal::new(false);
     let editor = RwSignal::new(ruphish_ui::event_editor::Editor::default());
-    let locked =
-        Signal::derive(move || editor.with(|s| s.busy || s.pending.is_some() || s.draft.is_some()));
+    let locked = Signal::derive(move || editor.with(|s| s.busy || s.pending.is_some()));
     crate::campaign_queries::RefreshState::register(Signal::derive(move || {
         history.with(History::loading)
     }));
     let tasks = ruphish_ui::view_tasks::ViewTasks::default();
+    let can_leave = crate::navigation::confirm_leave_action();
+    let close = Callback::new(move |()| {
+        if locked.get_untracked() {
+            return;
+        }
+        tasks.spawn(async move {
+            if can_leave().await && !locked.get_untracked() {
+                editor.update(ruphish_ui::event_editor::Editor::cancel);
+                editing.set(false);
+            }
+        });
+    });
     let attempts = Memo::new(move |_| history.with(|h| h.attempts.clone()));
     let copy_message = RwSignal::new(String::new());
     let open = Memo::new(move |_| history.with(|h| h.open));
@@ -319,7 +330,7 @@ pub(super) fn recipient_detail(
                         title=trs!(ui.edit_timeline)
                         class="event-edit-dialog"
                         busy=locked
-                        on_cancel=Callback::new(move |_| editing.set(false))
+                        on_cancel=close
                     >
                         <div class="recipient-history-heading">
                             <div>
@@ -333,7 +344,7 @@ pub(super) fn recipient_detail(
                                     }}
                                 </p>
                             </div>
-                            <ActionButton disabled=locked on_click=move |_| editing.set(false)>
+                            <ActionButton disabled=locked on_click=move |_| close.run(())>
                                 {tr!(ui.close)}
                             </ActionButton>
                         </div>
@@ -343,7 +354,8 @@ pub(super) fn recipient_detail(
                         }>
                             <ActionButton
                                 disabled=Signal::derive(move || {
-                                    locked.get() || history.with(History::loading)
+                                    locked.get() || editor.with(|s| s.draft.is_some())
+                                        || history.with(History::loading)
                                 })
                                 on_click=move |_| fetch(tasks, api, campaign, result, history, true)
                             >

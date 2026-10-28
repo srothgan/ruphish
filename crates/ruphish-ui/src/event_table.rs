@@ -2,7 +2,7 @@
 use crate::{client::Api, shared::components::*, time_display::instant};
 use leptos::prelude::*;
 use ruphish_domain::{
-    event_edit::{Action, Change, Inspection, Presence, Record, Value as EventValue},
+    event_edit::{Action, Change, Outcome, Presence, Record, Value as EventValue},
     events::{Kind, RecordedKind},
 };
 use ruphish_ui::{event_editor::Editor, recipient_history::History, tr, trs};
@@ -11,14 +11,14 @@ use serde_json::{Value, json};
 #[derive(Clone, Copy)]
 pub(crate) struct Csrf(pub StoredValue<String>);
 fn record(row: &Value) -> Option<Record> {
-    serde_json::from_value(row["correction"].clone()).ok()
+    serde_json::from_value(row["record"].clone()).ok()
 }
 fn patch(history: RwSignal<History>, record: &Record) {
     history.update(|history| {
         if history.events.get(&record.id).and_then(self::record).is_some_and(|old|old.revision>record.revision) {return;}
         let at=ruphish_domain::datetime::parse_stored(&record.current.time).ok().map(|v|v.as_second());
         let details=json!({"username_present":record.current.presence.username_present,"password_present":record.current.presence.password_present}).to_string();
-        history.events.insert(record.id,json!({"id":record.id,"time":record.current.time,"at":at,"message":record.current.kind.label(),"details":details,"correction":record}));
+        history.events.insert(record.id,json!({"id":record.id,"time":record.current.time,"at":at,"message":record.current.kind.label(),"details":details,"record":record}));
     });
 }
 fn presence(value: &str) -> Option<bool> {
@@ -63,17 +63,10 @@ pub(super) fn table(
             return;
         };
         let current = target.as_ref().map(|r| r.current.clone());
-        let time = current.as_ref().map(|f| f.time.clone()).unwrap_or_else(|| {
-            history
-                .with_untracked(|h| {
-                    h.events
-                        .values()
-                        .rev()
-                        .find_map(record)
-                        .map(|r| r.current.time)
-                })
-                .unwrap_or_else(|| ruphish_domain::datetime::now().to_string())
-        });
+        let time = current
+            .as_ref()
+            .map(|f| f.time.clone())
+            .unwrap_or_else(|| ruphish_domain::datetime::now().to_string());
         let time = ruphish_domain::datetime::parse_stored(&time)
             .map(ruphish_domain::datetime::utc)
             .unwrap_or(time);
@@ -165,10 +158,17 @@ pub(super) fn table(
                 )
                 .await
             {
-                Ok((value, _)) => match serde_json::from_value::<Record>(value) {
+                Ok((value, _)) => match serde_json::from_value::<Outcome>(value) {
                     Ok(record) => {
                         if editor.try_update(|s| s.saved(&record)).unwrap_or(false) {
-                            patch(history, &record);
+                            history.update(History::invalidate_reads);
+                            if let Some(event) = &record.event {
+                                patch(history, event);
+                            } else {
+                                history.update(|h| {
+                                    h.events.remove(&record.id);
+                                });
+                            }
                             queries.changed(&campaign.get_value());
                         } else {
                             editor.update(|s| {
@@ -194,21 +194,34 @@ pub(super) fn table(
         });
     });
     let locked = Signal::derive(move || editor.with(|s| s.busy || s.pending.is_some()));
+    let editing = Signal::derive(move || editor.with(|s| s.draft.is_some()));
     let form = move || {
         view! {
-            <div class="event-editor">
-                <h3>{move || editor.with(|s| s.draft.as_ref().map(|d| action_label(d.action)))}</h3>
+            <form
+                class="event-correction"
+                on:submit=move |event| {
+                    event.prevent_default();
+                    save.run(());
+                }
+                aria-busy=move || editor.with(|s| s.busy).to_string()
+            >
+                <header class="event-correction-heading">
+                    <h3>
+                        {move || editor.with(|s| s.draft.as_ref().map(|d| action_label(d.action)))}
+                    </h3>
+                </header>
                 <Show when=move || {
                     editor.with(|s| s.draft.as_ref().is_some_and(|d| d.value.is_some()))
                 }>
-                    <div class="event-edit-fields">
+                    <div class="event-correction-fields">
                         <Field label=trs!(ui.event_occurrence)>
                             <TextInput
                                 input_type="datetime-local"
                                 step="1"
+                                required=true
                                 value=Signal::derive(move || input.get())
                                 disabled=locked
-                                on_input=move |e| input.set(event_target_value(&e))
+                                on_input=move |event| input.set(event_target_value(&event))
                             />
                             <small>
                                 {move || {
@@ -276,9 +289,9 @@ pub(super) fn table(
                                     .is_some_and(|v| v.kind == Kind::FormSubmitted)
                             })
                     }>
-                        <fieldset class="event-presence-fields">
+                        <fieldset class="event-correction-presence">
                             <legend>{tr!(ui.event_form_fields)}</legend>
-                            <div class="event-edit-fields">
+                            <div class="event-correction-fields event-correction-fields--presence">
                                 {presence_select(editor, locked, false)}
                                 {presence_select(editor, locked, true)}
                             </div>
@@ -286,32 +299,42 @@ pub(super) fn table(
                     </Show>
                 </Show>
                 <Show when=move || {
-                    editor.with(|s| s.draft.as_ref().is_some_and(|d| d.action == Action::Exclude))
+                    editor.with(|s| s.draft.as_ref().is_some_and(|d| d.action == Action::Delete))
                 }>
-                    <p>{tr!(ui.event_exclude_explanation)}</p>
+                    <p>{tr!(ui.event_delete_explanation)}</p>
                 </Show>
-                <Show when=move || {
-                    editor.with(|s| s.draft.as_ref().is_some_and(|d| d.action == Action::Restore))
-                }>
-                    <p>{tr!(ui.event_restore_explanation)}</p>
+                <Show when=move || editor.with(|s| !s.error.is_empty())>
+                    <p role="alert" class="form-message error has-content">
+                        {move || editor.with(|s| s.error.clone())}
+                    </p>
                 </Show>
-                <FormFooter>
+                <Show when=move || editor.with(|s| s.pending.is_some() && !s.busy)>
+                    <p>{tr!(ui.event_retry_unknown)}</p>
+                </Show>
+                <footer class="event-correction-actions">
                     <ActionButton
-                        kind="button"
+                        kind="submit"
                         style=ButtonStyle::Primary
                         disabled=Signal::derive(move || editor.with(|s| s.busy))
-                        on_click=move |_| save.run(())
                     >
                         {move || {
-                            if editor.with(|s| s.pending.is_some()) {
-                                leptos_i18n::t_string!(i18n,ui.retry)
-                            } else if editor
-                                .with(|s| s.draft.as_ref().is_some_and(|d| d.action == Action::Add))
-                            {
-                                leptos_i18n::t_string!(i18n,ui.event_add)
-                            } else {
-                                leptos_i18n::t_string!(i18n,ui.save_changes)
-                            }
+                            editor
+                                .with(|s| {
+                                    if s.pending.is_some() {
+                                        leptos_i18n::t_string!(i18n, ui.retry).into_owned()
+                                    } else if s
+                                        .draft
+                                        .as_ref()
+                                        .is_some_and(|d| d.action == Action::Edit)
+                                    {
+                                        leptos_i18n::t_string!(i18n, ui.save_changes).into_owned()
+                                    } else {
+                                        s.draft
+                                            .as_ref()
+                                            .map(|d| action_label(d.action))
+                                            .unwrap_or_default()
+                                    }
+                                })
                         }}
                     </ActionButton>
                     <ActionButton
@@ -321,343 +344,139 @@ pub(super) fn table(
                     >
                         {tr!(ui.cancel)}
                     </ActionButton>
-                </FormFooter>
-                <Show when=move || editor.with(|s| s.pending.is_some() && !s.busy)>
-                    <p>{tr!(ui.event_retry_unknown)}</p>
-                </Show>
-            </div>
+                </footer>
+            </form>
         }
     };
     view! {
-        <p>{tr!(ui.event_effective_explanation)}</p>
-        <Show when=crate::campaigns::editable>
-            <ActionButton
-                kind="button"
-                disabled=Signal::derive(move || editor.with(|s| s.draft.is_some()))
-                on_click=move |_| open.run((Action::Add, None))
-            >
-                {tr!(ui.event_add)}
-            </ActionButton>
-        </Show>
-        <Show when=move || editor.with(|s| !s.error.is_empty())>
-            <p role="alert" class="form-message error has-content">
-                {move || editor.with(|s| s.error.clone())}
-            </p>
-        </Show>
-        <DataTable
-            label=trs!(ui.recipient_events)
-            sorting=sorting
-            columns=vec!["time", "message", "", "", ""]
-            headers=vec![
-                trs!(ui.time),
-                trs!(ui.event),
-                trs!(ui.event_origin),
-                trs!(ui.status),
-                trs!(ui.actions),
-            ]
-        >
-            <Show when=move || {
-                editor.with(|s| s.draft.as_ref().is_some_and(|d| d.event_id.is_none()))
-            }>
-                <tr>
-                    <td colspan="5">{form()}</td>
-                </tr>
+        <Show when=move || editing.get()>{form()}</Show>
+        <div class="event-review" hidden=move || editing.get()>
+            <p>{tr!(ui.event_effective_explanation)}</p>
+            <Show when=crate::campaigns::editable>
+                <ActionButton
+                    kind="button"
+                    disabled=Signal::derive(move || editor.with(|s| s.draft.is_some()))
+                    on_click=move |_| open.run((Action::Add, None))
+                >
+                    {tr!(ui.event_add)}
+                </ActionButton>
             </Show>
-            <For
-                each=move || {
-                    sorting
-                        .json(
-                            history
-                                .with(|h| {
-                                    h.events
-                                        .values()
-                                        .cloned()
-                                        .map(|mut row| {
-                                            if let Some(r) = record(&row) {
-                                                row["time"] = json!(r.current.time);
-                                                row["message"] = json!(r.current.kind.label());
-                                            }
-                                            row
-                                        })
-                                        .collect()
-                                }),
-                            &["time"],
-                        )
-                        .into_iter()
-                        .filter_map(|r| r["id"].as_i64())
-                        .collect::<Vec<_>>()
-                }
-                key=|id| *id
-                children=move |id| {
-                    let row = Signal::derive(move || {
-                        history.with(|h| h.events.get(&id).cloned().unwrap_or_default())
-                    });
-                    let current = Signal::derive(move || record(&row.get()));
-                    let inspection = RwSignal::new(None::<Inspection>);
-                    let audit_error = RwSignal::new(String::new());
-                    let audit_busy = RwSignal::new(false);
-                    let inspect = Callback::new(move |older: bool| {
-                        if audit_busy.get_untracked() {
-                            return;
-                        }
-                        audit_busy.set(true);
-                        audit_error.set(String::new());
-                        let before = if older {
-                            inspection.with_untracked(|v| v.as_ref().and_then(|v| v.next_before))
-                        } else {
-                            None
-                        };
-                        tasks
-                            .spawn(async move {
-                                let suffix = before
-                                    .map(|v| format!("?before={v}"))
-                                    .unwrap_or_default();
-                                match api
-                                    .read::<
-                                        Inspection,
-                                    >(
-                                        &format!(
-                                            "/api/campaigns/{}/recipients/{recipient}/events/{id}{suffix}",
-                                            campaign.get_value(),
-                                        ),
-                                    )
-                                    .await
-                                {
-                                    Ok(mut value) => {
-                                        patch(history, &value.record);
-                                        if older {
-                                            inspection
-                                                .update(|v| {
-                                                    if let Some(old) = v {
-                                                        old.audit.append(&mut value.audit);
-                                                        old.next_before = value.next_before;
-                                                        old.record = value.record;
-                                                    }
-                                                });
-                                        } else {
-                                            inspection.set(Some(value));
-                                        }
-                                    }
-                                    Err(error) => audit_error.set(error.message),
-                                }
-                                audit_busy.set(false);
-                            });
-                    });
-                    view! {
-                        <tr class:event-excluded=move || current.get().is_some_and(|r| r.excluded)>
-                            <td>
-                                {move || instant(
-                                    &current
-                                        .get()
-                                        .map(|r| json!(r.current.time))
-                                        .unwrap_or_else(|| row.get()["time"].clone()),
-                                )}
-                            </td>
-                            <td>
-                                {move || ruphish_ui::localization::event_label(
-                                    i18n,
-                                    &current
-                                        .get()
-                                        .map(|r| r.current.kind.label().to_owned())
-                                        .unwrap_or_else(|| crate::campaigns::text(
-                                            &row.get(),
-                                            "message",
-                                        )),
-                                )}
-                                <small>
-                                    {move || {
-                                        current
-                                            .get()
-                                            .and_then(|r| r.current.presence.password_present)
-                                            .map(|v| {
-                                                if v {
-                                                    leptos_i18n::t_string!(i18n,ui.password_field_was_nonempty)
-                                                } else {
-                                                    leptos_i18n::t_string!(i18n,ui.password_field_was_empty)
+            <Show when=move || editor.with(|s| !s.error.is_empty())>
+                <p role="alert" class="form-message error has-content">
+                    {move || editor.with(|s| s.error.clone())}
+                </p>
+            </Show>
+            <DataTable
+                label=trs!(ui.recipient_events)
+                sorting=sorting
+                columns=vec!["time", "message", "", "", ""]
+                headers=vec![
+                    trs!(ui.time),
+                    trs!(ui.event),
+                    trs!(ui.event_origin),
+                    trs!(ui.status),
+                    trs!(ui.actions),
+                ]
+            >
+                <For
+                    each=move || {
+                        sorting
+                            .json(
+                                history
+                                    .with(|h| {
+                                        h.events
+                                            .values()
+                                            .cloned()
+                                            .map(|mut row| {
+                                                if let Some(r) = record(&row) {
+                                                    row["time"] = json!(r.current.time);
+                                                    row["message"] = json!(r.current.kind.label());
                                                 }
+                                                row
                                             })
+                                            .collect()
+                                    }),
+                                &["time"],
+                            )
+                            .into_iter()
+                            .filter_map(|r| r["id"].as_i64())
+                            .collect::<Vec<_>>()
+                    }
+                    key=|id| *id
+                    children=move |id| {
+                        let row = Signal::derive(move || {
+                            history.with(|h| h.events.get(&id).cloned().unwrap_or_default())
+                        });
+                        let current = Signal::derive(move || record(&row.get()));
+                        view! {
+                            <tr>
+                                <td>{move || instant(&row.get()["time"])}</td>
+                                <td>
+                                    {move || event_title(i18n, &row.get())}
+                                    <small>
+                                        {move || {
+                                            current
+                                                .get()
+                                                .and_then(|r| r.current.presence.password_present)
+                                                .map(|present| {
+                                                    if present {
+                                                        leptos_i18n::t_string!(i18n,ui.password_field_was_nonempty)
+                                                    } else {
+                                                        leptos_i18n::t_string!(i18n,ui.password_field_was_empty)
+                                                    }
+                                                })
+                                        }}
+                                    </small>
+                                </td>
+                                <td>
+                                    {move || {
+                                        if current.get().is_some_and(|r| r.source == "operator") {
+                                            leptos_i18n::t_string!(i18n,ui.event_operator)
+                                        } else {
+                                            leptos_i18n::t_string!(i18n,ui.event_system)
+                                        }
                                     }}
-                                </small>
-                            </td>
-                            <td>
-                                {move || {
-                                    if current.get().is_some_and(|r| r.source == "operator") {
-                                        leptos_i18n::t_string!(i18n,ui.event_operator)
-                                    } else {
-                                        leptos_i18n::t_string!(i18n,ui.event_system)
-                                    }
-                                }}
-                            </td>
-                            <td>
-                                <Show when=move || current.get().is_some_and(|r| r.edited())>
-                                    <StatusBadge tone=StatusTone::Warning>
-                                        {tr!(ui.event_edited)}
-                                    </StatusBadge>
-                                </Show>
-                                <Show when=move || current.get().is_some_and(|r| r.excluded)>
-                                    <StatusBadge tone=StatusTone::Neutral>
-                                        {tr!(ui.event_excluded)}
-                                    </StatusBadge>
-                                </Show>
-                            </td>
-                            <td>
-                                <div class="table-actions">
-                                    <Show when=move || {
-                                        crate::campaigns::editable()
-                                            && current.get().is_some_and(|r| r.editable())
-                                    }>
-                                        <ActionButton
-                                            kind="button"
-                                            disabled=Signal::derive(move || {
-                                                editor.with(|s| s.draft.is_some())
-                                            })
-                                            on_click=move |_| {
-                                                open.run((Action::Edit, current.get_untracked()))
-                                            }
-                                        >
-                                            {tr!(ui.event_edit)}
-                                        </ActionButton>
+                                </td>
+                                <td>
+                                    <Show when=move || current.get().is_some_and(|r| r.edited)>
+                                        <StatusBadge tone=StatusTone::Warning>
+                                            {tr!(ui.event_edited)}
+                                        </StatusBadge>
+                                    </Show>
+                                </td>
+                                <td>
+                                    <div class="table-actions">
                                         <Show when=move || {
-                                            current.get().is_some_and(|r| !r.excluded)
+                                            crate::campaigns::editable()
+                                                && current.get().is_some_and(|r| r.editable())
                                         }>
                                             <ActionButton
                                                 kind="button"
-                                                disabled=Signal::derive(move || {
-                                                    editor.with(|s| s.draft.is_some())
-                                                })
+                                                disabled=editing
                                                 on_click=move |_| {
-                                                    open.run((Action::Exclude, current.get_untracked()))
+                                                    open.run((Action::Edit, current.get_untracked()))
+                                                }
+                                            >
+                                                {tr!(ui.event_edit)}
+                                            </ActionButton>
+                                            <ActionButton
+                                                kind="button"
+                                                disabled=editing
+                                                on_click=move |_| {
+                                                    open.run((Action::Delete, current.get_untracked()))
                                                 }
                                             >
                                                 {tr!(ui.delete)}
                                             </ActionButton>
                                         </Show>
-                                        <Show when=move || {
-                                            current.get().is_some_and(|r| r.excluded || r.edited())
-                                        }>
-                                            <ActionButton
-                                                kind="button"
-                                                disabled=Signal::derive(move || {
-                                                    editor.with(|s| s.draft.is_some())
-                                                })
-                                                on_click=move |_| {
-                                                    open.run((Action::Restore, current.get_untracked()))
-                                                }
-                                            >
-                                                {tr!(ui.event_restore)}
-                                            </ActionButton>
-                                        </Show>
-                                    </Show>
-                                    <Show when=move || {
-                                        current.get().is_some_and(|r| r.revision > 0)
-                                    }>
-                                        <ActionButton
-                                            kind="button"
-                                            expanded=Signal::derive(move || {
-                                                inspection.with(Option::is_some).to_string()
-                                            })
-                                            disabled=Signal::derive(move || audit_busy.get())
-                                            on_click=move |_| {
-                                                if inspection.get_untracked().is_some() {
-                                                    inspection.set(None)
-                                                } else {
-                                                    inspect.run(false)
-                                                }
-                                            }
-                                        >
-                                            {tr!(ui.event_audit)}
-                                        </ActionButton>
-                                    </Show>
-                                </div>
-                            </td>
-                        </tr>
-                        <Show when=move || {
-                            editor
-                                .with(|s| s.draft.as_ref().is_some_and(|d| d.event_id == Some(id)))
-                        }>
-                            <tr>
-                                <td colspan="5">{form()}</td>
-                            </tr>
-                        </Show>
-                        <Show when=move || {
-                            inspection.get().is_some() || !audit_error.get().is_empty()
-                        }>
-                            <tr>
-                                <td colspan="5">
-                                    <Show when=move || !audit_error.get().is_empty()>
-                                        <p role="alert">{move || audit_error.get()}</p>
-                                    </Show>
-                                    {move || {
-                                        inspection
-                                            .get()
-                                            .map(|v| {
-                                                view! {
-                                                    <p>{tr!(ui.event_audit_explanation)}</p>
-                                                    {(v.audit.is_empty())
-                                                        .then(|| view! { <p>{tr!(ui.event_no_changes)}</p> })}
-                                                    <p>
-                                                        <strong>{tr!(ui.event_original)}</strong>
-                                                        " "
-                                                        {fact_label(&v.record.original, false)}
-                                                    </p>
-                                                    <ol>
-                                                        {v
-                                                            .audit
-                                                            .into_iter()
-                                                            .map(|a| {
-                                                                view! {
-                                                                    <li>
-                                                                        {format!(
-                                                                            "{} #{} / {} #{}",
-                                                                            leptos_i18n::t_string!(i18n,ui.event_revision),
-                                                                            a.revision,
-                                                                            leptos_i18n::t_string!(i18n,ui.event_operator),
-                                                                            a.actor,
-                                                                        )} " / " {instant(&json!(a.performed_at))} " / "
-                                                                        {action_label(a.action)}
-                                                                        <p>
-                                                                            {a
-                                                                                .before
-                                                                                .map(|b| {
-                                                                                    format!("{} -> ", fact_label(&b.current, b.excluded))
-                                                                                })}{fact_label(&a.after.current, a.after.excluded)}
-                                                                        </p>
-                                                                    </li>
-                                                                }
-                                                            })
-                                                            .collect_view()}
-                                                    </ol>
-                                                }
-                                            })
-                                    }}
-                                    <Show when=move || {
-                                        inspection
-                                            .with(|v| {
-                                                v.as_ref().is_some_and(|v| v.next_before.is_some())
-                                            })
-                                    }>
-                                        <ActionButton
-                                            kind="button"
-                                            disabled=Signal::derive(move || audit_busy.get())
-                                            on_click=move |_| inspect.run(true)
-                                        >
-                                            {tr!(ui.load_earlier_history)}
-                                        </ActionButton>
-                                    </Show>
-                                    <ActionButton
-                                        kind="button"
-                                        disabled=Signal::derive(move || audit_busy.get())
-                                        on_click=move |_| inspect.run(false)
-                                    >
-                                        {tr!(ui.refresh)}
-                                    </ActionButton>
+                                    </div>
                                 </td>
                             </tr>
-                        </Show>
+                        }
                     }
-                }
-            />
-        </DataTable>
+                />
+            </DataTable>
+        </div>
     }
 }
 fn presence_select(
@@ -714,40 +533,9 @@ fn action_label(action: Action) -> String {
     match action {
         Action::Add => leptos_i18n::t_string!(i18n, ui.event_add).into(),
         Action::Edit => leptos_i18n::t_string!(i18n, ui.event_edit).into(),
-        Action::Exclude => leptos_i18n::t_string!(i18n, ui.event_excluded).into(),
-        Action::Restore => leptos_i18n::t_string!(i18n, ui.event_restore).into(),
+        Action::Delete => leptos_i18n::t_string!(i18n, ui.delete).into(),
     }
 }
-fn fact_label(fact: &ruphish_domain::event_edit::Fact, excluded: bool) -> String {
-    let i18n = ruphish_ui::localization::use_i18n();
-    let mut parts = vec![
-        ruphish_ui::localization::event_label(i18n, fact.kind.label()),
-        instant(&json!(fact.time)),
-    ];
-    for (username, present) in [
-        (true, fact.presence.username_present),
-        (false, fact.presence.password_present),
-    ] {
-        if let Some(present) = present {
-            let label = if username {
-                leptos_i18n::t_string!(i18n, ui.event_username_presence)
-            } else {
-                leptos_i18n::t_string!(i18n, ui.event_password_presence)
-            };
-            let value = if present {
-                leptos_i18n::t_string!(i18n, ui.event_present)
-            } else {
-                leptos_i18n::t_string!(i18n, ui.event_absent)
-            };
-            parts.push(format!("{label}: {value}"));
-        }
-    }
-    if excluded {
-        parts.push(leptos_i18n::t_string!(i18n, ui.event_excluded).into());
-    }
-    parts.join(" / ")
-}
-
 /// Read-only chronological history; correction controls live exclusively in the dialog.
 pub(super) fn timeline(history: RwSignal<History>) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
@@ -759,12 +547,11 @@ pub(super) fn timeline(history: RwSignal<History>) -> impl IntoView {
                     rows.sort_by_key(|row| (row["at"].as_i64(), row["id"].as_i64()));
                     rows
                 }
-                key=|row| (row["id"].as_i64(), row["correction"]["revision"].as_i64())
+                key=|row| (row["id"].as_i64(), row["record"]["revision"].as_i64())
                 children=move |row| {
-                    let correction = record(&row);
-                    let excluded = correction.as_ref().is_some_and(|r| r.excluded);
-                    let edited = correction.as_ref().is_some_and(Record::edited);
-                    let operator = correction.as_ref().is_some_and(|r| r.source == "operator");
+                    let record = record(&row);
+                    let edited = record.as_ref().is_some_and(|r| r.edited);
+                    let operator = record.as_ref().is_some_and(|r| r.source == "operator");
                     let label = event_title(i18n, &row);
                     let tone = match row["message"].as_str() {
                         Some("Email Sent") => "success",
@@ -773,7 +560,7 @@ pub(super) fn timeline(history: RwSignal<History>) -> impl IntoView {
                         _ => "neutral",
                     };
                     view! {
-                        <li class=format!("timeline-event {tone}") class:event-excluded=excluded>
+                        <li class=format!("timeline-event {tone}")>
                             <span class="timeline-marker" aria-hidden="true"></span>
                             <div>
                                 <strong>{label}</strong>
@@ -782,8 +569,6 @@ pub(super) fn timeline(history: RwSignal<History>) -> impl IntoView {
                                     {operator
                                         .then(|| view! { <span>{tr!(ui.event_operator)}</span> })}
                                     {edited.then(|| view! { <span>{tr!(ui.event_edited)}</span> })}
-                                    {excluded
-                                        .then(|| view! { <span>{tr!(ui.event_excluded)}</span> })}
                                 </div>
                             </div>
                         </li>

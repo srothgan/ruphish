@@ -2,7 +2,23 @@
 use super::UpgradeError;
 use sqlx::SqliteConnection;
 
-pub(super) const LATEST_VERSION: i64 = 14;
+const HISTORY: [(i64, &str); 13] = [
+    (1, "authentication-v1"),
+    (2, "campaign-execution-v1"),
+    (3, "participant-privacy-v1"),
+    (4, "verified-domains-public-events-v1"),
+    (5, "domain-verification-history-v1"),
+    (6, "analysis-integrations-v1"),
+    (7, "user-preferences-v1"),
+    (8, "utc-offset-preference-v1"),
+    (9, "campaign-drafts-v1"),
+    (10, "integration-identities-v1"),
+    (11, "observations-v1"),
+    (12, "company-settings-v1"),
+    (13, "learning-pages-v1"),
+];
+
+pub(super) const LATEST_VERSION: i64 = HISTORY[HISTORY.len() - 1].0;
 
 pub(super) const SCHEMA: &str = "
 CREATE TABLE ruphish_schema(version INTEGER PRIMARY KEY NOT NULL, name TEXT NOT NULL);
@@ -31,23 +47,13 @@ pub(super) async fn validate_version(
         sqlx::query_as("SELECT version,name FROM ruphish_schema ORDER BY version")
             .fetch_all(connection)
             .await?;
-    let history = [
-        (1, "authentication-v1".to_owned()),
-        (2, "campaign-execution-v1".to_owned()),
-        (3, "participant-privacy-v1".to_owned()),
-        (4, "verified-domains-public-events-v1".to_owned()),
-        (5, "domain-verification-history-v1".to_owned()),
-        (6, "analysis-integrations-v1".to_owned()),
-        (7, "user-preferences-v1".to_owned()),
-        (8, "utc-offset-preference-v1".to_owned()),
-        (9, "campaign-drafts-v1".to_owned()),
-        (10, "integration-identities-v1".to_owned()),
-        (11, "observations-v1".to_owned()),
-        (12, "company-settings-v1".to_owned()),
-        (13, "learning-pages-v1".to_owned()),
-        (14, "event-corrections-v1".to_owned()),
-    ];
-    if entries.is_empty() || !history.starts_with(&entries) {
+    if entries.is_empty()
+        || entries.len() > HISTORY.len()
+        || !entries
+            .iter()
+            .zip(HISTORY)
+            .all(|((version, name), expected)| *version == expected.0 && name == expected.1)
+    {
         return Err(UpgradeError::Unrecognized(
             "Unsupported Ruphish schema history".into(),
         ));
@@ -106,13 +112,6 @@ pub(super) async fn migrate(connection: &mut SqliteConnection) -> Result<(), Upg
     if version(connection).await? == 12 {
         sqlx::raw_sql(include_str!(
             "../../migrations/sqlite/13_learning_pages.sql"
-        ))
-        .execute(&mut *connection)
-        .await?;
-    }
-    if version(connection).await? == 13 {
-        sqlx::raw_sql(include_str!(
-            "../../migrations/sqlite/14_event_corrections.sql"
         ))
         .execute(&mut *connection)
         .await?;

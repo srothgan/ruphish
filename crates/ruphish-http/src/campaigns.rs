@@ -673,7 +673,7 @@ async fn recipient_history(
                 .iter()
                 .map(|e| {
                     Ok(reads::HistoryEvent {
-                        correction: e.correction.clone().ok_or_else(|| {
+                        record: e.record.clone().ok_or_else(|| {
                             error(ruphish_application::resources::Error::Internal)
                         })?,
                         id: e.id,

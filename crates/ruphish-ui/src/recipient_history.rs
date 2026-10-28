@@ -25,6 +25,12 @@ pub struct History {
     pub retry_older: bool,
 }
 impl History {
+    /// A confirmed write supersedes any history response begun before that write.
+    pub fn invalidate_reads(&mut self) {
+        self.active = None;
+        self.sequence += 1;
+    }
+
     /// Whether an initial history read has completed successfully.
     pub fn has_loaded(&self) -> bool {
         self.initialized
@@ -67,7 +73,7 @@ impl History {
         };
         Some((self.sequence, query))
     }
-    /// Merge an owned response while retaining older records and newer attempt state.
+    /// Replace revalidated events on refresh; append older pages and preserve attempt state.
     pub fn finish(&mut self, request: u64, result: Result<Value, String>) {
         let Some((active, older)) = self.active else {
             return;
@@ -99,6 +105,9 @@ impl History {
         let attempt_gap = !older && disjoint("attempts", "generation", &self.attempts);
         let event_gap = !older
             && (value["refresh_event_gap"] == true || disjoint("events", "id", &self.events));
+        if !older {
+            self.events.clear();
+        }
         for (key, id, map) in [
             ("attempts", "generation", &mut self.attempts),
             ("events", "id", &mut self.events),
@@ -106,8 +115,7 @@ impl History {
             for row in value[key].as_array().into_iter().flatten() {
                 if let Some(id) = row[id].as_i64() {
                     if key == "events" {
-                        let revision =
-                            |v: &Value| v["correction"]["revision"].as_i64().unwrap_or(0);
+                        let revision = |v: &Value| v["record"]["revision"].as_i64().unwrap_or(0);
                         if map
                             .get(&id)
                             .is_none_or(|old| revision(row) >= revision(old))
@@ -152,18 +160,34 @@ mod tests {
     use super::*;
     use serde_json::json;
     #[test]
-    fn refresh_cannot_undo_a_saved_correction_and_revalidates_older_rows() {
+    fn confirmed_writes_invalidate_old_reads_and_refresh_removes_deleted_rows() {
         let mut history = History::default();
         history.toggle();
         let (r, _) = history.begin(false).unwrap();
-        history.finish(r,Ok(json!({"events":[{"id":5,"correction":{"revision":2,"excluded":true}}],"next_event":5})));
+        history.finish(
+            r,
+            Ok(json!({"events":[{"id":5,"record":{"revision":0}}],"next_event":5})),
+        );
         let (r, _) = history.begin(true).unwrap();
-        history.finish(r,Ok(json!({"events":[{"id":1,"correction":{"revision":0,"excluded":false}}],"next_event":null})));
+        history.finish(
+            r,
+            Ok(json!({"events":[{"id":1,"record":{"revision":0}}],"next_event":null})),
+        );
+        let (stale, _) = history.begin(false).unwrap();
+        history.invalidate_reads();
+        history
+            .events
+            .insert(5, json!({"id":5,"record":{"revision":1,"edited":true}}));
+        history.finish(
+            stale,
+            Ok(json!({"events":[{"id":5,"record":{"revision":0}}]})),
+        );
+        assert_eq!(history.events[&5]["record"]["revision"], 1);
+        assert!(history.events.contains_key(&1));
         let (r, _) = history.begin(false).unwrap();
-        history.finish(r,Ok(json!({"events":[{"id":100},{"id":5,"correction":{"revision":1,"excluded":false}},{"id":1,"correction":{"revision":1,"excluded":true}}],"refresh_event_gap":true,"next_event":100})));
-        assert_eq!(history.events[&5]["correction"]["revision"], 2);
-        assert_eq!(history.events[&1]["correction"]["excluded"], true);
-        assert_eq!(history.next_event, Some(100));
+        history.finish(r, Ok(json!({"events":[{"id":5,"record":{"revision":1,"edited":true}}],"next_event":null})));
+        assert!(!history.events.contains_key(&1));
+        assert_eq!(history.events[&5]["record"]["edited"], true);
     }
     #[test]
     fn expansion_refresh_retry_and_older_pages_preserve_confirmed_history() {
@@ -182,7 +206,7 @@ mod tests {
         let (retry, _) = h.begin(true).unwrap();
         h.finish(retry,Ok(json!({"attempts":[{"generation":1,"state":"retry"}],"events":[{"id":1}],"next_event":null,"next_attempt":null})));
         let (refresh, _) = h.begin(false).unwrap();
-        h.finish(refresh,Ok(json!({"attempts":[{"generation":2,"state":"accepted"}],"events":[{"id":103},{"id":102}],"next_event":102,"next_attempt":2})));
+        h.finish(refresh,Ok(json!({"attempts":[{"generation":2,"state":"accepted"}],"events":[{"id":103},{"id":102},{"id":1}],"next_event":102,"next_attempt":2})));
         assert_eq!(h.attempts.len(), 2);
         assert_eq!(h.attempts[&2]["state"], "accepted");
         assert_eq!(h.events.len(), 3);
@@ -222,7 +246,7 @@ mod tests {
         let (r, _) = h.begin(false).unwrap();
         h.finish(
             r,
-            Ok(json!({"events":[{"id":105},{"id":104}],"next_event":104})),
+            Ok(json!({"events":[{"id":105},{"id":104},{"id":2},{"id":1}],"refresh_event_gap":true,"next_event":104})),
         );
         assert_eq!(h.next_event, Some(104));
         let (r, q) = h.begin(true).unwrap();

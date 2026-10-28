@@ -221,8 +221,8 @@ pub struct History {
 /// Sanitized historical event with optional normalized time.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HistoryEvent {
-    /// Original values, origin and correction state.
-    pub correction: ruphish_domain::event_edit::Record,
+    /// Current event values, origin and edit state.
+    pub record: ruphish_domain::event_edit::Record,
     /// Event identity.
     pub id: i64,
     /// Preserved timestamp.
@@ -296,8 +296,8 @@ pub struct ResultRecipient {
 /// One effective observation; no participant-entered values.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResultEvent {
-    /// Latest applied correction revision; zero means original evidence.
-    pub revision: i64,
+    /// Whether an operator has changed the event values since creation.
+    pub edited: bool,
     /// Event identity.
     pub id: i64,
     /// Recipient when resolvable.

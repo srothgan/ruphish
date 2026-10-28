@@ -207,14 +207,14 @@ async fn aggregate(
             WHERE c.user_id=(SELECT owner FROM parameters) AND ((SELECT campaign FROM parameters) IS NULL OR c.id=(SELECT campaign FROM parameters))
         ), accepted AS (
             SELECT i.*,min((CASE WHEN e.time>='1000' THEN floor(extract(epoch FROM e.time::timestamptz))::bigint END)) AS first_sent
-            FROM identities i JOIN effective_event_history e ON e.campaign_id=i.campaign_id AND e.recipient_id=i.id
+            FROM identities i JOIN event_history e ON e.campaign_id=i.campaign_id AND e.recipient_id=i.id
             WHERE e.message='Email Sent' AND (CASE WHEN e.time>='1000' THEN floor(extract(epoch FROM e.time::timestamptz))::bigint END)<=(SELECT now_time FROM parameters)
             GROUP BY i.id,i.campaign_id,i.email
         ), cohort AS (
             SELECT * FROM accepted WHERE ((SELECT since FROM parameters) IS NULL OR first_sent>=(SELECT since FROM parameters))
         ), outcomes AS (
             SELECT c.id, {flags}
-            FROM cohort c LEFT JOIN effective_event_history e ON e.campaign_id=c.campaign_id AND e.recipient_id=c.id
+            FROM cohort c LEFT JOIN event_history e ON e.campaign_id=c.campaign_id AND e.recipient_id=c.id
                 AND (CASE WHEN e.time>='1000' THEN floor(extract(epoch FROM e.time::timestamptz))::bigint END)<=(SELECT now_time FROM parameters)
             GROUP BY c.id
         )

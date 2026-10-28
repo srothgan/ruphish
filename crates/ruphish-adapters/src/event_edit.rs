@@ -43,6 +43,7 @@ pub(crate) fn sql(statement: &str, postgres: bool) -> String {
 macro_rules! repository {
     ($connection:ty, $postgres:expr) => {
         use ruphish_application::{auth::Identity, event_edit::*, resources::Error};
+        use ruphish_domain::events::RecordedKind;
         use sqlx::Row;
         macro_rules! query {
             ($sql:expr) => {
@@ -84,7 +85,7 @@ macro_rules! repository {
             id: i64,
         ) -> Result<Record, Error> {
             let row = query!(
-                "SELECT * FROM ruphish_event_records WHERE campaign_id=? AND recipient_id=? AND id=?"
+                "SELECT * FROM event_history WHERE campaign_id=? AND recipient_id=? AND id=?"
             )
             .bind(campaign)
             .bind(recipient)
@@ -103,130 +104,73 @@ macro_rules! repository {
                 id,
                 source: text("source")?,
                 revision: row.try_get("revision").map_err(storage)?,
-                excluded: row.try_get::<i64, _>("excluded").map_err(storage)? != 0,
-                original: crate::event_edit::fact(text("time")?, text("message")?, &text("details")?),
-                current: crate::event_edit::fact(
-                    text("effective_time")?,
-                    text("effective_message")?,
-                    &text("effective_details")?,
-                ),
+                edited: row.try_get::<bool, _>("edited").map_err(storage)?,
+                current: crate::event_edit::fact(text("time")?, text("message")?, &text("details")?),
             })
         }
         #[async_trait::async_trait]
         impl Repository for super::campaigns::Campaigns {
-            async fn inspect_event(
-                &self,
-                caller: Identity,
-                campaign: i64,
-                recipient: i64,
-                event: i64,
-                before: Option<i64>,
-            ) -> Result<Inspection, Error> {
-                let mut tx = snapshot(&self.pool).await?;
-                authorize(&mut tx, caller, campaign, recipient, false).await?;
-                let record = load(&mut tx, campaign, recipient, event).await?;
-                let mut rows = query!("SELECT revision,actor_id,performed_at,action,before_state,after_state FROM ruphish_event_changes WHERE event_id=? AND revision<? ORDER BY revision DESC LIMIT 51")
-                            .bind(event).bind(before.unwrap_or(i64::MAX)).fetch_all(&mut *tx).await.map_err(storage)?;
-                let more = rows.len() > 50;
-                rows.truncate(50);
-                let mut audit = Vec::new();
-                for row in rows {
-                    let before: Option<String> = row.try_get("before_state").map_err(storage)?;
-                    let after: String = row.try_get("after_state").map_err(storage)?;
-                    let action: String = row.try_get("action").map_err(storage)?;
-                    audit.push(Audit {
-                        revision: row.try_get("revision").map_err(storage)?,
-                        actor: row.try_get("actor_id").map_err(storage)?,
-                        performed_at: row.try_get("performed_at").map_err(storage)?,
-                        action: serde_json::from_str(&action).map_err(|_| Error::Internal)?,
-                        before: before
-                            .map(|v| serde_json::from_str(&v))
-                            .transpose()
-                            .map_err(|_| Error::Internal)?,
-                        after: serde_json::from_str(&after).map_err(|_| Error::Internal)?,
-                    });
-                }
-                tx.commit().await.map_err(storage)?;
-                Ok(Inspection {
-                    record,
-                    next_before: audit.last().map(|a| a.revision).filter(|_| more),
-                    audit,
-                })
-            }
             async fn change_event(
-                &self,
-                caller: Identity,
-                actor: Identity,
-                campaign: i64,
-                recipient: i64,
-                change: Change,
-                now: i64,
-            ) -> Result<Record, Error> {
+                &self, caller: Identity, campaign: i64, recipient: i64, change: Change, now: i64,
+            ) -> Result<Outcome, Error> {
                 let mut tx = begin(&self.pool).await?;
                 let (start, end) = authorize(&mut tx, caller, campaign, recipient, true).await?;
-                if actor.id != caller.id {
-                    super::resources::authorize(&mut tx, actor, false)
-                        .await?
-                        .require("modify_system")?;
-                }
-                let request =
-                    serde_json::to_string(&(campaign, recipient, &change)).map_err(|_| Error::Internal)?;
-                if let Some(row) = query!("SELECT request_text,after_state,owner_id FROM ruphish_event_changes WHERE actor_id=? AND request_id=?")
-                            .bind(actor.id).bind(&change.request_id).fetch_optional(&mut *tx).await.map_err(storage)? {
-                            if row.try_get::<String,_>("request_text").map_err(storage)? != request || row.try_get::<i64,_>("owner_id").map_err(storage)? != caller.id { return Err(Error::Changed); }
-                            return serde_json::from_str(&row.try_get::<String,_>("after_state").map_err(storage)?).map_err(|_|Error::Internal);
-                        }
                 let value = validate(&change, start, end, now).map_err(|e| Error::Invalid(e.into()))?;
-                let before = if let Some(id) = change.event_id {
-                    let record = load(&mut tx, campaign, recipient, id).await?;
-                    if !record.editable() {
-                        return Err(Error::Invalid("This event is read-only".into()));
+                if change.action == Action::Add {
+                    let fact = value.ok_or(Error::Internal)?;
+                    if let Some(id) = query!("SELECT id FROM events WHERE campaign_id=? AND recipient_id=? AND create_key=?")
+                        .bind(campaign).bind(recipient).bind(&change.request_id).fetch_optional(&mut *tx).await.map_err(storage)? {
+                        let record = load(&mut tx, campaign, recipient, id.try_get("id").map_err(storage)?).await?;
+                        if record.revision != 0 || !record.current.same_values(&fact) { return Err(Error::Changed); }
+                        return Ok(Outcome { id: record.id, event: Some(record) });
                     }
-                    if record.revision != change.revision {
-                        return Err(Error::Changed);
-                    }
-                    Some(record)
-                } else {
-                    None
-                };
-                let mut after = if let Some(record) = &before {
-                    record.clone()
-                } else {
-                    let fact = value.clone().ok_or(Error::Internal)?;
-                    let id = insert(&mut tx, campaign, recipient, &fact).await?;
-                    Record {
-                        id,
-                        source: "operator".into(),
-                        revision: 0,
-                        original: fact.clone(),
-                        current: fact,
-                        excluded: false,
-                    }
-                };
-                match change.action {
-                    Action::Add => (),
-                    Action::Edit => {
-                        after.current = value.ok_or(Error::Internal)?;
-                    }
-                    Action::Exclude => after.excluded = true,
-                    Action::Restore => {
-                        after.current = after.original.clone();
-                        after.excluded = false;
-                    }
+                    let id = insert(&mut tx, campaign, recipient, &fact, &change.request_id).await?;
+                    let record = Record { id, source: "operator".into(), revision: 0, edited: false, current: fact };
+                    commit(tx).await?;
+                    return Ok(Outcome { id, event: Some(record) });
                 }
-                after.revision = after.revision.checked_add(1).ok_or(Error::Internal)?;
-                let before_json = before
-                    .map(|v| serde_json::to_string(&v))
-                    .transpose()
-                    .map_err(|_| Error::Internal)?;
-                let after_json = serde_json::to_string(&after).map_err(|_| Error::Internal)?;
-                let action = serde_json::to_string(&change.action).map_err(|_| Error::Internal)?;
-                let details = crate::event_edit::details(&after.current)?;
-                query!("INSERT INTO ruphish_event_changes(event_id,revision,owner_id,campaign_id,recipient_id,actor_id,request_id,request_text,action,performed_at,before_state,after_state,time,message,details,excluded) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-                            .bind(after.id).bind(after.revision).bind(caller.id).bind(campaign).bind(recipient).bind(actor.id).bind(&change.request_id).bind(request).bind(action).bind(now).bind(before_json).bind(after_json)
-                            .bind(&after.current.time).bind(after.current.kind.label()).bind(details).bind(i64::from(after.excluded)).execute(&mut *tx).await.map_err(storage)?;
+                let id = change.event_id.ok_or(Error::Internal)?;
+                let mut record = load(&mut tx, campaign, recipient, id).await?;
+                if !record.editable() { return Err(Error::Invalid("This event is read-only".into())); }
+                if record.revision != change.revision {
+                    // An acknowledgement may have been lost; matching the requested next
+                    // version is safe to acknowledge without writing anything again.
+                    if change.action == Action::Edit && change.revision.checked_add(1) == Some(record.revision)
+                        && value.as_ref().is_some_and(|v| record.current.same_values(v)) {
+                        return Ok(Outcome { id, event: Some(record) });
+                    }
+                    return Err(Error::Changed);
+                }
+                if change.action == Action::Delete {
+                    query!("DELETE FROM ruphish_webhook_attempts WHERE job_id IN (SELECT id FROM ruphish_webhook_jobs WHERE event_id=?)")
+                        .bind(id).execute(&mut *tx).await.map_err(storage)?;
+                    query!("DELETE FROM ruphish_webhook_jobs WHERE event_id=?")
+                        .bind(id).execute(&mut *tx).await.map_err(storage)?;
+                    query!("DELETE FROM ruphish_event_receipts WHERE event_id=?")
+                        .bind(id).execute(&mut *tx).await.map_err(storage)?;
+                    query!("DELETE FROM events WHERE id=? AND campaign_id=? AND recipient_id=?")
+                        .bind(id).bind(campaign).bind(recipient).execute(&mut *tx).await.map_err(storage)?;
+                    commit(tx).await?;
+                    return Ok(Outcome { id, event: None });
+                }
+                let fact = value.ok_or(Error::Internal)?;
+                if record.current.same_values(&fact) { return Ok(Outcome { id, event: Some(record) }); }
+                let revision = record.revision.checked_add(1).ok_or(Error::Internal)?;
+                let RecordedKind::Known(kind) = fact.kind else { return Err(Error::Internal); };
+                let metadata = crate::event_edit::details(&fact)?;
+                query!("UPDATE events SET time=?,kind=?,metadata=?,edited=TRUE,revision=? WHERE id=? AND campaign_id=? AND recipient_id=?")
+                    .bind(&fact.time).bind(kind.key()).bind(metadata).bind(revision).bind(id).bind(campaign).bind(recipient)
+                    .execute(&mut *tx).await.map_err(storage)?;
+                // Do not send edited values through an as-yet-undelivered original job.
+                query!("DELETE FROM ruphish_webhook_attempts WHERE job_id IN (SELECT id FROM ruphish_webhook_jobs WHERE event_id=?)")
+                    .bind(id).execute(&mut *tx).await.map_err(storage)?;
+                query!("DELETE FROM ruphish_webhook_jobs WHERE event_id=?")
+                    .bind(id).execute(&mut *tx).await.map_err(storage)?;
+                record.current = fact;
+                record.revision = revision;
+                record.edited = true;
                 commit(tx).await?;
-                Ok(after)
+                Ok(Outcome { id, event: Some(record) })
             }
         }
     };

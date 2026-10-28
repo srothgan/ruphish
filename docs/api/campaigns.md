@@ -26,8 +26,7 @@ A campaign is an execution with a fixed audience and selected resources. Use [ca
 | POST | `/api/campaigns/{id}/complete` | Complete a campaign |
 | GET | `/api/campaigns/{id}/delivery` | Delivery state and attempts |
 | GET | `/api/campaigns/{id}/recipients/{result}/history` | Recipient attempts and individual events, including original/corrected values and exclusions |
-| POST | `/api/campaigns/{id}/recipients/{result}/events` | [Audited event correction](analysis-and-exports.md#event-corrections) |
-| GET | `/api/campaigns/{id}/recipients/{result}/events/{event}` | Current event and bounded correction audit |
+| POST | `/api/campaigns/{id}/recipients/{result}/events` | [Add, edit or delete an event](analysis-and-exports.md#event-corrections) |
 | POST | `/api/campaigns/{id}/delivery/{result}` | Resolve or retry a delivery outcome |
 
 `/complete` accepts POST only; GET and HEAD return `405` without changing campaign state. Requests in this route family have a 1 MiB body limit.

@@ -30,7 +30,7 @@ CREATE VIEW ruphish_domain_policy AS
       THEN d.checked_at+s.verification_validity_seconds ELSE NULL END AS expires_at
  FROM ruphish_domains d CROSS JOIN ruphish_settings s WHERE s.id=1;
 DROP TRIGGER ruphish_event_insert;
-CREATE TRIGGER ruphish_event_insert AFTER INSERT ON events BEGIN
+CREATE TRIGGER ruphish_event_insert AFTER INSERT ON events WHEN NEW.source<>'operator' BEGIN
  INSERT INTO ruphish_webhook_jobs(webhook_id,revision,event_id)
  SELECT w.id,s.revision,NEW.id FROM webhooks w JOIN ruphish_webhook_state s ON s.webhook_id=w.id
  WHERE w.is_active=1 AND (SELECT webhooks_enabled FROM ruphish_settings WHERE id=1)=1;

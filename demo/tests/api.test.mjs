@@ -40,33 +40,52 @@ test('source filters separate participant observations from delivery in the shar
     }
 });
 
-test('event corrections keep originals, reject stale revisions and change only effective results', async () => {
-    const data=dataset(now), f=setup(new Map(),data); await f.login();
-    const c=data.campaigns.find(c=>c.header.status==='Completed');
-    const r=c.results.find(r=>r.events.some(e=>e.kind==='Clicked Link'));
-    const e=r.events.find(e=>e.kind==='Clicked Link');
-    const path=`/api/campaigns/${c.header.id}/recipients/${r.id}/events`;
-    const body={request_id:'demo-event-correction-key',event_id:e.id,revision:0,action:'exclude',value:null};
-    const before=(await f.request(`/api/campaigns/${c.header.id}/results`)).value;
-    const saved=await f.request(path,'POST',body);
-    assert.equal(saved.status,200); assert.equal(saved.value.excluded,true); assert.equal(saved.value.source,e.source);
-    assert.deepEqual((await f.request(path,'POST',body)).value,saved.value);
-    assert.equal((await f.request(path,'POST',{...body,request_id:'demo-event-conflict-key'})).status,412);
-    const after=(await f.request(`/api/campaigns/${c.header.id}/results`)).value;
-    assert.equal(after.totals.clicked,before.totals.clicked-1);
-    const audit=(await f.request(`${path}/${e.id}`)).value;
-    assert.equal(audit.audit.length,1); assert.equal(audit.record.original.kind.value,'link_clicked');
-    const restored=await f.request(path,'POST',{...body,request_id:'demo-event-restore-key',revision:1,action:'restore'});
-    assert.equal(restored.value.excluded,false);
-    const add={request_id:'demo-event-add-key',event_id:null,revision:0,action:'add',value:{time:e.time,kind:'email_reported',presence:{username_present:null,password_present:null}}};
-    const added=await f.request(path,'POST',add); assert.equal(added.status,200); assert.equal(added.value.source,'operator');
-    assert.deepEqual((await f.request(path,'POST',add)).value,added.value);
-    assert.equal((await f.request(path,'POST',{...add,request_id:'demo-event-private-key',value:{...add.value,presence:{password:'forbidden'}}})).status,400);
-    const edit={request_id:'demo-event-type-key',event_id:added.value.id,revision:1,action:'edit',value:{time:e.time,kind:'link_clicked',presence:{}}};
-    assert.equal((await f.request(path,'POST',edit)).status,200);
-    const effective=(await f.request(`/api/campaigns/${c.header.id}/results?source=operator`)).value.events;
-    assert.equal(effective.find(e=>e.id===added.value.id).password_present,null);
-    assert.equal(c.header.status,'Completed');
+test('event rows distinguish creation from editing, reject stale writes and delete directly', async () => {
+    const data = dataset(now), f = setup(new Map(), data); await f.login();
+    const c = data.campaigns.find(c => c.header.status === 'Completed');
+    const r = c.results.find(r => r.events.some(e => e.kind === 'Clicked Link'));
+    const e = r.events.find(e => e.kind === 'Clicked Link');
+    const path = `/api/campaigns/${c.header.id}/recipients/${r.id}/events`;
+    const before = (await f.request(`/api/campaigns/${c.header.id}/results`)).value;
+    const body = { request_id: 'demo-event-delete-key', event_id: e.id, revision: 0, action: 'delete', value: null };
+    const deleted = await f.request(path, 'POST', body);
+    assert.equal(deleted.status, 200);
+    assert.deepEqual(deleted.value, { id: e.id, event: null });
+    const after = (await f.request(`/api/campaigns/${c.header.id}/results`)).value;
+    assert.equal(after.totals.clicked, before.totals.clicked - 1);
+    assert.equal((await f.request(`${path}/${e.id}`)).status, 404);
+    const history = (await f.request(path.replace('/events', '/history'))).value;
+    assert.ok(history.events.every(row => row.id !== e.id));
+    const add = { request_id: 'demo-event-add-key', event_id: null, revision: 0, action: 'add', value: { time: e.time, kind: 'email_reported', presence: {} } };
+    const added = await f.request(path, 'POST', add);
+    assert.equal(added.status, 200);
+    assert.equal(added.value.event.source, 'operator');
+    assert.equal(added.value.event.edited, false);
+    assert.equal(added.value.event.revision, 0);
+    assert.deepEqual((await f.request(path, 'POST', add)).value, added.value);
+    assert.equal((await f.request(path, 'POST', { ...add, value: { ...add.value, kind: 'email_opened' } })).status, 412);
+    assert.equal((await f.request(path, 'POST', { ...add, request_id: 'demo-event-private-key', value: { ...add.value, presence: { password: 'forbidden' } } })).status, 400);
+    const edit = { request_id: 'demo-event-type-key', event_id: added.value.id, revision: 0, action: 'edit', value: add.value };
+    assert.deepEqual((await f.request(path, 'POST', edit)).value, added.value, 'No-op keeps the creation unedited');
+    edit.value = { time: e.time, kind: 'form_submitted', presence: { password_present: false } };
+    const changed = await f.request(path, 'POST', edit);
+    assert.equal(changed.status, 200);
+    assert.equal(changed.value.event.edited, true);
+    assert.equal(changed.value.event.source, 'operator');
+    assert.equal(changed.value.event.revision, 1);
+    assert.deepEqual((await f.request(path, 'POST', edit)).value, changed.value);
+    assert.equal((await f.request(path, 'POST', { ...edit, value: add.value })).status, 412);
+    const reverted = await f.request(path, 'POST', { ...edit, revision: 1, value: add.value });
+    assert.equal(reverted.value.event.edited, true, 'Editing back remains marked edited');
+    const results = (await f.request(`/api/campaigns/${c.header.id}/results?source=operator`)).value.events;
+    assert.equal(results.find(e => e.id === added.value.id).password_present, null);
+    assert.equal(results.find(e => e.id === added.value.id).edited, true);
+    assert.equal(c.header.status, 'Completed');
+    const removeAdded = { ...body, event_id: added.value.id, revision: 2 };
+    assert.equal((await f.request(path, 'POST', removeAdded)).status, 200);
+    const replacement = await f.request(path, 'POST', { ...add, request_id: 'demo-event-new-identity' });
+    assert.ok(replacement.value.id > added.value.id, 'Deleted identities cannot be assigned to new events');
+    assert.equal((await f.request(path, 'POST', removeAdded)).status, 404);
 });
 
 test('configured resources and the demo starter picker use the existing authored starters', async () => {
@@ -234,7 +253,7 @@ test('event downloads share exclusive time bounds and retain the event schema wh
         return (await f.request('/api/import/group/review', 'POST', { content: await response.text(), columns: ['Email', 'Event', 'Time (UTC)', 'Password present'] })).value;
     };
     const before = await download(`until=${at}`), during = await download(`from=${at}&until=${at + 1}`);
-    assert.deepEqual(before.columns, ['Event ID', 'Recipient ID', 'Email', 'Time (UTC)', 'Event', 'Source', 'Password present', 'Correction revision']);
+    assert.deepEqual(before.columns, ['Event ID', 'Recipient ID', 'Email', 'Time (UTC)', 'Event', 'Source', 'Password present', 'Edited']);
     assert.deepEqual(before.targets, []);
     assert.deepEqual(during.targets, [{ email: 'person001@example.test', first_name: 'Email Sent', last_name: firstEvent.time, position: '' }]);
     const analysis = await f.request(`/api/campaigns/3/results?recipient=30001&from=${at}&until=${at + 1}`);

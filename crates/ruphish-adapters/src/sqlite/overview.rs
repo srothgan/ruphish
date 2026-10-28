@@ -199,14 +199,14 @@ async fn aggregate(
             WHERE c.user_id=?1 AND (?4 IS NULL OR c.id=?4)
         ), accepted AS (
             SELECT i.*,min(unixepoch(e.time)) AS first_sent
-            FROM identities i JOIN effective_event_history e ON e.campaign_id=i.campaign_id AND e.recipient_id=i.id
+            FROM identities i JOIN event_history e ON e.campaign_id=i.campaign_id AND e.recipient_id=i.id
             WHERE e.message='Email Sent' AND unixepoch(e.time)<=?3
             GROUP BY i.id
         ), cohort AS (
             SELECT * FROM accepted WHERE (?2 IS NULL OR first_sent>=?2)
         ), outcomes AS (
             SELECT c.id, {flags}
-            FROM cohort c LEFT JOIN effective_event_history e ON e.campaign_id=c.campaign_id AND e.recipient_id=c.id
+            FROM cohort c LEFT JOIN event_history e ON e.campaign_id=c.campaign_id AND e.recipient_id=c.id
                 AND unixepoch(e.time)<=?3
             GROUP BY c.id
         )

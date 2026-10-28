@@ -309,22 +309,15 @@ async fn validate_schema(
         .execute(&mut expected)
         .await?;
     }
-    if auth_schema::version(connection).await? >= 14 {
-        sqlx::raw_sql(include_str!(
-            "../../migrations/sqlite/14_event_corrections.sql"
-        ))
-        .execute(&mut expected)
-        .await?;
-    }
-    if auth_schema::version(connection).await? >= 14 {
-        const OBJECTS: &str = "SELECT name,sql FROM sqlite_master WHERE name IN ('ruphish_event_changes','ruphish_event_records','effective_event_history','ruphish_event_insert','ruphish_event_changes_campaign') ORDER BY name";
+    if auth_schema::version(connection).await? >= 11 {
+        const OBJECTS: &str = "SELECT name,sql FROM sqlite_master WHERE name IN ('event_history','ruphish_event_insert','ruphish_event_delete','events_recipient_identity','events_create_key') ORDER BY name";
         let actual: Vec<(String, String)> =
             sqlx::query_as(OBJECTS).fetch_all(&mut *connection).await?;
         let definitions: Vec<(String, String)> =
             sqlx::query_as(OBJECTS).fetch_all(&mut expected).await?;
         if actual != definitions {
             return Err(UpgradeError::Unrecognized(
-                "event correction schema differs from its migration".into(),
+                "event schema differs from its migration".into(),
             ));
         }
     }

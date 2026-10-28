@@ -30,7 +30,7 @@ fn get(client: &reqwest::blocking::Client, base: &str, path: &str) -> Value {
 }
 
 #[test]
-fn event_corrections_enforce_csrf_scope_closed_metadata_and_replay_after_restart() {
+fn event_edits_enforce_csrf_scope_closed_metadata_and_replay_after_restart() {
     let directory = workspace();
     write_config(directory.path(), &configuration());
     let mut process = Process::start(directory.path(), "admin");
@@ -75,14 +75,14 @@ fn event_corrections_enforce_csrf_scope_closed_metadata_and_replay_after_restart
         json!({"request_id":"invalid-participant-value","event_id":901,"revision":0,"action":"edit","value":{"kind":"form_submitted","time":"2026-06-02T00:00:00Z","presence":{"password":"forbidden-participant-value"}}}),
         json!({"request_id":"invalid-lifecycle-event","event_id":901,"revision":0,"action":"edit","value":{"kind":"email_sent","time":"2026-06-02T00:00:00Z","presence":{}}}),
         json!({"request_id":"invalid-presence-value","event_id":901,"revision":0,"action":"edit","value":{"kind":"form_submitted","time":"2026-06-02T00:00:00Z","presence":{"password_present":"true"}}}),
-        json!({"request_id":"readonly-smtp-event","event_id":902,"revision":0,"action":"exclude","value":null}),
+        json!({"request_id":"readonly-smtp-event","event_id":902,"revision":0,"action":"delete","value":null}),
     ] {
         assert_eq!(
             request(&api, &base, reqwest::Method::POST, path, Some(&invalid)).status(),
             400
         );
     }
-    let duplicate = r#"{"request_id":"duplicate-json-fields","event_id":901,"revision":0,"revision":1,"action":"exclude","value":null}"#;
+    let duplicate = r#"{"request_id":"duplicate-json-fields","event_id":901,"revision":0,"revision":1,"action":"delete","value":null}"#;
     assert_eq!(
         api.post(format!("{base}{path}"))
             .bearer_auth("synthetic-bootstrap-token")
@@ -103,6 +103,7 @@ fn event_corrections_enforce_csrf_scope_closed_metadata_and_replay_after_restart
     assert_eq!(saved.status(), 200, "{}", saved.text().unwrap());
     let mut stale = change.clone();
     stale["request_id"] = json!("http-stale-event-revision");
+    stale["value"]["time"] = json!("2026-06-04T00:00:00Z");
     assert_eq!(
         request(&api, &base, reqwest::Method::POST, path, Some(&stale)).status(),
         412
@@ -122,10 +123,11 @@ fn event_corrections_enforce_csrf_scope_closed_metadata_and_replay_after_restart
         .unwrap();
     assert_eq!(event["time"], "2026-06-02T00:00:00Z");
     assert_eq!(
-        event["correction"]["original"]["kind"]["value"],
-        "link_clicked"
+        event["record"]["current"]["kind"]["value"],
+        "form_submitted"
     );
-    assert_eq!(event["correction"]["source"], "public");
+    assert_eq!(event["record"]["source"], "public");
+    assert_eq!(event["record"]["edited"], true);
     let results = get(&api, &base, "/api/campaigns/91/results");
     assert_eq!(results["totals"]["clicked"], 0);
     assert_eq!(results["totals"]["submitted"], 1);
@@ -148,14 +150,20 @@ fn event_corrections_enforce_csrf_scope_closed_metadata_and_replay_after_restart
     base = format!("http://{}", process.ready()["admin"].as_str().unwrap());
     let replay = request(&api, &base, reqwest::Method::POST, path, Some(&change));
     assert_eq!(replay.status(), 200);
-    let inspection = get(&api, &base, "/api/campaigns/91/recipients/91/events/901");
-    assert_eq!(inspection["audit"].as_array().unwrap().len(), 1);
-    assert_eq!(inspection["audit"][0]["actor"], 1);
-    assert_eq!(inspection["record"]["revision"], 1);
-    assert!(
-        !inspection
-            .to_string()
-            .contains("forbidden-participant-value")
+    let saved: Value = replay.json().unwrap();
+    assert_eq!(saved["event"]["revision"], 1);
+    assert_eq!(saved["event"]["edited"], true);
+    assert!(!saved.to_string().contains("forbidden-participant-value"));
+    assert_eq!(
+        request(
+            &api,
+            &base,
+            reqwest::Method::GET,
+            "/api/campaigns/91/recipients/91/events/901",
+            None
+        )
+        .status(),
+        404
     );
     database(
         directory.path(),
@@ -172,7 +180,7 @@ fn event_corrections_enforce_csrf_scope_closed_metadata_and_replay_after_restart
         200
     );
     let impersonated = super::auth_process::bootstrap(&browser, &base);
-    let other_change = json!({"request_id":"impersonated-correction-key","event_id":903,"revision":0,"action":"exclude","value":null});
+    let other_change = json!({"request_id":"impersonated-correction-key","event_id":903,"revision":0,"action":"delete","value":null});
     let corrected = browser
         .post(format!("{base}/api/campaigns/92/recipients/92/events"))
         .header("origin", &base)
@@ -181,17 +189,14 @@ fn event_corrections_enforce_csrf_scope_closed_metadata_and_replay_after_restart
         .send()
         .unwrap();
     assert_eq!(corrected.status(), 200, "{}", corrected.text().unwrap());
-    let audit: Value = api
-        .get(format!("{base}/api/campaigns/92/recipients/92/events/903"))
+    let history: Value = api
+        .get(format!("{base}/api/campaigns/92/recipients/92/history"))
         .bearer_auth("other-event-key")
         .send()
         .unwrap()
         .json()
         .unwrap();
-    assert_eq!(
-        audit["audit"][0]["actor"], 1,
-        "Audit identifies the real operator during impersonation"
-    );
+    assert!(history["events"].as_array().unwrap().is_empty());
     database(
         directory.path(),
         "DELETE FROM role_permissions WHERE permission_id=(SELECT id FROM permissions WHERE slug='modify_objects');",
@@ -201,8 +206,8 @@ fn event_corrections_enforce_csrf_scope_closed_metadata_and_replay_after_restart
         403
     );
     assert_eq!(
-        get(&api, &base, "/api/campaigns/91/recipients/91/events/901")["record"]["revision"],
-        1
+        get(&api, &base, "/api/campaigns/91/results")["events"][0]["edited"],
+        true
     );
     database(
         directory.path(),

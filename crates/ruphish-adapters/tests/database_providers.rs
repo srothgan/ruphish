@@ -16,38 +16,45 @@ use sqlx::{
 };
 use std::path::PathBuf;
 
-#[path = "support/event_corrections.rs"]
-mod event_corrections;
+#[path = "support/event_edits.rs"]
+mod event_edits;
 
 #[tokio::test]
 #[ignore = "Requires canonical MySQL fixture"]
-async fn mysql_event_corrections_preserve_history_and_reopen() {
+async fn mysql_event_edits_preserve_history_and_reopen() {
     let (mut inspect, config) = fixture().await;
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
         .unwrap();
-    sqlx::raw_sql(event_corrections::SEED)
+    sqlx::raw_sql(event_edits::SEED)
         .execute(&mut inspect)
         .await
         .unwrap();
     db.close().await;
-    sqlx::raw_sql("DROP VIEW effective_event_history; DROP VIEW ruphish_event_records; DROP TABLE ruphish_event_changes; DELETE FROM _sqlx_migrations WHERE version=8;").execute(&mut inspect).await.unwrap();
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
         .unwrap();
-    event_corrections::contract(&db).await;
+    event_edits::contract(&db).await;
     db.close().await;
     let reopened = database::open(Config::MySql(config.clone()), Policy::default())
         .await
         .unwrap();
+    let history = reopened
+        .campaigns()
+        .recipient_history(event_edits::OWNER, 10, 11, None, None)
+        .await
+        .unwrap();
+    assert!(!history.events.iter().any(|e| e.id == 101));
     assert!(
-        reopened
-            .campaigns()
-            .inspect_event(event_corrections::OWNER, 10, 11, 101, None)
-            .await
+        history
+            .events
+            .iter()
+            .find(|e| e.id == 102)
             .unwrap()
             .record
-            .excluded
+            .as_ref()
+            .unwrap()
+            .edited
     );
     reopened.close().await;
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
@@ -61,13 +68,13 @@ async fn mysql_event_corrections_preserve_history_and_reopen() {
 
 #[tokio::test]
 #[ignore = "Requires canonical PostgreSQL fixture"]
-async fn postgres_event_corrections_preserve_history_and_reopen() {
+async fn postgres_event_edits_preserve_history_and_reopen() {
     let (mut admin, config) = postgres_fixture().await;
     let db = database::open(Config::Postgres(config.clone()), Policy::default())
         .await
         .unwrap();
     let mut inspect = postgres_inspect(&config).await;
-    sqlx::raw_sql(event_corrections::SEED)
+    sqlx::raw_sql(event_edits::SEED)
         .execute(&mut inspect)
         .await
         .unwrap();
@@ -76,23 +83,30 @@ async fn postgres_event_corrections_preserve_history_and_reopen() {
         .await
         .unwrap();
     db.close().await;
-    sqlx::raw_sql("DROP VIEW effective_event_history; DROP VIEW ruphish_event_records; DROP TABLE ruphish_event_changes; DELETE FROM _sqlx_migrations WHERE version=8;").execute(&mut inspect).await.unwrap();
     let db = database::open(Config::Postgres(config.clone()), Policy::default())
         .await
         .unwrap();
-    event_corrections::contract(&db).await;
+    event_edits::contract(&db).await;
     db.close().await;
     let reopened = database::open(Config::Postgres(config.clone()), Policy::default())
         .await
         .unwrap();
+    let history = reopened
+        .campaigns()
+        .recipient_history(event_edits::OWNER, 10, 11, None, None)
+        .await
+        .unwrap();
+    assert!(!history.events.iter().any(|e| e.id == 101));
     assert!(
-        reopened
-            .campaigns()
-            .inspect_event(event_corrections::OWNER, 10, 11, 101, None)
-            .await
+        history
+            .events
+            .iter()
+            .find(|e| e.id == 102)
             .unwrap()
             .record
-            .excluded
+            .as_ref()
+            .unwrap()
+            .edited
     );
     reopened.close().await;
     inspect.close().await.unwrap();
@@ -1333,7 +1347,6 @@ async fn sqlite_provider_contract() {
     )
     .await
     .unwrap();
-    sqlx::raw_sql("DROP VIEW effective_event_history; DROP VIEW ruphish_event_records; DROP TABLE ruphish_event_changes; DROP TRIGGER ruphish_event_insert; DELETE FROM ruphish_schema WHERE version=14;").execute(&mut previous).await.unwrap();
     let prior_trigger = include_str!("../migrations/sqlite/12_settings.sql")
         .split_once("CREATE TRIGGER ruphish_event_insert")
         .unwrap()
@@ -1412,7 +1425,6 @@ async fn mysql_provider_contract() {
     peer.close().await;
     db.close().await;
     // Reconstruct the immediately preceding schema, then verify its populated upgrade.
-    sqlx::raw_sql("DROP VIEW effective_event_history; DROP VIEW ruphish_event_records; DROP TABLE ruphish_event_changes; DELETE FROM _sqlx_migrations WHERE version=8; DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM _sqlx_migrations WHERE version=7; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut inspector).await.unwrap();
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
         .unwrap();
@@ -2199,8 +2211,7 @@ async fn postgres_provider_contract() {
     peer.close().await;
     db.close().await;
     // Reconstruct the immediately preceding schema, then verify its populated upgrade.
-    let mut previous = postgres_inspect(&config).await;
-    sqlx::raw_sql("DROP VIEW effective_event_history; DROP VIEW ruphish_event_records; DROP TABLE ruphish_event_changes; DELETE FROM _sqlx_migrations WHERE version=8; DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM _sqlx_migrations WHERE version=7; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut previous).await.unwrap();
+    let previous = postgres_inspect(&config).await;
     previous.close().await.unwrap();
     let db = database::open(Config::Postgres(config.clone()), Policy::default())
         .await

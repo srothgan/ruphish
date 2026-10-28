@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-Ruphish separates individual effective events from summary progression. Original observations remain available in the [correction history](correcting-events.md). That distinction explains why a summary can show an opened recipient even when their timeline has no separate open event.
+Ruphish separates individual effective events from summary progression. [Event editing](correcting-events.md) changes individual event rows. That distinction explains why a summary can show an opened recipient even when their timeline has no separate open event.
 
 | Observation | What was recorded |
 | --- | --- |
@@ -17,7 +17,7 @@ Ruphish separates individual effective events from summary progression. Original
 
 ## Counts and progression
 
-Effective event totals include repeated observations and operator additions, apply corrections, and omit excluded events. Unique counts include each attributable recipient once for the selected event type. Progression counts infer that a clicked or submitted recipient has reached the opened stage, and a submitted recipient has reached the clicked stage. Acceptance and reports are never inferred.
+Effective event totals include repeated observations and operator additions, use edited values, and omit deleted events. Unique counts include each attributable recipient once for the selected event type. Progression counts infer that a clicked or submitted recipient has reached the opened stage, and a submitted recipient has reached the clicked stage. Acceptance and reports are never inferred.
 
 Campaign Results summary cards, the dashboard, and the campaign execution overview count each recipient at most once per category within a campaign. Recipient detail counts use effective events, including repeats. The event table also retains excluded observations and original evidence for inspection. A retry of the same submission delivery is deduplicated. Campaign Results retains separately labelled event totals and activity charts.
 

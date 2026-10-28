@@ -14,16 +14,13 @@ async fn insert(
     campaign: i64,
     recipient: i64,
     fact: &Fact,
+    create_key: &str,
 ) -> Result<i64, Error> {
     let ruphish_domain::events::RecordedKind::Known(kind) = fact.kind else {
         return Err(Error::Internal);
     };
     let details = crate::event_edit::details(fact)?;
-    let row = sqlx::query(sqlx::AssertSqlSafe(crate::event_edit::sql("INSERT INTO events(campaign_id,recipient_id,email,time,kind,metadata,source) SELECT ?,id,email,?,?,?,'operator' FROM results WHERE id=?", false)))
-        .bind(campaign).bind(&fact.time).bind(kind.key()).bind(details).bind(recipient).execute(c).await.map_err(storage)?;
+    let row = sqlx::query(sqlx::AssertSqlSafe(crate::event_edit::sql("INSERT INTO events(campaign_id,recipient_id,email,time,kind,metadata,source,create_key) SELECT ?,id,email,?,?,?,'operator',? FROM results WHERE id=?", false)))
+        .bind(campaign).bind(&fact.time).bind(kind.key()).bind(details).bind(create_key).bind(recipient).execute(c).await.map_err(storage)?;
     Ok(row.last_insert_rowid())
-}
-
-async fn snapshot(pool: &sqlx::SqlitePool) -> Result<sqlx::Transaction<'_, sqlx::Sqlite>, Error> {
-    pool.begin().await.map_err(storage)
 }

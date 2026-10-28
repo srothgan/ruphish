@@ -20,7 +20,7 @@ const CTE: &str = r#"WITH audience AS (
  WHERE r.campaign_id=?1 AND (?4 IS NULL OR r.id=?4) AND (?6='' OR instr(lower(r.email||' '||COALESCE(r.first_name,'')||' '||COALESCE(r.last_name,'')),lower(?6))>0)
  AND (?8='[]' OR r.id IN (SELECT value FROM json_each(?8)))
 ), observed AS (
- SELECT e.* FROM effective_event_history e
+ SELECT e.* FROM event_history e
  LEFT JOIN audience a ON a.id=e.recipient_id
  WHERE e.campaign_id=?1 AND (?2 IS NULL OR unixepoch(e.time)>=?2) AND (?3 IS NULL OR unixepoch(e.time)<?3)
  AND (?5='[]' OR e.message IN (SELECT value FROM json_each(?5))) AND (?7='' OR e.source=?7)
@@ -187,7 +187,7 @@ impl Snapshots for Reports {
                 serde_json::from_str(&crate::participant_privacy::details(&details))
                     .unwrap_or_default();
             events.push(Event {
-                revision: r.try_get("revision").map_err(storage)?,
+                edited: r.try_get("edited").map_err(storage)?,
                 id: r.try_get("id").map_err(storage)?,
                 recipient_id: r.try_get("recipient_id").map_err(storage)?,
                 email: r.try_get("email").map_err(storage)?,

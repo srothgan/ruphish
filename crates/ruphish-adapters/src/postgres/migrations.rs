@@ -59,13 +59,6 @@ fn migrator() -> Migrator {
                 include_str!("../../migrations/postgres/7_learning_pages.sql").into_sql_str(),
                 false,
             ),
-            Migration::new(
-                8,
-                Cow::Borrowed("event corrections"),
-                MigrationType::Simple,
-                include_str!("../../migrations/postgres/8_event_corrections.sql").into_sql_str(),
-                false,
-            ),
         ]),
         locking: false,
         ..Migrator::DEFAULT
@@ -177,25 +170,6 @@ async fn verify(c: &mut PgConnection) -> Result<(), Error> {
         "ruphish",
     ) {
         return Err(Error::UnsupportedSchema);
-    }
-    for (name, expected) in [
-        (
-            "ruphish.ruphish_event_records",
-            include_str!("ruphish_event_records.sql"),
-        ),
-        (
-            "ruphish.effective_event_history",
-            include_str!("effective_event_history.sql"),
-        ),
-    ] {
-        let actual: String = sqlx::query_scalar("SELECT pg_get_viewdef($1::regclass)")
-            .bind(name)
-            .fetch_one(&mut *c)
-            .await
-            .map_err(storage_error)?;
-        if actual.trim() != expected.trim() {
-            return Err(Error::UnsupportedSchema);
-        }
     }
     let expected: serde_json::Value =
         serde_json::from_str(include_str!("schema.json")).map_err(|_| Error::UnsupportedSchema)?;

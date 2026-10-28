@@ -20,7 +20,7 @@ const CTE: &str = r#"WITH parameters AS (SELECT ? AS campaign, ? AS since, ? AS 
  WHERE r.campaign_id=(SELECT campaign FROM parameters) AND ((SELECT recipient FROM parameters) IS NULL OR r.id=(SELECT recipient FROM parameters)) AND ((SELECT search FROM parameters)='' OR instr(lower(CONCAT(r.email,' ',COALESCE(r.first_name,''),' ',COALESCE(r.last_name,''))),lower((SELECT search FROM parameters)))>0)
  AND (JSON_LENGTH((SELECT ids FROM parameters))=0 OR r.id IN (SELECT selected_ids.value FROM parameters p JOIN JSON_TABLE(p.ids,'$[*]' COLUMNS(value BIGINT PATH '$')) selected_ids ON TRUE))
 ), observed AS (
- SELECT e.* FROM effective_event_history e
+ SELECT e.* FROM event_history e
  LEFT JOIN audience a ON a.id=e.recipient_id
  WHERE e.campaign_id=(SELECT campaign FROM parameters) AND ((SELECT since FROM parameters) IS NULL OR __EVENT_SECOND__>=(SELECT since FROM parameters)) AND ((SELECT until_time FROM parameters) IS NULL OR __EVENT_SECOND__<(SELECT until_time FROM parameters))
  AND ((SELECT event_kind FROM parameters)='[]' OR e.message IN (SELECT selected_events.value FROM parameters p JOIN JSON_TABLE(p.event_kind,'$[*]' COLUMNS(value VARCHAR(64) PATH '$')) selected_events ON TRUE)) AND ((SELECT source_filter FROM parameters)='' OR e.source=(SELECT source_filter FROM parameters))
@@ -200,7 +200,7 @@ impl Snapshots for Reports {
                 serde_json::from_str(&crate::participant_privacy::details(&details))
                     .unwrap_or_default();
             events.push(Event {
-                revision: r.try_get("revision").map_err(storage)?,
+                edited: r.try_get("edited").map_err(storage)?,
                 id: r.try_get("id").map_err(storage)?,
                 recipient_id: r.try_get("recipient_id").map_err(storage)?,
                 email: r.try_get("email").map_err(storage)?,

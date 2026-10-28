@@ -1,5 +1,5 @@
 //! A pending request is immutable until its outcome is known.
-use ruphish_domain::event_edit::{Change, Record};
+use ruphish_domain::event_edit::{Action, Change, Outcome};
 
 #[derive(Clone, Default)]
 /// Draft state survives refresh, validation failures and concurrent-edit rejection.
@@ -42,15 +42,29 @@ impl Editor {
         }
     }
     /// An acknowledged mutation clears the draft, independently of read refresh success.
-    pub fn saved(&mut self, record: &Record) -> bool {
+    pub fn saved(&mut self, outcome: &Outcome) -> bool {
         let Some(request) = &self.pending else {
             return false;
         };
-        if record.id <= 0
-            || request.event_id.is_some_and(|id| id != record.id)
-            || Some(record.revision) != request.revision.checked_add(1)
-            || (request.event_id.is_none() && record.source != "operator")
-        {
+        if outcome.id <= 0 || request.event_id.is_some_and(|id| id != outcome.id) {
+            return false;
+        }
+        let valid = match (&outcome.event, request.action) {
+            (None, Action::Delete) => true,
+            (Some(record), Action::Add) => {
+                record.id == outcome.id
+                    && record.source == "operator"
+                    && record.revision == 0
+                    && !record.edited
+            }
+            (Some(record), Action::Edit) => {
+                record.id == outcome.id
+                    && (record.revision == request.revision
+                        || Some(record.revision) == request.revision.checked_add(1))
+            }
+            _ => false,
+        };
+        if !valid {
             return false;
         }
         *self = Self::default();
@@ -66,7 +80,7 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ruphish_domain::event_edit::{Action, Presence, Value};
+    use ruphish_domain::event_edit::{Action, Presence, Record, Value};
     use ruphish_domain::events::Kind;
     #[test]
     fn unknown_outcomes_retry_identical_commands_and_conflicts_keep_input() {
@@ -101,14 +115,19 @@ mod tests {
             id: 999,
             source: "public".into(),
             revision: 3,
-            original: fact.clone(),
             current: fact,
-            excluded: false,
+            edited: true,
         };
-        assert!(!editor.saved(&acknowledgement));
+        assert!(!editor.saved(&Outcome {
+            id: acknowledgement.id,
+            event: Some(acknowledgement.clone())
+        }));
         assert_eq!(editor.draft, Some(change));
         acknowledgement.id = 5;
-        assert!(editor.saved(&acknowledgement));
+        assert!(editor.saved(&Outcome {
+            id: acknowledgement.id,
+            event: Some(acknowledgement.clone())
+        }));
         editor.cancel();
         assert!(editor.draft.is_none());
     }
