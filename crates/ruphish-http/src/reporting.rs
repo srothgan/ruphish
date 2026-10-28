@@ -72,7 +72,7 @@ fn filter(f: &Filter) -> Result<app::Filter, Rejection> {
 }
 pub(crate) fn routes() -> Router<AuthState> {
     Router::new()
-        .route("/api/campaigns/{id}/analysis", get(read))
+        .route("/api/campaigns/{id}/results", get(read))
         .route("/api/campaigns/{id}/export", get(export))
 }
 async fn read(
@@ -93,7 +93,7 @@ async fn read(
         .analysis(user.identity, id, filter(&f)?)
         .await
         .map_err(error)?;
-    let value = reads::Analysis {
+    let value = reads::Results {
         id: a.id,
         name: a.name,
         status: a.status,
@@ -108,7 +108,7 @@ async fn read(
         recipients: a
             .recipients
             .into_iter()
-            .map(|r| reads::AnalysisRecipient {
+            .map(|r| reads::ResultRecipient {
                 id: r.id,
                 email: r.email,
                 name: r.name,
@@ -120,7 +120,7 @@ async fn read(
         events: a
             .events
             .into_iter()
-            .map(|e| reads::AnalysisEvent {
+            .map(|e| reads::ResultEvent {
                 id: e.id,
                 recipient_id: e.recipient_id,
                 email: e.email,

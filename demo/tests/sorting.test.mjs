@@ -33,7 +33,7 @@ test('analysis sorts complete filtered sets and downloads, preserving identities
     ]) {
         const ids = [];
         for (const offset of [0, 2, 4, 6]) {
-            const response = await request(`${path}/analysis?sort=${sort}&order=${order}&limit=2&offset=${offset}`);
+            const response = await request(`${path}/results?sort=${sort}&order=${order}&limit=2&offset=${offset}`);
             assert.equal(response.status, 200);
             const page = await response.json(); assert.equal(page.recipient_total, 5);
             ids.push(...page.recipients.map(row => row.id));
@@ -42,10 +42,10 @@ test('analysis sorts complete filtered sets and downloads, preserving identities
         const csv = await (await request(`${path}/export?format=csv&scope=recipients&sort=${sort}&order=${order}&limit=2&offset=2`)).text();
         assert.deepEqual(csv.trim().split(/\r?\n/).slice(1).map(line => Number(line.split(',')[0].replaceAll('"', ''))), expected);
     }
-    const filtered = await (await request(`${path}/analysis?sort=opened&order=desc&event=email_opened&limit=1&offset=1`)).json();
+    const filtered = await (await request(`${path}/results?sort=opened&order=desc&event=email_opened&limit=1&offset=1`)).json();
     assert.deepEqual(filtered.recipients.map(row => row.id), [104]); assert.equal(filtered.recipient_total, 2);
     for (const query of ['sort=unknown', 'sort=name%3BDROP%20TABLE%20results', 'order=ascending', 'event_sort=secret', 'event_order=DESC', 'event=Email%20Opened', 'event=unknown', 'source=unknown']) {
-        for (const endpoint of ['analysis', 'export?format=csv&scope=recipients']) {
+        for (const endpoint of ['results', 'export?format=csv&scope=recipients']) {
             const response = await request(`${path}/${endpoint}${endpoint.includes('?') ? '&' : '?'}${query}`);
             assert.equal(response.status, 400, query);
         }
@@ -86,7 +86,7 @@ test('event pages order actual instants across zones and retain nanoseconds', as
     for (const [index, time] of ['2026-01-01T00:00:00Z', '2026-01-01T02:00:00.000000001+02:00', '2026-01-01T00:00:00.000000002Z', '2025-12-31T23:00:00-01:00'].entries()) events[index].time = time;
     const ids = [];
     for (const offset of [0, 2]) {
-        const response = await request(`/api/campaigns/${seed.header.id}/analysis?event_sort=time&event_order=asc&limit=2&offset=${offset}`);
+        const response = await request(`/api/campaigns/${seed.header.id}/results?event_sort=time&event_order=asc&limit=2&offset=${offset}`);
         assert.equal(response.status, 200);
         ids.push(...(await response.json()).events.map(row => row.id));
     }
@@ -97,7 +97,7 @@ test('event pages order actual instants across zones and retain nanoseconds', as
 test('reporting uses named metrics and retains unrecognized history without inventing actions', async () => {
     const { seed, request } = await setup();
     seed.results[0].events.push({ id: 205, recipient_id: 101, email: seed.results[0].email, kind: 'Proxied request', source: 'legacy', password_present: null, time: '2026-01-01T00:00:01Z' });
-    const response = await request(`/api/campaigns/${seed.header.id}/analysis`);
+    const response = await request(`/api/campaigns/${seed.header.id}/results`);
     assert.equal(response.status, 200);
     const value = await response.json();
     assert.deepEqual(value.totals, { accepted: 0, opened: 3, clicked: 0, submitted: 1, reported: 0 });
@@ -117,7 +117,7 @@ test('absent native transport stays null and sorts separately from unknown accep
     seed.results.find(row => row.id === 105).state = 'unknown';
     const path = `/api/campaigns/${seed.header.id}`;
     for (const [order, expected] of [['asc', [102, 101, 103, 104, 105]], ['desc', [105, 104, 101, 103, 102]]]) {
-        const value = await (await request(`${path}/analysis?sort=delivery&order=${order}`)).json();
+        const value = await (await request(`${path}/results?sort=delivery&order=${order}`)).json();
         assert.deepEqual(value.recipients.map(row => row.id), expected);
         assert.equal(value.recipients.find(row => row.id === 102).delivery, null);
         assert.equal(value.recipients.find(row => row.id === 105).delivery, 'unknown');

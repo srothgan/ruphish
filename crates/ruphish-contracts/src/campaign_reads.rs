@@ -235,9 +235,9 @@ pub struct HistoryEvent {
     pub details: String,
 }
 
-/// Consistent analysis snapshot for one campaign, filter and page.
+/// Consistent results snapshot for one campaign, filter and page.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Analysis {
+pub struct Results {
     /// Campaign identity.
     pub id: i64,
     /// Campaign display name.
@@ -259,9 +259,9 @@ pub struct Analysis {
     /// Matching events before pagination.
     pub event_total: i64,
     /// Recipient page.
-    pub recipients: Vec<AnalysisRecipient>,
+    pub recipients: Vec<ResultRecipient>,
     /// Event page.
-    pub events: Vec<AnalysisEvent>,
+    pub events: Vec<ResultEvent>,
     /// Chart intervals.
     pub buckets: Vec<Bucket>,
     /// Interval width in seconds.
@@ -270,7 +270,7 @@ pub struct Analysis {
 
 /// Observed counts for one recipient.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AnalysisRecipient {
+pub struct ResultRecipient {
     /// Recipient identity.
     pub id: i64,
     /// Administrator-supplied address.
@@ -288,7 +288,7 @@ pub struct AnalysisRecipient {
 
 /// One recorded observation; no participant-entered values.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AnalysisEvent {
+pub struct ResultEvent {
     /// Event identity.
     pub id: i64,
     /// Recipient when resolvable.

@@ -154,7 +154,7 @@ fn dashboard_supports_authenticated_browser_and_api_reads_restart_and_revocation
     for path in [
         "/",
         "/campaigns",
-        "/analysis",
+        "/campaigns/1/results",
         "/api/overview",
         "/api/overview/posture?window=7d",
     ] {
@@ -287,7 +287,7 @@ fn progression_is_shared_across_summaries_without_inventing_recorded_events() {
         ] {
             assert_eq!(p[field], count, "{field}");
         }
-        let a = fetch("/api/campaigns/1/analysis");
+        let a = fetch("/api/campaigns/1/results");
         assert_eq!(
             a["progression"],
             json!({"accepted":6,"opened":4,"clicked":3,"submitted":2,"reported":1})
@@ -337,7 +337,7 @@ fn progression_is_shared_across_summaries_without_inventing_recorded_events() {
         );
         assert_eq!(recent["outcomes"]["opened"], 4);
         assert_eq!(recent["outcomes"]["clicked"], 3);
-        let filtered = fetch("/api/campaigns/1/analysis?event=form_submitted&limit=1");
+        let filtered = fetch("/api/campaigns/1/results?event=form_submitted&limit=1");
         assert_eq!(
             filtered["progression"],
             json!({"accepted":0,"opened":2,"clicked":2,"submitted":2,"reported":0})
@@ -346,7 +346,7 @@ fn progression_is_shared_across_summaries_without_inventing_recorded_events() {
             filtered["unique"],
             json!({"accepted":0,"opened":0,"clicked":0,"submitted":2,"reported":0})
         );
-        let recipient = fetch("/api/campaigns/1/analysis?recipient=5");
+        let recipient = fetch("/api/campaigns/1/results?recipient=5");
         assert_eq!(
             recipient["progression"],
             json!({"accepted":1,"opened":1,"clicked":1,"submitted":1,"reported":0})
@@ -359,7 +359,7 @@ fn progression_is_shared_across_summaries_without_inventing_recorded_events() {
         assert_eq!(unsent["stats"]["sent"], 0);
         assert_eq!(unsent["stats"]["opened"], 1);
         assert_eq!(unsent["stats"]["clicked"], 1);
-        let other = read(&base, "/api/campaigns/1/analysis", Some("other-key"));
+        let other = read(&base, "/api/campaigns/1/results", Some("other-key"));
         assert_eq!(other.status(), 404);
         let csv = read(
             &base,

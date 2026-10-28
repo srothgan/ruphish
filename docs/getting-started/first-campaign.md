@@ -110,7 +110,7 @@ Choose **Launch campaign**. Open Mailpit at `http://127.0.0.1:8026` and find the
 
 ## Inspect the result
 
-In the dedicated exercise browser, follow Alex's campaign link from Mailpit. The training page should open. Return to the campaign and choose **View analysis**. Inspect Alex's timeline and the click observation. An image open appears only if the mail viewer requests the tracking image; the click can count toward summary progression even without a separate open event.
+In the dedicated exercise browser, follow Alex's campaign link from Mailpit. The training page should open. Return to the campaign and choose **Results**. Inspect Alex's timeline and the click observation. An image open appears only if the mail viewer requests the tracking image; the click can count toward summary progression even without a separate open event.
 
 Download **Recipients CSV** or **Events CSV**. The recipient export summarizes people; the event export lists observations. Use [metric definitions](../user-guide/results/metrics.md) to understand the difference.
 

@@ -274,12 +274,24 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
             match path {
                 "/api/campaigns/summary" => round_trip::<wire::Summaries>(&actual),
                 path if path.ends_with("/summary") => round_trip::<wire::Summary>(&actual),
-                path if path.ends_with("/results") => round_trip::<wire::Results>(&actual),
+                path if path.ends_with("/results") => {
+                    round_trip::<ruphish_contracts::campaign_reads::Results>(&actual)
+                }
                 "/api/campaigns/" if actual.is_array() => {
                     round_trip::<Vec<wire::Campaign>>(&actual)
                 }
                 _ => round_trip::<wire::Campaign>(&actual),
             }
+        }
+        if id == "results" {
+            assert_eq!(actual["id"], case["json"]["id"]);
+            assert_eq!(actual["name"], case["json"]["name"]);
+            assert_eq!(actual["recipient_total"], 2);
+            assert_eq!(actual["recipients"][0]["email"], "alice@example.test");
+            assert_eq!(actual["recipients"][1]["email"], "bob@example.test");
+            assert_eq!(actual["totals"]["clicked"], 0);
+            let campaign = read(&base, "/api/campaigns/1");
+            actual = json!({"id":campaign["id"],"name":campaign["name"],"status":campaign["status"],"results":campaign["results"],"timeline":campaign["timeline"]});
         }
         actual = serde_json::from_str(&serde_json::to_string(&actual).unwrap().replace(
             &origin(&base, "training.example.test"),
@@ -607,7 +619,7 @@ fn executable_launch_delivers_personalized_mail_once_and_persists_acceptance_acr
     let recipient = state["items"][0]["id"].as_i64().unwrap();
     let history = read(
         &base,
-        &format!("/api/campaigns/{id}/delivery/{recipient}/history"),
+        &format!("/api/campaigns/{id}/recipients/{recipient}/history"),
     );
     assert_eq!(history["attempts"].as_array().unwrap().len(), 1);
     assert_eq!(history["attempts"][0]["state"], "accepted");
@@ -1375,7 +1387,7 @@ fn campaign_context_and_recipient_history_are_complete_bounded_and_owner_scoped(
     let view = read(&base, &endpoint);
     let a = view["items"][0]["id"].as_i64().unwrap();
     let b = view["items"][1]["id"].as_i64().unwrap();
-    let history_path = format!("{endpoint}/{a}/history");
+    let history_path = format!("/api/campaigns/{id}/recipients/{a}/history");
     let empty = read(&base, &history_path);
     assert_eq!(empty["attempts"], json!([]));
     assert_eq!(empty["events"], json!([]));
@@ -1473,7 +1485,10 @@ fn campaign_context_and_recipient_history_are_complete_bounded_and_owner_scoped(
     let view = read(&base, &endpoint);
     assert_eq!(view["items"][0]["attempt_count"], 105);
     assert_eq!(view["items"][0]["attempts"].as_array().unwrap().len(), 100);
-    let bob = read(&base, &format!("{endpoint}/{b}/history"));
+    let bob = read(
+        &base,
+        &format!("/api/campaigns/{id}/recipients/{b}/history"),
+    );
     assert_eq!(bob["attempts"], json!([]));
     assert_eq!(bob["events"].as_array().unwrap().len(), 100);
     assert!(
@@ -1495,7 +1510,9 @@ fn campaign_context_and_recipient_history_are_complete_bounded_and_owner_scoped(
         .unwrap();
     assert_eq!(anonymous.status(), 401);
     let missing = client()
-        .get(format!("{base}{endpoint}/999999/history"))
+        .get(format!(
+            "{base}/api/campaigns/{id}/recipients/999999/history"
+        ))
         .bearer_auth("synthetic-bootstrap-token")
         .send()
         .unwrap();
@@ -1504,7 +1521,7 @@ fn campaign_context_and_recipient_history_are_complete_bounded_and_owner_scoped(
     let second = post(&base, "/api/campaigns/", &body);
     let mismatch = client()
         .get(format!(
-            "{base}/api/campaigns/{}/delivery/{a}/history",
+            "{base}/api/campaigns/{}/recipients/{a}/history",
             second["id"]
         ))
         .bearer_auth("synthetic-bootstrap-token")

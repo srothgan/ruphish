@@ -73,6 +73,7 @@ async fn snapshot(context: Context) -> Result<Response, Rejection> {
         attention: wire::Attention {
             unverified_enabled_domains: s.attention.unverified_enabled_domains,
             delivery_problems: s.attention.delivery_problems,
+            campaign_ids: s.attention.campaign_ids,
             next_launch: s.attention.next_launch.map(|n| wire::NextLaunch {
                 id: n.id,
                 name: n.name,

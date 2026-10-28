@@ -1,17 +1,17 @@
 //! Campaign analysis: shared filters, activity chart and recipient drilldown.
 use crate::{
-    analysis_chart::{ActivityChart, Bucket, labels},
     campaign_queries::CampaignQueries,
     client::Api,
     feedback::Message,
+    results_chart::{ActivityChart, Bucket, labels},
     shared::components::*,
-    time_display::{instant as minute, local_input, parse_input},
+    time_display::{local_input, parse_input},
 };
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use leptos_router::hooks::{use_navigate, use_params_map, use_query_map};
 use ruphish_contracts::reporting::Filter;
 use ruphish_domain::reporting::SortDirection;
-use ruphish_ui::analysis_state::address;
+use ruphish_ui::results_state::address;
 use ruphish_ui::{tr, trs};
 use serde_json::Value;
 
@@ -37,8 +37,8 @@ pub(super) fn page(api: Api) -> impl IntoView {
                     _ => {
                         view! {
                             <NotFoundPage
-                                back_href="/analysis"
-                                back_label=trs!(ui.back_to_analysis)
+                                back_href="/campaigns"
+                                back_label=trs!(ui.back_to_campaigns)
                             />
                         }
                             .into_any()
@@ -51,12 +51,60 @@ pub(super) fn page(api: Api) -> impl IntoView {
 
 fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
+    if let Some(recipient) = recipient {
+        let mut initial = ruphish_ui::recipient_history::History::default();
+        initial.toggle();
+        let history = RwSignal::new(initial);
+        let query = use_query_map();
+        let back = Signal::derive(move || {
+            let mut q = query.with(|q| q.to_query_string());
+            if q == "?" {
+                q.clear();
+            }
+            format!("/campaigns/{id}/results{q}")
+        });
+        let campaign = StoredValue::new(id.to_string());
+        let read = expect_context::<CampaignQueries>().results.observe_polling(
+            move || {
+                CampaignQueries::results_key(
+                    id,
+                    &Filter {
+                        recipient: Some(recipient),
+                        limit: 1,
+                        ..Default::default()
+                    },
+                )
+            },
+            ruphish_ui::query::document_visible(),
+        );
+        let refresh = Signal::derive(move || serde_json::json!(read.data.get()));
+        return view! {
+            <BackLink href=back>{tr!(ui.results)}</BackLink>
+            <ReadBoundary
+                failure=read.failure
+                has_data=Signal::derive(move || read.data.with(Option::is_some))
+                fetching=read.fetching
+                retry=read.refresh
+                back_href=format!("/campaigns/{id}/results")
+                back_label=trs!(ui.results)
+            >
+                {crate::campaign_delivery::recipient_detail(
+                    api,
+                    campaign,
+                    recipient,
+                    history,
+                    refresh,
+                )}
+            </ReadBoundary>
+        }
+        .into_any();
+    }
 
     let query = use_query_map();
     let navigate = StoredValue::new(use_navigate());
     let path = StoredValue::new(recipient.map_or_else(
-        || format!("/analysis/{id}"),
-        |r| format!("/analysis/{id}/recipients/{r}"),
+        || format!("/campaigns/{id}/results"),
+        |r| format!("/campaigns/{id}/results/recipients/{r}"),
     ));
     let filters = Memo::new(move |_| {
         let get = |key: &str| query.with(|q| q.get(key));
@@ -91,8 +139,8 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
     let from = RwSignal::new(String::new());
     let until = RwSignal::new(String::new());
     let queries = expect_context::<CampaignQueries>();
-    let read = queries.analysis.observe_polling(
-        move || CampaignQueries::analysis_key(id, &filters.get()),
+    let read = queries.results.observe_polling(
+        move || CampaignQueries::results_key(id, &filters.get()),
         ruphish_ui::query::document_visible(),
     );
     let data = read.data;
@@ -106,32 +154,6 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                 Default::default(),
             )
         })
-    };
-    let event_sorting = TableSorting {
-        current: Signal::derive(move || ruphish_ui::table_state::Sort {
-            column: serde_json::to_value(filters.get().event_sort)
-                .ok()
-                .and_then(|v| v.as_str().map(str::to_owned))
-                .unwrap_or_default(),
-            order: filters.get().event_order,
-        }),
-        change: Callback::new(move |column: String| {
-            let mut filter = filters.get_untracked();
-            let current = ruphish_ui::table_state::Sort {
-                column: serde_json::to_value(filter.event_sort)
-                    .ok()
-                    .and_then(|v| v.as_str().map(str::to_owned))
-                    .unwrap_or_default(),
-                order: filter.event_order,
-            }
-            .select(&column);
-            if let Ok(sort) = serde_json::from_value(Value::String(column)) {
-                filter.event_sort = sort;
-                filter.event_order = current.order;
-                filter.offset = 0;
-                go(filter);
-            }
-        }),
     };
     let sorting = TableSorting {
         current: Signal::derive(move || ruphish_ui::table_state::Sort {
@@ -183,7 +205,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                 ..Default::default()
             };
             let result = queries
-                .read_analysis(api, id, &filter)
+                .read_results(api, id, &filter)
                 .await
                 .map_err(|e| e.message)
                 .map(|value| {
@@ -308,61 +330,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
     });
     let content = view! {
         <ManagementPage>
-            <BackLink href=Signal::derive(move || {
-                if recipient.is_some() {
-                    let mut f = filters.get();
-                    f.recipient = None;
-                    f.offset = 0;
-                    address(&format!("/analysis/{id}"), &f, false)
-                } else {
-                    "/analysis".into()
-                }
-            })>
-                {move || {
-                    if recipient.is_some() {
-                        leptos_i18n::t_string!(i18n, ui.back_to_campaign_analysis)
-                    } else {
-                        leptos_i18n::t_string!(i18n, ui.back_to_analysis)
-                    }
-                }}
-            </BackLink>
-            <PageHeader
-                title=Signal::derive(move || {
-                    let name = data
-                        .with(|v| v.as_ref().map(|v| v.name.clone()).unwrap_or_default());
-                    if name.is_empty() {
-                        leptos_i18n::t_string!(i18n, ui.campaign).into()
-                    } else {
-                        name
-                    }
-                })
-                subtitle=Signal::derive(move || {
-                    if loaded.get() {
-                        leptos_i18n::t_string!(
-                            i18n, messages.updated_arg0, arg0 = (minute(&serde_json::json!(data.with(|v| v.as_ref().map(|v| v.as_of))))).to_string()
-                        )
-                    } else if loading.get() {
-                        leptos_i18n::t_string!(i18n, ui.loading_analysis).into()
-                    } else {
-                        leptos_i18n::t_string!(
-                            i18n, ui.refresh_failed_retry_to_load_current_results
-                        )
-                            .into()
-                    }
-                })
-            >
-                <ActionButton
-                    busy=Signal::derive(move || loading.get().to_string())
-                    on_click=move |_| read.refresh.run(())
-                >
-                    {move || {
-                        if loading.get() {
-                            leptos_i18n::t_string!(i18n, ui.refreshing)
-                        } else {
-                            leptos_i18n::t_string!(i18n, ui.refresh)
-                        }
-                    }}
-                </ActionButton>
+            <div class="management-actions">
                 <ActionMenu
                     label=trs!(ui.export)
                     style=ButtonStyle::Primary
@@ -387,14 +355,13 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                         {tr!(ui.excel_workbook)}
                     </ActionButton>
                 </ActionMenu>
-                <ActionLink href=format!("/campaigns/{id}")>{tr!(ui.back_to_campaign)}</ActionLink>
-            </PageHeader>
+            </div>
             {message.view()}
             <QueryStatus
                 fetching=loading
                 has_data=loaded
                 error=read.error
-                noun=trs!(ui.campaign_analysis)
+                noun=trs!(ui.results)
                 refresh=read.refresh
             />
             <form class="analysis-filters" on:submit=apply>
@@ -591,6 +558,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                             label=trs!(ui.recipient_observations)
                             sorting=sorting
                             columns=vec![
+                                "",
                                 "email",
                                 "name",
                                 "delivery",
@@ -602,6 +570,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                                 "",
                             ]
                             headers=vec![
+                                trs!(ui.history),
                                 trs!(ui.recipient),
                                 trs!(ui.name),
                                 trs!(ui.delivery),
@@ -613,103 +582,133 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                                 trs!(ui.details),
                             ]
                         >
-                            {move || {
-                                data.with(|v| {
-                                        v.as_ref().map(|v| v.recipients.clone()).unwrap_or_default()
+                            <For
+                                each=move || {
+                                    data.with(|v| {
+                                        v.as_ref()
+                                            .map(|v| {
+                                                v.recipients.iter().map(|r| r.id).collect::<Vec<_>>()
+                                            })
+                                            .unwrap_or_default()
                                     })
-                                    .into_iter()
-                                    .map(|row| {
-                                        let mut filter = filters.get();
-                                        filter.offset = 0;
-                                        let href = address(
-                                            &format!("/analysis/{id}/recipients/{}", row.id),
-                                            &filter,
-                                            false,
-                                        );
-                                        view! {
-                                            <tr>
-                                                <td>{row.email}</td>
-                                                <td>{row.name}</td>
-                                                <td>
-                                                    {ruphish_ui::localization::delivery_label(
-                                                        i18n,
-                                                        row.delivery.map_or("historical", |state| state.as_str()),
-                                                    )}
-                                                </td>
-                                                {(0..5)
-                                                    .map(|i| {
-                                                        view! {
-                                                            <td>
-                                                                {row.counts.values()[i]}
-                                                                {(i == 4 && row.historical_reported)
-                                                                    .then(|| {
-                                                                        view! {
-                                                                            <small>{tr!(ui.legacy_report_time_unknown)}</small>
-                                                                        }
-                                                                    })}
-                                                            </td>
-                                                        }
-                                                    })
-                                                    .collect_view()}
-                                                <td>
-                                                    <ActionLink href=href>{tr!(ui.details)}</ActionLink>
-                                                </td>
-                                            </tr>
-                                        }
-                                    })
-                                    .collect_view()
-                            }}
+                                }
+                                key=|id| *id
+                                children=move |recipient| {
+                                    let row = Signal::derive(move || {
+                                        data.with(|v| {
+                                            v.as_ref()
+                                                .and_then(|v| {
+                                                    v.recipients.iter().find(|r| r.id == recipient).cloned()
+                                                })
+                                        })
+                                    });
+                                    let history = RwSignal::new(
+                                        ruphish_ui::recipient_history::History::default(),
+                                    );
+                                    let open = Memo::new(move |_| history.with(|h| h.open));
+                                    let campaign = StoredValue::new(id.to_string());
+                                    let refresh = Signal::derive(move || {
+                                        serde_json::json!(data.get())
+                                    });
+                                    let href = Signal::derive(move || address(
+                                        &format!("/campaigns/{id}/results/recipients/{recipient}"),
+                                        &filters.get(),
+                                        false,
+                                    ));
+                                    let panel = format!("result-history-{recipient}");
+                                    view! {
+                                        <tr
+                                            class="recipient-summary"
+                                            class:recipient-expanded=move || open.get()
+                                        >
+                                            <td class="recipient-disclosure">
+                                                <button
+                                                    type="button"
+                                                    class="recipient-toggle"
+                                                    aria-label=move || {
+                                                        row.get().map(|r| r.email).unwrap_or_default()
+                                                    }
+                                                    aria-expanded=move || open.get().to_string()
+                                                    aria-controls=panel.clone()
+                                                    on:click=move |_| {
+                                                        history
+                                                            .update(ruphish_ui::recipient_history::History::toggle)
+                                                    }
+                                                >
+                                                    <svg
+                                                        viewBox="0 0 20 20"
+                                                        width="18"
+                                                        height="18"
+                                                        aria-hidden="true"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        stroke-width="1.8"
+                                                    >
+                                                        <path d="m7 4 6 6-6 6" />
+                                                    </svg>
+                                                </button>
+                                            </td>
+                                            <th scope="row">{move || row.get().map(|r| r.email)}</th>
+                                            <td>{move || row.get().map(|r| r.name)}</td>
+                                            <td>
+                                                {move || {
+                                                    row.get()
+                                                        .map(|r| ruphish_ui::localization::delivery_label(
+                                                            i18n,
+                                                            r.delivery.map_or("historical", |s| s.as_str()),
+                                                        ))
+                                                }}
+                                            </td>
+                                            {(0..5)
+                                                .map(move |i| {
+                                                    view! {
+                                                        <td>
+                                                            {move || row.get().map(|r| r.counts.values()[i])}
+                                                            <Show when=move || {
+                                                                i == 4 && row.get().is_some_and(|r| r.historical_reported)
+                                                            }>
+                                                                <small>{tr!(ui.legacy_report_time_unknown)}</small>
+                                                            </Show>
+                                                        </td>
+                                                    }
+                                                })
+                                                .collect_view()}
+                                            <td>
+                                                {move || {
+                                                    view! {
+                                                        <ActionLink href=href.get()>{tr!(ui.details)}</ActionLink>
+                                                    }
+                                                }}
+                                            </td>
+                                        </tr>
+                                        <tr
+                                            class="recipient-history-row"
+                                            hidden=move || !open.get()
+                                        >
+                                            <td colspan="10">
+                                                <div id=panel>
+                                                    <Show when=move || {
+                                                        open.get()
+                                                    }>
+                                                        {crate::campaign_delivery::recipient_detail(
+                                                            api,
+                                                            campaign,
+                                                            recipient,
+                                                            history,
+                                                            refresh,
+                                                        )}
+                                                    </Show>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            />
                         </DataTable>
                     }
                         .into_any()
                 } else {
-                    view! {
-                        <DataTable
-                            sorting=event_sorting
-                            columns=vec!["time", "kind", "source", "password_present"]
-                            label=trs!(ui.recipient_events)
-                            headers=vec![
-                                trs!(ui.time),
-                                trs!(ui.event),
-                                trs!(ui.source),
-                                trs!(ui.details),
-                            ]
-                        >
-                            {move || {
-                                data.with(|v| {
-                                        v.as_ref().map(|v| v.events.clone()).unwrap_or_default()
-                                    })
-                                    .into_iter()
-                                    .map(|e| {
-                                        view! {
-                                            <tr>
-                                                <td>{minute(&Value::String(e.time))}</td>
-                                                <td>
-                                                    {ruphish_ui::localization::event_label(
-                                                        i18n,
-                                                        e.kind.label(),
-                                                    )}
-                                                </td>
-                                                <td>{e.source.as_str()}</td>
-                                                <td>
-                                                    {e
-                                                        .password_present
-                                                        .map(|v| {
-                                                            if v {
-                                                                leptos_i18n::t_string!(i18n, ui.password_field_was_nonempty)
-                                                            } else {
-                                                                leptos_i18n::t_string!(i18n, ui.password_field_was_empty)
-                                                            }
-                                                        })}
-                                                </td>
-                                            </tr>
-                                        }
-                                    })
-                                    .collect_view()
-                            }}
-                        </DataTable>
-                    }
-                        .into_any()
+                    ().into_any()
                 }} <Show when=move || total.get() == 0>
                     <EmptyState title=trs!(ui.no_matching_results)>
                         <p>{tr!(ui.change_or_clear_the_filters_to_see_more_activity)}</p>
@@ -758,10 +757,11 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
             has_data=Signal::derive(move || read.data.with(Option::is_some))
             fetching=read.fetching
             retry=read.refresh
-            back_href="/analysis"
-            back_label=trs!(ui.back_to_analysis)
+            back_href="/campaigns"
+            back_label=trs!(ui.back_to_campaigns)
         >
             {content}
         </ReadBoundary>
     }
+    .into_any()
 }

@@ -175,7 +175,7 @@ test('event downloads share exclusive time bounds and retain the event schema wh
     assert.deepEqual(before.columns, ['Event ID', 'Recipient ID', 'Email', 'Time (UTC)', 'Event', 'Source', 'Password present']);
     assert.deepEqual(before.targets, []);
     assert.deepEqual(during.targets, [{ email: 'person001@example.test', first_name: 'Email Sent', last_name: firstEvent.time, position: '' }]);
-    const analysis = await f.request(`/api/campaigns/3/analysis?recipient=30001&from=${at}&until=${at + 1}`);
+    const analysis = await f.request(`/api/campaigns/3/results?recipient=30001&from=${at}&until=${at + 1}`);
     assert.equal(analysis.value.event_total, 1);
 });
 
@@ -236,11 +236,11 @@ test('dashboard, filters, pagination and recipient drill-downs share the same re
     assert.equal(first.items.length, 50);
     assert.ok(second.items.every(r => r.id > first.next_after));
     const recipient = first.items[0];
-    const analysis = (await f.request(`/api/campaigns/3/analysis?recipient=${recipient.id}`)).value;
+    const analysis = (await f.request(`/api/campaigns/3/results?recipient=${recipient.id}`)).value;
     assert.equal(analysis.recipients.length, 1);
     assert.ok(analysis.events.every(e => e.recipient_id === recipient.id));
-    assert.equal((await f.request(`/api/campaigns/3/delivery/${recipient.id}/history`)).value.email, recipient.email);
-    assert.equal((await f.request('/api/campaigns/3/analysis?search=does-not-exist')).value.recipient_total, 0);
+    assert.equal((await f.request(`/api/campaigns/3/recipients/${recipient.id}/history`)).value.email, recipient.email);
+    assert.equal((await f.request('/api/campaigns/3/results?search=does-not-exist')).value.recipient_total, 0);
 });
 
 test('analysis navigation lists campaign executions and opens their populated results', async () => {
@@ -250,7 +250,7 @@ test('analysis navigation lists campaign executions and opens their populated re
     assert.equal(directory.value.items.length, 4);
     assert.ok(directory.value.items.every(row => row.kind === 'campaign'));
     for (const row of directory.value.items) {
-        const result = await f.request(`/api/campaigns/${row.id}/analysis`);
+        const result = await f.request(`/api/campaigns/${row.id}/results`);
         assert.equal(result.status, 200);
         assert.equal(String(result.value.id), row.id);
         assert.equal(result.value.name, row.name);

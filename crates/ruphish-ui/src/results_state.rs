@@ -107,7 +107,10 @@ mod tests {
     #[test]
     fn bookmark_and_download_filters_round_trip_without_empty_or_irrelevant_parameters() {
         let mut filter = Filter::default();
-        assert_eq!(address("/analysis/7", &filter, false), "/analysis/7");
+        assert_eq!(
+            address("/campaigns/7/results", &filter, false),
+            "/campaigns/7/results"
+        );
         filter.recipients = "2,9".into();
         filter.search = "Renée & team+one".into();
         filter.event = "email_reported".into();

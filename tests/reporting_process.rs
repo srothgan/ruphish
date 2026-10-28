@@ -21,13 +21,8 @@ fn get(client: &reqwest::blocking::Client, base: &str, path: &str) -> Value {
     let response = request(client, base, reqwest::Method::GET, path, None);
     assert_eq!(response.status(), 200, "{}", response.text().unwrap());
     let value: Value = response.json().unwrap();
-    if path
-        .split('?')
-        .next()
-        .unwrap_or(path)
-        .ends_with("/analysis")
-    {
-        let snapshot: ruphish_contracts::campaign_reads::Analysis =
+    if path.split('?').next().unwrap_or(path).ends_with("/results") {
+        let snapshot: ruphish_contracts::campaign_reads::Results =
             serde_json::from_value(value.clone()).unwrap();
         assert_eq!(serde_json::to_value(snapshot).unwrap(), value);
     }
@@ -52,7 +47,7 @@ fn sorted_analysis_exports_and_delivery_cursors_survive_rejections_deletion_and_
     database(directory.path(), &setup);
     assert_eq!(
         client
-            .get(format!("{base}/api/campaigns/91/analysis?sort=email"))
+            .get(format!("{base}/api/campaigns/91/results?sort=email"))
             .send()
             .unwrap()
             .status(),
@@ -61,7 +56,7 @@ fn sorted_analysis_exports_and_delivery_cursors_survive_rejections_deletion_and_
     let page = get(
         &client,
         &base,
-        "/api/campaigns/91/analysis?sort=email&order=desc&offset=50&limit=5",
+        "/api/campaigns/91/results?sort=email&order=desc&offset=50&limit=5",
     );
     assert_eq!(page["recipient_total"], 55);
     assert_eq!(
@@ -90,10 +85,10 @@ fn sorted_analysis_exports_and_delivery_cursors_survive_rejections_deletion_and_
         .collect();
     assert_eq!(ids, (1000..1055).rev().collect::<Vec<_>>());
     for path in [
-        "/api/campaigns/91/analysis?sort=unknown",
-        "/api/campaigns/91/analysis?sort=email%3BDROP%20TABLE%20results",
-        "/api/campaigns/91/analysis?order=descending",
-        "/api/campaigns/91/analysis?event_sort=unknown",
+        "/api/campaigns/91/results?sort=unknown",
+        "/api/campaigns/91/results?sort=email%3BDROP%20TABLE%20results",
+        "/api/campaigns/91/results?order=descending",
+        "/api/campaigns/91/results?event_sort=unknown",
         "/api/campaigns/91/export?format=csv&scope=recipients&sort=unknown",
     ] {
         assert_eq!(
@@ -107,7 +102,7 @@ fn sorted_analysis_exports_and_delivery_cursors_survive_rejections_deletion_and_
             &client,
             &base,
             reqwest::Method::GET,
-            "/api/campaigns/93/analysis?sort=email",
+            "/api/campaigns/93/results?sort=email",
             None
         )
         .status(),
@@ -118,7 +113,7 @@ fn sorted_analysis_exports_and_delivery_cursors_survive_rejections_deletion_and_
             &client,
             &base,
             reqwest::Method::GET,
-            "/api/campaigns/91/analysis?sort=name&recipient=2000",
+            "/api/campaigns/91/results?sort=name&recipient=2000",
             None
         )
         .status(),
@@ -182,7 +177,7 @@ fn sorted_analysis_exports_and_delivery_cursors_survive_rejections_deletion_and_
         get(
             &client,
             &base,
-            "/api/campaigns/92/analysis?sort=opened&order=desc"
+            "/api/campaigns/92/results?sort=opened&order=desc"
         )["recipient_total"],
         0
     );
@@ -291,7 +286,7 @@ fn verified_imap_reports_survive_ack_failure_restart_and_uid_reset_without_messa
     );
     assert_eq!(failed["history"][0]["matched"], 1);
     assert_eq!(failed["history"][0]["rejected"], 1);
-    let analysis = get(&client, &base, "/api/campaigns/91/analysis");
+    let analysis = get(&client, &base, "/api/campaigns/91/results");
     assert_eq!(analysis["totals"]["reported"], 1);
     assert_eq!(analysis["events"][0]["source"], "mailbox");
     assert_eq!(analysis["unique"]["opened"], 0);
@@ -320,14 +315,14 @@ fn verified_imap_reports_survive_ack_failure_restart_and_uid_reset_without_messa
     assert_eq!(recovered["code"], "passed");
     assert_eq!(recovered["history"][0]["rejected"], 2);
     assert_eq!(
-        get(&client, &base, "/api/campaigns/91/analysis")["totals"]["reported"],
+        get(&client, &base, "/api/campaigns/91/results")["totals"]["reported"],
         1
     );
     assert_eq!(peer.state.lock().unwrap().seen, vec![2]);
     for (path, code) in [
-        ("/api/campaigns/91/analysis?limit=garbage", 400),
+        ("/api/campaigns/91/results?limit=garbage", 400),
         ("/api/campaigns/91/export?format=exe", 400),
-        ("/api/campaigns/999/analysis", 404),
+        ("/api/campaigns/999/results", 404),
     ] {
         assert_eq!(
             request(&client, &base, reqwest::Method::GET, path, None).status(),
@@ -391,7 +386,7 @@ fn verified_imap_reports_survive_ack_failure_restart_and_uid_reset_without_messa
     );
     assert_eq!(resumed["code"], "passed");
     assert_eq!(
-        get(&client, &base, "/api/campaigns/91/analysis")["totals"]["reported"],
+        get(&client, &base, "/api/campaigns/91/results")["totals"]["reported"],
         1
     );
     process.stop();
@@ -536,7 +531,7 @@ fn reporting_api_rejects_cross_owner_admin_only_stale_and_malformed_requests() {
         directory.path(),
         "UPDATE users SET password_change_required=0; UPDATE ruphish_settings SET reporting_mailboxes_enabled=1; INSERT INTO users(id,username,api_key,role_id,password_change_required,account_locked) VALUES(2,'other','other-key',2,0,0); INSERT INTO ruphish_auth_state VALUES(2,0); INSERT INTO campaigns(id,user_id,name,url,status) VALUES(91,1,'Owner report','https://training.test','Completed'); INSERT INTO results(id,campaign_id,user_id,r_id,email,status,reported) VALUES(91,91,1,'abc123','person@example.test','Email Sent',1);",
     );
-    for path in ["/api/campaigns/91/analysis", "/api/campaigns/91/export"] {
+    for path in ["/api/campaigns/91/results", "/api/campaigns/91/export"] {
         assert_eq!(
             client
                 .get(format!("{base}{path}"))
@@ -688,7 +683,7 @@ fn reporting_api_rejects_cross_owner_admin_only_stale_and_malformed_requests() {
             .len(),
         1
     );
-    let analysis = get(&client, &base, "/api/campaigns/91/analysis");
+    let analysis = get(&client, &base, "/api/campaigns/91/results");
     assert_eq!(analysis["recipients"][0]["historical_reported"], true);
     assert_eq!(analysis["unique"]["reported"], 0);
     let mailbox_path = format!("{base}/api/reporting-mailboxes/{id}");
@@ -750,21 +745,21 @@ fn analysis_multiselect_filters_chart_pages_and_exports_and_rejects_invalid_iden
     let by_name = get(
         &client,
         &base,
-        "/api/campaigns/91/analysis?search=ALICE%20EXAMPLE",
+        "/api/campaigns/91/results?search=ALICE%20EXAMPLE",
     );
     assert_eq!(by_name["recipient_total"], 1);
     assert_eq!(by_name["recipients"][0]["id"], 91);
     let by_email = get(
         &client,
         &base,
-        "/api/campaigns/91/analysis?search=b%40example.test",
+        "/api/campaigns/91/results?search=b%40example.test",
     );
     assert_eq!(by_email["recipient_total"], 1);
     assert_eq!(by_email["recipients"][0]["id"], 92);
     let selected = get(
         &client,
         &base,
-        "/api/campaigns/91/analysis?recipients=91,92&limit=1",
+        "/api/campaigns/91/results?recipients=91,92&limit=1",
     );
     assert_eq!(selected["recipient_total"], 2);
     assert_eq!(selected["event_total"], 3);
@@ -776,7 +771,7 @@ fn analysis_multiselect_filters_chart_pages_and_exports_and_rejects_invalid_iden
     let next = get(
         &client,
         &base,
-        "/api/campaigns/91/analysis?recipients=91,92&limit=1&offset=1",
+        "/api/campaigns/91/results?recipients=91,92&limit=1&offset=1",
     );
     assert_eq!(next["recipients"][0]["id"], 92);
     assert_eq!(next["totals"], selected["totals"]);
@@ -803,17 +798,13 @@ fn analysis_multiselect_filters_chart_pages_and_exports_and_rejects_invalid_iden
     }
     assert_eq!(sum, [0, 1, 1, 0, 1]);
     assert_eq!(selected["bucket_seconds"].as_i64().unwrap() % 60, 0);
-    let duplicate = get(
-        &client,
-        &base,
-        "/api/campaigns/91/analysis?recipients=91,91",
-    );
+    let duplicate = get(&client, &base, "/api/campaigns/91/results?recipients=91,91");
     assert_eq!(duplicate["recipient_total"], 1);
     assert_eq!(duplicate["event_total"], 2);
     let intersect = get(
         &client,
         &base,
-        "/api/campaigns/91/analysis?recipients=91,92&recipient=92&event=link_clicked",
+        "/api/campaigns/91/results?recipients=91,92&recipient=92&event=link_clicked",
     );
     assert_eq!(intersect["event_total"], 1);
     let csv = request(
@@ -875,7 +866,7 @@ fn analysis_multiselect_filters_chart_pages_and_exports_and_rejects_invalid_iden
         ("event=%27%20OR%201=1--", 400),
         ("source=unknown", 400),
     ] {
-        for route in ["analysis", "export"] {
+        for route in ["results", "export"] {
             let response = request(
                 &client,
                 &base,
@@ -892,18 +883,18 @@ fn analysis_multiselect_filters_chart_pages_and_exports_and_rejects_invalid_iden
             &client,
             &base,
             reqwest::Method::GET,
-            &format!("/api/campaigns/91/analysis?recipients={excessive}"),
+            &format!("/api/campaigns/91/results?recipients={excessive}"),
             None
         )
         .status(),
         400
     );
-    let before = get(&client, &base, "/api/campaigns/91/analysis");
+    let before = get(&client, &base, "/api/campaigns/91/results");
     database(
         directory.path(),
         "INSERT INTO events(campaign_id,recipient_id,email,time,kind,source,metadata) VALUES(91,91,'a@example.test','2026-10-04T00:00:00Z','Proxied request','legacy','{}')",
     );
-    let after = get(&client, &base, "/api/campaigns/91/analysis");
+    let after = get(&client, &base, "/api/campaigns/91/results");
     assert_eq!(
         after["totals"], before["totals"],
         "unrecognized history must not invent known actions"
@@ -924,5 +915,89 @@ fn analysis_multiselect_filters_chart_pages_and_exports_and_rejects_invalid_iden
     );
     assert_eq!(csv.status(), 200);
     assert!(csv.text().unwrap().contains("Proxied request"));
+    process.stop();
+}
+
+#[test]
+fn consolidated_campaign_reads_share_identity_scope_and_bounded_history() {
+    let directory = workspace();
+    write_config(directory.path(), &configuration());
+    let mut process = Process::start(directory.path(), "admin");
+    let base = format!("http://{}", process.ready()["admin"].as_str().unwrap());
+    let client = client();
+    database(
+        directory.path(),
+        "UPDATE users SET password_change_required=0; INSERT INTO users(id,username,api_key,role_id,password_change_required,account_locked) VALUES(2,'outside','outside-key',2,0,0); INSERT INTO ruphish_auth_state VALUES(2,0); INSERT INTO campaigns(id,user_id,name,status) VALUES(91,1,'Completed read','Completed'),(92,2,'Outside','Completed'); INSERT INTO results(id,campaign_id,user_id,r_id,email,status,reported) VALUES(91,91,1,'read-recipient','read@example.test','Email Sent',0),(92,92,2,'outside-recipient','outside@example.test','Email Sent',0);",
+    );
+    for index in 0..105 {
+        database(
+            directory.path(),
+            &format!(
+                "INSERT INTO events(campaign_id,recipient_id,email,time,kind,metadata,source) VALUES(91,91,'read@example.test','2026-01-01T00:00:{:02}Z','link_clicked','{{}}','public')",
+                index % 60
+            ),
+        );
+    }
+    let context = get(&client, &base, "/api/campaigns/91/context");
+    assert_eq!(context["id"], 91);
+    assert_eq!(context["status"], "Completed");
+    assert_eq!(context["total"], 1);
+    assert!(context.get("results").is_none());
+    let results = get(&client, &base, "/api/campaigns/91/results?limit=1");
+    assert_eq!(results["totals"]["clicked"], 105);
+    assert_eq!(results["unique"]["clicked"], 1);
+    assert_eq!(results["events"].as_array().unwrap().len(), 1);
+    let history = get(&client, &base, "/api/campaigns/91/recipients/91/history");
+    let events = history["events"].as_array().unwrap();
+    assert_eq!(events.len(), 100);
+    let older = get(
+        &client,
+        &base,
+        &format!(
+            "/api/campaigns/91/recipients/91/history?before_event={}",
+            history["next_event"]
+        ),
+    );
+    assert_eq!(older["events"].as_array().unwrap().len(), 5);
+    for path in [
+        "/api/campaigns/91/context",
+        "/api/campaigns/91/results",
+        "/api/campaigns/91/recipients/91/history",
+    ] {
+        assert_eq!(
+            client.get(format!("{base}{path}")).send().unwrap().status(),
+            401
+        );
+        assert_eq!(
+            client
+                .get(format!("{base}{path}"))
+                .bearer_auth("outside-key")
+                .send()
+                .unwrap()
+                .status(),
+            404
+        );
+    }
+    for path in [
+        "/api/campaigns/91/recipients/92/history",
+        "/api/campaigns/999/context",
+        "/api/campaigns/91/results?recipient=92",
+    ] {
+        assert_eq!(
+            request(&client, &base, reqwest::Method::GET, path, None).status(),
+            404
+        );
+    }
+    assert_eq!(
+        request(
+            &client,
+            &base,
+            reqwest::Method::GET,
+            "/api/campaigns/91/analysis",
+            None
+        )
+        .status(),
+        404
+    );
     process.stop();
 }

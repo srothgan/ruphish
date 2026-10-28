@@ -29,7 +29,7 @@ export function overview(data) {
         as_of: data.now,
         recent: [...data.campaigns].reverse().map(c => ({ id: c.header.id, name: c.header.name, status: c.header.status, launch: c.header.launch_date, recipients: c.results.length, outcomes: posture(c.results) })),
         inventory: { templates: data.templates.length, pages: data.pages.length, groups: data.groups.length, profiles: data.smtp.length, domains: data.domains.length, domains_verified: data.domains.filter(d => d.eligible).length, reporting_mailboxes: data['reporting-mailboxes'].length },
-        attention: { unverified_enabled_domains: data.domains.filter(d => d.enabled && !d.eligible).length, delivery_problems: data.campaigns.filter(c => c.header.status !== 'Completed').flatMap(c => c.results).filter(r => r.state === 'failed').length, next_launch: scheduled.length ? { id: scheduled[0].id, name: scheduled[0].name, launch: scheduled[0].launch_date } : null },
+        attention: { unverified_enabled_domains: data.domains.filter(d => d.enabled && !d.eligible).length, delivery_problems: data.campaigns.filter(c => c.header.status !== 'Completed').flatMap(c => c.results).filter(r => r.state === 'failed').length, campaign_ids: data.campaigns.filter(c => c.header.status !== 'Completed' && c.results.some(r => ['failed','blocked','unknown'].includes(r.state))).slice(0,10).map(c => c.header.id), next_launch: scheduled.length ? { id: scheduled[0].id, name: scheduled[0].name, launch: scheduled[0].launch_date } : null },
     };
 }
 
@@ -132,7 +132,7 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage, da
         if (path === '/auth/login' && method === 'POST') {
             if (body.username !== 'demo' || body.password !== 'demodemo') return failure(401, 'AUTH_INVALID_CREDENTIALS');
             if (!saveIdentity(1)) return failure(503, 'DEMO_STORAGE_REQUIRED');
-            const next = typeof body.next === 'string' && /^\/(?:$|(?:groups|templates|pages|learning-pages|smtp|campaigns|analysis|domains|webhooks|reporting-mailboxes|users|user|settings)(?:[/?]|$))/.test(body.next) && !/[\\\r\n]/.test(body.next) ? body.next : '/';
+            const next = typeof body.next === 'string' && /^\/(?:$|(?:groups|templates|pages|learning-pages|smtp|campaigns|domains|webhooks|reporting-mailboxes|users|user|settings)(?:[/?]|$))/.test(body.next) && !/[\\\r\n]/.test(body.next) ? body.next : '/';
             return success(next);
         }
         if (!current) return failure(401);
@@ -194,14 +194,15 @@ export function createDemoApi({ now = Math.floor(Date.now() / 1000), storage, da
         if (campaignMatch) {
             const c = data.campaigns.find(c => c.header.id === Number(campaignMatch[1])), operation = campaignMatch[2] ?? '';
             if (!c) return failure(404);
+            if (method === 'GET' && operation === 'context') return json(c.header);
             if (method === 'GET' && operation === 'delivery') {
                 try { return json(delivery(c, url.searchParams, current.id)); } catch { return failure(400); }
             }
-            if (method === 'GET' && operation === 'analysis') {
+            if (method === 'GET' && operation === 'results') {
                 try { return json(analysis(c, url.searchParams, now)); } catch { return failure(400, 'ANALYSIS_FILTER_INVALID'); }
             }
             if (method === 'GET' && operation === 'draft') return json({ name: c.header.name, url: c.header.url, selection: { groups: [{ id: 1 }], template: { id: c.header.template.id }, page: { id: 1 }, smtp: { id: 1 } }, policy });
-            const history = operation.match(/^delivery\/(\d+)\/history$/);
+            const history = operation.match(/^recipients\/(\d+)\/history$/);
             if (method === 'GET' && history) {
                 const r = c.results.find(r => r.id === Number(history[1]));
                 if (!r) return failure(404);

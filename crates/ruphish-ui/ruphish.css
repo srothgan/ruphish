@@ -634,16 +634,6 @@
   .recipient-history-columns { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.3fr); gap: var(--s6); align-items: start; }
   .recipient-history h4 { margin: 0 0 var(--s5); font-size: var(--fs-base); }
   .recipient-actions { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s2); }
-  .delivery-timeline { list-style: none; padding: 0; margin: 0 0 var(--s5); }
-  .timeline-event { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: var(--s3); position: relative; padding-bottom: var(--s5); }
-  .timeline-event:not(:last-child)::before { content: ''; position: absolute; left: 7px; top: 14px; bottom: 0; width: 2px; background: var(--line-strong); }
-  .timeline-marker { width: 12px; height: 12px; margin-top: var(--s1); margin-left: 2px; border-radius: 50%; background: var(--muted); border: 2px solid var(--muted); z-index: 1; }
-  .timeline-event.success .timeline-marker { background: var(--teal-600); border-color: var(--teal-600); }
-  .timeline-event.failure .timeline-marker { background: var(--danger); border-color: var(--danger); }
-  .timeline-event.warning .timeline-marker { background: var(--amber); border-color: var(--amber); }
-  .timeline-marker.pending { background: var(--canvas); }
-  .timeline-event strong { display: block; font-size: var(--fs-sm); font-weight: var(--fw-semibold); }
-  .timeline-event time { display: block; margin-top: var(--s2); color: var(--muted); font-size: var(--fs-sm); }
   .delivery-attempt { padding-bottom: var(--s5); margin-bottom: var(--s5); border-bottom: 1px solid var(--line); }
   .delivery-attempt h5 { margin: 0 0 var(--s2); font-size: var(--fs-base); }
   .attempt-facts { display: grid; gap: var(--s3); margin: var(--s4) 0 0; }
@@ -800,3 +790,7 @@
     .account-app .step-navigation button[aria-current=step], .account-app .step-navigation button:focus-visible { --step-edge: Highlight; color: Highlight; }
   }
 }
+
+.campaign-sections { display:flex; flex-wrap:wrap; gap:1rem; border-bottom:1px solid var(--line); margin-bottom:1.5rem; }
+.campaign-sections a { padding:.75rem .25rem; border-bottom:3px solid transparent; }
+.campaign-sections a[aria-current="page"] { border-bottom-color:currentColor; font-weight:600; }

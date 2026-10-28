@@ -876,6 +876,11 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     );
     a.unwrap();
     b.unwrap();
+    let context = campaigns.header(actor, campaign.id).await.unwrap();
+    assert_eq!(context.id, campaign.id);
+    assert_eq!(context.total, 1);
+    let overview = db.overview().snapshot(actor, now).await.unwrap();
+    assert!(overview.attention.campaign_ids.len() <= 10);
     let analysis = db
         .reporting()
         .analysis(

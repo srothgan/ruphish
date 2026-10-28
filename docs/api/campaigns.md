@@ -16,7 +16,8 @@ A campaign is an execution with a fixed audience and selected resources. Use [ca
 | POST | `/api/campaigns/test` | Send a test from the selected campaign configuration |
 | GET | `/api/campaigns/{id}` | Legacy execution detail |
 | DELETE | `/api/campaigns/{id}` | Delete execution data |
-| GET | `/api/campaigns/{id}/results` | Legacy results and timeline |
+| GET | `/api/campaigns/{id}/context` | Typed campaign configuration and linked-resource context |
+| GET | `/api/campaigns/{id}/results` | Filtered native results, chart buckets and bounded recipient/event pages |
 | GET | `/api/campaigns/summary` | Legacy collection summaries |
 | GET | `/api/campaigns/{id}/summary` | Legacy execution summary |
 | GET | `/api/campaigns/overview` | Bounded execution headers; `after`, `limit`, and optional `completed` |
@@ -24,7 +25,7 @@ A campaign is an execution with a fixed audience and selected resources. Use [ca
 | GET | `/api/campaigns/{id}/draft` | Read inputs for duplication; does not save a draft |
 | POST | `/api/campaigns/{id}/complete` | Complete a campaign |
 | GET | `/api/campaigns/{id}/delivery` | Delivery state and attempts |
-| GET | `/api/campaigns/{id}/delivery/{result}/history` | Recipient attempt and event history |
+| GET | `/api/campaigns/{id}/recipients/{result}/history` | Recipient attempt and event history |
 | POST | `/api/campaigns/{id}/delivery/{result}` | Resolve or retry a delivery outcome |
 
 `/complete` accepts POST only; GET and HEAD return `405` without changing campaign state. Requests in this route family have a 1 MiB body limit.
@@ -85,7 +86,7 @@ Set `policy.learning_page_id` to an owned [learning page](learning-pages.md) to 
 
 Campaign detail includes identity, lifecycle timestamps, URL, selected resources, and available `results` and `timeline`. Absent lifecycle dates return `null`, including `send_by_date` and `completed_date`. Empty results or timeline fields may be omitted. Result `id` is the opaque recipient tracking ID. Legacy network-location fields are not a source of participant identity; do not build new tracking around them.
 
-Legacy summary `stats` includes `total`, `sent`, `opened`, `clicked`, `submitted_data`, `email_reported`, and `error`. These use progression semantics. Use [analysis](analysis-and-exports.md) for observed event counts, filters, and exportable rows; do not combine the two models as if they were identical metrics.
+Legacy summary `stats` includes `total`, `sent`, `opened`, `clicked`, `submitted_data`, `email_reported`, and `error`. These use progression semantics. Use [results](analysis-and-exports.md) for observed event counts, filters, and exportable rows; do not combine the two models as if they were identical metrics.
 
 The directory accepts `filter=all`, `drafts`, `active`, `completed`, or `executions` and an opaque `after` cursor. It returns `items` and `next_after`, with at most 50 rows per page. Keep cursor values opaque.
 
@@ -106,3 +107,5 @@ History accepts `before_attempt` and `before_event` cursors and returns attempts
 A resolution POST contains the current `generation` and an `action`: `confirm_accepted` or `resend_unknown` for an unknown outcome, or `retry` for an eligible failed/blocked result. Reload before resolving a stale generation. An unknown outcome can mean SMTP accepted the message before the connection failed; resending may produce a duplicate.
 
 Completion stops remaining campaign work but cannot recall accepted mail. Deletion removes history. See [completion and deletion](../user-guide/campaigns/completion-and-deletion.md) before invoking either operation.
+
+The compact context read returns the launched schedule, audience size, policy and resource references. Template subject and sender/profile information describe current shared resources. It excludes resource bodies and service credentials. Recipient history pages contain at most 100 attempts and 100 events each; use `next_attempt` and `next_event` as the exclusive `before_attempt` and `before_event` cursors. Numeric recipient identities belong to the campaign, and cross-campaign or cross-owner reads fail with `404`.

@@ -1,5 +1,7 @@
 //! Stable recipient rows with an independently loaded, expandable history panel.
-use crate::shared::components::{ActionButton, ButtonStyle, StatusBadge, StatusTone};
+use crate::shared::components::{
+    ActionButton, ButtonStyle, DataTable, StatusBadge, StatusTone, TableSorting,
+};
 use crate::{
     account::copy_text,
     campaigns::{array, text},
@@ -7,8 +9,8 @@ use crate::{
     time_display::instant,
 };
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
-use ruphish_ui::recipient_history::{History, timeline, tone};
-use ruphish_ui::tr;
+use ruphish_ui::recipient_history::{History, tone};
+use ruphish_ui::{tr, trs};
 use serde_json::Value;
 
 #[derive(Clone, Copy)]
@@ -34,11 +36,21 @@ fn fetch(
     tasks.spawn(async move {
         let response = api
             .get(&format!(
-                "/api/campaigns/{}/delivery/{result}/history{query}",
+                "/api/campaigns/{}/recipients/{result}/history{query}",
                 campaign.get_value()
             ))
             .await
-            .map_err(|e| e.message)
+            .map_err(|e| {
+                if e.is_terminal() {
+                    history.update(|h| {
+                        h.events.clear();
+                        h.attempts.clear();
+                        h.next_event = None;
+                        h.next_attempt = None;
+                    });
+                }
+                e.message
+            })
             .and_then(|value| {
                 let value: ruphish_contracts::campaign_reads::History =
                     serde_json::from_value(value).map_err(|_| api.invalid_read())?;
@@ -66,18 +78,8 @@ pub(super) fn recipient_row(
             .find(|r| r["id"] == result)
             .unwrap_or(Value::Null)
     });
-    let tasks = ruphish_ui::view_tasks::ViewTasks::default();
     let history = RwSignal::new(History::default());
     let open = Memo::new(move |_| history.with(|h| h.open));
-    let entries = Memo::new(move |_| history.with(timeline));
-    let attempts = Memo::new(move |_| history.with(|h| h.attempts.clone()));
-    let copy_message = RwSignal::new(String::new());
-    Effect::new(move |_| {
-        data.track();
-        if open.get() && history.with_untracked(|h| h.error.is_none()) {
-            fetch(tasks, api, campaign, result, history, false);
-        }
-    });
     let panel_id = format!("recipient-history-{result}");
     let button_id = format!("recipient-toggle-{result}");
     let busy = controls.busy;
@@ -173,146 +175,209 @@ pub(super) fn recipient_row(
         </tr>
         <tr class="recipient-history-row" hidden=move || !open.get()>
             <td colspan="5">
-                <section
-                    id=panel_id
-                    aria-labelledby=button_id
-                    class="recipient-history"
-                    aria-busy=move || history.with(History::loading).to_string()
-                >
-                    <div class="recipient-history-heading">
-                        <h3>{tr!(ui.recipient_history)}</h3>
-                        <span>
-                            {move || {
-                                leptos_i18n::t_string!(
-                                    i18n, messages.times_shown_in_arg0, arg0 = (crate::time_display::zone_name()).to_string()
-                                )
-                            }}
-                        </span>
-                    </div>
-                    <Show when=move || history.with(History::loading)>
-                        <p role="status">{tr!(ui.loading_history)}</p>
-                    </Show>
-                    {move || {
-                        history
-                            .get()
-                            .error
-                            .map(|error| {
-                                view! {
-                                    <div class="form-message error" role="alert">
-                                        <p>{error}</p>
-                                        <ActionButton
-                                            kind="button"
-                                            on_click=move |_| fetch(
-                                                tasks,
-                                                api,
-                                                campaign,
-                                                result,
-                                                history,
-                                                history.get_untracked().retry_older,
-                                            )
-                                        >
-                                            {tr!(ui.retry_history)}
-                                        </ActionButton>
-                                    </div>
-                                }
-                            })
-                    }}
-                    <div class="recipient-history-columns">
-                        <section class="recipient-timeline">
-                            <h4>{tr!(ui.timeline)}</h4>
-                            <ol class="delivery-timeline">
-                                {move || {
-                                    entries
-                                        .get()
-                                        .into_iter()
-                                        .map(|entry| {
-                                            view! {
-                                                <li class=format!("timeline-event {}", entry.tone)>
-                                                    <span class="timeline-marker" aria-hidden="true"></span>
-                                                    <div>
-                                                        <strong>
-                                                            {ruphish_ui::localization::timeline_title(
-                                                                i18n,
-                                                                &entry.title,
-                                                            )}
-                                                        </strong>
-                                                        <time>
-                                                            {entry
-                                                                .at
-                                                                .map(|at| instant(&Value::from(at)))
-                                                                .unwrap_or_else(|| {
-                                                                    leptos_i18n::t_string!(i18n, ui.time_not_recorded).into()
-                                                                })}
-                                                        </time>
-                                                    </div>
-                                                </li>
-                                            }
-                                        })
-                                        .collect_view()
-                                }}
-                                <Show when=move || {
-                                    matches!(text(&row.get(), "state").as_str(), "ready" | "retry")
-                                }>
-                                    <li class="timeline-event neutral">
-                                        <span
-                                            class="timeline-marker pending"
-                                            aria-hidden="true"
-                                        ></span>
-                                        <div>
-                                            <strong>
-                                                {move || {
-                                                    if text(&row.get(), "state") == "retry" {
-                                                        leptos_i18n::t_string!(i18n, ui.next_retry_scheduled)
-                                                    } else {
-                                                        leptos_i18n::t_string!(i18n, ui.scheduled_to_send)
-                                                    }
-                                                }}
-                                            </strong>
-                                            <time>{move || instant(&row.get()["due"])}</time>
-                                        </div>
-                                    </li>
-                                </Show>
-                            </ol>
-                            <Show when=move || {
-                                !history.with(History::loading)
-                                    && history
-                                        .with(|h| {
-                                            h.error.is_none() && h.events.is_empty()
-                                                && h.attempts.is_empty()
-                                        })
-                            }>
-                                <p>{tr!(ui.no_attempts_or_recipient_events_recorded_yet)}</p>
-                            </Show>
-                        </section>
-                        <section class="recipient-attempts">
-                            <h4>{tr!(ui.delivery_attempts)}</h4>
-                            {move || {
-                                attempts
-                                    .get()
-                                    .into_values()
-                                    .rev()
-                                    .map(|attempt| attempt_details(attempt, copy_message))
-                                    .collect_view()
-                            }}
-                            <p class="copy-status" role="status">
-                                {move || copy_message.get()}
-                            </p>
-                        </section>
-                    </div>
+                <div id=panel_id aria-labelledby=button_id>
                     <Show when=move || {
-                        history.with(|h| h.next_attempt.is_some() || h.next_event.is_some())
-                    }>
-                        <ActionButton
-                            kind="button"
-                            disabled=Signal::derive(move || history.with(History::loading))
-                            on_click=move |_| fetch(tasks, api, campaign, result, history, true)
-                        >
-                            {tr!(ui.load_earlier_history)}
-                        </ActionButton>
-                    </Show>
-                </section>
+                        open.get()
+                    }>{recipient_detail(api, campaign, result, history, data)}</Show>
+                </div>
             </td>
         </tr>
+    }
+}
+
+pub(super) fn recipient_detail(
+    api: Api,
+    campaign: StoredValue<String>,
+    result: i64,
+    history: RwSignal<History>,
+    refresh: Signal<Value>,
+) -> impl IntoView {
+    let i18n = ruphish_ui::localization::use_i18n();
+    let outcomes = expect_context::<crate::campaign_queries::CampaignQueries>()
+        .results
+        .observe_polling(
+            move || {
+                crate::campaign_queries::CampaignQueries::results_key(
+                    campaign.get_value().parse().unwrap_or(0),
+                    &ruphish_contracts::reporting::Filter {
+                        recipient: Some(result),
+                        limit: 1,
+                        ..Default::default()
+                    },
+                )
+            },
+            ruphish_ui::query::document_visible(),
+        );
+    let tasks = ruphish_ui::view_tasks::ViewTasks::default();
+    let sorting = TableSorting::new(
+        "recipient-history-events",
+        "time",
+        ruphish_domain::reporting::SortDirection::Desc,
+    );
+    let attempts = Memo::new(move |_| history.with(|h| h.attempts.clone()));
+    let copy_message = RwSignal::new(String::new());
+    let open = Memo::new(move |_| history.with(|h| h.open));
+    Effect::new(move |_| {
+        refresh.track();
+        if open.get() && history.with_untracked(|h| h.error.is_none()) {
+            fetch(tasks, api, campaign, result, history, false);
+        }
+    });
+    view! {
+        <section
+            class="recipient-history"
+            aria-busy=move || history.with(History::loading).to_string()
+        >
+            <div class="recipient-history-heading">
+                <h3>{tr!(ui.recipient_history)}</h3>
+                <span>
+                    {move || {
+                        leptos_i18n::t_string!(
+                            i18n, messages.times_shown_in_arg0, arg0 = (crate::time_display::zone_name()).to_string()
+                        )
+                    }}
+                </span>
+            </div>
+            <crate::shared::components::QueryStatus
+                fetching=outcomes.fetching
+                has_data=Signal::derive(move || outcomes.data.with(Option::is_some))
+                error=outcomes.error
+                noun=trs!(ui.results)
+                refresh=outcomes.refresh
+            />
+            <dl class="delivery-metrics">
+                {[
+                    (trs!(ui.accepted), 0),
+                    (trs!(ui.opened), 1),
+                    (trs!(ui.clicked), 2),
+                    (trs!(ui.submitted), 3),
+                    (trs!(ui.reported), 4),
+                ]
+                    .into_iter()
+                    .map(|(label, index)| {
+                        view! {
+                            <div>
+                                <dt>{move || label.get()}</dt>
+                                <dd>
+                                    {move || {
+                                        outcomes
+                                            .data
+                                            .with(|v| v.as_ref().map(|v| v.totals.values()[index]))
+                                    }}
+                                </dd>
+                            </div>
+                        }
+                    })
+                    .collect_view()}
+            </dl>
+            <p>{tr!(ui.recipient_observation_counts)}</p>
+            <Show when=move || history.with(History::loading)>
+                <p role="status">{tr!(ui.loading_history)}</p>
+            </Show>
+            {move || {
+                history
+                    .get()
+                    .error
+                    .map(|error| {
+                        view! {
+                            <div class="form-message error" role="alert">
+                                <p>{error}</p>
+                                <ActionButton
+                                    kind="button"
+                                    on_click=move |_| fetch(
+                                        tasks,
+                                        api,
+                                        campaign,
+                                        result,
+                                        history,
+                                        history.get_untracked().retry_older,
+                                    )
+                                >
+                                    {tr!(ui.retry_history)}
+                                </ActionButton>
+                            </div>
+                        }
+                    })
+            }}
+            <div class="recipient-history-columns">
+                <section>
+                    <h4>{tr!(ui.recipient_events)}</h4>
+                    <DataTable
+                        sorting=sorting
+                        columns=vec!["time", "message", ""]
+                        label=trs!(ui.recipient_events)
+                        headers=vec![trs!(ui.time), trs!(ui.event), trs!(ui.details)]
+                    >
+                        {move || {
+                            sorting
+                                .json(
+                                    history
+                                        .with(|h| h.events.values().cloned().collect::<Vec<_>>()),
+                                    &["time"],
+                                )
+                                .into_iter()
+                                .map(|event| {
+                                    view! {
+                                        <tr>
+                                            <td>{instant(&event["time"])}</td>
+                                            <td>
+                                                {ruphish_ui::localization::event_label(
+                                                    i18n,
+                                                    &text(&event, "message"),
+                                                )}
+                                            </td>
+                                            <td>
+                                                {serde_json::from_str::<Value>(&text(&event, "details"))
+                                                    .ok()
+                                                    .and_then(|v| v["password_present"].as_bool())
+                                                    .map(|v| {
+                                                        if v {
+                                                            leptos_i18n::t_string!(i18n, ui.password_field_was_nonempty)
+                                                        } else {
+                                                            leptos_i18n::t_string!(i18n, ui.password_field_was_empty)
+                                                        }
+                                                    })}
+                                            </td>
+                                        </tr>
+                                    }
+                                })
+                                .collect_view()
+                        }}
+                    </DataTable>
+                    <Show when=move || {
+                        !history.with(History::loading)
+                            && history.with(|h| h.error.is_none() && h.events.is_empty())
+                    }>
+                        <p>{tr!(ui.no_attempts_or_recipient_events_recorded_yet)}</p>
+                    </Show>
+                </section>
+                <section class="recipient-attempts">
+                    <h4>{tr!(ui.delivery_attempts)}</h4>
+                    {move || {
+                        attempts
+                            .get()
+                            .into_values()
+                            .rev()
+                            .map(|attempt| attempt_details(attempt, copy_message))
+                            .collect_view()
+                    }}
+                    <p class="copy-status" role="status">
+                        {move || copy_message.get()}
+                    </p>
+                </section>
+            </div>
+            <Show when=move || {
+                history.with(|h| h.next_attempt.is_some() || h.next_event.is_some())
+            }>
+                <ActionButton
+                    kind="button"
+                    disabled=Signal::derive(move || history.with(History::loading))
+                    on_click=move |_| fetch(tasks, api, campaign, result, history, true)
+                >
+                    {tr!(ui.load_earlier_history)}
+                </ActionButton>
+            </Show>
+        </section>
     }
 }
 

@@ -211,30 +211,6 @@ pub fn delivery_label(context: leptos_i18n::I18nContext<Locale>, state: &str) ->
     }
 }
 
-/// Render chronological facts without changing their timestamps or grouping.
-pub fn timeline_title(
-    context: leptos_i18n::I18nContext<Locale>,
-    title: &crate::recipient_history::TimelineTitle,
-) -> String {
-    use crate::recipient_history::TimelineTitle;
-    match title {
-        TimelineTitle::Started(generation) => leptos_i18n::t_string!(
-            context,
-            messages.attempt_generation_started,
-            generation = *generation
-        )
-        .to_string(),
-        TimelineTitle::Finished(generation, state) => leptos_i18n::t_string!(
-            context,
-            messages.attempt_generation_outcome,
-            generation = *generation,
-            outcome = delivery_label(context, state)
-        )
-        .to_string(),
-        TimelineTitle::Event(event) => event_label(context, event),
-    }
-}
-
 /// Preserve server details while localizing verification recovery guidance.
 pub fn verification_error(
     context: leptos_i18n::I18nContext<Locale>,

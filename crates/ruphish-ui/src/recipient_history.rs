@@ -1,6 +1,6 @@
 //! Recipient expansion survives table refresh; history merges only confirmed responses.
 use serde_json::Value;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 
 #[derive(Clone, Default)]
 /// Confirmed history and the request currently owned by one expanded recipient.
@@ -123,26 +123,6 @@ impl History {
     }
 }
 
-/// One observed point in a recipient's chronological history.
-#[derive(Clone, PartialEq, Eq)]
-pub struct TimelineEntry {
-    /// Recorded UTC seconds, absent for an unparseable legacy timestamp.
-    pub at: Option<i64>,
-    /// Human-readable observation; never a fabricated protocol phase.
-    pub title: TimelineTitle,
-    /// Semantic marker color accompanied by the textual outcome.
-    pub tone: &'static str,
-}
-/// Observed timeline facts, rendered into the selected language by the UI.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TimelineTitle {
-    /// The recorded start of this attempt generation.
-    Started(i64),
-    /// The recorded generation and resulting transport state.
-    Finished(i64, String),
-    /// A recorded event name from the server.
-    Event(String),
-}
 /// Consistent semantic colors for state labels and timeline markers.
 pub fn tone(state: &str) -> &'static str {
     match state {
@@ -152,65 +132,6 @@ pub fn tone(state: &str) -> &'static str {
         _ => "neutral",
     }
 }
-/// Coalesce only one corresponding event per recorded attempt; preserve other events.
-pub fn timeline(history: &History) -> Vec<TimelineEntry> {
-    let mut entries = Vec::new();
-    let mut matched = HashSet::new();
-    for (generation, a) in &history.attempts {
-        entries.push(TimelineEntry {
-            at: a["started"].as_i64(),
-            title: TimelineTitle::Started(*generation),
-            tone: "neutral",
-        });
-        if let Some(finished) = a["finished"].as_i64() {
-            let state = a["state"].as_str().unwrap_or_default();
-            entries.push(TimelineEntry {
-                at: Some(finished),
-                title: TimelineTitle::Finished(*generation, state.to_owned()),
-                tone: tone(state),
-            });
-        }
-    }
-    for e in history.events.values() {
-        let at = e["at"].as_i64();
-        let message = e["message"].as_str().unwrap_or("Recorded event");
-        let duplicate = history
-            .attempts
-            .iter()
-            .find(|(generation, a)| {
-                !matched.contains(*generation)
-                    && at.is_some()
-                    && a["finished"].as_i64() == at
-                    && match message {
-                        "Email Sent" => a["state"] == "accepted",
-                        "Error Sending Email" => matches!(
-                            a["state"].as_str(),
-                            Some("retry" | "failed" | "blocked" | "unknown")
-                        ),
-                        _ => false,
-                    }
-            })
-            .map(|(generation, _)| *generation);
-        if let Some(generation) = duplicate {
-            matched.insert(generation);
-            continue;
-        }
-        entries.push(TimelineEntry {
-            at,
-            title: TimelineTitle::Event(message.to_owned()),
-            tone: if message == "Email Sent" {
-                "success"
-            } else if message == "Error Sending Email" {
-                "failure"
-            } else {
-                "neutral"
-            },
-        });
-    }
-    entries.sort_by_key(|e| e.at.unwrap_or(i64::MAX));
-    entries
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -250,29 +171,14 @@ mod tests {
         assert_eq!(h.events.len(), 3);
     }
     #[test]
-    fn timeline_orders_real_outcomes_and_does_not_hide_unrelated_or_duplicate_events() {
+    fn repeated_events_keep_individual_identities_and_occurrence_times() {
         let mut h = History::default();
         h.toggle();
-        let (r, _) = h.begin(false).unwrap();
-        h.finish(r,Ok(json!({"attempts":[
-            {"generation":2,"started":30,"finished":31,"state":"accepted","smtp_code":null,"stage":""},
-            {"generation":1,"started":10,"finished":11,"state":"retry"}],
-            "events":[{"id":1,"at":11,"message":"Error Sending Email"},{"id":2,"at":31,"message":"Email Sent"},{"id":3,"at":32,"message":"Email Opened"},{"id":4,"at":31,"message":"Email Sent"}]})));
-        let events = timeline(&h);
-        assert_eq!(
-            events.iter().map(|e| e.at.unwrap()).collect::<Vec<_>>(),
-            vec![10, 11, 30, 31, 31, 32]
-        );
-        assert_eq!(events[1].title, TimelineTitle::Finished(1, "retry".into()));
-        assert_eq!(
-            events[3].title,
-            TimelineTitle::Finished(2, "accepted".into())
-        );
-        assert_eq!(events[5].title, TimelineTitle::Event("Email Opened".into()));
-        // The title carries only recorded state, never invented SMTP codes/phases.
-        assert_eq!(events[0].title, TimelineTitle::Started(1));
-        assert_eq!(events[2].title, TimelineTitle::Started(2));
-        assert_eq!(events[4].title, TimelineTitle::Event("Email Sent".into()));
+        let (request, _) = h.begin(false).unwrap();
+        h.finish(request, Ok(json!({"events":[{"id":1,"at":32,"message":"Clicked Link"},{"id":2,"at":32,"message":"Clicked Link"}]})));
+        assert_eq!(h.events.len(), 2);
+        assert_eq!(h.events[&1]["at"], 32);
+        assert_eq!(h.events[&2]["at"], 32);
     }
 
     #[test]

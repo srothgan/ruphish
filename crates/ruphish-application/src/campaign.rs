@@ -313,6 +313,8 @@ pub trait Queue: Send + Sync {
 /// Owner-authorized campaign transaction boundary.
 #[async_trait::async_trait]
 pub trait Repository: drafts::Repository + Send + Sync {
+    /// Owner-scoped campaign context without recipient arrays, content or secrets.
+    async fn header(&self, caller: Identity, id: i64) -> Result<CampaignHeader, Error>;
     /// Bounded metadata for the UI without content, secrets or event payloads.
     async fn overview(
         &self,

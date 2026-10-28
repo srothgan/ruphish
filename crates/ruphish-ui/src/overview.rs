@@ -4,27 +4,19 @@ use crate::{
 };
 use leptos::prelude::*;
 use ruphish_contracts::overview::Snapshot;
-use ruphish_domain::{campaign::CampaignStatus, reporting::SortDirection};
-use ruphish_ui::overview_state::{ChangeGoal, count_change, percentage};
+use ruphish_domain::reporting::SortDirection;
+use ruphish_ui::overview_state::percentage;
 use ruphish_ui::{tr, trs};
 
 pub(super) fn page() -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
-    let change = move |current, previous| {
-        if current == previous {
-            leptos_i18n::t_string!(i18n, ui.no_change).to_owned()
-        } else {
-            count_change(current, previous)
-        }
-    };
-
     let queries = expect_context::<OverviewQueries>();
-    let window = RwSignal::new("30d".to_owned());
     let snapshot = queries.snapshot.observe(|| ());
-    let posture = queries.posture.observe(move || window.get());
     let snapshot_data = snapshot.data;
-    let posture_data = posture.data;
+    let drafts = expect_context::<crate::campaign_queries::CampaignQueries>()
+        .directory
+        .observe(|| ("drafts".into(), String::new(), "name".into(), "asc".into()));
     let can_create =
         use_context::<crate::resources::ResourceAccess>().is_some_and(|access| access.0);
     view! {
@@ -35,15 +27,15 @@ pub(super) fn page() -> impl IntoView {
             >
                 <ActionButton
                     disabled=Signal::derive(move || {
-                        snapshot.fetching.get() || posture.fetching.get()
+                        snapshot.fetching.get() || drafts.fetching.get()
                     })
                     on_click=move |_| {
                         snapshot.refresh.run(());
-                        posture.refresh.run(());
+                        drafts.refresh.run(());
                     }
                 >
                     {move || {
-                        if snapshot.fetching.get() || posture.fetching.get() {
+                        if snapshot.fetching.get() || drafts.fetching.get() {
                             leptos_i18n::t_string!(i18n, ui.refreshing_2)
                         } else {
                             leptos_i18n::t_string!(i18n, ui.refresh)
@@ -55,154 +47,46 @@ pub(super) fn page() -> impl IntoView {
                 </ActionLink>
             </PageHeader>
             <div class="dashboard-stack">
-                <Card class="dashboard-posture" label=trs!(ui.analysis_overview)>
-                    <div class="dashboard-section-heading">
-                        <div>
-                            <div class="dashboard-title">
-                                <h2>
-                                    <a href="/analysis">{tr!(ui.analysis_overview)}</a>
-                                </h2>
-                                <InfoPopover
-                                    id="dashboard-metrics-help".to_owned()
-                                    label=trs!(ui.dashboard_counts_and_comparisons)
-                                    explanation=trs!(
-                                        ui.the_period_selects_recipients_whose_first_recorded_email_send_falls_within_that
-                                    )
-                                />
-                            </div>
-                            <p>{tr!(ui.outcomes_for_emails_sent_in_the_selected_period)}</p>
-                        </div>
-                        <Select
-                            label=trs!(ui.period)
-                            value=window
-                            on_change=Callback::new(move |value| window.set(value))
-                        >
-                            <option value="all">{tr!(ui.all_time)}</option>
-                            <option value="365d">{tr!(ui.last_year)}</option>
-                            <option value="30d">{tr!(ui.last_30_days)}</option>
-                            <option value="7d">{tr!(ui.last_7_days)}</option>
-                        </Select>
-                    </div>
+                <Card label=trs!(ui.drafts)>
+                    <h2>{tr!(ui.drafts)}</h2>
                     <QueryStatus
-                        fetching=posture.fetching
-                        has_data=Signal::derive(move || posture_data.with(Option::is_some))
-                        error=posture.error
-                        noun=trs!(ui.analysis_overview)
-                        refresh=posture.refresh
+                        fetching=drafts.fetching
+                        has_data=Signal::derive(move || drafts.data.with(Option::is_some))
+                        error=drafts.error
+                        noun=trs!(ui.drafts)
+                        refresh=drafts.refresh
                     />
-                    {move || {
-                        posture_data
-                            .get()
-                            .map(|p| {
-                                let counts = p.counts;
-                                let previous = p.previous.map(|previous| previous.counts);
-                                let metrics = [
-                                    (
-                                        trs!(ui.emails_sent),
-                                        counts.delivered,
-                                        None,
-                                        false,
-                                        ChangeGoal::Neutral,
-                                    ),
-                                    (
-                                        trs!(ui.opened),
-                                        counts.opened,
-                                        previous.map(|p| p.opened),
-                                        true,
-                                        ChangeGoal::Decrease,
-                                    ),
-                                    (
-                                        trs!(ui.clicked),
-                                        counts.clicked,
-                                        previous.map(|p| p.clicked),
-                                        true,
-                                        ChangeGoal::Decrease,
-                                    ),
-                                    (
-                                        trs!(ui.credentials_entered),
-                                        counts.credentials_entered,
-                                        previous.map(|p| p.credentials_entered),
-                                        true,
-                                        ChangeGoal::Decrease,
-                                    ),
-                                    (
-                                        trs!(ui.reported),
-                                        counts.reported,
-                                        previous.map(|p| p.reported),
-                                        true,
-                                        ChangeGoal::Increase,
-                                    ),
-                                ];
-                                let comparison = match p.window.as_str() {
-                                    "7d" => {
-                                        leptos_i18n::t_string!(
-                                            i18n, ui.changes_compare_with_the_previous_7_days
-                                        )
-                                    }
-                                    "30d" => {
-                                        leptos_i18n::t_string!(
-                                            i18n, ui.changes_compare_with_the_previous_30_days
-                                        )
-                                    }
-                                    "365d" => {
-                                        leptos_i18n::t_string!(
-                                            i18n, ui.changes_compare_with_the_previous_365_days
-                                        )
-                                    }
-                                    _ => "",
-                                };
-                                view! {
-                                    <dl class="dashboard-metrics">
-                                        {metrics
-                                            .into_iter()
-                                            .map(|(label, count, prior, rate, goal)| {
-                                                view! {
-                                                    <div>
-                                                        <dt>{move || label.get()}</dt>
-                                                        <dd>
-                                                            <span class="dashboard-metric-value">
-                                                                {count}
-                                                                {prior
-                                                                    .map(|prior| {
-                                                                        view! {
-                                                                            <small
-                                                                                class=format!(
-                                                                                    "dashboard-change {}",
-                                                                                    goal.tone(count, prior),
-                                                                                )
-                                                                                title=leptos_i18n::t_string!(
-                                                                                    i18n, messages.arg0_arg1_compared_with_the_previous_period, arg0 = ruphish_ui::localization::trend_label(i18n, goal.tone(count,prior)), arg1 = (change(count,prior)).to_string()
-                                                                                )
-                                                                            >
-                                                                                {change(count, prior)}
-                                                                            </small>
-                                                                        }
-                                                                    })}
-                                                            </span>
-                                                            {rate
-                                                                .then(|| {
-                                                                    view! {
-                                                                        <small>
-                                                                            {leptos_i18n::t!(
-                                                                                i18n, messages.arg0_of_emails_sent, arg0 = (percentage(count,counts.delivered)).to_string()
-                                                                            )}
-                                                                        </small>
-                                                                    }
-                                                                })}
-                                                        </dd>
-                                                    </div>
-                                                }
-                                            })
-                                            .collect_view()}
-                                    </dl>
-                                    <p class="dashboard-updated">
-                                        {leptos_i18n::t!(
-                                            i18n, messages.arg0_observed_through_arg1, arg0 = (comparison).to_string(), arg1 = (minute(&p.as_of.into())).to_string()
-                                        )}
-                                    </p>
-                                }
-                            })
-                    }}
+                    <ul>
+                        {move || {
+                            drafts
+                                .data
+                                .get()
+                                .map(|page| {
+                                    page.items
+                                        .into_iter()
+                                        .take(5)
+                                        .map(|draft| {
+                                            view! {
+                                                <li>
+                                                    <a href=format!(
+                                                        "/campaigns/drafts/{}",
+                                                        draft.id,
+                                                    )>{draft.name}</a>
+                                                </li>
+                                            }
+                                        })
+                                        .collect_view()
+                                })
+                        }}
+                    </ul>
+                    <Show when=move || {
+                        drafts
+                            .data
+                            .with(|page| page.as_ref().is_some_and(|page| page.items.is_empty()))
+                    }>
+                        <p>{tr!(ui.no_drafts)}</p>
+                    </Show>
+                    <ActionLink href="/campaigns?filter=drafts">{tr!(ui.campaigns)}</ActionLink>
                 </Card>
                 <QueryStatus
                     fetching=snapshot.fetching
@@ -254,19 +138,8 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                             )
                             .into_iter()
                             .map(|c| {
-                                let (action_href, action_label) = if c.status
-                                    == CampaignStatus::Completed
-                                {
-                                    (
-                                        format!("/analysis/{}", c.id),
-                                        leptos_i18n::t_string!(i18n, ui.analysis),
-                                    )
-                                } else {
-                                    (
-                                        format!("/campaigns/{}", c.id),
-                                        leptos_i18n::t_string!(i18n, ui.campaign),
-                                    )
-                                };
+                                let action_href = format!("/campaigns/{}/results", c.id);
+                                let action_label = leptos_i18n::t_string!(i18n, ui.results);
                                 view! {
                                     <tr>
                                         <th scope="row">
@@ -362,6 +235,18 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                                             i18n, messages.arg0_failed_blocked_or_uncertain_deliveries_in_unfinished_campaigns, arg0 = (attention.delivery_problems).to_string()
                                         )}
                                     </p>
+                                    {attention
+                                        .campaign_ids
+                                        .iter()
+                                        .copied()
+                                        .map(|id| {
+                                            view! {
+                                                <a href=format!(
+                                                    "/campaigns/{id}/delivery",
+                                                )>{tr!(ui.campaign)}" #"{id}</a>
+                                            }
+                                        })
+                                        .collect_view()}
                                     <a href="/campaigns">{tr!(ui.review_campaigns)}</a>
                                 </li>
                             }
@@ -373,7 +258,7 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                         view! {
                             <div class="dashboard-next">
                                 <h3>{tr!(ui.next_scheduled_launch)}</h3>
-                                <a href=format!("/campaigns/{}", n.id)>{n.name}</a>
+                                <a href=format!("/campaigns/{}/delivery", n.id)>{n.name}</a>
                                 <p>{minute(&n.launch.into())}</p>
                             </div>
                         }

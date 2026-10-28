@@ -348,7 +348,7 @@
     "total": "Total",
     "no_campaigns_yet": "No campaigns yet",
     "prepare_your_resources_then_create_a_campaign_to_begin": "Prepare your resources, then create a campaign to begin.",
-    "recent_campaign_rates_cover_all_recorded_sends_independently_of_the_period_above": "Recent campaign rates cover all recorded sends, independently of the period above.",
+    "recent_campaign_rates_cover_all_recorded_sends_independently_of_the_period_above": "Rates cover the recorded sends in each campaign.",
     "needs_attention": "Needs attention",
     "no_domain_verification_or_delivery_issues_need_attention": "No domain verification or delivery issues need attention.",
     "verification_needed": "Verification needed",
@@ -880,7 +880,10 @@
     "starter_prefill": "Prefill recipient email",
     "starter_use_logo": "Use company logo",
     "starter_preview_loading": "Preparing preview…",
-    "starter_retry_preview": "Retry preview"
+    "starter_retry_preview": "Retry preview",
+    "results": "Results",
+    "setup": "Setup",
+    "connections": "Connections"
   },
   "messages": {
     "the_request_failed_arg0_try_again": "The request failed ({{ arg0 }}). Try again.",

@@ -1,7 +1,7 @@
 //! Responsive count chart: lines and visible observation dots, integer axes and keyboard-readable values.
 use crate::shared::components::*;
 use leptos::prelude::*;
-use ruphish_ui::analysis_state::{count_axis, time_axis};
+use ruphish_ui::results_state::{count_axis, time_axis};
 use ruphish_ui::{tr, trs};
 use wasm_bindgen::prelude::*;
 
@@ -22,11 +22,11 @@ const SERIES: [&str; 5] = [
     "series-reported",
 ];
 
-#[wasm_bindgen(module = "/web/analysis-time.mjs")]
+#[wasm_bindgen(module = "/web/results-time.mjs")]
 extern "C" {
-    #[wasm_bindgen(js_name=observeAnalysisWidth)]
+    #[wasm_bindgen(js_name=observeResultsWidth)]
     fn observe_width(element: &JsValue, callback: &js_sys::Function) -> JsValue;
-    #[wasm_bindgen(js_name=unobserveAnalysisWidth)]
+    #[wasm_bindgen(js_name=unobserveResultsWidth)]
     fn unobserve_width(observer: &JsValue);
 }
 

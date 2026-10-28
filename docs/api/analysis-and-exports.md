@@ -1,11 +1,11 @@
 ---
-title: Analysis and exports API
+title: Results and exports API
 description: Query observed campaign events and download consistent CSV or XLSX reports.
 sidebar:
   order: 13
 ---
 
-`GET /api/campaigns/{id}/analysis` returns a filtered snapshot. `GET /api/campaigns/{id}/export` downloads a report from the same filter model. Both require access to the campaign.
+`GET /api/campaigns/{id}/results` returns a filtered snapshot. `GET /api/campaigns/{id}/export` downloads a report from the same filter model. Both require access to the campaign.
 
 ## Filters
 
@@ -31,7 +31,7 @@ Sorting applies to the complete filtered collection before pagination. Recipient
 
 Changing sort or filters should reset `offset` to zero. Separate requests read current data, so new observations can move rows between pages; an offset is not a frozen snapshot. Exports use the same selected ordering across all matching rows and ignore the displayed page offset/limit.
 
-For example, `/api/campaigns/42/analysis?limit=25&offset=0` reads the first page for campaign 42. That ID is illustrative; use an execution returned by your installation.
+For example, `/api/campaigns/42/results?limit=25&offset=0` reads the first page for campaign 42. That ID is illustrative; use an execution returned by your installation.
 
 ## Snapshot fields
 

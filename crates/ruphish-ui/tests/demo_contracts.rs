@@ -79,8 +79,8 @@ fn demo_responses_decode_through_the_existing_contracts() {
     decode::<overview::PostureResponse>(&values, "/api/overview/posture?window=30d");
     decode::<campaign_reads::Directory>(&values, "/api/campaigns/directory");
     decode::<campaign_reads::Delivery>(&values, "/api/campaigns/3/delivery");
-    decode::<campaign_reads::Analysis>(&values, "/api/campaigns/3/analysis");
-    decode::<campaign_reads::History>(&values, "/api/campaigns/3/delivery/30001/history");
+    decode::<campaign_reads::Results>(&values, "/api/campaigns/3/results");
+    decode::<campaign_reads::History>(&values, "/api/campaigns/3/recipients/30001/history");
     decode::<campaign_reads::Draft>(
         &values,
         "/api/campaign-drafts/00000000-0000-4000-8000-000000000001",

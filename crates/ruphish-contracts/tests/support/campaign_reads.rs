@@ -16,7 +16,7 @@ fn incomplete_campaign_snapshots_are_errors_instead_of_empty_lists_or_zero_metri
         4
     );
     assert_eq!(
-        serde_json::from_value::<Analysis>(fixture["analysis"].clone())
+        serde_json::from_value::<Results>(fixture["analysis"].clone())
             .unwrap()
             .progression
             .values(),
@@ -29,20 +29,20 @@ fn incomplete_campaign_snapshots_are_errors_instead_of_empty_lists_or_zero_metri
             let rejected = match kind {
                 "directory" => serde_json::from_value::<Directory>(broken).is_err(),
                 "delivery" => serde_json::from_value::<Delivery>(broken).is_err(),
-                _ => serde_json::from_value::<Analysis>(broken).is_err(),
+                _ => serde_json::from_value::<Results>(broken).is_err(),
             };
             assert!(rejected, "{kind}.{key}");
         }
     }
     let mut broken = fixture["analysis"].clone();
     broken["progression"] = json!([1, 1]);
-    assert!(serde_json::from_value::<Analysis>(broken).is_err());
+    assert!(serde_json::from_value::<Results>(broken).is_err());
     let mut broken = fixture["analysis"].clone();
     broken["recipients"][0]
         .as_object_mut()
         .unwrap()
         .remove("counts");
-    assert!(serde_json::from_value::<Analysis>(broken).is_err());
+    assert!(serde_json::from_value::<Results>(broken).is_err());
 }
 
 #[test]
@@ -66,7 +66,7 @@ fn sparse_counts_and_explicit_empty_pages_remain_valid() {
     let mut value = fixture["analysis"].clone();
     value["progression"] = json!({"accepted":0,"opened":0,"clicked":0,"submitted":0,"reported":0});
     assert_eq!(
-        serde_json::from_value::<Analysis>(value)
+        serde_json::from_value::<Results>(value)
             .unwrap()
             .progression
             .values(),
@@ -169,7 +169,7 @@ fn named_metrics_and_classified_observations_reject_missing_or_unknown_values() 
         let mut broken = fixture.clone();
         broken["totals"].as_object_mut().unwrap().remove(field);
         assert!(
-            serde_json::from_value::<Analysis>(broken).is_err(),
+            serde_json::from_value::<Results>(broken).is_err(),
             "missing {field}"
         );
     }
@@ -182,13 +182,13 @@ fn named_metrics_and_classified_observations_reject_missing_or_unknown_values() 
         let mut broken = fixture.clone();
         *broken.pointer_mut(pointer).unwrap() = json!("unrecognized");
         assert!(
-            serde_json::from_value::<Analysis>(broken).is_err(),
+            serde_json::from_value::<Results>(broken).is_err(),
             "{pointer}"
         );
     }
     let mut imported = fixture;
     imported["events"][0]["kind"] = json!({"type":"historical","value":"Proxied request"});
-    let value: Analysis = serde_json::from_value(imported).unwrap();
+    let value: Results = serde_json::from_value(imported).unwrap();
     assert_eq!(
         value.events[0].kind,
         ruphish_domain::events::RecordedKind::Historical("Proxied request".into())
@@ -243,11 +243,11 @@ fn lifecycle_transport_and_history_states_cannot_be_interchanged() {
     assert!(serde_json::from_value::<AttemptState>(json!("ready")).is_err());
     let mut value = fixture["analysis"].clone();
     value["recipients"][0]["delivery"] = Value::Null;
-    let absent: Analysis = serde_json::from_value(value.clone()).unwrap();
+    let absent: Results = serde_json::from_value(value.clone()).unwrap();
     assert_eq!(absent.recipients[0].delivery, None);
     value["recipients"][0]
         .as_object_mut()
         .unwrap()
         .remove("delivery");
-    assert!(serde_json::from_value::<Analysis>(value).is_err());
+    assert!(serde_json::from_value::<Results>(value).is_err());
 }

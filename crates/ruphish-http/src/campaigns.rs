@@ -38,11 +38,11 @@ pub(crate) fn routes() -> Router<AuthState> {
         .route("/api/campaigns/overview", get(overview))
         .route("/api/campaigns/{id}", get(read).delete(delete))
         .route("/api/campaigns/{id}/summary", get(summary))
-        .route("/api/campaigns/{id}/results", get(results))
+        .route("/api/campaigns/{id}/context", get(context))
         .route("/api/campaigns/{id}/complete", post(complete))
         .route("/api/campaigns/{id}/delivery", get(deliveries))
         .route(
-            "/api/campaigns/{id}/delivery/{result}/history",
+            "/api/campaigns/{id}/recipients/{result}/history",
             get(recipient_history),
         )
         .route("/api/campaigns/{id}/delivery/{result}", post(resolve))
@@ -431,24 +431,14 @@ async fn read(context: Context, Path(id): Path<i64>) -> Result<Response, Rejecti
         .map_err(error)?;
     response(StatusCode::OK, &encode_campaign(&c)?, None)
 }
-async fn results(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
+async fn context(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
-    let c = context
+    let campaign = context
         .campaigns()
-        .get(user.identity, id)
+        .header(user.identity, id)
         .await
         .map_err(error)?;
-    response(
-        StatusCode::OK,
-        &details::Results {
-            id: c.id,
-            name: c.name.clone(),
-            status: c.status,
-            results: c.results.iter().map(encode_result).collect(),
-            timeline: events(&c),
-        },
-        None,
-    )
+    response(StatusCode::OK, &encode_header(&campaign), None)
 }
 async fn summary(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;

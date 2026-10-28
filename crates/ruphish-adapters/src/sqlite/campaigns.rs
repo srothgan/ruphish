@@ -313,6 +313,14 @@ async fn header(c: &mut SqliteConnection, owner: i64, id: i64) -> Result<Campaig
 }
 #[async_trait::async_trait]
 impl Repository for Campaigns {
+    async fn header(&self, caller: Identity, id: i64) -> Result<CampaignHeader, Error> {
+        let mut tx = self.pool.begin().await.map_err(storage)?;
+        super::resources::authorize(&mut tx, caller, false).await?;
+        let value = header(&mut tx, caller.id, id).await?;
+        tx.commit().await.map_err(storage)?;
+        Ok(value)
+    }
+
     async fn directory(
         &self,
         caller: Identity,

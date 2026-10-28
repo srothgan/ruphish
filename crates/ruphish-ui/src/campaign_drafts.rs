@@ -106,7 +106,10 @@ fn load(api: Api, token: String, id: String, editing: bool) -> impl IntoView {
                 Ok(v) => {
                     load_error.set(None);
                     if let Some(campaign) = v["campaign_id"].as_i64() {
-                        navigate(&format!("/campaigns/{campaign}"), Default::default());
+                        navigate(
+                            &format!("/campaigns/{campaign}/delivery"),
+                            Default::default(),
+                        );
                     } else {
                         data.set(Some(v));
                     }
@@ -168,7 +171,10 @@ fn read_only(api: Api, token: String, id: String) -> impl IntoView {
     let redirect = navigate.clone();
     Effect::new(move |_| {
         if let Some(campaign) = saved.get()["campaign_id"].as_i64() {
-            redirect(&format!("/campaigns/{campaign}"), Default::default());
+            redirect(
+                &format!("/campaigns/{campaign}/delivery"),
+                Default::default(),
+            );
         }
     });
     let can_edit = crate::campaigns::editable();

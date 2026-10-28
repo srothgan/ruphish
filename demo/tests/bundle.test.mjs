@@ -27,7 +27,7 @@ test('the generated browser bundle logs in and reads real starter content withou
         assert.equal(directory.items.length, 4);
         const completed = directory.items.find(row => row.status === 'Completed');
         assert.ok(completed);
-        assert.ok((await read(`/api/campaigns/${completed.id}/analysis`)).event_total > 0);
+        assert.ok((await read(`/api/campaigns/${completed.id}/results`)).event_total > 0);
         const sample = await readFile(new URL('../../crates/ruphish-ui/assets/recipient-template.csv', import.meta.url), 'utf8');
         const review = async content => {
             const request = new Request('https://demo.example.test/api/import/group/review', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content }) });

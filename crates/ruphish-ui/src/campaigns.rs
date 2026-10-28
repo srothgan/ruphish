@@ -26,26 +26,18 @@ pub(super) fn editable() -> bool {
 }
 
 pub(super) fn list(api: Api, token: String) -> impl IntoView {
-    list_mode(api, false, token)
-}
-pub(super) fn analysis_directory(api: Api) -> impl IntoView {
-    list_mode(api, true, String::new())
-}
-fn list_mode(api: Api, analysis: bool, token: String) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
     let token = StoredValue::new(token);
-    let filter = RwSignal::new(String::from(if analysis { "executions" } else { "all" }));
+    let query = use_query_map();
+    let filter = RwSignal::new(
+        query
+            .with(|q| q.get("filter"))
+            .filter(|f| matches!(f.as_str(), "drafts" | "active" | "completed"))
+            .unwrap_or_else(|| "all".into()),
+    );
     let queries = expect_context::<CampaignQueries>();
     let cursors = RwSignal::new(vec![String::new()]);
-    let preference = TableSorting::new(
-        if analysis {
-            "analysis-directory"
-        } else {
-            "campaign-directory"
-        },
-        "name",
-        SortDirection::Asc,
-    );
+    let preference = TableSorting::new("campaign-directory", "name", SortDirection::Asc);
     let sorting = TableSorting {
         current: preference.current,
         change: Callback::new(move |column: String| {
@@ -84,7 +76,7 @@ fn list_mode(api: Api, analysis: bool, token: String) -> impl IntoView {
     let busy = read.fetching;
     let loaded = Signal::derive(move || read.data.with(Option::is_some));
     let delete_message = Message::new(String::new());
-    let can_edit = editable() && !analysis;
+    let can_edit = editable();
     let deleting = RwSignal::new(None::<Value>);
     let mutating = RwSignal::new(false);
     let tasks = ruphish_ui::view_tasks::ViewTasks::default();
@@ -130,26 +122,8 @@ fn list_mode(api: Api, analysis: bool, token: String) -> impl IntoView {
     view! {
         <ManagementPage>
             <PageHeader
-                title=Signal::derive(move || {
-                    (if analysis {
-                        leptos_i18n::t_string!(i18n, ui.campaign_analysis)
-                    } else {
-                        leptos_i18n::t_string!(i18n, ui.campaigns)
-                    })
-                        .to_owned()
-                })
-                subtitle=Signal::derive(move || {
-                    (if analysis {
-                        leptos_i18n::t_string!(
-                            i18n, ui.select_a_campaign_to_inspect_its_recorded_events_and_recipient_outcomes
-                        )
-                    } else {
-                        leptos_i18n::t_string!(
-                            i18n, ui.prepare_a_simulation_and_follow_its_delivery_progress
-                        )
-                    })
-                        .to_owned()
-                })
+                title=trs!(ui.campaigns)
+                subtitle=trs!(ui.prepare_a_simulation_and_follow_its_delivery_progress)
             >
                 <ActionButton
                     disabled=Signal::derive(move || busy.get() || mutating.get())
@@ -169,21 +143,19 @@ fn list_mode(api: Api, analysis: bool, token: String) -> impl IntoView {
                 refresh=read.refresh
             />
             <TableToolbar title=trs!(ui.campaigns)>
-                <Show when=move || !analysis>
-                    <Select
-                        label=trs!(ui.campaign_filter)
-                        value=Signal::derive(move || filter.get())
-                        on_change=Callback::new(move |v: String| batch(move || {
-                            cursors.set(vec![String::new()]);
-                            filter.set(v);
-                        }))
-                    >
-                        <option value="all">{tr!(ui.all_campaigns)}</option>
-                        <option value="drafts">{tr!(ui.drafts)}</option>
-                        <option value="active">{tr!(ui.active_campaigns_filter)}</option>
-                        <option value="completed">{tr!(ui.completed_campaigns_filter)}</option>
-                    </Select>
-                </Show>
+                <Select
+                    label=trs!(ui.campaign_filter)
+                    value=Signal::derive(move || filter.get())
+                    on_change=Callback::new(move |v: String| batch(move || {
+                        cursors.set(vec![String::new()]);
+                        filter.set(v);
+                    }))
+                >
+                    <option value="all">{tr!(ui.all_campaigns)}</option>
+                    <option value="drafts">{tr!(ui.drafts)}</option>
+                    <option value="active">{tr!(ui.active_campaigns_filter)}</option>
+                    <option value="completed">{tr!(ui.completed_campaigns_filter)}</option>
+                </Select>
             </TableToolbar>
             <DataTable
                 sorting=sorting
@@ -209,12 +181,7 @@ fn list_mode(api: Api, analysis: bool, token: String) -> impl IntoView {
                             } else {
                                 format!("/campaigns/{id}")
                             };
-                            let analysis_href = format!("/analysis/{id}");
-                            let view_href = if analysis {
-                                analysis_href.clone()
-                            } else {
-                                href.clone()
-                            };
+                            let view_href = href.clone();
                             let name = text(&r, "name");
                             let target = r.clone();
                             view! {
@@ -272,11 +239,7 @@ fn list_mode(api: Api, analysis: bool, token: String) -> impl IntoView {
                                                 delete_message.clear();
                                                 deleting.set(Some(target.clone()));
                                             })
-                                        >
-                                            <ActionLink hidden={draft || analysis} href=analysis_href>
-                                                {tr!(ui.view_analysis)}
-                                            </ActionLink>
-                                        </ResourceActions>
+                                        ></ResourceActions>
                                     </td>
                                 </tr>
                             }
@@ -348,7 +311,7 @@ fn list_mode(api: Api, analysis: bool, token: String) -> impl IntoView {
         </ManagementPage>
     }
 }
-pub(super) fn detail(api: Api, token: String) -> impl IntoView {
+pub(super) fn detail(api: Api, token: String, section: Section) -> impl IntoView {
     let params = use_params_map();
     let query = use_query_map();
     let drafts = use_context::<ruphish_ui::import_drafts::ImportDrafts>();
@@ -384,7 +347,7 @@ pub(super) fn detail(api: Api, token: String) -> impl IntoView {
                         create(api, token.get_value(), initial, None).into_any()
                     }
                 } else if id.parse::<i64>().ok().is_some_and(|id| id > 0) {
-                    show(api, token.get_value(), id).into_any()
+                    show(api, token.get_value(), id, section).into_any()
                 } else {
                     view! {
                         <NotFoundPage
@@ -908,7 +871,10 @@ pub(super) fn create(
                         d.generation = persistence.saved_generation.get_untracked();
                         d.launch = None;
                     });
-                    navigate(&format!("/campaigns/{}", v["id"]), Default::default());
+                    navigate(
+                        &format!("/campaigns/{}/delivery", v["id"]),
+                        Default::default(),
+                    );
                 }
                 Err(e) => {
                     if (400..500).contains(&e.status) {
@@ -1617,7 +1583,7 @@ pub(super) fn create(
     }
 }
 
-fn show(api: Api, token: String, id: String) -> impl IntoView {
+fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
     let id = StoredValue::new(id);
@@ -1641,6 +1607,9 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
     let after = Memo::new(move |_| cursors.with(|v| v.last().cloned().unwrap_or_default()));
     let busy = RwSignal::new(false);
     let visible = ruphish_ui::query::document_visible();
+    let context = queries
+        .context
+        .observe_polling(move || id.get_value(), visible);
     let read = queries.delivery.observe_polling(
         move || {
             (
@@ -1650,15 +1619,22 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
                 sorting.order(),
             )
         },
-        Signal::derive(move || visible.get() && !busy.get()),
+        Signal::derive(move || visible.get() && !busy.get() && section == Section::Delivery),
     );
     let data = Signal::derive(move || {
-        read.data
+        let mut value = read
+            .data
             .get()
             .map(|snapshot| snapshot.value)
-            .unwrap_or(Value::Null)
+            .unwrap_or_else(|| json!({}));
+        value["campaign"] = context
+            .data
+            .get()
+            .map(|value| json!(value))
+            .unwrap_or(Value::Null);
+        value
     });
-    let confirmed = Signal::derive(move || read.data.with(Option::is_some));
+    let confirmed = Signal::derive(move || context.data.with(Option::is_some));
     let next = Signal::derive(move || {
         data.get()["next_cursor"]
             .as_str()
@@ -1772,20 +1748,18 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
                         leptos_i18n::t_string!(i18n,ui.campaign).to_owned()
                     }
                 })
-                subtitle=Signal::derive(move || {
-                    leptos_i18n::t_string!(
-                        i18n, messages.arg0_last_refreshed_arg1, arg0 = ruphish_ui::localization::event_label(i18n, &text(&data.get()["campaign"],"status")), arg1 = (read.data.get().map(|snapshot| instant(&json!(snapshot.refreshed_at))).unwrap_or_default()).to_string()
-                    )
-                })
+                subtitle=Signal::derive(move || ruphish_ui::localization::event_label(
+                    i18n,
+                    &text(&data.get()["campaign"], "status"),
+                ))
             >
-                <ActionLink href=format!(
-                    "/analysis/{}",
-                    id.get_value(),
-                )>{tr!(ui.view_analysis)}</ActionLink>
                 <ActionButton
                     disabled=Signal::derive(move || busy.get())
                     busy=Signal::derive(move || loading.get().to_string())
-                    on_click=move |_| read.refresh.run(())
+                    on_click=move |_| {
+                        context.refresh.run(());
+                        queries.changed(&id.get_value());
+                    }
                 >
                     {move || {
                         if loading.get() {
@@ -1808,7 +1782,10 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
                         busy.get() || !confirmed.get()
                             || data.get()["campaign"]["status"] == "Completed"
                     })
-                    on_click=move |_| action.set(Some(("complete".into(), Value::Null)))
+                    on_click=move |_| {
+                        read.refresh.run(());
+                        action.set(Some(("complete".into(), Value::Null)));
+                    }
                 >
                     {tr!(ui.complete_campaign)}
                 </ActionButton>
@@ -1816,122 +1793,165 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
                     style=ButtonStyle::Ghost
                     hidden=!can_edit
                     disabled=Signal::derive(move || busy.get() || !confirmed.get())
-                    on_click=move |_| action.set(Some(("delete".into(), Value::Null)))
+                    on_click=move |_| {
+                        read.refresh.run(());
+                        action.set(Some(("delete".into(), Value::Null)));
+                    }
                 >
                     {tr!(ui.delete)}
                 </ActionButton>
             </PageHeader>
+            <nav class="campaign-sections" aria-label=move || trs!(ui.campaign).get()>
+                {[
+                    (Section::Setup, trs!(ui.setup)),
+                    (Section::Delivery, trs!(ui.delivery)),
+                    (Section::Results, trs!(ui.results)),
+                    (Section::Connections, trs!(ui.connections)),
+                ]
+                    .into_iter()
+                    .map(|(item, label)| {
+                        view! {
+                            <a
+                                href=format!("/campaigns/{}/{}", id.get_value(), item.path())
+                                aria-current=if section == item { Some("page") } else { None }
+                            >
+                                {move || label.get()}
+                            </a>
+                        }
+                    })
+                    .collect_view()}
+            </nav>
             {message.view()}
-            <QueryStatus
-                fetching=loading
-                has_data=confirmed
-                error=read.error
-                noun=trs!(ui.campaign_delivery)
-                refresh=read.refresh
-            />
-            <Show when=move || data.get()["mailer_enabled"] == false>
-                <p class="form-message error">
-                    {tr!(ui.delivery_processing_is_disabled_in_this_process)}
-                </p>
-            </Show>
-            <p>
-                {tr!(
-                    ui.acceptance_means_the_smtp_server_accepted_the_message_participant_credentials_ar
-                )}
-            </p>
-            <Show when=move || {
-                confirmed.get()
-            }>
-                {move || campaign_context(&data.get()["campaign"])} {delivery_progress(data)}
-                <DataTable
-                    sorting=sorting
-                    columns=vec!["", "email", "state", "due", "attempt_count"]
-                    label=trs!(ui.campaign_delivery)
-                    headers=vec![
-                        trs!(ui.history),
-                        trs!(ui.recipient),
-                        trs!(ui.delivery),
-                        trs!(ui.next_last_due),
-                        trs!(ui.attempts_and_actions),
-                    ]
-                >
-                    <For
-                        each=move || {
-                            array(&data.get(), "items")
-                                .into_iter()
-                                .filter_map(|r| r["id"].as_i64())
-                                .collect::<Vec<_>>()
-                        }
-                        key=|id| *id
-                        children=move |result| {
-                            crate::campaign_delivery::recipient_row(
-                                api,
-                                id,
-                                result,
-                                data,
-                                crate::campaign_delivery::Controls {
-                                    busy,
-                                    can_edit,
-                                    action,
-                                },
-                            )
-                        }
-                    />
-                </DataTable>
-            </Show>
-            <PaginationControls
-                disabled=Signal::derive(move || loading.get() || busy.get())
-                has_previous=Signal::derive(move || !cursors.with(Vec::is_empty))
-                has_next=Signal::derive(move || next.get().is_some())
-                on_previous=Callback::new(move |()| {
-                    cursors
-                        .update(|v| {
-                            v.pop();
-                        })
-                })
-                on_next=Callback::new(move |()| {
-                    if let Some(next) = next.get_untracked() {
-                        cursors.update(|v| v.push(next));
-                    }
-                })
-            />
-            <Show when=move || confirmed.get()>
-                <section class="resource-section">
-                    <h2>{tr!(ui.recent_activity)}</h2>
-                    <p>
-                        {tr!(
-                            ui.latest_50_campaign_events_expand_a_recipient_above_for_their_timeline_and_earlie
-                        )}
-                    </p>
-                    <DataTable
-                        sorting=activity_sort
-                        columns=vec!["time", "email", "message"]
-                        label=trs!(ui.campaign_activity)
-                        headers=vec![trs!(ui.time), trs!(ui.recipient), trs!(ui.event)]
-                    >
-                        {move || {
-                            activity_sort
-                                .json(array(&data.get(), "activity"), &["time"])
-                                .into_iter()
-                                .map(|e| {
-                                    view! {
-                                        <tr>
-                                            <td>{instant(&e["time"])}</td>
-                                            <td>{text(&e, "email")}</td>
-                                            <td>
-                                                {ruphish_ui::localization::event_label(
-                                                    i18n,
-                                                    &text(&e, "message"),
-                                                )}
-                                            </td>
-                                        </tr>
+            {match section {
+                Section::Delivery => {
+                    view! {
+                        <section>
+                            <QueryStatus
+                                fetching=loading
+                                has_data=confirmed
+                                error=read.error
+                                noun=trs!(ui.campaign_delivery)
+                                refresh=read.refresh
+                            />
+                            <Show when=move || data.get()["mailer_enabled"] == false>
+                                <p class="form-message error">
+                                    {tr!(ui.delivery_processing_is_disabled_in_this_process)}
+                                </p>
+                            </Show>
+                            <p>
+                                {tr!(
+                                    ui.acceptance_means_the_smtp_server_accepted_the_message_participant_credentials_ar
+                                )}
+                            </p>
+                            <Show when=move || {
+                                confirmed.get()
+                            }>
+                                {delivery_progress(data)}
+                                <DataTable
+                                    sorting=sorting
+                                    columns=vec!["", "email", "state", "due", "attempt_count"]
+                                    label=trs!(ui.campaign_delivery)
+                                    headers=vec![
+                                        trs!(ui.history),
+                                        trs!(ui.recipient),
+                                        trs!(ui.delivery),
+                                        trs!(ui.next_last_due),
+                                        trs!(ui.attempts_and_actions),
+                                    ]
+                                >
+                                    <For
+                                        each=move || {
+                                            array(&data.get(), "items")
+                                                .into_iter()
+                                                .filter_map(|r| r["id"].as_i64())
+                                                .collect::<Vec<_>>()
+                                        }
+                                        key=|id| *id
+                                        children=move |result| {
+                                            crate::campaign_delivery::recipient_row(
+                                                api,
+                                                id,
+                                                result,
+                                                data,
+                                                crate::campaign_delivery::Controls {
+                                                    busy,
+                                                    can_edit,
+                                                    action,
+                                                },
+                                            )
+                                        }
+                                    />
+                                </DataTable>
+                            </Show>
+                            <PaginationControls
+                                disabled=Signal::derive(move || loading.get() || busy.get())
+                                has_previous=Signal::derive(move || !cursors.with(Vec::is_empty))
+                                has_next=Signal::derive(move || next.get().is_some())
+                                on_previous=Callback::new(move |()| {
+                                    cursors
+                                        .update(|v| {
+                                            v.pop();
+                                        })
+                                })
+                                on_next=Callback::new(move |()| {
+                                    if let Some(next) = next.get_untracked() {
+                                        cursors.update(|v| v.push(next));
                                     }
                                 })
-                                .collect_view()
-                        }}
-                    </DataTable>
-                </section>
-            </Show>
+                            />
+                            <Show when=move || confirmed.get()>
+                                <section class="resource-section">
+                                    <h2>{tr!(ui.recent_activity)}</h2>
+                                    <p>
+                                        {tr!(
+                                            ui.latest_50_campaign_events_expand_a_recipient_above_for_their_timeline_and_earlie
+                                        )}
+                                    </p>
+                                    <DataTable
+                                        sorting=activity_sort
+                                        columns=vec!["time", "email", "message"]
+                                        label=trs!(ui.campaign_activity)
+                                        headers=vec![
+                                            trs!(ui.time),
+                                            trs!(ui.recipient),
+                                            trs!(ui.event),
+                                        ]
+                                    >
+                                        {move || {
+                                            activity_sort
+                                                .json(array(&data.get(), "activity"), &["time"])
+                                                .into_iter()
+                                                .map(|e| {
+                                                    view! {
+                                                        <tr>
+                                                            <td>{instant(&e["time"])}</td>
+                                                            <td>{text(&e, "email")}</td>
+                                                            <td>
+                                                                {ruphish_ui::localization::event_label(
+                                                                    i18n,
+                                                                    &text(&e, "message"),
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                })
+                                                .collect_view()
+                                        }}
+                                    </DataTable>
+                                </section>
+                            </Show>
+                        </section>
+                    }
+                        .into_any()
+                }
+                Section::Results => crate::campaign_results::page(api).into_any(),
+                Section::Setup => {
+                    view! { {move || campaign_setup(&data.get()["campaign"])} }.into_any()
+                }
+                Section::Connections => {
+                    view! { {move || campaign_context(&data.get()["campaign"])} }.into_any()
+                }
+            }}
             {move || {
                 action
                     .get()
@@ -2010,10 +2030,10 @@ fn show(api: Api, token: String, id: String) -> impl IntoView {
     };
     view! {
         <ReadBoundary
-            failure=read.failure
-            has_data=Signal::derive(move || read.data.with(Option::is_some))
-            fetching=read.fetching
-            retry=read.refresh
+            failure=context.failure
+            has_data=Signal::derive(move || context.data.with(Option::is_some))
+            fetching=context.fetching
+            retry=context.refresh
             back_href="/campaigns"
             back_label=trs!(ui.back_to_campaigns)
         >
@@ -2233,21 +2253,6 @@ fn campaign_context(c: &Value) -> impl IntoView + use<> {
                             }
                         }}
                     </dd>
-                </div> <div>
-                    <dt>{tr!(ui.scheduled_launch)}</dt>
-                    <dd class="data-value">{instant(&c["launch_date"])}</dd>
-                </div> <div>
-                    <dt>{tr!(ui.initial_distribution_end)}</dt>
-                    <dd>
-                        {if c["send_by_date"].is_null() {
-                            leptos_i18n::t_string!(i18n, ui.no_distribution_window).into()
-                        } else {
-                            instant(&c["send_by_date"])
-                        }}
-                    </dd>
-                </div> <div>
-                    <dt>{tr!(ui.public_campaign_url)}</dt>
-                    <dd>{text(&c, "url")}</dd>
                 </div>
             </dl>
             <p class="resource-usage">
@@ -2256,5 +2261,57 @@ fn campaign_context(c: &Value) -> impl IntoView + use<> {
                 )}
             </p>
         </Card>
+    }
+}
+
+fn campaign_setup(c: &Value) -> impl IntoView + use<> {
+    let c = c.clone();
+    let i18n = ruphish_ui::localization::use_i18n();
+    view! {
+        <Card class="resource-read-panel" label=trs!(ui.setup)>
+            <h2>{tr!(ui.setup)}</h2>
+            <dl class="resource-facts">
+                <div>
+                    <dt>{tr!(ui.recipients)}</dt>
+                    <dd>{c["total"].as_u64().unwrap_or(0)}</dd>
+                </div>
+                <div>
+                    <dt>{tr!(ui.scheduled_launch)}</dt>
+                    <dd class="data-value">{instant(&c["launch_date"])}</dd>
+                </div>
+                <div>
+                    <dt>{tr!(ui.initial_distribution_end)}</dt>
+                    <dd>
+                        {if c["send_by_date"].is_null() {
+                            leptos_i18n::t_string!(i18n, ui.no_distribution_window).into()
+                        } else {
+                            instant(&c["send_by_date"])
+                        }}
+                    </dd>
+                </div>
+                <div>
+                    <dt>{tr!(ui.public_campaign_url)}</dt>
+                    <dd>{text(&c, "url")}</dd>
+                </div>
+            </dl>
+        </Card>
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Section {
+    Setup,
+    Delivery,
+    Results,
+    Connections,
+}
+impl Section {
+    fn path(self) -> &'static str {
+        match self {
+            Self::Setup => "setup",
+            Self::Delivery => "delivery",
+            Self::Results => "results",
+            Self::Connections => "connections",
+        }
     }
 }

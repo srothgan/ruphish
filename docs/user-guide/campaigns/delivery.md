@@ -5,7 +5,7 @@ sidebar:
   order: 5
 ---
 
-Open the campaign to inspect recipient delivery state and attempt history. SMTP acceptance means the configured server accepted the message; it does not confirm final delivery to a person's inbox.
+Open the campaign?s **Delivery** view to inspect recipient delivery state and attempt history. SMTP acceptance means the configured server accepted the message; it does not confirm final delivery to a person's inbox.
 
 | State | Meaning and next action |
 | --- | --- |

@@ -248,12 +248,6 @@ pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<>
             view! {
                 {link(
                     path,
-                    "/analysis",
-                    trs!(ui.analysis),
-                    "M3 3v18h18 M7 17v-5 M12 17V7 M17 17v-9",
-                )}
-                {link(
-                    path,
                     "/campaigns",
                     trs!(ui.campaigns),
                     "M4 21V3 M4 4c5-4 10 4 16 0v10c-6 4-11-4-16 0",

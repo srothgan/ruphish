@@ -78,10 +78,7 @@ async fn translated_text_updates_in_place_without_replacing_draft_state() {
 fn localized_observations_preserve_recorded_outcomes_and_external_details() {
     locale_window::install();
     use leptos::prelude::*;
-    use ruphish_ui::{
-        localization::*,
-        recipient_history::{History, timeline},
-    };
+    use ruphish_ui::{localization::*, recipient_history::History};
     let _ = any_spawner::Executor::init_wasm_bindgen();
     let owner = Owner::new();
     owner.with(|| untrack(|| {
@@ -92,21 +89,17 @@ fn localized_observations_preserve_recorded_outcomes_and_external_details() {
         history.toggle();
         let (ticket, _) = history.begin(false).unwrap();
         history.finish(ticket, Ok(json!({"attempts":[{"generation":2,"started":30,"finished":31,"state":"accepted","smtp_code":null,"stage":""}],"events":[{"id":1,"at":32,"message":"Email Opened"}]})));
-        let entries = timeline(&history);
-        assert_eq!(timeline_title(context, &entries[1].title), "Attempt 2: Accepted by SMTP server");
+        assert_eq!(delivery_label(context, "accepted"), "Accepted by SMTP server");
         context.set_locale(Locale::de);
-        assert!(import_note(context, &note).contains("Anhänge"));
-        assert_eq!(timeline_title(context, &entries[1].title), "Versuch 2: Vom SMTP-Server angenommen");
-        assert_eq!(timeline_title(context, &entries[2].title), "E-Mail geöffnet");
+        assert!(import_note(context, &note).contains("Anh\u{e4}nge"));
+        assert_eq!(delivery_label(context, "accepted"), "Vom SMTP-Server angenommen");
+        assert_eq!(event_label(context, history.events[&1]["message"].as_str().unwrap()), "E-Mail ge\u{f6}ffnet");
         assert_eq!(event_label(context, "An external diagnostic"), "An external diagnostic");
-        assert!(entries.iter().all(|entry| {
-            let text = timeline_title(context, &entry.title);
-            !text.contains("null") && !text.contains("250")
-        }));
+        assert!(!delivery_label(context, "accepted").contains("250"));
         let error = ruphish_ui::import_state::ImportError::RequestFailed("External response".into());
         assert_eq!(import_error(context, &error), "External response (IMPORT_REQUEST_FAILED)");
-        assert_eq!(entries[1].at, Some(31));
-        assert_eq!(entries[1].tone, "success");
+        assert_eq!(history.attempts[&2]["finished"],31);
+        assert_eq!(ruphish_ui::recipient_history::tone("accepted"),"success");
     }));
     owner.cleanup();
 }

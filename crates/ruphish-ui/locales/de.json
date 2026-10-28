@@ -348,7 +348,7 @@
     "total": "Gesamt",
     "no_campaigns_yet": "Noch keine Kampagnen",
     "prepare_your_resources_then_create_a_campaign_to_begin": "Bereiten Sie Ihre Ressourcen vor und erstellen Sie anschließend eine Kampagne.",
-    "recent_campaign_rates_cover_all_recorded_sends_independently_of_the_period_above": "Die Kennzahlen der neuesten Kampagnen berücksichtigen alle erfassten Sendungen, unabhängig vom oben ausgewählten Zeitraum.",
+    "recent_campaign_rates_cover_all_recorded_sends_independently_of_the_period_above": "Die Raten beziehen sich auf die erfassten Sendungen der jeweiligen Kampagne.",
     "needs_attention": "Handlungsbedarf",
     "no_domain_verification_or_delivery_issues_need_attention": "Keine Probleme bei Domainverifizierung oder Versand erfordern Ihre Aufmerksamkeit.",
     "verification_needed": "Verifizierung erforderlich",
@@ -880,7 +880,10 @@
     "starter_prefill": "Empfänger-E-Mail vorausfüllen",
     "starter_use_logo": "Unternehmenslogo verwenden",
     "starter_preview_loading": "Vorschau wird vorbereitet…",
-    "starter_retry_preview": "Vorschau erneut laden"
+    "starter_retry_preview": "Vorschau erneut laden",
+    "results": "Ergebnisse",
+    "setup": "Konfiguration",
+    "connections": "Verkn?pfungen"
   },
   "messages": {
     "the_request_failed_arg0_try_again": "Die Anfrage ist fehlgeschlagen ({{ arg0 }}). Versuchen Sie es erneut.",

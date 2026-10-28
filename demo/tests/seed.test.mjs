@@ -54,7 +54,7 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
             apiKey = db.prepare("SELECT api_key FROM users WHERE username='demo'").get().api_key;
         } finally { db.close(); }
         await start();
-        for (const path of ['/api/overview', '/api/overview/posture?window=30d', '/api/campaigns/directory', '/api/campaigns/3/delivery', '/api/campaigns/3/analysis', '/api/webhooks/', '/api/reporting-mailboxes/', '/api/learning-pages/1', '/api/campaign-drafts/00000000-0000-4000-8000-000000000001']) {
+        for (const path of ['/api/overview', '/api/overview/posture?window=30d', '/api/campaigns/directory', '/api/campaigns/3/delivery', '/api/campaigns/3/results', '/api/webhooks/', '/api/reporting-mailboxes/', '/api/learning-pages/1', '/api/campaign-drafts/00000000-0000-4000-8000-000000000001']) {
             const response = await fetch(`http://127.0.0.1:${port}${path}`, { headers: { Authorization: `Bearer ${apiKey}` } });
             assert.equal(response.status, 200, path);
             const value = await response.json();

@@ -92,21 +92,6 @@ pub struct Event {
     pub details: String,
 }
 
-/// Dedicated result response; both collections are required, including when empty.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Results {
-    /// Execution identity.
-    pub id: i64,
-    /// Display name.
-    pub name: String,
-    /// Campaign lifecycle.
-    pub status: ruphish_domain::campaign::CampaignStatus,
-    /// Immutable audience with projected outcomes.
-    pub results: Vec<Recipient>,
-    /// Committed observation history.
-    pub timeline: Vec<Event>,
-}
-
 /// Campaign-wide counts derived from the authoritative progression rules.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Counts {

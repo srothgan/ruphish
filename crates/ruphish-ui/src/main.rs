@@ -11,15 +11,13 @@ fn main() {}
 #[cfg(target_arch = "wasm32")]
 mod account;
 #[cfg(target_arch = "wasm32")]
-mod analysis;
-#[cfg(target_arch = "wasm32")]
-mod analysis_chart;
-#[cfg(target_arch = "wasm32")]
 mod campaign_delivery;
 #[cfg(target_arch = "wasm32")]
 mod campaign_drafts;
 #[cfg(target_arch = "wasm32")]
 mod campaign_queries;
+#[cfg(target_arch = "wasm32")]
+mod campaign_results;
 #[cfg(target_arch = "wasm32")]
 mod campaigns;
 #[cfg(target_arch = "wasm32")]
@@ -48,6 +46,8 @@ mod preferences;
 mod resource_queries;
 #[cfg(target_arch = "wasm32")]
 mod resources;
+#[cfg(target_arch = "wasm32")]
+mod results_chart;
 #[cfg(target_arch = "wasm32")]
 mod shared;
 #[cfg(target_arch = "wasm32")]
