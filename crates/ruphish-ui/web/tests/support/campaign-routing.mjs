@@ -126,8 +126,12 @@ if (scenario === 'event-editor') {
   assert.equal(added.source, 'operator');
   assert.equal(added.edited, false);
   assert.equal(added.revision, 0);
-  const operatorRow = () => [...review.querySelectorAll('tr:has(td)')].find(row => row.cells[2]?.textContent.trim() === 'Operator');
+  const operatorRow = () => [...review.querySelectorAll('tr:has(td)')].find(row => row.cells[2]?.textContent.trim() === 'Manuell erfasst');
   assert.ok(operatorRow(), 'operator creation is visible');
+  assert.deepEqual([...operatorRow().querySelectorAll('.field-presence small')].map(e => e.textContent), ['Keine Eingabe erkannt', 'Eingegeben']);
+  const submittedTimeline = [...document.querySelectorAll('.timeline-event')].find(row => row.querySelector('.submission-fields'));
+  assert.ok(submittedTimeline, 'delivery history shows submission field indicators');
+
   assert.equal(operatorRow().cells[3].textContent.trim(), '', 'creating an operator event must not show Edited');
   assert.deepEqual(changes[0].value.presence, { username_present: false, password_present: true });
   operatorRow().querySelector('.table-actions button').click();

@@ -8,14 +8,14 @@ pub const SEED: &str = r#"
 INSERT INTO users(id,username,api_key,role_id,password_change_required,account_locked) VALUES(1,'event-owner','event-owner-key',1,FALSE,FALSE),(2,'event-other','event-other-key',2,FALSE,FALSE);
 INSERT INTO ruphish_auth_state VALUES(1,0),(2,0);
 INSERT INTO campaigns(id,user_id,name,status,launch_date,completed_date) VALUES(10,1,'Event edits','Completed','2026-01-01T00:00:00Z','2026-09-01T00:00:00Z'),(20,2,'Other','Completed','2026-01-01T00:00:00Z','2026-09-01T00:00:00Z');
-INSERT INTO results(id,campaign_id,user_id,r_id,email,status,reported) VALUES(11,10,1,'event-recipient','alice@example.test','Email Sent',FALSE),(21,20,2,'other-recipient','bob@example.test','Email Sent',FALSE);
+INSERT INTO results(id,campaign_id,user_id,r_id,email,status,reported) VALUES(11,10,1,'event-recipient','alice@example.test','Email Sent',FALSE),(12,10,1,'event-second','second@example.test','Email Sent',FALSE),(21,20,2,'other-recipient','bob@example.test','Email Sent',FALSE);
 INSERT INTO ruphish_delivery(result_id,campaign_id,state,due) VALUES(11,10,'accepted',1767225600);
 INSERT INTO events(id,campaign_id,recipient_id,email,time,kind,metadata,source) VALUES
 (101,10,11,'alice@example.test','2026-06-01T00:00:00Z','link_clicked','{}','public'),
 (102,10,11,'alice@example.test','2026-06-01T00:00:01Z','link_clicked','{}','public'),
 (103,10,11,'alice@example.test','2026-06-01T00:00:02Z','link_clicked','{}','public'),
-(104,10,11,'alice@example.test','2026-06-01T00:00:03Z','link_clicked','{}','public'),
-(105,10,11,'alice@example.test','2026-06-01T00:00:04Z','link_clicked','{}','public');
+(104,10,11,'alice@example.test','2026-06-01T00:01:00Z','link_clicked','{}','public'),
+(105,10,11,'alice@example.test','2026-06-01T00:03:00Z','link_clicked','{}','public');
 "#;
 pub fn change(
     key: &str,
@@ -53,6 +53,68 @@ pub async fn contract(db: &Database) {
     let repo = db.campaigns();
     let before = results(db).await;
     assert_eq!(before.totals, [0, 0, 5, 0, 0]);
+    assert_eq!(before.unique, [0, 0, 1, 0, 0]);
+    assert_eq!(before.participant_buckets.len(), 4);
+    assert!(
+        before
+            .participant_buckets
+            .iter()
+            .all(|b| b.counts == [0, 0, 1, 0, 0]),
+        "repeats across buckets and quiet intervals cannot inflate participant totals"
+    );
+    let paged = db
+        .reporting()
+        .analysis(
+            OWNER,
+            10,
+            Filter {
+                limit: 1,
+                offset: 4,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(paged.events.len(), 1);
+    assert_eq!(
+        paged.participant_buckets.last().unwrap().counts,
+        [0, 0, 1, 0, 0]
+    );
+    let start = ruphish_domain::datetime::parse("2026-06-01T00:02:00Z")
+        .unwrap()
+        .as_second();
+    let window = db
+        .reporting()
+        .analysis(
+            OWNER,
+            10,
+            Filter {
+                from: Some(start),
+                until: Some(start + 120),
+                limit: 1,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(window.totals, [0, 0, 1, 0, 0]);
+    assert_eq!(window.participant_buckets.len(), 1);
+    assert_eq!(window.participant_buckets[0].time, start + 60);
+    assert_eq!(window.participant_buckets[0].counts, [0, 0, 1, 0, 0]);
+    let empty = db
+        .reporting()
+        .analysis(
+            OWNER,
+            10,
+            Filter {
+                event: vec![Kind::FormSubmitted],
+                limit: 1,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert!(empty.participant_buckets.is_empty());
     assert!(before.events.iter().all(|e| !e.edited));
     let mut noop = change(
         "unchanged",
@@ -115,6 +177,31 @@ pub async fn contract(db: &Database) {
         .await
         .unwrap();
     assert!(changed.event.as_ref().unwrap().edited);
+    let snapshot = results(db).await;
+    let submission = snapshot.events.iter().find(|e| e.id == added.id).unwrap();
+    assert_eq!(submission.username_present, Some(true));
+    assert_eq!(submission.password_present, Some(false));
+    assert_eq!(
+        snapshot.participant_buckets.last().unwrap().counts,
+        [0, 0, 1, 1, 0]
+    );
+    let manual = db
+        .reporting()
+        .analysis(
+            OWNER,
+            10,
+            Filter {
+                source: Some(ruphish_domain::reporting::Source::Operator),
+                limit: 1,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        manual.participant_buckets.last().unwrap().counts,
+        [0, 0, 0, 1, 0]
+    );
     assert_eq!(changed.event.as_ref().unwrap().source, "operator");
     assert_eq!(changed.event.as_ref().unwrap().revision, 1);
     assert_eq!(
@@ -211,6 +298,10 @@ pub async fn contract(db: &Database) {
         .await
         .unwrap();
     assert_eq!(deleted.id, 101);
+    assert_eq!(
+        results(db).await.participant_buckets.last().unwrap().counts,
+        [0, 0, 1, 1, 1]
+    );
     assert!(deleted.event.is_none());
     assert!(matches!(
         repo.change_event(
@@ -322,4 +413,65 @@ pub async fn contract(db: &Database) {
     assert!(csv.contains("Edited"));
     assert!(!csv.contains("Correction revision"));
     assert!(csv.contains("operator"));
+    // A second participant adds one to the campaign, even with repeat actions.
+    let mut added_ids = Vec::new();
+    for key in ["second-first-click", "second-repeat-click"] {
+        let event = repo
+            .change_event(
+                OWNER,
+                10,
+                12,
+                change(key, None, 0, Action::Add, Some(Kind::LinkClicked)),
+                NOW,
+            )
+            .await
+            .unwrap();
+        added_ids.push(event.id);
+    }
+    let clicked = db
+        .reporting()
+        .analysis(
+            OWNER,
+            10,
+            Filter {
+                event: vec![Kind::LinkClicked],
+                limit: 1,
+                offset: 1,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(clicked.unique, [0, 0, 2, 0, 0]);
+    assert_eq!(clicked.totals, [0, 0, 4, 0, 0]);
+    assert_eq!(
+        clicked.participant_buckets.first().unwrap().counts,
+        [0, 0, 1, 0, 0]
+    );
+    assert_eq!(
+        clicked.participant_buckets.last().unwrap().counts,
+        [0, 0, 2, 0, 0]
+    );
+    for id in added_ids {
+        repo.change_event(
+            OWNER,
+            10,
+            12,
+            change(
+                &format!("second-delete-{id}"),
+                Some(id),
+                0,
+                Action::Delete,
+                None,
+            ),
+            NOW,
+        )
+        .await
+        .unwrap();
+    }
+    assert_eq!(
+        results(db).await.participant_buckets.last().unwrap().counts[2],
+        1,
+        "removing the last matching event removes the participant from this metric"
+    );
 }

@@ -161,14 +161,38 @@ pub(super) fn recipient_row(
                 <StatusBadge tone=Signal::derive(move || status_tone(
                     &text(&row.get(), "state"),
                 ))>
-                    {move || ruphish_ui::localization::delivery_label(
-                        i18n,
-                        &text(&row.get(), "state"),
-                    )}
+                    {move || {
+                        let value = row.get();
+                        if text(&value, "state") == "ready"
+                            && value["due"]
+                                .as_i64()
+                                .is_some_and(|due| due > (js_sys::Date::now() / 1000.0) as i64)
+                        {
+                            leptos_i18n::t_string!(i18n, ui.scheduled).to_string()
+                        } else {
+                            ruphish_ui::localization::delivery_label(i18n, &text(&value, "state"))
+                        }
+                    }}
                 </StatusBadge>
-                <small class="delivery-code">{move || text(&row.get(), "code")}</small>
+                <small class="delivery-code">
+                    {move || ruphish_ui::localization::delivery_failure_label(
+                        i18n,
+                        &text(&row.get(), "code"),
+                    )}
+                </small>
             </td>
-            <td>{move || instant(&row.get()["due"])}</td>
+            <td>
+                <small>
+                    {move || {
+                        if matches!(text(&row.get(), "state").as_str(), "ready" | "retry") {
+                            leptos_i18n::t_string!(i18n, ui.next_attempt).to_string()
+                        } else {
+                            leptos_i18n::t_string!(i18n, ui.last_scheduled_attempt).to_string()
+                        }
+                    }}
+                </small>
+                {move || instant(&row.get()["due"])}
+            </td>
             <td>
                 <span>
                     {move || {

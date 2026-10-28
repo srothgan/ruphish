@@ -234,20 +234,20 @@ fn detail(api: Api, id: i64) -> impl IntoView {
                 .as_ref()
                 .map(|v| {
                     let first = v
-                        .buckets
+                        .participant_buckets
                         .iter()
                         .position(|b| b.counts.values()[1..].iter().any(|count| *count > 0));
                     let last = v
-                        .buckets
+                        .participant_buckets
                         .iter()
                         .rposition(|b| b.counts.values()[1..].iter().any(|count| *count > 0));
                     first
                         .zip(last)
                         .map(|(first, last)| {
-                            v.buckets[first..=last]
+                            v.participant_buckets[first..=last]
                                 .iter()
                                 .map(|b| Bucket {
-                                    time: b.time,
+                                    time: b.time + v.bucket_seconds,
                                     counts: b.counts.values(),
                                 })
                                 .collect::<Vec<_>>()
@@ -416,13 +416,7 @@ fn detail(api: Api, id: i64) -> impl IntoView {
                                                 })
                                             }}
                                         </strong>
-                                        <small>
-                                            {move || {
-                                                leptos_i18n::t_string!(
-                                                    i18n, messages.arg0_recorded_events, arg0 = (data.with(|v| v.as_ref().map_or(0, |v| v.totals.values()[i]))).to_string()
-                                                )
-                                            }}
-                                        </small>
+                                        <small>{tr!(ui.participants)}</small>
                                     </Card>
                                 }
                             })
@@ -442,7 +436,7 @@ fn detail(api: Api, id: i64) -> impl IntoView {
                             )}
                         </p>
                     </details>
-                    <h2>{tr!(ui.recipients)}</h2>
+                    <h2>{tr!(ui.participants)}</h2>
                     <DataTable
                         label=trs!(ui.recipient_observations)
                         sorting=sorting
@@ -487,7 +481,9 @@ fn detail(api: Api, id: i64) -> impl IntoView {
                                             .map(move |index| {
                                                 view! {
                                                     <td>
-                                                        {move || row.get().map(|r| r.counts.values()[index])}
+                                                        <ActivityIndicator recorded=Signal::derive(move || {
+                                                            row.get().is_some_and(|r| r.counts.values()[index] > 0)
+                                                        }) />
                                                         <Show when=move || {
                                                             index == 4
                                                                 && row.get().is_some_and(|r| r.historical_reported)

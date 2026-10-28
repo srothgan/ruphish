@@ -907,3 +907,12 @@
   @keyframes query-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .query-loading-mark { animation: none; } }
 }
+
+@layer primitives {
+  .submission-fields { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s3) var(--s5); margin-block: var(--s2); }
+  .field-presence { display: inline-flex; align-items: baseline; gap: var(--s2); font-size: var(--fs-sm); }
+  .field-presence small { display: block; color: var(--muted); font-size: var(--fs-xs); }
+  .presence-mark, .activity-indicator { color: var(--muted); font-weight: 600; }
+  .field-presence.is-present .presence-mark, .activity-indicator.is-present { color: var(--teal-600); }
+  .delivery-code { overflow-wrap: anywhere; user-select: text; }
+}

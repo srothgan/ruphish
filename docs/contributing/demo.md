@@ -71,7 +71,7 @@ Campaign drafts remain an intentionally stateless demonstration: saving a new dr
 
 ## Build and validation
 
-See [local demo instructions](../../demo/README.md) for building and previewing the artifact and [the canonical validation reference](testing/validation.md#public-demo) for exact test commands. The normal build remains `trunk build --locked`. The demo additionally bundles its transport and builds with `--features demo`.
+See [local demo instructions](../../demo/README.md) for building and previewing the artifact and [the canonical validation reference](testing/validation.md#public-demo) for exact test commands. The normal build remains `trunk build --locked`. The demo additionally bundles its transport and generates an HTML entry point with the static title `Ruphish Demo`, then builds that entry point with `--features demo`.
 
 Both local modes use Trunk's existing `dist/.stage` staging and final `dist/admin` directory. Build sequentially and rebuild the intended mode before consuming this directory. CI uses separate jobs and artifact names so a demo artifact cannot satisfy the normal product asset cache.
 
@@ -83,7 +83,7 @@ The `demo` group in [the shared path selection](../../.github/paths.yml) selects
 
 ```sh
 node crates/ruphish-ui/web/build-demo.mjs
-trunk build --locked --release --features demo
+trunk build --locked --release --features demo crates/ruphish-ui/web/generated/index.html
 node demo/vercel-output.mjs
 ```
 

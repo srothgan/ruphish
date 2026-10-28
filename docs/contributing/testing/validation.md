@@ -118,7 +118,7 @@ For demo UI changes, apply the normal formatting rules, generate the demo transp
 ```sh
 node crates/ruphish-ui/web/build-demo.mjs
 node --test demo/tests/bundle.test.mjs
-trunk build --locked --features demo
+trunk build --locked --features demo crates/ruphish-ui/web/generated/index.html
 cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --features demo --locked -- -D warnings
 ```
 

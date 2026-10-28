@@ -66,8 +66,30 @@ export function analysis(campaign, query, now, paginate = true) {
         const index = kinds.indexOf(e.kind);
         if (index >= 0) buckets.get(time)[index]++;
     }
+    const firstActions = new Map();
+    for (const e of events) {
+        const index = kinds.indexOf(e.kind), at = Date.parse(e.time) / 1000;
+        if (e.recipient_id == null || index < 0 || !Number.isFinite(at)) continue;
+        const key = `${e.recipient_id}:${index}`, previous = firstActions.get(key);
+        if (!previous || at < previous.at) firstActions.set(key, { index, at });
+    }
+    const increments = new Map();
+    for (const { index, at } of firstActions.values()) {
+        const time = Math.floor(at / 3600) * 3600;
+        if (!increments.has(time)) increments.set(time, [0, 0, 0, 0, 0]);
+        increments.get(time)[index]++;
+    }
+    const participantBuckets = [], cumulative = [0, 0, 0, 0, 0];
+    if (increments.size) {
+        const end = Math.max(...buckets.keys());
+        for (let time = Math.min(...increments.keys()); time <= end; time += 3600) {
+            const added = increments.get(time) ?? [0, 0, 0, 0, 0];
+            added.forEach((count, index) => { cumulative[index] += count; });
+            participantBuckets.push({ time, counts: namedCounts([...cumulative]) });
+        }
+    }
     const offset = Math.max(0, Number(query.get('offset') ?? 0)), limit = Math.max(1, Math.min(200, Number(query.get('limit') ?? 50)));
-    return { first_observed: namedCounts(kinds.map(kind => { const times = events.filter(e => e.kind === kind).map(e => Date.parse(e.time)/1000); return times.length ? Math.min(...times) : null; })), last_observed: namedCounts(kinds.map(kind => { const times = events.filter(e => e.kind === kind).map(e => Date.parse(e.time)/1000); return times.length ? Math.max(...times) : null; })), id: campaign.header.id, name: campaign.header.name, status: campaign.header.status, as_of: now, audience: campaign.results.length, unique: namedCounts(unique), progression: namedCounts(progression), totals: namedCounts(counts(events)), recipient_total: rows.length, event_total: events.length, recipients: (paginate ? rows.slice(offset, offset + limit) : rows).map(r => ({ ...r, counts: namedCounts(r.counts) })), events: (paginate ? sortedEvents.slice(offset, offset + limit) : sortedEvents).map(e => ({ id:e.id,recipient_id:e.recipient_id,email:e.email,time:e.time,source:e.source,password_present:e.password_present??null,edited:e.edited??false,kind:recordedKind(e.kind) })), buckets: [...buckets].map(([time, values]) => ({ time, counts: namedCounts(values) })), bucket_seconds: 3600 };
+    return { first_observed: namedCounts(kinds.map(kind => { const times = events.filter(e => e.kind === kind).map(e => Date.parse(e.time)/1000); return times.length ? Math.min(...times) : null; })), last_observed: namedCounts(kinds.map(kind => { const times = events.filter(e => e.kind === kind).map(e => Date.parse(e.time)/1000); return times.length ? Math.max(...times) : null; })), id: campaign.header.id, name: campaign.header.name, status: campaign.header.status, as_of: now, audience: campaign.results.length, unique: namedCounts(unique), progression: namedCounts(progression), totals: namedCounts(counts(events)), recipient_total: rows.length, event_total: events.length, recipients: (paginate ? rows.slice(offset, offset + limit) : rows).map(r => ({ ...r, counts: namedCounts(r.counts) })), events: (paginate ? sortedEvents.slice(offset, offset + limit) : sortedEvents).map(e => ({ id:e.id,recipient_id:e.recipient_id,email:e.email,time:e.time,source:e.source,password_present:e.password_present??null,username_present:e.username_present??null,edited:e.edited??false,kind:recordedKind(e.kind) })), participant_buckets: participantBuckets, buckets: [...buckets].map(([time, values]) => ({ time, counts: namedCounts(values) })), bucket_seconds: 3600 };
 }
 
 function summaries(data, family) {

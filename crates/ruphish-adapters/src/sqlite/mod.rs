@@ -315,7 +315,15 @@ async fn validate_schema(
             sqlx::query_as(OBJECTS).fetch_all(&mut *connection).await?;
         let definitions: Vec<(String, String)> =
             sqlx::query_as(OBJECTS).fetch_all(&mut expected).await?;
-        if actual != definitions {
+        // SQLite retains the SQL's original line endings; include_str! retains
+        // the checkout's. Compare across checkouts without rewriting stored SQL
+        // or ignoring other differences in the event objects.
+        let normalize = |(name, sql): (String, String)| (name, sql.replace("\r\n", "\n"));
+        if !actual
+            .into_iter()
+            .map(normalize)
+            .eq(definitions.into_iter().map(normalize))
+        {
             return Err(UpgradeError::Unrecognized(
                 "event schema differs from its migration".into(),
             ));

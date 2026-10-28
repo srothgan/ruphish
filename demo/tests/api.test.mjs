@@ -409,3 +409,29 @@ test('multiple event kinds preserve union totals and occurrence bounds across pa
     assert.ok(full.events.every(e=>['email_opened','link_clicked'].includes(e.kind.value)));
     assert.equal((await f.request(path+',invalid')).status,400);
 });
+
+
+test('campaign participant series deduplicates across buckets, filters and pages while recipient counts retain repeats', async () => {
+    const data = dataset(now), c = data.campaigns.find(c => c.header.id === 2);
+    c.results.forEach(r => { r.events = []; });
+    const event = (id, ago, source = 'public') => ({ id, time: new Date((now - ago) * 1000).toISOString(), kind: 'Clicked Link', source, password_present: null, edited: false });
+    c.results[0].events = [event(99001, 7200), event(99002, 3600), event(99003, 60)];
+    c.results[1].events = [event(99004, 1800, 'operator')];
+    for (const r of c.results) for (const e of r.events) Object.assign(e, { recipient_id: r.id, email: r.email });
+    const f = setup(new Map(), data); await f.login();
+    const read = async query => (await f.request(`/api/campaigns/2/results?${query}`)).value;
+    const result = await read('limit=1&offset=1');
+    assert.equal(result.events.length, 1);
+    assert.equal(result.totals.clicked, 4);
+    assert.equal(result.unique.clicked, 2);
+    assert.equal(result.participant_buckets[0].counts.clicked, 1);
+    assert.equal(result.participant_buckets.at(-1).counts.clicked, 2);
+    const individual = await read(`recipient=${c.results[0].id}`);
+    assert.equal(individual.totals.clicked, 3);
+    assert.ok(individual.participant_buckets.every(b => b.counts.clicked === 1));
+    const filtered = await read(`source=public&from=${now - 4000}&until=${now}&limit=1`);
+    assert.equal(filtered.totals.clicked, 2);
+    assert.ok(filtered.participant_buckets.every(b => b.counts.clicked === 1));
+    assert.equal(filtered.participant_buckets[0].time, Math.floor((now - 3600) / 3600) * 3600);
+    assert.deepEqual((await read('event=form_submitted')).participant_buckets, []);
+});

@@ -197,6 +197,7 @@ fn detail(api: Api, campaign: i64, recipient: i64) -> impl IntoView {
                                 })
                                 .collect_view()}
                         </dl>
+                        <p>{tr!(ui.recipient_observation_counts)}</p>
                         <p class="recipient-reaction-time">
                             {move || data.with(|v| v.as_ref().map(reaction_time))}
                         </p>
@@ -345,17 +346,18 @@ pub(crate) fn EventHistory(data: Signal<Option<Results>>) -> impl IntoView {
                                             <time>{instant(&event.time.clone().into())}</time>
                                             <div>
                                                 <strong>{label}</strong>
-                                                {event
-                                                    .password_present
-                                                    .map(|present| {
+                                                {matches!(
+                                                    event.kind,
+                                                    ruphish_domain::events::RecordedKind::Known(
+                                                        ruphish_domain::events::Kind::FormSubmitted,
+                                                    )
+                                                )
+                                                    .then(|| {
                                                         view! {
-                                                            <small>
-                                                                {if present {
-                                                                    leptos_i18n::t_string!(i18n,ui.password_field_was_nonempty)
-                                                                } else {
-                                                                    leptos_i18n::t_string!(i18n,ui.password_field_was_empty)
-                                                                }}
-                                                            </small>
+                                                            <SubmissionFields
+                                                                username=Signal::stored(event.username_present)
+                                                                password=Signal::stored(event.password_present)
+                                                            />
                                                         }
                                                     })}
                                                 <div class="timeline-labels">

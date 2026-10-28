@@ -1,4 +1,4 @@
-//! Responsive count chart: lines and visible observation dots, integer axes and keyboard-readable values.
+//! Cumulative participant chart with integer axes and keyboard-readable interval totals.
 use crate::shared::components::*;
 use leptos::prelude::*;
 use ruphish_ui::results_state::{count_axis, time_axis};
@@ -82,7 +82,7 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
                 <span>
                     {move || {
                         leptos_i18n::t_string!(
-                            i18n, messages.events_per_arg0_minute_arg1_arg2, arg0 = (interval.get()/60).to_string(), arg2 = (zone()).to_string()
+                            i18n, messages.participants_through_intervals, minutes = (interval.get()/60).to_string(), zone = (zone()).to_string()
                         )
                     }}
                 </span>
@@ -155,6 +155,13 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
                                                             x1=x(pair[0].time)
                                                             y1=y(pair[0].counts[i])
                                                             x2=x(pair[1].time)
+                                                            y2=y(pair[0].counts[i])
+                                                            stroke-width="2"
+                                                        />
+                                                        <line
+                                                            x1=x(pair[1].time)
+                                                            y1=y(pair[0].counts[i])
+                                                            x2=x(pair[1].time)
                                                             y2=y(pair[1].counts[i])
                                                             stroke-width="2"
                                                         />
@@ -215,7 +222,7 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
                                     let title = format!(
                                         "{}: {}",
                                         leptos_i18n::t_string!(
-                                            i18n, messages.start_to_end, start = time(bucket.time), end = time(bucket.time+interval.get())
+                                            i18n, messages.participants_through, end = time(bucket.time)
                                         ),
                                         (1..5)
                                             .map(|i| {
@@ -274,7 +281,7 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
                                         <strong>{tr!(ui.details)}</strong>
                                         <span>
                                             {leptos_i18n::t_string!(
-                                                i18n, messages.start_to_end, start = time(bucket.time), end = time(bucket.time+interval.get())
+                                                i18n, messages.participants_through, end = time(bucket.time)
                                             )}
                                         </span>
                                         <dl>

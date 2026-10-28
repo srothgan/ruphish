@@ -169,7 +169,8 @@
         "recipient_id": 1,
         "source": "legacy",
         "time": "2026-10-19T13:29:09Z",
-        "edited": false
+        "edited": false,
+        "username_present": null
       },
       {
         "email": "browser@example.test",
@@ -182,7 +183,8 @@
         "recipient_id": 1,
         "source": "legacy",
         "time": "2026-10-19T13:26:28Z",
-        "edited": false
+        "edited": false,
+        "username_present": null
       },
       {
         "email": "browser@example.test",
@@ -195,7 +197,8 @@
         "recipient_id": 1,
         "source": "legacy",
         "time": "2026-10-19T13:24:43Z",
-        "edited": false
+        "edited": false,
+        "username_present": null
       },
       {
         "email": "browser@example.test",
@@ -208,7 +211,8 @@
         "recipient_id": 1,
         "source": "legacy",
         "time": "2026-10-19T13:18:43Z",
-        "edited": false
+        "edited": false,
+        "username_present": null
       },
       {
         "email": "",
@@ -221,7 +225,8 @@
         "recipient_id": null,
         "source": "legacy",
         "time": "2026-10-19T13:18:42Z",
-        "edited": false
+        "edited": false,
+        "username_present": null
       }
     ],
     "id": 1,
@@ -278,6 +283,28 @@
       "clicked": 1792416388,
       "submitted": 1792416549,
       "reported": null
-    }
+    },
+    "participant_buckets": [
+      {
+        "time": 1792415880,
+        "counts": {
+          "accepted": 1,
+          "opened": 0,
+          "clicked": 0,
+          "submitted": 0,
+          "reported": 0
+        }
+      },
+      {
+        "time": 1792416540,
+        "counts": {
+          "accepted": 1,
+          "opened": 1,
+          "clicked": 1,
+          "submitted": 1,
+          "reported": 0
+        }
+      }
+    ]
   }
 }

@@ -37,13 +37,13 @@ For example, `/api/campaigns/42/results?limit=25&offset=0` reads the first page 
 
 `first_observed` and `last_observed` contain the earliest/latest effective UTC Unix second for each metric across the complete filtered selection, before pagination. Both are objects with required `accepted`, `opened`, `clicked`, `submitted` and `reported` fields; a field is `null` when no valid timestamp exists. These are observed times, not inferred progression timestamps.
 
-The response contains campaign `id`, `name`, `status`, `as_of` (UTC Unix seconds), unfiltered `audience`, filtered `recipient_total` and `event_total`, current `recipients` and `events` pages, chart `buckets`, and `bucket_seconds`.
+The response contains campaign `id`, `name`, `status`, `as_of` (UTC Unix seconds), unfiltered `audience`, filtered `recipient_total` and `event_total`, current `recipients` and `events` pages, raw-event chart `buckets`, cumulative `participant_buckets`, and `bucket_seconds`.
 
 `unique`, `progression`, `totals`, recipient `counts`, and bucket `counts` are objects with five required numeric fields: `accepted`, `opened`, `clicked`, `submitted`, and `reported`. Empty results contain zero values, not omitted fields or positional arrays. `unique` counts distinct recipients with effective matching events; `totals` counts the events themselves. `progression` includes inferred earlier engagement stages. They answer different questions. See [metric definitions](../user-guide/results/metrics.md).
 
 Recipient rows contain `id`, `email`, `name`, `delivery`, `counts`, and `historical_reported`. Delivery is one of `ready`, `preparing`, `submitting`, `retry`, `accepted`, `failed`, `unknown`, `blocked`, `cancelled`, or explicit `null`. `unknown` means ambiguous transport acceptance; `null` means no native transport record exists. The property is required even when null. The UI and tabular exports label that absence as historical; delivery sorting puts it before recorded states ascending and after them descending. Campaign `status` is `Created`, `Queued`, `In progress`, `Emails Sent`, or `Completed`; the first and fourth values can occur in imported campaign history.
 
-Event rows contain `id`, nullable `recipient_id`, `email`, UTC `time`, `kind`, `source`, nullable `password_present`, and boolean `edited`. The nullable fields must still be present. `source` is `legacy`, `application`, `public`, `mailbox`, or `operator`. Missing presence evidence is not the same as `false`. Historical reported state is separate from an observed report event.
+Event rows contain `id`, nullable `recipient_id`, `email`, UTC `time`, `kind`, `source`, nullable `password_present` and `username_present`, and boolean `edited`. The nullable fields must still be present. `source` is `legacy`, `application`, `public`, `mailbox`, or `operator`. Missing presence evidence is not the same as `false`. Historical reported state is separate from an observed report event.
 
 A recognized event uses a classified kind such as `{"type":"known","value":"form_submitted"}`. Unrecognized imported names remain explicit history, for example `{"type":"historical","value":"Proxied request"}`. They remain visible in event rows and exports but never contribute to a known action's metrics. CSV and XLSX retain readable event names. There are no aliases for superseded pre-release reporting formats.
 
@@ -69,9 +69,11 @@ The added audience fields come from the campaign's recipient records, preserving
 
 Downloads use `Content-Disposition: attachment`, a `campaign-{id}` filename, and `Cache-Control: no-store`. They contain operator-provided recipient identities and selected event metadata, not submitted participant values or IP-derived location. See [export interpretation](../user-guide/results/exports.md).
 
+`participant_buckets` uses the same `{time, counts}` shape as `buckets`. Each attributed recipient contributes once per action, at the first matching timestamp inside the selected filters. Counts are cumulative through each interval (end exclusive), retain totals through quiet intervals, and are independent of table pagination. Unattributed events and events without valid timestamps cannot add chart participants. Existing `buckets`, `totals`, and recipient `counts` retain their event-count semantics.
+
 ## Event corrections
 
-`POST /api/campaigns/{campaign}/recipients/{recipient}/events` commits one owner-scoped change. It requires `modify_objects`; browser sessions also require the existing CSRF token and origin checks. Completed campaigns accept corrections without changing their lifecycle or delivery work. The response is the committed event record, with immutable `original`, effective `current`, `source`, `excluded`, and boolean `edited`.
+`POST /api/campaigns/{campaign}/recipients/{recipient}/events` commits one owner-scoped change. It requires `modify_objects`; browser sessions also require the existing CSRF token and origin checks. Completed campaigns accept corrections without changing their lifecycle or delivery work. The response contains the affected `id` and `event`. For add/edit, `event` contains `id`, `current`, `source`, `revision`, and boolean `edited`; deletion returns `event: null`.
 
 ```json
 {
