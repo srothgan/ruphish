@@ -14,6 +14,7 @@ Cost describes the work performed, not a promised duration. Compilation, tool in
 | Check | Guarantee and prerequisite | Cost and placement |
 | --- | --- | --- |
 | Rustfmt / Leptos formatting | Rust layout / Leptos markup layout; installed pinned tools | Small, no product compilation. Agents after applicable edits; CI on selected Rust/UI paths |
+| Prettier / ESLint | Maintained JavaScript formatting and code checks with scoped browser/Node globals; root npm dependencies | Small, no Rust compilation. Shared validation checks all maintained JavaScript on every run |
 | Native Clippy | Native target compilation and lint policy, including tests | Compilation can dominate a cold run. Agents use affected targets; the product group checks all native targets |
 | Native unit and ordinary integration tests | Domain, serialization, adapter, HTTP and SQLite behavior | Reuse compilation; filesystem/database cases cost more than pure functions. Agents select regressions; the product group runs the complete non-ignored native suite |
 | JS tests and syntax | Actual editor/state/build transformations; npm dependencies where imported | Installation is separate. Run affected tests locally and all browser functional tests on product PRs. Syntax-only commands are needed only for files not parsed by tests/build |
@@ -35,7 +36,7 @@ The executable participant-privacy workflow runs the served JavaScript collector
 
 ## Prerequisites
 
-Use the Rust toolchain/components/target in [rust-toolchain.toml](../../../rust-toolchain.toml). Tool versions are owned by [Cargo.toml](../../../Cargo.toml) workspace metadata and [Trunk.toml](../../../Trunk.toml); [development setup](../setup.md) explains formatting, generation and editor configuration. CI additionally pins product Node and tool installers in the [toolchain action](../../../.github/actions/toolchain/action.yml). The website job reads its Node version from [website/package.json](../../../website/package.json).
+Use the Rust toolchain/components/target in [rust-toolchain.toml](../../../rust-toolchain.toml). Rust tool versions are owned by [Cargo.toml](../../../Cargo.toml) workspace metadata and [Trunk.toml](../../../Trunk.toml); JavaScript quality-tool versions are pinned in the root [package.json](../../../package.json) and lockfile. [Development setup](../setup.md) explains formatting, generation and editor configuration. CI additionally pins product Node and tool installers in the [toolchain action](../../../.github/actions/toolchain/action.yml). The website job reads its Node version from [website/package.json](../../../website/package.json).
 
 For a fresh browser setup, install the matching tools and npm dependencies. These are setup commands, not checks to repeat after every edit:
 
@@ -45,6 +46,7 @@ cargo install leptosfmt --version 0.1.33 --locked --profile dev
 cargo install trunk --version 0.21.14 --locked --profile dev
 cargo install wasm-bindgen-cli --version 0.2.129 --locked --profile dev
 cargo install cargo-deny --version 0.19.9 --locked --profile dev
+npm ci --ignore-scripts
 npm ci --prefix crates/ruphish-ui/web
 ```
 
@@ -70,7 +72,7 @@ cargo clippy -p ruphish-domain --all-targets --locked -- -D warnings
 cargo test -p ruphish-domain --locked
 ```
 
-For markup changes also run `leptosfmt --check crates/ruphish-ui/src crates/ruphish-ui/tests`. For JS changes use the relevant file under `crates/ruphish-ui/web/tests/`; for standalone files not parsed by those tests/build use `node --check <changed-file>`. Do not run every syntax-only command after a build that already parsed the same modules.
+For markup changes also run `leptosfmt --check crates/ruphish-ui/src crates/ruphish-ui/tests`. For JavaScript changes use the [formatting and lint checks](#javascript-formatting-and-linting) plus the relevant functional tests, including `crates/ruphish-ui/web/tests/` for browser code. ESLint already parses the maintained JavaScript, so a separate `node --check` is not needed for those files.
 
 Executable cases are independently selectable through the existing `startup_process` target. Use the appropriate filter, not the full suite by default:
 
@@ -141,12 +143,35 @@ trunk build --locked
 node --test crates/ruphish-ui/web/tests/campaign-routing.artifact.mjs
 ```
 
+## JavaScript formatting and linting
+
+Run from the product root after installing the root dependencies with `npm ci --ignore-scripts`:
+
+```sh
+npx --no-install prettier . --check
+npx --no-install eslint . --max-warnings=0
+```
+
+These are read-only checks. To apply JavaScript formatting deliberately:
+
+```sh
+npx --no-install prettier . --write
+```
+
+The pinned local executables are required; `--no-install` prevents downloading an unpinned tool during a check. [`.prettierignore`](../../../.prettierignore) restricts formatting to maintained `.js`, `.mjs` and `.cjs` files. [The Prettier configuration](../../../.prettierrc.json) uses two spaces, single quotes, LF and a 100-column target. Markdown, Rust, JSON and YAML are not included in this formatting command.
+
+[The ESLint configuration](../../../eslint.config.mjs) enables the recommended correctness rules, unused-variable checks, explicit control-flow braces, separate variable declarations, `const` preference and strict equality with the conventional null-check exception. Node build/test/tool files and browser modules receive their own globals; JSDOM/browser callback harnesses receive both. The injected landing-page collector declares only its renderer-provided bindings in addition to browser globals. Generated output, dependencies, local state and independent content fixtures are excluded from both tools.
+
+The shared workflow runs these checks in its always-selected paths/quality job, so JavaScript, configuration and tooling changes cannot bypass them through product path selection. PR, nightly and release entry points all invoke that workflow. Installing dependencies does not run the formatter or linter, and no automatic formatting or lint-fix hook is installed. Existing files must satisfy these checks before a future CI run can pass; adding configuration alone does not reformat or repair them.
+
 ## Complete source acceptance commands
 
 This catalog is for an explicitly selected full acceptance run. It is not a local completion checklist. Generate the real development distribution before process tests; Trunk invokes the JS/CSS generator itself:
 
 ```sh
 trunk build --locked
+npx --no-install prettier . --check
+npx --no-install eslint . --max-warnings=0
 cargo fmt --all -- --check
 leptosfmt --check crates/ruphish-ui/src crates/ruphish-ui/tests
 cargo clippy --workspace --exclude ruphish-ui --all-targets --locked -- -D warnings
@@ -158,6 +183,7 @@ cargo test -p ruphish-ui --test '*' --target wasm32-unknown-unknown --locked
 cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --locked -- -D warnings
 cargo clippy -p ruphish-ui --tests --target wasm32-unknown-unknown --locked -- -D warnings
 npm audit --prefix crates/ruphish-ui/web
+npm audit
 cargo deny check bans licenses sources advisories
 ```
 

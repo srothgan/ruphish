@@ -1,0 +1,22 @@
+# Format maintained JavaScript only; other languages have their own rules.
+*
+!*/
+!*.js
+!*.mjs
+!*.cjs
+
+# Generated output, dependencies, local state and independent content fixtures.
+**/node_modules/**
+**/generated/**
+**/target/**
+**/dist/**
+**/coverage/**
+**/.git/**
+**/.astro/**
+**/.vercel/**
+.ci-tools/**
+data/**
+tests/acceptance/data/**
+tests/fixtures/**
+website/src/content/docs/**
+crates/ruphish-http/starter-templates/**

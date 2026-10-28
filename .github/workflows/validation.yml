@@ -17,7 +17,7 @@ env:
 
 jobs:
   changes:
-    name: Paths and workflow checks
+    name: Paths, JavaScript and workflow checks
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
@@ -35,6 +35,12 @@ jobs:
         with:
           node-version: '26.8.1'
           package-manager-cache: false
+      - name: Install JavaScript quality tools
+        run: npm ci --ignore-scripts
+      - name: Check JavaScript formatting
+        run: npx --no-install prettier . --check
+      - name: Lint maintained JavaScript
+        run: npx --no-install eslint . --max-warnings=0
       - name: Check gate behavior and fixture initialization
         run: node --test .github/scripts/*.test.mjs demo/tests/vercel-output.test.mjs tests/acceptance/init.test.mjs
       - name: Lint workflows
@@ -95,7 +101,7 @@ jobs:
           cache-group: browser
       - name: Install browser dependencies
         run: npm ci --prefix crates/ruphish-ui/web
-      - name: Browser formatting
+      - name: Browser Rust and Leptos formatting
         run: |
           cargo fmt --all -- --check
           leptosfmt --check crates/ruphish-ui/src crates/ruphish-ui/tests
@@ -275,6 +281,7 @@ jobs:
           dependencies: 'true'
           cache-group: policy
       - run: npm audit --prefix crates/ruphish-ui/web
+      - run: npm audit
       - run: cargo deny check bans licenses sources advisories
 
   public:

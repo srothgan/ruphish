@@ -1,5 +1,9 @@
 # Match both Rust formatters on every platform.
 *.rs text eol=lf
+# Keep JavaScript formatting stable across Windows and POSIX checkouts.
+*.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
 # Keep the embedded recipient download identical across platform checkouts.
 crates/ruphish-ui/assets/recipient-template.csv text eol=lf
 # Preserve the exact bytes used by fixture manifests and copied SQL provenance.
