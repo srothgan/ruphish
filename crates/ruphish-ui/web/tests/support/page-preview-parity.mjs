@@ -1,4 +1,4 @@
-// Real API previews and public responses must differ only by the live landing collector.
+// Preview and public landing content differ only by the collector endpoint and base URL.
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
@@ -17,21 +17,55 @@ for (const { kind, preview, served, title, visible } of JSON.parse(
     for (const text of visible) {
       assert.ok(doc.body.textContent.includes(text), text);
     }
-    assert.equal(doc.querySelectorAll('iframe,object,[onclick],[onload],[onerror]').length, 0);
-    assert.ok(!doc.documentElement.outerHTML.includes('outside.invalid'));
-    assert.ok(!doc.documentElement.outerHTML.includes('unsafe()'));
+    assert.equal(doc.querySelectorAll('iframe,frame,frameset,object,embed').length, 0);
+    if (kind === 'learning') {
+      assert.equal(
+        doc.querySelectorAll('script,form,input,button,[onclick],[onload],[onerror]').length,
+        0,
+      );
+      assert.ok(!doc.documentElement.outerHTML.includes('outside.invalid'));
+      assert.ok(!doc.documentElement.outerHTML.includes('unsafe()'));
+    } else {
+      assert.equal(doc.querySelectorAll('script').length, 2);
+      assert.equal(doc.querySelectorAll('script[data-ruphish-collector]').length, 1);
+      assert.equal(doc.head.querySelector('script').hasAttribute('data-ruphish-collector'), true);
+      assert.equal(
+        doc.querySelector('script:not([data-ruphish-collector])').textContent,
+        'unsafe()',
+      );
+      assert.equal(doc.querySelector('img').getAttribute('src'), 'https://outside.invalid/pixel');
+      assert.equal(doc.querySelector('img').getAttribute('onerror'), 'unsafe()');
+      assert.equal(
+        doc.querySelectorAll('form[action],form[target],[formaction],[formtarget]').length,
+        0,
+      );
+      assert.match(
+        doc.querySelector('meta[http-equiv="Content-Security-Policy"]').content,
+        /form-action 'none'/,
+      );
+    }
   }
-  assert.equal(expected.querySelectorAll('script').length, 0, 'previews have no collector');
-  const collectors = actual.querySelectorAll('script');
-  assert.equal(collectors.length, kind === 'landing' ? 1 : 0);
-  for (const collector of collectors) {
-    assert.ok(collector.nonce, 'live landing script is the nonce-bound collector');
-    collector.remove();
+  if (kind === 'landing') {
+    const previewBase = expected.querySelector('base');
+    const liveBase = actual.querySelector('base');
+    assert.equal(previewBase.href, 'https://preview.invalid/');
+    assert.match(liveBase.href, /^https:\/\/.*\?rid=/);
+    const previewCollector = expected.querySelector('[data-ruphish-collector]');
+    const liveCollector = actual.querySelector('[data-ruphish-collector]');
+    const liveEndpoint = `const endpoint=${JSON.stringify(liveBase.href)};`;
+    assert.ok(liveCollector.textContent.includes(liveEndpoint));
+    assert.ok(previewCollector.textContent.includes('const endpoint=null;'));
+    // Normalize only these verified differences; compare all remaining markup and script content.
+    liveCollector.textContent = liveCollector.textContent.replace(
+      liveEndpoint,
+      'const endpoint=null;',
+    );
+    liveBase.setAttribute('href', previewBase.getAttribute('href'));
   }
   assert.equal(
     actual.documentElement.outerHTML,
     expected.documentElement.outerHTML,
-    'preview and served content use the same preparation and sanitizer',
+    'preview and served content use the same preparation for their page kind',
   );
   const formCount = kind === 'landing' ? 1 : 0;
   assert.equal(expected.querySelectorAll('form').length, formCount);

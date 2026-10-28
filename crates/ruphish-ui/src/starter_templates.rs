@@ -614,6 +614,12 @@ fn preview_panel(
     let queries: ManagementQueries = expect_context();
     let id = StoredValue::new(id);
     let detail = queries.starter.observe(move || id.get_value());
+    let interactive = Signal::derive(move || {
+        detail
+            .data
+            .get()
+            .is_some_and(|entry| entry.summary.kind == Kind::LandingPage)
+    });
     let preview = RwSignal::new(ContentPreview::default());
     let retry = RwSignal::new(0u64);
     let options = Memo::new(move |_| state.draft.with(|draft| draft.options(&id.get_value())));
@@ -789,9 +795,19 @@ fn preview_panel(
                                 <iframe
                                     title=leptos_i18n::t_string!(i18n, ui.preview)
                                     class="starter-preview-frame"
-                                    sandbox=""
+                                    sandbox=move || {
+                                        if interactive.get() {
+                                            ruphish_domain::landing::SANDBOX
+                                        } else {
+                                            ""
+                                        }
+                                    }
                                     referrerpolicy="no-referrer"
-                                    srcdoc=preview_document(&html)
+                                    srcdoc=if interactive.get() {
+                                        ruphish_ui::landing_preview_document(&html)
+                                    } else {
+                                        preview_document(&html)
+                                    }
                                 ></iframe>
                             }
                         })

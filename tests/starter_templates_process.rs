@@ -103,6 +103,11 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
     );
     let catalog = get("/api/starter-templates/");
     let rows = catalog.as_array().unwrap();
+    assert_eq!(rows.iter().filter(|r| r["kind"] == "email").count(), 23);
+    assert_eq!(
+        rows.iter().filter(|r| r["kind"] == "landing_page").count(),
+        25
+    );
     assert!(rows.iter().any(|r| r["kind"] == "email"));
     assert!(rows.iter().any(|r| r["kind"] == "landing_page"));
     let learning: std::collections::BTreeSet<_> = rows
@@ -128,6 +133,9 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
         std::collections::BTreeSet::from([
             "page-microsoft-full-screen",
             "page-microsoft-side-panel",
+            "page-microsoft-two-step",
+            "page-microsoft-two-step-side-panel",
+            "page-onedrive-shared-document",
             "page-zoom",
             "page-salesforce",
             "page-workday",
@@ -159,6 +167,7 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
         brand: "Fixture",
         kind: ruphish_contracts::starter_templates::Kind::LearningPage,
         html: "<div class='brand'>Default mark</div><h1>Fixture explanation</h1><p>{{.FirstName}}</p><p>Literal {{ unfinished example</p><form><input name='password'><button>Submit</button></form><script>unsafe()</script>",
+        script: None,
         subject: "",
         text: "",
         logo: Some((".brand", 48, "Learning page header")),
@@ -172,6 +181,23 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
         assert_eq!(entry["summary"], *row);
         entries.push(entry);
     }
+    // Compare actual native and browser-demo responses, including every assembled script
+    // and creation payload, so the two build adapters cannot silently diverge.
+    let demo = std::process::Command::new("node")
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../demo/contract-samples.mjs"))
+        .output()
+        .unwrap();
+    assert!(
+        demo.status.success(),
+        "{}",
+        String::from_utf8_lossy(&demo.stderr)
+    );
+    let demo: Value = serde_json::from_slice(&demo.stdout).unwrap();
+    assert_eq!(demo["/api/starter-templates/"], catalog);
+    for entry in &entries {
+        let id = entry["summary"]["id"].as_str().unwrap();
+        assert_eq!(demo[format!("/api/starter-templates/{id}")], *entry, "{id}");
+    }
     assert!(!rows.iter().any(|row| row["id"] == "fixture-learning"));
     entries.push(serde_json::to_value(learning.entry()).unwrap());
     let mut saved = Vec::new();
@@ -180,6 +206,23 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
         let id = row["id"].as_str().unwrap();
         let resource = &entry["resource"];
         let html = resource["html"].as_str().unwrap();
+        if matches!(
+            id,
+            "page-onedrive-shared-document"
+                | "page-google-drive-shared-document"
+                | "page-dropbox-shared-file"
+                | "page-microsoft-two-step"
+                | "page-microsoft-two-step-side-panel"
+                | "page-google-workspace-two-step"
+        ) {
+            assert_eq!(html.matches("data-starter-interaction").count(), 1, "{id}");
+            assert!(html.contains("window.ruphish.submit(form)"), "{id}");
+            assert_eq!(html.matches("</body>").count(), 1, "{id}");
+            assert!(
+                html.find("data-starter-interaction").unwrap() < html.find("</body>").unwrap(),
+                "{id}"
+            );
+        }
         assert!(!html.contains("{{.Tracker}}"));
         if row["kind"] == "landing_page" {
             assert!(!html.contains("{{.Email"), "prefill must default off: {id}");

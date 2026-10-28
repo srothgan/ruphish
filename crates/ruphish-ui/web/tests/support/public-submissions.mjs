@@ -23,7 +23,12 @@ function request(target, options = {}) {
         const chunks = [];
         response.on('data', (chunk) => chunks.push(chunk));
         response.on('end', () =>
-          resolve({ ok: response.statusCode === 200, text: Buffer.concat(chunks).toString() }),
+          resolve({
+            ok: response.statusCode === 200,
+            status: response.statusCode,
+            headers: response.headers,
+            text: Buffer.concat(chunks).toString(),
+          }),
         );
       },
     );
@@ -34,6 +39,21 @@ function request(target, options = {}) {
 }
 const loaded = await request(url);
 assert.equal(loaded.ok, true);
+assert.match(loaded.headers['content-security-policy'], /^sandbox allow-scripts allow-forms;/);
+assert.ok(!loaded.headers['content-security-policy'].includes('allow-same-origin'));
+const preflight = await request(url, {
+  method: 'OPTIONS',
+  headers: {
+    Origin: 'null',
+    'Access-Control-Request-Method': 'POST',
+    'Access-Control-Request-Headers': 'content-type',
+  },
+});
+assert.equal(preflight.status, 204);
+assert.equal(preflight.headers['access-control-allow-origin'], '*');
+assert.equal(preflight.headers['access-control-allow-credentials'], undefined);
+assert.ok(preflight.headers['access-control-allow-methods'].includes('POST'));
+assert.equal(preflight.headers['access-control-allow-headers'], 'Content-Type');
 const dom = new JSDOM(loaded.text, { url, runScripts: 'outside-only' });
 try {
   const requests = [];
@@ -42,7 +62,12 @@ try {
   dom.window.fetch = async (target, options) => {
     assert.ok(!options.body.includes('CANARY'));
     requests.push(JSON.parse(options.body));
-    const response = await request(target, options);
+    const response = await request(target, {
+      ...options,
+      headers: { ...options.headers, Origin: 'null' },
+    });
+    assert.equal(response.headers['access-control-allow-origin'], '*');
+    assert.equal(response.headers['access-control-allow-credentials'], undefined);
     delivered?.();
     if (lost) {
       lost = false;
@@ -50,7 +75,7 @@ try {
     }
     return { ok: response.ok, json: async () => JSON.parse(response.text) };
   };
-  dom.window.eval(dom.window.document.querySelector('script[nonce]').textContent);
+  dom.window.eval(dom.window.document.querySelector('script[data-ruphish-collector]').textContent);
   const form = dom.window.document.querySelector('form');
   const password = form.querySelector('input[type="password"]');
   const submit = async () => {

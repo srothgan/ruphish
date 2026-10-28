@@ -428,13 +428,33 @@ test('event rows distinguish creation from editing, reject stale writes and dele
   assert.equal((await f.request(path, 'POST', removeAdded)).status, 404);
 });
 
-test('configured resources and the demo starter picker use the existing authored starters', async () => {
+test('the full starter catalog is independent of the preloaded sample resources', async () => {
   const f = setup();
   await f.login();
   const catalog = (await f.request('/api/starter-templates/')).value;
-  assert.equal(catalog.filter((row) => row.kind === 'email').length, 4);
-  assert.equal(catalog.filter((row) => row.kind === 'landing_page').length, 2);
+  assert.equal(catalog.filter((row) => row.kind === 'email').length, 23);
+  assert.equal(catalog.filter((row) => row.kind === 'landing_page').length, 25);
   assert.equal(catalog.filter((row) => row.kind === 'learning_page').length, 3);
+  assert.equal(new Set(catalog.map((entry) => entry.id)).size, 51);
+  assert.equal((await f.request('/api/templates/')).value.length, 4);
+  assert.equal((await f.request('/api/pages/')).value.length, 2);
+  for (const row of catalog) {
+    const entry = (await f.request(`/api/starter-templates/${row.id}`)).value;
+    assert.deepEqual(entry.summary, row);
+    assert.equal(entry.resource.name, row.name);
+    assert.equal(typeof entry.resource.html, 'string');
+    assert.equal('id' in entry.resource, false);
+    assert.equal('modified_date' in entry.resource, false);
+    const previewPath = {
+      email: '/api/util/preview',
+      landing_page: '/api/pages/preview',
+      learning_page: '/api/learning-pages/preview',
+    }[row.kind];
+    const preview = await f.request(previewPath, 'POST', { html: entry.resource.html });
+    assert.equal(preview.status, 200, row.id);
+    assert.equal(preview.value.html, entry.resource.html, row.id);
+  }
+  assert.equal((await f.request('/api/starter-templates/not-found')).status, 404);
   for (const [family, id, source] of [
     ['templates', 'email-microsoft-shared-document', 'emails/microsoft-shared-document/email.html'],
     ['pages', 'page-microsoft-side-panel', 'landing-pages/microsoft-side-panel/landing.html'],

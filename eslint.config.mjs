@@ -45,6 +45,7 @@ export default [
       'website/*.config.{js,mjs}',
       'website/tools/**/*.{js,mjs}',
       'crates/ruphish-ui/web/build*.mjs',
+      'crates/ruphish-http/src/starter_templates/catalog.mjs',
       'crates/ruphish-ui/web/tests/**/*.{js,mjs}',
     ],
     languageOptions: { globals: globals.node },
@@ -70,5 +71,9 @@ export default [
       // The Rust landing-page renderer supplies these two bindings.
       globals: { ...globals.browser, endpoint: 'readonly', messages: 'readonly' },
     },
+  },
+  {
+    files: ['crates/ruphish-http/src/starter_templates/interaction.js'],
+    languageOptions: { sourceType: 'script', globals: globals.browser },
   },
 ];

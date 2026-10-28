@@ -106,7 +106,6 @@ pub fn router(services: Services) -> Router {
             let state = state.clone();
             let capacity = capacity.clone();
             async move {
-                let report = request.uri().path().ends_with("/report");
                 let Ok(_permit) = capacity.try_acquire_owned() else {
                     return empty(StatusCode::TOO_MANY_REQUESTS);
                 };
@@ -117,12 +116,12 @@ pub fn router(services: Services) -> Router {
                         Ok(response) => response,
                         Err(_) => empty(StatusCode::REQUEST_TIMEOUT),
                     };
-                if report {
-                    response.headers_mut().insert(
-                        header::ACCESS_CONTROL_ALLOW_ORIGIN,
-                        header::HeaderValue::from_static("*"),
-                    );
-                }
+                // Sandboxed landing pages have an opaque origin. Public responses expose
+                // no administrative credentials and never permit credentialed CORS.
+                response.headers_mut().insert(
+                    header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                    header::HeaderValue::from_static("*"),
+                );
                 response
             }
         })
@@ -238,8 +237,20 @@ async fn handle(request: Request<Body>, state: &Services) -> Response {
             return empty(StatusCode::NO_CONTENT);
         }
         return match state.previews.render(rid).await {
-            Ok(html)=>([(header::CONTENT_TYPE,"text/html; charset=utf-8"),(header::CACHE_CONTROL,"no-store"),(header::CONTENT_SECURITY_POLICY,"sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'"),(header::REFERRER_POLICY,"no-referrer")],html).into_response(),
-            Err(_)=>empty(StatusCode::NOT_FOUND),
+            Ok(html) => (
+                [
+                    (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+                    (header::CACHE_CONTROL, "no-store"),
+                    (
+                        header::CONTENT_SECURITY_POLICY,
+                        ruphish_contracts::landing::response_policy().as_str(),
+                    ),
+                    (header::REFERRER_POLICY, "no-referrer"),
+                ],
+                html,
+            )
+                .into_response(),
+            Err(_) => empty(StatusCode::NOT_FOUND),
         };
     }
     let Some(host) = host else {
@@ -250,7 +261,8 @@ async fn handle(request: Request<Body>, state: &Services) -> Response {
             StatusCode::NO_CONTENT,
             [
                 (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
-                (header::ACCESS_CONTROL_ALLOW_METHODS, "GET, HEAD"),
+                (header::ACCESS_CONTROL_ALLOW_METHODS, "GET, HEAD, POST"),
+                (header::ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type"),
             ],
         )
             .into_response();

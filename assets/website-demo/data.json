@@ -12,19 +12,19 @@
     { "name": "Upcoming awareness exercise", "ago": -6, "launch_minute": 570, "send_minutes": 30, "track_days": 7, "size": 12, "opened": 0, "clicked": 0, "submitted": 0, "reported": 0, "failed": 0 }
   ],
   "templates": [
-    { "starter": "microsoft-shared-document", "name": "Microsoft 365 - Shared document (EN)", "brand": "Microsoft" },
-    { "starter": "google-account-security", "name": "Google Account - Account security (EN)", "brand": "Google" },
-    { "starter": "docusign-signature-request", "name": "Docusign - Signature request (EN)", "brand": "Docusign" },
-    { "starter": "workday-employee-document", "name": "Workday - Employee document (EN)", "brand": "Workday" }
+    "email-microsoft-shared-document",
+    "email-google-account-security",
+    "email-docusign-signature-request",
+    "email-workday-employee-document"
   ],
   "pages": [
-    { "starter": "microsoft-side-panel", "name": "Microsoft - Sign in (side panel)", "brand": "Microsoft", "company_logo": { "selector": ".microsoft", "height": 36, "context": "Entra company branding" } },
-    { "starter": "google-workspace", "name": "Google - Sign in (wide)", "brand": "Google" }
+    "page-microsoft-side-panel",
+    "page-google-workspace"
   ],
   "learning_pages": [
-    { "starter": "slam", "name": "SLAM (EN)", "brand": "Ruphish" },
-    { "starter": "stop-challenge-protect", "name": "Stop, Challenge, Protect (EN)", "brand": "Ruphish" },
-    { "starter": "recognize-resist-report-delete", "name": "Recognize, Resist and Report, Delete (EN)", "brand": "Ruphish" }
+    "learning-slam",
+    "learning-stop-challenge-protect",
+    "learning-recognize-resist-report-delete"
   ],
   "users": [
     { "username": "demo", "role": "admin" },

@@ -1,9 +1,11 @@
 //! Final rendered HTML policy and the sole participant submission implementation.
 use ruphish_application::resources::Error;
+#[path = "landing_authored.rs"]
+mod authored;
 #[path = "landing_diagnostics.rs"]
 mod diagnostics;
 
-/// Safe document plus its matching response policy. Nonces are response-specific.
+/// Prepared document plus its matching response policy.
 pub struct Document {
     /// Final HTML, after template expansion and policy enforcement.
     pub html: String,
@@ -45,26 +47,19 @@ impl From<RenderError> for Error {
     }
 }
 
-/// Prepare and sanitize a complete page identically for previews, validation and public serving.
+/// Prepare authored landing pages or restricted static learning pages.
 pub fn render(source: &str, mode: Mode<'_>) -> Result<Document, RenderError> {
-    let (source, endpoint, learning) = match mode {
-        Mode::Landing { context, endpoint } => (
-            std::borrow::Cow::Owned(
-                crate::resources::render(source, context).map_err(RenderError::Template)?,
-            ),
-            endpoint,
-            false,
-        ),
-        Mode::Learning => (std::borrow::Cow::Borrowed(source), None, true),
-    };
-    prepare_document(source.as_ref(), endpoint, learning).map_err(RenderError::Document)
+    match mode {
+        Mode::Landing { context, endpoint } => {
+            let source =
+                crate::resources::render(source, context).map_err(RenderError::Template)?;
+            authored::prepare(&source, endpoint).map_err(RenderError::Document)
+        }
+        Mode::Learning => prepare_learning(source).map_err(RenderError::Document),
+    }
 }
 
-fn prepare_document(
-    source: &str,
-    endpoint: Option<&str>,
-    learning: bool,
-) -> Result<Document, Error> {
+fn prepare_learning(source: &str) -> Result<Document, Error> {
     if source.len() > crate::resources::MAX_DOCUMENT {
         return Err(Error::Invalid("landing_document_too_large".into()));
     }
@@ -174,59 +169,34 @@ fn prepare_document(
             }
             Some(value.into())
         });
-    if learning {
-        cleaner.rm_tags(&[
-            "form", "input", "textarea", "select", "option", "optgroup", "button", "datalist",
-        ]);
-        let mut attributes = cleaner.clone_tag_attributes();
-        attributes.retain(|tag, _| !matches!(*tag, "textarea" | "select" | "button" | "datalist"));
-        cleaner.tag_attributes(attributes);
-        cleaner.add_clean_content_tags(&["textarea", "select", "button", "datalist"]);
-    }
+    cleaner.rm_tags(&[
+        "form", "input", "textarea", "select", "option", "optgroup", "button", "datalist",
+    ]);
+    let mut attributes = cleaner.clone_tag_attributes();
+    attributes.retain(|tag, _| !matches!(*tag, "textarea" | "select" | "button" | "datalist"));
+    cleaner.tag_attributes(attributes);
+    cleaner.add_clean_content_tags(&["textarea", "select", "button", "datalist"]);
     let body = cleaner.clean(source).to_string();
     let mut warnings = diagnostics::inspect(source, &body)?;
-    if learning {
-        warnings.retain(|warning| {
-            matches!(warning.code, "authored_execution_removed" | "html_repaired")
+    warnings
+        .retain(|warning| matches!(warning.code, "authored_execution_removed" | "html_repaired"));
+    let selector =
+        scraper::Selector::parse("form, input, textarea, select, button, [contenteditable]")
+            .map_err(|_| Error::Internal)?;
+    if parsed.select(&selector).next().is_some() {
+        warnings.push(ruphish_application::resources::PageWarning {
+            code: "learning_controls_removed",
+            control: None,
         });
-        let selector =
-            scraper::Selector::parse("form, input, textarea, select, button, [contenteditable]")
-                .map_err(|_| Error::Internal)?;
-        if parsed.select(&selector).next().is_some() {
-            warnings.push(ruphish_application::resources::PageWarning {
-                code: "learning_controls_removed",
-                control: None,
-            });
-        }
     }
     let [html_attributes, body_attributes] = root_attributes(source)?;
-    let mut bytes = [0; 24];
-    getrandom::fill(&mut bytes).map_err(|_| Error::Internal)?;
-    let nonce = hex::encode(bytes);
-    let mut html = format!(
-        "<!doctype html><html{html_attributes}><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">{title}</head><body{body_attributes}>{body}"
+    let html = format!(
+        "<!doctype html><html{html_attributes}><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">{title}</head><body{body_attributes}>{body}</body></html>"
     );
-    if let Some(endpoint) = endpoint {
-        let config = serde_json::to_string(endpoint)
-            .map_err(|_| Error::Internal)?
-            .replace('<', "\\u003c");
-        html.push_str(&format!(
-            "<script nonce=\"{nonce}\">(()=>{{const endpoint={config};const messages={};{} }})();</script>",
-            include_str!("landing-locales.json"),
-            include_str!("landing-collector.js")
-        ));
-    }
-    html.push_str("</body></html>");
     Ok(Document {
         html,
         warnings,
-        csp: if endpoint.is_none() {
-            "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'".into()
-        } else {
-            format!(
-                "default-src 'none'; script-src 'nonce-{nonce}'; script-src-attr 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'"
-            )
-        },
+        csp: "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'".into(),
     })
 }
 

@@ -171,6 +171,7 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
     std::fs::create_dir_all(&static_root).unwrap();
     std::fs::write(static_root.join("training.txt"), "Public training asset").unwrap();
     std::fs::write(static_root.join("page.html"),"<form action='/collect'><input name='password' type='password'></form><script>unsafe()</script>").unwrap();
+    std::fs::write(static_root.join("exercise.woff2"), b"synthetic-font").unwrap();
     let mut process = Process::with_options(
         directory.path(),
         "all",
@@ -355,6 +356,20 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
         .get(format!("{origin}/static/page.html"))
         .send()
         .unwrap();
+    let font = browser
+        .get(format!("{origin}/static/exercise.woff2"))
+        .header("origin", "null")
+        .send()
+        .unwrap();
+    assert_eq!(font.status(), 200);
+    assert_eq!(font.headers()["content-type"], "font/woff2");
+    assert_eq!(font.headers()["access-control-allow-origin"], "*");
+    assert!(
+        font.headers()
+            .get("access-control-allow-credentials")
+            .is_none()
+    );
+    assert_eq!(font.bytes().unwrap().as_ref(), b"synthetic-font");
     assert_eq!(static_page.status(), 200);
     assert!(
         static_page.headers()["content-security-policy"]
@@ -529,7 +544,8 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
         "A new real landing request contributes independently of the deleted observation"
     );
     assert!(html.contains("name=\"password\""));
-    assert!(!html.contains("authoredCanary"));
+    assert!(html.contains("authoredCanary"));
+    assert!(html.find("data-ruphish-collector").unwrap() < html.find("authoredCanary").unwrap());
     assert_eq!(
         browser
             .get(format!("{origin}/track?rid={rid}"))

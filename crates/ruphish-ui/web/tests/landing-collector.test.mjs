@@ -11,6 +11,10 @@ const source = await readFile(
   new URL('../../../ruphish-adapters/src/landing-collector.js', import.meta.url),
   'utf8',
 );
+const starterInteraction = await readFile(
+  new URL('../../../ruphish-http/src/starter_templates/interaction.js', import.meta.url),
+  'utf8',
+);
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 const ok = () => ({ ok: true, json: async () => ({ success: true }) });
 function page(
@@ -46,6 +50,9 @@ test('every shipped starter login reports presence only, including prefill and c
   const brands = new Map([
     ['microsoft-full-screen', '.microsoft'],
     ['microsoft-side-panel', '.microsoft'],
+    ['microsoft-two-step', '.microsoft'],
+    ['microsoft-two-step-side-panel', '.microsoft'],
+    ['onedrive-shared-document', '.microsoft'],
     ['zoom', '.masthead'],
     ['salesforce', 'img.logo'],
     ['workday', '.brand'],
@@ -67,7 +74,16 @@ test('every shipped starter login reports presence only, including prefill and c
       for (const variant of variants) {
         const p = page(variant);
         try {
+          if (p.window.document.querySelector('[data-login-flow]')) {
+            p.window.eval(starterInteraction);
+            p.window.document.querySelector('[data-open]')?.click();
+          }
           p.form.querySelector('input[type=email]').value = 'USERNAME-CANARY@example.test';
+          if (p.window.document.querySelector('[data-login-flow="two-step"]')) {
+            submit(p);
+            await tick();
+            assert.equal(p.requests.length, 0, `${slug}: identifier is local`);
+          }
           p.form.querySelector('input[type=password]').value = 'PASSWORD-CANARY';
           submit(p);
           await tick();
@@ -346,5 +362,88 @@ test('submission feedback follows document and browser language without changing
     } finally {
       p.dom.window.close();
     }
+  }
+});
+
+test('authored validation and intermediate steps cancel tracking; explicit final submission uses the same closed collector', async () => {
+  const p = page();
+  try {
+    p.form.addEventListener('submit', (event) => event.preventDefault());
+    submit(p);
+    await tick();
+    assert.equal(p.requests.length, 0);
+    p.form.querySelector('input[type=password]').required = true;
+    p.form.querySelector('input[type=password]').value = '';
+    assert.equal(await p.window.ruphish.submit(p.form), false);
+    assert.equal(p.requests.length, 0);
+    p.form.querySelector('input[type=password]').value = 'FINAL-CANARY';
+    assert.equal(await p.window.ruphish.submit(p.form), true);
+    assert.equal(p.requests.length, 1);
+    assert.equal(p.requests[0].payload.password_present, true);
+    safe(p.requests);
+  } finally {
+    p.dom.window.close();
+  }
+});
+
+test('document-level authored submit cancellation prevents a managed observation', async () => {
+  const p = page();
+  try {
+    p.window.document.addEventListener('submit', (event) => event.preventDefault());
+    submit(p);
+    await tick();
+    assert.equal(p.requests.length, 0);
+  } finally {
+    p.dom.window.close();
+  }
+});
+
+test('functional preview executes page handlers but its collector sends no requests or redirects', async () => {
+  const dom = new JSDOM(
+    '<!doctype html><html><head><script>(()=>{const endpoint=null;const messages=' +
+      messages +
+      ';' +
+      source +
+      '})();</script></head><body><form onsubmit="document.body.dataset.handled=1"><input name="password" type="password" value="PREVIEW-CANARY"><button>Continue</button></form></body></html>',
+    {
+      url: 'https://preview.invalid/',
+      runScripts: 'dangerously',
+      beforeParse(window) {
+        window.fetch = () => {
+          throw new Error('Preview must not fetch');
+        };
+      },
+    },
+  );
+  try {
+    dom.window.document.querySelector('form').requestSubmit();
+    await tick();
+    assert.equal(dom.window.document.body.dataset.handled, '1');
+    assert.match(
+      dom.window.document.querySelector('[role=status]').textContent,
+      /No interaction was recorded/,
+    );
+    assert.equal(dom.window.location.href, 'https://preview.invalid/');
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('a dynamic password revealed and submitted in one task retains its password role', async () => {
+  const p = page('<form><button>Continue</button></form>');
+  try {
+    const field = p.window.document.createElement('input');
+    field.name = 'password';
+    field.type = 'password';
+    field.value = 'REVEALED-CANARY';
+    p.form.append(field);
+    field.type = 'text';
+    submit(p);
+    await tick();
+    assert.equal(p.requests.length, 1);
+    assert.equal(p.requests[0].payload.password_present, true);
+    safe(p.requests);
+  } finally {
+    p.dom.window.close();
   }
 });

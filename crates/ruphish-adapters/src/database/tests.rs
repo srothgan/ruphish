@@ -123,7 +123,9 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
                     let Output::Html { html, csp } = result.unwrap() else { unreachable!() };
                     assert!(html.contains("Hello Alice"));
                     assert!(!html.contains("Bob"));
-                    assert!(!html.contains("injectedCanary"), "sanitize after substituting recipient values");
+                    assert!(html.contains("injectedCanary"), "text-template output remains authored content under DEC-053");
+                    assert!(csp.starts_with("sandbox allow-scripts allow-forms;"));
+                    assert!(!csp.contains("allow-same-origin"));
                     assert!(html.contains("name=\"password\""));
                     assert!(csp.contains("form-action 'none'"));
                 } else {

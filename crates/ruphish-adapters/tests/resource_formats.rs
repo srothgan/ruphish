@@ -57,7 +57,7 @@ fn page_titles_remain_escaped_head_metadata_in_preview_and_live_modes() {
 }
 
 #[test]
-fn semantic_page_layout_survives_without_allowing_active_attributes_or_descendants() {
+fn semantic_page_layout_preserves_authored_landing_behavior_and_restricts_learning_content() {
     let source = r##"<!doctype html><html><body><main class="lesson" onclick="unsafe()"><nav aria-label="Lesson"><a href="#check">Check</a></nav><section id="check" aria-labelledby="heading" onmouseover="unsafe()"><h2 id="heading">Verify independently</h2><p>Use a known contact.</p><script>unsafe()</script><iframe src="https://outside.invalid"></iframe><img src="https://outside.invalid/pixel" onerror="unsafe()"><a href="javascript:unsafe()">Unsafe destination</a><form action="https://outside.invalid"><input name="password"><button>Send</button></form></section></main></body></html>"##;
     for learning in [false, true] {
         let rendered = if learning {
@@ -99,14 +99,30 @@ fn semantic_page_layout_survives_without_allowing_active_attributes_or_descendan
             "<iframe",
             "outside.invalid",
         ] {
-            assert!(!rendered.html.contains(forbidden), "{forbidden}");
+            if learning || forbidden == "<iframe" {
+                assert!(!rendered.html.contains(forbidden), "{forbidden}");
+            } else {
+                assert!(
+                    rendered.html.contains(forbidden),
+                    "authored landing behavior: {forbidden}"
+                );
+            }
         }
         let controls = scraper::Selector::parse("form,input,button").unwrap();
         assert_eq!(
             document.select(&controls).count(),
             if learning { 0 } else { 3 }
         );
-        assert!(rendered.csp.contains("connect-src 'none'"));
+        if learning {
+            assert!(rendered.csp.contains("connect-src 'none'"));
+        } else {
+            assert!(
+                rendered
+                    .csp
+                    .starts_with("sandbox allow-scripts allow-forms;")
+            );
+            assert!(!rendered.csp.contains("allow-same-origin"));
+        }
     }
 }
 
@@ -471,7 +487,7 @@ fn final_page_policy_preserves_names_and_rendered_expressions_without_changing_a
 }
 
 #[test]
-fn processed_pages_remove_form_actions_and_executable_authored_content() {
+fn processed_pages_preserve_controls_but_remove_native_actions_and_embeds() {
     let source = "<form id='training' action='/outside'><input name='username'><input type='password' name='password'><textarea name='secret' dirname='direction'></textarea><button formaction='https://outside.test'>Submit</button></form><input form='training' name='associated'><object name='embedded'></object>";
     let page = Page {
         html: source.into(),
@@ -488,7 +504,7 @@ fn processed_pages_remove_form_actions_and_executable_authored_content() {
     .html;
     assert!(html.contains("name=\"associated\""));
     assert!(html.contains("form=\"training\""));
-    assert!(!html.contains("dirname="));
+    assert!(html.contains("dirname="));
     assert!(!html.contains("formaction="));
     assert!(!html.contains("<object"));
     assert_eq!(page.html, source);
@@ -768,4 +784,100 @@ fn campaign_mime_preserves_address_headers_and_inline_attachment_contracts() {
             }
         }
     }
+}
+
+#[allow(
+    clippy::unwrap_used,
+    reason = "Build an isolated in-memory ZIP fixture"
+)]
+fn page_bundle(files: &[(&str, &[u8])]) -> String {
+    let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    for (name, bytes) in files {
+        zip.start_file(*name, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(bytes).unwrap();
+    }
+    STANDARD.encode(zip.finish().unwrap().into_inner())
+}
+
+#[test]
+fn page_bundle_embeds_nested_css_fonts_images_and_scripts_without_fetching_remote_resources() {
+    let input = page_bundle(&[
+        ("index.html", br#"<!doctype html><link rel="stylesheet" href="css/main.css" integrity="sha256-original"><img src="images/logo.png"><script src="app.js"></script><img src="https://remote.invalid/image"><style>.inline { background: url('images/logo.png') }</style>"#),
+        ("css/main.css", br#"@import "nested/theme.css" screen; .hero { background: image-set("../images/logo.png" 1x, url(../images/logo.png) 2x) }"#),
+        ("css/nested/theme.css", br#"@font-face { font-family: exercise; src: url('../../fonts/exercise.woff2') }"#),
+        ("images/logo.png", b"synthetic-image"),
+        ("fonts/exercise.woff2", b"synthetic-font"),
+        ("app.js", b"document.body.dataset.loaded='yes'"),
+    ]);
+    let tools = Tools {
+        policy: Policy::default(),
+    };
+    let output = tools.page_bundle(&input).unwrap();
+    assert!(output.contains("data:image/png;base64,c3ludGhldGljLWltYWdl"));
+    assert!(output.contains("data:text/javascript;base64,"));
+    assert!(!output.contains("sha256-original"));
+    assert!(output.contains("https://remote.invalid/image"));
+    let document = scraper::Html::parse_document(&output);
+    let stylesheet = document
+        .select(&scraper::Selector::parse("link").unwrap())
+        .next()
+        .unwrap()
+        .value()
+        .attr("href")
+        .unwrap();
+    let css = String::from_utf8(
+        STANDARD
+            .decode(stylesheet.strip_prefix("data:text/css;base64,").unwrap())
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(css.contains("data:image/png;base64,c3ludGhldGljLWltYWdl"));
+    assert!(css.contains(" screen;"));
+    let nested = css.split('"').nth(1).unwrap();
+    let nested = String::from_utf8(
+        STANDARD
+            .decode(nested.strip_prefix("data:text/css;base64,").unwrap())
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(nested.contains("data:font/woff2;base64,c3ludGhldGljLWZvbnQ="));
+}
+
+#[test]
+fn page_bundle_rejects_missing_assets_cycles_traversal_and_oversized_expansion() {
+    let tools = Tools {
+        policy: Policy::default(),
+    };
+    for files in [
+        vec![("index.html", b"<img src='missing.png'>".as_slice())],
+        vec![
+            (
+                "index.html",
+                b"<link rel='stylesheet' href='a.css'>".as_slice(),
+            ),
+            ("a.css", b"@import 'b.css';"),
+            ("b.css", b"@import 'a.css';"),
+        ],
+        vec![
+            ("index.html", b"<p>Page</p>".as_slice()),
+            ("../outside.txt", b"blocked"),
+        ],
+        vec![("other.html", b"<p>No entry point</p>".as_slice())],
+        vec![
+            (
+                "index.html",
+                b"<script type='module' src='module.js'></script>".as_slice(),
+            ),
+            ("module.js", b"import './nested.js'"),
+        ],
+    ] {
+        assert!(tools.page_bundle(&page_bundle(&files)).is_err());
+    }
+    let huge = vec![b' '; 8 * 1024 * 1024 + 1];
+    assert!(
+        tools
+            .page_bundle(&page_bundle(&[("index.html", &huge)]))
+            .is_err()
+    );
 }

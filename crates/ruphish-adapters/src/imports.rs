@@ -13,6 +13,9 @@ pub struct Tools {
 }
 #[async_trait::async_trait]
 impl ContentTools for Tools {
+    fn page_bundle(&self, content: &str) -> Result<String, Error> {
+        landing_bundle::import(content)
+    }
     fn csv(&self, bytes: &[u8], columns: Option<[String; 4]>) -> Result<CsvImport, Error> {
         if bytes.len() > MAX_DOCUMENT {
             return Err(invalid("CSV exceeds 8 MiB"));
@@ -397,3 +400,5 @@ mod tests {
         Ok(())
     }
 }
+#[path = "landing_bundle.rs"]
+mod landing_bundle;

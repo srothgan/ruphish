@@ -1,0 +1,466 @@
+[
+  {
+    "id": "email-onedrive-document-invitation",
+    "name": "OneDrive - Document sharing invitation (EN)",
+    "brand": "Microsoft",
+    "kind": "email",
+    "html": "emails/onedrive-document-invitation/email.html",
+    "subject": "emails/onedrive-document-invitation/subject.txt",
+    "text": "emails/onedrive-document-invitation/email.txt"
+  },
+  {
+    "id": "email-google-drive-document-invitation",
+    "name": "Google Drive - Document sharing invitation (EN)",
+    "brand": "Google",
+    "kind": "email",
+    "html": "emails/google-drive-document-invitation/email.html",
+    "subject": "emails/google-drive-document-invitation/subject.txt",
+    "text": "emails/google-drive-document-invitation/email.txt"
+  },
+  {
+    "id": "email-dropbox-file-invitation",
+    "name": "Dropbox - File sharing invitation (EN)",
+    "brand": "Dropbox",
+    "kind": "email",
+    "html": "emails/dropbox-file-invitation/email.html",
+    "subject": "emails/dropbox-file-invitation/subject.txt",
+    "text": "emails/dropbox-file-invitation/email.txt"
+  },
+  {
+    "id": "page-onedrive-shared-document",
+    "name": "OneDrive / SharePoint - Shared document",
+    "brand": "Microsoft",
+    "kind": "landing_page",
+    "html": "landing-pages/onedrive-shared-document/landing.html",
+    "script": "../src/starter_templates/interaction.js",
+    "company_logo": {
+      "selector": ".microsoft",
+      "height": 36,
+      "context": "Entra company branding"
+    }
+  },
+  {
+    "id": "page-google-drive-shared-document",
+    "name": "Google Drive - Shared document",
+    "brand": "Google",
+    "kind": "landing_page",
+    "html": "landing-pages/google-drive-shared-document/landing.html",
+    "script": "../src/starter_templates/interaction.js"
+  },
+  {
+    "id": "page-dropbox-shared-file",
+    "name": "Dropbox - Shared file",
+    "brand": "Dropbox",
+    "kind": "landing_page",
+    "html": "landing-pages/dropbox-shared-file/landing.html",
+    "script": "../src/starter_templates/interaction.js"
+  },
+  {
+    "id": "page-microsoft-two-step",
+    "name": "Microsoft Entra - Two-step sign-in",
+    "brand": "Microsoft",
+    "kind": "landing_page",
+    "html": "landing-pages/microsoft-two-step/landing.html",
+    "script": "../src/starter_templates/interaction.js",
+    "company_logo": {
+      "selector": ".microsoft",
+      "height": 36,
+      "context": "Entra company branding"
+    }
+  },
+  {
+    "id": "page-microsoft-two-step-side-panel",
+    "name": "Microsoft Entra - Two-step sign-in (side panel)",
+    "brand": "Microsoft",
+    "kind": "landing_page",
+    "html": "landing-pages/microsoft-two-step-side-panel/landing.html",
+    "script": "../src/starter_templates/interaction.js",
+    "company_logo": {
+      "selector": ".microsoft",
+      "height": 36,
+      "context": "Entra company branding"
+    }
+  },
+  {
+    "id": "page-google-workspace-two-step",
+    "name": "Google Workspace - Two-step sign-in",
+    "brand": "Google",
+    "kind": "landing_page",
+    "html": "landing-pages/google-workspace-two-step/landing.html",
+    "script": "../src/starter_templates/interaction.js"
+  },
+  {
+    "id": "email-microsoft-shared-document",
+    "name": "Microsoft 365 - Shared document (EN)",
+    "brand": "Microsoft",
+    "kind": "email",
+    "html": "emails/microsoft-shared-document/email.html",
+    "subject": "emails/microsoft-shared-document/subject.txt",
+    "text": "emails/microsoft-shared-document/email.txt"
+  },
+  {
+    "id": "email-microsoft-account-security",
+    "name": "Microsoft account - Account security (EN)",
+    "brand": "Microsoft",
+    "kind": "email",
+    "html": "emails/microsoft-account-security/email.html",
+    "subject": "emails/microsoft-account-security/subject.txt",
+    "text": "emails/microsoft-account-security/email.txt"
+  },
+  {
+    "id": "email-microsoft-teams-invitation",
+    "name": "Microsoft Teams - Team invitation (EN)",
+    "brand": "Microsoft",
+    "kind": "email",
+    "html": "emails/microsoft-teams-invitation/email.html",
+    "subject": "emails/microsoft-teams-invitation/subject.txt",
+    "text": "emails/microsoft-teams-invitation/email.txt"
+  },
+  {
+    "id": "email-google-shared-document",
+    "name": "Google Workspace - Shared document (EN)",
+    "brand": "Google",
+    "kind": "email",
+    "html": "emails/google-shared-document/email.html",
+    "subject": "emails/google-shared-document/subject.txt",
+    "text": "emails/google-shared-document/email.txt"
+  },
+  {
+    "id": "email-google-account-security",
+    "name": "Google Account - Account security (EN)",
+    "brand": "Google",
+    "kind": "email",
+    "html": "emails/google-account-security/email.html",
+    "subject": "emails/google-account-security/subject.txt",
+    "text": "emails/google-account-security/email.txt"
+  },
+  {
+    "id": "email-dropbox-shared-folder",
+    "name": "Dropbox - Shared folder (EN)",
+    "brand": "Dropbox",
+    "kind": "email",
+    "html": "emails/dropbox-shared-folder/email.html",
+    "subject": "emails/dropbox-shared-folder/subject.txt",
+    "text": "emails/dropbox-shared-folder/email.txt"
+  },
+  {
+    "id": "email-docusign-signature-request",
+    "name": "Docusign - Signature request (EN)",
+    "brand": "Docusign",
+    "kind": "email",
+    "html": "emails/docusign-signature-request/email.html",
+    "subject": "emails/docusign-signature-request/subject.txt",
+    "text": "emails/docusign-signature-request/email.txt"
+  },
+  {
+    "id": "email-adobe-document-review",
+    "name": "Adobe Acrobat - PDF review (EN)",
+    "brand": "Adobe",
+    "kind": "email",
+    "html": "emails/adobe-document-review/email.html",
+    "subject": "emails/adobe-document-review/subject.txt",
+    "text": "emails/adobe-document-review/email.txt"
+  },
+  {
+    "id": "email-slack-workspace-invitation",
+    "name": "Slack - Workspace invitation (EN)",
+    "brand": "Slack",
+    "kind": "email",
+    "html": "emails/slack-workspace-invitation/email.html",
+    "subject": "emails/slack-workspace-invitation/subject.txt",
+    "text": "emails/slack-workspace-invitation/email.txt"
+  },
+  {
+    "id": "email-zoom-meeting-invitation",
+    "name": "Zoom - Meeting invitation (EN)",
+    "brand": "Zoom",
+    "kind": "email",
+    "html": "emails/zoom-meeting-invitation/email.html",
+    "subject": "emails/zoom-meeting-invitation/subject.txt",
+    "text": "emails/zoom-meeting-invitation/email.txt"
+  },
+  {
+    "id": "email-atlassian-jira-assignment",
+    "name": "Jira - Task assignment (EN)",
+    "brand": "Atlassian",
+    "kind": "email",
+    "html": "emails/atlassian-jira-assignment/email.html",
+    "subject": "emails/atlassian-jira-assignment/subject.txt",
+    "text": "emails/atlassian-jira-assignment/email.txt"
+  },
+  {
+    "id": "email-atlassian-confluence-access",
+    "name": "Confluence - Knowledge-space access (EN)",
+    "brand": "Atlassian",
+    "kind": "email",
+    "html": "emails/atlassian-confluence-access/email.html",
+    "subject": "emails/atlassian-confluence-access/subject.txt",
+    "text": "emails/atlassian-confluence-access/email.txt"
+  },
+  {
+    "id": "email-salesforce-report-access",
+    "name": "Salesforce - Shared report (EN)",
+    "brand": "Salesforce",
+    "kind": "email",
+    "html": "emails/salesforce-report-access/email.html",
+    "subject": "emails/salesforce-report-access/subject.txt",
+    "text": "emails/salesforce-report-access/email.txt"
+  },
+  {
+    "id": "email-github-repository-invitation",
+    "name": "GitHub - Repository invitation (EN)",
+    "brand": "GitHub",
+    "kind": "email",
+    "html": "emails/github-repository-invitation/email.html",
+    "subject": "emails/github-repository-invitation/subject.txt",
+    "text": "emails/github-repository-invitation/email.txt"
+  },
+  {
+    "id": "email-github-account-security",
+    "name": "GitHub - Account security (EN)",
+    "brand": "GitHub",
+    "kind": "email",
+    "html": "emails/github-account-security/email.html",
+    "subject": "emails/github-account-security/subject.txt",
+    "text": "emails/github-account-security/email.txt"
+  },
+  {
+    "id": "email-paypal-payment-request",
+    "name": "PayPal - Payment request (EN)",
+    "brand": "PayPal",
+    "kind": "email",
+    "html": "emails/paypal-payment-request/email.html",
+    "subject": "emails/paypal-payment-request/subject.txt",
+    "text": "emails/paypal-payment-request/email.txt"
+  },
+  {
+    "id": "email-amazon-business-invoice",
+    "name": "Amazon Business - Invoice available (EN)",
+    "brand": "Amazon",
+    "kind": "email",
+    "html": "emails/amazon-business-invoice/email.html",
+    "subject": "emails/amazon-business-invoice/subject.txt",
+    "text": "emails/amazon-business-invoice/email.txt"
+  },
+  {
+    "id": "email-apple-icloud-storage",
+    "name": "iCloud - Storage review (EN)",
+    "brand": "Apple",
+    "kind": "email",
+    "html": "emails/apple-icloud-storage/email.html",
+    "subject": "emails/apple-icloud-storage/subject.txt",
+    "text": "emails/apple-icloud-storage/email.txt"
+  },
+  {
+    "id": "email-linkedin-message-notification",
+    "name": "LinkedIn - Message notification (EN)",
+    "brand": "LinkedIn",
+    "kind": "email",
+    "html": "emails/linkedin-message-notification/email.html",
+    "subject": "emails/linkedin-message-notification/subject.txt",
+    "text": "emails/linkedin-message-notification/email.txt"
+  },
+  {
+    "id": "email-workday-employee-document",
+    "name": "Workday - Employee document (EN)",
+    "brand": "Workday",
+    "kind": "email",
+    "html": "emails/workday-employee-document/email.html",
+    "subject": "emails/workday-employee-document/subject.txt",
+    "text": "emails/workday-employee-document/email.txt"
+  },
+  {
+    "id": "page-microsoft-full-screen",
+    "name": "Microsoft - Sign in (full-screen background)",
+    "brand": "Microsoft",
+    "kind": "landing_page",
+    "html": "landing-pages/microsoft-full-screen/landing.html",
+    "company_logo": {
+      "selector": ".microsoft",
+      "height": 36,
+      "context": "Entra company branding"
+    }
+  },
+  {
+    "id": "page-microsoft-side-panel",
+    "name": "Microsoft - Sign in (side panel)",
+    "brand": "Microsoft",
+    "kind": "landing_page",
+    "html": "landing-pages/microsoft-side-panel/landing.html",
+    "company_logo": {
+      "selector": ".microsoft",
+      "height": 36,
+      "context": "Entra company branding"
+    }
+  },
+  {
+    "id": "page-google-workspace",
+    "name": "Google - Sign in (wide)",
+    "brand": "Google",
+    "kind": "landing_page",
+    "html": "landing-pages/google-workspace/landing.html"
+  },
+  {
+    "id": "page-google-account",
+    "name": "Google - Sign in (compact)",
+    "brand": "Google",
+    "kind": "landing_page",
+    "html": "landing-pages/google-account/landing.html"
+  },
+  {
+    "id": "page-dropbox",
+    "name": "Dropbox - Log in",
+    "brand": "Dropbox",
+    "kind": "landing_page",
+    "html": "landing-pages/dropbox/landing.html"
+  },
+  {
+    "id": "page-docusign",
+    "name": "Docusign - Log in",
+    "brand": "Docusign",
+    "kind": "landing_page",
+    "html": "landing-pages/docusign/landing.html"
+  },
+  {
+    "id": "page-adobe-acrobat",
+    "name": "Adobe - Sign in",
+    "brand": "Adobe",
+    "kind": "landing_page",
+    "html": "landing-pages/adobe-acrobat/landing.html"
+  },
+  {
+    "id": "page-slack",
+    "name": "Slack - Password sign-in adaptation",
+    "brand": "Slack",
+    "kind": "landing_page",
+    "html": "landing-pages/slack/landing.html"
+  },
+  {
+    "id": "page-zoom",
+    "name": "Zoom - Sign in",
+    "brand": "Zoom",
+    "kind": "landing_page",
+    "html": "landing-pages/zoom/landing.html",
+    "company_logo": {
+      "selector": ".masthead",
+      "height": 36,
+      "context": "Organization vanity-URL login"
+    }
+  },
+  {
+    "id": "page-jira",
+    "name": "Atlassian Cloud - Log in",
+    "brand": "Atlassian",
+    "kind": "landing_page",
+    "html": "landing-pages/jira/landing.html"
+  },
+  {
+    "id": "page-confluence",
+    "name": "Confluence Cloud - Atlassian sign-in",
+    "brand": "Atlassian",
+    "kind": "landing_page",
+    "html": "landing-pages/confluence/landing.html"
+  },
+  {
+    "id": "page-salesforce",
+    "name": "Salesforce - Log in",
+    "brand": "Salesforce",
+    "kind": "landing_page",
+    "html": "landing-pages/salesforce/landing.html",
+    "company_logo": {
+      "selector": "img.logo",
+      "height": 80,
+      "context": "My Domain login"
+    }
+  },
+  {
+    "id": "page-github-repository",
+    "name": "GitHub - Sign in (light)",
+    "brand": "GitHub",
+    "kind": "landing_page",
+    "html": "landing-pages/github-repository/landing.html"
+  },
+  {
+    "id": "page-github-account",
+    "name": "GitHub - Sign in (dark)",
+    "brand": "GitHub",
+    "kind": "landing_page",
+    "html": "landing-pages/github-account/landing.html"
+  },
+  {
+    "id": "page-paypal",
+    "name": "PayPal - Log in",
+    "brand": "PayPal",
+    "kind": "landing_page",
+    "html": "landing-pages/paypal/landing.html"
+  },
+  {
+    "id": "page-amazon-business",
+    "name": "Amazon Business - Sign in",
+    "brand": "Amazon",
+    "kind": "landing_page",
+    "html": "landing-pages/amazon-business/landing.html"
+  },
+  {
+    "id": "page-apple-icloud",
+    "name": "Apple Account - iCloud sign-in",
+    "brand": "Apple",
+    "kind": "landing_page",
+    "html": "landing-pages/apple-icloud/landing.html"
+  },
+  {
+    "id": "page-linkedin",
+    "name": "LinkedIn - Sign in",
+    "brand": "LinkedIn",
+    "kind": "landing_page",
+    "html": "landing-pages/linkedin/landing.html"
+  },
+  {
+    "id": "page-workday",
+    "name": "Workday - Native tenant sign-in",
+    "brand": "Workday",
+    "kind": "landing_page",
+    "html": "landing-pages/workday/landing.html",
+    "company_logo": {
+      "selector": ".brand",
+      "height": 48,
+      "context": "Native tenant login"
+    }
+  },
+  {
+    "id": "learning-slam",
+    "name": "SLAM (EN)",
+    "brand": "Ruphish",
+    "kind": "learning_page",
+    "html": "learning-pages/slam/learning.html",
+    "company_logo": {
+      "selector": ".learning-logo",
+      "height": 48,
+      "context": "Learning page header"
+    }
+  },
+  {
+    "id": "learning-stop-challenge-protect",
+    "name": "Stop, Challenge, Protect (EN)",
+    "brand": "Ruphish",
+    "kind": "learning_page",
+    "html": "learning-pages/stop-challenge-protect/learning.html",
+    "company_logo": {
+      "selector": ".learning-logo",
+      "height": 48,
+      "context": "Learning page header"
+    }
+  },
+  {
+    "id": "learning-recognize-resist-report-delete",
+    "name": "Recognize, Resist and Report, Delete (EN)",
+    "brand": "Ruphish",
+    "kind": "learning_page",
+    "html": "learning-pages/recognize-resist-report-delete/learning.html",
+    "company_logo": {
+      "selector": ".learning-logo",
+      "height": 48,
+      "context": "Learning page header"
+    }
+  }
+]

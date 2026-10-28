@@ -13,6 +13,7 @@ async-imap = { version = "0.12", default-features = false, features = ["runtime-
 async-trait = "0.1.92"
 base64 = "0.23"
 bcrypt = "0.19.3"
+cssparser = "0.38.0"
 csv = { version = "1", default-features = false }
 futures-util = "0.3.34"
 getrandom = "0.4.3"

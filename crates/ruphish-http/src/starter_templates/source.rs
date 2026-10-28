@@ -7,6 +7,7 @@ pub(super) struct Source {
     pub(super) name: &'static str,
     pub(super) brand: &'static str,
     pub(super) html: &'static str,
+    pub(super) script: Option<&'static str>,
     pub(super) kind: Kind,
     pub(super) subject: &'static str,
     pub(super) text: &'static str,
@@ -32,17 +33,26 @@ impl Source {
     }
 
     pub(super) fn entry(&self) -> Entry {
+        // Only catalog-owned documents are composed here. Returned resources contain
+        // the script inline, so independent copies need no catalog or asset lookup.
+        let html = match self.script {
+            Some(script) => self.html.replace(
+                "</body>",
+                &format!("<script data-starter-interaction>{script}</script></body>"),
+            ),
+            None => self.html.to_owned(),
+        };
         Entry {
             summary: self.summary(),
             resource: match self.kind {
                 Kind::Email => json!({
-                    "name": self.name, "html": self.html,
+                    "name": self.name, "html": html,
                     "subject": self.subject.trim_end(), "text": self.text, "attachments": [],
                 }),
                 Kind::LandingPage => {
-                    json!({"name": self.name, "html": self.html, "redirect_url": ""})
+                    json!({"name": self.name, "html": html, "redirect_url": ""})
                 }
-                Kind::LearningPage => json!({"name": self.name, "html": self.html}),
+                Kind::LearningPage => json!({"name": self.name, "html": html}),
             },
         }
     }

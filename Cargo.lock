@@ -4617,6 +4617,7 @@ dependencies = [
  "async-trait",
  "base64 0.23.1",
  "bcrypt",
+ "cssparser 0.38.0",
  "csv",
  "futures-util",
  "getrandom 0.4.3",

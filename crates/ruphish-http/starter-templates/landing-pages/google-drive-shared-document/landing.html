@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><title>Project review notes</title>
+<!-- Independent simulation layout. See interactive-references.md for upstream references and adaptation boundaries. Existing embedded logo provenance remains in licenses/sources.json. -->
+<style>* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; color: #1b1b1b; font: 15px/1.5 "Segoe UI", Arial, sans-serif; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; opacity: .65; }
+button:focus-visible, input:focus-visible { outline: 2px solid #0067b8; outline-offset: 3px; }
+fieldset { min-inline-size: 0; border: 0; padding: 0; margin: 0; }
+.page { min-height: 100vh; display: flex; flex-direction: column; }
+.login-area { flex: 1; display: grid; place-items: center; padding: 48px 24px; }
+.login { width: 100%; max-width: 440px; padding: 44px; background: #fff; box-shadow: 0 2px 6px #0003; }
+.brand { display: flex; align-items: center; gap: 8px; font-size: 21px; line-height: 24px; font-weight: 600; color: #737373; }
+.brand img { display: block; width: 24px; height: 24px; }
+h1 { font-size: 24px; line-height: 1.3; font-weight: 600; margin: 22px 0 12px; }
+.intro { margin: 0 0 16px; }
+.field { margin: 18px 0 8px; }
+.field label { display: block; font-size: 13px; margin-bottom: 4px; }
+.field input { width: 100%; height: 38px; border: 0; border-bottom: 1px solid #666; border-radius: 0; padding: 6px 0; background: #fff; color: inherit; }
+.actions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; margin-top: 28px; }
+.primary { min-width: 108px; min-height: 36px; padding: 7px 16px; border: 1px solid #0067b8; background: #0067b8; color: #fff; }
+.primary:hover { background: #005da6; }
+.text-button { padding: 6px 0; border: 0; background: transparent; color: #0067b8; text-align: left; }
+.account-row { display: flex; align-items: center; gap: 8px; margin: 18px 0 0; }
+.account-row [data-account] { overflow-wrap: anywhere; }
+.back { flex: 0 0 auto; width: 30px; min-height: 30px; border: 0; background: transparent; color: inherit; font-size: 22px; }
+.back:hover { background: #eee; border-radius: 50%; }
+.reveal { display: flex; gap: 9px; align-items: center; margin-top: 16px; font-size: 13px; }
+.reveal input { width: 18px; height: 18px; margin: 0; accent-color: #0067b8; }
+.footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 20px; padding: 12px 24px; font-size: 12px; color: #555; }
+.footer a { color: inherit; text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
+[data-failure] { color: #b10e1e; }
+.form-notice { font-size: 13px; }
+.noscript { margin: 16px; padding: 16px; background: #fff; color: #b10e1e; }
+@media (max-width: 600px) { .login-area { padding: 24px; align-items: start; } .login { padding: 16px 0; box-shadow: none; } body { background: #fff !important; } .footer { justify-content: flex-start; } }
+body { background: #f0f4f9; color: #1f1f1f; font-family: Arial, sans-serif; }
+.login { max-width: 1040px; padding: 36px; border-radius: 28px; box-shadow: none; }
+.brand { font-size: 20px; color: #444746; font-weight: 400; }
+.brand img { width: 48px; height: 48px; }
+.columns { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; }
+h1 { font-size: 36px; line-height: 1.25; font-weight: 400; margin: 24px 0 16px; }
+form { padding-top: 24px; }
+.field { margin-top: 16px; }
+.field input { height: 56px; border: 1px solid #747775; border-radius: 4px; padding: 13px 15px; }
+.field label { color: #444746; }
+.primary { border-radius: 24px; min-height: 40px; min-width: 80px; background: #0b57d0; border-color: #0b57d0; padding: 10px 24px; }
+.primary:hover { background: #0842a0; }
+.text-button { color: #0b57d0; }
+.reveal { font-size: 14px; }
+.account-row { border: 1px solid #747775; border-radius: 20px; padding: 2px 9px; width: fit-content; max-width: 100%; font-size: 14px; }
+.account-row .back { font-size: 18px; }
+.actions { margin-top: 40px; }
+.footer { width: min(1040px, 100%); margin: 0 auto; padding-bottom: 28px; }
+@media (max-width: 760px) { .columns { grid-template-columns: 1fr; gap: 8px; } .login { padding: 28px; } h1 { font-size: 32px; } form { padding-top: 0; } }
+@media (max-width: 600px) { .login { padding: 0; border-radius: 0; } }
+ .sharing-header { background: #fff; border-bottom: 1px solid #e0e0e0; padding: 18px 28px; display: flex; align-items: center; gap: 12px; font-size: 20px; }
+.sharing-header img { height: 26px; width: 26px; }
+.sharing-card { width: min(100%, 580px); background: #fff; border: 1px solid #e0e0e0; padding: 40px; text-align: center; }
+.sharing-card h1 { font-size: 25px; margin: 20px 0 12px; }
+.sharing-card p { margin: 12px 0; }
+.sender { font-weight: 600; }
+.file-tile { border: 1px solid #e0e0e0; padding: 24px 16px; margin: 28px 0; display: flex; gap: 18px; align-items: center; text-align: left; }
+.file-symbol { flex: 0 0 48px; height: 60px; display: grid; place-items: center; background: #edf3fc; border: 1px solid #c6d6ee; color: #185abd; font-size: 11px; font-weight: 700; }
+.file-name { font-size: 18px; overflow-wrap: anywhere; }
+.file-detail { color: #666; font-size: 13px; margin-top: 5px; }
+.sharing-card .primary { margin-top: 12px; }
+.file-back { margin-bottom: 20px; }
+.google .sharing-card { border-radius: 16px; text-align: left; }
+.google .sharing-card h1 { font-size: 28px; }
+.dropbox .sharing-card { border-color: #d8d3cc; }
+.dropbox .file-symbol { background: #f7f5f2; color: #1e1919; border-color: #d8d3cc; }
+@media (max-width: 600px) { .sharing-card { padding: 24px; } .sharing-header { padding: 16px 24px; } }
+
+.account-row:has([data-account][hidden]) { display: none; }
+</style></head><body class="google">
+<main class="page" data-login-flow="two-step" data-identifier-title="Sign in" data-password-title="Welcome"><header class="sharing-header"><img src="data:image/png;base64,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" alt="" width="26" height="26"><span>Google Drive</span></header><div class="login-area"><section class="sharing-card" data-sharing aria-labelledby="shared-title"><p class="sender">Jordan Lee</p><h1 id="shared-title">Shared a document with you</h1><p>You have been invited to view this document.</p><div class="file-tile"><div class="file-symbol" aria-hidden="true">DOC</div><div><div class="file-name">Project review notes</div><div class="file-detail">Google Docs document &middot; Can view</div></div></div><p>Sign in with the account this invitation was sent to.</p><button class="primary" type="button" data-open>Open document</button></section><section class="login" data-login hidden aria-label="Account sign-in"><button type="button" class="text-button file-back" data-back data-back-file>Back to file</button><div class="brand "><img src="data:image/png;base64,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" alt="Google" width="48" height="48"></div><div class="columns"><div><h1 data-title>Sign in</h1><p class="intro" data-identifier-copy>Use your Google Account</p><div class="account-row"><button class="back" type="button" data-back aria-label="Use another account">&#8592;</button><span data-account hidden></span></div></div><form><fieldset data-identifier disabled><div class="field"><label for="email">Email address</label><input id="email" name="username" type="email" value="" autocomplete="username" required></div><div class="actions"><button class="primary" type="submit" data-next>Next</button></div></fieldset><fieldset data-credential disabled hidden><div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><label class="reveal"><input type="checkbox" data-reveal>Show password</label><div class="actions"><button class="primary" type="submit" data-final>Next</button></div></fieldset><p class="form-notice" data-failure role="alert" hidden>This page could not submit. Reload the page and try again.</p></form></div></section></div>
+<footer class="footer"><span>English (United States)</span><span>Privacy</span><span>Terms</span></footer></main><noscript><p class="noscript">JavaScript is required to continue.</p></noscript>
+</body></html>

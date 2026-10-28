@@ -44,6 +44,10 @@ pub(crate) fn routes() -> Router<AuthState> {
         )
         .route("/api/import/email", axum::routing::post(import_email))
         .route("/api/import/site", axum::routing::post(import_site))
+        .route(
+            "/api/import/page-bundle",
+            axum::routing::post(import_page_bundle),
+        )
         .route("/api/util/preview", axum::routing::post(preview))
         .route("/api/util/send_test_email", axum::routing::post(send_test))
         .route(
@@ -183,6 +187,21 @@ async fn import_email(context: Context, body: Bytes) -> Result<Response, Rejecti
 #[derive(serde::Deserialize)]
 struct SiteRequest {
     url: String,
+}
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PageBundleRequest {
+    content: String,
+}
+async fn import_page_bundle(context: Context, body: Bytes) -> Result<Response, Rejection> {
+    editor_identity(&context).await?;
+    let request: PageBundleRequest = parse(&body)?;
+    let html = context
+        .resources()
+        .tools()
+        .page_bundle(&request.content)
+        .map_err(error)?;
+    response(StatusCode::OK, &summaries_wire::HtmlImport { html }, None)
 }
 async fn import_site(context: Context, body: Bytes) -> Result<Response, Rejection> {
     editor_identity(&context).await?;

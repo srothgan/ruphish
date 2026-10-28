@@ -1,11 +1,13 @@
 {
   "en": {
+    "preview": "Preview submission only. No interaction was recorded.",
     "submitting": "Submitting…",
     "submitted": "Submitted.",
     "unconfirmed": "Submission could not be confirmed. Please try again.",
     "retry": "Retry this submission"
   },
   "de": {
+    "preview": "Nur eine Vorschau. Es wurde keine Interaktion aufgezeichnet.",
     "submitting": "Wird übermittelt…",
     "submitted": "Übermittelt.",
     "unconfirmed": "Übermittlung nicht bestätigt. Bitte erneut versuchen.",

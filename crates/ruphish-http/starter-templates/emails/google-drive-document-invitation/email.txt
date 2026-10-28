@@ -1,0 +1,10 @@
+Jordan Lee shared a file with you
+
+Project review notes
+Google Docs document - Can view
+
+Open the file: {{.URL}}
+
+This invitation is for {{.Email}}. Sign in with that account to access the file.
+
+Google Drive

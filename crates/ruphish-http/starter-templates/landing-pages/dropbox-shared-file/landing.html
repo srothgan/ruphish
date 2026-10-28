@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><title>Project brief.pdf</title>
+<!-- Independent simulation layout. See interactive-references.md for upstream references and adaptation boundaries. Existing embedded logo provenance remains in licenses/sources.json. -->
+<style>* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; color: #1b1b1b; font: 15px/1.5 "Segoe UI", Arial, sans-serif; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; opacity: .65; }
+button:focus-visible, input:focus-visible { outline: 2px solid #0067b8; outline-offset: 3px; }
+fieldset { min-inline-size: 0; border: 0; padding: 0; margin: 0; }
+.page { min-height: 100vh; display: flex; flex-direction: column; }
+.login-area { flex: 1; display: grid; place-items: center; padding: 48px 24px; }
+.login { width: 100%; max-width: 440px; padding: 44px; background: #fff; box-shadow: 0 2px 6px #0003; }
+.brand { display: flex; align-items: center; gap: 8px; font-size: 21px; line-height: 24px; font-weight: 600; color: #737373; }
+.brand img { display: block; width: 24px; height: 24px; }
+h1 { font-size: 24px; line-height: 1.3; font-weight: 600; margin: 22px 0 12px; }
+.intro { margin: 0 0 16px; }
+.field { margin: 18px 0 8px; }
+.field label { display: block; font-size: 13px; margin-bottom: 4px; }
+.field input { width: 100%; height: 38px; border: 0; border-bottom: 1px solid #666; border-radius: 0; padding: 6px 0; background: #fff; color: inherit; }
+.actions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; margin-top: 28px; }
+.primary { min-width: 108px; min-height: 36px; padding: 7px 16px; border: 1px solid #0067b8; background: #0067b8; color: #fff; }
+.primary:hover { background: #005da6; }
+.text-button { padding: 6px 0; border: 0; background: transparent; color: #0067b8; text-align: left; }
+.account-row { display: flex; align-items: center; gap: 8px; margin: 18px 0 0; }
+.account-row [data-account] { overflow-wrap: anywhere; }
+.back { flex: 0 0 auto; width: 30px; min-height: 30px; border: 0; background: transparent; color: inherit; font-size: 22px; }
+.back:hover { background: #eee; border-radius: 50%; }
+.reveal { display: flex; gap: 9px; align-items: center; margin-top: 16px; font-size: 13px; }
+.reveal input { width: 18px; height: 18px; margin: 0; accent-color: #0067b8; }
+.footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 20px; padding: 12px 24px; font-size: 12px; color: #555; }
+.footer a { color: inherit; text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
+[data-failure] { color: #b10e1e; }
+.form-notice { font-size: 13px; }
+.noscript { margin: 16px; padding: 16px; background: #fff; color: #b10e1e; }
+@media (max-width: 600px) { .login-area { padding: 24px; align-items: start; } .login { padding: 16px 0; box-shadow: none; } body { background: #fff !important; } .footer { justify-content: flex-start; } }
+body { background: #f7f5f2; font-family: Arial, sans-serif; color: #1e1919; }
+.login { max-width: 480px; padding: 40px; box-shadow: none; border: 1px solid #d8d3cc; }
+.brand { color: #1e1919; font-size: 26px; }
+.brand img { width: 32px; height: 32px; }
+h1 { font-size: 28px; font-weight: 500; }
+.field input { height: 48px; border: 1px solid #8c8279; padding: 12px; }
+.primary { width: 100%; background: #0061fe; border-color: #0061fe; min-height: 48px; font-weight: 600; }
+.actions { margin-top: 24px; }
+@media (max-width: 600px) { .login { border: 0; } }
+ .sharing-header { background: #fff; border-bottom: 1px solid #e0e0e0; padding: 18px 28px; display: flex; align-items: center; gap: 12px; font-size: 20px; }
+.sharing-header img { height: 26px; width: 26px; }
+.sharing-card { width: min(100%, 580px); background: #fff; border: 1px solid #e0e0e0; padding: 40px; text-align: center; }
+.sharing-card h1 { font-size: 25px; margin: 20px 0 12px; }
+.sharing-card p { margin: 12px 0; }
+.sender { font-weight: 600; }
+.file-tile { border: 1px solid #e0e0e0; padding: 24px 16px; margin: 28px 0; display: flex; gap: 18px; align-items: center; text-align: left; }
+.file-symbol { flex: 0 0 48px; height: 60px; display: grid; place-items: center; background: #edf3fc; border: 1px solid #c6d6ee; color: #185abd; font-size: 11px; font-weight: 700; }
+.file-name { font-size: 18px; overflow-wrap: anywhere; }
+.file-detail { color: #666; font-size: 13px; margin-top: 5px; }
+.sharing-card .primary { margin-top: 12px; }
+.file-back { margin-bottom: 20px; }
+.google .sharing-card { border-radius: 16px; text-align: left; }
+.google .sharing-card h1 { font-size: 28px; }
+.dropbox .sharing-card { border-color: #d8d3cc; }
+.dropbox .file-symbol { background: #f7f5f2; color: #1e1919; border-color: #d8d3cc; }
+@media (max-width: 600px) { .sharing-card { padding: 24px; } .sharing-header { padding: 16px 24px; } }
+
+.account-row:has([data-account][hidden]) { display: none; }
+</style></head><body class="dropbox">
+<main class="page" data-login-flow="combined" data-identifier-title="Log in to Dropbox" data-password-title="Log in to Dropbox"><header class="sharing-header"><img src="data:image/png;base64,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" alt="" width="26" height="26"><span>Dropbox</span></header><div class="login-area"><section class="sharing-card" data-sharing aria-labelledby="shared-title"><p class="sender">Taylor Chen</p><h1 id="shared-title">Shared a file with you</h1><p>You have been invited to view this file.</p><div class="file-tile"><div class="file-symbol" aria-hidden="true">PDF</div><div><div class="file-name">Project brief.pdf</div><div class="file-detail">PDF document &middot; Can view</div></div></div><p>Sign in with the account this invitation was sent to.</p><button class="primary" type="button" data-open>Open file</button></section><section class="login" data-login hidden aria-label="Account sign-in"><button type="button" class="text-button file-back" data-back data-back-file>Back to file</button><div class="brand "><img src="data:image/png;base64,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" alt="Dropbox" width="48" height="48"><span>Dropbox</span></div><div class="columns"><div><h1 data-title>Log in to Dropbox</h1><p class="intro" data-identifier-copy>Log in to access the shared file.</p><span data-account hidden></span></div><form><fieldset data-identifier disabled><div class="field"><label for="email">Email address</label><input id="email" name="username" type="email" value="" autocomplete="username" required></div></fieldset><fieldset data-credential disabled hidden><div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><label class="reveal"><input type="checkbox" data-reveal>Show password</label><div class="actions"><button class="primary" type="submit" data-final>Log in</button></div></fieldset><p class="form-notice" data-failure role="alert" hidden>This page could not submit. Reload the page and try again.</p></form></div></section></div>
+<footer class="footer"><span>English (United States)</span><span>Privacy</span><span>Terms</span></footer></main><noscript><p class="noscript">JavaScript is required to continue.</p></noscript>
+</body></html>

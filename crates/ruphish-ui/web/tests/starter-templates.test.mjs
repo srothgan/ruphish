@@ -13,6 +13,9 @@ const logo =
 const branding = new Map([
   ['microsoft-full-screen', { selector: '.microsoft', height: 36 }],
   ['microsoft-side-panel', { selector: '.microsoft', height: 36 }],
+  ['microsoft-two-step', { selector: '.microsoft', height: 36 }],
+  ['microsoft-two-step-side-panel', { selector: '.microsoft', height: 36 }],
+  ['onedrive-shared-document', { selector: '.microsoft', height: 36 }],
   ['zoom', { selector: '.masthead', height: 36 }],
   ['salesforce', { selector: 'img.logo', height: 80 }],
   ['workday', { selector: '.brand', height: 48 }],
@@ -20,7 +23,7 @@ const branding = new Map([
 
 test('all landing pages remain offline; options default off and preserve independent content', async () => {
   const directories = await readdir(new URL('landing-pages/', root));
-  assert.equal(directories.length, 19);
+  assert.equal(directories.length, 25);
   for (const slug of directories) {
     const source = await readFile(new URL(`landing-pages/${slug}/landing.html`, root), 'utf8');
     assert.equal(preparePage(source, false, '', ''), source);
@@ -36,7 +39,7 @@ test('all landing pages remain offline; options default off and preserve indepen
     assert.equal(parse(prefilled).querySelector('input[type=email]').value, '{{.Email | html}}');
     assert.equal(parse(prefilled).querySelector('input[type=password]').value, '');
     assert.equal(parse(source).querySelector('input[type=email]').value, '');
-    // Only the five reviewed layouts allow this operation; unsupported entries have no option.
+    // Only the reviewed layouts allow this operation; unsupported entries have no option.
     if (branding.has(slug)) {
       const config = branding.get(slug);
       for (const prefill of [false, true]) {
@@ -140,7 +143,7 @@ test('learning-page logos preserve static explanations and reject unusable brand
 
 test('email catalog has no tracker or remote images and retains ordinary Go expressions', async () => {
   const directories = await readdir(new URL('emails/', root));
-  assert.equal(directories.length, 20);
+  assert.equal(directories.length, 23);
   for (const slug of directories) {
     const source = await readFile(new URL(`emails/${slug}/email.html`, root), 'utf8');
     assert.doesNotMatch(source, /\{\{\s*\.(Tracker|TrackingURL)/);

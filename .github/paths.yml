@@ -46,6 +46,7 @@ demo:
   - 'crates/ruphish-domain/**'
   - 'crates/ruphish-contracts/**'
   - 'crates/ruphish-http/starter-templates/**'
+  - 'crates/ruphish-http/src/starter_templates/**'
   - 'assets/website-demo/**'
   - 'demo/**'
   - '.github/workflows/**'

@@ -374,7 +374,7 @@
     "attachments": "Attachments",
     "add_attachments": "Add attachments",
     "optional_campaign_defaults": "Optional campaign defaults",
-    "public_pages_preserve_field_names_and_styling_but_block_authored_scripts_embedde": "Public pages preserve field names and styling, but block authored scripts, embedded frames and external resources. Use embedded PNG, JPEG or GIF images. Preview the final page before launch; form submissions send only event metadata and optional password presence.",
+    "landing_content_help": "Landing pages support authored scripts, images, stylesheets and fonts. Built-in submissions send only event metadata and password presence. Custom code can read or transmit input; review the functional preview before launch.",
     "suggested_submission_settings_for_campaigns_using_this_page_leave_tracking_off_a": "Suggested submission settings for campaigns using this page. Leave tracking off and the redirect blank if no defaults are needed.",
     "track_only_whether_fields_were_filled_and_submitted_entered_usernames_passwords": "Track only whether fields were filled and submitted. Entered usernames, passwords and other field values are never collected.",
     "connection": "Connection",
@@ -943,7 +943,9 @@
     "delivery_error_fallback": "Sending needs attention. Check the attempt details or contact your administrator with this code.",
     "delivery_error_owner": "The campaign owner is unavailable. Ask an administrator to check the account before retrying.",
     "delivery_error_resource": "A required campaign resource is unavailable. Check the template, landing page and sending profile before retrying.",
-    "participants": "Participants"
+    "participants": "Participants",
+    "landing_preview_help": "Functional preview with sample recipient Alice Example. Scripts and external resources run in isolation. Submissions create no campaign events. Custom code can contact external services.",
+    "landing_bundle_help": "You can also upload a ZIP with index.html at its root plus images, stylesheets, fonts and bundled scripts. Local assets are embedded in the draft; limits: 8 MiB and 256 entries."
   },
   "messages": {
     "the_request_failed_arg0_try_again": "The request failed ({{ arg0 }}). Try again.",

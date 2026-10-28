@@ -23,6 +23,22 @@ Return whenever needed. Adding the same entry again creates another resource, us
 
 Learning-page previews show static content without recipient personalization, forms or tracking. For a page that offers **Use company logo**, enable it in the preview to embed the shared uploaded image in that copy. Learning pages do not offer recipient-email prefill. After adding a copy, select it as the redirect destination during campaign creation.
 
+## Document invitations and interactive sign-in
+
+The catalog contains 23 emails, 25 landing pages and three learning pages. The following options are additional entries; the original templates remain available.
+
+| Landing page | Matching email | Sample document |
+| --- | --- | --- |
+| OneDrive / SharePoint - Shared document | OneDrive - Document sharing invitation (EN) | Alex Morgan shares `Project handover.docx`. |
+| Google Drive - Shared document | Google Drive - Document sharing invitation (EN) | Jordan Lee shares `Project review notes`. |
+| Dropbox - Shared file | Dropbox - File sharing invitation (EN) | Taylor Chen shares `Project brief.pdf`. |
+
+These pages represent restricted sharing that asks the recipient to sign in with an account, rather than enter a document password. Add the email and landing page separately, then select both in the campaign. If you customize the sender or filename, edit both copies; they do not synchronize automatically.
+
+Three standalone pages are also available: **Microsoft Entra - Two-step sign-in**, **Microsoft Entra - Two-step sign-in (side panel)** and **Google Workspace - Two-step sign-in**. They ask for an email address before showing the password field. The OneDrive and Google Drive document pages use the same sequence after opening the document card; Dropbox shows email and password together. Going back before final submission clears the password and preserves the email address.
+
+Opening a document card, continuing after the email address and going back create no submission events. Only the final sign-in action calls the built-in collector, which records password presence without sending the entered values. Final submission locks the form against duplicate actions; uncertain delivery uses the collector's **Retry this submission** button. Functional previews create no campaign events. Close and reopen a preview to restart after final submission. These pages do not validate credentials or retrieve cloud files.
+
 ## Learning page choices
 
 The **Learning pages** tab offers three independent English starters. None is preselected or preferred; choose the method and layout that suit your audience.
@@ -41,6 +57,9 @@ All three use Ruphish styling and an embedded Ruphish logo. Enable **Use company
 | --- | --- |
 | Microsoft full-screen | Entra company branding |
 | Microsoft side panel | Entra company branding |
+| Microsoft Entra - Two-step sign-in | Entra company branding |
+| Microsoft Entra - Two-step sign-in (side panel) | Entra company branding |
+| OneDrive / SharePoint - Shared document | Entra company branding on the sign-in panel |
 | Zoom | Organization vanity-URL login |
 | Salesforce | My Domain login |
 | Workday | Native tenant login |
