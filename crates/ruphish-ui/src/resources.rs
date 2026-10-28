@@ -1109,6 +1109,8 @@ fn content_workspace(
                     {move || {
                         if family == Family::LearningPages {
                             leptos_i18n::t_string!(i18n, ui.learning_preview_help)
+                        } else if family == Family::Pages {
+                            leptos_i18n::t_string!(i18n, ui.landing_preview_help)
                         } else {
                             leptos_i18n::t_string!(
                                 i18n, ui.current_draft_with_sample_recipient_alice_example_scripts_external_resources_and
@@ -1149,9 +1151,17 @@ fn content_workspace(
                             view! {
                                 <iframe
                                     title=trs!(ui.current_html_draft_preview)
-                                    sandbox=""
+                                    sandbox=if family == Family::Pages {
+                                        ruphish_domain::landing::SANDBOX
+                                    } else {
+                                        ""
+                                    }
                                     referrerpolicy="no-referrer"
-                                    srcdoc=preview_document(&html)
+                                    srcdoc=if family == Family::Pages {
+                                        ruphish_ui::landing_preview_document(&html)
+                                    } else {
+                                        preview_document(&html)
+                                    }
                                 ></iframe>
                             }
                         })
@@ -1384,11 +1394,7 @@ fn content_fields(
                                 <p>{tr!(ui.learning_static_help)}</p>
                             </Show>
                             <Show when=move || family == Family::Pages>
-                                <p>
-                                    {tr!(
-                                        ui.public_pages_preserve_field_names_and_styling_but_block_authored_scripts_embedde
-                                    )}
-                                </p>
+                                <p>{tr!(ui.landing_content_help)}</p>
                                 <p>{tr!(ui.all_submissions_recorded)}</p>
                                 {editor
                                     .field(
@@ -1598,6 +1604,7 @@ fn import_panel(api: Api, token: String, family: Family, open: RwSignal<bool>) -
             .unwrap_or("")
             .to_ascii_lowercase();
         let kind = match extension.as_str() {
+            "zip" if family == Family::Pages && !cfg!(feature = "demo") => "bundle",
             "json" => "json",
             "csv" if family == Family::Groups => "csv",
             "eml" if family == Family::Templates => "email",
@@ -1619,6 +1626,42 @@ fn import_panel(api: Api, token: String, family: Family, open: RwSignal<bool>) -
         };
         busy.set(true);
         spawn_local(async move {
+            if kind == "bundle" {
+                use base64::Engine;
+                let result = match wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await {
+                    Ok(buffer) => {
+                        let bytes = js_sys::Uint8Array::new(&buffer).to_vec();
+                        let payload = json!({"content":base64::engine::general_purpose::STANDARD.encode(bytes)});
+                        api.resource(
+                            "POST",
+                            "/api/import/page-bundle",
+                            &token.get_value(),
+                            Some(&payload),
+                            None,
+                        )
+                        .await
+                        .and_then(|(value, _)| {
+                            value["html"]
+                                .as_str()
+                                .map(str::to_owned)
+                                .ok_or_else(|| api.invalid_read())
+                        })
+                    }
+                    Err(_) => Err(ruphish_ui::localization::import_error(
+                        i18n,
+                        &ImportError::ReadFailed,
+                    )),
+                };
+                match result {
+                    Ok(html) => {
+                        content.set(html);
+                        mode.set("html".into());
+                    }
+                    Err(error) => message.error(error),
+                }
+                busy.set(false);
+                return;
+            }
             match wasm_bindgen_futures::JsFuture::from(file.text()).await {
                 Ok(value) => {
                     content.set(value.as_string().unwrap_or_default());
@@ -1725,7 +1768,9 @@ fn import_panel(api: Api, token: String, family: Family, open: RwSignal<bool>) -
                     accept=match family {
                         Family::Groups => ".json,.csv",
                         Family::Templates => ".json,.eml,.html,.htm",
-                        Family::Pages | Family::LearningPages => ".json,.html,.htm",
+                        Family::Pages if !cfg!(feature = "demo") => ".json,.html,.htm,.zip",
+                        Family::Pages => ".json,.html,.htm",
+                        Family::LearningPages => ".json,.html,.htm",
                         Family::Profiles => ".json",
                     }
                     on:change=read
@@ -1747,6 +1792,8 @@ fn import_panel(api: Api, token: String, family: Family, open: RwSignal<bool>) -
                             }
                         })}
                 </div>
+                {(family == Family::Pages && !cfg!(feature = "demo"))
+                    .then(|| view! { <p class="field-help">{tr!(ui.landing_bundle_help)}</p> })}
                 <Select
                     label=trs!(ui.import_format)
                     value=mode

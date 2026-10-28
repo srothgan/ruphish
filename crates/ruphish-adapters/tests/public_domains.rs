@@ -327,7 +327,8 @@ async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_on
     };
     assert!(html.contains("name=\"password\""));
     assert!(html.contains("autocomplete=\"current-password\""));
-    assert!(!html.contains("outside.invalid"));
+    assert!(html.contains("outside.invalid"));
+    assert!(csp.starts_with("sandbox allow-scripts allow-forms;"));
     assert!(csp.contains("form-action 'none'"));
     let id = "a".repeat(32);
     for _ in 0..2 {
@@ -410,7 +411,7 @@ async fn failed_event_write_rolls_back_submission_deduplication_and_result_state
     db.close().await;
 }
 #[test]
-fn final_html_retains_form_semantics_without_authored_execution_or_network_endpoints() {
+fn final_html_preserves_authored_execution_and_assets_inside_managed_form_sandbox() {
     let source = r#"<style>body {background: navy}</style><form action="https://outside.invalid"><input name="username" autocomplete="username"><input type="password" name="password"><button formaction="https://outside.invalid">Submit</button></form><iframe srcdoc="<script>alert(1)</script>"></iframe><svg onload="fetch('https://outside.invalid')"></svg><img src="https://outside.invalid/image"><meta http-equiv="refresh" content="0;url=https://outside.invalid"><script>canaryScript()</script>"#;
     let doc = ruphish_adapters::landing::render(
         source,
@@ -423,13 +424,18 @@ fn final_html_retains_form_semantics_without_authored_execution_or_network_endpo
     assert!(doc.html.contains("name=\"username\""));
     assert!(doc.html.contains("name=\"password\""));
     assert!(doc.html.contains("background: navy"));
-    assert!(!doc.html.contains("canaryScript"));
-    assert!(!doc.html.contains("outside.invalid"));
+    assert!(doc.html.contains("canaryScript"));
+    assert!(doc.html.contains("https://outside.invalid/image"));
+    assert!(!doc.html.contains("http-equiv=\"refresh\""));
     assert!(!doc.html.contains("formaction="));
     assert!(!doc.html.contains("<iframe"));
     assert_eq!(doc.html.matches("<script ").count(), 1);
     assert!(doc.csp.contains("form-action 'none'"));
-    assert!(doc.csp.contains("script-src-attr 'none'"));
+    assert!(doc.csp.starts_with("sandbox allow-scripts allow-forms;"));
+    assert!(!doc.csp.contains("allow-same-origin"));
+    assert!(
+        doc.html.find("data-ruphish-collector").unwrap() < doc.html.find("canaryScript").unwrap()
+    );
 }
 
 #[path = "../../../tests/support/domain_network.rs"]
@@ -648,20 +654,24 @@ fn whole_document_layout_attributes_and_embedded_images_survive_final_policy() {
     )
     .unwrap();
     assert!(document.html.contains("<html lang=\"fr\">"));
-    assert!(
-        document
-            .html
-            .contains("<body class=\"welcome\" style=\"margin: 2rem\">")
-    );
+    let parsed = scraper::Html::parse_document(&document.html);
+    let body = parsed
+        .select(&scraper::Selector::parse("body").unwrap())
+        .next()
+        .unwrap();
+    assert_eq!(body.value().attr("class"), Some("welcome"));
+    assert_eq!(body.value().attr("style"), Some("margin: 2rem"));
+    assert_eq!(body.value().attr("onload"), Some("bad()"));
     assert!(
         document
             .html
             .contains("src=\"data:image/png;base64,iVBORw0KGgo=\"")
     );
     assert!(document.html.contains(".welcome { color: navy }"));
-    assert!(!document.html.contains("onload"));
-    assert!(!document.html.contains("data:text/html"));
-    assert!(!document.html.contains("<script"));
+    assert!(document.html.contains("onload"));
+    assert!(document.html.contains("data:text/html"));
+    assert!(document.html.contains("data-ruphish-collector"));
+    assert!(document.html.contains("const endpoint=null"));
 }
 
 #[tokio::test]

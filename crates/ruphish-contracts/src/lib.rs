@@ -30,3 +30,4 @@ where
 {
     serde::Deserialize::deserialize(deserializer)
 }
+pub use ruphish_domain::landing;

@@ -26,7 +26,9 @@ See [groups](../user-guide/groups.md) for encoding, limits, and duplicate handli
 
 `POST /api/import/email` accepts `content` (raw MIME email as a JSON string) and optional `convert_links` (default false). It returns `subject`, `text`, and `html`. It does not import MIME attachments; upload supported attachments separately.
 
-`POST /api/import/site` accepts `url` and returns `html`. Fetches follow outbound destination and TLS restrictions. The legacy `include_resources` input does not turn this into an asset-packaging service. Review imported HTML under the [landing-page restrictions](../user-guide/landing-pages.md).
+`POST /api/import/site` accepts `url` and returns `html`. Fetches follow outbound destination and TLS restrictions. The legacy `include_resources` input does not turn this into an asset-packaging service. External references remain external. Review imported HTML under the [landing-page authoring rules](../user-guide/landing-pages.md).
+
+`POST /api/import/page-bundle` requires resource-editing permission and accepts `{"content":"<base64 ZIP bytes>"}`; unknown fields are rejected. It returns `{"html":"..."}` without saving a resource. The ZIP must contain root `index.html` and its local assets. Import embeds supported static references and nested stylesheet dependencies without filesystem extraction or network requests. Missing dependencies, cycles, invalid paths, unsupported local modules/types and size/count limit violations return HTTP 400; authorization and session-CSRF checks match other imports. See [bundle limits and lifecycle](../user-guide/landing-pages.md#upload-a-page-with-local-assets). Save the returned HTML through the landing-page API after review.
 
 ## Preview HTML
 

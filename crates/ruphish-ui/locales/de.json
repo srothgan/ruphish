@@ -374,7 +374,7 @@
     "attachments": "Anhänge",
     "add_attachments": "Anhänge hinzufügen",
     "optional_campaign_defaults": "Optionale Kampagnenstandardwerte",
-    "public_pages_preserve_field_names_and_styling_but_block_authored_scripts_embedde": "Öffentliche Seiten erhalten Feldnamen und Gestaltung, blockieren aber verfasste Skripte, eingebettete Frames und externe Ressourcen. Verwenden Sie eingebettete PNG-, JPEG- oder GIF-Bilder. Prüfen Sie die fertige Seite vor dem Start; Formulare senden nur Ereignismetadaten und optional das Vorhandensein eines Passworts.",
+    "landing_content_help": "Landingpages unterstützen eigene Skripte, Bilder, Stylesheets und Schriftarten. Integrierte Übermittlungen senden nur Ereignismetadaten und das Vorhandensein eines Passworts. Eigener Code kann Eingaben lesen oder übertragen; prüfen Sie die Funktionsvorschau vor dem Start.",
     "suggested_submission_settings_for_campaigns_using_this_page_leave_tracking_off_a": "Vorgeschlagene Erfassungseinstellungen für Kampagnen mit dieser Seite. Lassen Sie die Erfassung deaktiviert und die Weiterleitung leer, wenn keine Standardwerte benötigt werden.",
     "track_only_whether_fields_were_filled_and_submitted_entered_usernames_passwords": "Nur erfassen, ob Felder ausgefüllt und übermittelt wurden. Eingegebene Benutzernamen, Passwörter und andere Feldwerte werden niemals gesammelt.",
     "connection": "Verbindung",
@@ -943,7 +943,9 @@
     "delivery_error_fallback": "Der Versand erfordert Ihre Aufmerksamkeit. Prüfen Sie die Details oder wenden Sie sich mit diesem Code an Ihren Administrator.",
     "delivery_error_owner": "Das Konto des Kampagneninhabers ist nicht verfügbar. Lassen Sie es vor einem erneuten Versuch durch einen Administrator prüfen.",
     "delivery_error_resource": "Eine benötigte Kampagnenressource ist nicht verfügbar. Prüfen Sie vor einem erneuten Versuch die Vorlage, Landingpage und das Versandprofil.",
-    "participants": "Teilnehmer"
+    "participants": "Teilnehmer",
+    "landing_preview_help": "Funktionsvorschau mit Beispielempfängerin Alice Example. Skripte und externe Ressourcen werden isoliert ausgeführt. Übermittlungen erzeugen keine Kampagnenereignisse. Eigener Code kann externe Dienste kontaktieren.",
+    "landing_bundle_help": "Sie können auch eine ZIP-Datei mit index.html im Stammverzeichnis sowie Bildern, Stylesheets, Schriftarten und gebündelten Skripten hochladen. Lokale Ressourcen werden in den Entwurf eingebettet; Grenzen: 8 MiB und 256 Einträge."
   },
   "messages": {
     "the_request_failed_arg0_try_again": "Die Anfrage ist fehlgeschlagen ({{ arg0 }}). Versuchen Sie es erneut.",

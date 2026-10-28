@@ -1,5 +1,5 @@
-// This code is injected only after authored content has been processed.
-// No FormData, field maps, entered values or value-derived strings cross the network.
+// Installed before authored scripts. Only this built-in collector's requests have
+// the presence-only contract; authored code can make independent requests.
 const passwordControls = new WeakSet(document.querySelectorAll('input[type="password"]'));
 // Remember password roles across reveal toggles, including newly inserted controls.
 const remember = (root) => {
@@ -10,15 +10,20 @@ const remember = (root) => {
     .querySelectorAll?.('input[type="password"]')
     .forEach((control) => passwordControls.add(control));
 };
-new MutationObserver((records) =>
+const rememberChanges = (records) =>
   records.forEach((record) => {
+    if (record.type === 'attributes' && record.oldValue?.toLowerCase() === 'password') {
+      passwordControls.add(record.target);
+    }
     remember(record.target);
     record.addedNodes.forEach(remember);
-  }),
-).observe(document, {
+  });
+const observer = new MutationObserver(rememberChanges);
+observer.observe(document, {
   subtree: true,
   childList: true,
   attributes: true,
+  attributeOldValue: true,
   attributeFilter: ['type'],
 });
 const pending = new Set();
@@ -32,55 +37,74 @@ const language =
     .map((value) => (value || '').split('-')[0].toLowerCase())
     .find((value) => Object.hasOwn(messages, value)) || 'en';
 const text = messages[language];
-document.addEventListener(
-  'submit',
-  (event) => {
-    event.preventDefault();
-    const form = event.target;
-    if (!(form instanceof HTMLFormElement)) {
-      return;
-    }
-    const notice = document.createElement('p');
-    notice.setAttribute('role', 'status');
-    const status = document.createElement('span');
-    const retry = document.createElement('button');
-    retry.type = 'button';
-    retry.textContent = text.retry;
-    retry.hidden = true;
-    notice.append(status, retry);
-    form.append(notice);
-    try {
-      const bytes = crypto.getRandomValues(new Uint8Array(16));
-      const event_id = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-      const password_present = Array.from(form.elements).some(
-        (control) =>
-          control instanceof HTMLInputElement &&
-          (passwordControls.has(control) || control.type === 'password') &&
-          !control.matches(':disabled') &&
-          control.name !== '' &&
-          !control.closest('datalist') &&
-          control.value !== '',
-      );
-      const attempt = {
-        payload: { event_id, password_present },
-        status,
-        retry,
-        busy: false,
-        done: false,
-      };
-      pending.add(attempt);
-      retry.addEventListener('click', () => deliver(attempt));
-      void deliver(attempt);
-    } catch {
-      status.textContent = text.unconfirmed;
-    }
-  },
-  true,
-);
+window.addEventListener('submit', (event) => {
+  const form = event.target;
+  if (!(form instanceof HTMLFormElement) || !form.isConnected || event.defaultPrevented) {
+    return;
+  }
+  event.preventDefault();
+  // Custom flows cancel their submit event and call ruphish.submit(form) only
+  // after their own validation/final step. Native navigation stays blocked by CSP.
+  void submit(form, false);
+});
+
+Object.defineProperty(window, 'ruphish', {
+  value: Object.freeze({ submit: (form) => submit(form, true) }),
+});
+
+async function submit(form, validate) {
+  if (!(form instanceof HTMLFormElement) || form.ownerDocument !== document || !form.isConnected) {
+    throw new TypeError('Expected a connected form in this page');
+  }
+  if (validate && !form.reportValidity()) {
+    return false;
+  }
+  // Authored code may insert/reveal a password and submit within the same task.
+  rememberChanges(observer.takeRecords());
+  const notice = document.createElement('p');
+  notice.setAttribute('role', 'status');
+  const status = document.createElement('span');
+  const retry = document.createElement('button');
+  retry.type = 'button';
+  retry.textContent = text.retry;
+  retry.hidden = true;
+  notice.append(status, retry);
+  form.append(notice);
+  if (endpoint === null) {
+    status.textContent = text.preview;
+    return false;
+  }
+  try {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    const event_id = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    const password_present = Array.from(form.elements).some(
+      (control) =>
+        control instanceof HTMLInputElement &&
+        (passwordControls.has(control) || control.type === 'password') &&
+        !control.matches(':disabled') &&
+        control.name !== '' &&
+        !control.closest('datalist') &&
+        control.value !== '',
+    );
+    const attempt = {
+      payload: { event_id, password_present },
+      status,
+      retry,
+      busy: false,
+      done: false,
+    };
+    pending.add(attempt);
+    retry.addEventListener('click', () => deliver(attempt));
+    return await deliver(attempt);
+  } catch {
+    status.textContent = text.unconfirmed;
+    return false;
+  }
+}
 
 async function deliver(attempt) {
   if (attempt.busy || attempt.done) {
-    return;
+    return attempt.done;
   }
   attempt.busy = true;
   attempt.retry.hidden = true;
@@ -116,9 +140,11 @@ async function deliver(attempt) {
     if (pending.size === 0 && destination !== null) {
       location.assign(destination);
     }
+    return true;
   } catch {
     attempt.status.textContent = text.unconfirmed;
     attempt.retry.hidden = false;
+    return false;
   } finally {
     clearTimeout(timeout);
     attempt.busy = false;

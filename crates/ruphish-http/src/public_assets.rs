@@ -71,24 +71,21 @@ impl Assets {
                     "Public assets exceed their size or count limit",
                 ));
             }
-            let mime = match entry
-                .path()
-                .extension()
-                .and_then(|s| s.to_str())
-                .unwrap_or("")
-                .to_ascii_lowercase()
-                .as_str()
-            {
-                "png" => "image/png",
-                "jpg" | "jpeg" => "image/jpeg",
-                "gif" => "image/gif",
-                "ico" => "image/x-icon",
-                "svg" => "image/svg+xml",
-                "css" => "text/css; charset=utf-8",
-                "js" => "text/javascript; charset=utf-8",
-                "html" | "htm" => "text/html; charset=utf-8",
-                "txt" => "text/plain; charset=utf-8",
-                _ => "application/octet-stream",
+            let mime = match ruphish_contracts::landing::asset_mime(name) {
+                Some("text/css") => "text/css; charset=utf-8",
+                Some("text/javascript") => "text/javascript; charset=utf-8",
+                Some(mime) => mime,
+                None => match name
+                    .rsplit('.')
+                    .next()
+                    .unwrap_or("")
+                    .to_ascii_lowercase()
+                    .as_str()
+                {
+                    "html" | "htm" => "text/html; charset=utf-8",
+                    "txt" => "text/plain; charset=utf-8",
+                    _ => "application/octet-stream",
+                },
             };
             self.0.insert(
                 format!("/static{route}"),

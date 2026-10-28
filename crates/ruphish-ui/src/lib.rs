@@ -41,6 +41,15 @@ pub fn preview_document(source: &str) -> String {
     )
 }
 
+/// Functional landing preview; pair only with the domain's opaque-origin SANDBOX.
+/// The server supplies managed submission feedback with no live event endpoint.
+pub fn landing_preview_document(source: &str) -> String {
+    format!(
+        "<!doctype html><meta http-equiv=\"Content-Security-Policy\" content=\"{}\">{source}",
+        ruphish_domain::landing::CONTENT_POLICY
+    )
+}
+
 #[cfg(test)]
 #[path = "../../../tests/editor_workflow.rs"]
 mod editor_workflow;

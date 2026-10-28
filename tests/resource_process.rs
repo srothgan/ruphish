@@ -2093,3 +2093,119 @@ fn legacy_site_import_allow_deny_and_base_href_cases_use_controlled_servers() {
         process.stop();
     }
 }
+
+#[test]
+fn landing_bundle_import_preview_and_saved_assets_survive_restart() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = ready(&mut process);
+    unlock(directory.path());
+    let client = client();
+    // Independently generated ZIP: root index.html, one stylesheet, ordinary form and authored script.
+    let payload = json!({"content":"UEsDBBQAAAAIAAAAIVzDyG9OgAAAALYAAAAKAAAAaW5kZXguaHRtbFWMQQ6DMAwEv5LmAfABk0uv/QRgI6IGO7UdIX5foebS445mFh4oq1+Vwu5HSVAyv4NSmaL5Vch2Io9hV9o6GVazmGATPRJkrs3DnU+xzmanKMbA8/G3lT4tK2GCpbkLp6ewZ24EYwcw/v5s1Vw9nZlRzmFpjIVeMiPh5Hr7XfgCUEsDBBQAAAAIAAAAIVwbDU6HFgAAABQAAAAJAAAAc3R5bGUuY3NzS8pPqVSoVkjOz8kvslLISyyrVKgFAFBLAQIUABQAAAAIAAAAIVzDyG9OgAAAALYAAAAKAAAAAAAAAAAAAACAAQAAAABpbmRleC5odG1sUEsBAhQAFAAAAAgAAAAhXBsNTocWAAAAFAAAAAkAAAAAAAAAAAAAAIABqAAAAHN0eWxlLmNzc1BLBQYAAAAAAgACAG8AAADlAAAAAAA="});
+    let path = format!("{base}/api/import/page-bundle");
+    assert_eq!(
+        client.post(&path).json(&payload).send().unwrap().status(),
+        401
+    );
+    let imported: Value = client
+        .post(&path)
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&payload)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert!(
+        imported["html"]
+            .as_str()
+            .unwrap()
+            .contains("data:text/css;base64,Ym9keSB7IGNvbG9yOiBuYXZ5IH0=")
+    );
+    assert_eq!(
+        client
+            .post(&path)
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&json!({"content":"invalid"}))
+            .send()
+            .unwrap()
+            .status(),
+        400
+    );
+    let mut extra = payload.clone();
+    extra["unexpected"] = json!(true);
+    assert_eq!(
+        client
+            .post(&path)
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&extra)
+            .send()
+            .unwrap()
+            .status(),
+        400
+    );
+    let preview: Value = client
+        .post(format!("{base}/api/pages/preview"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&imported)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    let preview = preview["html"].as_str().unwrap();
+    assert!(preview.contains("window.bundleLoaded=true"));
+    assert!(preview.contains("const endpoint=null"));
+    assert!(preview.contains("form-action 'none'"));
+    assert!(
+        preview.find("data-ruphish-collector").unwrap()
+            < preview.find("window.bundleLoaded").unwrap()
+    );
+    let saved: Value = client
+        .post(format!("{base}/api/pages/"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&json!({"name":"Bundled page","html":imported["html"]}))
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(saved["html"], imported["html"]);
+    let id = saved["id"].as_i64().unwrap();
+    process.stop();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = ready(&mut process);
+    let reloaded: Value = client
+        .get(format!("{base}/api/pages/{id}"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(reloaded["html"], imported["html"]);
+    assert_eq!(
+        client
+            .delete(format!("{base}/api/pages/{id}"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .send()
+            .unwrap()
+            .status(),
+        200
+    );
+    assert_eq!(
+        client
+            .get(format!("{base}/api/pages/{id}"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .send()
+            .unwrap()
+            .status(),
+        404
+    );
+    process.stop();
+}

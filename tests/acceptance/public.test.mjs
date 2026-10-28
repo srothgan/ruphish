@@ -259,7 +259,11 @@ test(
     const landing = await publicRequest(`/?rid=${rid}`);
     assert.equal(landing.status, 200);
     assert(landing.body.includes('Hello Protocol'));
-    assert(!landing.body.includes('authoredScriptExecuted'));
+    assert(landing.body.includes('authoredScriptExecuted'));
+    assert(
+      landing.headers['content-security-policy'].startsWith('sandbox allow-scripts allow-forms;'),
+    );
+    assert(!landing.headers['content-security-policy'].includes('allow-same-origin'));
     assert(landing.headers['content-security-policy'].includes("form-action 'none'"));
     const beforeRejections = await api(campaignPath);
     const canary = `NEVER-RETAIN-${run}`;

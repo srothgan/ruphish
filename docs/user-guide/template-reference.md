@@ -44,7 +44,7 @@ The renderer includes Go-style built-ins for boolean/comparison operations, form
 
 ## Escaping and Unicode
 
-Text-template evaluation does not automatically HTML-escape recipient values. Choose explicit escaping for the context in which a value is inserted. The served landing page is subsequently restricted by the [participant-page policy](participant-data.md); that separate boundary is not contextual template escaping.
+Text-template evaluation does not automatically HTML-escape recipient values. Choose explicit escaping for the insertion context, such as `{{html .FirstName}}` for HTML text. Avoid inserting recipient values into executable code. Authored landing pages permit scripts after expansion, so unescaped recipient markup can become executable too. The [participant-page sandbox](participant-data.md) isolates that document from administration; it does not provide contextual escaping or prevent code from reading the page's controls.
 
 String length and indexing follow byte-oriented compatibility behavior. A slice that splits a UTF-8 character is rejected, rather than returning invalid UTF-8. For example, `{{slice "José" 3 5}}` yields `é`; slicing only one byte of that character fails.
 

@@ -177,6 +177,8 @@ pub struct EmailImport {
 /// Format and network boundaries for import and preview operations.
 #[async_trait::async_trait]
 pub trait ContentTools: Send + Sync {
+    /// Import a base64 ZIP page bundle into self-contained HTML, without network access.
+    fn page_bundle(&self, content: &str) -> Result<String, Error>;
     /// Parse records into accepted recipients and explicit row errors.
     fn csv(&self, bytes: &[u8], columns: Option<[String; 4]>) -> Result<CsvImport, Error>;
     /// Decode MIME bodies and optionally rewrite links.

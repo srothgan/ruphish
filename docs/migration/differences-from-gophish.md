@@ -39,7 +39,7 @@ New revision and generation checks prevent stale edits or delivery decisions fro
 
 ## Participant data and page behavior
 
-Legacy capture flags no longer authorize collecting entered values. Submission events and password presence are always recorded. The served page restricts authored active content and uses a closed event schema; importing a website does not preserve all scripts, forms, or externally hosted assets. Read [participant data](../user-guide/participant-data.md), including its verification limits.
+Legacy capture flags no longer authorize collecting entered values. Accepted built-in submissions record events and password presence. Landing pages support authored scripts and visual assets, with managed native forms and an opaque-origin sandbox. Custom final submissions can use `window.ruphish.submit(form)`; script cancellation and arbitrary external requests are not automatically counted. Website imports retain external references, while ZIP imports embed declared local assets. Review [landing-page authoring](../user-guide/landing-pages.md) and [participant data](../user-guide/participant-data.md), including their verification limits.
 
 An event is an observation, not proof that a particular person acted. New reporting distinguishes observed event totals, unique recipients, inferred progression, and delivery state. Old summary counts and new analysis counts are not interchangeable.
 

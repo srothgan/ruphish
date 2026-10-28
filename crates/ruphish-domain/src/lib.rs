@@ -23,3 +23,4 @@ pub mod settings;
 pub mod validation;
 
 pub mod event_edit;
+pub mod landing;
