@@ -9,8 +9,6 @@ use ruphish_ui::overview_state::percentage;
 use ruphish_ui::{tr, trs};
 
 pub(super) fn page() -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
-
     let queries = expect_context::<OverviewQueries>();
     let snapshot = queries.snapshot.observe(|| ());
     let snapshot_data = snapshot.data;
@@ -21,81 +19,88 @@ pub(super) fn page() -> impl IntoView {
         use_context::<crate::resources::ResourceAccess>().is_some_and(|access| access.0);
     view! {
         <ManagementPage>
-            <PageHeader
-                title=trs!(ui.dashboard)
-                subtitle=trs!(ui.campaign_activity_recipient_outcomes_and_the_resources_behind_them)
-            >
-                <ActionButton
-                    disabled=Signal::derive(move || {
+            <PageHeader title=trs!(ui.dashboard)>
+                <RefreshButton
+                    fetching=Signal::derive(move || {
                         snapshot.fetching.get() || drafts.fetching.get()
                     })
-                    on_click=move |_| {
+                    on_refresh=Callback::new(move |_| {
                         snapshot.refresh.run(());
                         drafts.refresh.run(());
-                    }
-                >
-                    {move || {
-                        if snapshot.fetching.get() || drafts.fetching.get() {
-                            leptos_i18n::t_string!(i18n, ui.refreshing_2)
-                        } else {
-                            leptos_i18n::t_string!(i18n, ui.refresh)
-                        }
-                    }}
-                </ActionButton>
+                    })
+                />
                 <ActionLink style=ButtonStyle::Primary href="/campaigns/new" hidden=!can_create>
                     {tr!(ui.create_campaign)}
                 </ActionLink>
             </PageHeader>
             <div class="dashboard-stack">
-                <Card label=trs!(ui.drafts)>
-                    <h2>{tr!(ui.drafts)}</h2>
-                    <QueryStatus
-                        fetching=drafts.fetching
-                        has_data=Signal::derive(move || drafts.data.with(Option::is_some))
-                        error=drafts.error
-                        noun=trs!(ui.drafts)
-                        refresh=drafts.refresh
-                    />
-                    <ul>
-                        {move || {
-                            drafts
-                                .data
-                                .get()
-                                .map(|page| {
-                                    page.items
-                                        .into_iter()
-                                        .take(5)
-                                        .map(|draft| {
-                                            view! {
-                                                <li>
-                                                    <a href=format!(
-                                                        "/campaigns/drafts/{}",
-                                                        draft.id,
-                                                    )>{draft.name}</a>
-                                                </li>
-                                            }
-                                        })
-                                        .collect_view()
-                                })
-                        }}
-                    </ul>
-                    <Show when=move || {
-                        drafts
-                            .data
-                            .with(|page| page.as_ref().is_some_and(|page| page.items.is_empty()))
-                    }>
-                        <p>{tr!(ui.no_drafts)}</p>
-                    </Show>
-                    <ActionLink href="/campaigns?filter=drafts">{tr!(ui.campaigns)}</ActionLink>
-                </Card>
-                <QueryStatus
+
+                <QueryBoundary
                     fetching=snapshot.fetching
                     has_data=Signal::derive(move || snapshot_data.with(Option::is_some))
                     error=snapshot.error
                     noun=trs!(ui.dashboard)
                     refresh=snapshot.refresh
-                />
-                {move || snapshot_data.get().map(snapshot_sections)}
+                >
+                    <div class="dashboard-stack">
+                        {move || snapshot_data.get().map(snapshot_sections)}
+                        <Show when=move || {
+                            drafts.error.get().is_some()
+                                || drafts
+                                    .data
+                                    .with(|v| v.as_ref().is_some_and(|v| !v.items.is_empty()))
+                        }>
+                            <Card label=trs!(ui.drafts)>
+                                <h2>{tr!(ui.drafts)}</h2>
+                                <QueryBoundary
+                                    fetching=drafts.fetching
+                                    has_data=Signal::derive(move || {
+                                        drafts.data.with(Option::is_some)
+                                    })
+                                    error=drafts.error
+                                    noun=trs!(ui.drafts)
+                                    refresh=drafts.refresh
+                                >
+                                    <ul>
+                                        {move || {
+                                            drafts
+                                                .data
+                                                .get()
+                                                .map(|page| {
+                                                    page.items
+                                                        .into_iter()
+                                                        .take(5)
+                                                        .map(|draft| {
+                                                            view! {
+                                                                <li>
+                                                                    <a href=format!(
+                                                                        "/campaigns/drafts/{}",
+                                                                        draft.id,
+                                                                    )>{draft.name}</a>
+                                                                </li>
+                                                            }
+                                                        })
+                                                        .collect_view()
+                                                })
+                                        }}
+                                    </ul>
+                                    <Show when=move || {
+                                        drafts
+                                            .data
+                                            .with(|page| {
+                                                page.as_ref().is_some_and(|page| page.items.is_empty())
+                                            })
+                                    }>
+                                        <p>{tr!(ui.no_drafts)}</p>
+                                    </Show>
+                                    <ActionLink href="/campaigns?filter=drafts">
+                                        {tr!(ui.campaigns)}
+                                    </ActionLink>
+                                </QueryBoundary>
+                            </Card>
+                        </Show>
+                    </div>
+                </QueryBoundary>
             </div>
         </ManagementPage>
     }
@@ -138,12 +143,18 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                             )
                             .into_iter()
                             .map(|c| {
-                                let action_href = format!("/campaigns/{}/results", c.id);
-                                let action_label = leptos_i18n::t_string!(i18n, ui.results);
+                                let section = crate::campaigns::Section::landing(c.status);
+                                let action_href = format!("/campaigns/{}/{}", c.id, section.path());
+                                let action_label = if section == crate::campaigns::Section::Results
+                                {
+                                    leptos_i18n::t_string!(i18n, ui.results)
+                                } else {
+                                    leptos_i18n::t_string!(i18n, ui.delivery)
+                                };
                                 view! {
                                     <tr>
                                         <th scope="row">
-                                            <a href=format!("/campaigns/{}", c.id)>{c.name}</a>
+                                            <a href=action_href.clone()>{c.name}</a>
                                             <span class="dashboard-campaign-meta">
                                                 {ruphish_ui::localization::event_label(
                                                     i18n,

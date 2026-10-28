@@ -1,5 +1,7 @@
 //! Stable recipient rows with an independently loaded, expandable history panel.
-use crate::shared::components::{ActionButton, ButtonStyle, StatusBadge, StatusTone};
+use crate::shared::components::{
+    ActionButton, ButtonStyle, Dialog, QueryBoundary, StatusBadge, StatusTone,
+};
 use crate::{
     account::copy_text,
     campaigns::{array, text},
@@ -110,7 +112,16 @@ pub(super) fn recipient_row(
             .find(|r| r["id"] == result)
             .unwrap_or(Value::Null)
     });
-    let history = RwSignal::new(History::default());
+    let query = leptos_router::hooks::use_query_map();
+    let mut initial = History::default();
+    if query
+        .with(|q| q.get("recipient"))
+        .and_then(|v| v.parse::<i64>().ok())
+        == Some(result)
+    {
+        initial.toggle();
+    }
+    let history = RwSignal::new(initial);
     let open = Memo::new(move |_| history.with(|h| h.open));
     let panel_id = format!("recipient-history-{result}");
     let button_id = format!("recipient-toggle-{result}");
@@ -225,21 +236,13 @@ pub(super) fn recipient_detail(
     refresh: Signal<Value>,
 ) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
-    let outcomes = expect_context::<crate::campaign_queries::CampaignQueries>()
-        .results
-        .observe_polling(
-            move || {
-                crate::campaign_queries::CampaignQueries::results_key(
-                    campaign.get_value().parse().unwrap_or(0),
-                    &ruphish_contracts::reporting::Filter {
-                        recipient: Some(result),
-                        limit: 1,
-                        ..Default::default()
-                    },
-                )
-            },
-            ruphish_ui::query::document_visible(),
-        );
+    let editing = RwSignal::new(false);
+    let editor = RwSignal::new(ruphish_ui::event_editor::Editor::default());
+    let locked =
+        Signal::derive(move || editor.with(|s| s.busy || s.pending.is_some() || s.draft.is_some()));
+    crate::campaign_queries::RefreshState::register(Signal::derive(move || {
+        history.with(History::loading)
+    }));
     let tasks = ruphish_ui::view_tasks::ViewTasks::default();
     let attempts = Memo::new(move |_| history.with(|h| h.attempts.clone()));
     let copy_message = RwSignal::new(String::new());
@@ -256,7 +259,6 @@ pub(super) fn recipient_detail(
             aria-busy=move || history.with(History::loading).to_string()
         >
             <div class="recipient-history-heading">
-                <h3>{tr!(ui.recipient_history)}</h3>
                 <span>
                     {move || {
                         leptos_i18n::t_string!(
@@ -264,105 +266,104 @@ pub(super) fn recipient_detail(
                         )
                     }}
                 </span>
+                <Show when=crate::campaigns::editable>
+                    <ActionButton
+                        disabled=Signal::derive(move || !history.with(History::has_loaded))
+                        on_click=move |_| { editing.set(true) }
+                    >
+                        {tr!(ui.edit_timeline)}
+                    </ActionButton>
+                </Show>
             </div>
-            <crate::shared::components::QueryStatus
-                fetching=outcomes.fetching
-                has_data=Signal::derive(move || outcomes.data.with(Option::is_some))
-                error=outcomes.error
-                noun=trs!(ui.results)
-                refresh=outcomes.refresh
-            />
-            <dl class="delivery-metrics">
-                {[
-                    (trs!(ui.accepted), 0),
-                    (trs!(ui.opened), 1),
-                    (trs!(ui.clicked), 2),
-                    (trs!(ui.submitted), 3),
-                    (trs!(ui.reported), 4),
-                ]
-                    .into_iter()
-                    .map(|(label, index)| {
-                        view! {
+            <QueryBoundary
+                fetching=Signal::derive(move || history.with(History::loading))
+                has_data=Signal::derive(move || history.with(History::has_loaded))
+                error=Signal::derive(move || history.with(|h| h.error.clone()))
+                noun=trs!(ui.recipient_history)
+                refresh=Callback::new(move |_| fetch(
+                    tasks,
+                    api,
+                    campaign,
+                    result,
+                    history,
+                    history.get_untracked().retry_older,
+                ))
+            >
+                <div class="recipient-history-columns">
+                    <section>
+                        <h4>{tr!(ui.result_history)}</h4>
+                        {crate::event_table::timeline(history)}
+                    </section>
+                    <section class="recipient-attempts">
+                        <h4>{tr!(ui.delivery_attempts)}</h4>
+                        <Show when=move || {
+                            history.with(|h| h.has_loaded() && h.attempts.is_empty())
+                        }>
+                            <p>{tr!(ui.no_delivery_attempts)}</p>
+                        </Show>
+                        {move || {
+                            attempts
+                                .get()
+                                .into_values()
+                                .rev()
+                                .map(|attempt| attempt_details(attempt, copy_message))
+                                .collect_view()
+                        }}
+                        <span class="copy-status" role="status">
+                            {move || copy_message.get()}
+                        </span>
+                    </section>
+                </div>
+                <Show when=move || editing.get()>
+                    <Dialog
+                        title=trs!(ui.edit_timeline)
+                        class="event-edit-dialog"
+                        busy=locked
+                        on_cancel=Callback::new(move |_| editing.set(false))
+                    >
+                        <div class="recipient-history-heading">
                             <div>
-                                <dt>{move || label.get()}</dt>
-                                <dd>
+                                <h2>{tr!(ui.edit_timeline)}</h2>
+                                <p>
                                     {move || {
-                                        outcomes
-                                            .data
-                                            .with(|v| v.as_ref().map(|v| v.totals.values()[index]))
+                                        array(&refresh.get(), "items")
+                                            .into_iter()
+                                            .find(|row| row["id"] == result)
+                                            .map(|row| text(&row, "email"))
                                     }}
-                                </dd>
+                                </p>
                             </div>
-                        }
-                    })
-                    .collect_view()}
-            </dl>
-            <p>{tr!(ui.recipient_observation_counts)}</p>
-            <Show when=move || history.with(History::loading)>
-                <p role="status">{tr!(ui.loading_history)}</p>
-            </Show>
-            {move || {
-                history
-                    .get()
-                    .error
-                    .map(|error| {
-                        view! {
-                            <div class="form-message error" role="alert">
-                                <p>{error}</p>
-                                <ActionButton
-                                    kind="button"
-                                    on_click=move |_| fetch(
-                                        tasks,
-                                        api,
-                                        campaign,
-                                        result,
-                                        history,
-                                        history.get_untracked().retry_older,
-                                    )
-                                >
-                                    {tr!(ui.retry_history)}
-                                </ActionButton>
-                            </div>
-                        }
-                    })
-            }}
-            <div class="recipient-history-columns">
-                <section>
-                    <h4>{tr!(ui.recipient_events)}</h4>
-                    {crate::event_table::table(api, campaign, result, history)}
-                    <Show when=move || {
-                        !history.with(History::loading)
-                            && history.with(|h| h.error.is_none() && h.events.is_empty())
-                    }>
-                        <p>{tr!(ui.no_attempts_or_recipient_events_recorded_yet)}</p>
-                    </Show>
-                </section>
-                <section class="recipient-attempts">
-                    <h4>{tr!(ui.delivery_attempts)}</h4>
-                    {move || {
-                        attempts
-                            .get()
-                            .into_values()
-                            .rev()
-                            .map(|attempt| attempt_details(attempt, copy_message))
-                            .collect_view()
-                    }}
-                    <p class="copy-status" role="status">
-                        {move || copy_message.get()}
-                    </p>
-                </section>
-            </div>
-            <Show when=move || {
-                history.with(|h| h.next_attempt.is_some() || h.next_event.is_some())
-            }>
-                <ActionButton
-                    kind="button"
-                    disabled=Signal::derive(move || history.with(History::loading))
-                    on_click=move |_| fetch(tasks, api, campaign, result, history, true)
-                >
-                    {tr!(ui.load_earlier_history)}
-                </ActionButton>
-            </Show>
+                            <ActionButton disabled=locked on_click=move |_| editing.set(false)>
+                                {tr!(ui.close)}
+                            </ActionButton>
+                        </div>
+                        {crate::event_table::table(api, campaign, result, history, editor)}
+                        <Show when=move || {
+                            history.with(|h| h.next_event.is_some() || h.next_attempt.is_some())
+                        }>
+                            <ActionButton
+                                disabled=Signal::derive(move || {
+                                    locked.get() || history.with(History::loading)
+                                })
+                                on_click=move |_| fetch(tasks, api, campaign, result, history, true)
+                            >
+                                {tr!(ui.load_earlier_history)}
+                            </ActionButton>
+                        </Show>
+                    </Dialog>
+                </Show>
+                <Show when=move || {
+                    history.with(|h| h.next_attempt.is_some() || h.next_event.is_some())
+                }>
+                    <ActionButton
+                        kind="button"
+                        disabled=Signal::derive(move || history.with(History::loading))
+                        on_click=move |_| fetch(tasks, api, campaign, result, history, true)
+                    >
+                        {tr!(ui.load_earlier_history)}
+                    </ActionButton>
+                </Show>
+            </QueryBoundary>
         </section>
     }
 }

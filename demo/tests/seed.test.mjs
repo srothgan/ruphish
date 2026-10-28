@@ -66,6 +66,24 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
         const demo = createDemoApi({ now: 1793016000, storage: { getItem: k => memory.get(k), setItem: (k, v) => memory.set(k, v), removeItem: k => memory.delete(k) } });
         const post = (path, body) => demo.execute(new Request(`https://demo.example.test${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }));
         assert.equal((await post('/auth/login', { username: 'demo', password: 'demodemo' })).status, 200);
+        for (const [query, totals] of [
+            ['source=public', { accepted: 0, opened: 304, clicked: 46, submitted: 12, reported: 63 }],
+            ['source=application', { accepted: 617, opened: 0, clicked: 0, submitted: 0, reported: 0 }],
+            ['source=public&recipients=20001&event=email_opened,link_clicked', { accepted: 0, opened: 1, clicked: 1, submitted: 0, reported: 0 }],
+            ['source=mailbox', { accepted: 0, opened: 0, clicked: 0, submitted: 0, reported: 70 }],
+            ['source=operator', { accepted: 0, opened: 16, clicked: 2, submitted: 0, reported: 7 }],
+            ['source=mailbox&event=link_clicked', { accepted: 0, opened: 0, clicked: 0, submitted: 0, reported: 0 }],
+        ]) {
+            const path = `/api/campaigns/2/results?${query}`;
+            const response = await fetch(`http://127.0.0.1:${port}${path}`, { headers: { Authorization: `Bearer ${apiKey}` } });
+            assert.equal(response.status, 200, path);
+            const actual = await response.json();
+            const sample = await (await demo.execute(new Request(`https://demo.example.test${path}`))).json();
+            assert.deepEqual(actual.totals, totals, path);
+            assert.deepEqual(sample.totals, totals, path);
+            assert.equal(actual.event_total, sample.event_total, path);
+            assert.equal(actual.recipient_total, sample.recipient_total, path);
+        }
         const exportPath = '/api/campaigns/3/export?format=csv&scope=recipients&recipients=30001,30002&limit=1&offset=1';
         const live = await fetch(`http://127.0.0.1:${port}${exportPath}`, { headers: { Authorization: `Bearer ${apiKey}` } });
         const simulated = await demo.execute(new Request(`https://demo.example.test${exportPath}`));

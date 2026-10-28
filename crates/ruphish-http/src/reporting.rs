@@ -44,11 +44,18 @@ fn filter(f: &Filter) -> Result<app::Filter, Rejection> {
             "analysis_invalid_filter",
         )
     };
-    let event = if f.event.is_empty() {
-        None
-    } else {
-        Some(app::Kind::from_key(&f.event).ok_or_else(invalid)?)
-    };
+    let mut event = Vec::new();
+    if !f.event.is_empty() {
+        if f.event.len() > 160 {
+            return Err(invalid());
+        }
+        for key in f.event.split(',') {
+            let kind = app::Kind::from_key(key).ok_or_else(invalid)?;
+            if !event.contains(&kind) {
+                event.push(kind);
+            }
+        }
+    }
     let source = if f.source.is_empty() {
         None
     } else {
@@ -94,6 +101,8 @@ async fn read(
         .await
         .map_err(error)?;
     let value = reads::Results {
+        first_observed: a.first_observed.into(),
+        last_observed: a.last_observed.into(),
         id: a.id,
         name: a.name,
         status: a.status,
@@ -173,4 +182,45 @@ async fn export(
         d.bytes,
     )
         .into_response())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod filter_tests {
+    use super::*;
+    #[test]
+    fn multiple_event_types_are_a_validated_set() {
+        let parsed = filter(&Filter {
+            event: "email_opened,link_clicked,email_opened".into(),
+            ..Default::default()
+        })
+        .ok()
+        .unwrap();
+        assert_eq!(
+            parsed.event,
+            vec![app::Kind::EmailOpened, app::Kind::LinkClicked]
+        );
+        for event in [
+            "email_opened,unknown",
+            "email_opened,",
+            ",",
+            "Email Opened",
+            "link_clicked OR 1=1",
+        ] {
+            assert!(
+                filter(&Filter {
+                    event: event.into(),
+                    ..Default::default()
+                })
+                .is_err()
+            );
+        }
+        assert!(
+            filter(&Filter {
+                event: "email_opened,".repeat(100),
+                ..Default::default()
+            })
+            .is_err()
+        );
+    }
 }

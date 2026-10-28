@@ -171,3 +171,85 @@ mod tests {
         assert!(time_axis(0, 2592000, 240).0 > time_axis(0, 2592000, 1440).0);
     }
 }
+
+/// Timing of the first recorded interaction, independent of visible history pages.
+#[derive(Debug, PartialEq, Eq)]
+pub enum InteractionTiming {
+    /// No opened, clicked, submitted or reported event was recorded.
+    NotObserved,
+    /// Evidence exists but cannot be related to a valid SMTP acceptance instant.
+    Unavailable,
+    /// Nonnegative elapsed seconds from acceptance to the first interaction.
+    AfterAcceptance(u64),
+}
+
+/// Use the earliest observed interaction; never infer a missing open from a click,
+/// or skip an earlier inconsistent timestamp in favor of a convenient later one.
+pub fn first_interaction(first: [Option<i64>; 5], totals: [i64; 5]) -> InteractionTiming {
+    if totals[1..].iter().all(|count| *count == 0) {
+        return InteractionTiming::NotObserved;
+    }
+    if (1..5).any(|index| totals[index] > 0 && first[index].is_none()) {
+        return InteractionTiming::Unavailable;
+    }
+    let earliest = first[1..].iter().flatten().min().copied();
+    match first[0]
+        .zip(earliest)
+        .and_then(|(accepted, event)| event.checked_sub(accepted))
+    {
+        Some(seconds) if seconds >= 0 => InteractionTiming::AfterAcceptance(seconds as u64),
+        _ => InteractionTiming::Unavailable,
+    }
+}
+
+#[cfg(test)]
+mod interaction_timing_tests {
+    use super::{InteractionTiming::*, first_interaction};
+    #[test]
+    fn timing_uses_recorded_evidence_even_when_the_first_event_is_not_an_open() {
+        assert_eq!(
+            first_interaction(
+                [Some(100), None, Some(160), Some(200), Some(150)],
+                [1, 0, 1, 1, 1]
+            ),
+            AfterAcceptance(50)
+        );
+        assert_eq!(
+            first_interaction([Some(100), Some(100), None, None, None], [1, 3, 0, 0, 0]),
+            AfterAcceptance(0)
+        );
+        assert_eq!(
+            first_interaction([Some(100), None, None, None, None], [1, 0, 0, 0, 0]),
+            NotObserved
+        );
+    }
+    #[test]
+    fn incomplete_or_inconsistent_history_never_becomes_an_invented_response_time() {
+        assert_eq!(
+            first_interaction([Some(100), None, Some(160), None, None], [1, 1, 1, 0, 0]),
+            Unavailable
+        );
+        assert_eq!(
+            first_interaction([None, Some(150), None, None, None], [0, 1, 0, 0, 0]),
+            Unavailable
+        );
+        assert_eq!(
+            first_interaction([Some(100), None, None, None, None], [1, 1, 0, 0, 0]),
+            Unavailable
+        );
+        assert_eq!(
+            first_interaction(
+                [Some(100), Some(90), Some(150), None, None],
+                [1, 1, 1, 0, 0]
+            ),
+            Unavailable
+        );
+        assert_eq!(
+            first_interaction(
+                [Some(i64::MIN), Some(i64::MAX), None, None, None],
+                [1, 1, 0, 0, 0]
+            ),
+            Unavailable
+        );
+    }
+}

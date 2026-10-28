@@ -15,7 +15,7 @@ sidebar:
 | `recipients` | Comma-separated numeric recipient-row IDs; at most 200 |
 | `from` | Inclusive UTC Unix seconds |
 | `until` | Exclusive UTC Unix seconds |
-| `event` | Stable event identifier; omit for all events |
+| `event` | Comma-separated stable event identifiers (union); omit for all events |
 | `source` | `legacy`, `application`, `public`, `mailbox`, or `operator`; omit for all sources |
 | `search` | Case-insensitive recipient name/email substring |
 | `sort` | Recipient column: `email` (default), `name`, `delivery`, `accepted`, `opened`, `clicked`, `submitted`, or `reported` |
@@ -25,7 +25,7 @@ sidebar:
 | `offset` | Table offset, default 0 |
 | `limit` | Requested table rows, 1–200; default 50 |
 
-Recipient filters intersect when combined. Invalid filters fail rather than silently broadening the result. Supported event filters are `campaign_created`, `email_sent`, `email_error`, `email_opened`, `link_clicked`, `form_submitted`, `email_reported`, and `delivery_reconciled`. Display labels are not filter identifiers; for example, use `event=form_submitted`. Unknown event identifiers or sources return `400`.
+Recipient filters intersect when combined. Event types are combined as a union; duplicates are ignored. Invalid filters fail rather than silently broadening the result. Supported event filters are `campaign_created`, `email_sent`, `email_error`, `email_opened`, `link_clicked`, `form_submitted`, `email_reported`, and `delivery_reconciled`. Display labels are not filter identifiers; for example, use `event=email_opened,form_submitted`. Unknown event identifiers or sources return `400`.
 
 Sorting applies to the complete filtered collection before pagination. Recipient text uses case-sensitive Unicode order, and counts sort numerically. Event-kind ordering uses the readable event name shown in the table and exports. Equal recipient values use ascending recipient ID; equal event values use event ID in the selected direction. Presence sorts absent, false, then true in ascending order. Undated historical report flags do not contribute to the recorded report count. Unknown sort columns or directions return `400`.
 
@@ -34,6 +34,8 @@ Changing sort or filters should reset `offset` to zero. Separate requests read c
 For example, `/api/campaigns/42/results?limit=25&offset=0` reads the first page for campaign 42. That ID is illustrative; use an execution returned by your installation.
 
 ## Snapshot fields
+
+`first_observed` and `last_observed` contain the earliest/latest effective UTC Unix second for each metric across the complete filtered selection, before pagination. Both are objects with required `accepted`, `opened`, `clicked`, `submitted` and `reported` fields; a field is `null` when no valid timestamp exists. These are observed times, not inferred progression timestamps.
 
 The response contains campaign `id`, `name`, `status`, `as_of` (UTC Unix seconds), unfiltered `audience`, filtered `recipient_total` and `event_total`, current `recipients` and `events` pages, chart `buckets`, and `bucket_seconds`.
 

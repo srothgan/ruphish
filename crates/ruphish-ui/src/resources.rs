@@ -319,9 +319,7 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
                 }
                     .to_owned()
             >
-                <ActionButton disabled=list.fetching on_click=move |_| list.refresh.run(())>
-                    {tr!(ui.refresh)}
-                </ActionButton>
+                <RefreshButton fetching=list.fetching on_refresh=list.refresh />
                 <ActionButton hidden=!can_edit on_click=move |_| import_open.set(true)>
                     {tr!(ui.import)}
                 </ActionButton>
@@ -346,108 +344,111 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
                 token=token.get_value()
                 on_deleted=deleted
             />
-            <ListToolbar
-                search=search
-                count=Signal::derive(move || visible.with(Vec::len))
-                count_known=confirmed
-                noun=Signal::derive(move || family.plural().to_owned())
-            />
-            <QueryStatus
+            <QueryBoundary
                 fetching=list.fetching
                 has_data=confirmed
                 error=list.error
                 noun=Signal::derive(move || family.plural().to_owned())
                 refresh=list.refresh
-            />
-            <DataTable
-                sorting=sorting
-                columns=vec!["name", "count", "modified_date", ""]
-                label=Signal::derive(move || family.title().to_owned())
-                empty=Signal::derive(move || visible.with(Vec::is_empty))
-                headers=vec![
-                    trs!(ui.name),
-                    if family == Family::Groups {
-                        trs!(ui.recipients)
-                    } else {
-                        trs!(ui.active_campaigns)
-                    },
-                    trs!(ui.last_modified),
-                    trs!(ui.actions),
-                ]
             >
-                {move || {
-                    sorting
-                        .rows(
-                            visible.get(),
-                            |row, key| match key {
-                                "count" => row.count.into(),
-                                "modified_date" => {
-                                    sort_timestamp(row.modified_date.as_deref().unwrap_or_default())
-                                }
-                                _ => row.name.clone().into(),
-                            },
-                            |row| row.id.into(),
-                        )
-                        .into_iter()
-                        .map(|v| {
-                            let id = v.id;
-                            let delete_name = v.name.clone();
-                            view! {
-                                <tr>
-                                    <th scope="row">
-                                        <a href=format!("/{}/{id}", family.route())>{v.name}</a>
-                                    </th>
-                                    <td>{v.count}</td>
-                                    <td>
-                                        {crate::time_display::instant(
-                                            &serde_json::json!(v.modified_date),
-                                        )}
-                                    </td>
-                                    <td>
-                                        <ResourceActions
-                                            view_href=format!("/{}/{id}", family.route())
-                                            edit_href=format!("/{}/{id}/edit", family.route())
-                                            can_edit=can_edit
-                                            size=ControlSize::Small
-                                            disabled=deletion.busy
-                                            on_delete=Callback::new(move |()| {
-                                                deletion
-                                                    .select(DeleteTarget {
-                                                        id,
-                                                        name: delete_name.clone(),
-                                                        path: format!("/api/{}/{id}", family.route()),
-                                                        revision: None,
-                                                        description: leptos_i18n::t_string!(
-                                                            i18n, ui.this_permanently_removes_the_saved_resource_resources_used_by_unfinished_campaig
-                                                        ),
-                                                    })
-                                            })
-                                        >
-                                            <ActionLink
-                                                hidden=!can_edit
+                <QueryControls slot:controls>
+                    <ListToolbar
+                        search=search
+                        count=Signal::derive(move || visible.with(Vec::len))
+                        count_known=confirmed
+                        noun=Signal::derive(move || family.plural().to_owned())
+                    />
+                </QueryControls>
+                <DataTable
+                    sorting=sorting
+                    columns=vec!["name", "count", "modified_date", ""]
+                    label=Signal::derive(move || family.title().to_owned())
+                    empty=Signal::derive(move || visible.with(Vec::is_empty))
+                    headers=vec![
+                        trs!(ui.name),
+                        if family == Family::Groups {
+                            trs!(ui.recipients)
+                        } else {
+                            trs!(ui.active_campaigns)
+                        },
+                        trs!(ui.last_modified),
+                        trs!(ui.actions),
+                    ]
+                >
+                    {move || {
+                        sorting
+                            .rows(
+                                visible.get(),
+                                |row, key| match key {
+                                    "count" => row.count.into(),
+                                    "modified_date" => {
+                                        sort_timestamp(
+                                            row.modified_date.as_deref().unwrap_or_default(),
+                                        )
+                                    }
+                                    _ => row.name.clone().into(),
+                                },
+                                |row| row.id.into(),
+                            )
+                            .into_iter()
+                            .map(|v| {
+                                let id = v.id;
+                                let delete_name = v.name.clone();
+                                view! {
+                                    <tr>
+                                        <th scope="row">
+                                            <a href=format!("/{}/{id}", family.route())>{v.name}</a>
+                                        </th>
+                                        <td>{v.count}</td>
+                                        <td>
+                                            {crate::time_display::instant(
+                                                &serde_json::json!(v.modified_date),
+                                            )}
+                                        </td>
+                                        <td>
+                                            <ResourceActions
+                                                view_href=format!("/{}/{id}", family.route())
+                                                edit_href=format!("/{}/{id}/edit", family.route())
+                                                can_edit=can_edit
                                                 size=ControlSize::Small
                                                 disabled=deletion.busy
-                                                href=format!("/{}/new?duplicate={id}", family.route())
+                                                on_delete=Callback::new(move |()| {
+                                                    deletion
+                                                        .select(DeleteTarget {
+                                                            id,
+                                                            name: delete_name.clone(),
+                                                            path: format!("/api/{}/{id}", family.route()),
+                                                            revision: None,
+                                                            description: leptos_i18n::t_string!(
+                                                                i18n, ui.this_permanently_removes_the_saved_resource_resources_used_by_unfinished_campaig
+                                                            ),
+                                                        })
+                                                })
                                             >
-                                                {tr!(ui.duplicate)}
-                                            </ActionLink>
-                                        </ResourceActions>
-                                    </td>
-                                </tr>
-                            }
-                        })
-                        .collect_view()
-                }}
-            </DataTable>
-            <ListEmptyState
-                ready=Signal::derive(move || {
-                    confirmed.get() && !list.fetching.get() && list.error.get().is_none()
-                })
-                count=Signal::derive(move || visible.with(Vec::len))
-                search=search
-                title=Signal::derive(move || family.empty_title().to_owned())
-                guidance=Signal::derive(move || family.empty_guidance().to_owned())
-            />
+                                                <ActionLink
+                                                    hidden=!can_edit
+                                                    size=ControlSize::Small
+                                                    disabled=deletion.busy
+                                                    href=format!("/{}/new?duplicate={id}", family.route())
+                                                >
+                                                    {tr!(ui.duplicate)}
+                                                </ActionLink>
+                                            </ResourceActions>
+                                        </td>
+                                    </tr>
+                                }
+                            })
+                            .collect_view()
+                    }}
+                </DataTable>
+                <ListEmptyState
+                    ready=Signal::derive(move || { confirmed.get() && list.error.get().is_none() })
+                    count=Signal::derive(move || visible.with(Vec::len))
+                    search=search
+                    title=Signal::derive(move || family.empty_title().to_owned())
+                    guidance=Signal::derive(move || family.empty_guidance().to_owned())
+                />
+            </QueryBoundary>
         </ManagementPage>
     }
 }
@@ -671,76 +672,84 @@ fn edit(
                     })}
 
             </PageHeader>
-            {matches!(
-                family,
-                Family::Templates | Family::Pages | Family::LearningPages | Family::Profiles
-            )
-                .then(|| {
-                    view! {
-                        <p class="resource-usage">
-                            {tr!(
-                                ui.campaigns_use_the_current_saved_version_of_this_resource_editing_it_can_affect_u
-                            )}
-                        </p>
-                    }
-                })}
-            {editor.import_review.map(|review| import_review_panel(review, editor.message))}
-            {editor.message.view()}
-            <ValidationSummary form=validation />
-            <Show when=move || loading.get()>
-                <p>{tr!(ui.loading_resource)}</p>
-            </Show>
-            <FormFields disabled=Signal::derive(move || {
-                load_failed.get() || editor.readonly || loading.get() || editor.busy.get()
-            })>{editor.field("name", trs!(ui.name), "text")}{content}</FormFields>
-            <FormFooter spread=true>
-                <ActionButton
-                    style=ButtonStyle::Ghost
-                    disabled=Signal::derive(move || {
-                        loading.get() || load_failed.get() || editor.busy.get()
-                    })
-                    on_click=move |_| {
-                        editor.draft.update(ResourceDraft::cancel);
-                        editor.epoch.update(|v| *v += 1);
-                        let id = editor
-                            .draft
-                            .with_untracked(|d| d.value()["id"].as_i64().unwrap_or(0));
-                        editor
-                            .replace_url
-                            .run(
-                                if id > 0 {
-                                    format!("/{}/{id}", family.route())
-                                } else {
-                                    format!("/{}", family.route())
-                                },
-                            );
-                    }
-                >
-                    {tr!(ui.cancel_changes)}
-                </ActionButton>
-                <SaveButton
-                    disabled=Signal::derive(move || {
-                        loading.get() || load_failed.get() || editor.readonly || editor.busy.get()
-                            || editor.visual_pending.get()
-                            || editor.import_review.is_some_and(|r| !r.with(ImportReview::ready))
-                    })
-                    on_click=Callback::new(save)
-                    label=Signal::derive(move || {
-                        if editor.draft.with(|d| d.value()["id"].as_i64().unwrap_or(0) == 0) {
-                            leptos_i18n::t_string!(
-                                i18n, messages.create_arg0, arg0 = (family.singular()).to_string()
-                            )
-                        } else {
-                            leptos_i18n::t_string!(i18n, ui.save_changes).into()
+            <QueryBoundary
+                fetching=loading.into()
+                has_data=Signal::derive(move || !loading.get() && !load_failed.get())
+                error=Signal::derive(move || load_error.get().map(|e| e.message))
+                noun=Signal::derive(move || family.singular().to_owned())
+                refresh=Callback::new(move |_| reload.update(|n| *n += 1))
+            >
+                {matches!(
+                    family,
+                    Family::Templates | Family::Pages | Family::LearningPages | Family::Profiles
+                )
+                    .then(|| {
+                        view! {
+                            <p class="resource-usage">
+                                {tr!(
+                                    ui.campaigns_use_the_current_saved_version_of_this_resource_editing_it_can_affect_u
+                                )}
+                            </p>
                         }
-                    })
-                />
-            </FormFooter>
-            {move || {
-                test_open
-                    .get()
-                    .then(|| test_panel(api, token.get_value(), family, editor, test_open))
-            }}
+                    })}
+                {editor.import_review.map(|review| import_review_panel(review, editor.message))}
+                {editor.message.view()}
+                <ValidationSummary form=validation />
+
+                <FormFields disabled=Signal::derive(move || {
+                    load_failed.get() || editor.readonly || loading.get() || editor.busy.get()
+                })>{editor.field("name", trs!(ui.name), "text")}{content}</FormFields>
+                <FormFooter spread=true>
+                    <ActionButton
+                        style=ButtonStyle::Ghost
+                        disabled=Signal::derive(move || {
+                            loading.get() || load_failed.get() || editor.busy.get()
+                        })
+                        on_click=move |_| {
+                            editor.draft.update(ResourceDraft::cancel);
+                            editor.epoch.update(|v| *v += 1);
+                            let id = editor
+                                .draft
+                                .with_untracked(|d| d.value()["id"].as_i64().unwrap_or(0));
+                            editor
+                                .replace_url
+                                .run(
+                                    if id > 0 {
+                                        format!("/{}/{id}", family.route())
+                                    } else {
+                                        format!("/{}", family.route())
+                                    },
+                                );
+                        }
+                    >
+                        {tr!(ui.cancel_changes)}
+                    </ActionButton>
+                    <SaveButton
+                        disabled=Signal::derive(move || {
+                            loading.get() || load_failed.get() || editor.readonly
+                                || editor.busy.get() || editor.visual_pending.get()
+                                || editor
+                                    .import_review
+                                    .is_some_and(|r| !r.with(ImportReview::ready))
+                        })
+                        on_click=Callback::new(save)
+                        label=Signal::derive(move || {
+                            if editor.draft.with(|d| d.value()["id"].as_i64().unwrap_or(0) == 0) {
+                                leptos_i18n::t_string!(
+                                    i18n, messages.create_arg0, arg0 = (family.singular()).to_string()
+                                )
+                            } else {
+                                leptos_i18n::t_string!(i18n, ui.save_changes).into()
+                            }
+                        })
+                    />
+                </FormFooter>
+                {move || {
+                    test_open
+                        .get()
+                        .then(|| test_panel(api, token.get_value(), family, editor, test_open))
+                }}
+            </QueryBoundary>
         </ManagementPage>
     };
     view! {
@@ -2042,47 +2051,48 @@ fn test_panel(
             {profiles
                 .map(|read| {
                     view! {
-                        <QueryStatus
+                        <QueryBoundary
                             fetching=read.fetching
                             has_data=Signal::derive(move || read.data.with(Option::is_some))
                             error=read.error
                             noun=trs!(ui.sending_profiles)
                             refresh=read.refresh
-                        />
-                        <Select
-                            label=trs!(ui.sending_profile)
-                            value=selected
-                            disabled=Signal::derive(move || busy.get())
-                            on_change=Callback::new(move |v| selected.set(v))
                         >
-                            <option value="">{tr!(ui.choose_a_profile)}</option>
-                            {move || {
-                                (!selected.get().is_empty() && profile_name.get().is_none())
-                                    .then(|| {
-                                        view! {
-                                            <option value=selected.get() selected=true disabled=true>
-                                                {tr!(ui.unavailable)}
-                                            </option>
-                                        }
-                                    })
-                            }}
-                            {move || {
-                                read.data
-                                    .get()
-                                    .unwrap_or_default()
-                                    .into_iter()
-                                    .map(|row| {
-                                        let id = row.id.to_string();
-                                        let is_selected = selected.get() == id;
-                                        view! {
-                                            <option value=id selected=is_selected>
-                                                {row.name}
-                                            </option>
-                                        }
-                                    })
-                                    .collect_view()
-                            }}
-                        </Select>
+                            <Select
+                                label=trs!(ui.sending_profile)
+                                value=selected
+                                disabled=Signal::derive(move || busy.get())
+                                on_change=Callback::new(move |v| selected.set(v))
+                            >
+                                <option value="">{tr!(ui.choose_a_profile)}</option>
+                                {move || {
+                                    (!selected.get().is_empty() && profile_name.get().is_none())
+                                        .then(|| {
+                                            view! {
+                                                <option value=selected.get() selected=true disabled=true>
+                                                    {tr!(ui.unavailable)}
+                                                </option>
+                                            }
+                                        })
+                                }}
+                                {move || {
+                                    read.data
+                                        .get()
+                                        .unwrap_or_default()
+                                        .into_iter()
+                                        .map(|row| {
+                                            let id = row.id.to_string();
+                                            let is_selected = selected.get() == id;
+                                            view! {
+                                                <option value=id selected=is_selected>
+                                                    {row.name}
+                                                </option>
+                                            }
+                                        })
+                                        .collect_view()
+                                }}
+                            </Select>
+                        </QueryBoundary>
                     }
                 })}
             <ActionButton
@@ -2113,48 +2123,49 @@ fn test_panel(
                         }
                     })
                     .collect_view()} <div>
-                    <QueryStatus
+                    <QueryBoundary
                         fetching=pages.fetching
                         has_data=Signal::derive(move || pages.data.with(Option::is_some))
                         error=pages.error
                         noun=trs!(ui.landing_pages)
                         refresh=pages.refresh
-                    />
-                    <Select
-                        label=trs!(ui.preview_landing_page)
-                        value=page
-                        disabled=Signal::derive(move || busy.get())
-                        on_change=Callback::new(move |v| page.set(v))
                     >
-                        <option value="">{tr!(ui.no_landing_page)}</option>
-                        {move || {
-                            (!page.get().is_empty() && page_name.get().is_none())
-                                .then(|| {
-                                    view! {
-                                        <option value=page.get() selected=true disabled=true>
-                                            {tr!(ui.unavailable)}
-                                        </option>
-                                    }
-                                })
-                        }}
-                        {move || {
-                            pages
-                                .data
-                                .get()
-                                .unwrap_or_default()
-                                .into_iter()
-                                .map(|row| {
-                                    let id = row.id.to_string();
-                                    let is_selected = page.get() == id;
-                                    view! {
-                                        <option value=id selected=is_selected>
-                                            {row.name}
-                                        </option>
-                                    }
-                                })
-                                .collect_view()
-                        }}
-                    </Select>
+                        <Select
+                            label=trs!(ui.preview_landing_page)
+                            value=page
+                            disabled=Signal::derive(move || busy.get())
+                            on_change=Callback::new(move |v| page.set(v))
+                        >
+                            <option value="">{tr!(ui.no_landing_page)}</option>
+                            {move || {
+                                (!page.get().is_empty() && page_name.get().is_none())
+                                    .then(|| {
+                                        view! {
+                                            <option value=page.get() selected=true disabled=true>
+                                                {tr!(ui.unavailable)}
+                                            </option>
+                                        }
+                                    })
+                            }}
+                            {move || {
+                                pages
+                                    .data
+                                    .get()
+                                    .unwrap_or_default()
+                                    .into_iter()
+                                    .map(|row| {
+                                        let id = row.id.to_string();
+                                        let is_selected = page.get() == id;
+                                        view! {
+                                            <option value=id selected=is_selected>
+                                                {row.name}
+                                            </option>
+                                        }
+                                    })
+                                    .collect_view()
+                            }}
+                        </Select>
+                    </QueryBoundary>
                 </div>
             </div>
             {message.view()}

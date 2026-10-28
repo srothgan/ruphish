@@ -27,6 +27,18 @@ Keep confirmed resource data separate from incomplete form state. Preserve recov
 
 Use shared localization and date/time helpers; avoid literal English strings or feature-specific timestamp parsers. The [localization guide](localization.md) explains translation keys, error-code mapping, and independent account preferences.
 
+## Campaign reads and transitions
+
+Campaign results mount only at `/campaigns/:id/results`; delivery mounts at `/campaigns/:id/delivery`. Dashboard and directory links select delivery for open campaigns and results for completed campaigns through `Section::landing`. The bare campaign URL resolves its header and replaces the history entry with that section URL before mounting section content. Creation has its own `/campaigns/new` route. Never render results at both the bare entry URL and the results URL: the first filter would change route owners and discard the presentation observer.
+
+The applied campaign filters live in the URL. The filter form holds only unapplied edits. A query key contains the campaign identity and applied filters; all sources use the same results endpoint and read policy. Draft form edits do not fetch results.
+
+`QueryView` owns the current selection's confirmed response, request progress and error. Its presentation observer may retain the last successful response while a new selection loads. This is a read-only display snapshot, not a second query cache: it is never written back under the new key and cannot make exports ready. It survives cache expiry, is replaced by a successful response (including empty results), and is cleared on access-denied or missing-record failures. The observer is scoped to the campaign view, so navigation to another campaign cannot reuse it.
+
+Derive loading controls from query state. No confirmed presentation means initial loading; hide the data controls with the data area. A pending selection with previous data keeps the filters, summaries, chart and table mounted and shows progress in Apply. Reapplying unchanged filters is a no-op; explicit refresh has its own header control. An exact cached selection may display immediately. Background refresh retains confirmed content. Temporary failures retain the presentation with an error and retry; they must not appear as successful empty results.
+
+Campaign completion controls automatic polling and focus refresh only. It does not change selection transitions, export readiness or the content boundary. Automatic refresh requires a confirmed eligible response; an initial failure offers explicit retry. Pending requests are not restarted by the poll timer. Navigation disposes the old observer, and late responses cannot replace a newer selection.
+
 ## Form validation
 
 Domain validators own reusable rules. `form_validation.rs` projects editable browser values into those validators, while shared controls associate localized diagnostics with fields and focus the first failing control. Use `FormValidation` for a form, supply `validation_field` for nested paths, and provide a `ValidationAnchor` for grouped or JavaScript-owned inputs. Errors become visible on blur or an attempted action. Editing invalidates pending diagnostic responses; a delayed failure must not annotate newer input.
@@ -49,3 +61,5 @@ Draft persistence permits incomplete configuration within its existing structura
 ## Verification
 
 Use functional Rust/JS tests for extracted transformations and request construction, then build the WASM distribution when UI output changes. Follow [validation](testing/validation.md) for the affected targets. The user performs [manual browser review](testing/manual-ui.md); a build or Node WASM test does not establish layout, keyboard, editor, or participant-browser behavior.
+
+The [built-application routing regression](testing/validation.md#campaign-route-regression) runs after building the development distribution. It uses the existing synthetic API and JSDOM to exercise the real WASM router, component identity, first-filter progress, lifecycle links, entry errors and retry. It does not contact the local server or replace manual visual review.

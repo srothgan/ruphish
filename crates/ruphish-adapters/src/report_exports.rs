@@ -148,9 +148,10 @@ pub(crate) fn generate(
         vec![
             "Event filter".into(),
             f.event
-                .map(ruphish_domain::events::Kind::label)
-                .unwrap_or_default()
-                .into(),
+                .iter()
+                .map(|kind| kind.label())
+                .collect::<Vec<_>>()
+                .join(", "),
         ],
         vec![
             "Source filter".into(),

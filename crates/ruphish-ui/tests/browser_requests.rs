@@ -602,3 +602,27 @@ fn late_session_preferences_cannot_undo_a_confirmed_save() {
     });
     owner.cleanup();
 }
+
+#[wasm_bindgen_test]
+fn campaign_german_labels_preserve_umlauts_and_resources_name() {
+    locale_window::install();
+    let owner = leptos::prelude::Owner::new();
+    owner.with(|| {
+        let i18n = ruphish_ui::localization::provide(ruphish_ui::localization::Locale::de);
+        assert_eq!(leptos_i18n::t_string!(i18n, ui.resources), "Ressourcen");
+        assert_eq!(
+            leptos_i18n::t_string!(i18n, ui.opened),
+            "E-Mail ge\u{f6}ffnet"
+        );
+        assert_eq!(
+            leptos_i18n::t_string!(i18n, ui.recipient_analysis),
+            "Empf\u{e4}ngeranalyse"
+        );
+        assert_eq!(
+            leptos_i18n::t_string!(i18n, ui.review_delivery),
+            "Versand und Ereignisse pr\u{fc}fen"
+        );
+        assert_eq!(leptos_i18n::t_string!(i18n, ui.close), "Schlie\u{df}en");
+    });
+    owner.cleanup();
+}

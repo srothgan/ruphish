@@ -9,6 +9,7 @@ export function localeWindow() {
   globalThis.removeEventListener = events.removeEventListener.bind(events);
   Object.defineProperty(globalThis, 'navigator', {configurable: true, value: {languages: ['de-DE'], language: 'de-DE'}});
 }
+export function focusBrowser() { events.dispatchEvent(new Event("focus")); }
 export function changeBrowserLocale() {
   globalThis.navigator.languages = ['fr-FR'];
   globalThis.navigator.language = 'fr-FR';
@@ -18,6 +19,8 @@ export function changeBrowserLocale() {
 extern "C" {
     #[wasm_bindgen(js_name = localeWindow)]
     pub fn install();
+    #[wasm_bindgen(js_name = focusBrowser)]
+    pub fn focus();
     #[wasm_bindgen(js_name = changeBrowserLocale)]
     pub fn change();
 }

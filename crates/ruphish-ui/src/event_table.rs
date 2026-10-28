@@ -37,11 +37,14 @@ pub(super) fn table(
     campaign: StoredValue<String>,
     recipient: i64,
     history: RwSignal<History>,
+    editor: RwSignal<Editor>,
 ) -> impl IntoView {
     let i18n = api.i18n;
+    crate::navigation::protect_draft(move || {
+        editor.with(|s| s.draft.is_some() || s.pending.is_some() || s.busy)
+    });
     let csrf = expect_context::<Csrf>().0;
     let tasks = ruphish_ui::view_tasks::ViewTasks::default();
-    let editor = RwSignal::new(Editor::default());
     let input = RwSignal::new(String::new());
     let original_input = StoredValue::new(String::new());
     let zone = StoredValue::new(crate::time_display::zone());
@@ -194,6 +197,7 @@ pub(super) fn table(
     let form = move || {
         view! {
             <div class="event-editor">
+                <h3>{move || editor.with(|s| s.draft.as_ref().map(|d| action_label(d.action)))}</h3>
                 <Show when=move || {
                     editor.with(|s| s.draft.as_ref().is_some_and(|d| d.value.is_some()))
                 }>
@@ -206,6 +210,13 @@ pub(super) fn table(
                                 disabled=locked
                                 on_input=move |e| input.set(event_target_value(&e))
                             />
+                            <small>
+                                {move || {
+                                    zone.with_value(|z| {
+                                        ruphish_domain::datetime::zone_name(z).to_owned()
+                                    })
+                                }}
+                            </small>
                         </Field>
                         <Select
                             label=trs!(ui.event)
@@ -255,24 +266,24 @@ pub(super) fn table(
                                 })
                                 .collect_view()}
                         </Select>
-                        <Show when=move || {
-                            editor
-                                .with(|s| {
-                                    s.draft
-                                        .as_ref()
-                                        .and_then(|d| d.value.as_ref())
-                                        .is_some_and(|v| v.kind == Kind::FormSubmitted)
-                                })
-                        }>
-                            {presence_select(editor, locked, false)}
-                            {presence_select(editor, locked, true)}
-                        </Show>
                     </div>
-                    <p>
-                        {move || {
-                            zone.with_value(|z| ruphish_domain::datetime::zone_name(z).to_owned())
-                        }}
-                    </p>
+                    <Show when=move || {
+                        editor
+                            .with(|s| {
+                                s.draft
+                                    .as_ref()
+                                    .and_then(|d| d.value.as_ref())
+                                    .is_some_and(|v| v.kind == Kind::FormSubmitted)
+                            })
+                    }>
+                        <fieldset class="event-presence-fields">
+                            <legend>{tr!(ui.event_form_fields)}</legend>
+                            <div class="event-edit-fields">
+                                {presence_select(editor, locked, false)}
+                                {presence_select(editor, locked, true)}
+                            </div>
+                        </fieldset>
+                    </Show>
                 </Show>
                 <Show when=move || {
                     editor.with(|s| s.draft.as_ref().is_some_and(|d| d.action == Action::Exclude))
@@ -284,7 +295,7 @@ pub(super) fn table(
                 }>
                     <p>{tr!(ui.event_restore_explanation)}</p>
                 </Show>
-                <div class="form-actions">
+                <FormFooter>
                     <ActionButton
                         kind="button"
                         style=ButtonStyle::Primary
@@ -294,6 +305,10 @@ pub(super) fn table(
                         {move || {
                             if editor.with(|s| s.pending.is_some()) {
                                 leptos_i18n::t_string!(i18n,ui.retry)
+                            } else if editor
+                                .with(|s| s.draft.as_ref().is_some_and(|d| d.action == Action::Add))
+                            {
+                                leptos_i18n::t_string!(i18n,ui.event_add)
                             } else {
                                 leptos_i18n::t_string!(i18n,ui.save_changes)
                             }
@@ -306,7 +321,7 @@ pub(super) fn table(
                     >
                         {tr!(ui.cancel)}
                     </ActionButton>
-                </div>
+                </FormFooter>
                 <Show when=move || editor.with(|s| s.pending.is_some() && !s.busy)>
                     <p>{tr!(ui.event_retry_unknown)}</p>
                 </Show>
@@ -324,9 +339,11 @@ pub(super) fn table(
                 {tr!(ui.event_add)}
             </ActionButton>
         </Show>
-        <p role="alert" class="form-message error">
-            {move || editor.with(|s| s.error.clone())}
-        </p>
+        <Show when=move || editor.with(|s| !s.error.is_empty())>
+            <p role="alert" class="form-message error has-content">
+                {move || editor.with(|s| s.error.clone())}
+            </p>
+        </Show>
         <DataTable
             label=trs!(ui.recipient_events)
             sorting=sorting
@@ -469,7 +486,7 @@ pub(super) fn table(
                                     } else {
                                         leptos_i18n::t_string!(i18n,ui.event_system)
                                     }
-                                }}<small>{move || current.get().map(|r| r.source)}</small>
+                                }}
                             </td>
                             <td>
                                 <Show when=move || current.get().is_some_and(|r| r.edited())>
@@ -531,19 +548,26 @@ pub(super) fn table(
                                             </ActionButton>
                                         </Show>
                                     </Show>
-                                    <ActionButton
-                                        kind="button"
-                                        disabled=Signal::derive(move || audit_busy.get())
-                                        on_click=move |_| {
-                                            if inspection.get_untracked().is_some() {
-                                                inspection.set(None)
-                                            } else {
-                                                inspect.run(false)
+                                    <Show when=move || {
+                                        current.get().is_some_and(|r| r.revision > 0)
+                                    }>
+                                        <ActionButton
+                                            kind="button"
+                                            expanded=Signal::derive(move || {
+                                                inspection.with(Option::is_some).to_string()
+                                            })
+                                            disabled=Signal::derive(move || audit_busy.get())
+                                            on_click=move |_| {
+                                                if inspection.get_untracked().is_some() {
+                                                    inspection.set(None)
+                                                } else {
+                                                    inspect.run(false)
+                                                }
                                             }
-                                        }
-                                    >
-                                        {tr!(ui.event_audit)}
-                                    </ActionButton>
+                                        >
+                                            {tr!(ui.event_audit)}
+                                        </ActionButton>
+                                    </Show>
                                 </div>
                             </td>
                         </tr>
@@ -560,12 +584,17 @@ pub(super) fn table(
                         }>
                             <tr>
                                 <td colspan="5">
-                                    <p role="alert">{move || audit_error.get()}</p>
+                                    <Show when=move || !audit_error.get().is_empty()>
+                                        <p role="alert">{move || audit_error.get()}</p>
+                                    </Show>
                                     {move || {
                                         inspection
                                             .get()
                                             .map(|v| {
                                                 view! {
+                                                    <p>{tr!(ui.event_audit_explanation)}</p>
+                                                    {(v.audit.is_empty())
+                                                        .then(|| view! { <p>{tr!(ui.event_no_changes)}</p> })}
                                                     <p>
                                                         <strong>{tr!(ui.event_original)}</strong>
                                                         " "
@@ -717,4 +746,75 @@ fn fact_label(fact: &ruphish_domain::event_edit::Fact, excluded: bool) -> String
         parts.push(leptos_i18n::t_string!(i18n, ui.event_excluded).into());
     }
     parts.join(" / ")
+}
+
+/// Read-only chronological history; correction controls live exclusively in the dialog.
+pub(super) fn timeline(history: RwSignal<History>) -> impl IntoView {
+    let i18n = ruphish_ui::localization::use_i18n();
+    view! {
+        <ol class="delivery-timeline">
+            <For
+                each=move || {
+                    let mut rows = history.with(|h| h.events.values().cloned().collect::<Vec<_>>());
+                    rows.sort_by_key(|row| (row["at"].as_i64(), row["id"].as_i64()));
+                    rows
+                }
+                key=|row| (row["id"].as_i64(), row["correction"]["revision"].as_i64())
+                children=move |row| {
+                    let correction = record(&row);
+                    let excluded = correction.as_ref().is_some_and(|r| r.excluded);
+                    let edited = correction.as_ref().is_some_and(Record::edited);
+                    let operator = correction.as_ref().is_some_and(|r| r.source == "operator");
+                    let label = event_title(i18n, &row);
+                    let tone = match row["message"].as_str() {
+                        Some("Email Sent") => "success",
+                        Some("Error Sending Email") => "failure",
+                        Some("Delivery reconciled") => "warning",
+                        _ => "neutral",
+                    };
+                    view! {
+                        <li class=format!("timeline-event {tone}") class:event-excluded=excluded>
+                            <span class="timeline-marker" aria-hidden="true"></span>
+                            <div>
+                                <strong>{label}</strong>
+                                <time>{instant(&row["time"])}</time>
+                                <div class="timeline-labels">
+                                    {operator
+                                        .then(|| view! { <span>{tr!(ui.event_operator)}</span> })}
+                                    {edited.then(|| view! { <span>{tr!(ui.event_edited)}</span> })}
+                                    {excluded
+                                        .then(|| view! { <span>{tr!(ui.event_excluded)}</span> })}
+                                </div>
+                            </div>
+                        </li>
+                    }
+                }
+            />
+        </ol>
+        <Show when=move || {
+            history.with(|h| h.has_loaded() && h.error.is_none() && h.events.is_empty())
+        }>
+            <p>{tr!(ui.no_attempts_or_recipient_events_recorded_yet)}</p>
+        </Show>
+    }
+}
+
+fn event_title(
+    i18n: leptos_i18n::I18nContext<ruphish_ui::localization::Locale>,
+    row: &Value,
+) -> String {
+    let message = row["message"].as_str().unwrap_or_default();
+    if message == "Delivery reconciled" {
+        let metadata: Value =
+            serde_json::from_str(row["details"].as_str().unwrap_or_default()).unwrap_or_default();
+        return match metadata["action"].as_str() {
+            Some("retry") => leptos_i18n::t_string!(i18n, ui.retry_requested).into(),
+            Some("resend_unknown") => leptos_i18n::t_string!(i18n, ui.resend_requested).into(),
+            Some("confirm_accepted") => {
+                leptos_i18n::t_string!(i18n, ui.acceptance_confirmed).into()
+            }
+            _ => leptos_i18n::t_string!(i18n, ui.delivery_resolution).into(),
+        };
+    }
+    ruphish_ui::localization::event_label(i18n, message)
 }

@@ -56,7 +56,7 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
             on_cleanup(move || cleanup.with_value(|(observer, _)| unobserve_width(observer)));
         }
     });
-    let visible = RwSignal::new([true; 5]);
+    let visible = RwSignal::new([false, true, true, true, true]);
     let active = RwSignal::new(None::<i64>);
     let bounds = Memo::new(move |_| {
         let rows = data.get();
@@ -136,7 +136,7 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
                             let span = (last - first) as f64;
                             let enabled = visible.get();
                             let rows = data.get();
-                            (0..5)
+                            (1..5)
                                 .filter(move |i| enabled[*i])
                                 .map(move |i| {
                                     let x = |time: i64| {
@@ -217,7 +217,7 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
                                         leptos_i18n::t_string!(
                                             i18n, messages.start_to_end, start = time(bucket.time), end = time(bucket.time+interval.get())
                                         ),
-                                        (0..5)
+                                        (1..5)
                                             .map(|i| {
                                                 format!("{} {}", bucket.counts[i], labels[i].get())
                                             })
@@ -278,7 +278,7 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
                                             )}
                                         </span>
                                         <dl>
-                                            {(0..5)
+                                            {(1..5)
                                                 .map(|i| {
                                                     view! {
                                                         <div>
@@ -335,6 +335,7 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
                     {labels
                         .into_iter()
                         .enumerate()
+                        .skip(1)
                         .map(|(i, label)| {
                             view! {
                                 <ActionButton
@@ -352,5 +353,82 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
                 </div>
             </Show>
         </Card>
+    }
+}
+
+/// Mutually exclusive current delivery states; retries never double-count recipients.
+pub(super) fn delivery_donut(data: Signal<serde_json::Value>) -> impl IntoView {
+    let states = [
+        "ready",
+        "preparing",
+        "submitting",
+        "retry",
+        "accepted",
+        "failed",
+        "blocked",
+        "unknown",
+        "cancelled",
+    ];
+    let total = Signal::derive(move || {
+        states
+            .iter()
+            .map(|state| data.get()["counts"][state].as_i64().unwrap_or(0).max(0))
+            .sum::<i64>()
+    });
+    view! {
+        <div class="delivery-donut" aria-hidden="true">
+            <svg viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="46" fill="none" stroke="var(--line)" stroke-width="15" />
+                {move || {
+                    let all = total.get();
+                    let mut offset = 0.0;
+                    states
+                        .into_iter()
+                        .map(|state| {
+                            let color = delivery_color(state);
+                            let count = data.get()["counts"][state].as_i64().unwrap_or(0).max(0);
+                            let size = if all > 0 {
+                                100.0 * count as f64 / all as f64
+                            } else {
+                                0.0
+                            };
+                            let start = offset;
+                            offset += size;
+                            view! {
+                                <circle
+                                    cx="60"
+                                    cy="60"
+                                    r="46"
+                                    pathLength="100"
+                                    fill="none"
+                                    stroke=color
+                                    stroke-width="15"
+                                    stroke-dasharray=format!("{size} {}", 100.0 - size)
+                                    stroke-dashoffset=(-start).to_string()
+                                    transform="rotate(-90 60 60)"
+                                />
+                            }
+                        })
+                        .collect_view()
+                }}
+                <text x="60" y="64" text-anchor="middle">
+                    {move || total.get()}
+                </text>
+            </svg>
+        </div>
+    }
+}
+
+pub(super) fn delivery_color(state: &str) -> &'static str {
+    match state {
+        "ready" => "#bacac7",
+        "preparing" => "#77a8a0",
+        "submitting" => "#3f8f84",
+        "retry" => "#c89432",
+        "accepted" => "#0b6b63",
+        "failed" => "#be4652",
+        "blocked" => "#cc7447",
+        "unknown" => "#8a6eaa",
+        _ => "#87938f",
     }
 }

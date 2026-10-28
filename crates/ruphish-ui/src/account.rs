@@ -534,8 +534,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         } else if list {
             crate::campaigns::list(api, token.get_value()).into_any()
         } else {
-            crate::campaigns::detail(api, token.get_value(), crate::campaigns::Section::Results)
-                .into_any()
+            crate::campaigns::entry().into_any()
         }
     };
     let draft_page = move |editing: bool| {
@@ -712,7 +711,23 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
             />
             <Route
                 path=path!("/campaigns/:id/results/recipients/:recipient")
-                view=move || campaign_section(crate::campaigns::Section::Results)
+                view=move || {
+                    if required {
+                        password_form(api, token.get_value(), true).into_any()
+                    } else {
+                        crate::recipient_analysis::page(api).into_any()
+                    }
+                }
+            />
+            <Route
+                path=path!("/campaigns/new")
+                view=move || {
+                    if required {
+                        password_form(api, token.get_value(), true).into_any()
+                    } else {
+                        crate::campaigns::new(api, token.get_value()).into_any()
+                    }
+                }
             />
             <Route path=path!("/campaigns/:id") view=move || campaign_page(false) />
             <Route

@@ -190,124 +190,129 @@ pub(crate) fn DisplayPreferencesForm(api: Api, token: String) -> impl IntoView {
         <Card class="account-panel">
             <h2>{tr!(preferences.heading)}</h2>
             <p>{tr!(preferences.description)}</p>
-            <QueryStatus
+            <QueryBoundary
                 fetching=Signal::derive(move || read.fetching.get())
                 has_data=Signal::derive(|| true)
                 error=Signal::derive(move || state.error.get())
                 noun=trs!(preferences.heading)
                 refresh=read.refresh
-            />
-            <form class="account-form" novalidate on:submit=submit>
-                <ValidationSummary form=validation />
-                <div class="preference-field">
-                    <Select
-                        validation_field="language"
-                        label=trs!(language.label)
-                        value=language
+            >
+                <form class="account-form" novalidate on:submit=submit>
+                    <ValidationSummary form=validation />
+                    <div class="preference-field">
+                        <Select
+                            validation_field="language"
+                            label=trs!(language.label)
+                            value=language
+                            disabled=busy
+                            on_change=Callback::new(move |value| language.set(value))
+                        >
+                            <option value="">{tr!(preferences.browser_default)}</option>
+                            {Locale::get_all()
+                                .iter()
+                                .map(|locale| {
+                                    view! {
+                                        <option value=locale.as_str() lang=locale.as_str()>
+                                            {leptos_i18n::td_string!(*locale, language.native_name)}
+                                        </option>
+                                    }
+                                })
+                                .collect_view()}
+                        </Select>
+                        <div class="preference-reset">
+                            <ActionButton
+                                style=ButtonStyle::Ghost
+                                size=ControlSize::Small
+                                disabled=Signal::derive(move || {
+                                    busy.get() || language.get().is_empty()
+                                })
+                                on_click=move |_| language.set(String::new())
+                            >
+                                {move || {
+                                    leptos_i18n::t_string!(
+                                        i18n, preferences.reset_default, value = leptos_i18n::td_string!(browser_language, language.native_name)
+                                    )
+                                }}
+                            </ActionButton>
+                        </div>
+                    </div>
+                    <div class="preference-field">
+                        <SearchSelect
+                            validation_field="format_locale"
+                            id="date-format"
+                            label=trs!(preferences.format_label)
+                            search_label=trs!(preferences.search_formats)
+                            value=format
+                            options=format_options
+                            disabled=busy
+                        />
+                        <div class="preference-reset">
+                            <ActionButton
+                                style=ButtonStyle::Ghost
+                                size=ControlSize::Small
+                                disabled=Signal::derive(move || {
+                                    busy.get() || format.get().is_empty()
+                                })
+                                on_click=move |_| format.set(String::new())
+                            >
+                                {move || {
+                                    leptos_i18n::t_string!(
+                                        i18n, preferences.reset_default, value = browser_format_name.get()
+                                    )
+                                }}
+                            </ActionButton>
+                        </div>
+                    </div>
+                    <div class="preference-field">
+                        <SearchSelect
+                            validation_field="time_zone"
+                            id="time-zone"
+                            label=trs!(preferences.zone_label)
+                            search_label=trs!(preferences.search_zones)
+                            value=zone
+                            options=zone_options
+                            disabled=busy
+                        />
+                        <div class="preference-reset">
+                            <ActionButton
+                                style=ButtonStyle::Ghost
+                                size=ControlSize::Small
+                                disabled=Signal::derive(move || busy.get() || zone.get().is_empty())
+                                on_click=move |_| zone.set(String::new())
+                            >
+                                {move || {
+                                    leptos_i18n::t_string!(
+                                        i18n, preferences.reset_default, value = browser_zone.get_value()
+                                    )
+                                }}
+                            </ActionButton>
+                        </div>
+                    </div>
+                    <Checkbox
+                        label=trs!(preferences.show_offset)
+                        checked=show_offset
                         disabled=busy
-                        on_change=Callback::new(move |value| language.set(value))
-                    >
-                        <option value="">{tr!(preferences.browser_default)}</option>
-                        {Locale::get_all()
-                            .iter()
-                            .map(|locale| {
-                                view! {
-                                    <option value=locale.as_str() lang=locale.as_str()>
-                                        {leptos_i18n::td_string!(*locale, language.native_name)}
-                                    </option>
+                        on_toggle=Callback::new(move |value| show_offset.set(value))
+                    />
+                    <p>
+                        <strong>{tr!(preferences.preview)}</strong>
+                        " "
+                        {preview}
+                    </p>
+                    {message.view()}
+                    <div class="account-actions">
+                        <ActionButton kind="submit" style=ButtonStyle::Primary disabled=busy>
+                            {move || {
+                                if busy.get() {
+                                    leptos_i18n::t_string!(i18n, ui.saving)
+                                } else {
+                                    leptos_i18n::t_string!(i18n, preferences.save)
                                 }
-                            })
-                            .collect_view()}
-                    </Select>
-                    <div class="preference-reset">
-                        <ActionButton
-                            style=ButtonStyle::Ghost
-                            size=ControlSize::Small
-                            disabled=Signal::derive(move || busy.get() || language.get().is_empty())
-                            on_click=move |_| language.set(String::new())
-                        >
-                            {move || {
-                                leptos_i18n::t_string!(
-                                    i18n, preferences.reset_default, value = leptos_i18n::td_string!(browser_language, language.native_name)
-                                )
                             }}
                         </ActionButton>
                     </div>
-                </div>
-                <div class="preference-field">
-                    <SearchSelect
-                        validation_field="format_locale"
-                        id="date-format"
-                        label=trs!(preferences.format_label)
-                        search_label=trs!(preferences.search_formats)
-                        value=format
-                        options=format_options
-                        disabled=busy
-                    />
-                    <div class="preference-reset">
-                        <ActionButton
-                            style=ButtonStyle::Ghost
-                            size=ControlSize::Small
-                            disabled=Signal::derive(move || busy.get() || format.get().is_empty())
-                            on_click=move |_| format.set(String::new())
-                        >
-                            {move || {
-                                leptos_i18n::t_string!(
-                                    i18n, preferences.reset_default, value = browser_format_name.get()
-                                )
-                            }}
-                        </ActionButton>
-                    </div>
-                </div>
-                <div class="preference-field">
-                    <SearchSelect
-                        validation_field="time_zone"
-                        id="time-zone"
-                        label=trs!(preferences.zone_label)
-                        search_label=trs!(preferences.search_zones)
-                        value=zone
-                        options=zone_options
-                        disabled=busy
-                    />
-                    <div class="preference-reset">
-                        <ActionButton
-                            style=ButtonStyle::Ghost
-                            size=ControlSize::Small
-                            disabled=Signal::derive(move || busy.get() || zone.get().is_empty())
-                            on_click=move |_| zone.set(String::new())
-                        >
-                            {move || {
-                                leptos_i18n::t_string!(
-                                    i18n, preferences.reset_default, value = browser_zone.get_value()
-                                )
-                            }}
-                        </ActionButton>
-                    </div>
-                </div>
-                <Checkbox
-                    label=trs!(preferences.show_offset)
-                    checked=show_offset
-                    disabled=busy
-                    on_toggle=Callback::new(move |value| show_offset.set(value))
-                />
-                <p>
-                    <strong>{tr!(preferences.preview)}</strong>
-                    " "
-                    {preview}
-                </p>
-                {message.view()}
-                <div class="account-actions">
-                    <ActionButton kind="submit" style=ButtonStyle::Primary disabled=busy>
-                        {move || {
-                            if busy.get() {
-                                leptos_i18n::t_string!(i18n, ui.saving)
-                            } else {
-                                leptos_i18n::t_string!(i18n, preferences.save)
-                            }
-                        }}
-                    </ActionButton>
-                </div>
-            </form>
+                </form>
+            </QueryBoundary>
         </Card>
     }
 }

@@ -89,6 +89,21 @@ pub(crate) fn ActionButton(
     }
 }
 
+/// Replace a button label with progress without changing the control's dimensions.
+#[component]
+pub(crate) fn LoadingLabel(loading: Signal<bool>, children: Children) -> impl IntoView {
+    view! {
+        <span class="button-progress" class:is-loading=move || loading.get()>
+            <span class="button-progress-label">{children()}</span>
+            <span
+                class="button-progress-spinner"
+                hidden=move || !loading.get()
+                aria-hidden="true"
+            ></span>
+        </span>
+    }
+}
+
 #[component]
 pub(crate) fn ActionLink(
     children: Children,
@@ -226,6 +241,53 @@ pub(crate) fn SaveButton(
                 }
             }
         >
+            {move || label.get()}
+        </ActionButton>
+    }
+}
+
+/// A permanent refresh glyph keeps the toolbar stable. One visible rotation acknowledges
+/// even a request that finishes before the browser paints; busy still means real fetching.
+#[component]
+pub(crate) fn RefreshButton(
+    fetching: Signal<bool>,
+    #[prop(into, default = ruphish_ui::trs!(ui.refresh))] label: Signal<String>,
+    #[prop(into, optional)] disabled: Signal<bool>,
+    on_refresh: Callback<()>,
+) -> impl IntoView {
+    let rotating = RwSignal::new(false);
+    Effect::new(move |_| {
+        if fetching.get() {
+            rotating.set(true);
+        }
+    });
+    view! {
+        <ActionButton
+            disabled=Signal::derive(move || disabled.get() || fetching.get())
+            busy=Signal::derive(move || fetching.get().to_string())
+            on_click=move |_| {
+                rotating.set(true);
+                on_refresh.run(());
+            }
+        >
+            <svg
+                class="refresh-indicator"
+                class:is-fetching=move || rotating.get()
+                on:animationiteration=move |_| {
+                    if !fetching.get_untracked() {
+                        rotating.set(false);
+                    }
+                }
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+            >
+                <path d="M20 7v5h-5M4 17v-5h5M6.1 6.1a8 8 0 0 1 13.4 3.4M17.9 17.9A8 8 0 0 1 4.5 14.5" />
+            </svg>
             {move || label.get()}
         </ActionButton>
     }

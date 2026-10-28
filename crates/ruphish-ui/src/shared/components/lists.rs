@@ -34,43 +34,6 @@ pub(crate) fn ListToolbar(
     }
 }
 
-/// Common query feedback derives from the cache; it owns no competing error state.
-#[component]
-pub(crate) fn QueryStatus(
-    fetching: Signal<bool>,
-    has_data: Signal<bool>,
-    error: Signal<Option<String>>,
-    noun: Signal<String>,
-    refresh: Callback<()>,
-) -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
-    view! {
-        <Show when=move || fetching.get()>
-            <p role="status">
-                {move || leptos_i18n::t_string!(i18n, messages.loading_arg0, arg0=noun.get())}
-            </p>
-        </Show>
-        <Show when=move || error.get().is_some()>
-            <p class="form-message error has-content" role="alert">
-                {move || {
-                    let error = error.get().unwrap_or_default();
-                    if has_data.get() {
-                        leptos_i18n::t_string!(
-                            i18n, messages.refresh_failed_displayed_data_may_be_stale_arg0, arg0=error
-                        )
-                            .to_string()
-                    } else {
-                        error
-                    }
-                }}
-            </p>
-            <ActionButton disabled=fetching on_click=move |_| refresh.run(())>
-                {move || leptos_i18n::t_string!(i18n, messages.retry_loading_arg0, arg0=noun.get())}
-            </ActionButton>
-        </Show>
-    }
-}
-
 /// Table heading and compact trailing filter controls share one aligned row.
 #[component]
 pub(crate) fn TableToolbar(

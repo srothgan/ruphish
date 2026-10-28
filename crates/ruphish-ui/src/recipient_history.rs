@@ -25,6 +25,11 @@ pub struct History {
     pub retry_older: bool,
 }
 impl History {
+    /// Whether an initial history read has completed successfully.
+    pub fn has_loaded(&self) -> bool {
+        self.initialized
+    }
+
     /// Whether this expansion currently owns an in-flight request.
     pub fn loading(&self) -> bool {
         self.active.is_some()

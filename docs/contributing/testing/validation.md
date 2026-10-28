@@ -132,6 +132,15 @@ cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --locked -- -D warnin
 
 Both local builds use `dist/.stage` and complete at `dist/admin`; rebuild the desired mode before using the output. CI builds the demo with `--release` in a separate job/cache, validates and packages it with `node demo/vercel-output.mjs`, and uploads `demo-vercel-output`. Native/provider tests consume only the normal development `admin-distribution`. [Demo deployment](../demo.md#github-build-and-vercel-deployment) consumes the optimized artifact without rebuilding. Visual review and screenshot recapture remain user tasks.
 
+## Campaign route regression
+
+After changes to campaign routes or section ownership, build the normal development distribution and exercise its actual WASM router in JSDOM with the existing synthetic API. This verifies lifecycle destinations, first and subsequent filter transitions without remounting, preserved bookmarks, and missing/denied/retry states. It does not contact a live server or verify visual layout.
+
+```sh
+trunk build --locked
+node --test crates/ruphish-ui/web/tests/campaign-routing.artifact.mjs
+```
+
 ## Complete source acceptance commands
 
 This catalog is for an explicitly selected full acceptance run. It is not a local completion checklist. Generate the real development distribution before process tests; Trunk invokes the JS/CSS generator itself:

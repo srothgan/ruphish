@@ -7,6 +7,39 @@ import { readFileSync } from 'node:fs';
 
 const now = 1793016000;
 
+
+test('source filters separate participant observations from delivery in the shared sample campaigns', async () => {
+    const f = setup(); await f.login();
+    const read = async query => {
+        const result = await f.request(`/api/campaigns/2/results?${query}`);
+        assert.equal(result.status, 200);
+        return result.value;
+    };
+    const publicEvents = await read('source=public');
+    assert.deepEqual(publicEvents.totals, { accepted: 0, opened: 304, clicked: 46, submitted: 12, reported: 63 });
+    assert.equal(publicEvents.event_total, 425);
+    assert.ok(publicEvents.events.every(e => e.source === 'public' && e.kind.value !== 'email_sent'));
+    const delivery = await read('source=application');
+    assert.deepEqual(delivery.totals, { accepted: 617, opened: 0, clicked: 0, submitted: 0, reported: 0 });
+    const selected = await read('source=public&recipients=20001&event=email_opened,link_clicked');
+    assert.equal(selected.recipient_total, 1);
+    assert.deepEqual(selected.totals, { accepted: 0, opened: 1, clicked: 1, submitted: 0, reported: 0 });
+    const mailbox = await read('source=mailbox');
+    assert.deepEqual(mailbox.totals, { accepted: 0, opened: 0, clicked: 0, submitted: 0, reported: 70 });
+    assert.ok(mailbox.events.every(e => e.kind.value === 'email_reported'));
+    const operator = await read('source=operator');
+    assert.deepEqual(operator.totals, { accepted: 0, opened: 16, clicked: 2, submitted: 0, reported: 7 });
+    assert.equal((await read('source=legacy')).event_total, 0);
+    assert.equal((await read('source=mailbox&event=link_clicked')).event_total, 0);
+    for (const id of [1, 2, 3]) {
+        for (const source of ['public', 'mailbox', 'operator']) {
+            const result = await f.request(`/api/campaigns/${id}/results?source=${source}`);
+            assert.equal(result.status, 200);
+            assert.ok(result.value.event_total > 0, `campaign ${id}, source ${source}`);
+        }
+    }
+});
+
 test('event corrections keep originals, reject stale revisions and change only effective results', async () => {
     const data=dataset(now), f=setup(new Map(),data); await f.login();
     const c=data.campaigns.find(c=>c.header.status==='Completed');
@@ -340,4 +373,20 @@ test('one dataset has complete references and safe participant history', () => {
         }
     }
     assert.deepEqual(dataset(now), data);
+});
+
+test('multiple event kinds preserve union totals and occurrence bounds across pages', async () => {
+    const data=dataset(now), f=setup(new Map(),data); await f.login();
+    const c=data.campaigns.find(c=>c.results.some(r=>r.events.some(e=>e.kind==='Clicked Link')));
+    const path=`/api/campaigns/${c.header.id}/results?event=email_opened,link_clicked`;
+    const full=(await f.request(path+'&limit=200')).value;
+    const page=(await f.request(path+'&limit=1&offset=1')).value;
+    assert.deepEqual(page.totals,full.totals);
+    assert.deepEqual(page.first_observed,full.first_observed);
+    assert.deepEqual(page.last_observed,full.last_observed);
+    assert.equal(page.totals.accepted,0);
+    assert.equal(page.totals.submitted,0);
+    assert.ok(full.totals.opened>0 && full.totals.clicked>0);
+    assert.ok(full.events.every(e=>['email_opened','link_clicked'].includes(e.kind.value)));
+    assert.equal((await f.request(path+',invalid')).status,400);
 });

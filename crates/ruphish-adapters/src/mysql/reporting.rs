@@ -22,10 +22,10 @@ const CTE: &str = r#"WITH parameters AS (SELECT ? AS campaign, ? AS since, ? AS 
 ), observed AS (
  SELECT e.* FROM effective_event_history e
  LEFT JOIN audience a ON a.id=e.recipient_id
- WHERE e.campaign_id=(SELECT campaign FROM parameters) AND ((SELECT since FROM parameters) IS NULL OR (CASE WHEN e.time>='1000' THEN TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',CAST(REPLACE(LEFT(e.time,19),'T',' ') AS DATETIME)) END)>=(SELECT since FROM parameters)) AND ((SELECT until_time FROM parameters) IS NULL OR (CASE WHEN e.time>='1000' THEN TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',CAST(REPLACE(LEFT(e.time,19),'T',' ') AS DATETIME)) END)<(SELECT until_time FROM parameters))
- AND ((SELECT event_kind FROM parameters)='' OR e.message=(SELECT event_kind FROM parameters)) AND ((SELECT source_filter FROM parameters)='' OR e.source=(SELECT source_filter FROM parameters))
+ WHERE e.campaign_id=(SELECT campaign FROM parameters) AND ((SELECT since FROM parameters) IS NULL OR __EVENT_SECOND__>=(SELECT since FROM parameters)) AND ((SELECT until_time FROM parameters) IS NULL OR __EVENT_SECOND__<(SELECT until_time FROM parameters))
+ AND ((SELECT event_kind FROM parameters)='[]' OR e.message IN (SELECT selected_events.value FROM parameters p JOIN JSON_TABLE(p.event_kind,'$[*]' COLUMNS(value VARCHAR(64) PATH '$')) selected_events ON TRUE)) AND ((SELECT source_filter FROM parameters)='' OR e.source=(SELECT source_filter FROM parameters))
  AND (((SELECT recipient FROM parameters) IS NULL AND (SELECT search FROM parameters)='' AND JSON_LENGTH((SELECT ids FROM parameters))=0) OR a.id IS NOT NULL)
-), selected AS (SELECT * FROM audience a WHERE ((SELECT event_kind FROM parameters)='' AND (SELECT source_filter FROM parameters)='') OR EXISTS(SELECT 1 FROM observed o WHERE o.recipient_id=a.id))
+), selected AS (SELECT * FROM audience a WHERE ((SELECT event_kind FROM parameters)='[]' AND (SELECT source_filter FROM parameters)='') OR EXISTS(SELECT 1 FROM observed o WHERE o.recipient_id=a.id))
 "#;
 const TYPES: [&str; 5] = [
     "Email Sent",
@@ -86,30 +86,40 @@ impl Snapshots for Reports {
             .fetch_one(&mut *tx)
             .await
             .map_err(storage)?;
+        let event_kinds =
+            serde_json::to_string(&f.event.iter().map(|kind| kind.label()).collect::<Vec<_>>())
+                .map_err(|_| Error::Internal)?;
+        // Reuse the canonical offset-aware timestamp normalization used by sorting.
+        let second = |column| {
+            format!(
+                "TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',CAST(REPLACE(LEFT(({}),19),'T',' ') AS DATETIME))",
+                crate::campaign_sort::timestamp_key(column, "mysql")
+            )
+        };
+        let cte = CTE.replace("__EVENT_SECOND__", &second("e.time"));
+        let observed_second = second("time");
         macro_rules! query {
             ($tail:expr) => {
-                sqlx::query(sqlx::AssertSqlSafe(format!("{CTE} {}", $tail)))
-                    .bind(id)
-                    .bind(f.from)
-                    .bind(f.until)
-                    .bind(f.recipient)
-                    .bind(
-                        f.event
-                            .map(ruphish_domain::events::Kind::label)
-                            .unwrap_or_default(),
-                    )
-                    .bind(&f.search)
-                    .bind(
-                        f.source
-                            .map(ruphish_domain::reporting::Source::as_str)
-                            .unwrap_or_default(),
-                    )
-                    .bind(&selected_ids)
+                sqlx::query(sqlx::AssertSqlSafe(
+                    format!("{cte} {}", $tail).replace("__SECOND__", &observed_second),
+                ))
+                .bind(id)
+                .bind(f.from)
+                .bind(f.until)
+                .bind(f.recipient)
+                .bind(&event_kinds)
+                .bind(&f.search)
+                .bind(
+                    f.source
+                        .map(ruphish_domain::reporting::Source::as_str)
+                        .unwrap_or_default(),
+                )
+                .bind(&selected_ids)
             };
         }
         let metrics = query!(
             r#"
-                SELECT message,count(*) AS total,count(DISTINCT recipient_id) AS unique_count
+                SELECT message,count(*) AS total,count(DISTINCT recipient_id) AS unique_count, min(__SECOND__) AS first_observed, max(__SECOND__) AS last_observed
                 FROM observed
                 GROUP BY message
             "#
@@ -117,11 +127,15 @@ impl Snapshots for Reports {
         .fetch_all(&mut *tx)
         .await
         .map_err(storage)?;
+        let mut first_observed = [None; 5];
+        let mut last_observed = [None; 5];
         let mut unique = [0; 5];
         let mut totals = [0; 5];
         for r in metrics {
             let kind: String = r.try_get("message").map_err(storage)?;
             if let Some(i) = TYPES.iter().position(|s| *s == kind) {
+                first_observed[i] = r.try_get("first_observed").map_err(storage)?;
+                last_observed[i] = r.try_get("last_observed").map_err(storage)?;
                 unique[i] = r.try_get("unique_count").map_err(storage)?;
                 totals[i] = r.try_get("total").map_err(storage)?;
             }
@@ -139,8 +153,8 @@ impl Snapshots for Reports {
             r#"
                 SELECT (SELECT count(*)
                 FROM observed) AS events,(SELECT count(*)
-                FROM selected) AS recipients, (SELECT min((CASE WHEN time>='1000' THEN TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',CAST(REPLACE(LEFT(time,19),'T',' ') AS DATETIME)) END))
-                FROM observed) AS first,(SELECT max((CASE WHEN time>='1000' THEN TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',CAST(REPLACE(LEFT(time,19),'T',' ') AS DATETIME)) END))
+                FROM selected) AS recipients, (SELECT min(__SECOND__)
+                FROM observed) AS first,(SELECT max(__SECOND__)
                 FROM observed) AS last
             "#
         )
@@ -268,9 +282,9 @@ impl Snapshots for Reports {
         let width = (((last - first).max(0) / 100 + 60) / 60).max(1) * 60;
         let rows = query!(format!(
             r#"
-                SELECT ((CASE WHEN time>='1000' THEN TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',CAST(REPLACE(LEFT(time,19),'T',' ') AS DATETIME)) END) DIV {width})*{width} AS bucket,message,count(*) AS total
+                SELECT (__SECOND__ DIV {width})*{width} AS bucket,message,count(*) AS total
                 FROM observed
-                WHERE (CASE WHEN time>='1000' THEN TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',CAST(REPLACE(LEFT(time,19),'T',' ') AS DATETIME)) END) IS NOT NULL
+                WHERE __SECOND__ IS NOT NULL
                 GROUP BY bucket,message
                 ORDER BY bucket
             "#
@@ -300,6 +314,8 @@ impl Snapshots for Reports {
             }
         }
         let result = Analysis {
+            first_observed,
+            last_observed,
             id,
             name: campaign.try_get("name").map_err(storage)?,
             status: ruphish_domain::campaign::CampaignStatus::from_stored(

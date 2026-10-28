@@ -11,13 +11,19 @@ pub(crate) fn ManagementPage(children: Children) -> impl IntoView {
 pub(crate) fn PageHeader(
     #[prop(into)] title: Signal<String>,
     #[prop(into, optional)] subtitle: Signal<String>,
+    #[prop(into, optional)] badge: Signal<String>,
     #[prop(default = false)] status: bool,
     #[prop(optional)] children: Option<Children>,
 ) -> impl IntoView {
     view! {
         <div class="management-heading">
             <div>
-                <h1>{move || title.get()}</h1>
+                <div class="page-title-line">
+                    <h1>{move || title.get()}</h1>
+                    <Show when=move || !badge.get().is_empty()>
+                        <span class="campaign-lifecycle">{move || badge.get()}</span>
+                    </Show>
+                </div>
                 <Show when=move || !subtitle.get().is_empty()>
                     <p class:save-state=status role=if status { Some("status") } else { None }>
                         {move || subtitle.get()}

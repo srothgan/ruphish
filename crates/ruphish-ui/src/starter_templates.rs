@@ -231,242 +231,247 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                 "/settings".to_owned()
             })>{tr!(ui.company_settings)}</BackLink>
             <PageHeader title=trs!(ui.starter_title) subtitle=trs!(ui.starter_description) />
-            <QueryStatus
+            <QueryBoundary
                 fetching=catalog.fetching
                 has_data=Signal::derive(move || catalog.data.get().is_some())
                 error=catalog.error
                 noun=trs!(ui.starter_title)
                 refresh=catalog.refresh
-            />
-            <Tabs
-                label=trs!(ui.starter_title)
-                selected=tab
-                tabs=vec![
-                    Tab {
-                        id: "starter-emails",
-                        label: trs!(ui.email_templates),
-                        disabled: false.into(),
-                    },
-                    Tab {
-                        id: "starter-pages",
-                        label: trs!(ui.landing_pages),
-                        disabled: false.into(),
-                    },
-                    Tab {
-                        id: "starter-learning-pages",
-                        label: trs!(ui.learning_pages),
-                        disabled: false.into(),
-                    },
-                ]
-            />
-            // One upload serves both page families and remains mounted across tab changes.
-            <div hidden=move || tab.get() == 0>{logo_panel(state, logo_expanded, logo_picker)}</div>
-            {["starter-emails", "starter-pages", "starter-learning-pages"]
-                .into_iter()
-                .enumerate()
-                .map(move |(index, panel_id)| {
-                    let sorting = TableSorting::new(panel_id, "name", SortDirection::Asc);
-                    let mut headers = vec![trs!(ui.starter_select), trs!(ui.name)];
-                    if index != 0 {
-                        headers.push(trs!(ui.starter_available_options));
-                    }
-                    headers.push(trs!(ui.actions));
-                    view! {
-                        <TabPanel
-                            id=panel_id
-                            class="starter-tab"
-                            selected=Signal::derive(move || tab.get() == index)
-                        >
-                            <Show when=move || tab.get() == index>
-                                <ListToolbar
-                                    search=search
-                                    count=Signal::derive(move || visible.get().len())
-                                    count_known=Signal::derive(move || catalog.data.get().is_some())
-                                    label=trs!(ui.starter_search)
-                                    noun=trs!(ui.starter_items)
-                                />
-                                <ListEmptyState
-                                    ready=Signal::derive(move || catalog.data.get().is_some())
-                                    count=Signal::derive(move || visible.get().len())
-                                    search=search
-                                    guidance=Signal::derive(move || {
-                                        if index == 2 {
-                                            leptos_i18n::t_string!(i18n, ui.starter_learning_empty)
-                                                .to_string()
+            >
+                <Tabs
+                    label=trs!(ui.starter_title)
+                    selected=tab
+                    tabs=vec![
+                        Tab {
+                            id: "starter-emails",
+                            label: trs!(ui.email_templates),
+                            disabled: false.into(),
+                        },
+                        Tab {
+                            id: "starter-pages",
+                            label: trs!(ui.landing_pages),
+                            disabled: false.into(),
+                        },
+                        Tab {
+                            id: "starter-learning-pages",
+                            label: trs!(ui.learning_pages),
+                            disabled: false.into(),
+                        },
+                    ]
+                />
+                // One upload serves both page families and remains mounted across tab changes.
+                <div hidden=move || {
+                    tab.get() == 0
+                }>{logo_panel(state, logo_expanded, logo_picker)}</div>
+                {["starter-emails", "starter-pages", "starter-learning-pages"]
+                    .into_iter()
+                    .enumerate()
+                    .map(move |(index, panel_id)| {
+                        let sorting = TableSorting::new(panel_id, "name", SortDirection::Asc);
+                        let mut headers = vec![trs!(ui.starter_select), trs!(ui.name)];
+                        if index != 0 {
+                            headers.push(trs!(ui.starter_available_options));
+                        }
+                        headers.push(trs!(ui.actions));
+                        view! {
+                            <TabPanel
+                                id=panel_id
+                                class="starter-tab"
+                                selected=Signal::derive(move || tab.get() == index)
+                            >
+                                <Show when=move || tab.get() == index>
+                                    <ListToolbar
+                                        search=search
+                                        count=Signal::derive(move || visible.get().len())
+                                        count_known=Signal::derive(move || {
+                                            catalog.data.get().is_some()
+                                        })
+                                        label=trs!(ui.starter_search)
+                                        noun=trs!(ui.starter_items)
+                                    />
+                                    <ListEmptyState
+                                        ready=Signal::derive(move || catalog.data.get().is_some())
+                                        count=Signal::derive(move || visible.get().len())
+                                        search=search
+                                        guidance=Signal::derive(move || {
+                                            if index == 2 {
+                                                leptos_i18n::t_string!(i18n, ui.starter_learning_empty)
+                                                    .to_string()
+                                            } else {
+                                                leptos_i18n::t_string!(i18n, ui.starter_empty).to_string()
+                                            }
+                                        })
+                                    />
+                                    <DataTable
+                                        sorting=sorting
+                                        columns=if index == 0 {
+                                            vec!["", "name", ""]
                                         } else {
-                                            leptos_i18n::t_string!(i18n, ui.starter_empty).to_string()
+                                            vec!["", "name", "options", ""]
+                                        }
+                                        class="starter-table"
+                                        compact=true
+                                        label=trs!(ui.starter_title)
+                                        empty=Signal::derive(move || visible.with(Vec::is_empty))
+                                        headers=headers.clone()
+                                    >
+                                        <For
+                                            each=move || {
+                                                sorting
+                                                    .rows(
+                                                        visible.get(),
+                                                        |row, key| {
+                                                            if key == "options" {
+                                                                SortValue::Tuple(
+                                                                    vec![row.prefill.into(), row.company_logo.is_some().into()],
+                                                                )
+                                                            } else {
+                                                                row.name.clone().into()
+                                                            }
+                                                        },
+                                                        |row| row.id.clone().into(),
+                                                    )
+                                            }
+                                            key=|row| row.id.clone()
+                                            children=move |row| {
+                                                let id = StoredValue::new(row.id);
+                                                let name = StoredValue::new(row.name);
+                                                let prefill = row.prefill;
+                                                let branding = row.company_logo.is_some();
+                                                view! {
+                                                    <tr>
+                                                        <td>
+                                                            <Checkbox
+                                                                label=Signal::derive(String::new)
+                                                                aria_label=Signal::derive(move || {
+                                                                    format!(
+                                                                        "{}: {}",
+                                                                        leptos_i18n::t_string!(i18n, ui.starter_select),
+                                                                        name.get_value(),
+                                                                    )
+                                                                })
+                                                                compact=true
+                                                                checked=Signal::derive(move || {
+                                                                    state.draft.with(|draft| draft.contains(&id.get_value()))
+                                                                })
+                                                                disabled=Signal::derive(move || state.busy.get())
+                                                                on_toggle=Callback::new(move |checked| {
+                                                                    state
+                                                                        .draft
+                                                                        .update(|draft| draft.select(&id.get_value(), checked))
+                                                                })
+                                                            />
+                                                        </td>
+                                                        <th scope="row">{move || name.get_value()}</th>
+                                                        <Show when=move || index != 0>
+                                                            <td>
+                                                                <div class="starter-capabilities">
+                                                                    {prefill
+                                                                        .then(|| {
+                                                                            view! { <span>{tr!(ui.starter_prefill_short)}</span> }
+                                                                        })}
+                                                                    {branding
+                                                                        .then(|| {
+                                                                            view! { <span>{tr!(ui.starter_logo_upload)}</span> }
+                                                                        })} {(!prefill && !branding).then_some("—")}
+                                                                </div>
+                                                            </td>
+                                                        </Show>
+                                                        <td>
+                                                            <ActionButton
+                                                                size=ControlSize::Small
+                                                                aria_label=Signal::derive(move || {
+                                                                    format!(
+                                                                        "{}: {}",
+                                                                        leptos_i18n::t_string!(i18n, ui.preview),
+                                                                        name.get_value(),
+                                                                    )
+                                                                })
+                                                                on_click=move |_| focus.set(Some(id.get_value()))
+                                                            >
+                                                                {tr!(ui.preview)}
+                                                            </ActionButton>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            }
+                                        />
+                                    </DataTable>
+                                </Show>
+                            </TabPanel>
+                        }
+                    })
+                    .collect_view()}
+                <Show when=move || {
+                    focus.get().is_some()
+                }>{move || review_dialog(api, token, visible, focus, state, open_logo)}</Show>
+                <FormFooter spread=true>
+                    <p role="status">
+                        {move || {
+                            format!(
+                                "{} {}",
+                                state.draft.with(StarterSelection::count),
+                                leptos_i18n::t_string!(i18n, ui.starter_selected),
+                            )
+                        }}
+                    </p>
+                    <ActionButton
+                        style=ButtonStyle::Primary
+                        disabled=Signal::derive(move || {
+                            state.busy.get() || state.upload.with(|upload| upload.loading)
+                                || state.draft.with(|draft| draft.count() == 0)
+                                || (needs_logo.get()
+                                    && state.upload.with(|upload| upload.data.is_empty()))
+                        })
+                        on_click=add
+                    >
+                        {move || {
+                            if state.busy.get() {
+                                leptos_i18n::t_string!(i18n, ui.starter_adding)
+                            } else {
+                                leptos_i18n::t_string!(i18n, ui.starter_add)
+                            }
+                        }}
+                    </ActionButton>
+                </FormFooter>
+                <Show when=move || !results.get().is_empty()>
+                    <Card label=trs!(ui.starter_results)>
+                        <h2>{tr!(ui.starter_results)}</h2>
+                        <ul aria-live="polite">
+                            {move || {
+                                results
+                                    .get()
+                                    .into_iter()
+                                    .map(|(name, result)| {
+                                        view! {
+                                            <li>
+                                                {match result {
+                                                    Ok(path) => {
+                                                        view! {
+                                                            <span>
+                                                                {tr!(ui.starter_added)}" "<a href=path>{name}</a>
+                                                            </span>
+                                                        }
+                                                            .into_any()
+                                                    }
+                                                    Err(error) => {
+                                                        view! {
+                                                            <span class="error">
+                                                                {name}": "{error}" "{tr!(ui.starter_check_before_retry)}
+                                                            </span>
+                                                        }
+                                                            .into_any()
+                                                    }
+                                                }}
+                                            </li>
                                         }
                                     })
-                                />
-                                <DataTable
-                                    sorting=sorting
-                                    columns=if index == 0 {
-                                        vec!["", "name", ""]
-                                    } else {
-                                        vec!["", "name", "options", ""]
-                                    }
-                                    class="starter-table"
-                                    compact=true
-                                    label=trs!(ui.starter_title)
-                                    empty=Signal::derive(move || visible.with(Vec::is_empty))
-                                    headers=headers.clone()
-                                >
-                                    <For
-                                        each=move || {
-                                            sorting
-                                                .rows(
-                                                    visible.get(),
-                                                    |row, key| {
-                                                        if key == "options" {
-                                                            SortValue::Tuple(
-                                                                vec![row.prefill.into(), row.company_logo.is_some().into()],
-                                                            )
-                                                        } else {
-                                                            row.name.clone().into()
-                                                        }
-                                                    },
-                                                    |row| row.id.clone().into(),
-                                                )
-                                        }
-                                        key=|row| row.id.clone()
-                                        children=move |row| {
-                                            let id = StoredValue::new(row.id);
-                                            let name = StoredValue::new(row.name);
-                                            let prefill = row.prefill;
-                                            let branding = row.company_logo.is_some();
-                                            view! {
-                                                <tr>
-                                                    <td>
-                                                        <Checkbox
-                                                            label=Signal::derive(String::new)
-                                                            aria_label=Signal::derive(move || {
-                                                                format!(
-                                                                    "{}: {}",
-                                                                    leptos_i18n::t_string!(i18n, ui.starter_select),
-                                                                    name.get_value(),
-                                                                )
-                                                            })
-                                                            compact=true
-                                                            checked=Signal::derive(move || {
-                                                                state.draft.with(|draft| draft.contains(&id.get_value()))
-                                                            })
-                                                            disabled=Signal::derive(move || state.busy.get())
-                                                            on_toggle=Callback::new(move |checked| {
-                                                                state
-                                                                    .draft
-                                                                    .update(|draft| draft.select(&id.get_value(), checked))
-                                                            })
-                                                        />
-                                                    </td>
-                                                    <th scope="row">{move || name.get_value()}</th>
-                                                    <Show when=move || index != 0>
-                                                        <td>
-                                                            <div class="starter-capabilities">
-                                                                {prefill
-                                                                    .then(|| {
-                                                                        view! { <span>{tr!(ui.starter_prefill_short)}</span> }
-                                                                    })}
-                                                                {branding
-                                                                    .then(|| {
-                                                                        view! { <span>{tr!(ui.starter_logo_upload)}</span> }
-                                                                    })} {(!prefill && !branding).then_some("—")}
-                                                            </div>
-                                                        </td>
-                                                    </Show>
-                                                    <td>
-                                                        <ActionButton
-                                                            size=ControlSize::Small
-                                                            aria_label=Signal::derive(move || {
-                                                                format!(
-                                                                    "{}: {}",
-                                                                    leptos_i18n::t_string!(i18n, ui.preview),
-                                                                    name.get_value(),
-                                                                )
-                                                            })
-                                                            on_click=move |_| focus.set(Some(id.get_value()))
-                                                        >
-                                                            {tr!(ui.preview)}
-                                                        </ActionButton>
-                                                    </td>
-                                                </tr>
-                                            }
-                                        }
-                                    />
-                                </DataTable>
-                            </Show>
-                        </TabPanel>
-                    }
-                })
-                .collect_view()}
-            <Show when=move || {
-                focus.get().is_some()
-            }>{move || review_dialog(api, token, visible, focus, state, open_logo)}</Show>
-            <FormFooter spread=true>
-                <p role="status">
-                    {move || {
-                        format!(
-                            "{} {}",
-                            state.draft.with(StarterSelection::count),
-                            leptos_i18n::t_string!(i18n, ui.starter_selected),
-                        )
-                    }}
-                </p>
-                <ActionButton
-                    style=ButtonStyle::Primary
-                    disabled=Signal::derive(move || {
-                        state.busy.get() || state.upload.with(|upload| upload.loading)
-                            || state.draft.with(|draft| draft.count() == 0)
-                            || (needs_logo.get()
-                                && state.upload.with(|upload| upload.data.is_empty()))
-                    })
-                    on_click=add
-                >
-                    {move || {
-                        if state.busy.get() {
-                            leptos_i18n::t_string!(i18n, ui.starter_adding)
-                        } else {
-                            leptos_i18n::t_string!(i18n, ui.starter_add)
-                        }
-                    }}
-                </ActionButton>
-            </FormFooter>
-            <Show when=move || !results.get().is_empty()>
-                <Card label=trs!(ui.starter_results)>
-                    <h2>{tr!(ui.starter_results)}</h2>
-                    <ul aria-live="polite">
-                        {move || {
-                            results
-                                .get()
-                                .into_iter()
-                                .map(|(name, result)| {
-                                    view! {
-                                        <li>
-                                            {match result {
-                                                Ok(path) => {
-                                                    view! {
-                                                        <span>
-                                                            {tr!(ui.starter_added)}" "<a href=path>{name}</a>
-                                                        </span>
-                                                    }
-                                                        .into_any()
-                                                }
-                                                Err(error) => {
-                                                    view! {
-                                                        <span class="error">
-                                                            {name}": "{error}" "{tr!(ui.starter_check_before_retry)}
-                                                        </span>
-                                                    }
-                                                        .into_any()
-                                                }
-                                            }}
-                                        </li>
-                                    }
-                                })
-                                .collect_view()
-                        }}
-                    </ul>
-                </Card>
-            </Show>
+                                    .collect_view()
+                            }}
+                        </ul>
+                    </Card>
+                </Show>
+            </QueryBoundary>
         </ManagementPage>
     }
 }
@@ -667,95 +672,96 @@ fn preview_panel(
     view! {
         <div class="starter-preview">
             <div class="starter-preview-settings">
-                <QueryStatus
+                <QueryBoundary
                     fetching=detail.fetching
                     has_data=Signal::derive(move || detail.data.get().is_some())
                     error=detail.error
                     noun=trs!(ui.preview)
                     refresh=detail.refresh
-                />
-                {move || {
-                    detail
-                        .data
-                        .get()
-                        .map(|entry| {
-                            let prefill = entry.summary.prefill;
-                            let branding = entry.summary.company_logo;
-                            view! {
-                                <div class="starter-options">
-                                    <Show when=move || prefill>
-                                        <div>
-                                            <Checkbox
-                                                label=trs!(ui.starter_prefill)
-                                                checked=Signal::derive(move || options.get().prefill)
-                                                disabled=Signal::derive(move || { state.busy.get() })
-                                                on_toggle=Callback::new(move |checked| {
-                                                    state
-                                                        .draft
-                                                        .update(|draft| {
-                                                            draft
-                                                                .configure(
-                                                                    &id.get_value(),
-                                                                    |options| {
-                                                                        options.prefill = checked;
-                                                                    },
-                                                                );
-                                                        })
-                                                })
-                                            />
-                                            <p class="field-help">{tr!(ui.starter_options_help)}</p>
-                                        </div>
-                                    </Show>
-                                    {branding
-                                        .map(|branding| {
-                                            view! {
-                                                <div>
-                                                    <Checkbox
-                                                        label=trs!(ui.starter_use_logo)
-                                                        checked=Signal::derive(move || options.get().logo)
-                                                        disabled=Signal::derive(move || { state.busy.get() })
-                                                        on_toggle=Callback::new(move |checked| {
-                                                            state
-                                                                .draft
-                                                                .update(|draft| {
-                                                                    draft
-                                                                        .configure(
-                                                                            &id.get_value(),
-                                                                            |options| {
-                                                                                options.logo = checked;
-                                                                            },
-                                                                        );
-                                                                })
-                                                        })
-                                                    />
-                                                    <p class="field-help">{branding.context}</p>
-                                                </div>
-                                            }
-                                        })}
-                                </div>
-                            }
-                        })
-                }}
-                <Show when=move || missing_logo.get()>
-                    <div class="starter-logo-notice" role="status">
-                        <p>
-                            {move || {
-                                if state.upload.with(|upload| upload.loading) {
-                                    leptos_i18n::t_string!(i18n, ui.starter_logo_loading)
-                                } else {
-                                    leptos_i18n::t_string!(i18n, ui.starter_logo_required)
+                >
+                    {move || {
+                        detail
+                            .data
+                            .get()
+                            .map(|entry| {
+                                let prefill = entry.summary.prefill;
+                                let branding = entry.summary.company_logo;
+                                view! {
+                                    <div class="starter-options">
+                                        <Show when=move || prefill>
+                                            <div>
+                                                <Checkbox
+                                                    label=trs!(ui.starter_prefill)
+                                                    checked=Signal::derive(move || options.get().prefill)
+                                                    disabled=Signal::derive(move || { state.busy.get() })
+                                                    on_toggle=Callback::new(move |checked| {
+                                                        state
+                                                            .draft
+                                                            .update(|draft| {
+                                                                draft
+                                                                    .configure(
+                                                                        &id.get_value(),
+                                                                        |options| {
+                                                                            options.prefill = checked;
+                                                                        },
+                                                                    );
+                                                            })
+                                                    })
+                                                />
+                                                <p class="field-help">{tr!(ui.starter_options_help)}</p>
+                                            </div>
+                                        </Show>
+                                        {branding
+                                            .map(|branding| {
+                                                view! {
+                                                    <div>
+                                                        <Checkbox
+                                                            label=trs!(ui.starter_use_logo)
+                                                            checked=Signal::derive(move || options.get().logo)
+                                                            disabled=Signal::derive(move || { state.busy.get() })
+                                                            on_toggle=Callback::new(move |checked| {
+                                                                state
+                                                                    .draft
+                                                                    .update(|draft| {
+                                                                        draft
+                                                                            .configure(
+                                                                                &id.get_value(),
+                                                                                |options| {
+                                                                                    options.logo = checked;
+                                                                                },
+                                                                            );
+                                                                    })
+                                                            })
+                                                        />
+                                                        <p class="field-help">{branding.context}</p>
+                                                    </div>
+                                                }
+                                            })}
+                                    </div>
                                 }
-                            }}
-                        </p>
-                        <ActionButton
-                            size=ControlSize::Small
-                            disabled=Signal::derive(move || state.busy.get())
-                            on_click=move |_| open_logo.run(())
-                        >
-                            {tr!(ui.starter_open_logo)}
-                        </ActionButton>
-                    </div>
-                </Show>
+                            })
+                    }}
+                    <Show when=move || missing_logo.get()>
+                        <div class="starter-logo-notice" role="status">
+                            <p>
+                                {move || {
+                                    if state.upload.with(|upload| upload.loading) {
+                                        leptos_i18n::t_string!(i18n, ui.starter_logo_loading)
+                                    } else {
+                                        leptos_i18n::t_string!(i18n, ui.starter_logo_required)
+                                    }
+                                }}
+                            </p>
+                            <ActionButton
+                                size=ControlSize::Small
+                                disabled=Signal::derive(move || state.busy.get())
+                                on_click=move |_| open_logo.run(())
+                            >
+                                {tr!(ui.starter_open_logo)}
+                            </ActionButton>
+                        </div>
+                    </Show>
+                </QueryBoundary>
             </div>
             <div class="starter-preview-canvas">
                 <Show when=move || preview.with(|p| p.loading)>

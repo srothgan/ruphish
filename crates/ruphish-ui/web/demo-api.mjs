@@ -38,7 +38,8 @@ export function overview(data) {
 }
 
 export function analysis(campaign, query, now, paginate = true) {
-    if (query.get('event') && !Object.values(eventKinds).includes(query.get('event'))) throw new Error('Invalid event');
+    const selectedEvents = (query.get('event') || '').split(',').filter(Boolean);
+    if (selectedEvents.some(kind => !Object.values(eventKinds).includes(kind))) throw new Error('Invalid event');
     if (query.get('source') && !['legacy', 'application', 'public', 'mailbox', 'operator'].includes(query.get('source'))) throw new Error('Invalid source');
     const from = Number(query.get('from') ?? 0), until = Number(query.get('until') ?? now);
     const selected = new Set((query.get('recipients') ?? '').split(',').filter(Boolean).map(Number));
@@ -46,7 +47,7 @@ export function analysis(campaign, query, now, paginate = true) {
     const results = campaign.results.filter(r => (!query.has('recipient') || r.id === Number(query.get('recipient'))) && (!selected.size || selected.has(r.id)) && (!search || `${r.email} ${r.first_name} ${r.last_name}`.toLocaleLowerCase().includes(search)));
     const events = results.flatMap(r => r.events).filter(e => {
         const at = Date.parse(e.time) / 1000;
-        return !e.excluded && at >= from && at < until && (!query.get('event') || query.get('event') === eventKinds[e.kind]) && (!query.get('source') || query.get('source') === e.source);
+        return !e.excluded && at >= from && at < until && (!selectedEvents.length || selectedEvents.includes(eventKinds[e.kind])) && (!query.get('source') || query.get('source') === e.source);
     }).sort(byTime);
     const eventMap = new Map();
     for (const e of events) {
@@ -66,7 +67,7 @@ export function analysis(campaign, query, now, paginate = true) {
         if (index >= 0) buckets.get(time)[index]++;
     }
     const offset = Math.max(0, Number(query.get('offset') ?? 0)), limit = Math.max(1, Math.min(200, Number(query.get('limit') ?? 50)));
-    return { id: campaign.header.id, name: campaign.header.name, status: campaign.header.status, as_of: now, audience: campaign.results.length, unique: namedCounts(unique), progression: namedCounts(progression), totals: namedCounts(counts(events)), recipient_total: rows.length, event_total: events.length, recipients: (paginate ? rows.slice(offset, offset + limit) : rows).map(r => ({ ...r, counts: namedCounts(r.counts) })), events: (paginate ? sortedEvents.slice(offset, offset + limit) : sortedEvents).map(e => ({ id:e.id,recipient_id:e.recipient_id,email:e.email,time:e.time,source:e.source,password_present:e.password_present??null,revision:e.revision??0,kind:recordedKind(e.kind) })), buckets: [...buckets].map(([time, values]) => ({ time, counts: namedCounts(values) })), bucket_seconds: 3600 };
+    return { first_observed: namedCounts(kinds.map(kind => { const times = events.filter(e => e.kind === kind).map(e => Date.parse(e.time)/1000); return times.length ? Math.min(...times) : null; })), last_observed: namedCounts(kinds.map(kind => { const times = events.filter(e => e.kind === kind).map(e => Date.parse(e.time)/1000); return times.length ? Math.max(...times) : null; })), id: campaign.header.id, name: campaign.header.name, status: campaign.header.status, as_of: now, audience: campaign.results.length, unique: namedCounts(unique), progression: namedCounts(progression), totals: namedCounts(counts(events)), recipient_total: rows.length, event_total: events.length, recipients: (paginate ? rows.slice(offset, offset + limit) : rows).map(r => ({ ...r, counts: namedCounts(r.counts) })), events: (paginate ? sortedEvents.slice(offset, offset + limit) : sortedEvents).map(e => ({ id:e.id,recipient_id:e.recipient_id,email:e.email,time:e.time,source:e.source,password_present:e.password_present??null,revision:e.revision??0,kind:recordedKind(e.kind) })), buckets: [...buckets].map(([time, values]) => ({ time, counts: namedCounts(values) })), bucket_seconds: 3600 };
 }
 
 function summaries(data, family) {

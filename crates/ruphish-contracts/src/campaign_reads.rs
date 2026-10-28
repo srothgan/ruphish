@@ -240,6 +240,11 @@ pub struct HistoryEvent {
 /// Consistent results snapshot for one campaign, filter and page.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Results {
+    /// First observed UTC second per metric, before pagination; absent without valid evidence.
+    pub first_observed: crate::reporting::ObservationTimes,
+    /// Latest observed UTC second per metric, before pagination.
+    pub last_observed: crate::reporting::ObservationTimes,
+
     /// Campaign identity.
     pub id: i64,
     /// Campaign display name.

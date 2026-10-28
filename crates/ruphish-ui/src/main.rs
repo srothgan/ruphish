@@ -43,6 +43,8 @@ mod overview_queries;
 #[cfg(target_arch = "wasm32")]
 mod preferences;
 #[cfg(target_arch = "wasm32")]
+mod recipient_analysis;
+#[cfg(target_arch = "wasm32")]
 mod resource_queries;
 #[cfg(target_arch = "wasm32")]
 mod resources;

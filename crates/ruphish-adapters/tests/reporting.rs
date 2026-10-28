@@ -289,7 +289,7 @@ async fn observations_filters_and_exports_preserve_evidence_without_credentials_
         "same-time events must paginate deterministically"
     );
     let mut selected = filter();
-    selected.event = Some(ruphish_domain::events::Kind::EmailReported);
+    selected.event = vec![ruphish_domain::events::Kind::EmailReported];
     let selected = reports
         .analysis(caller(), campaign, selected)
         .await

@@ -248,80 +248,88 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                     })
                 />
             </PageHeader>
-            {message.view()}
-            <form id="user-form" novalidate on:submit=submit>
-                <ValidationSummary form=validation />
-                <FormFields disabled=Signal::derive(move || busy.get() || !loaded.get())>
-                    <Field label=trs!(ui.username)>
-                        <TextInput
-                            autocomplete="off"
-                            required=true
-                            validation_field="username"
-                            value=Signal::derive(move || username.get())
-                            on_input=move |e| username.set(event_target_value(&e))
+            <QueryBoundary
+                fetching=loading.into()
+                has_data=Signal::derive(move || loaded.get())
+                error=Signal::derive(move || load_error.get().map(|e| e.message))
+                noun=trs!(ui.user)
+                refresh=Callback::new(move |_| reload.update(|n| *n += 1))
+            >
+                {message.view()}
+                <form id="user-form" novalidate on:submit=submit>
+                    <ValidationSummary form=validation />
+                    <FormFields disabled=Signal::derive(move || busy.get() || !loaded.get())>
+                        <Field label=trs!(ui.username)>
+                            <TextInput
+                                autocomplete="off"
+                                required=true
+                                validation_field="username"
+                                value=Signal::derive(move || username.get())
+                                on_input=move |e| username.set(event_target_value(&e))
+                            />
+                        </Field>
+                        <Field label=Signal::derive(move || {
+                            (if id.is_some() {
+                                leptos_i18n::t_string!(
+                                    i18n, ui.new_password_leave_empty_to_keep_current
+                                )
+                            } else {
+                                leptos_i18n::t_string!(i18n, ui.temporary_password)
+                            })
+                                .to_owned()
+                        })>
+                            <TextInput
+                                input_type="password"
+                                autocomplete="new-password"
+                                required=id.is_none()
+                                validation_field="password"
+                                value=Signal::derive(move || password.get())
+                                on_input=move |e| password.set(event_target_value(&e))
+                            />
+                        </Field>
+                        <Select
+                            validation_field="role"
+                            label=trs!(ui.role)
+                            value=role
+                            on_change=Callback::new(move |v| role.set(v))
+                        >
+                            <option value="user">{tr!(ui.user)}</option>
+                            <option value="admin">{tr!(ui.administrator_2)}</option>
+                            {move || {
+                                let slug = role.get();
+                                (!matches!(slug.as_str(), "user" | "admin"))
+                                    .then(|| {
+                                        view! { <option value=slug.clone()>{slug.clone()}</option> }
+                                    })
+                            }}
+                        </Select>
+                        <Checkbox
+                            label=trs!(ui.require_password_change)
+                            checked=reset
+                            on_toggle=Callback::new(move |v| reset.set(v))
                         />
-                    </Field>
-                    <Field label=Signal::derive(move || {
-                        (if id.is_some() {
-                            leptos_i18n::t_string!(
-                                i18n, ui.new_password_leave_empty_to_keep_current
-                            )
-                        } else {
-                            leptos_i18n::t_string!(i18n, ui.temporary_password)
-                        })
-                            .to_owned()
-                    })>
-                        <TextInput
-                            input_type="password"
-                            autocomplete="new-password"
-                            required=id.is_none()
-                            validation_field="password"
-                            value=Signal::derive(move || password.get())
-                            on_input=move |e| password.set(event_target_value(&e))
+                        <Checkbox
+                            label=trs!(ui.lock_account)
+                            checked=locked
+                            on_toggle=Callback::new(move |v| locked.set(v))
                         />
-                    </Field>
-                    <Select
-                        validation_field="role"
-                        label=trs!(ui.role)
-                        value=role
-                        on_change=Callback::new(move |v| role.set(v))
-                    >
-                        <option value="user">{tr!(ui.user)}</option>
-                        <option value="admin">{tr!(ui.administrator_2)}</option>
-                        {move || {
-                            let slug = role.get();
-                            (!matches!(slug.as_str(), "user" | "admin"))
-                                .then(|| {
-                                    view! { <option value=slug.clone()>{slug.clone()}</option> }
-                                })
-                        }}
-                    </Select>
-                    <Checkbox
-                        label=trs!(ui.require_password_change)
-                        checked=reset
-                        on_toggle=Callback::new(move |v| reset.set(v))
-                    />
-                    <Checkbox
-                        label=trs!(ui.lock_account)
-                        checked=locked
-                        on_toggle=Callback::new(move |v| locked.set(v))
-                    />
-                </FormFields>
-                <FormFooter>
-                    <ActionButton
-                        kind="button"
-                        style=ButtonStyle::Ghost
-                        disabled=Signal::derive(move || busy.get())
-                        on_click=move |_| {
-                            password.set(String::new());
-                            loaded.set(false);
-                            cancel_navigation("/users", Default::default());
-                        }
-                    >
-                        {tr!(ui.cancel_changes)}
-                    </ActionButton>
-                </FormFooter>
-            </form>
+                    </FormFields>
+                    <FormFooter>
+                        <ActionButton
+                            kind="button"
+                            style=ButtonStyle::Ghost
+                            disabled=Signal::derive(move || busy.get())
+                            on_click=move |_| {
+                                password.set(String::new());
+                                loaded.set(false);
+                                cancel_navigation("/users", Default::default());
+                            }
+                        >
+                            {tr!(ui.cancel_changes)}
+                        </ActionButton>
+                    </FormFooter>
+                </form>
+            </QueryBoundary>
         </ManagementPage>
     };
     view! {
@@ -405,175 +413,174 @@ fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
                 title=trs!(ui.users)
                 subtitle=trs!(ui.manage_access_roles_and_account_status)
             >
-                <ActionButton disabled=list.fetching on_click=move |_| list.refresh.run(())>
-                    {tr!(ui.refresh)}
-                </ActionButton>
+                <RefreshButton fetching=list.fetching on_refresh=list.refresh />
                 <ActionLink style=ButtonStyle::Primary href="/users/new">
                     {tr!(ui.create_user)}
                 </ActionLink>
             </PageHeader>
             {message.view()}
-            <ListToolbar
-                search=search
-                count=Signal::derive(move || visible.with(Vec::len))
-                count_known=confirmed
-                label=trs!(ui.search_by_username)
-                noun=trs!(ui.users_2)
-            />
-            <QueryStatus
+            <QueryBoundary
                 fetching=list.fetching
                 has_data=confirmed
                 error=list.error
                 noun=trs!(ui.users_2)
                 refresh=list.refresh
-            />
-            <DataTable
-                sorting=sorting
-                columns=vec!["username", "role", "status", ""]
-                label=trs!(ui.users)
-                empty=Signal::derive(move || visible.with(Vec::is_empty))
-                headers=vec![trs!(ui.user), trs!(ui.role), trs!(ui.status), trs!(ui.actions)]
             >
-                {move || {
-                    sorting
-                        .rows(
-                            visible.get(),
-                            |row, key| match key {
-                                "role" => {
-                                    ruphish_ui::localization::role_label(i18n, &row.role).into()
-                                }
-                                "status" => {
-                                    (if row.account_locked {
-                                        "locked"
-                                    } else if row.password_change_required {
-                                        "password_setup"
-                                    } else {
-                                        "active"
-                                    })
-                                        .into()
-                                }
-                                _ => row.username.clone().into(),
-                            },
-                            |row| row.id.into(),
-                        )
-                        .into_iter()
-                        .map(|user| {
-                            let id = user.id;
-                            let delete_name = user.username.clone();
-                            let impersonate_name = user.username.clone();
-                            let own_account = id == current_user;
-                            let can_impersonate = !user.account_locked
-                                && !user.password_change_required;
-                            view! {
-                                <tr>
-                                    <th scope="row">
-                                        <a href=format!("/users/{id}/edit")>{user.username}</a>
-                                    </th>
-                                    <td>
-                                        {ruphish_ui::localization::role_label(i18n, &user.role)}
-                                    </td>
-                                    <td>
-                                        {move || {
-                                            if user.account_locked {
-                                                leptos_i18n::t_string!(i18n, ui.locked)
-                                            } else if user.password_change_required {
-                                                leptos_i18n::t_string!(i18n, ui.password_setup)
-                                            } else {
-                                                leptos_i18n::t_string!(i18n, ui.active)
-                                            }
-                                        }}
-                                    </td>
-                                    <td>
-                                        <div class="row-actions">
-                                            <a href=format!("/users/{id}/edit")>{tr!(ui.edit)}</a>
-                                            <ActionButton
-                                                disabled=Signal::derive(move || {
-                                                    !can_impersonate || busy.get()
-                                                })
-                                                on_click=move |_| {
-                                                    if busy.get_untracked() {
-                                                        return;
-                                                    }
-                                                    busy.set(true);
-                                                    let name = impersonate_name.clone();
-                                                    tasks
-                                                        .spawn(async move {
-                                                            match api
-                                                                .form(
-                                                                    "/auth/impersonate",
-                                                                    &token.get_value(),
-                                                                    &[("username", name)],
-                                                                )
-                                                                .await
-                                                            {
-                                                                Ok(_) => navigate("/"),
-                                                                Err(error) => message.error(error),
-                                                            }
-                                                            busy.set(false);
-                                                        });
+                <QueryControls slot:controls>
+                    <ListToolbar
+                        search=search
+                        count=Signal::derive(move || visible.with(Vec::len))
+                        count_known=confirmed
+                        label=trs!(ui.search_by_username)
+                        noun=trs!(ui.users_2)
+                    />
+                </QueryControls>
+                <DataTable
+                    sorting=sorting
+                    columns=vec!["username", "role", "status", ""]
+                    label=trs!(ui.users)
+                    empty=Signal::derive(move || visible.with(Vec::is_empty))
+                    headers=vec![trs!(ui.user), trs!(ui.role), trs!(ui.status), trs!(ui.actions)]
+                >
+                    {move || {
+                        sorting
+                            .rows(
+                                visible.get(),
+                                |row, key| match key {
+                                    "role" => {
+                                        ruphish_ui::localization::role_label(i18n, &row.role).into()
+                                    }
+                                    "status" => {
+                                        (if row.account_locked {
+                                            "locked"
+                                        } else if row.password_change_required {
+                                            "password_setup"
+                                        } else {
+                                            "active"
+                                        })
+                                            .into()
+                                    }
+                                    _ => row.username.clone().into(),
+                                },
+                                |row| row.id.into(),
+                            )
+                            .into_iter()
+                            .map(|user| {
+                                let id = user.id;
+                                let delete_name = user.username.clone();
+                                let impersonate_name = user.username.clone();
+                                let own_account = id == current_user;
+                                let can_impersonate = !user.account_locked
+                                    && !user.password_change_required;
+                                view! {
+                                    <tr>
+                                        <th scope="row">
+                                            <a href=format!("/users/{id}/edit")>{user.username}</a>
+                                        </th>
+                                        <td>
+                                            {ruphish_ui::localization::role_label(i18n, &user.role)}
+                                        </td>
+                                        <td>
+                                            {move || {
+                                                if user.account_locked {
+                                                    leptos_i18n::t_string!(i18n, ui.locked)
+                                                } else if user.password_change_required {
+                                                    leptos_i18n::t_string!(i18n, ui.password_setup)
+                                                } else {
+                                                    leptos_i18n::t_string!(i18n, ui.active)
                                                 }
-                                            >
-                                                {tr!(ui.view_as)}
-                                            </ActionButton>
-                                            <ActionButton
-                                                style=ButtonStyle::Ghost
-                                                size=ControlSize::Small
-                                                disabled=Signal::derive(move || own_account || busy.get())
-                                                title=Signal::derive(move || {
-                                                    (if own_account {
-                                                        leptos_i18n::t_string!(
-                                                            i18n, ui.you_cannot_delete_your_own_account
-                                                        )
-                                                    } else {
-                                                        leptos_i18n::t_string!(i18n, ui.delete_this_user)
+                                            }}
+                                        </td>
+                                        <td>
+                                            <div class="row-actions">
+                                                <a href=format!("/users/{id}/edit")>{tr!(ui.edit)}</a>
+                                                <ActionButton
+                                                    disabled=Signal::derive(move || {
+                                                        !can_impersonate || busy.get()
                                                     })
-                                                        .to_owned()
-                                                })
-                                                on_click=move |_| {
-                                                    message.clear();
-                                                    deleting.set(Some((id, delete_name.clone())))
-                                                }
-                                            >
-                                                {tr!(ui.delete)}
-                                            </ActionButton>
-                                        </div>
-                                    </td>
-                                </tr>
+                                                    on_click=move |_| {
+                                                        if busy.get_untracked() {
+                                                            return;
+                                                        }
+                                                        busy.set(true);
+                                                        let name = impersonate_name.clone();
+                                                        tasks
+                                                            .spawn(async move {
+                                                                match api
+                                                                    .form(
+                                                                        "/auth/impersonate",
+                                                                        &token.get_value(),
+                                                                        &[("username", name)],
+                                                                    )
+                                                                    .await
+                                                                {
+                                                                    Ok(_) => navigate("/"),
+                                                                    Err(error) => message.error(error),
+                                                                }
+                                                                busy.set(false);
+                                                            });
+                                                    }
+                                                >
+                                                    {tr!(ui.view_as)}
+                                                </ActionButton>
+                                                <ActionButton
+                                                    style=ButtonStyle::Ghost
+                                                    size=ControlSize::Small
+                                                    disabled=Signal::derive(move || own_account || busy.get())
+                                                    title=Signal::derive(move || {
+                                                        (if own_account {
+                                                            leptos_i18n::t_string!(
+                                                                i18n, ui.you_cannot_delete_your_own_account
+                                                            )
+                                                        } else {
+                                                            leptos_i18n::t_string!(i18n, ui.delete_this_user)
+                                                        })
+                                                            .to_owned()
+                                                    })
+                                                    on_click=move |_| {
+                                                        message.clear();
+                                                        deleting.set(Some((id, delete_name.clone())))
+                                                    }
+                                                >
+                                                    {tr!(ui.delete)}
+                                                </ActionButton>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            })
+                            .collect_view()
+                    }}
+                </DataTable>
+                <ListEmptyState
+                    ready=Signal::derive(move || { confirmed.get() && list.error.get().is_none() })
+                    count=Signal::derive(move || visible.with(Vec::len))
+                    search=search
+                    title=trs!(ui.no_users_found)
+                    guidance=trs!(ui.create_a_user_to_get_started)
+                />
+                {move || {
+                    deleting
+                        .get()
+                        .map(|(_, name)| {
+                            view! {
+                                <DeleteConfirmation
+                                    title=leptos_i18n::t_string!(
+                                        i18n, messages.delete_arg0, arg0 = (name).to_string()
+                                    )
+                                    description=trs!(
+                                        ui.this_permanently_removes_the_account_and_its_owned_campaigns_templates_and_other
+                                    )
+                                    confirm_label=trs!(ui.delete_user_and_data)
+                                    busy=busy
+                                    on_confirm=Callback::new(remove)
+                                    on_cancel=Callback::new(move |()| deleting.set(None))
+                                    message=message
+                                />
                             }
                         })
-                        .collect_view()
                 }}
-            </DataTable>
-            <ListEmptyState
-                ready=Signal::derive(move || {
-                    confirmed.get() && !list.fetching.get() && list.error.get().is_none()
-                })
-                count=Signal::derive(move || visible.with(Vec::len))
-                search=search
-                title=trs!(ui.no_users_found)
-                guidance=trs!(ui.create_a_user_to_get_started)
-            />
-            {move || {
-                deleting
-                    .get()
-                    .map(|(_, name)| {
-                        view! {
-                            <DeleteConfirmation
-                                title=leptos_i18n::t_string!(
-                                    i18n, messages.delete_arg0, arg0 = (name).to_string()
-                                )
-                                description=trs!(
-                                    ui.this_permanently_removes_the_account_and_its_owned_campaigns_templates_and_other
-                                )
-                                confirm_label=trs!(ui.delete_user_and_data)
-                                busy=busy
-                                on_confirm=Callback::new(remove)
-                                on_cancel=Callback::new(move |()| deleting.set(None))
-                                message=message
-                            />
-                        }
-                    })
-            }}
+            </QueryBoundary>
         </ManagementPage>
     }
 }
