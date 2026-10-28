@@ -1347,19 +1347,6 @@ async fn sqlite_provider_contract() {
     )
     .await
     .unwrap();
-    let prior_trigger = include_str!("../migrations/sqlite/12_settings.sql")
-        .split_once("CREATE TRIGGER ruphish_event_insert")
-        .unwrap()
-        .1
-        .split_once("INSERT INTO ruphish_schema")
-        .unwrap()
-        .0;
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-        "CREATE TRIGGER ruphish_event_insert{prior_trigger}"
-    )))
-    .execute(&mut previous)
-    .await
-    .unwrap();
     sqlx::raw_sql("DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM ruphish_schema WHERE version=13; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut previous).await.unwrap();
     previous.close().await.unwrap();
     let db = database::open(
@@ -1425,6 +1412,7 @@ async fn mysql_provider_contract() {
     peer.close().await;
     db.close().await;
     // Reconstruct the immediately preceding schema, then verify its populated upgrade.
+    sqlx::raw_sql("DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM _sqlx_migrations WHERE version=7; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut inspector).await.unwrap();
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
         .unwrap();
@@ -2211,7 +2199,8 @@ async fn postgres_provider_contract() {
     peer.close().await;
     db.close().await;
     // Reconstruct the immediately preceding schema, then verify its populated upgrade.
-    let previous = postgres_inspect(&config).await;
+    let mut previous = postgres_inspect(&config).await;
+    sqlx::raw_sql("DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM _sqlx_migrations WHERE version=7; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut previous).await.unwrap();
     previous.close().await.unwrap();
     let db = database::open(Config::Postgres(config.clone()), Policy::default())
         .await
