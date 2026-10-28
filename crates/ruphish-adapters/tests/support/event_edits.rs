@@ -442,15 +442,16 @@ pub async fn contract(db: &Database) {
         )
         .await
         .unwrap();
-    assert_eq!(clicked.unique, [0, 0, 2, 0, 0]);
-    assert_eq!(clicked.totals, [0, 0, 4, 0, 0]);
+    let opened = i64::from(a.is_ok());
+    assert_eq!(clicked.unique, [0, opened, 2, 1, 1]);
+    assert_eq!(clicked.totals, [0, opened, 4, 1, 2 - opened]);
     assert_eq!(
         clicked.participant_buckets.first().unwrap().counts,
         [0, 0, 1, 0, 0]
     );
     assert_eq!(
         clicked.participant_buckets.last().unwrap().counts,
-        [0, 0, 2, 0, 0]
+        [0, opened, 2, 1, 1]
     );
     for id in added_ids {
         repo.change_event(

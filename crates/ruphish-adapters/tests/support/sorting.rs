@@ -528,6 +528,175 @@ async fn historical_transport(db: &Database) {
     }
 }
 
+// The selected event qualifies recipients; the time/source scope still bounds
+// every returned occurrence, including actions before and after qualification.
+const EVENT_SELECTION: &str = "
+INSERT INTO campaigns(id,user_id,name,status) VALUES(950,1,'Event selection','Completed');
+INSERT INTO results(id,campaign_id,user_id,r_id,email,status,reported) VALUES
+(9501,950,1,'selection-1','a@example.test','Email Sent',false),
+(9502,950,1,'selection-2','b@example.test','Email Sent',false),
+(9503,950,1,'selection-3','c@example.test','Email Sent',false),
+(9504,950,1,'selection-4','d@example.test','Email Sent',false);
+INSERT INTO events(id,campaign_id,recipient_id,email,time,kind,metadata,source) VALUES
+(95001,950,9501,'a@example.test','2026-01-01T00:00:00Z','email_opened','{}','public'),
+(95002,950,9501,'a@example.test','2026-01-01T00:00:01Z','form_submitted','{}','public'),
+(95003,950,9501,'a@example.test','2026-01-01T00:00:02Z','link_clicked','{}','public'),
+(95004,950,9501,'a@example.test','2026-01-01T00:00:03Z','form_submitted','{}','public'),
+(95005,950,9501,'a@example.test','2026-01-01T00:00:04Z','email_reported','{}','operator'),
+(95006,950,9501,'a@example.test','2026-01-01T00:00:05Z','email_opened','{}','public'),
+(95007,950,9502,'b@example.test','2025-12-31T23:59:59Z','form_submitted','{}','public'),
+(95008,950,9502,'b@example.test','2026-01-01T00:00:02Z','link_clicked','{}','public'),
+(95009,950,9502,'b@example.test','2026-01-01T00:00:05Z','form_submitted','{}','public'),
+(95010,950,9503,'c@example.test','2026-01-01T00:00:00Z','email_reported','{}','public'),
+(95011,950,9503,'c@example.test','2026-01-01T00:00:04Z','link_clicked','{}','public'),
+(95012,950,NULL,'unattributed@example.test','2026-01-01T00:00:02Z','form_submitted','{}','legacy');";
+
+async fn event_selection(db: &Database) {
+    use ruphish_domain::events::Kind;
+    let actor = db.accounts().by_name("admin").await.unwrap().identity;
+    let reports = db.reporting();
+    let filter = reporting::Filter {
+        event: vec![Kind::FormSubmitted],
+        from: Some(1767225600),
+        until: Some(1767225605),
+        event_order: SortDirection::Asc,
+        limit: 50,
+        ..Default::default()
+    };
+    let selected = reports.analysis(actor, 950, filter.clone()).await.unwrap();
+    assert_eq!(selected.audience, 4);
+    assert_eq!(selected.recipient_total, 1);
+    assert_eq!(selected.recipients[0].id, 9501);
+    assert_eq!(selected.event_total, 5);
+    assert_eq!(
+        selected.events.iter().map(|e| e.id).collect::<Vec<_>>(),
+        [95001, 95002, 95003, 95004, 95005]
+    );
+    assert_eq!(selected.totals, [0, 1, 1, 2, 1]);
+    assert_eq!(selected.unique, [0, 1, 1, 1, 1]);
+    assert_eq!(selected.recipients[0].counts, [0, 1, 1, 2, 1]);
+    assert_eq!(
+        selected.first_observed,
+        [
+            None,
+            Some(1767225600),
+            Some(1767225602),
+            Some(1767225601),
+            Some(1767225604)
+        ]
+    );
+    assert_eq!(selected.last_observed[3], Some(1767225603));
+    assert_eq!(selected.buckets[0].counts, [0, 1, 1, 2, 1]);
+    assert_eq!(selected.participant_buckets[0].counts, [0, 1, 1, 1, 1]);
+
+    let union_filter = reporting::Filter {
+        event: vec![Kind::FormSubmitted, Kind::EmailReported],
+        limit: 1,
+        offset: 1,
+        ..filter.clone()
+    };
+    let union = reports
+        .analysis(actor, 950, union_filter.clone())
+        .await
+        .unwrap();
+    assert_eq!(union.recipient_total, 2);
+    assert_eq!(union.recipients[0].id, 9503);
+    assert_eq!(union.recipients[0].counts, [0, 0, 1, 0, 1]);
+    assert_eq!(union.event_total, 7);
+    assert_eq!(union.events.len(), 1);
+    assert_eq!(union.totals, [0, 1, 2, 2, 2]);
+    assert_eq!(union.unique, [0, 1, 2, 1, 2]);
+    assert_eq!(union.buckets[0].counts, [0, 1, 2, 2, 2]);
+    assert_eq!(union.participant_buckets[0].counts, [0, 1, 2, 1, 2]);
+    for (scope, column, expected) in [
+        (
+            "events",
+            "Event ID",
+            vec![
+                "95001", "95010", "95002", "95003", "95004", "95005", "95011",
+            ],
+        ),
+        ("recipients", "Recipient ID", vec!["9501", "9503"]),
+    ] {
+        let download = reports
+            .export(actor, 950, union_filter.clone(), "csv", scope)
+            .await
+            .unwrap();
+        let mut reader = csv::Reader::from_reader(download.bytes.as_slice());
+        let index = reader
+            .headers()
+            .unwrap()
+            .iter()
+            .position(|name| name == column)
+            .unwrap();
+        let ids = reader
+            .records()
+            .map(|row| row.unwrap()[index].to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(ids, expected);
+    }
+
+    let public = reports
+        .analysis(
+            actor,
+            950,
+            reporting::Filter {
+                source: Some(reporting::Source::Public),
+                ..filter.clone()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(public.totals, [0, 1, 1, 2, 0]);
+    for restricted in [
+        reporting::Filter {
+            source: Some(reporting::Source::Operator),
+            ..filter.clone()
+        },
+        reporting::Filter {
+            recipients: vec![9502, 9503],
+            ..filter.clone()
+        },
+        reporting::Filter {
+            recipient: Some(9502),
+            ..filter.clone()
+        },
+        reporting::Filter {
+            search: "b@example.test".into(),
+            ..filter.clone()
+        },
+        reporting::Filter {
+            from: Some(1767225604),
+            ..filter.clone()
+        },
+    ] {
+        let empty = reports.analysis(actor, 950, restricted).await.unwrap();
+        assert_eq!(empty.recipient_total, 0);
+        assert_eq!(empty.event_total, 0);
+        assert_eq!(empty.totals, [0; 5]);
+        assert!(empty.participant_buckets.is_empty());
+    }
+    let all = reports
+        .analysis(
+            actor,
+            950,
+            reporting::Filter {
+                event: vec![],
+                ..filter
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        all.recipient_total, 4,
+        "No event selection retains recipients without activity"
+    );
+    assert_eq!(
+        all.event_total, 9,
+        "Unattributed history remains available without event selection"
+    );
+}
+
 #[tokio::test]
 async fn sqlite_sorted_tables_cover_complete_sets_and_exports() {
     let dir = tempfile::tempdir().unwrap();
@@ -545,6 +714,11 @@ async fn sqlite_sorted_tables_cover_complete_sets_and_exports() {
     .unwrap();
     sqlx::raw_sql(SETUP).execute(&mut inspect).await.unwrap();
     exercise(&db).await;
+    sqlx::raw_sql(EVENT_SELECTION)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    event_selection(&db).await;
     sqlx::raw_sql(MISSING_TRANSPORT)
         .execute(&mut inspect)
         .await
@@ -562,6 +736,11 @@ async fn mysql_sorted_tables_cover_complete_sets_and_exports() {
     bootstrap_sorting(&db).await;
     sqlx::raw_sql(SETUP).execute(&mut inspect).await.unwrap();
     exercise(&db).await;
+    sqlx::raw_sql(EVENT_SELECTION)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    event_selection(&db).await;
     sqlx::raw_sql(MISSING_TRANSPORT)
         .execute(&mut inspect)
         .await
@@ -587,6 +766,11 @@ async fn postgres_sorted_tables_cover_complete_sets_and_exports() {
     let mut inspect = postgres_inspect(&config).await;
     sqlx::raw_sql(SETUP).execute(&mut inspect).await.unwrap();
     exercise(&db).await;
+    sqlx::raw_sql(EVENT_SELECTION)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    event_selection(&db).await;
     sqlx::raw_sql(MISSING_TRANSPORT)
         .execute(&mut inspect)
         .await

@@ -18,7 +18,8 @@ pub struct Filter {
     pub from: Option<i64>,
     /// Exclusive UTC Unix seconds.
     pub until: Option<i64>,
-    /// Union of recognized event types; empty means all types.
+    /// Select recipients with any of these event types in the time/source scope.
+    /// Retain all scoped event types for those recipients; empty means no event selection.
     pub event: Vec<ruphish_domain::events::Kind>,
     /// Case-insensitive recipient name/email substring.
     pub search: String,

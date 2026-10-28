@@ -906,7 +906,7 @@
     "not_observed": "Nicht beobachtet",
     "since_acceptance": "Seit Versand",
     "review_delivery": "Versand und Ereignisse prüfen",
-    "event_types": "Ereignistypen",
+    "recipients_with_any_event": "Empfänger mit mindestens einem ausgewählten Ereignis",
     "retry_requested": "Erneuter Versand angefordert",
     "resend_requested": "Erneuter Versand trotz unklarem Status angefordert",
     "acceptance_confirmed": "Manuell als gesendet markiert",

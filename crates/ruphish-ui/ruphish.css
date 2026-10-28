@@ -820,6 +820,7 @@
 @keyframes refresh-turn { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .refresh-indicator.is-fetching { animation: none; } }
 .campaign-heading-facts { display: flex; flex-wrap: wrap; gap: .5rem 2rem; color: var(--muted); margin: -.5rem 0 1.5rem; }
+.campaign-heading-facts strong { font-weight: var(--fw-semibold); }
 .timeline-labels { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .35rem; font-size: .8rem; color: var(--muted); }
 .timeline-labels span { background: var(--canvas); padding: .15rem .45rem; border-radius: .25rem; }
 .event-edit-dialog { width: min(72rem, calc(100vw - 3rem)); max-width: 72rem; }
@@ -845,7 +846,7 @@
 .select-loading { display: block; min-height: 1.5rem; color: var(--muted); font-size: .85rem; }
 
 .page-title-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: .75rem; }
-.campaign-lifecycle { border: 1px solid var(--line); border-radius: 1rem; padding: .2rem .65rem; font-size: .8rem; color: var(--muted); }
+.campaign-lifecycle { border: 1px solid var(--line-strong); border-radius: 1rem; padding: .2rem .65rem; background: var(--teal-100); color: var(--teal-700); font-size: .8rem; font-weight: var(--fw-semibold); }
 .delivery-swatch { display: inline-block; width: .65rem; height: .65rem; margin-right: .4rem; border-radius: 50%; }
 
 }

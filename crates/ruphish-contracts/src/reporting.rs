@@ -12,7 +12,9 @@ pub struct Filter {
     pub from: Option<i64>,
     /// Exclusive UTC seconds.
     pub until: Option<i64>,
-    /// Comma-separated event identifiers (union); empty means all. Validated by HTTP.
+    /// Select recipients with any of these comma-separated event identifiers in the
+    /// time/source scope, retaining all their scoped events. Empty means no selection.
+    /// Validated by HTTP.
     pub event: String,
     /// Recipient search.
     pub search: String,

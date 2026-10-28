@@ -7,7 +7,7 @@ sidebar:
 
 Open **Campaigns** and select a launched campaign. **Sending** opens for ongoing campaigns; completed campaigns open **Results**. The four campaign tabs are **Setup**, **Sending**, **Results**, and **Resources**.
 
-Use the recipient selector, event/source filters, and time range to narrow the question. Select up to 200 recipient identities, or leave the selector empty for everyone. Select several engagement event types to include any of those types. Local time input follows your display zone; the underlying filters use UTC instants.
+Use the recipient selector, event/source filters, and time range to narrow the question. Select up to 200 recipient identities, or leave the selector empty for everyone. Select engagement event types to include recipients with at least one of those events within the selected time range and source. All event types for those recipients remain visible within that same time/source scope. Multiple event types mean any selected type, not every type; leaving them unchecked adds no event-based recipient restriction. The start is inclusive and the end is exclusive. Local time input follows your display zone; the underlying filters use UTC instants.
 
 The four summaries count participants with recorded opens, clicks, submissions and reports. Each campaign recipient counts at most once per action within the selected filters. The cumulative participant chart adds each recipient at their first matching action in the selected period and keeps the count unchanged across quiet intervals or repeated actions. Toggle series in its legend, then hover, focus or select an interval for its cumulative totals. Sending states have their own donut chart in **Sending**.
 

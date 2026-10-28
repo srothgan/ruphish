@@ -5,7 +5,7 @@ sidebar:
   order: 5
 ---
 
-Set the campaign Results filters first, then choose **Recipient activity CSV**, **Individual events CSV**, or **Export Excel**. Exports contain all matching rows, not only the visible page.
+Set the campaign Results filters first, then choose **Recipient activity CSV**, **Individual events CSV**, or **Export Excel**. Exports contain all matching rows, not only the visible page. Selected event types choose recipients who have any of those events within the date/source scope; exports retain all event types for those recipients within that same scope. The start time is inclusive and the end time is exclusive.
 
 | Download | Contents |
 | --- | --- |

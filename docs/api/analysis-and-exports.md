@@ -15,7 +15,7 @@ sidebar:
 | `recipients` | Comma-separated numeric recipient-row IDs; at most 200 |
 | `from` | Inclusive UTC Unix seconds |
 | `until` | Exclusive UTC Unix seconds |
-| `event` | Comma-separated stable event identifiers (union); omit for all events |
+| `event` | Comma-separated stable event identifiers; select recipients with any of these events within the time/source scope, retaining all their scoped event types; omit for no event-based selection |
 | `source` | `legacy`, `application`, `public`, `mailbox`, or `operator`; omit for all sources |
 | `search` | Case-insensitive recipient name/email substring |
 | `sort` | Recipient column: `email` (default), `name`, `delivery`, `accepted`, `opened`, `clicked`, `submitted`, or `reported` |
@@ -25,7 +25,11 @@ sidebar:
 | `offset` | Table offset, default 0 |
 | `limit` | Requested table rows, 1–200; default 50 |
 
-Recipient filters intersect when combined. Event types are combined as a union; duplicates are ignored. Invalid filters fail rather than silently broadening the result. Supported event filters are `campaign_created`, `email_sent`, `email_error`, `email_opened`, `link_clicked`, `form_submitted`, `email_reported`, and `delivery_reconciled`. Display labels are not filter identifiers; for example, use `event=email_opened,form_submitted`. Unknown event identifiers or sources return `400`.
+Recipient filters intersect when combined. Event types select recipients with at least one matching event inside the `from` (inclusive), `until` (exclusive), and `source` restrictions. All event types for those recipients within the same time/source restrictions contribute to rows, totals, charts, and exports. Multiple types match any selected type; duplicates are ignored. Events outside the time window cannot qualify a recipient and are not returned.
+
+This changes the meaning of existing `event` URLs from event-type restriction to recipient selection. Unattributed events cannot qualify a recipient and are excluded when `event` is set; without it, existing unattributed history remains available.
+
+Invalid filters fail rather than silently broadening the result. Supported event filters are `campaign_created`, `email_sent`, `email_error`, `email_opened`, `link_clicked`, `form_submitted`, `email_reported`, and `delivery_reconciled`. Display labels are not filter identifiers; for example, use `event=email_opened,form_submitted`. Unknown event identifiers or sources return `400`.
 
 Sorting applies to the complete filtered collection before pagination. Recipient text uses case-sensitive Unicode order, and counts sort numerically. Event-kind ordering uses the readable event name shown in the table and exports. Equal recipient values use ascending recipient ID; equal event values use event ID in the selected direction. Presence sorts absent, false, then true in ascending order. Undated historical report flags do not contribute to the recorded report count. Unknown sort columns or directions return `400`.
 

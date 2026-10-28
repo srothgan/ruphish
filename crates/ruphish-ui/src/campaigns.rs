@@ -1950,7 +1950,9 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
                     {move || instant(&data.get()["campaign"]["launch_date"])}
                 </span>
                 <span>
-                    {tr!(ui.recipients)}": "{move || data.get()["campaign"]["total"].as_i64()}
+                    <strong>{tr!(ui.recipients)}":"</strong>
+                    " "
+                    {move || data.get()["campaign"]["total"].as_i64()}
                 </span>
             </div>
             <nav class="campaign-sections" aria-label=move || trs!(ui.campaign).get()>
