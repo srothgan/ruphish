@@ -19,3 +19,5 @@ pub mod server;
 mod starter_templates;
 
 mod settings;
+
+mod event_edit;

@@ -181,6 +181,7 @@ async fn snapshot_tracks_queued_launches_expiry_current_delivery_issues_and_inve
     );
     assert_eq!(s.attention.next_launch.as_ref().map(|n| n.id), Some(3));
     assert_eq!(s.attention.delivery_problems, 3);
+    assert_eq!(s.attention.campaign_ids, vec![1]);
     assert_eq!(s.attention.unverified_enabled_domains, 3);
     assert_eq!(
         s.inventory,

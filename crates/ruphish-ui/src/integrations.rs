@@ -201,9 +201,7 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
                         .to_owned()
                 })
             >
-                <ActionButton on_click=move |_| list.refresh.run(()) disabled=list.fetching>
-                    {tr!(ui.refresh)}
-                </ActionButton>
+                <RefreshButton fetching=list.fetching on_refresh=list.refresh />
                 {can_edit
                     .then(|| {
                         view! {
@@ -220,105 +218,106 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
             </PageHeader>
             {message.view()}
             <ResourceDeleteDialog deletion=deletion api=api token=token on_deleted=deleted />
-            <ListToolbar
-                search=search
-                count=Signal::derive(move || visible.with(Vec::len))
-                count_known=confirmed
-                noun=Signal::derive(move || kind.plural().to_owned())
-            />
-            <QueryStatus
+            <QueryBoundary
                 fetching=list.fetching
                 has_data=confirmed
                 error=list.error
                 noun=Signal::derive(move || kind.plural().to_owned())
                 refresh=list.refresh
-            />
-            <DataTable
-                sorting=sorting
-                columns=vec!["name", "destination", "enabled", "status", ""]
-                label=Signal::derive(move || kind.title().to_owned())
-                empty=Signal::derive(move || visible.with(Vec::is_empty))
-                headers=vec![
-                    trs!(ui.name),
-                    trs!(ui.destination),
-                    trs!(ui.enabled),
-                    trs!(ui.status),
-                    trs!(ui.actions),
-                ]
             >
-                {move || {
-                    sorting
-                        .rows(
-                            visible.get(),
-                            |row, key| match key {
-                                "destination" => row.destination().into(),
-                                "enabled" => row.enabled().into(),
-                                "status" => {
-                                    (if row.running() { "checking" } else { row.code() }).into()
+                <QueryControls slot:controls>
+                    <ListToolbar
+                        search=search
+                        count=Signal::derive(move || visible.with(Vec::len))
+                        count_known=confirmed
+                        noun=Signal::derive(move || kind.plural().to_owned())
+                    />
+                </QueryControls>
+                <DataTable
+                    sorting=sorting
+                    columns=vec!["name", "destination", "enabled", "status", ""]
+                    label=Signal::derive(move || kind.title().to_owned())
+                    empty=Signal::derive(move || visible.with(Vec::is_empty))
+                    headers=vec![
+                        trs!(ui.name),
+                        trs!(ui.destination),
+                        trs!(ui.enabled),
+                        trs!(ui.status),
+                        trs!(ui.actions),
+                    ]
+                >
+                    {move || {
+                        sorting
+                            .rows(
+                                visible.get(),
+                                |row, key| match key {
+                                    "destination" => row.destination().into(),
+                                    "enabled" => row.enabled().into(),
+                                    "status" => {
+                                        (if row.running() { "checking" } else { row.code() }).into()
+                                    }
+                                    _ => row.name().into(),
+                                },
+                                |row| row.id().into(),
+                            )
+                            .into_iter()
+                            .map(|row| {
+                                let href = format!("{}/{}", kind.path(), row.id());
+                                let target = DeleteTarget {
+                                    id: row.id(),
+                                    name: row.name().to_owned(),
+                                    path: format!("{}/{}", kind.api(), row.id()),
+                                    revision: Some(row.revision().to_string()),
+                                    description: leptos_i18n::t_string!(
+                                        i18n, ui.this_removes_the_configuration_and_its_processing_history_already_dispatched_req
+                                    ),
+                                };
+                                view! {
+                                    <tr>
+                                        <th scope="row">
+                                            <a href=href.clone()>{row.name().to_owned()}</a>
+                                        </th>
+                                        <td>{row.destination().to_owned()}</td>
+                                        <td>
+                                            {if row.enabled() {
+                                                leptos_i18n::t_string!(i18n, ui.yes)
+                                            } else {
+                                                leptos_i18n::t_string!(i18n, ui.no)
+                                            }}
+                                        </td>
+                                        <td>
+                                            {if row.running() {
+                                                leptos_i18n::t_string!(i18n, ui.checking).into()
+                                            } else {
+                                                row.code().to_owned()
+                                            }}
+                                        </td>
+                                        <td>
+                                            <ResourceActions
+                                                view_href=href.clone()
+                                                edit_href=format!("{href}/edit")
+                                                can_edit=can_edit
+                                                size=ControlSize::Small
+                                                disabled=deletion.busy
+                                                on_delete=Callback::new(move |()| {
+                                                    deletion.select(target.clone())
+                                                })
+                                            />
+                                        </td>
+                                    </tr>
                                 }
-                                _ => row.name().into(),
-                            },
-                            |row| row.id().into(),
-                        )
-                        .into_iter()
-                        .map(|row| {
-                            let href = format!("{}/{}", kind.path(), row.id());
-                            let target = DeleteTarget {
-                                id: row.id(),
-                                name: row.name().to_owned(),
-                                path: format!("{}/{}", kind.api(), row.id()),
-                                revision: Some(row.revision().to_string()),
-                                description: leptos_i18n::t_string!(
-                                    i18n, ui.this_removes_the_configuration_and_its_processing_history_already_dispatched_req
-                                ),
-                            };
-                            view! {
-                                <tr>
-                                    <th scope="row">
-                                        <a href=href.clone()>{row.name().to_owned()}</a>
-                                    </th>
-                                    <td>{row.destination().to_owned()}</td>
-                                    <td>
-                                        {if row.enabled() {
-                                            leptos_i18n::t_string!(i18n, ui.yes)
-                                        } else {
-                                            leptos_i18n::t_string!(i18n, ui.no)
-                                        }}
-                                    </td>
-                                    <td>
-                                        {if row.running() {
-                                            leptos_i18n::t_string!(i18n, ui.checking).into()
-                                        } else {
-                                            row.code().to_owned()
-                                        }}
-                                    </td>
-                                    <td>
-                                        <ResourceActions
-                                            view_href=href.clone()
-                                            edit_href=format!("{href}/edit")
-                                            can_edit=can_edit
-                                            size=ControlSize::Small
-                                            disabled=deletion.busy
-                                            on_delete=Callback::new(move |()| {
-                                                deletion.select(target.clone())
-                                            })
-                                        />
-                                    </td>
-                                </tr>
-                            }
-                        })
-                        .collect_view()
-                }}
-            </DataTable>
-            <ListEmptyState
-                ready=Signal::derive(move || {
-                    confirmed.get() && !list.fetching.get() && list.error.get().is_none()
-                })
-                count=Signal::derive(move || visible.with(Vec::len))
-                search=search
-                title=Signal::derive(move || kind.empty_title().to_owned())
-                guidance=Signal::derive(move || kind.empty_guidance().to_owned())
-            />
+                            })
+                            .collect_view()
+                    }}
+                </DataTable>
+                <ListEmptyState
+                    ready=Signal::derive(move || { confirmed.get() && list.error.get().is_none() })
+                    count=Signal::derive(move || visible.with(Vec::len))
+                    search=search
+                    title=Signal::derive(move || kind.empty_title().to_owned())
+                    guidance=Signal::derive(move || kind.empty_guidance().to_owned())
+                />
+            </QueryBoundary>
         </ManagementPage>
     }
 }
@@ -550,155 +549,165 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                         .to_owned()
                 })
             />
-            <p class="resource-usage">
-                {move || {
-                    if kind.webhook() {
-                        leptos_i18n::t_string!(i18n, ui.webhook_configuration_context)
-                    } else {
-                        leptos_i18n::t_string!(i18n, ui.mailbox_configuration_context)
-                    }
-                }}
-            </p>
-            {message.view()}
-            <form novalidate on:submit=save>
-                <ValidationSummary form=validation />
-                <FormFields disabled=Signal::derive(move || {
-                    busy.get() || !loaded.get() || !editable
-                })>
-                    {field(draft, "name", trs!(ui.name), "text")}
-                    {if kind.webhook() {
-                        view! {
-                            <section class="resource-section">
-                                <h2>{tr!(ui.connection)}</h2>
-                                {field(draft, "url", trs!(ui.endpoint_url), "url")}
-                                <SecretField
-                                    validation_field="secret"
-                                    label=trs!(ui.signing_secret)
-                                    saved_hint=trs!(ui.leave_empty_to_keep_the_saved_secret)
-                                    has_saved_value=has_saved_secret
-                                    value=Signal::derive(move || text(&draft.get(), "secret"))
-                                    on_input=Callback::new(move |value: String| {
-                                        draft.update(|draft| draft["secret"] = json!(value))
-                                    })
-                                />
-                            </section>
-                            <section class="resource-section">
-                                <h2>{tr!(ui.delivery)}</h2>
-                                {checkbox(draft, "is_active", trs!(ui.enabled))}
-                                <p>{tr!(ui.webhook_delivery_guidance)}</p>
-                            </section>
+            <QueryBoundary
+                fetching=loading.into()
+                has_data=Signal::derive(move || loaded.get())
+                error=Signal::derive(move || load_error.get().map(|e| e.message))
+                noun=trs!(ui.resources)
+                refresh=Callback::new(move |_| refresh.update(|n| *n += 1))
+            >
+                <p class="resource-usage">
+                    {move || {
+                        if kind.webhook() {
+                            leptos_i18n::t_string!(i18n, ui.webhook_configuration_context)
+                        } else {
+                            leptos_i18n::t_string!(i18n, ui.mailbox_configuration_context)
                         }
-                            .into_any()
-                    } else {
-                        view! {
-                            <section class="resource-section">
-                                <h2>{tr!(ui.connection)}</h2>
-                                <div class="resource-columns">
-                                    {field(draft, "host", trs!(ui.imap_hostname), "text")}
-                                    {field(draft, "port", trs!(ui.port), "number")}
-                                </div>
-                                {checkbox(
-                                    draft,
-                                    "tls",
-                                    trs!(ui.use_implicit_tls_otherwise_starttls_is_required),
-                                )}
-                                {checkbox(
-                                    draft,
-                                    "ignore_cert_errors",
-                                    trs!(ui.skip_certificate_verification),
-                                )}
-                                <p class="field-hint">
-                                    {tr!(ui.skip_certificate_verification_help)}
-                                </p>
-                            </section>
-                            <section class="resource-section">
-                                <h2>{tr!(ui.service_account)}</h2>
-                                <div class="resource-columns">
-                                    {field(
-                                        draft,
-                                        "username",
-                                        trs!(ui.service_account_username),
-                                        "text",
-                                    )}
+                    }}
+                </p>
+                {message.view()}
+                <form novalidate on:submit=save>
+                    <ValidationSummary form=validation />
+                    <FormFields disabled=Signal::derive(move || {
+                        busy.get() || !loaded.get() || !editable
+                    })>
+                        {field(draft, "name", trs!(ui.name), "text")}
+                        {if kind.webhook() {
+                            view! {
+                                <section class="resource-section">
+                                    <h2>{tr!(ui.connection)}</h2>
+                                    {field(draft, "url", trs!(ui.endpoint_url), "url")}
                                     <SecretField
-                                        validation_field="password"
-                                        label=trs!(ui.service_account_password)
-                                        saved_hint=trs!(ui.leave_empty_to_keep_the_saved_password)
+                                        validation_field="secret"
+                                        label=trs!(ui.signing_secret)
+                                        saved_hint=trs!(ui.leave_empty_to_keep_the_saved_secret)
                                         has_saved_value=has_saved_secret
-                                        value=Signal::derive(move || text(&draft.get(), "password"))
+                                        value=Signal::derive(move || text(&draft.get(), "secret"))
                                         on_input=Callback::new(move |value: String| {
-                                            draft.update(|draft| draft["password"] = json!(value))
+                                            draft.update(|draft| draft["secret"] = json!(value))
                                         })
                                     />
-                                </div>
-                            </section>
-                            <section class="resource-section">
-                                <h2>{tr!(ui.monitoring)}</h2>
-                                <div class="resource-columns">
-                                    {field(draft, "folder", trs!(ui.folder), "text")}
-                                    {field(
-                                        draft,
-                                        "frequency",
-                                        trs!(ui.check_interval_in_seconds_minimum_30),
-                                        "number",
-                                    )}
-                                    {field(
-                                        draft,
-                                        "restrict_domain",
-                                        trs!(ui.optional_sender_domain_filter),
-                                        "text",
-                                    )}
-                                </div>
-                                {checkbox(
-                                    draft,
-                                    "delete_reported",
-                                    trs!(ui.delete_successfully_matched_messages_after_processing),
-                                )}
-                                {checkbox(draft, "enabled", trs!(ui.enabled))}
-                                <p>{tr!(ui.mailbox_processing_guidance)}</p>
-                            </section>
-                        }
-                            .into_any()
-                    }}
-                </FormFields>
-                <FormFooter spread=true>
-                    <ActionButton
-                        style=ButtonStyle::Ghost
-                        disabled=busy
-                        on_click=move |_| {
-                            draft.set(baseline.get_untracked());
-                            navigate
-                                .with_value(|navigate| navigate(
-                                    &id
-                                        .map_or_else(
-                                            || kind.path().into(),
-                                            |id| format!("{}/{id}", kind.path()),
-                                        ),
-                                    Default::default(),
-                                ));
-                        }
-                    >
-                        {tr!(ui.cancel_changes)}
-                    </ActionButton>
-                    <SaveButton
-                        kind="submit"
-                        disabled=Signal::derive(move || {
-                            busy.get() || !loaded.get() || !editable
-                        })
-                        label=Signal::derive(move || {
-                            if busy.get() {
-                                leptos_i18n::t_string!(i18n, ui.saving).to_owned()
-                            } else if id.is_some() {
-                                leptos_i18n::t_string!(i18n, ui.save_changes).to_owned()
-                            } else {
-                                leptos_i18n::t_string!(
-                                    i18n, messages.create_arg0, arg0 = (kind.singular()).to_string()
-                                )
+                                </section>
+                                <section class="resource-section">
+                                    <h2>{tr!(ui.delivery)}</h2>
+                                    {checkbox(draft, "is_active", trs!(ui.enabled))}
+                                    <p>{tr!(ui.webhook_delivery_guidance)}</p>
+                                </section>
                             }
-                        })
-                    />
-                </FormFooter>
-            </form>
+                                .into_any()
+                        } else {
+                            view! {
+                                <section class="resource-section">
+                                    <h2>{tr!(ui.connection)}</h2>
+                                    <div class="resource-columns">
+                                        {field(draft, "host", trs!(ui.imap_hostname), "text")}
+                                        {field(draft, "port", trs!(ui.port), "number")}
+                                    </div>
+                                    {checkbox(
+                                        draft,
+                                        "tls",
+                                        trs!(ui.use_implicit_tls_otherwise_starttls_is_required),
+                                    )}
+                                    {checkbox(
+                                        draft,
+                                        "ignore_cert_errors",
+                                        trs!(ui.skip_certificate_verification),
+                                    )}
+                                    <p class="field-hint">
+                                        {tr!(ui.skip_certificate_verification_help)}
+                                    </p>
+                                </section>
+                                <section class="resource-section">
+                                    <h2>{tr!(ui.service_account)}</h2>
+                                    <div class="resource-columns">
+                                        {field(
+                                            draft,
+                                            "username",
+                                            trs!(ui.service_account_username),
+                                            "text",
+                                        )}
+                                        <SecretField
+                                            validation_field="password"
+                                            label=trs!(ui.service_account_password)
+                                            saved_hint=trs!(ui.leave_empty_to_keep_the_saved_password)
+                                            has_saved_value=has_saved_secret
+                                            value=Signal::derive(move || text(&draft.get(), "password"))
+                                            on_input=Callback::new(move |value: String| {
+                                                draft.update(|draft| draft["password"] = json!(value))
+                                            })
+                                        />
+                                    </div>
+                                </section>
+                                <section class="resource-section">
+                                    <h2>{tr!(ui.monitoring)}</h2>
+                                    <div class="resource-columns">
+                                        {field(draft, "folder", trs!(ui.folder), "text")}
+                                        {field(
+                                            draft,
+                                            "frequency",
+                                            trs!(ui.check_interval_in_seconds_minimum_30),
+                                            "number",
+                                        )}
+                                        {field(
+                                            draft,
+                                            "restrict_domain",
+                                            trs!(ui.optional_sender_domain_filter),
+                                            "text",
+                                        )}
+                                    </div>
+                                    {checkbox(
+                                        draft,
+                                        "delete_reported",
+                                        trs!(
+                                            ui.delete_successfully_matched_messages_after_processing
+                                        ),
+                                    )}
+                                    {checkbox(draft, "enabled", trs!(ui.enabled))}
+                                    <p>{tr!(ui.mailbox_processing_guidance)}</p>
+                                </section>
+                            }
+                                .into_any()
+                        }}
+                    </FormFields>
+                    <FormFooter spread=true>
+                        <ActionButton
+                            style=ButtonStyle::Ghost
+                            disabled=busy
+                            on_click=move |_| {
+                                draft.set(baseline.get_untracked());
+                                navigate
+                                    .with_value(|navigate| navigate(
+                                        &id
+                                            .map_or_else(
+                                                || kind.path().into(),
+                                                |id| format!("{}/{id}", kind.path()),
+                                            ),
+                                        Default::default(),
+                                    ));
+                            }
+                        >
+                            {tr!(ui.cancel_changes)}
+                        </ActionButton>
+                        <SaveButton
+                            kind="submit"
+                            disabled=Signal::derive(move || {
+                                busy.get() || !loaded.get() || !editable
+                            })
+                            label=Signal::derive(move || {
+                                if busy.get() {
+                                    leptos_i18n::t_string!(i18n, ui.saving).to_owned()
+                                } else if id.is_some() {
+                                    leptos_i18n::t_string!(i18n, ui.save_changes).to_owned()
+                                } else {
+                                    leptos_i18n::t_string!(
+                                        i18n, messages.create_arg0, arg0 = (kind.singular()).to_string()
+                                    )
+                                }
+                            })
+                        />
+                    </FormFooter>
+                </form>
+            </QueryBoundary>
         </ManagementPage>
     };
     view! {
@@ -830,9 +839,7 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
             <PageHeader title=Signal::derive(move || {
                 value.get().map(|v| v.name().to_owned()).unwrap_or_default()
             })>
-                <ActionButton on_click=move |_| read.refresh.run(()) disabled=read.fetching>
-                    {tr!(ui.refresh)}
-                </ActionButton>
+                <RefreshButton fetching=read.fetching on_refresh=read.refresh />
                 {editable
                     .then(|| {
                         view! {
@@ -869,263 +876,272 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                         }
                     })}
             </PageHeader>
+
             {message.view()}
-            <QueryStatus
+            <QueryBoundary
                 fetching=read.fetching
                 has_data=confirmed
                 error=read.error
                 noun=Signal::derive(move || kind.singular().to_owned())
                 refresh=read.refresh
-            />
-            <Show when=move || confirmed.get()>
-                <Card class="integration-status">
-                    <dl>
-                        <dt>{tr!(ui.destination)}</dt>
-                        <dd>
-                            {move || {
-                                value.get().map(|v| v.destination().to_owned()).unwrap_or_default()
-                            }}
-                        </dd>
-                        <dt>{tr!(ui.enabled)}</dt>
-                        <dd>
-                            {move || {
-                                if value.get().is_some_and(|v| v.enabled()) {
-                                    leptos_i18n::t_string!(i18n, ui.yes)
-                                } else {
-                                    leptos_i18n::t_string!(i18n, ui.no)
-                                }
-                            }}
-                        </dd>
-                        <dt>{tr!(ui.credential_configured)}</dt>
-                        <dd>
-                            {move || {
-                                if value.get().is_some_and(|v| v.has_secret()) {
-                                    leptos_i18n::t_string!(i18n, ui.yes)
-                                } else {
-                                    leptos_i18n::t_string!(i18n, ui.no)
-                                }
-                            }}
-                        </dd>
-                        {(!kind.webhook())
+            >
+                <Show when=move || confirmed.get()>
+                    <Card class="integration-status">
+                        <dl>
+                            <dt>{tr!(ui.destination)}</dt>
+                            <dd>
+                                {move || {
+                                    value
+                                        .get()
+                                        .map(|v| v.destination().to_owned())
+                                        .unwrap_or_default()
+                                }}
+                            </dd>
+                            <dt>{tr!(ui.enabled)}</dt>
+                            <dd>
+                                {move || {
+                                    if value.get().is_some_and(|v| v.enabled()) {
+                                        leptos_i18n::t_string!(i18n, ui.yes)
+                                    } else {
+                                        leptos_i18n::t_string!(i18n, ui.no)
+                                    }
+                                }}
+                            </dd>
+                            <dt>{tr!(ui.credential_configured)}</dt>
+                            <dd>
+                                {move || {
+                                    if value.get().is_some_and(|v| v.has_secret()) {
+                                        leptos_i18n::t_string!(i18n, ui.yes)
+                                    } else {
+                                        leptos_i18n::t_string!(i18n, ui.no)
+                                    }
+                                }}
+                            </dd>
+                            {(!kind.webhook())
+                                .then(|| {
+                                    view! {
+                                        <dt>{tr!(ui.account)}</dt>
+                                        <dd>
+                                            {move || {
+                                                mailbox.get().map(|v| v.username).unwrap_or_default()
+                                            }}
+                                        </dd>
+                                        <dt>{tr!(ui.folder)}</dt>
+                                        <dd>
+                                            {move || {
+                                                mailbox.get().map(|v| v.folder).unwrap_or_default()
+                                            }}
+                                        </dd>
+                                        <dt>{tr!(ui.transport)}</dt>
+                                        <dd>
+                                            {move || {
+                                                leptos_i18n::t_string!(
+                                                    i18n, messages.transport_port, transport = if mailbox.get().is_some_and(|v| v.tls) { "TLS" } else { "STARTTLS" }, port = mailbox.get().map(|v| v.port.to_string()).unwrap_or_default()
+                                                )
+                                            }}
+                                        </dd>
+                                        <dt>{tr!(ui.certificate_verification)}</dt>
+                                        <dd>
+                                            {move || {
+                                                if mailbox.get().is_some_and(|v| v.ignore_cert_errors) {
+                                                    trs!(ui.certificate_verification_skipped)
+                                                } else {
+                                                    trs!(ui.certificate_verification_enabled)
+                                                }
+                                            }}
+                                        </dd>
+                                        <dt>{tr!(ui.check_interval)}</dt>
+                                        <dd>
+                                            {move || {
+                                                leptos_i18n::t_string!(
+                                                    i18n, messages.count_seconds, count = mailbox.get().map(|v| v.frequency.to_string()).unwrap_or_default()
+                                                )
+                                            }}
+                                        </dd>
+                                        <dt>{tr!(ui.last_outcome)}</dt>
+                                        <dd>
+                                            {move || {
+                                                value.get().map(|v| v.code().to_owned()).unwrap_or_default()
+                                            }}
+                                        </dd>
+                                        <dt>{tr!(ui.last_successful_check)}</dt>
+                                        <dd>
+                                            {move || {
+                                                if mailbox.get().is_some_and(|v| v.last_success == 0) {
+                                                    leptos_i18n::t_string!(i18n, ui.not_recorded).into()
+                                                } else {
+                                                    instant(&json!(mailbox.get().map(|v| v.last_success)))
+                                                }
+                                            }}
+                                        </dd>
+                                        <dt>{tr!(ui.next_check)}</dt>
+                                        <dd>
+                                            {move || {
+                                                if !value.get().is_some_and(|v| v.enabled()) {
+                                                    leptos_i18n::t_string!(i18n, ui.disabled).into()
+                                                } else if mailbox.get().is_some_and(|v| v.next_check == 0) {
+                                                    leptos_i18n::t_string!(i18n, ui.queued).into()
+                                                } else {
+                                                    instant(&json!(mailbox.get().map(|v| v.next_check)))
+                                                }
+                                            }}
+                                        </dd>
+                                    }
+                                })}
+                        </dl>
+                        <Show when=move || value.get().is_some_and(|v| v.running())>
+                            <p role="status" aria-busy="true">
+                                {tr!(ui.checking_reporting_mailbox)}
+                            </p>
+                        </Show>
+                    </Card>
+                    <Show when=move || {
+                        !kind.webhook()
+                            && value
+                                .get()
+                                .is_some_and(|v| v.code() == "mailbox_uidvalidity_changed")
+                    }>
+                        <p role="alert">
+                            {tr!(
+                                ui.the_mail_server_changed_its_message_identifiers_processing_is_paused_to_protect
+                            )}
+                        </p>
+                        {editable
                             .then(|| {
                                 view! {
-                                    <dt>{tr!(ui.account)}</dt>
-                                    <dd>
-                                        {move || {
-                                            mailbox.get().map(|v| v.username).unwrap_or_default()
-                                        }}
-                                    </dd>
-                                    <dt>{tr!(ui.folder)}</dt>
-                                    <dd>
-                                        {move || {
-                                            mailbox.get().map(|v| v.folder).unwrap_or_default()
-                                        }}
-                                    </dd>
-                                    <dt>{tr!(ui.transport)}</dt>
-                                    <dd>
-                                        {move || {
-                                            leptos_i18n::t_string!(
-                                                i18n, messages.transport_port, transport = if mailbox.get().is_some_and(|v| v.tls) { "TLS" } else { "STARTTLS" }, port = mailbox.get().map(|v| v.port.to_string()).unwrap_or_default()
-                                            )
-                                        }}
-                                    </dd>
-                                    <dt>{tr!(ui.certificate_verification)}</dt>
-                                    <dd>
-                                        {move || {
-                                            if mailbox.get().is_some_and(|v| v.ignore_cert_errors) {
-                                                trs!(ui.certificate_verification_skipped)
-                                            } else {
-                                                trs!(ui.certificate_verification_enabled)
-                                            }
-                                        }}
-                                    </dd>
-                                    <dt>{tr!(ui.check_interval)}</dt>
-                                    <dd>
-                                        {move || {
-                                            leptos_i18n::t_string!(
-                                                i18n, messages.count_seconds, count = mailbox.get().map(|v| v.frequency.to_string()).unwrap_or_default()
-                                            )
-                                        }}
-                                    </dd>
-                                    <dt>{tr!(ui.last_outcome)}</dt>
-                                    <dd>
-                                        {move || {
-                                            value.get().map(|v| v.code().to_owned()).unwrap_or_default()
-                                        }}
-                                    </dd>
-                                    <dt>{tr!(ui.last_successful_check)}</dt>
-                                    <dd>
-                                        {move || {
-                                            if mailbox.get().is_some_and(|v| v.last_success == 0) {
-                                                leptos_i18n::t_string!(i18n, ui.not_recorded).into()
-                                            } else {
-                                                instant(&json!(mailbox.get().map(|v| v.last_success)))
-                                            }
-                                        }}
-                                    </dd>
-                                    <dt>{tr!(ui.next_check)}</dt>
-                                    <dd>
-                                        {move || {
-                                            if !value.get().is_some_and(|v| v.enabled()) {
-                                                leptos_i18n::t_string!(i18n, ui.disabled).into()
-                                            } else if mailbox.get().is_some_and(|v| v.next_check == 0) {
-                                                leptos_i18n::t_string!(i18n, ui.queued).into()
-                                            } else {
-                                                instant(&json!(mailbox.get().map(|v| v.next_check)))
-                                            }
-                                        }}
-                                    </dd>
+                                    <ActionButton
+                                        disabled=unavailable
+                                        on_click=move |_| resuming.set(true)
+                                    >
+                                        {tr!(ui.resume_with_new_arrivals)}
+                                    </ActionButton>
                                 }
                             })}
-                    </dl>
-                    <Show when=move || value.get().is_some_and(|v| v.running())>
-                        <p role="status" aria-busy="true">
-                            {tr!(ui.checking_reporting_mailbox)}
-                        </p>
                     </Show>
-                </Card>
-                <Show when=move || {
-                    !kind.webhook()
-                        && value.get().is_some_and(|v| v.code() == "mailbox_uidvalidity_changed")
-                }>
-                    <p role="alert">
-                        {tr!(
-                            ui.the_mail_server_changed_its_message_identifiers_processing_is_paused_to_protect
-                        )}
-                    </p>
-                    {editable
-                        .then(|| {
-                            view! {
-                                <ActionButton
-                                    disabled=unavailable
-                                    on_click=move |_| resuming.set(true)
-                                >
-                                    {tr!(ui.resume_with_new_arrivals)}
-                                </ActionButton>
-                            }
-                        })}
-                </Show>
-                <Show when=move || resuming.get()>
-                    <DeleteConfirmation
-                        title=trs!(ui.resume_with_new_arrivals_2)
-                        description=trs!(
-                            ui.existing_messages_in_the_changed_folder_will_be_left_untouched_monitoring_starts
-                        )
-                        confirm_label=trs!(ui.resume_monitoring)
-                        busy=Signal::derive(move || busy.get())
-                        on_confirm=Callback::new(move |()| action("resume"))
-                        on_cancel=Callback::new(move |()| resuming.set(false))
-                        message=message
-                    />
-                </Show>
-                <h2>
-                    {move || {
-                        if kind.webhook() {
-                            leptos_i18n::t_string!(i18n, ui.recent_delivery_attempts)
-                        } else {
-                            leptos_i18n::t_string!(i18n, ui.recent_mailbox_checks)
-                        }
-                    }}
-                </h2>
-                <DataTable
-                    sorting=history_sort
-                    columns=if kind.webhook() {
-                        vec!["started", "finished", "code", "status", "event_id", "attempt"]
-                    } else {
-                        vec!["started", "finished", "code", "matched", "rejected"]
-                    }
-                    label=trs!(ui.integration_history)
-                    headers=if kind.webhook() {
-                        vec![
-                            trs!(ui.started),
-                            trs!(ui.finished),
-                            trs!(ui.outcome),
-                            trs!(ui.http_status),
-                            trs!(ui.event),
-                            trs!(ui.attempt),
-                        ]
-                    } else {
-                        vec![
-                            trs!(ui.started),
-                            trs!(ui.finished),
-                            trs!(ui.outcome),
-                            trs!(ui.matched),
-                            trs!(ui.rejected),
-                        ]
-                    }
-                >
-                    {move || {
-                        history_sort
-                            .rows(
-                                value.get().map(Record::history).unwrap_or_default(),
-                                |row, key| match key {
-                                    "finished" => {
-                                        row.finished.map_or(SortValue::Missing, Into::into)
-                                    }
-                                    "code" => row.code.clone().into(),
-                                    "status" => {
-                                        row.status
-                                            .map_or(
-                                                SortValue::Missing,
-                                                |v| SortValue::Number(i128::from(v)),
-                                            )
-                                    }
-                                    "event_id" => {
-                                        row.event_id.map_or(SortValue::Missing, Into::into)
-                                    }
-                                    "attempt" => row.attempt.map_or(SortValue::Missing, Into::into),
-                                    "matched" => row.matched.into(),
-                                    "rejected" => row.rejected.into(),
-                                    _ => row.started.into(),
-                                },
-                                |row| row.id.into(),
+                    <Show when=move || resuming.get()>
+                        <DeleteConfirmation
+                            title=trs!(ui.resume_with_new_arrivals_2)
+                            description=trs!(
+                                ui.existing_messages_in_the_changed_folder_will_be_left_untouched_monitoring_starts
                             )
-                            .into_iter()
-                            .map(|run| {
-                                view! {
-                                    <tr>
-                                        <td class="data-value">{instant(&json!(run.started))}</td>
-                                        <td>
-                                            {if run.finished.is_none() {
-                                                leptos_i18n::t_string!(i18n, ui.running).into()
+                            confirm_label=trs!(ui.resume_monitoring)
+                            busy=Signal::derive(move || busy.get())
+                            on_confirm=Callback::new(move |()| action("resume"))
+                            on_cancel=Callback::new(move |()| resuming.set(false))
+                            message=message
+                        />
+                    </Show>
+                    <h2>
+                        {move || {
+                            if kind.webhook() {
+                                leptos_i18n::t_string!(i18n, ui.recent_delivery_attempts)
+                            } else {
+                                leptos_i18n::t_string!(i18n, ui.recent_mailbox_checks)
+                            }
+                        }}
+                    </h2>
+                    <DataTable
+                        sorting=history_sort
+                        columns=if kind.webhook() {
+                            vec!["started", "finished", "code", "status", "event_id", "attempt"]
+                        } else {
+                            vec!["started", "finished", "code", "matched", "rejected"]
+                        }
+                        label=trs!(ui.integration_history)
+                        headers=if kind.webhook() {
+                            vec![
+                                trs!(ui.started),
+                                trs!(ui.finished),
+                                trs!(ui.outcome),
+                                trs!(ui.http_status),
+                                trs!(ui.event),
+                                trs!(ui.attempt),
+                            ]
+                        } else {
+                            vec![
+                                trs!(ui.started),
+                                trs!(ui.finished),
+                                trs!(ui.outcome),
+                                trs!(ui.matched),
+                                trs!(ui.rejected),
+                            ]
+                        }
+                    >
+                        {move || {
+                            history_sort
+                                .rows(
+                                    value.get().map(Record::history).unwrap_or_default(),
+                                    |row, key| match key {
+                                        "finished" => {
+                                            row.finished.map_or(SortValue::Missing, Into::into)
+                                        }
+                                        "code" => row.code.clone().into(),
+                                        "status" => {
+                                            row.status
+                                                .map_or(
+                                                    SortValue::Missing,
+                                                    |v| SortValue::Number(i128::from(v)),
+                                                )
+                                        }
+                                        "event_id" => {
+                                            row.event_id.map_or(SortValue::Missing, Into::into)
+                                        }
+                                        "attempt" => {
+                                            row.attempt.map_or(SortValue::Missing, Into::into)
+                                        }
+                                        "matched" => row.matched.into(),
+                                        "rejected" => row.rejected.into(),
+                                        _ => row.started.into(),
+                                    },
+                                    |row| row.id.into(),
+                                )
+                                .into_iter()
+                                .map(|run| {
+                                    view! {
+                                        <tr>
+                                            <td class="data-value">{instant(&json!(run.started))}</td>
+                                            <td>
+                                                {if run.finished.is_none() {
+                                                    leptos_i18n::t_string!(i18n, ui.running).into()
+                                                } else {
+                                                    instant(&json!(run.finished))
+                                                }}
+                                            </td>
+                                            <td>{run.code}</td>
+                                            {if kind.webhook() {
+                                                view! {
+                                                    <td>
+                                                        {run.status.map(|s| s.to_string()).unwrap_or_default()}
+                                                    </td>
+                                                    <td>
+                                                        {run.event_id.map(|s| s.to_string()).unwrap_or_default()}
+                                                    </td>
+                                                    <td>
+                                                        {run.attempt.map(|s| s.to_string()).unwrap_or_default()}
+                                                    </td>
+                                                }
+                                                    .into_any()
                                             } else {
-                                                instant(&json!(run.finished))
+                                                view! {
+                                                    <td>{run.matched}</td>
+                                                    <td>{run.rejected}</td>
+                                                }
+                                                    .into_any()
                                             }}
-                                        </td>
-                                        <td>{run.code}</td>
-                                        {if kind.webhook() {
-                                            view! {
-                                                <td>
-                                                    {run.status.map(|s| s.to_string()).unwrap_or_default()}
-                                                </td>
-                                                <td>
-                                                    {run.event_id.map(|s| s.to_string()).unwrap_or_default()}
-                                                </td>
-                                                <td>
-                                                    {run.attempt.map(|s| s.to_string()).unwrap_or_default()}
-                                                </td>
-                                            }
-                                                .into_any()
-                                        } else {
-                                            view! {
-                                                <td>{run.matched}</td>
-                                                <td>{run.rejected}</td>
-                                            }
-                                                .into_any()
-                                        }}
-                                    </tr>
-                                }
-                            })
-                            .collect_view()
-                    }}
-                </DataTable>
-            </Show>
-            <ResourceDeleteDialog
-                deletion=deletion
-                api=api
-                token=token.get_value()
-                on_deleted=deleted
-            />
+                                        </tr>
+                                    }
+                                })
+                                .collect_view()
+                        }}
+                    </DataTable>
+                </Show>
+                <ResourceDeleteDialog
+                    deletion=deletion
+                    api=api
+                    token=token.get_value()
+                    on_deleted=deleted
+                />
+            </QueryBoundary>
         </ManagementPage>
     };
     view! {

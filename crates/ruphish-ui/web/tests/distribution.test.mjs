@@ -7,9 +7,28 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { build } from 'esbuild';
 
 const execute = promisify(execFile);
 const generator = fileURLToPath(new URL('../build.mjs', import.meta.url));
+
+test('admin stylesheet bundles the theme palette and visibility rule without import warnings', async () => {
+  const result = await build({
+    entryPoints: [fileURLToPath(new URL('../../ruphish.css', import.meta.url))],
+    bundle: true,
+    minify: true,
+    external: ['fonts/*'],
+    write: false,
+    logLevel: 'silent',
+  });
+  assert.deepEqual(result.warnings, [], 'stylesheet imports must not be silently dropped');
+  const css = result.outputFiles[0].text;
+  for (const token of ['--ink', '--canvas', '--paper', '--teal-600', '--nav-bg', '--nav-fg']) {
+    assert.match(css, new RegExp(`${token}:`), `${token} must be defined, not just referenced`);
+  }
+  assert.match(css, /\[hidden\]\{display:none!important\}/);
+  assert.doesNotMatch(css, /@import\b/, 'the admin stylesheet must contain its theme');
+});
 
 test('completed distribution can be promoted immediately and retains nested assets and exact hashes', async () => {
   const temporary = await mkdtemp(path.join(tmpdir(), 'ruphish-distribution-'));

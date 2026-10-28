@@ -191,242 +191,244 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
     view! {
         <ManagementPage>
             <PageHeader title=trs!(ui.company_settings) subtitle=trs!(ui.settings_scope)>
-                <ActionButton disabled=busy on_click=move |_| read.refresh.run(())>
-                    {tr!(ui.refresh)}
-                </ActionButton>
+                <RefreshButton fetching=read.fetching on_refresh=read.refresh disabled=busy />
             </PageHeader>
             {message.view()}
             <ValidationSummary form=validation />
-            <QueryStatus
+            <QueryBoundary
                 fetching=read.fetching
                 has_data=Signal::derive(move || read.data.get().is_some())
                 error=read.error
                 noun=trs!(ui.company_settings)
                 refresh=read.refresh
-            />
-            <div class="settings-stack">
-                <form
-                    novalidate
-                    on:submit=move |event: leptos::ev::SubmitEvent| {
-                        event.prevent_default();
-                        if validation.check() {
-                            confirming_policy.set(true);
+            >
+                <div class="settings-stack">
+                    <form
+                        novalidate
+                        on:submit=move |event: leptos::ev::SubmitEvent| {
+                            event.prevent_default();
+                            if validation.check() {
+                                confirming_policy.set(true);
+                            }
                         }
-                    }
-                >
-                    <FormFields disabled=Signal::derive(move || {
-                        busy.get() || draft.get().is_none()
-                    })>
-                        <div class="settings-sections">
-                            <section class="settings-section">
-                                <h2>{tr!(ui.domain_verification)}</h2>
-                                <Checkbox
-                                    label=trs!(ui.settings_verification_enabled)
-                                    checked=Signal::derive(move || {
-                                        draft
-                                            .with(|d| {
-                                                d.as_ref().is_some_and(|(_, p)| p.verification_enabled)
-                                            })
-                                    })
-                                    on_toggle=Callback::new(move |v| {
-                                        draft
-                                            .update(|d| {
-                                                if let Some((_, p)) = d {
-                                                    p.verification_enabled = v;
-                                                }
-                                            })
-                                    })
-                                />
-                                <p>{tr!(ui.settings_domains_retained)}</p>
-                                <Show when=move || {
-                                    draft
-                                        .with(|d| {
-                                            d.as_ref().is_some_and(|(_, p)| p.verification_enabled)
-                                        })
-                                        || validation
-                                            .error("verification_validity_seconds")
-                                            .is_some()
-                                        || validation
-                                            .error("verification_recheck_seconds")
-                                            .is_some()
-                                }>
+                    >
+                        <FormFields disabled=Signal::derive(move || {
+                            busy.get() || draft.get().is_none()
+                        })>
+                            <div class="settings-sections">
+                                <section class="settings-section">
+                                    <h2>{tr!(ui.domain_verification)}</h2>
                                     <Checkbox
-                                        label=trs!(ui.settings_verification_expires)
+                                        label=trs!(ui.settings_verification_enabled)
                                         checked=Signal::derive(move || {
                                             draft
                                                 .with(|d| {
-                                                    d.as_ref().is_some_and(|(_, p)| p.verification_expires)
+                                                    d.as_ref().is_some_and(|(_, p)| p.verification_enabled)
                                                 })
                                         })
                                         on_toggle=Callback::new(move |v| {
                                             draft
                                                 .update(|d| {
                                                     if let Some((_, p)) = d {
-                                                        p.verification_expires = v;
+                                                        p.verification_enabled = v;
                                                     }
                                                 })
                                         })
                                     />
-                                    <div class="settings-fields">
-                                        <Field label=trs!(ui.settings_validity_seconds)>
-                                            <TextInput
-                                                input_type="number"
-                                                step="1"
-                                                validation_field="verification_validity_seconds"
-                                                value=validity
-                                                on_input=move |e| validity.set(event_target_value(&e))
-                                            />
-                                        </Field>
-                                        <Field label=trs!(ui.settings_recheck_seconds)>
-                                            <TextInput
-                                                input_type="number"
-                                                step="1"
-                                                validation_field="verification_recheck_seconds"
-                                                value=recheck
-                                                on_input=move |e| recheck.set(event_target_value(&e))
-                                            />
-                                        </Field>
-                                    </div>
-                                    <p>{tr!(ui.settings_duration_help)}</p>
-                                </Show>
-                            </section>
-                            <section class="settings-section">
-                                <h2>{tr!(ui.settings_integrations)}</h2>
-                                <Checkbox
-                                    label=trs!(ui.reporting_mailboxes)
-                                    checked=Signal::derive(move || {
+                                    <p>{tr!(ui.settings_domains_retained)}</p>
+                                    <Show when=move || {
                                         draft
                                             .with(|d| {
-                                                d.as_ref()
-                                                    .is_some_and(|(_, p)| p.reporting_mailboxes_enabled)
+                                                d.as_ref().is_some_and(|(_, p)| p.verification_enabled)
                                             })
-                                    })
-                                    on_toggle=Callback::new(move |v| {
-                                        draft
-                                            .update(|d| {
-                                                if let Some((_, p)) = d {
-                                                    p.reporting_mailboxes_enabled = v;
-                                                }
+                                            || validation
+                                                .error("verification_validity_seconds")
+                                                .is_some()
+                                            || validation
+                                                .error("verification_recheck_seconds")
+                                                .is_some()
+                                    }>
+                                        <Checkbox
+                                            label=trs!(ui.settings_verification_expires)
+                                            checked=Signal::derive(move || {
+                                                draft
+                                                    .with(|d| {
+                                                        d.as_ref().is_some_and(|(_, p)| p.verification_expires)
+                                                    })
                                             })
-                                    })
-                                />
-                                <p>{tr!(ui.settings_mailboxes_help)}</p>
-                                <Checkbox
-                                    label=trs!(ui.webhooks)
-                                    checked=Signal::derive(move || {
-                                        draft
-                                            .with(|d| {
-                                                d.as_ref().is_some_and(|(_, p)| p.webhooks_enabled)
+                                            on_toggle=Callback::new(move |v| {
+                                                draft
+                                                    .update(|d| {
+                                                        if let Some((_, p)) = d {
+                                                            p.verification_expires = v;
+                                                        }
+                                                    })
                                             })
-                                    })
-                                    on_toggle=Callback::new(move |v| {
-                                        draft
-                                            .update(|d| {
-                                                if let Some((_, p)) = d {
-                                                    p.webhooks_enabled = v;
-                                                }
-                                            })
-                                    })
-                                />
-                                <p>{tr!(ui.settings_webhooks_help)}</p>
-                            </section>
-                            <div class="management-actions">
-                                <ActionButton
-                                    kind="submit"
-                                    style=ButtonStyle::Primary
-                                    disabled=Signal::derive(move || !dirty())
-                                >
-                                    {tr!(ui.save_changes)}
-                                </ActionButton>
-                                <ActionButton on_click=move |_| {
-                                    draft.set(None);
-                                }>{tr!(ui.settings_discard)}</ActionButton>
+                                        />
+                                        <div class="settings-fields">
+                                            <Field label=trs!(ui.settings_validity_seconds)>
+                                                <TextInput
+                                                    input_type="number"
+                                                    step="1"
+                                                    validation_field="verification_validity_seconds"
+                                                    value=validity
+                                                    on_input=move |e| validity.set(event_target_value(&e))
+                                                />
+                                            </Field>
+                                            <Field label=trs!(ui.settings_recheck_seconds)>
+                                                <TextInput
+                                                    input_type="number"
+                                                    step="1"
+                                                    validation_field="verification_recheck_seconds"
+                                                    value=recheck
+                                                    on_input=move |e| recheck.set(event_target_value(&e))
+                                                />
+                                            </Field>
+                                        </div>
+                                        <p>{tr!(ui.settings_duration_help)}</p>
+                                    </Show>
+                                </section>
+                                <section class="settings-section">
+                                    <h2>{tr!(ui.settings_integrations)}</h2>
+                                    <Checkbox
+                                        label=trs!(ui.reporting_mailboxes)
+                                        checked=Signal::derive(move || {
+                                            draft
+                                                .with(|d| {
+                                                    d.as_ref()
+                                                        .is_some_and(|(_, p)| p.reporting_mailboxes_enabled)
+                                                })
+                                        })
+                                        on_toggle=Callback::new(move |v| {
+                                            draft
+                                                .update(|d| {
+                                                    if let Some((_, p)) = d {
+                                                        p.reporting_mailboxes_enabled = v;
+                                                    }
+                                                })
+                                        })
+                                    />
+                                    <p>{tr!(ui.settings_mailboxes_help)}</p>
+                                    <Checkbox
+                                        label=trs!(ui.webhooks)
+                                        checked=Signal::derive(move || {
+                                            draft
+                                                .with(|d| {
+                                                    d.as_ref().is_some_and(|(_, p)| p.webhooks_enabled)
+                                                })
+                                        })
+                                        on_toggle=Callback::new(move |v| {
+                                            draft
+                                                .update(|d| {
+                                                    if let Some((_, p)) = d {
+                                                        p.webhooks_enabled = v;
+                                                    }
+                                                })
+                                        })
+                                    />
+                                    <p>{tr!(ui.settings_webhooks_help)}</p>
+                                </section>
+                                <div class="management-actions">
+                                    <ActionButton
+                                        kind="submit"
+                                        style=ButtonStyle::Primary
+                                        disabled=Signal::derive(move || !dirty())
+                                    >
+                                        {tr!(ui.save_changes)}
+                                    </ActionButton>
+                                    <ActionButton on_click=move |_| {
+                                        draft.set(None);
+                                    }>{tr!(ui.settings_discard)}</ActionButton>
+                                </div>
                             </div>
-                        </div>
-                    </FormFields>
-                </form>
-                <Card>
-                    <h2>{tr!(ui.starter_title)}</h2>
-                    <p>{tr!(ui.starter_description)}</p>
-                    <ActionLink href="/settings/starter-templates">
-                        {tr!(ui.starter_browse)}
-                    </ActionLink>
-                </Card>
-                <Card class="settings-danger">
-                    <h2>{tr!(ui.settings_danger_zone)}</h2>
-                    <p>{tr!(ui.close_all_description)}</p>
-                    <ActionButton style=ButtonStyle::Danger disabled=busy on_click=preview>
-                        {tr!(ui.close_all_campaigns)}
-                    </ActionButton>
-                </Card>
-            </div>
-            <Show when=move || confirming_policy.get()>
-                <Dialog
-                    title=trs!(ui.settings_confirm_title)
-                    busy=busy
-                    on_cancel=Callback::new(move |()| confirming_policy.set(false))
-                >
-                    <h2>{tr!(ui.settings_confirm_title)}</h2>
-                    <p>{tr!(ui.settings_confirm_description)}</p>
-                    {message.view()}
-                    <div class="confirmation-actions">
-                        <ActionButton disabled=busy on_click=move |_| confirming_policy.set(false)>
-                            {tr!(ui.cancel)}
-                        </ActionButton>
-                        <ActionButton
-                            disabled=busy
-                            style=ButtonStyle::Primary
-                            on_click=move |_| save.run(())
-                        >
-                            {tr!(ui.save_changes)}
-                        </ActionButton>
-                    </div>
-                </Dialog>
-            </Show>
-            <Show when=move || closure.get().is_some()>
-                <Dialog
-                    title=trs!(ui.close_all_campaigns)
-                    busy=busy
-                    on_cancel=Callback::new(move |()| closure.set(None))
-                >
-                    <h2>{tr!(ui.close_all_campaigns)}</h2>
-                    <p>{tr!(ui.close_all_description)}</p>
-                    <dl class="resource-facts">
-                        <div>
-                            <dt>{tr!(ui.campaigns)}</dt>
-                            <dd>{move || closure.get().map(|r| r.campaigns)}</dd>
-                        </div>
-                        <div>
-                            <dt>{tr!(ui.settings_pending_deliveries)}</dt>
-                            <dd>{move || closure.get().map(|r| r.pending_deliveries)}</dd>
-                        </div>
-                    </dl>
-                    <p>{tr!(ui.close_all_retry_help)}</p>
-                    <Field label=trs!(ui.close_all_type_confirmation)>
-                        <TextInput
-                            value=confirmation
-                            disabled=busy
-                            on_input=move |e| confirmation.set(event_target_value(&e))
-                        />
-                    </Field>
-                    {closure_message.view()}
-                    <div class="confirmation-actions">
-                        <ActionButton disabled=busy on_click=move |_| closure.set(None)>
-                            {tr!(ui.cancel)}
-                        </ActionButton>
-                        <ActionButton
-                            style=ButtonStyle::Danger
-                            disabled=Signal::derive(move || {
-                                busy.get() || confirmation.get() != "CLOSE ALL"
-                                    || closure.get().is_none_or(|r| r.campaigns == 0)
-                            })
-                            on_click=move |_| close.run(())
-                        >
+                        </FormFields>
+                    </form>
+                    <Card>
+                        <h2>{tr!(ui.starter_title)}</h2>
+                        <p>{tr!(ui.starter_description)}</p>
+                        <ActionLink href="/settings/starter-templates">
+                            {tr!(ui.starter_browse)}
+                        </ActionLink>
+                    </Card>
+                    <Card class="settings-danger">
+                        <h2>{tr!(ui.settings_danger_zone)}</h2>
+                        <p>{tr!(ui.close_all_description)}</p>
+                        <ActionButton style=ButtonStyle::Danger disabled=busy on_click=preview>
                             {tr!(ui.close_all_campaigns)}
                         </ActionButton>
-                    </div>
-                </Dialog>
-            </Show>
+                    </Card>
+                </div>
+                <Show when=move || confirming_policy.get()>
+                    <Dialog
+                        title=trs!(ui.settings_confirm_title)
+                        busy=busy
+                        on_cancel=Callback::new(move |()| confirming_policy.set(false))
+                    >
+                        <h2>{tr!(ui.settings_confirm_title)}</h2>
+                        <p>{tr!(ui.settings_confirm_description)}</p>
+                        {message.view()}
+                        <div class="confirmation-actions">
+                            <ActionButton
+                                disabled=busy
+                                on_click=move |_| confirming_policy.set(false)
+                            >
+                                {tr!(ui.cancel)}
+                            </ActionButton>
+                            <ActionButton
+                                disabled=busy
+                                style=ButtonStyle::Primary
+                                on_click=move |_| save.run(())
+                            >
+                                {tr!(ui.save_changes)}
+                            </ActionButton>
+                        </div>
+                    </Dialog>
+                </Show>
+                <Show when=move || closure.get().is_some()>
+                    <Dialog
+                        title=trs!(ui.close_all_campaigns)
+                        busy=busy
+                        on_cancel=Callback::new(move |()| closure.set(None))
+                    >
+                        <h2>{tr!(ui.close_all_campaigns)}</h2>
+                        <p>{tr!(ui.close_all_description)}</p>
+                        <dl class="resource-facts">
+                            <div>
+                                <dt>{tr!(ui.campaigns)}</dt>
+                                <dd>{move || closure.get().map(|r| r.campaigns)}</dd>
+                            </div>
+                            <div>
+                                <dt>{tr!(ui.settings_pending_deliveries)}</dt>
+                                <dd>{move || closure.get().map(|r| r.pending_deliveries)}</dd>
+                            </div>
+                        </dl>
+                        <p>{tr!(ui.close_all_retry_help)}</p>
+                        <Field label=trs!(ui.close_all_type_confirmation)>
+                            <TextInput
+                                value=confirmation
+                                disabled=busy
+                                on_input=move |e| confirmation.set(event_target_value(&e))
+                            />
+                        </Field>
+                        {closure_message.view()}
+                        <div class="confirmation-actions">
+                            <ActionButton disabled=busy on_click=move |_| closure.set(None)>
+                                {tr!(ui.cancel)}
+                            </ActionButton>
+                            <ActionButton
+                                style=ButtonStyle::Danger
+                                disabled=Signal::derive(move || {
+                                    busy.get() || confirmation.get() != "CLOSE ALL"
+                                        || closure.get().is_none_or(|r| r.campaigns == 0)
+                                })
+                                on_click=move |_| close.run(())
+                            >
+                                {tr!(ui.close_all_campaigns)}
+                            </ActionButton>
+                        </div>
+                    </Dialog>
+                </Show>
+            </QueryBoundary>
         </ManagementPage>
     }
 }

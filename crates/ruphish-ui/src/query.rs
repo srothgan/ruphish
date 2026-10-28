@@ -1,4 +1,4 @@
-//! Shared read policy over leptos-fetch. The query cache is the only data owner.
+//! Shared server reads over leptos-fetch, with observer-local transition snapshots.
 use crate::api_error::ApiError;
 use leptos::prelude::*;
 use leptos_fetch::{QueryClient, QueryOptions, QueryScopeLocal};
@@ -10,23 +10,9 @@ use std::{cell::RefCell, collections::HashMap, fmt::Debug, hash::Hash, rc::Rc, t
 /// Do not clear during refresh: leptos-fetch 0.4.10 can panic when the old
 /// cached query completes after clear. Identity changes already replace the document.
 pub fn provide_client() -> QueryClient {
-    let client = QueryClient::new()
+    QueryClient::new()
         .with_options(QueryOptions::new().with_stale_time(Duration::from_secs(30)))
-        .provide();
-    let focus = window_event_listener(leptos::ev::focus, move |_| client.invalidate_all_queries());
-    let visible = window_event_listener(leptos::ev::visibilitychange, move |_| {
-        if web_sys::window()
-            .and_then(|w| w.document())
-            .is_some_and(|d| !d.hidden())
-        {
-            client.invalidate_all_queries();
-        }
-    });
-    on_cleanup(move || {
-        focus.remove();
-        visible.remove();
-    });
-    client
+        .provide()
 }
 
 /// One cached result: only a retryable refresh failure retains confirmed data.
@@ -84,6 +70,7 @@ where
 /// Define once per authenticated shell; share across all consumers and mutations.
 pub struct Query<K: 'static, T: 'static> {
     client: QueryClient,
+    automatic: fn(&T) -> bool,
     scope: StoredValue<QueryScopeLocal<K, Snapshot<T>>, LocalStorage>,
     polls: StoredValue<Polls<K>, LocalStorage>,
 }
@@ -108,9 +95,17 @@ where
         let polls = Rc::new(RefCell::new(HashMap::new()));
         Self {
             client,
+            automatic: |_| true,
             scope: StoredValue::new_local(scope(client, fetch, polls.clone())),
             polls: StoredValue::new_local(polls),
         }
+    }
+
+    /// Restrict automatic focus and interval refreshes using the confirmed snapshot.
+    /// Initial loads, explicit reloads and mutation invalidations remain available.
+    pub fn with_automatic_refresh(mut self, predicate: fn(&T) -> bool) -> Self {
+        self.automatic = predicate;
+        self
     }
 
     /// Subscribe using the current key, without showing a previous key's data.
@@ -131,6 +126,31 @@ where
             .client
             .subscribe_value_local(scope.clone(), key.clone());
         let fetching = self.client.subscribe_is_fetching_local(scope, key.clone());
+        let focus_key = key.clone();
+        let automatic_refresh = Callback::new(move |()| {
+            if !fetching.get_untracked()
+                && value.with_untracked(|v| {
+                    v.as_ref()
+                        .and_then(|s| s.data.as_ref())
+                        .is_some_and(self.automatic)
+                })
+            {
+                self.invalidate(focus_key());
+            }
+        });
+        let focus = window_event_listener(leptos::ev::focus, move |_| automatic_refresh.run(()));
+        let visible = window_event_listener(leptos::ev::visibilitychange, move |_| {
+            if web_sys::window()
+                .and_then(|w| w.document())
+                .is_some_and(|d| !d.hidden())
+            {
+                automatic_refresh.run(());
+            }
+        });
+        on_cleanup(move || {
+            focus.remove();
+            visible.remove();
+        });
         QueryView {
             data: Signal::derive(move || value.get().and_then(|s| s.data)),
             error: Signal::derive(move || value.get().and_then(|s| s.error.map(|e| e.message))),
@@ -175,6 +195,9 @@ where
             if let Ok(timer) = set_interval_with_handle(
                 move || {
                     if !enabled.get_untracked()
+                        || !view
+                            .data
+                            .with_untracked(|v| v.as_ref().is_some_and(self.automatic))
                         || view.fetching.get_untracked()
                         || view
                             .failure
@@ -317,6 +340,70 @@ impl<T: Send + Sync> Clone for QueryView<T> {
     }
 }
 
+/// Observer-local presentation; the query cache still owns exact-selection data.
+/// Previous data is never written into a new selection's cache or used for exports.
+pub struct QueryPresentation<T: Send + Sync + 'static> {
+    /// Last confirmed response for this view, including a successful empty response.
+    pub data: Signal<Option<T>>,
+    /// A new selection has no response yet, including before its request starts.
+    pub pending: Signal<bool>,
+    /// The visible response belongs to the preceding selection.
+    pub is_previous_data: Signal<bool>,
+}
+impl<T: Send + Sync> Copy for QueryPresentation<T> {}
+impl<T: Send + Sync> Clone for QueryPresentation<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T: Clone + Send + Sync + 'static> QueryView<T> {
+    /// Retain the response, not a cache entry that may expire during a transition.
+    /// Mount one observer per entity; changing filters/pages keeps that observer alive.
+    /// Terminal errors and confirmed deletion of the displayed selection clear it.
+    pub fn presentation<K>(
+        self,
+        key: impl Fn() -> K + Send + Sync + 'static,
+    ) -> QueryPresentation<T>
+    where
+        K: Clone + Eq + Send + Sync + 'static,
+    {
+        let retained = Memo::new_owning(move |previous: Option<Option<(K, T)>>| {
+            let current = key();
+            let response = self.data.get();
+            let failure = self.failure.get();
+            if failure.as_ref().is_some_and(ApiError::is_terminal) {
+                return (None, true);
+            }
+            if let Some(response) = response {
+                return (Some((current, response)), true);
+            }
+            let previous = previous.flatten();
+            if previous
+                .as_ref()
+                .is_some_and(|(shown, _)| *shown == current)
+            {
+                // Exact-selection data is cleared by a confirmed deletion, not a refresh.
+                return (None, true);
+            }
+            (previous, false)
+        });
+        let data = Signal::derive(move || {
+            retained.with(|value| value.as_ref().map(|(_, response)| response.clone()))
+        });
+        QueryPresentation {
+            data,
+            pending: Signal::derive(move || {
+                self.data.with(Option::is_none)
+                    && (self.fetching.get() || self.failure.with(Option::is_none))
+            }),
+            is_previous_data: Signal::derive(move || {
+                self.data.with(Option::is_none) && data.with(Option::is_some)
+            }),
+        }
+    }
+}
+
 #[derive(Default)]
 struct PollSchedule {
     consumers: usize,
@@ -332,4 +419,67 @@ pub fn document_visible() -> Signal<bool> {
             .and_then(|w| w.document())
             .is_some_and(|d| !d.hidden())
     })
+}
+
+struct RegisteredRead {
+    id: u64,
+    fetching: Signal<bool>,
+    ready: Signal<bool>,
+}
+
+/// Page-level refresh feedback aggregates reads without changing content layout.
+#[derive(Clone, Copy)]
+pub struct RefreshState {
+    reads: RwSignal<Vec<RegisteredRead>>,
+    next: RwSignal<u64>,
+}
+impl RefreshState {
+    /// Install a toolbar loading group for this page.
+    pub fn provide() -> Self {
+        let state = Self {
+            reads: RwSignal::new(Vec::new()),
+            next: RwSignal::new(0),
+        };
+        provide_context(state);
+        state
+    }
+    /// Include a child read until its owner is disposed.
+    pub fn register(fetching: Signal<bool>) {
+        Self::register_read(fetching, true.into());
+    }
+    /// Register whether the current selection has a confirmed snapshot for dependent actions.
+    pub fn register_read(fetching: Signal<bool>, ready: Signal<bool>) {
+        if let Some(state) = use_context::<Self>() {
+            let id = state.next.get_untracked();
+            state.next.set(id + 1);
+            state.reads.update(|reads| {
+                reads.push(RegisteredRead {
+                    id,
+                    fetching,
+                    ready,
+                })
+            });
+            on_cleanup(move || {
+                if !state.reads.is_disposed() {
+                    state
+                        .reads
+                        .update(|reads| reads.retain(|read| read.id != id));
+                }
+            });
+        }
+    }
+    /// Whether all required current selections have confirmed data.
+    pub fn ready(self) -> Signal<bool> {
+        Signal::derive(move || {
+            self.reads
+                .with(|reads| !reads.is_empty() && reads.iter().all(|read| read.ready.get()))
+        })
+    }
+    /// Derive activity from all currently registered requests.
+    pub fn fetching(self) -> Signal<bool> {
+        Signal::derive(move || {
+            self.reads
+                .with(|reads| reads.iter().any(|read| read.fetching.get()))
+        })
+    }
 }

@@ -72,6 +72,8 @@ pub struct Attention {
     pub unverified_enabled_domains: i64,
     /// Current failed, blocked or uncertain deliveries in unfinished campaigns.
     pub delivery_problems: i64,
+    /// Up to ten unfinished campaign identities requiring delivery review.
+    pub campaign_ids: Vec<i64>,
     /// The soonest future scheduled launch, if any.
     #[serde(deserialize_with = "crate::nullable")]
     pub next_launch: Option<NextLaunch>,

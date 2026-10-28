@@ -87,13 +87,15 @@ export function dataset(now) {
             const resultId = id * 10000 + n + 1, sent = launch + n * 7;
             const state = c.ago < 0 ? 'ready' : failed ? 'failed' : 'accepted';
             const events = [];
-            const add = (kind, delay, password_present = null) => events.push({ id: ++eventId, recipient_id: resultId, email: person.email, time: iso(sent + delay), kind, source: 'application', password_present });
+            // Sample operator additions alongside automatic tracking; reports also arrive by mailbox.
+            const interactionSource = n % 20 === 19 ? 'operator' : 'public';
+            const add = (kind, delay, password_present = null, source = interactionSource) => events.push({ id: ++eventId, recipient_id: resultId, email: person.email, time: iso(sent + delay), kind, source, password_present });
             if (state === 'accepted') {
-                add('Email Sent', 0);
+                add('Email Sent', 0, null, 'application');
                 if (n < c.opened) add('Email Opened', 900);
                 if (n < c.clicked) add('Clicked Link', 1800);
                 if (n < c.submitted) add('Submitted Data', 2100, true);
-                if (n >= c.size - c.reported) add('Email Reported', 3600);
+                if (n >= c.size - c.reported) add('Email Reported', 3600, null, interactionSource === 'operator' ? 'operator' : n % 2 === 0 ? 'mailbox' : 'public');
             }
             const attempts = state === 'ready' ? [] : [{ generation: 1, started: sent, finished: sent + 1, state, stage: failed ? 'Envelope' : 'Data', smtp_code: failed ? 550 : 250, message_id: `demo-${resultId}@example.test` }];
             return { ...person, id: resultId, rid: `demo-recipient-${resultId}`, state, due: sent, send_date: iso(sent), modified_date: iso(sent), attempts, events };

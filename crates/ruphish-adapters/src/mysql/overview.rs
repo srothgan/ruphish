@@ -123,6 +123,8 @@ impl Repository for Overview {
         .fetch_one(&mut *tx)
         .await
         .map_err(storage)?;
+        let campaign_ids: Vec<i64> = sqlx::query_scalar("SELECT DISTINCT c.id FROM campaigns c JOIN ruphish_delivery d ON d.campaign_id=c.id WHERE c.user_id=? AND c.status!='Completed' AND d.state IN ('failed','blocked','unknown') ORDER BY c.id LIMIT 10")
+            .bind(owner).fetch_all(&mut *tx).await.map_err(storage)?;
         let next_launch = sqlx::query(
             "SELECT id,name,launch_date FROM campaigns \
              WHERE user_id=? AND status!='Completed' AND (CASE WHEN launch_date>='1000' THEN TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',CAST(REPLACE(LEFT(launch_date,19),'T',' ') AS DATETIME)) END)>? \
@@ -155,6 +157,7 @@ impl Repository for Overview {
             attention: Attention {
                 unverified_enabled_domains,
                 delivery_problems,
+                campaign_ids,
                 next_launch,
             },
         })

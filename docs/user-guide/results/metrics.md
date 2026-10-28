@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-Ruphish separates recorded observations from summary progression. That distinction explains why a summary can show an opened recipient even when their timeline has no separate open event.
+Ruphish separates individual effective events from summary progression. [Event editing](correcting-events.md) changes individual event rows. That distinction explains why a summary can show an opened recipient even when their timeline has no separate open event.
 
 | Observation | What was recorded |
 | --- | --- |
@@ -17,21 +17,19 @@ Ruphish separates recorded observations from summary progression. That distincti
 
 ## Counts and progression
 
-Raw event totals include repeated observations. Unique counts include each attributable recipient once for the selected event type. Progression counts infer that a clicked or submitted recipient has reached the opened stage, and a submitted recipient has reached the clicked stage. Acceptance and reports are never inferred.
+Effective event totals include repeated observations and operator additions, use edited values, and omit deleted events. Unique counts include each attributable recipient once for the selected event type. Progression counts infer that a clicked or submitted recipient has reached the opened stage, and a submitted recipient has reached the clicked stage. Acceptance and reports are never inferred.
 
-Campaign analysis summary cards, the dashboard, and the campaign execution overview count each recipient at most once per category within a campaign. Recipient analysis cards and event history count all recorded observations, including repeats. A retry of the same submission delivery is deduplicated. Campaign analysis retains separately labelled event totals and activity charts.
+Campaign Results summary cards, the dashboard, and the campaign execution overview count each recipient at most once per category within a campaign. Recipient detail counts use effective events, including repeats. The event table also retains excluded observations and original evidence for inspection. A retry of the same submission delivery is deduplicated. Campaign Results retains separately labelled event totals and activity charts.
 
-Those inferences do not add timeline events or invent timestamps. Charts, event tables, and event exports retain recorded observations. Password presence requires an explicit positive boolean; submission alone does not mean credentials were entered.
+Those inferences do not add timeline events or invent timestamps. Charts and event exports use effective events and their corrected occurrence times. The event table separately identifies origin, edits and exclusions. Password presence requires an explicit positive boolean; submission alone does not mean credentials were entered.
 
 ## Dashboard scope
 
-The dashboard selects recipients by their first recorded SMTP acceptance in the chosen period. Subsequent observations count through the server's snapshot time. A repeated send does not move a recipient into a later cohort. The same address in different campaigns counts separately.
+The dashboard shows compact rates for recent campaigns. Each rate uses that campaign's recorded sent-recipient count; a zero denominator displays a dash. The same address in different campaigns counts separately.
 
-Opened, clicked, reported, and credentials-entered percentages divide by the selected sent-recipient count. A zero denominator displays a dash. The 7/30/365-day views compare absolute interaction counts with the preceding equal-length cohort, whose observations stop before the current period begins. All time has no preceding-period comparison.
+## Campaign Results scope
 
-## Campaign-analysis scope
-
-Analysis applies its recipient, event, source, and time filters before aggregation and pagination. Its lower time bound is inclusive; its upper bound is exclusive. These filtered observations can differ from the dashboard's acceptance cohort. Don't compare the two counts without matching their scopes.
+Results applies recipient, event, source, and time filters before aggregation and pagination. Its lower time bound is inclusive; its upper bound is exclusive. Recipient detail shows that recipient's full observation history and delivery attempts; the campaign's selected filters remain available when returning.
 
 ## Historical and automated activity
 

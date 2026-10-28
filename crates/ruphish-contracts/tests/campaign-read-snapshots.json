@@ -168,7 +168,8 @@
         "password_present": true,
         "recipient_id": 1,
         "source": "legacy",
-        "time": "2026-10-19T13:29:09Z"
+        "time": "2026-10-19T13:29:09Z",
+        "edited": false
       },
       {
         "email": "browser@example.test",
@@ -180,7 +181,8 @@
         "password_present": null,
         "recipient_id": 1,
         "source": "legacy",
-        "time": "2026-10-19T13:26:28Z"
+        "time": "2026-10-19T13:26:28Z",
+        "edited": false
       },
       {
         "email": "browser@example.test",
@@ -192,7 +194,8 @@
         "password_present": null,
         "recipient_id": 1,
         "source": "legacy",
-        "time": "2026-10-19T13:24:43Z"
+        "time": "2026-10-19T13:24:43Z",
+        "edited": false
       },
       {
         "email": "browser@example.test",
@@ -204,7 +207,8 @@
         "password_present": null,
         "recipient_id": 1,
         "source": "legacy",
-        "time": "2026-10-19T13:18:43Z"
+        "time": "2026-10-19T13:18:43Z",
+        "edited": false
       },
       {
         "email": "",
@@ -216,7 +220,8 @@
         "password_present": null,
         "recipient_id": null,
         "source": "legacy",
-        "time": "2026-10-19T13:18:42Z"
+        "time": "2026-10-19T13:18:42Z",
+        "edited": false
       }
     ],
     "id": 1,
@@ -259,6 +264,20 @@
       "clicked": 1,
       "submitted": 1,
       "reported": 0
+    },
+    "first_observed": {
+      "accepted": 1792415923,
+      "opened": 1792416283,
+      "clicked": 1792416388,
+      "submitted": 1792416549,
+      "reported": null
+    },
+    "last_observed": {
+      "accepted": 1792415923,
+      "opened": 1792416283,
+      "clicked": 1792416388,
+      "submitted": 1792416549,
+      "reported": null
     }
   }
 }

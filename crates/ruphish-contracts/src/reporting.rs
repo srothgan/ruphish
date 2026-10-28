@@ -12,7 +12,7 @@ pub struct Filter {
     pub from: Option<i64>,
     /// Exclusive UTC seconds.
     pub until: Option<i64>,
-    /// Event identifier supplied by the client; the HTTP boundary validates it.
+    /// Comma-separated event identifiers (union); empty means all. Validated by HTTP.
     pub event: String,
     /// Recipient search.
     pub search: String,
@@ -86,6 +86,49 @@ impl From<[i64; 5]> for Counts {
 impl Counts {
     /// Presentation order for the five chart series or table columns.
     pub const fn values(self) -> [i64; 5] {
+        [
+            self.accepted,
+            self.opened,
+            self.clicked,
+            self.submitted,
+            self.reported,
+        ]
+    }
+}
+
+/// Observed UTC seconds by event type; missing evidence is null, never inferred.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ObservationTimes {
+    /// SMTP acceptance.
+    #[serde(deserialize_with = "crate::nullable")]
+    pub accepted: Option<i64>,
+    /// Image request.
+    #[serde(deserialize_with = "crate::nullable")]
+    pub opened: Option<i64>,
+    /// Landing request.
+    #[serde(deserialize_with = "crate::nullable")]
+    pub clicked: Option<i64>,
+    /// Form submission.
+    #[serde(deserialize_with = "crate::nullable")]
+    pub submitted: Option<i64>,
+    /// Report.
+    #[serde(deserialize_with = "crate::nullable")]
+    pub reported: Option<i64>,
+}
+impl From<[Option<i64>; 5]> for ObservationTimes {
+    fn from([accepted, opened, clicked, submitted, reported]: [Option<i64>; 5]) -> Self {
+        Self {
+            accepted,
+            opened,
+            clicked,
+            submitted,
+            reported,
+        }
+    }
+}
+impl ObservationTimes {
+    /// Same presentation order as Counts.
+    pub const fn values(self) -> [Option<i64>; 5] {
         [
             self.accepted,
             self.opened,

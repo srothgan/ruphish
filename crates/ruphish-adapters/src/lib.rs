@@ -34,3 +34,5 @@ mod reporting;
 mod campaign_listing;
 
 mod campaign_sort;
+
+mod event_edit;

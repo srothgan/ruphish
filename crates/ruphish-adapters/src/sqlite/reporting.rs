@@ -23,9 +23,9 @@ const CTE: &str = r#"WITH audience AS (
  SELECT e.* FROM event_history e
  LEFT JOIN audience a ON a.id=e.recipient_id
  WHERE e.campaign_id=?1 AND (?2 IS NULL OR unixepoch(e.time)>=?2) AND (?3 IS NULL OR unixepoch(e.time)<?3)
- AND (?5='' OR e.message=?5) AND (?7='' OR e.source=?7)
+ AND (?5='[]' OR e.message IN (SELECT value FROM json_each(?5))) AND (?7='' OR e.source=?7)
  AND ((?4 IS NULL AND ?6='' AND ?8='[]') OR a.id IS NOT NULL)
-), selected AS (SELECT * FROM audience a WHERE (?5='' AND ?7='') OR EXISTS(SELECT 1 FROM observed o WHERE o.recipient_id=a.id))
+), selected AS (SELECT * FROM audience a WHERE (?5='[]' AND ?7='') OR EXISTS(SELECT 1 FROM observed o WHERE o.recipient_id=a.id))
 "#;
 const TYPES: [&str; 5] = [
     "Email Sent",
@@ -84,6 +84,9 @@ impl Snapshots for Reports {
             .fetch_one(&mut *tx)
             .await
             .map_err(storage)?;
+        let event_kinds =
+            serde_json::to_string(&f.event.iter().map(|kind| kind.label()).collect::<Vec<_>>())
+                .map_err(|_| Error::Internal)?;
         macro_rules! query {
             ($tail:expr) => {
                 sqlx::query(sqlx::AssertSqlSafe(format!("{CTE} {}", $tail)))
@@ -91,11 +94,7 @@ impl Snapshots for Reports {
                     .bind(f.from)
                     .bind(f.until)
                     .bind(f.recipient)
-                    .bind(
-                        f.event
-                            .map(ruphish_domain::events::Kind::label)
-                            .unwrap_or_default(),
-                    )
+                    .bind(&event_kinds)
                     .bind(&f.search)
                     .bind(
                         f.source
@@ -107,7 +106,7 @@ impl Snapshots for Reports {
         }
         let metrics = query!(
             r#"
-                SELECT message,count(*) AS total,count(DISTINCT recipient_id) AS unique_count
+                SELECT message,count(*) AS total,count(DISTINCT recipient_id) AS unique_count, min(unixepoch(time)) AS first_observed, max(unixepoch(time)) AS last_observed
                 FROM observed
                 GROUP BY message
             "#
@@ -115,11 +114,15 @@ impl Snapshots for Reports {
         .fetch_all(&mut *tx)
         .await
         .map_err(storage)?;
+        let mut first_observed = [None; 5];
+        let mut last_observed = [None; 5];
         let mut unique = [0; 5];
         let mut totals = [0; 5];
         for r in metrics {
             let kind: String = r.try_get("message").map_err(storage)?;
             if let Some(i) = TYPES.iter().position(|s| *s == kind) {
+                first_observed[i] = r.try_get("first_observed").map_err(storage)?;
+                last_observed[i] = r.try_get("last_observed").map_err(storage)?;
                 unique[i] = r.try_get("unique_count").map_err(storage)?;
                 totals[i] = r.try_get("total").map_err(storage)?;
             }
@@ -184,6 +187,7 @@ impl Snapshots for Reports {
                 serde_json::from_str(&crate::participant_privacy::details(&details))
                     .unwrap_or_default();
             events.push(Event {
+                edited: r.try_get("edited").map_err(storage)?,
                 id: r.try_get("id").map_err(storage)?,
                 recipient_id: r.try_get("recipient_id").map_err(storage)?,
                 email: r.try_get("email").map_err(storage)?,
@@ -297,6 +301,8 @@ impl Snapshots for Reports {
             }
         }
         let result = Analysis {
+            first_observed,
+            last_observed,
             id,
             name: campaign.try_get("name").map_err(storage)?,
             status: ruphish_domain::campaign::CampaignStatus::from_stored(

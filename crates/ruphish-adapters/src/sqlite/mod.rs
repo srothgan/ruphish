@@ -309,6 +309,18 @@ async fn validate_schema(
         .execute(&mut expected)
         .await?;
     }
+    if auth_schema::version(connection).await? >= 11 {
+        const OBJECTS: &str = "SELECT name,sql FROM sqlite_master WHERE name IN ('event_history','ruphish_event_insert','ruphish_event_delete','events_recipient_identity','events_create_key') ORDER BY name";
+        let actual: Vec<(String, String)> =
+            sqlx::query_as(OBJECTS).fetch_all(&mut *connection).await?;
+        let definitions: Vec<(String, String)> =
+            sqlx::query_as(OBJECTS).fetch_all(&mut expected).await?;
+        if actual != definitions {
+            return Err(UpgradeError::Unrecognized(
+                "event schema differs from its migration".into(),
+            ));
+        }
+    }
     if schema(connection).await? != schema(&mut expected).await? {
         return Err(UpgradeError::Unrecognized(
             "schema does not match migration history".into(),
@@ -343,3 +355,5 @@ pub(super) fn resource_error(error: sqlx::Error) -> ruphish_application::resourc
 
 pub(super) mod settings;
 mod settings_schema;
+
+mod event_edit;

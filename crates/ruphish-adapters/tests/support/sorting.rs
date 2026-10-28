@@ -280,7 +280,7 @@ async fn exercise(db: &Database) {
             reporting::Filter {
                 sort: RecipientSort::Opened,
                 order: SortDirection::Desc,
-                event: Some(ruphish_domain::events::Kind::EmailOpened),
+                event: vec![ruphish_domain::events::Kind::EmailOpened],
                 limit: 1,
                 offset: 1,
                 ..Default::default()
@@ -306,6 +306,86 @@ async fn exercise(db: &Database) {
             .recipient_total,
         0
     );
+
+    // Union filters aggregate the complete selection before either table is paged.
+    let union_filter = reporting::Filter {
+        event: vec![
+            ruphish_domain::events::Kind::EmailOpened,
+            ruphish_domain::events::Kind::FormSubmitted,
+        ],
+        limit: 1,
+        offset: 2,
+        ..Default::default()
+    };
+    let union = reports
+        .analysis(actor, 900, union_filter.clone())
+        .await
+        .unwrap();
+    assert_eq!(union.event_total, 5);
+    assert_eq!(union.recipient_total, 4);
+    assert_eq!(union.totals, [0, 3, 0, 2, 0]);
+    assert_eq!(union.unique, [0, 2, 0, 2, 0]);
+    assert_eq!(
+        union.first_observed,
+        [None, Some(1767225600), None, Some(1767225603), None]
+    );
+    assert_eq!(
+        union.last_observed,
+        [None, Some(1767225600), None, Some(1767225604), None]
+    );
+    let export = reports
+        .export(actor, 900, union_filter, "csv", "events")
+        .await
+        .unwrap();
+    assert_eq!(
+        csv::Reader::from_reader(export.bytes.as_slice())
+            .records()
+            .count(),
+        5
+    );
+    let single = reports
+        .analysis(
+            actor,
+            900,
+            reporting::Filter {
+                recipient: Some(9002),
+                event: vec![
+                    ruphish_domain::events::Kind::EmailOpened,
+                    ruphish_domain::events::Kind::FormSubmitted,
+                ],
+                limit: 1,
+                offset: 1,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(single.totals, [0, 2, 0, 0, 0]);
+    assert_eq!(single.first_observed[1], Some(1767225600));
+    assert_eq!(single.last_observed[1], Some(1767225600));
+
+    let window = reports
+        .analysis(
+            actor,
+            900,
+            reporting::Filter {
+                event: vec![
+                    ruphish_domain::events::Kind::EmailOpened,
+                    ruphish_domain::events::Kind::FormSubmitted,
+                ],
+                from: Some(1767225600),
+                until: Some(1767225601),
+                limit: 50,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        window.event_total, 3,
+        "Offset timestamps must use their actual UTC second in filters as well as summaries"
+    );
+    assert_eq!(window.totals, [0, 3, 0, 0, 0]);
 
     // Mixed draft/execution identities remain deterministic for equal names and
     // absent audience/schedule values. A cursor must survive boundary deletion.

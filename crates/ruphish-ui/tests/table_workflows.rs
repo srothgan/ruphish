@@ -3,8 +3,8 @@
 use ruphish_contracts::reporting::Filter;
 use ruphish_domain::reporting::{RecipientSort, SortDirection};
 use ruphish_ui::{
-    analysis_state,
     resource_state::ResourceDraft,
+    results_state,
     table_state::{Sort, Value, ratio, scalar, timestamp},
 };
 use serde_json::json;
@@ -65,14 +65,14 @@ fn table_sort_and_page_bookmarks_survive_refresh_and_download_without_page_trunc
         until: Some(200),
         ..Default::default()
     };
-    let saved = analysis_state::query(&filter, false);
+    let saved = results_state::query(&filter, false);
     let revisited: Filter = serde_urlencoded::from_str(&saved).unwrap();
     assert_eq!(revisited, filter);
     let mut download = revisited.clone();
     download.format = "csv".into();
     download.scope = "recipients".into();
     let exported: Filter =
-        serde_urlencoded::from_str(&analysis_state::query(&download, true)).unwrap();
+        serde_urlencoded::from_str(&results_state::query(&download, true)).unwrap();
     assert_eq!(exported.sort, RecipientSort::Opened);
     assert_eq!(exported.order, SortDirection::Desc);
     assert_eq!(exported.offset, 0);

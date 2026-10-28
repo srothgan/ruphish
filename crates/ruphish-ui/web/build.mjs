@@ -44,7 +44,7 @@ if (process.argv[2] === "manifest") {
   await mkdir(path.join(web, "generated"), { recursive: true });
   const common = { bundle: true, minify: true, target: "es2022", legalComments: "linked", logLevel: "info" };
   await Promise.all([
-    build({ ...common, entryPoints: [path.join(web, "../ruphish.css")], external: ["fonts/*"], outfile: path.join(web, "generated/admin.css") }),
+    build({ ...common, logOverride: { "invalid-@import": "error" }, entryPoints: [path.join(web, "../ruphish.css")], external: ["fonts/*"], outfile: path.join(web, "generated/admin.css") }),
     build({ ...common, entryPoints: [path.join(web, "editor.mjs")], format: "esm", outfile: path.join(web, "generated/editor.js") }),
     build({ ...common, entryPoints: [path.join(web, "datetime.mjs")], format: "esm", outfile: path.join(web, "generated/datetime.js") }),
     build({ ...common, entryPoints: [path.join(web, "starter-templates.mjs")], format: "esm", outfile: path.join(web, "generated/starter-templates.js") }),

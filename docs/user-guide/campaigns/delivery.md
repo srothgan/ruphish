@@ -5,7 +5,9 @@ sidebar:
   order: 5
 ---
 
-Open the campaign to inspect recipient delivery state and attempt history. SMTP acceptance means the configured server accepted the message; it does not confirm final delivery to a person's inbox.
+Open the campaign's **Delivery** view to inspect recipient delivery state and attempt history. SMTP acceptance means the configured server accepted the message; it does not confirm final delivery to a person's inbox. The donut counts recipients once by their current delivery state, not once per attempt. Expand a recipient row for the timeline and delivery-attempt details; **Edit events** opens the [correction dialog](../results/correcting-events.md).
+
+Administrative history names the action taken: retry requested, resend requested despite uncertainty, or SMTP acceptance confirmed manually. These actions are separate from engagement observations.
 
 | State | Meaning and next action |
 | --- | --- |

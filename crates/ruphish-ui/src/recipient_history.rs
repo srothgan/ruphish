@@ -1,6 +1,6 @@
 //! Recipient expansion survives table refresh; history merges only confirmed responses.
 use serde_json::Value;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 
 #[derive(Clone, Default)]
 /// Confirmed history and the request currently owned by one expanded recipient.
@@ -25,6 +25,17 @@ pub struct History {
     pub retry_older: bool,
 }
 impl History {
+    /// A confirmed write supersedes any history response begun before that write.
+    pub fn invalidate_reads(&mut self) {
+        self.active = None;
+        self.sequence += 1;
+    }
+
+    /// Whether an initial history read has completed successfully.
+    pub fn has_loaded(&self) -> bool {
+        self.initialized
+    }
+
     /// Whether this expansion currently owns an in-flight request.
     pub fn loading(&self) -> bool {
         self.active.is_some()
@@ -62,7 +73,7 @@ impl History {
         };
         Some((self.sequence, query))
     }
-    /// Merge an owned response while retaining older records and newer attempt state.
+    /// Replace revalidated events on refresh; append older pages and preserve attempt state.
     pub fn finish(&mut self, request: u64, result: Result<Value, String>) {
         let Some((active, older)) = self.active else {
             return;
@@ -92,14 +103,26 @@ impl History {
                 .is_some_and(|(oldest, newest)| oldest > newest)
         };
         let attempt_gap = !older && disjoint("attempts", "generation", &self.attempts);
-        let event_gap = !older && disjoint("events", "id", &self.events);
+        let event_gap = !older
+            && (value["refresh_event_gap"] == true || disjoint("events", "id", &self.events));
+        if !older {
+            self.events.clear();
+        }
         for (key, id, map) in [
             ("attempts", "generation", &mut self.attempts),
             ("events", "id", &mut self.events),
         ] {
             for row in value[key].as_array().into_iter().flatten() {
                 if let Some(id) = row[id].as_i64() {
-                    if older {
+                    if key == "events" {
+                        let revision = |v: &Value| v["record"]["revision"].as_i64().unwrap_or(0);
+                        if map
+                            .get(&id)
+                            .is_none_or(|old| revision(row) >= revision(old))
+                        {
+                            map.insert(id, row.clone());
+                        }
+                    } else if older {
                         map.entry(id).or_insert_with(|| row.clone());
                     } else {
                         map.insert(id, row.clone());
@@ -123,26 +146,6 @@ impl History {
     }
 }
 
-/// One observed point in a recipient's chronological history.
-#[derive(Clone, PartialEq, Eq)]
-pub struct TimelineEntry {
-    /// Recorded UTC seconds, absent for an unparseable legacy timestamp.
-    pub at: Option<i64>,
-    /// Human-readable observation; never a fabricated protocol phase.
-    pub title: TimelineTitle,
-    /// Semantic marker color accompanied by the textual outcome.
-    pub tone: &'static str,
-}
-/// Observed timeline facts, rendered into the selected language by the UI.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TimelineTitle {
-    /// The recorded start of this attempt generation.
-    Started(i64),
-    /// The recorded generation and resulting transport state.
-    Finished(i64, String),
-    /// A recorded event name from the server.
-    Event(String),
-}
 /// Consistent semantic colors for state labels and timeline markers.
 pub fn tone(state: &str) -> &'static str {
     match state {
@@ -152,69 +155,40 @@ pub fn tone(state: &str) -> &'static str {
         _ => "neutral",
     }
 }
-/// Coalesce only one corresponding event per recorded attempt; preserve other events.
-pub fn timeline(history: &History) -> Vec<TimelineEntry> {
-    let mut entries = Vec::new();
-    let mut matched = HashSet::new();
-    for (generation, a) in &history.attempts {
-        entries.push(TimelineEntry {
-            at: a["started"].as_i64(),
-            title: TimelineTitle::Started(*generation),
-            tone: "neutral",
-        });
-        if let Some(finished) = a["finished"].as_i64() {
-            let state = a["state"].as_str().unwrap_or_default();
-            entries.push(TimelineEntry {
-                at: Some(finished),
-                title: TimelineTitle::Finished(*generation, state.to_owned()),
-                tone: tone(state),
-            });
-        }
-    }
-    for e in history.events.values() {
-        let at = e["at"].as_i64();
-        let message = e["message"].as_str().unwrap_or("Recorded event");
-        let duplicate = history
-            .attempts
-            .iter()
-            .find(|(generation, a)| {
-                !matched.contains(*generation)
-                    && at.is_some()
-                    && a["finished"].as_i64() == at
-                    && match message {
-                        "Email Sent" => a["state"] == "accepted",
-                        "Error Sending Email" => matches!(
-                            a["state"].as_str(),
-                            Some("retry" | "failed" | "blocked" | "unknown")
-                        ),
-                        _ => false,
-                    }
-            })
-            .map(|(generation, _)| *generation);
-        if let Some(generation) = duplicate {
-            matched.insert(generation);
-            continue;
-        }
-        entries.push(TimelineEntry {
-            at,
-            title: TimelineTitle::Event(message.to_owned()),
-            tone: if message == "Email Sent" {
-                "success"
-            } else if message == "Error Sending Email" {
-                "failure"
-            } else {
-                "neutral"
-            },
-        });
-    }
-    entries.sort_by_key(|e| e.at.unwrap_or(i64::MAX));
-    entries
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn confirmed_writes_invalidate_old_reads_and_refresh_removes_deleted_rows() {
+        let mut history = History::default();
+        history.toggle();
+        let (r, _) = history.begin(false).unwrap();
+        history.finish(
+            r,
+            Ok(json!({"events":[{"id":5,"record":{"revision":0}}],"next_event":5})),
+        );
+        let (r, _) = history.begin(true).unwrap();
+        history.finish(
+            r,
+            Ok(json!({"events":[{"id":1,"record":{"revision":0}}],"next_event":null})),
+        );
+        let (stale, _) = history.begin(false).unwrap();
+        history.invalidate_reads();
+        history
+            .events
+            .insert(5, json!({"id":5,"record":{"revision":1,"edited":true}}));
+        history.finish(
+            stale,
+            Ok(json!({"events":[{"id":5,"record":{"revision":0}}]})),
+        );
+        assert_eq!(history.events[&5]["record"]["revision"], 1);
+        assert!(history.events.contains_key(&1));
+        let (r, _) = history.begin(false).unwrap();
+        history.finish(r, Ok(json!({"events":[{"id":5,"record":{"revision":1,"edited":true}}],"next_event":null})));
+        assert!(!history.events.contains_key(&1));
+        assert_eq!(history.events[&5]["record"]["edited"], true);
+    }
     #[test]
     fn expansion_refresh_retry_and_older_pages_preserve_confirmed_history() {
         let mut h = History::default();
@@ -232,7 +206,7 @@ mod tests {
         let (retry, _) = h.begin(true).unwrap();
         h.finish(retry,Ok(json!({"attempts":[{"generation":1,"state":"retry"}],"events":[{"id":1}],"next_event":null,"next_attempt":null})));
         let (refresh, _) = h.begin(false).unwrap();
-        h.finish(refresh,Ok(json!({"attempts":[{"generation":2,"state":"accepted"}],"events":[{"id":103},{"id":102}],"next_event":102,"next_attempt":2})));
+        h.finish(refresh,Ok(json!({"attempts":[{"generation":2,"state":"accepted"}],"events":[{"id":103},{"id":102},{"id":1}],"next_event":102,"next_attempt":2})));
         assert_eq!(h.attempts.len(), 2);
         assert_eq!(h.attempts[&2]["state"], "accepted");
         assert_eq!(h.events.len(), 3);
@@ -250,29 +224,14 @@ mod tests {
         assert_eq!(h.events.len(), 3);
     }
     #[test]
-    fn timeline_orders_real_outcomes_and_does_not_hide_unrelated_or_duplicate_events() {
+    fn repeated_events_keep_individual_identities_and_occurrence_times() {
         let mut h = History::default();
         h.toggle();
-        let (r, _) = h.begin(false).unwrap();
-        h.finish(r,Ok(json!({"attempts":[
-            {"generation":2,"started":30,"finished":31,"state":"accepted","smtp_code":null,"stage":""},
-            {"generation":1,"started":10,"finished":11,"state":"retry"}],
-            "events":[{"id":1,"at":11,"message":"Error Sending Email"},{"id":2,"at":31,"message":"Email Sent"},{"id":3,"at":32,"message":"Email Opened"},{"id":4,"at":31,"message":"Email Sent"}]})));
-        let events = timeline(&h);
-        assert_eq!(
-            events.iter().map(|e| e.at.unwrap()).collect::<Vec<_>>(),
-            vec![10, 11, 30, 31, 31, 32]
-        );
-        assert_eq!(events[1].title, TimelineTitle::Finished(1, "retry".into()));
-        assert_eq!(
-            events[3].title,
-            TimelineTitle::Finished(2, "accepted".into())
-        );
-        assert_eq!(events[5].title, TimelineTitle::Event("Email Opened".into()));
-        // The title carries only recorded state, never invented SMTP codes/phases.
-        assert_eq!(events[0].title, TimelineTitle::Started(1));
-        assert_eq!(events[2].title, TimelineTitle::Started(2));
-        assert_eq!(events[4].title, TimelineTitle::Event("Email Sent".into()));
+        let (request, _) = h.begin(false).unwrap();
+        h.finish(request, Ok(json!({"events":[{"id":1,"at":32,"message":"Clicked Link"},{"id":2,"at":32,"message":"Clicked Link"}]})));
+        assert_eq!(h.events.len(), 2);
+        assert_eq!(h.events[&1]["at"], 32);
+        assert_eq!(h.events[&2]["at"], 32);
     }
 
     #[test]
@@ -287,7 +246,7 @@ mod tests {
         let (r, _) = h.begin(false).unwrap();
         h.finish(
             r,
-            Ok(json!({"events":[{"id":105},{"id":104}],"next_event":104})),
+            Ok(json!({"events":[{"id":105},{"id":104},{"id":2},{"id":1}],"refresh_event_gap":true,"next_event":104})),
         );
         assert_eq!(h.next_event, Some(104));
         let (r, q) = h.begin(true).unwrap();

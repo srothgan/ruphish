@@ -23,3 +23,5 @@ pub use ruphish_domain::validation;
 
 /// Shared sorted-continuation rules used by transport and storage adapters.
 pub use ruphish_domain::pagination;
+
+pub mod event_edit;

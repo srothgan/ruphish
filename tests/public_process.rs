@@ -490,6 +490,44 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
     assert_eq!(last["message"], "Clicked Link");
     assert_eq!(last["time"], clicked["results"][0]["modified_date"]);
     let html = view.text().unwrap();
+    let recipient = get(
+        &admin,
+        &format!("/api/campaigns/{}/results", campaign["id"]),
+    )["recipients"][0]["id"]
+        .as_i64()
+        .unwrap();
+    let history = get(
+        &admin,
+        &format!(
+            "/api/campaigns/{}/recipients/{recipient}/history",
+            campaign["id"]
+        ),
+    );
+    let event = history["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["message"] == "Clicked Link")
+        .unwrap();
+    let correction=client().post(format!("{admin}/api/campaigns/{}/recipients/{recipient}/events",campaign["id"]))
+        .bearer_auth("synthetic-bootstrap-token").json(&json!({"request_id":"real-public-click-correction","event_id":event["id"],"revision":0,"action":"delete","value":null})).send().unwrap();
+    assert_eq!(correction.status(), 200, "{}", correction.text().unwrap());
+    assert_eq!(
+        get(
+            &admin,
+            &format!("/api/campaigns/{}/results", campaign["id"])
+        )["totals"]["clicked"],
+        0
+    );
+    assert_eq!(browser.get(&url).send().unwrap().status(), 200);
+    assert_eq!(
+        get(
+            &admin,
+            &format!("/api/campaigns/{}/results", campaign["id"])
+        )["totals"]["clicked"],
+        1,
+        "A new real landing request contributes independently of the deleted observation"
+    );
     assert!(html.contains("name=\"password\""));
     assert!(!html.contains("authoredCanary"));
     assert_eq!(
@@ -639,7 +677,7 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
     );
     let analysis = get(
         &admin,
-        &format!("/api/campaigns/{}/analysis?limit=100", campaign["id"]),
+        &format!("/api/campaigns/{}/results?limit=100", campaign["id"]),
     );
     assert_eq!(analysis["unique"]["submitted"], 1);
     assert_eq!(analysis["progression"]["submitted"], 1);
@@ -655,7 +693,7 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
     let recipient_analysis = get(
         &admin,
         &format!(
-            "/api/campaigns/{}/analysis?recipient={recipient_id}&limit=100",
+            "/api/campaigns/{}/results?recipient={recipient_id}&limit=100",
             campaign["id"]
         ),
     );

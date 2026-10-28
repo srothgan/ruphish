@@ -69,9 +69,15 @@ pub(crate) fn MultiSelect(
                         selected.set(Vec::new())
                     }>{tr!(ui.clear_selection)}</ActionButton>
                 </div>
-                <Show when=move || loading.get()>
-                    <p role="status">{tr!(ui.loading_recipients)}</p>
-                </Show>
+                <span class="select-loading" role="status">
+                    {move || {
+                        if loading.get() {
+                            leptos_i18n::t_string!(i18n,ui.loading_recipients).to_owned()
+                        } else {
+                            String::new()
+                        }
+                    }}
+                </span>
                 <Show when=move || !error.get().is_empty()>
                     <p role="alert">{move || error.get()}</p>
                     <ActionButton on_click=move |_| on_retry.run(())>{tr!(ui.retry)}</ActionButton>

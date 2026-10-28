@@ -202,6 +202,7 @@ async fn load_aggregate(
         .map_err(storage)?
     {
         events.push(Event {
+            record: None,
             recipient_id: e.try_get("recipient_id").map_err(storage)?,
             id: e.try_get("id").map_err(storage)?,
             email: text(&e, "email")?,
@@ -316,6 +317,14 @@ async fn header(c: &mut PgConnection, owner: i64, id: i64) -> Result<CampaignHea
 }
 #[async_trait::async_trait]
 impl Repository for Campaigns {
+    async fn header(&self, caller: Identity, id: i64) -> Result<CampaignHeader, Error> {
+        let mut tx = self.pool.begin().await.map_err(storage)?;
+        super::resources::authorize(&mut tx, caller, false).await?;
+        let value = header(&mut tx, caller.id, id).await?;
+        tx.commit().await.map_err(storage)?;
+        Ok(value)
+    }
+
     async fn directory(
         &self,
         caller: Identity,
@@ -616,6 +625,7 @@ impl Repository for Campaigns {
         .map_err(storage)?
         {
             activity.push(Event {
+                record: None,
                 recipient_id: e.try_get("recipient_id").map_err(storage)?,
                 id: e.try_get("id").map_err(storage)?,
                 email: text(&e, "email")?,
@@ -664,12 +674,20 @@ impl Repository for Campaigns {
         rows.truncate(100);
         let mut events = Vec::new();
         for e in rows {
+            let record = super::event_edit::load(
+                &mut tx,
+                campaign,
+                result,
+                e.try_get("id").map_err(storage)?,
+            )
+            .await?;
             events.push(Event {
+                record: Some(record.clone()),
                 recipient_id: e.try_get("recipient_id").map_err(storage)?,
                 id: e.try_get("id").map_err(storage)?,
                 email: text(&e, "email")?,
-                time: text(&e, "time")?,
-                message: text(&e, "message")?,
+                time: record.current.time.clone(),
+                message: record.current.kind.label().to_owned(),
                 details: crate::participant_privacy::details(&text(&e, "details")?),
             });
         }

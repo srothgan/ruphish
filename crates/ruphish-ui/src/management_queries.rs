@@ -129,7 +129,7 @@ impl ManagementQueries {
         self.integration.invalidate_where(|_| true);
         self.campaigns.directory.invalidate_where(|_| true);
         self.campaigns.delivery.invalidate_where(|_| true);
-        self.campaigns.analysis.invalidate_where(|_| true);
+        self.campaigns.results.invalidate_where(|_| true);
         self.overview.campaigns_changed();
     }
     pub fn domain_verified(self, value: Domain) {

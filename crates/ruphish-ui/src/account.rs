@@ -411,6 +411,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         .is_some_and(|u| u.permissions.iter().any(|p| p == "modify_system"));
     let required = user.as_ref().is_some_and(|u| u.password_change_required);
     let token = StoredValue::new(session.csrf_token.clone());
+    provide_context(crate::event_table::Csrf(token));
     let message = Message::new(String::new());
     let actor = session.actor.clone();
     let active = actor.is_some();
@@ -533,7 +534,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         } else if list {
             crate::campaigns::list(api, token.get_value()).into_any()
         } else {
-            crate::campaigns::detail(api, token.get_value()).into_any()
+            crate::campaigns::entry().into_any()
         }
     };
     let draft_page = move |editing: bool| {
@@ -569,13 +570,11 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
             crate::integrations::page(api, token.get_value(), kind, editing).into_any()
         }
     };
-    let analysis_page = move |directory: bool| {
+    let campaign_section = move |section| {
         if required {
             password_form(api, token.get_value(), true).into_any()
-        } else if directory {
-            crate::campaigns::analysis_directory(api).into_any()
         } else {
-            crate::analysis::page(api).into_any()
+            crate::campaigns::detail(api, token.get_value(), section).into_any()
         }
     };
     let content = view! {
@@ -643,12 +642,6 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
                     }
                 }
             />
-            <Route path=path!("/analysis") view=move || analysis_page(true) />
-            <Route path=path!("/analysis/:id") view=move || analysis_page(false) />
-            <Route
-                path=path!("/analysis/:id/recipients/:recipient")
-                view=move || analysis_page(false)
-            />
             <Route
                 path=path!("/webhooks")
                 view=move || move || integration_page(
@@ -700,6 +693,42 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
             <Route path=path!("/campaigns/drafts/:id") view=move || draft_page(false) />
             <Route path=path!("/campaigns/drafts/:id/edit") view=move || draft_page(true) />
             <Route path=path!("/campaigns") view=move || campaign_page(true) />
+            <Route
+                path=path!("/campaigns/:id/setup")
+                view=move || campaign_section(crate::campaigns::Section::Setup)
+            />
+            <Route
+                path=path!("/campaigns/:id/delivery")
+                view=move || campaign_section(crate::campaigns::Section::Delivery)
+            />
+            <Route
+                path=path!("/campaigns/:id/results")
+                view=move || campaign_section(crate::campaigns::Section::Results)
+            />
+            <Route
+                path=path!("/campaigns/:id/connections")
+                view=move || campaign_section(crate::campaigns::Section::Connections)
+            />
+            <Route
+                path=path!("/campaigns/:id/results/recipients/:recipient")
+                view=move || {
+                    if required {
+                        password_form(api, token.get_value(), true).into_any()
+                    } else {
+                        crate::recipient_analysis::page(api).into_any()
+                    }
+                }
+            />
+            <Route
+                path=path!("/campaigns/new")
+                view=move || {
+                    if required {
+                        password_form(api, token.get_value(), true).into_any()
+                    } else {
+                        crate::campaigns::new(api, token.get_value()).into_any()
+                    }
+                }
+            />
             <Route path=path!("/campaigns/:id") view=move || campaign_page(false) />
             <Route
                 path=path!("/domains")

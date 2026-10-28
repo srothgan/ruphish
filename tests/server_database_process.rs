@@ -180,7 +180,7 @@ pub(super) fn exercise(mut database_config: Value, mut fault: impl FnMut(&Path, 
         get(
             &client,
             &base,
-            &format!("/api/campaigns/{campaign_id}/analysis")
+            &format!("/api/campaigns/{campaign_id}/results")
         )["totals"]["reported"],
         1
     );
@@ -238,7 +238,7 @@ pub(super) fn exercise(mut database_config: Value, mut fault: impl FnMut(&Path, 
     let analysis = get(
         &client,
         &base,
-        &format!("/api/campaigns/{campaign_id}/analysis"),
+        &format!("/api/campaigns/{campaign_id}/results"),
     );
     assert_eq!(
         analysis["totals"]["reported"], 1,
@@ -521,7 +521,7 @@ fn uncertain_delivery(
     let item = &delivery["items"][0];
     assert_eq!(item["attempts"].as_array().unwrap().len(), 1);
     assert_eq!(
-        get(&client(), base, &format!("/api/campaigns/{id}/analysis"))["totals"]["accepted"],
+        get(&client(), base, &format!("/api/campaigns/{id}/results"))["totals"]["accepted"],
         0,
         "unconfirmed delivery is not counted as accepted"
     );
@@ -537,11 +537,11 @@ fn uncertain_delivery(
         1
     );
     assert_eq!(
-        get(&client(), base, &format!("/api/campaigns/{id}/analysis"))["totals"]["accepted"],
+        get(&client(), base, &format!("/api/campaigns/{id}/results"))["totals"]["accepted"],
         1
     );
     assert_eq!(
-        get(&client(), base, &format!("/api/campaigns/{id}/analysis"))["progression"],
+        get(&client(), base, &format!("/api/campaigns/{id}/results"))["progression"],
         json!({"accepted":1,"opened":0,"clicked":0,"submitted":0,"reported":0}),
         "the same address in another campaign must not inherit its interactions"
     );
@@ -554,7 +554,7 @@ fn uncertain_delivery(
     );
     assert_eq!(stale.status(), 412);
     assert_eq!(
-        get(&client(), base, &format!("/api/campaigns/{id}/analysis"))["totals"]["accepted"],
+        get(&client(), base, &format!("/api/campaigns/{id}/results"))["totals"]["accepted"],
         1
     );
 }
@@ -734,7 +734,7 @@ fn campaign_workflow(
         .unwrap();
     assert!(failed.status().is_server_error());
     assert_eq!(
-        get(&client(), base, &format!("/api/campaigns/{id}/analysis"))["totals"],
+        get(&client(), base, &format!("/api/campaigns/{id}/results"))["totals"],
         json!({"accepted":2,"opened":0,"clicked":0,"submitted":0,"reported":0})
     );
     fault(directory, Fault::RestoreInsert("ruphish_webhook_jobs"));
@@ -749,7 +749,7 @@ fn campaign_workflow(
             200
         );
     }
-    let submitted = get(&client(), base, &format!("/api/campaigns/{id}/analysis"));
+    let submitted = get(&client(), base, &format!("/api/campaigns/{id}/results"));
     assert_eq!(
         submitted["totals"],
         json!({"accepted":2,"opened":0,"clicked":0,"submitted":1,"reported":0})
@@ -791,7 +791,7 @@ fn campaign_workflow(
             .status(),
         415
     );
-    let analysis = get(&client(), base, &format!("/api/campaigns/{id}/analysis"));
+    let analysis = get(&client(), base, &format!("/api/campaigns/{id}/results"));
     assert_eq!(
         analysis["totals"],
         json!({"accepted":2,"opened":2,"clicked":1,"submitted":1,"reported":0})
@@ -807,12 +807,12 @@ fn campaign_workflow(
     let page1 = get(
         &client(),
         base,
-        &format!("/api/campaigns/{id}/analysis?limit=1"),
+        &format!("/api/campaigns/{id}/results?limit=1"),
     );
     let page2 = get(
         &client(),
         base,
-        &format!("/api/campaigns/{id}/analysis?limit=1&offset=1"),
+        &format!("/api/campaigns/{id}/results?limit=1&offset=1"),
     );
     assert_eq!(page1["recipient_total"], 2);
     assert_eq!(page1["totals"], page2["totals"]);
@@ -820,7 +820,7 @@ fn campaign_workflow(
     let selected = get(
         &client(),
         base,
-        &format!("/api/campaigns/{id}/analysis?search=BOB"),
+        &format!("/api/campaigns/{id}/results?search=BOB"),
     );
     assert_eq!(selected["recipient_total"], 1);
     assert_eq!(
@@ -831,7 +831,7 @@ fn campaign_workflow(
         &client(),
         base,
         reqwest::Method::GET,
-        &format!("/api/campaigns/{id}/analysis?recipients=999999"),
+        &format!("/api/campaigns/{id}/results?recipients=999999"),
         None,
     );
     assert_eq!(bad.status(), 404);
@@ -848,7 +848,7 @@ fn campaign_workflow(
     let empty = get(
         &client(),
         base,
-        &format!("/api/campaigns/{id}/analysis?search=nobody"),
+        &format!("/api/campaigns/{id}/results?search=nobody"),
     );
     assert_eq!(
         empty["totals"],

@@ -31,9 +31,6 @@ pub(crate) fn Dialog(
                 if let Some(cancel) = on_cancel {
                     event.prevent_default();
                     if !busy.get_untracked() {
-                        if let Some(dialog) = node.get_untracked() {
-                            dialog.close();
-                        }
                         cancel.run(());
                     }
                 }

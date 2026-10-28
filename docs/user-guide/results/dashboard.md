@@ -1,20 +1,16 @@
 ---
-title: Read the dashboard
-description: Use periods, recent campaigns, and attention items to understand your own campaign activity.
+title: Use the dashboard
+description: Continue drafts and find recent campaigns and delivery work needing attention.
 sidebar:
   order: 3
 ---
 
-The authenticated home page shows your account's analysis metrics, recent campaigns, resource inventory, and operational attention items. Administrators still see their own campaign data; impersonation follows the selected account.
+The authenticated home page shows drafts to continue, recent campaigns with compact outcome rates, the next scheduled launch, resource inventory, and operational attention items. Administrators see their own campaign data; impersonation follows the selected account.
 
-![Ruphish dashboard with a period selector, five outcome metrics, four recent campaigns, and attention items.](/dashboard.png)
-
-This screenshot uses synthetic demonstration data, captured on 26 October 2026. Its counts illustrate the layout, not campaign effectiveness or results you should expect. The period applies to the analysis overview; recent-campaign rates cover each campaign's recorded sends independently.
-
-Choose **All time**, **Last year**, **Last 30 days**, or **Last 7 days**. Last year is a rolling 365 days, and the default is Last 30 days. The period affects the analysis overview; recent-campaign rates use each campaign's complete recorded history.
-
-Headline metrics count recipients. Interaction percentages use the selected sent-recipient denominator. Smaller comparison values are absolute count changes, so consider volume as well as direction. Read [metric definitions](metrics.md) before comparing periods.
+Choose **Create campaign** to prepare a draft. Open a recent campaign for **Results**, or use a scheduled launch or delivery attention link to open **Delivery**. The dashboard shows up to five saved drafts and up to ten campaign links needing delivery review; open Campaigns for the directory.
 
 Use **Needs attention** to find enabled domains without current verification and failed, blocked, or uncertain deliveries in unfinished campaigns. A disabled domain remains in inventory without requesting verification attention.
 
-Changing the period reloads metrics independently of other dashboard content. Failed refreshes retain confirmed results with their timestamp and a retry option. Check freshness before treating an attention count as current.
+Recent campaign rates cover each campaign's recorded sends. Use its Results view for filters, charts, individual observations, and exports. See [metric definitions](metrics.md) for interpretation.
+
+Refresh reloads the operational snapshot and drafts. Failed refreshes retain confirmed data and offer a retry. Check freshness before treating an attention count as current.

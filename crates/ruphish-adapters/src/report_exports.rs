@@ -65,6 +65,7 @@ fn events(a: &Analysis) -> Vec<Vec<String>> {
             "Event",
             "Source",
             "Password present",
+            "Edited",
         ]
         .into_iter()
         .map(str::to_owned)
@@ -81,6 +82,7 @@ fn events(a: &Analysis) -> Vec<Vec<String>> {
             e.password_present
                 .map(|v| v.to_string())
                 .unwrap_or_default(),
+            e.edited.to_string(),
         ]
     }));
     rows
@@ -146,9 +148,10 @@ pub(crate) fn generate(
         vec![
             "Event filter".into(),
             f.event
-                .map(ruphish_domain::events::Kind::label)
-                .unwrap_or_default()
-                .into(),
+                .iter()
+                .map(|kind| kind.label())
+                .collect::<Vec<_>>()
+                .join(", "),
         ],
         vec![
             "Source filter".into(),

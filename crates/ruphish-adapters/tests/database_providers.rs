@@ -16,6 +16,103 @@ use sqlx::{
 };
 use std::path::PathBuf;
 
+#[path = "support/event_edits.rs"]
+mod event_edits;
+
+#[tokio::test]
+#[ignore = "Requires canonical MySQL fixture"]
+async fn mysql_event_edits_preserve_history_and_reopen() {
+    let (mut inspect, config) = fixture().await;
+    let db = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    sqlx::raw_sql(event_edits::SEED)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    db.close().await;
+    let db = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    event_edits::contract(&db).await;
+    db.close().await;
+    let reopened = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    let history = reopened
+        .campaigns()
+        .recipient_history(event_edits::OWNER, 10, 11, None, None)
+        .await
+        .unwrap();
+    assert!(!history.events.iter().any(|e| e.id == 101));
+    assert!(
+        history
+            .events
+            .iter()
+            .find(|e| e.id == 102)
+            .unwrap()
+            .record
+            .as_ref()
+            .unwrap()
+            .edited
+    );
+    reopened.close().await;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE `{}`",
+        config.database
+    )))
+    .execute(&mut inspect)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires canonical PostgreSQL fixture"]
+async fn postgres_event_edits_preserve_history_and_reopen() {
+    let (mut admin, config) = postgres_fixture().await;
+    let db = database::open(Config::Postgres(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    let mut inspect = postgres_inspect(&config).await;
+    sqlx::raw_sql(event_edits::SEED)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    sqlx::query("SELECT setval(pg_get_serial_sequence('events','id'),105)")
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    db.close().await;
+    let db = database::open(Config::Postgres(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    event_edits::contract(&db).await;
+    db.close().await;
+    let reopened = database::open(Config::Postgres(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    let history = reopened
+        .campaigns()
+        .recipient_history(event_edits::OWNER, 10, 11, None, None)
+        .await
+        .unwrap();
+    assert!(!history.events.iter().any(|e| e.id == 101));
+    assert!(
+        history
+            .events
+            .iter()
+            .find(|e| e.id == 102)
+            .unwrap()
+            .record
+            .as_ref()
+            .unwrap()
+            .edited
+    );
+    reopened.close().await;
+    inspect.close().await.unwrap();
+    postgres_cleanup(&mut admin, &config).await;
+}
+
 #[path = "support/campaign_drafts.rs"]
 mod campaign_drafts;
 #[path = "support/company_settings.rs"]
@@ -876,6 +973,11 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     );
     a.unwrap();
     b.unwrap();
+    let context = campaigns.header(actor, campaign.id).await.unwrap();
+    assert_eq!(context.id, campaign.id);
+    assert_eq!(context.total, 1);
+    let overview = db.overview().snapshot(actor, now).await.unwrap();
+    assert!(overview.attention.campaign_ids.len() <= 10);
     let analysis = db
         .reporting()
         .analysis(
@@ -907,7 +1009,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         recipients: vec![claim.result_id],
         from: Some(now + 3),
         until: Some(now + 4),
-        event: Some(ruphish_domain::events::Kind::FormSubmitted),
+        event: vec![ruphish_domain::events::Kind::FormSubmitted],
         source: Some(ruphish_domain::reporting::Source::Public),
         search: "EXAMPLE.TEST".into(),
         limit: 50,

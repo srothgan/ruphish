@@ -34,69 +34,65 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
                 token=token.get_value()
                 on_deleted=deleted
             />
-            <QueryStatus
+            <QueryBoundary
                 fetching=read.fetching
                 has_data=Signal::derive(move || data.with(Option::is_some))
                 error=read.error
                 noun=trs!(ui.resource)
                 refresh=read.refresh
-            />
-            {move || {
-                data.get()
-                    .map(|value| {
-                        let id = value.metadata.id;
-                        let name = value.metadata.name.clone();
-                        let export = value.clone();
-                        let export_name = name.clone();
-                        let delete_name = name.clone();
-                        view! {
-                            <PageHeader
-                                title=name
-                                subtitle=leptos_i18n::t_string!(
-                                    i18n, messages.last_updated_arg0, arg0 = (crate::time_display::instant(&serde_json::json!(value.metadata.modified_date))).to_string()
-                                )
-                            >
-                                <ActionButton
-                                    disabled=read.fetching
-                                    on_click=move |_| read.refresh.run(())
+            >
+                {move || {
+                    data.get()
+                        .map(|value| {
+                            let id = value.metadata.id;
+                            let name = value.metadata.name.clone();
+                            let export = value.clone();
+                            let export_name = name.clone();
+                            let delete_name = name.clone();
+                            view! {
+                                <PageHeader
+                                    title=name
+                                    subtitle=leptos_i18n::t_string!(
+                                        i18n, messages.last_updated_arg0, arg0 = (crate::time_display::instant(&serde_json::json!(value.metadata.modified_date))).to_string()
+                                    )
                                 >
-                                    {tr!(ui.refresh)}
-                                </ActionButton>
-                                <ResourceActions
-                                    edit_href=format!("/{}/{id}/edit", family.route())
-                                    can_edit=can_edit
-                                    disabled=deletion.busy
-                                    on_delete=Callback::new(move |()| {
-                                        deletion
-                                            .select(DeleteTarget {
-                                                id,
-                                                name: delete_name.clone(),
-                                                path: format!("/api/{}/{id}", family.route()),
-                                                revision: revision.get_untracked(),
-                                                description: leptos_i18n::t_string!(
-                                                    i18n, ui.this_permanently_removes_the_saved_resource_resources_used_by_unfinished_campaig
-                                                ),
-                                            })
-                                    })
-                                >
-                                    <ActionLink
-                                        hidden=!can_edit
+                                    <RefreshButton fetching=read.fetching on_refresh=read.refresh />
+                                    <ResourceActions
+                                        edit_href=format!("/{}/{id}/edit", family.route())
+                                        can_edit=can_edit
                                         disabled=deletion.busy
-                                        href=format!("/{}/new?duplicate={id}", family.route())
+                                        on_delete=Callback::new(move |()| {
+                                            deletion
+                                                .select(DeleteTarget {
+                                                    id,
+                                                    name: delete_name.clone(),
+                                                    path: format!("/api/{}/{id}", family.route()),
+                                                    revision: revision.get_untracked(),
+                                                    description: leptos_i18n::t_string!(
+                                                        i18n, ui.this_permanently_removes_the_saved_resource_resources_used_by_unfinished_campaig
+                                                    ),
+                                                })
+                                        })
                                     >
-                                        {tr!(ui.duplicate)}
-                                    </ActionLink>
-                                    <ActionButton on_click=move |_| download(
-                                        &export,
-                                        &export_name,
-                                        message,
-                                    )>{tr!(ui.export_json)}</ActionButton>
-                                </ResourceActions>
-                            </PageHeader>
-                            <Card class="resource-read-panel">{body(value)}</Card>
-                        }
-                    })
-            }}
+                                        <ActionLink
+                                            hidden=!can_edit
+                                            disabled=deletion.busy
+                                            href=format!("/{}/new?duplicate={id}", family.route())
+                                        >
+                                            {tr!(ui.duplicate)}
+                                        </ActionLink>
+                                        <ActionButton on_click=move |_| download(
+                                            &export,
+                                            &export_name,
+                                            message,
+                                        )>{tr!(ui.export_json)}</ActionButton>
+                                    </ResourceActions>
+                                </PageHeader>
+                                <Card class="resource-read-panel">{body(value)}</Card>
+                            }
+                        })
+                }}
+            </QueryBoundary>
         </ManagementPage>
     };
     view! {

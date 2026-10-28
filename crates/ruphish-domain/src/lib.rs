@@ -21,3 +21,5 @@ pub mod template;
 pub mod events;
 pub mod settings;
 pub mod validation;
+
+pub mod event_edit;

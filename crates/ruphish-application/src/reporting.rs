@@ -18,8 +18,8 @@ pub struct Filter {
     pub from: Option<i64>,
     /// Exclusive UTC Unix seconds.
     pub until: Option<i64>,
-    /// Exact recognized event type.
-    pub event: Option<ruphish_domain::events::Kind>,
+    /// Union of recognized event types; empty means all types.
+    pub event: Vec<ruphish_domain::events::Kind>,
     /// Case-insensitive recipient name/email substring.
     pub search: String,
     /// Report source, or no restriction.
@@ -44,7 +44,7 @@ impl Default for Filter {
             recipients: Vec::new(),
             from: None,
             until: None,
-            event: None,
+            event: Vec::new(),
             search: String::new(),
             source: None,
             offset: 0,
@@ -59,6 +59,8 @@ impl Default for Filter {
 /// Safe event data; no arbitrary payload or network identity.
 #[derive(Clone)]
 pub struct Event {
+    /// Whether an operator has changed the event values since creation.
+    pub edited: bool,
     /// Durable event identity.
     pub id: i64,
     /// Associated recipient identity if resolvable.
@@ -109,6 +111,11 @@ pub struct Bucket {
 }
 /// Consistent authorized snapshot, with bounded table pages.
 pub struct Analysis {
+    /// First observed UTC second per metric, before pagination; absent without valid evidence.
+    pub first_observed: [Option<i64>; 5],
+    /// Latest observed UTC second per metric, before pagination.
+    pub last_observed: [Option<i64>; 5],
+
     /// Campaign identifier.
     pub id: i64,
     /// Campaign display name.
