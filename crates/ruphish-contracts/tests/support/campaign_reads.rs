@@ -221,6 +221,17 @@ fn named_metrics_and_classified_observations_reject_missing_or_unknown_values() 
         value["events"][0]["edited"] = invalid;
         assert!(serde_json::from_value::<Results>(value).is_err());
     }
+    for present in [Value::Null, json!(false), json!(true)] {
+        let mut value = fixture.clone();
+        value["events"][0]["username_present"] = present.clone();
+        let decoded: Results = serde_json::from_value(value).unwrap();
+        assert_eq!(json!(decoded.events[0].username_present), present);
+    }
+    for invalid in [json!("entered-user"), json!(1), json!({"value":"private"})] {
+        let mut value = fixture.clone();
+        value["events"][0]["username_present"] = invalid;
+        assert!(serde_json::from_value::<Results>(value).is_err());
+    }
     let mut imported = fixture;
     imported["events"][0]["kind"] = json!({"type":"historical","value":"Proxied request"});
     let value: Results = serde_json::from_value(imported).unwrap();

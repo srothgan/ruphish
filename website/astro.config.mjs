@@ -15,8 +15,11 @@ const sections = [
 ];
 
 // Production uses its assigned Vercel domain; a custom domain can override SITE_URL.
-const site = process.env.SITE_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL
-  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : undefined);
+const site =
+  process.env.SITE_URL ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : undefined);
 
 export default defineConfig({
   site,
@@ -29,15 +32,25 @@ export default defineConfig({
       description: 'Guides and reference for running phishing simulations with Ruphish.',
       logo: { src: './src/assets/ruphish-wordmark-white.svg', alt: 'Ruphish', replacesTitle: true },
       favicon: '/favicon.svg',
-      social: [{ icon: 'github', label: 'Ruphish on GitHub', href: 'https://github.com/srothgan/ruphish' }],
+      social: [
+        { icon: 'github', label: 'Ruphish on GitHub', href: 'https://github.com/srothgan/ruphish' },
+      ],
       customCss: ['./src/styles/fonts.css', './src/styles/docs.css'],
-      components: { Head: './src/components/DocsHead.astro', SocialIcons: './src/components/DocsLinks.astro', Footer: './src/components/DocsFooter.astro' },
+      components: {
+        Head: './src/components/DocsHead.astro',
+        SocialIcons: './src/components/DocsLinks.astro',
+        Footer: './src/components/DocsFooter.astro',
+      },
       routeMiddleware: './src/docs-middleware.ts',
       sidebar: [
         { label: 'Documentation', slug: 'docs' },
-        ...sections.filter(([, directory]) => existsSync(resolve(sourceRoot, directory))).map(([label, directory]) => ({
-          label, items: [{ autogenerate: { directory: `docs/${directory}` } }], collapsed: directory !== 'getting-started',
-        })),
+        ...sections
+          .filter(([, directory]) => existsSync(resolve(sourceRoot, directory)))
+          .map(([label, directory]) => ({
+            label,
+            items: [{ autogenerate: { directory: `docs/${directory}` } }],
+            collapsed: directory !== 'getting-started',
+          })),
       ],
       tableOfContents: { minHeadingLevel: 2, maxHeadingLevel: 3 },
       pagination: true,

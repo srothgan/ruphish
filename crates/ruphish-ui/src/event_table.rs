@@ -413,20 +413,29 @@ pub(super) fn table(
                                 <td>{move || instant(&row.get()["time"])}</td>
                                 <td>
                                     {move || event_title(i18n, &row.get())}
-                                    <small>
-                                        {move || {
-                                            current
-                                                .get()
-                                                .and_then(|r| r.current.presence.password_present)
-                                                .map(|present| {
-                                                    if present {
-                                                        leptos_i18n::t_string!(i18n,ui.password_field_was_nonempty)
-                                                    } else {
-                                                        leptos_i18n::t_string!(i18n,ui.password_field_was_empty)
-                                                    }
-                                                })
-                                        }}
-                                    </small>
+                                    <Show when=move || {
+                                        current
+                                            .get()
+                                            .is_some_and(|r| {
+                                                matches!(
+                                                    r.current.kind,
+                                                    RecordedKind::Known(Kind::FormSubmitted)
+                                                )
+                                            })
+                                    }>
+                                        <SubmissionFields
+                                            username=Signal::derive(move || {
+                                                current
+                                                    .get()
+                                                    .and_then(|r| r.current.presence.username_present)
+                                            })
+                                            password=Signal::derive(move || {
+                                                current
+                                                    .get()
+                                                    .and_then(|r| r.current.presence.password_present)
+                                            })
+                                        />
+                                    </Show>
                                 </td>
                                 <td>
                                     {move || {
@@ -565,6 +574,22 @@ pub(super) fn timeline(history: RwSignal<History>) -> impl IntoView {
                             <div>
                                 <strong>{label}</strong>
                                 <time>{instant(&row["time"])}</time>
+                                {record
+                                    .as_ref()
+                                    .filter(|r| {
+                                        matches!(
+                                            r.current.kind,
+                                            RecordedKind::Known(Kind::FormSubmitted)
+                                        )
+                                    })
+                                    .map(|r| {
+                                        view! {
+                                            <SubmissionFields
+                                                username=Signal::stored(r.current.presence.username_present)
+                                                password=Signal::stored(r.current.presence.password_present)
+                                            />
+                                        }
+                                    })}
                                 <div class="timeline-labels">
                                     {operator
                                         .then(|| view! { <span>{tr!(ui.event_operator)}</span> })}

@@ -206,7 +206,7 @@ pub fn delivery_label(context: leptos_i18n::I18nContext<Locale>, state: &str) ->
         "cancelled" => leptos_i18n::t_string!(context, ui.cancelled).to_string(),
         "preparing" => leptos_i18n::t_string!(context, ui.preparing_message).to_string(),
         "submitting" => leptos_i18n::t_string!(context, ui.submitting_message).to_string(),
-        "ready" => leptos_i18n::t_string!(context, ui.scheduled).to_string(),
+        "ready" => leptos_i18n::t_string!(context, ui.delivery_queued).to_string(),
         _ => leptos_i18n::t_string!(context, ui.recorded_delivery_state).to_string(),
     }
 }
@@ -410,4 +410,25 @@ pub fn validation_label(
             leptos_i18n::t_string!(context, validation.invalid).to_owned()
         }
     }
+}
+
+/// Delivery diagnostics follow the same stable-code plus translated-text convention as API failures.
+pub fn delivery_failure_label(context: leptos_i18n::I18nContext<Locale>, code: &str) -> String {
+    if code.is_empty() {
+        return String::new();
+    }
+    let text = match code {
+        "delivery_outcome_unknown" | "legacy_delivery_outcome_unknown" => {
+            leptos_i18n::t_string!(context, ui.delivery_error_unknown)
+        }
+        "smtp_permanent_rejection" => leptos_i18n::t_string!(context, ui.delivery_error_rejected),
+        "smtp_profile_blocked" => leptos_i18n::t_string!(context, ui.delivery_error_profile),
+        "smtp_temporary_rejection" => leptos_i18n::t_string!(context, ui.delivery_error_temporary),
+        "delivery_retry_exhausted" => leptos_i18n::t_string!(context, ui.delivery_error_exhausted),
+        "campaign_owner_unavailable" => leptos_i18n::t_string!(context, ui.delivery_error_owner),
+        "campaign_resource_missing" => leptos_i18n::t_string!(context, ui.delivery_error_resource),
+        "campaign_page_missing" => leptos_i18n::t_string!(context, ui.delivery_error_page),
+        _ => leptos_i18n::t_string!(context, ui.delivery_error_fallback),
+    };
+    format!("{code} - {text}")
 }

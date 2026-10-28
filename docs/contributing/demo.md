@@ -43,7 +43,19 @@ Normal production tests retain their assertions and run without `demo`. Dedicate
 
 Dates are relative to an anchor fixed for the browser tab. The screenshot recorder anchors dates at recording time. Both consumers receive the same scenario. The SQL consumer uses current installed schemas and forces outbound integrations and domains off; the recorder retains its randomly generated password and isolated container. The browser login credentials are never installed as a server password.
 
-The recorder now checks four campaigns, six groups, two mailboxes, twelve delivery failures, and 937 delivered messages in the last 30 days. Screenshot regeneration is a separate manual asset-authoring action; existing PNGs are not overwritten by implementation or tests.
+The dataset contains four campaigns, six groups, two mailboxes, twelve delivery failures, and 937 delivered messages in the last 30 days. Screenshot regeneration is a separate manual asset-authoring action; existing PNGs are not overwritten by implementation or tests.
+
+### Campaign timing
+
+[`timing.mjs`](../../assets/website-demo/timing.mjs) owns the synthetic calendar, random streams, recipient selections and event histories. Its calendar is Monday–Friday, 09:00–17:00 UTC, independent of the host or browser timezone; it does not model public holidays. Launch dates use the scenario's day offsets and time of day, moving past weekend launches backward to Friday and future weekend launches forward to Monday. The baseline, Benefits, Delivery and upcoming campaigns send over 45, 360, 180 and 30 minutes respectively, using the production minute-level distribution across the complete audience. SMTP acceptance is recorded one second after each scheduled send.
+
+The baseline, Delivery and upcoming campaigns close seven calendar days after their launch date; Benefits closes after ten. A weekend closure moves forward to Monday at 17:00 UTC. The sending deadline and tracking closure are distinct. Lifecycle status is derived from launch, closure and the fixed snapshot. The shared closure feeds both SQL `completed_date` and completed-campaign event-edit validation; future closures remain scenario plans, not a new automatic-completion feature in the application.
+
+First engagement has a lognormal working-time delay with median 45 minutes and sigma 1.8. The working-time clock pauses overnight and on weekends. Most recipients engage within their first working day, with a declining tail over several days; late-day delivery can carry engagement into the next calendar day. Short session delays use elapsed time: click median 90 seconds (sigma 0.9), submission median 45 seconds (sigma 0.7), report median three minutes without a click or fifteen minutes after a risky action (sigma 1). These are illustrative synthetic parameters, not measured industry benchmarks.
+
+Opener, clicker and submitter selections are shuffled, with submitters drawn from clickers and clickers from openers. About 20% of clickers also report, capped by the reporting target; remaining reporters are selected from non-clickers. Event counts can exceed participant counts: opens have a 35% continuation probability with at most three extra occurrences, clicks 15% with at most two, and submissions 5% with at most one. Repeat-delay medians are 45 working minutes, eight working minutes and 90 elapsed seconds respectively (sigmas 1.5, 1.2 and 0.8). Reports occur once; risky repeats stop before a report, while rereading the email remains possible afterward. A repeated submission represents a separate participant action, not an idempotent request replay. Later reopens do not downgrade stored submission/click progression.
+
+Required actions use rejection sampling conditioned on campaign closure; optional repeats outside the window are omitted. A bounded sampling failure throws instead of fabricating a timestamp. The generator constructs the planned history before hiding events at or after the snapshot. Consequently, configured engagement counts are eventual unique-participant targets: completed campaigns reach them, while active campaigns can show fewer. The current 30-day delivery total remains 937. Seeds are keyed by scenario, campaign, recipient and purpose; occurrence IDs have stable per-kind slots, so later observations do not renumber earlier history. Repeated observations remain separate timeline/export rows but count once per participant in summary cards and cumulative participant charts.
 
 The configured content comes directly from the real starter files: Microsoft shared document, Google account security, Docusign signature request, and Workday employee document emails; Microsoft side-panel and Google Workspace landing pages; and SLAM, Stop/Challenge/Protect, and Recognize/Resist/Report/Delete learning pages. The demo starter picker exposes this same selected subset, including supported prefill and company-logo options. `starter-content.mjs` reads the authored files for Node consumers; `build-demo.mjs` substitutes those static exports into the browser bundle and retains the source license/provenance notices. Node filesystem APIs and backend code never enter the browser bundle.
 
@@ -71,7 +83,7 @@ Campaign drafts remain an intentionally stateless demonstration: saving a new dr
 
 ## Build and validation
 
-See [local demo instructions](../../demo/README.md) for building and previewing the artifact and [the canonical validation reference](testing/validation.md#public-demo) for exact test commands. The normal build remains `trunk build --locked`. The demo additionally bundles its transport and builds with `--features demo`.
+See [local demo instructions](../../demo/README.md) for building and previewing the artifact and [the canonical validation reference](testing/validation.md#public-demo) for exact test commands. The normal build remains `trunk build --locked`. The demo additionally bundles its transport and generates an HTML entry point with the static title `Ruphish Demo`, then builds that entry point with `--features demo`.
 
 Both local modes use Trunk's existing `dist/.stage` staging and final `dist/admin` directory. Build sequentially and rebuild the intended mode before consuming this directory. CI uses separate jobs and artifact names so a demo artifact cannot satisfy the normal product asset cache.
 
@@ -83,7 +95,7 @@ The `demo` group in [the shared path selection](../../.github/paths.yml) selects
 
 ```sh
 node crates/ruphish-ui/web/build-demo.mjs
-trunk build --locked --release --features demo
+trunk build --locked --release --features demo crates/ruphish-ui/web/generated/index.html
 node demo/vercel-output.mjs
 ```
 

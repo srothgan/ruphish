@@ -114,6 +114,15 @@ fn event_edits_enforce_csrf_scope_closed_metadata_and_replay_after_restart() {
         request(&api, &base, reqwest::Method::POST, path, Some(&reused)).status(),
         412
     );
+    let results = get(&api, &base, "/api/campaigns/91/results?recipient=91");
+    let submission = results["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["id"] == 901)
+        .unwrap();
+    assert_eq!(submission["username_present"], false);
+    assert_eq!(submission["password_present"], true);
     let history = get(&api, &base, "/api/campaigns/91/recipients/91/history");
     let event = history["events"]
         .as_array()
@@ -966,6 +975,16 @@ fn analysis_multiselect_filters_chart_pages_and_exports_and_rejects_invalid_iden
     );
     assert_eq!(next["recipients"][0]["id"], 92);
     assert_eq!(next["totals"], selected["totals"]);
+    assert_eq!(next["participant_buckets"], selected["participant_buckets"]);
+    assert_eq!(
+        selected["participant_buckets"]
+            .as_array()
+            .unwrap()
+            .last()
+            .unwrap()["counts"],
+        selected["unique"]
+    );
+
     let buckets = selected["buckets"].as_array().unwrap();
     assert!(buckets.len() <= 102);
     assert!(

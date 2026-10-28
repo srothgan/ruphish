@@ -2173,16 +2173,15 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
 }
 
 fn delivery_progress(data: Signal<Value>) -> impl IntoView {
+    let i18n = ruphish_ui::localization::use_i18n();
     let states = [
         (
             "ready",
-            trs!(ui.ready),
             "neutral",
             trs!(ui.queued_waiting_for_its_scheduled_time_or_an_available_worker),
         ),
         (
             "preparing",
-            trs!(ui.preparing),
             "active",
             trs!(
                 ui.a_worker_claimed_this_recipient_and_is_preparing_the_sending_attempt_after_a_cra
@@ -2190,7 +2189,6 @@ fn delivery_progress(data: Signal<Value>) -> impl IntoView {
         ),
         (
             "submitting",
-            trs!(ui.submitting),
             "active",
             trs!(
                 ui.submission_has_been_authorized_but_smtp_acceptance_is_not_yet_recorded_after_a_c
@@ -2198,13 +2196,11 @@ fn delivery_progress(data: Signal<Value>) -> impl IntoView {
         ),
         (
             "retry",
-            trs!(ui.retry),
             "warning",
             trs!(ui.a_retryable_failure_was_recorded_another_attempt_is_scheduled_with_a_delay),
         ),
         (
             "accepted",
-            trs!(ui.accepted),
             "success",
             trs!(
                 ui.smtp_acceptance_was_recorded_or_explicitly_confirmed_by_an_operator_using_mail_s
@@ -2212,7 +2208,6 @@ fn delivery_progress(data: Signal<Value>) -> impl IntoView {
         ),
         (
             "failed",
-            trs!(ui.failed),
             "failure",
             trs!(
                 ui.content_preparation_failed_the_message_was_permanently_rejected_or_the_retry_lim
@@ -2220,7 +2215,6 @@ fn delivery_progress(data: Signal<Value>) -> impl IntoView {
         ),
         (
             "blocked",
-            trs!(ui.blocked),
             "warning",
             trs!(
                 ui.an_account_resource_or_smtp_configuration_problem_prevents_automatic_progress_co
@@ -2228,7 +2222,6 @@ fn delivery_progress(data: Signal<Value>) -> impl IntoView {
         ),
         (
             "unknown",
-            trs!(ui.unknown),
             "warning",
             trs!(
                 ui.the_message_may_have_been_accepted_but_its_outcome_could_not_be_confirmed_check
@@ -2236,7 +2229,6 @@ fn delivery_progress(data: Signal<Value>) -> impl IntoView {
         ),
         (
             "cancelled",
-            trs!(ui.cancelled),
             "neutral",
             trs!(ui.pending_work_was_cancelled_messages_already_submitted_cannot_be_recalled),
         ),
@@ -2249,7 +2241,11 @@ fn delivery_progress(data: Signal<Value>) -> impl IntoView {
                 <dl class="delivery-metrics">
                     {states
                         .into_iter()
-                        .map(|(state, label, tone, explanation)| {
+                        .map(move |(state, tone, explanation)| {
+                            let label = Signal::derive(move || ruphish_ui::localization::delivery_label(
+                                i18n,
+                                state,
+                            ));
                             view! {
                                 <div
                                     class=format!("delivery-metric {tone}")

@@ -4,8 +4,10 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 
 // Exercise the actual inline gate, including missing outputs and dependency skips.
-const workflow = readFileSync(new URL('../workflows/validation.yml', import.meta.url), 'utf8')
-  .replaceAll('\r\n', '\n');
+const workflow = readFileSync(
+  new URL('../workflows/validation.yml', import.meta.url),
+  'utf8',
+).replaceAll('\r\n', '\n');
 const gate = workflow.match(/node --input-type=module <<'NODE'\n([\s\S]*?)\n\s*NODE/)[1];
 const groups = ['product', 'website', 'persistence', 'dependencies', 'public'];
 const jobs = ['website', 'assets', 'native', 'platforms', 'database', 'dependencies', 'public'];
@@ -14,9 +16,11 @@ function results(selected = [], succeeded = []) {
   return {
     changes: {
       result: 'success',
-      outputs: Object.fromEntries(groups.map(group => [group, String(selected.includes(group))])),
+      outputs: Object.fromEntries(groups.map((group) => [group, String(selected.includes(group))])),
     },
-    ...Object.fromEntries(jobs.map(job => [job, { result: succeeded.includes(job) ? 'success' : 'skipped' }])),
+    ...Object.fromEntries(
+      jobs.map((job) => [job, { result: succeeded.includes(job) ? 'success' : 'skipped' }]),
+    ),
   };
 }
 

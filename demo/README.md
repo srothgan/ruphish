@@ -7,7 +7,7 @@ From the repository root, with the [pinned development tools](../docs/contributi
 ```sh
 npm ci --prefix crates/ruphish-ui/web
 node crates/ruphish-ui/web/build-demo.mjs
-trunk build --locked --features demo
+trunk build --locked --features demo crates/ruphish-ui/web/generated/index.html
 node demo/serve.mjs
 ```
 

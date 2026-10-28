@@ -28,6 +28,8 @@ cargo fmt --all -- --check
 
 Markdown follows a separate rule: one source line per paragraph or list item, with no manual prose wrapping.
 
+Maintained JavaScript uses the root `package.json` and lockfile for pinned Prettier and ESLint tools. The root configurations support editor integration, two-space indentation, single quotes, LF line endings and a 100-column formatting target. Generated bundles, dependencies and independent content fixtures are excluded. These tools are separate from the browser build dependencies in `crates/ruphish-ui/web/`; see [JavaScript formatting and linting](testing/validation.md#javascript-formatting-and-linting) for the direct installation, check and formatting commands.
+
 ## Build and run
 
 `trunk build --locked` builds the WASM interface and its generated browser assets. Then build/run the native `ruphish` package with the prepared configuration. Use the native admin listener to exercise authentication and API-backed pages; standalone `trunk serve` is not configured as a replacement for that application flow.

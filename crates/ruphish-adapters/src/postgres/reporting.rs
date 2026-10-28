@@ -202,6 +202,7 @@ impl Snapshots for Reports {
                 )
                 .ok_or(Error::Internal)?,
                 password_present: safe["password_present"].as_bool(),
+                username_present: safe["username_present"].as_bool(),
             });
         }
         let recipient_order = crate::reporting::recipient_order(f, "postgres");
@@ -302,7 +303,29 @@ impl Snapshots for Reports {
                 time += width;
             }
         }
+        // Deduplicate within the filtered snapshot before pagination or time bucketing.
+        let participant_rows = query!(format!(r#"
+            , first_actions AS (
+                SELECT recipient_id,message,min((CASE WHEN time>='1000' THEN floor(extract(epoch FROM time::timestamptz))::bigint END)) AS first_time FROM observed
+                WHERE recipient_id IS NOT NULL AND (CASE WHEN time>='1000' THEN floor(extract(epoch FROM time::timestamptz))::bigint END) IS NOT NULL
+                GROUP BY recipient_id,message
+            )
+            SELECT (first_time / {width})*{width} AS bucket,message,count(*) AS total
+            FROM first_actions GROUP BY bucket,message ORDER BY bucket
+        "#)).fetch_all(&mut *tx).await.map_err(storage)?;
+        let mut participant_increments = std::collections::BTreeMap::<i64, [i64; 5]>::new();
+        for row in participant_rows {
+            let kind: String = row.try_get("message").map_err(storage)?;
+            if let Some(i) = TYPES.iter().position(|s| *s == kind) {
+                participant_increments
+                    .entry(row.try_get("bucket").map_err(storage)?)
+                    .or_default()[i] = row.try_get("total").map_err(storage)?;
+            }
+        }
+        let participant_buckets =
+            crate::reporting::participant_buckets(participant_increments, last, width);
         let result = Analysis {
+            participant_buckets,
             first_observed,
             last_observed,
             id,

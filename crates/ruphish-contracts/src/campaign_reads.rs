@@ -271,6 +271,8 @@ pub struct Results {
     pub events: Vec<ResultEvent>,
     /// Chart intervals.
     pub buckets: Vec<Bucket>,
+    /// Cumulative distinct participants per action, independent of pagination.
+    pub participant_buckets: Vec<Bucket>,
     /// Interval width in seconds.
     pub bucket_seconds: i64,
 }
@@ -314,6 +316,9 @@ pub struct ResultEvent {
     /// Presence only, when recorded.
     #[serde(deserialize_with = "nullable")]
     pub password_present: Option<bool>,
+    /// Username presence when explicitly recorded, never inferred from addressing.
+    #[serde(deserialize_with = "nullable")]
+    pub username_present: Option<bool>,
 }
 
 /// One chart interval.

@@ -75,6 +75,8 @@ pub struct Event {
     pub source: Source,
     /// Presence only; absence is distinct from false.
     pub password_present: Option<bool>,
+    /// Username presence, when explicitly recorded; never inferred.
+    pub username_present: Option<bool>,
 }
 /// Recipient observations, kept separate from transport state.
 #[derive(Clone)]
@@ -143,6 +145,8 @@ pub struct Analysis {
     pub events: Vec<Event>,
     /// Bounded chart buckets.
     pub buckets: Vec<Bucket>,
+    /// Cumulative distinct participants per action in the selected window.
+    pub participant_buckets: Vec<Bucket>,
     /// Width of each chart interval in seconds, always a whole number of minutes.
     pub bucket_seconds: i64,
 }

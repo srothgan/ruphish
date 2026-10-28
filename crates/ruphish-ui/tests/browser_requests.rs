@@ -89,10 +89,10 @@ fn localized_observations_preserve_recorded_outcomes_and_external_details() {
         history.toggle();
         let (ticket, _) = history.begin(false).unwrap();
         history.finish(ticket, Ok(json!({"attempts":[{"generation":2,"started":30,"finished":31,"state":"accepted","smtp_code":null,"stage":""}],"events":[{"id":1,"at":32,"message":"Email Opened"}]})));
-        assert_eq!(delivery_label(context, "accepted"), "Accepted by SMTP server");
+        assert_eq!(delivery_label(context, "accepted"), "Email sent");
         context.set_locale(Locale::de);
         assert!(import_note(context, &note).contains("Anh\u{e4}nge"));
-        assert_eq!(delivery_label(context, "accepted"), "Vom SMTP-Server angenommen");
+        assert_eq!(delivery_label(context, "accepted"), "E-Mail gesendet");
         assert_eq!(event_label(context, history.events[&1]["message"].as_str().unwrap()), "E-Mail ge\u{f6}ffnet");
         assert_eq!(event_label(context, "An external diagnostic"), "An external diagnostic");
         assert!(!delivery_label(context, "accepted").contains("250"));
@@ -606,6 +606,7 @@ fn late_session_preferences_cannot_undo_a_confirmed_save() {
 #[wasm_bindgen_test]
 fn campaign_german_labels_preserve_umlauts_and_resources_name() {
     locale_window::install();
+    let _ = any_spawner::Executor::init_wasm_bindgen();
     let owner = leptos::prelude::Owner::new();
     owner.with(|| {
         let i18n = ruphish_ui::localization::provide(ruphish_ui::localization::Locale::de);
@@ -616,7 +617,7 @@ fn campaign_german_labels_preserve_umlauts_and_resources_name() {
         );
         assert_eq!(
             leptos_i18n::t_string!(i18n, ui.recipient_analysis),
-            "Empf\u{e4}ngeranalyse"
+            "Empf\u{e4}ngeraktivit\u{e4}t"
         );
         assert_eq!(
             leptos_i18n::t_string!(i18n, ui.review_delivery),
@@ -625,4 +626,29 @@ fn campaign_german_labels_preserve_umlauts_and_resources_name() {
         assert_eq!(leptos_i18n::t_string!(i18n, ui.close), "Schlie\u{df}en");
     });
     owner.cleanup();
+}
+
+#[wasm_bindgen_test]
+fn delivery_diagnostics_keep_codes_and_switch_language_without_inventing_causes() {
+    locale_window::install();
+    let _ = any_spawner::Executor::init_wasm_bindgen();
+    use leptos::prelude::*;
+    use ruphish_ui::localization::{self, Locale};
+    Owner::new().with(|| {
+        let context = localization::provide(Locale::de);
+        let german = localization::delivery_failure_label(context, "smtp_profile_blocked");
+        assert!(german.starts_with("smtp_profile_blocked - "));
+        assert!(german.contains("Versandprofil"));
+        assert!(german.contains("TLS"));
+        context.set_locale(Locale::en);
+        let english = localization::delivery_failure_label(context, "smtp_profile_blocked");
+        assert!(english.starts_with("smtp_profile_blocked - "));
+        assert!(english.contains("sending profile"));
+        assert_ne!(english, german);
+        assert!(
+            localization::delivery_failure_label(context, "future_delivery_code")
+                .starts_with("future_delivery_code - ")
+        );
+        assert_eq!(localization::delivery_failure_label(context, ""), "");
+    });
 }

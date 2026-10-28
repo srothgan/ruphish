@@ -109,3 +109,26 @@ pub(crate) fn event_order(filter: &Filter, provider: &str) -> String {
     };
     format!("{column} {direction},id {direction}")
 }
+
+/// Accumulate first matching actions; quiet intervals retain the participant totals.
+pub(crate) fn participant_buckets(
+    increments: std::collections::BTreeMap<i64, [i64; 5]>,
+    last: i64,
+    width: i64,
+) -> Vec<Bucket> {
+    let Some(mut time) = increments.keys().next().copied() else {
+        return Vec::new();
+    };
+    let mut counts = [0; 5];
+    let mut buckets = Vec::new();
+    while time <= last {
+        if let Some(added) = increments.get(&time) {
+            for (total, count) in counts.iter_mut().zip(added) {
+                *total += count;
+            }
+        }
+        buckets.push(Bucket { time, counts });
+        time += width;
+    }
+    buckets
+}

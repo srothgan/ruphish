@@ -1,14 +1,17 @@
-import en from '../locales/en.json' with {type: 'json'};
-import de from '../locales/de.json' with {type: 'json'};
+import en from '../locales/en.json' with { type: 'json' };
+import de from '../locales/de.json' with { type: 'json' };
 
 // Only trusted application chrome uses this catalog; authored HTML is never scanned.
-const catalogs = {en: en.editor, de: de.editor};
+const catalogs = { en: en.editor, de: de.editor };
 export function editorText(locale, key) {
   return catalogs[locale]?.[key] ?? catalogs.en[key] ?? key;
 }
 
 export class EditorError extends Error {
-  constructor(key) { super(editorText('en', key)); this.key = key; }
+  constructor(key) {
+    super(editorText('en', key));
+    this.key = key;
+  }
 }
 
 export function editorError(locale, error) {
@@ -26,11 +29,13 @@ export function localizeVisualShell(document, locale) {
 }
 
 export function codeMirrorPhrases(locale) {
-  const catalog = locale === "de" ? de.codemirror : en.codemirror;
-  return Object.fromEntries(Object.entries(en.codemirror).map(([key, phrase]) => [phrase, catalog[key] ?? phrase]));
+  const catalog = locale === 'de' ? de.codemirror : en.codemirror;
+  return Object.fromEntries(
+    Object.entries(en.codemirror).map(([key, phrase]) => [phrase, catalog[key] ?? phrase]),
+  );
 }
 
 export function contentLocale(document, fallback) {
-  const language = document.documentElement.lang.split("-")[0].toLowerCase();
-  return ["en", "de"].includes(language) ? language : fallback;
+  const language = document.documentElement.lang.split('-')[0].toLowerCase();
+  return ['en', 'de'].includes(language) ? language : fallback;
 }

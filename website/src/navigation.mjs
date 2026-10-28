@@ -6,7 +6,9 @@
 export function setupNavigation(header, mobile) {
   const button = header.querySelector('button[aria-controls]');
   const nav = header.querySelector('nav');
-  if (!button || !nav) return;
+  if (!button || !nav) {
+    return;
+  }
 
   const document = header.ownerDocument;
   function setOpen(open) {
@@ -18,8 +20,11 @@ export function setupNavigation(header, mobile) {
     const active = document.activeElement;
     button.hidden = !mobile.matches;
     setOpen(false);
-    if (mobile.matches && nav.contains(active)) button.focus();
-    else if (!mobile.matches && active === button) nav.querySelector('a')?.focus();
+    if (mobile.matches && nav.contains(active)) {
+      button.focus();
+    } else if (!mobile.matches && active === button) {
+      nav.querySelector('a')?.focus();
+    }
   }
 
   button.addEventListener('click', () => {
@@ -33,13 +38,19 @@ export function setupNavigation(header, mobile) {
     }
   });
   nav.addEventListener('click', (event) => {
-    if (event.target.closest('a')) setOpen(false);
+    if (event.target.closest('a')) {
+      setOpen(false);
+    }
   });
   document.addEventListener('click', (event) => {
-    if (!header.contains(event.target)) setOpen(false);
+    if (!header.contains(event.target)) {
+      setOpen(false);
+    }
   });
   header.addEventListener('focusout', (event) => {
-    if (!header.contains(event.relatedTarget)) setOpen(false);
+    if (!header.contains(event.relatedTarget)) {
+      setOpen(false);
+    }
   });
   mobile.addEventListener('change', reset);
   header.dataset.navigation = '';

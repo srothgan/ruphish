@@ -70,5 +70,7 @@ public:
 
 dependencies:
   - *build_inputs
+  - 'package.json'
+  - 'package-lock.json'
   - 'crates/ruphish-ui/web/package.json'
   - 'crates/ruphish-ui/web/package-lock.json'

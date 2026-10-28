@@ -138,6 +138,15 @@ async fn read(
                 kind: e.kind,
                 source: e.source,
                 password_present: e.password_present,
+                username_present: e.username_present,
+            })
+            .collect(),
+        participant_buckets: a
+            .participant_buckets
+            .into_iter()
+            .map(|b| reads::Bucket {
+                time: b.time,
+                counts: b.counts.into(),
             })
             .collect(),
         buckets: a
