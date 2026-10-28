@@ -1,80 +1,46 @@
-# Product development instructions
+# Working instructions
 
-## Scope and structure
+These rules guide implementation, review, validation, and reporting in this repository. Apply them to the affected work; use the linked documentation for product behavior and detailed procedures.
 
-The seven crate boundaries are domain, wire contracts, application use cases, adapters, HTTP, WASM UI, and executable composition. Keep domain rules authoritative, handlers/adapters thin, dependencies directed inward, and browser contracts free of backend secrets or infrastructure. Workspace architecture tests enforce the declared boundary policy; update that policy only for an intentional architectural change.
+## Core rules
 
-Native libraries are scaffolds until functionality is implemented with its tests; do not add fake domain models, no-op operations, or success-returning placeholder handlers. Existing compatibility fixtures are independent expectations, not evidence that Rust already supports those features. Preserve the legacy-test map's honest statuses and all original scenario guarantees as they are implemented.
+- **Understand before changing.** Inspect the affected implementation, consumers, tests, and documentation through success, failure, and recovery. Verify actual support and installed dependency APIs rather than assuming them. Read optional `PERSONAL.md` when present.
+- **Reuse and centralize.** Extend existing implementations, helpers, components, and constants. Keep shared rules and transformations at one authoritative owner, fix them there, and update callers instead of adding local copies or compensating checks. Combine code by shared responsibility, not superficial similarity.
+- **Keep state coherent.** Give mutable data one owner, derive dependent values, and represent mutually exclusive states explicitly. Keep drafts distinct from confirmed data; define invalidation for necessary caches instead of maintaining manually synchronized copies.
+- **Keep solutions focused.** Implement the simplest correct behavior within scope. Add abstractions, configuration, caching, or concurrency only for a concrete current benefit; reuse valid results or batch work before adding machinery. Do not introduce placeholders or success-returning no-ops.
+- **Respect boundaries.** Follow the [architecture](docs/contributing/architecture.md) and established conventions. Keep dependencies inward, handlers/adapters thin, and browser contracts free of backend secrets. Preserve authorization and boundary validation; avoid rechecking invariants already enforced within a trusted path.
+- **Keep changes coherent.** When changing behavior or contracts, update affected types, callers, persistence, documentation, and tests together. Identify breaking changes explicitly; do not retain compatibility layers by default.
+- **Use explicit, typed outcomes.** Express success and failure through clear types, handle expected cases explicitly, and propagate errors with useful context. Avoid silent fallbacks that make failed operations appear successful.
+- **Control asynchronous work.** Prevent stale results and duplicate effects; account for retries, cancellation, and uncertain outcomes. Release tasks, listeners, subscriptions, and other resources when their owner ends.
+- **Finish replacements.** Remove superseded paths, unused dependencies, obsolete flags, and stale comments within the changed scope. Verify remaining consumers and compatibility before removing legacy behavior; keep names and documentation accurate.
+- **Preserve Rust safety.** Keep production code free of unsafe code and accidental `unwrap`, `expect`, `panic`, `exit`, `todo`, `unimplemented`, and `dbg` usage. Limit test-only Clippy exemptions to assertions and setup.
 
-## Working discipline
+## Frontend
 
-- Inspect relevant implementation, fixtures, consumers, and error paths before changing behavior. Follow complete workflows through validation, persistence, emitted effects, and recovery.
-- Each invariant, transition, relationship, and derived value has one authoritative owner. Avoid duplicated state, redundant validation, and alternative stale implementations.
-- Use `cargo new`, `cargo add`, `cargo remove`, `cargo update`, `cargo install`, and `rustup` commands for crate creation, dependency/tool installation and changes; let the CLI write dependency version entries and lockfiles rather than adding dependencies by manually typing versions into manifests. Editing workspace metadata, profiles, feature configuration, and lint policy is normal configuration work.
-- Preserve external wire/data/template contracts and meaningful negative guarantees. Record an intentional compatibility difference and its tests explicitly before adopting it.
-- Match user-visible capabilities and outcomes; cleaner implementations and UI arrangements are allowed. Legacy components, markup structure, and harmless serialization formatting are not compatibility requirements. Define tests by what users can do and what their content does, preserving exact bytes only where they are part of a real contract.
-- Prefer typed errors at library boundaries and contextual startup errors. Production code forbids unsafe code and accidental unwrap/expect/panic/exit/todo/unimplemented/dbg usage; tests have narrow Clippy exemptions for assertions and setup.
-- Add tests for actual domain/functionality guarantees, persisted state, protocols, and real failure boundaries. Do not add mirror tests for trivial code or claim scaffold checks establish feature parity.
-- The user performs manual visual/UI interaction tests. Compile and build WASM; do not add browser/screenshot automation by default.
-- Review frontend alignment deliberately: labeled fields and adjacent buttons align on the actual control row with matching heights; headings, actions and wrapped rows need their own appropriate alignment. Fix the shared layout owner instead of adding pixel nudges. Do not default every flex/grid container to center alignment; keep centering where it serves the content, such as within icon buttons.
-- Reuse management UI from `crates/ruphish-ui/src/shared/components/`: page/table/form primitives, list search and empty states, action buttons/links and dialogs. Shared styles live in `crates/ruphish-ui/ruphish.css`; the palette lives in `crates/ruphish-ui/theme.css` and is shared with the isolated visual editor. Feature modules own their fields, permissions, API calls and state; they must not recreate generic controls or inline replacement empty states. Specialized editor tabs, disclosure controls and JavaScript-bound controls retain their specific accessibility behavior.
-- Never manually hard-wrap Markdown paragraphs or list items. Use one source line per paragraph or list item.
+- **Use the shared UI.** Follow [frontend development](docs/contributing/frontend.md) and the [design system](docs/contributing/design-system.md). Extend `crates/ruphish-ui/src/shared/components/`, `ruphish.css`, and `theme.css` instead of recreating generic controls or styles in features. Features own their fields, permissions, API calls, and state; preserve specialized accessibility behavior.
+- **Fix layout at its owner.** Align buttons with the actual input/select row and match control heights. Choose alignment deliberately for headings and wrapped rows; avoid pixel nudges and indiscriminate centering. The user owns manual visual/interaction review; do not add browser or screenshot automation by default.
 
-## Validation after changes
+## Tests and validation
 
-[Validation](docs/contributing/testing/validation.md) is the single command and CI reference. Select checks by changed behavior and affected consumers, including shared contracts, configuration, build inputs and fixtures. During implementation run the focused regression; after edits settle run the applicable checks below. A local commit does not require full acceptance.
+- **Test real guarantees.** Assert observable responses, persisted state, protocols, and effects with independent expectations and realistic failure cases. Do not mirror implementation details, weaken assertions, or mock away the boundary under test. Keep affected entries in `tests/legacy-test-map.toml` accurate.
+- **Keep fixtures isolated.** Reuse existing setup and the canonical `tests/acceptance/` fixture. Use disposable server databases, copy fixtures before mutation, preserve application-lab data, and never contact real recipients or external integration endpoints.
+- **Validate by impact.** Follow [validation](docs/contributing/testing/validation.md) for change-specific checks and commands. Cover affected consumers and real failure boundaries, including provider and recovery scenarios when relevant. Run focused regressions during implementation and applicable completion checks after edits settle; ordinary changes or commit requests do not require full acceptance.
+- **Check the actual target.** Run rustfmt, affected Clippy/tests, and Leptos formatting for changed markup. Include WASM checks for UI/browser-shared Rust and a development UI build for changed output/assets. Run relevant JavaScript tests; avoid redundant syntax checks. Prose-only changes require link/example/consistency checks, not product builds.
+- **Control validation cost.** Run one heavy workload at a time, initially with one build job/test thread and bounded Tokio/Rayon workers. Diagnose failures before retrying and rerun affected checks only. Do not duplicate Clippy with `cargo check` for identical targets or build without an executable/artifact need.
 
-CI provides the broader backstop: `pr.yml` selects main-PR checks, `nightly.yml` runs full source acceptance, and `release.yml` adds optimized-profile checks for release-target PRs or explicit manual runs. Native CI covers Linux, Windows and macOS. The shared `validation.yml` owns source-check commands. Once the repository exists, require `PR gate` on main and `Release gate` on release. Do not copy those full matrices into agent completion work; directly affected guarantees still require focused local regressions. Single-binary shipping is a later feature, separate from this validation foundation.
+## Tools and formatting
 
-| Change | Agent completion checks |
-| --- | --- |
-| Prose documentation | Relevant links, examples and consistency; no product builds |
-| Native Rust | Rustfmt, affected-target Clippy and relevant unit/integration tests |
-| Rust UI or browser-shared domain/contracts | Rustfmt, Leptos formatting where markup changes, affected functional tests and WASM Clippy/tests |
-| JavaScript | Relevant functional tests; syntax checks for files not parsed by those tests or the build |
-| UI output/assets | Development UI build; user owns visual/manual browser review |
-| HTTP/authentication/privacy | Rejection and legitimate-use cases plus the affected executable workflow |
-| Provider SQL/shared persistence | Relevant real-provider scenarios; shared storage covers affected engines; version-sensitive SQL/schema/driver changes cover both supported versions |
-| Migrations | Affected upgrade paths, preserved data, rollback/recovery and reopen |
-| Dependencies/toolchain | Dependency policy and affected native/browser targets |
-| Validation workflows/selection | Workflow gate tests, workflow lint and YAML path-group/coverage inspection; no automatic product acceptance run |
+- **Use the pinned toolchain.** Follow [development setup](docs/contributing/setup.md). Use Cargo/rustup commands for crate, dependency, and tool changes; let the CLI write dependency versions and lockfiles. Configuration remains directly editable. Keep dependency exceptions narrow and preserve source/license notices.
+- **Keep commands direct.** Do not add test-runner wrappers, Cargo aliases, or npm wrappers. Keep CI path groups in `.github/paths.yml` and fixed commands in workflow jobs; never construct commands from changed paths.
+- **Respect generated assets.** Run `npm ci` for fresh installs or changed dependency inputs; reuse assets only with unchanged inputs. Let Trunk generate its inputs and prepare them separately when standalone WASM checks need them. Use development builds unless a release task is requested; retain `dist/.stage` staging and `dist/admin` output without hand-editing generated files or weakening manifest/path checks.
 
-- Keep direct Cargo/Node/Docker commands visible; do not add a local test-runner, Cargo alias or npm wrapper. Keep CI path groups in `.github/paths.yml`; workflow jobs own fixed check commands and must not construct shell commands from changed paths.
-- Do not automatically run the full process suite, historical migrations, all database versions or public Docker acceptance after ordinary edits. Run these when their guarantees are affected or the task requests acceptance.
-- Never treat ignored, skipped, unavailable or unexecuted checks as passing. Report exact commands and limitations. Preserve the legacy-test map and meaningful negative guarantees.
-- Run one heavy workload at a time locally, initially one build job and test thread with bounded Tokio/Rayon workers. Investigate failures before retrying; rerun only affected checks after corrections.
-- Run rustfmt for Rust changes and Leptos formatting for markup changes. Preserve the pinned formatters, 100-column Rust/markup style and LF endings. Review formatter edits; do not blanket-skip formatting.
-- Use Clippy for static compilation/lint feedback; avoid duplicate cargo check for identical targets. Build when an executable, changed distribution or artifact test requires it. Native success does not prove WASM compatibility.
-- Run npm ci on fresh installations or changed dependency inputs. Reuse unchanged valid assets. Trunk runs the JS/CSS generator; do not repeat it immediately before Trunk. Standalone WASM checks may require prior generation.
-- Use development builds normally; release builds require an explicit release task. Keep Trunk staging at dist/.stage and the completed distribution at dist/admin. Never hand-edit generated files or weaken manifest/path checks.
-- Keep one canonical Docker fixture under tests/acceptance. Use disposable server databases, preserve application-lab data and never contact real recipients/integration endpoints during tests.
-- Local PR, nightly and manual validation workflows are authorized. Remote branch protection, publishing and deployments remain separate explicit actions. Source acceptance does not validate untested release artifacts.
+## Completion
 
-## Toolchain
+- **Review the finished change.** Check the diff and affected consumers against these rules, correct introduced defects, and update existing documentation. Report unrelated confirmed issues with evidence and a focused fix without expanding scope; distinguish uncertainty and avoid invented findings or routine checklist reports.
+- **Report actual verification.** State exact commands and results, separating setup failures, failing tests, and skipped or unexecuted checks. Never count unrun checks as passing or source validation as proof of untested release artifacts.
 
-`rust-toolchain.toml` owns Rust/components/targets. `Cargo.toml` workspace metadata owns leptosfmt and cargo-deny versions; `Trunk.toml` owns Trunk. Use Cargo/rustup CLI installation and dependency commands. See [development setup](docs/contributing/setup.md) and [validation prerequisites](docs/contributing/testing/validation.md#prerequisites). Keep dependency exceptions narrow and source/license notices intact.
+## Git and external actions
 
-## Data and side effects
-
-Ruphish's built-in collector and backend must not collect or retain entered login information, arbitrary submitted field values, or derivatives. Allow only explicit event metadata and optional presence booleans through the closed event schema; preserve the boundary in logs, errors, database records, exports, webhooks and legacy-data reads. No built-in capture setting is authorized. The approved DEC-053 direction permits user-authored/imported landing-page scripts as normal functionality, without a curated script allowlist or separate opt-in mode. Authors/operators control their code and external destinations, so do not promise that arbitrary authored pages cannot read or transmit participant input. Keep authored execution isolated from the administrative application and its credentials; retain ownership, authorization and server-side validation. The migration-root participant-privacy contract owns the detailed decision. This is planned work until implemented and verified; existing tests do not establish the changed rendering behavior. Administrator authentication and configured service credentials are separate from participant input.
-
-SQLite remains the default local configuration; MySQL and PostgreSQL are selected explicitly at startup. Database upgrades must preserve a recoverable original and be tested against independent legacy data. Fixtures contain synthetic credentials and must be copied before mutation. Product tests must not contact real recipients or external integration endpoints.
-
-Do not operate on GitHub, create releases/tags, publish, package for distribution, or deploy unless explicitly requested. Report commands actually run and any unresolved checks or reachable defects honestly. Optional PERSONAL.md in this directory adds local preferences if present.
-
-## Git and commit messages
-
-Read-only Git inspection such as `git status`, `git diff`, `git log`, and `git show` is allowed.
-
-Commit and push only when the user asks for it in that turn, never as a side effect of finishing a task. One approval covers that commit or push only; it does not carry over to later ones.
-
-Do not merge, rebase, create/delete/rename branches, switch branches, or rewrite history unless explicitly requested.
-
-When writing or suggesting a commit message:
-
-- Describe the net changes against `HEAD`, not the local implementation path.
-- Use imperative mood, present tense, and concise language.
-- Use the format `<type>(<scope>): <message>`; scope is optional. Allowed types are `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`, and `revert`.
-- Include 2–5 precise bullet points in the body.
-- Do not mention temporary or uncommitted planning files unless they are part of the intended change.
-- Do not add a `Co-Authored-By` trailer, a generated-by footer, or any other agent attribution.
+- **Respect authorization.** Read-only Git inspection and local validation workflow changes/runs are allowed. Commit or push only when requested in that turn; do not carry authorization forward. Branch changes, merges, rebases, and history rewrites require an explicit request.
+- **Keep external actions explicit.** Do not operate on GitHub, change remote settings, create releases/tags, publish, package for distribution, or deploy unless explicitly requested.
+- **Write precise commit messages.** Describe net changes against `HEAD` in imperative form: `<type>(<scope>): <message>`, with optional scope and type `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`, or `revert`. Include 2–5 body bullets; omit temporary planning files unless part of the change and never add agent attribution or a `Co-Authored-By` trailer.
