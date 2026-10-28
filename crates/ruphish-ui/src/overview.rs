@@ -132,7 +132,7 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                         trs!(ui.recipients),
                         trs!(ui.clicked),
                         trs!(ui.reported),
-                        trs!(ui.actions),
+                        Signal::stored(String::new()),
                     ]
                     empty=no_campaigns
                 >
