@@ -2,10 +2,267 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDemoApi } from '../../crates/ruphish-ui/web/demo-api.mjs';
 import { dataset, draftId } from '../../assets/website-demo/dataset.mjs';
+import { addWorkingTime, recipientHistory } from '../../assets/website-demo/timing.mjs';
 import { startRequestWith } from '../../crates/ruphish-ui/web/http.mjs';
 import { readFileSync } from 'node:fs';
 
 const now = 1793016000;
+
+test('working-time delays cross evenings, weekends, month boundaries and DST dates in UTC', () => {
+  const stamp = (value) => Date.parse(value) / 1000;
+  for (const [start, seconds, expected] of [
+    ['2026-10-28T16:50:00Z', 1800, '2026-10-29T09:20:00Z'],
+    ['2026-10-23T16:50:00Z', 1800, '2026-10-26T09:20:00Z'],
+    ['2026-03-27T16:50:00Z', 1800, '2026-03-30T09:20:00Z'],
+    ['2026-10-31T12:00:00Z', 1800, '2026-11-02T09:30:00Z'],
+    ['2026-12-31T16:50:00Z', 1800, '2027-01-01T09:20:00Z'],
+    ['2026-10-28T08:00:00Z', 60, '2026-10-28T09:01:00Z'],
+    ['2026-10-28T16:50:00Z', 600, '2026-10-28T17:00:00Z'],
+    ['2026-10-28T17:00:00Z', 1, '2026-10-29T09:00:01Z'],
+  ]) {
+    assert.equal(addWorkingTime(stamp(start), seconds), stamp(expected));
+  }
+  assert.throws(() => addWorkingTime(stamp('2026-10-28T09:00:00Z'), -1), /Invalid/);
+});
+
+test('campaigns retain weekday schedules, distinct sending and tracking windows, and coherent histories', () => {
+  const sample = dataset(Date.parse('2026-10-28T12:00:00Z') / 1000);
+  assert.deepEqual(
+    sample.campaigns.map((c) => [
+      c.header.launch_date,
+      c.header.send_by_date,
+      new Date(c.end * 1000).toISOString(),
+    ]),
+    [
+      ['2026-09-08T09:15:00.000Z', '2026-09-08T10:00:00.000Z', '2026-09-15T17:00:00.000Z'],
+      ['2026-10-06T09:00:00.000Z', '2026-10-06T15:00:00.000Z', '2026-10-16T17:00:00.000Z'],
+      ['2026-10-26T10:00:00.000Z', '2026-10-26T13:00:00.000Z', '2026-11-02T17:00:00.000Z'],
+      ['2026-11-03T09:30:00.000Z', '2026-11-03T10:00:00.000Z', '2026-11-10T17:00:00.000Z'],
+    ],
+  );
+  for (const date of [
+    '2026-10-26',
+    '2026-10-27',
+    '2026-10-28',
+    '2026-10-29',
+    '2026-10-30',
+    '2026-10-31',
+    '2026-11-01',
+    '2026-03-29',
+    '2027-01-01',
+  ]) {
+    const anchor = Date.parse(`${date}T00:00:00Z`) / 1000;
+    const data = dataset(anchor);
+    const ids = new Set();
+    assert.deepEqual(
+      data.campaigns.map((c) => c.header.status),
+      ['Completed', 'Completed', 'In progress', 'Queued'],
+    );
+    for (const c of data.campaigns) {
+      const launch = Date.parse(c.header.launch_date) / 1000;
+      const sendBy = Date.parse(c.header.send_by_date) / 1000;
+      assert.ok(![0, 6].includes(new Date(launch * 1000).getUTCDay()));
+      assert.ok(sendBy > launch && c.end > sendBy);
+      assert.ok(c.created < launch && c.created < anchor);
+      for (const r of c.results) {
+        assert.ok(r.due >= launch && r.due < sendBy);
+        assert.ok(Date.parse(r.modified_date) / 1000 < anchor);
+        assert.equal(
+          r.events.filter((e) => e.kind === 'Email Sent').length,
+          r.state === 'accepted' ? 1 : 0,
+        );
+        if (r.state !== 'accepted') {
+          assert.deepEqual(r.events, []);
+        }
+        if (r.state === 'ready') {
+          assert.deepEqual(r.attempts, []);
+        }
+        const first = (kind) => r.events.find((e) => e.kind === kind);
+        const click = first('Clicked Link');
+        const open = first('Email Opened');
+        const report = first('Email Reported');
+        let previous = -Infinity;
+        for (const e of r.events) {
+          const at = Date.parse(e.time) / 1000;
+          assert.ok(!ids.has(e.id));
+          ids.add(e.id);
+          assert.ok(at >= previous && at >= launch && at < anchor && at <= c.end);
+          if (e.kind !== 'Email Sent') {
+            assert.ok(at > Date.parse(first('Email Sent').time) / 1000);
+          }
+          if (e.kind === 'Clicked Link') {
+            assert.ok(open && e.time > open.time);
+          }
+          if (e.kind === 'Submitted Data') {
+            assert.ok(click && e.time > click.time);
+          }
+          if (report && ['Clicked Link', 'Submitted Data'].includes(e.kind)) {
+            assert.ok(e.time < report.time);
+          }
+          previous = at;
+        }
+        if (r.events.length) {
+          assert.equal(r.modified_date, r.events.at(-1).time);
+          assert.equal(Date.parse(first('Email Sent').time) / 1000, r.attempts[0].finished);
+        }
+      }
+    }
+  }
+});
+
+test('first engagement peaks early with a multi-day tail, while repeats have bounded causal identities', () => {
+  const sent = Date.parse('2026-10-19T09:00:00Z') / 1000;
+  const end = Date.parse('2026-10-26T17:00:00Z') / 1000;
+  let early = 0;
+  let late = 0;
+  let reopen = 0;
+  let reclick = 0;
+  let resubmit = 0;
+  let reopenedAfterSubmit = 0;
+  const firstTimes = new Set();
+  for (let n = 0; n < 1000; n++) {
+    const input = {
+      key: `distribution-test/${n}`,
+      sent,
+      end,
+      opened: true,
+      clicked: true,
+      submitted: true,
+      reported: false,
+    };
+    const full = recipientHistory(input, end + 1);
+    const ofKind = (kind) => full.filter((e) => e.kind === kind);
+    const opens = ofKind('Email Opened');
+    const clicks = ofKind('Clicked Link');
+    const submits = ofKind('Submitted Data');
+    firstTimes.add(opens[0].at);
+    if (opens[0].at <= sent + 8 * 3600) {
+      early++;
+    }
+    if (opens[0].at >= sent + 2 * 86400) {
+      late++;
+    }
+    if (opens.length > 1) {
+      reopen++;
+    }
+    if (clicks.length > 1) {
+      reclick++;
+    }
+    if (submits.length > 1) {
+      resubmit++;
+    }
+    if (opens.some((e) => e.at > submits[0].at)) {
+      reopenedAfterSubmit++;
+    }
+    assert.ok(opens.length <= 4 && clicks.length <= 3 && submits.length <= 2);
+    assert.equal(new Set(full.map((e) => e.slot)).size, full.length);
+    assert.deepEqual(
+      recipientHistory(input, sent + 86400),
+      full.filter((e) => e.at < sent + 86400),
+      'snapshot hides future events without changing earlier identities or times',
+    );
+    assert.deepEqual(
+      recipientHistory({ ...input, submitted: false }, end + 1).filter(
+        (e) => e.kind !== 'Submitted Data',
+      ),
+      full.filter((e) => e.kind !== 'Submitted Data'),
+      'independent action streams do not reshuffle other events',
+    );
+  }
+  assert.ok(early > 850 && early < 950, `first working day: ${early}/1000`);
+  assert.ok(late > 20 && late < 100, `third day or later: ${late}/1000`);
+  assert.ok(firstTimes.size > 800, 'responses are not synchronized to fixed offsets');
+  assert.ok(reopen > 250 && reopen < 450);
+  assert.ok(reclick > 80 && reclick < 220);
+  assert.ok(resubmit > 20 && resubmit < 90);
+  assert.ok(
+    reopenedAfterSubmit > 150,
+    'chronology permits returning to the email after submission',
+  );
+});
+
+test('missing open observations remain absent, and impossible interaction windows fail explicitly', () => {
+  const sent = Date.parse('2026-10-19T09:00:00Z') / 1000;
+  const end = sent + 7 * 86400;
+  const input = {
+    key: 'missing-open',
+    sent,
+    end,
+    opened: false,
+    clicked: true,
+    submitted: true,
+    reported: true,
+  };
+  const events = recipientHistory(input, end + 1);
+  assert.ok(!events.some((e) => e.kind === 'Email Opened'));
+  assert.ok(events.find((e) => e.kind === 'Clicked Link').at > sent);
+  assert.ok(
+    events.find((e) => e.kind === 'Submitted Data').at >
+      events.find((e) => e.kind === 'Clicked Link').at,
+  );
+  assert.throws(
+    () => recipientHistory({ ...input, end: sent + 1 }, end + 1),
+    /cannot fit before campaign closure/,
+  );
+});
+
+test('the shared seed preserves completed participant targets while exposing repeats and censored active outcomes', async () => {
+  const f = setup();
+  await f.login();
+  for (const [id, expected] of [
+    [1, { accepted: 400, opened: 260, clicked: 72, submitted: 28, reported: 44 }],
+    [2, { accepted: 617, opened: 320, clicked: 48, submitted: 12, reported: 140 }],
+  ]) {
+    const result = (await f.request(`/api/campaigns/${id}/results`)).value;
+    assert.deepEqual(result.unique, expected);
+    assert.ok(result.totals.opened > result.unique.opened);
+    assert.ok(result.totals.clicked > result.unique.clicked);
+    assert.deepEqual(result.participant_buckets.at(-1).counts, expected);
+    assert.ok(result.last_observed.opened - result.first_observed.opened > 2 * 86400);
+  }
+  const active = (await f.request('/api/campaigns/3/results')).value;
+  assert.ok(active.unique.opened > 100 && active.unique.opened < 170);
+  assert.ok(active.unique.clicked > 0 && active.unique.clicked < 22);
+  const selected = (await f.request('/api/campaigns/2/results?recipient=20010')).value;
+  assert.equal(selected.totals.opened, 3);
+  assert.equal(selected.unique.opened, 1);
+  const history = (await f.request('/api/campaigns/2/recipients/20010/history')).value.events;
+  assert.deepEqual(
+    history.map((e) => e.message),
+    ['Email Sent', 'Email Opened', 'Clicked Link', 'Clicked Link', 'Email Opened', 'Email Opened'],
+  );
+  const c = dataset(now).campaigns[1];
+  const clicked = c.results.filter((r) => r.events.some((e) => e.kind === 'Clicked Link'));
+  assert.ok(
+    clicked.some((r) => r.id > 20300),
+    'clickers are spread through the audience',
+  );
+  assert.ok(
+    clicked.some((r) => r.events.some((e) => e.kind === 'Email Reported')),
+    'some recipients report after clicking',
+  );
+});
+
+test('completed campaign event edits use the shared closure instead of a one-day limit', async () => {
+  const f = setup();
+  await f.login();
+  const path = '/api/campaigns/2/recipients/20010/events';
+  for (const [time, status] of [
+    ['2026-10-05T11:00:00Z', 200],
+    ['2026-10-12T17:00:00Z', 200],
+    ['2026-10-12T17:00:01Z', 400],
+    ['2026-10-02T08:59:59Z', 400],
+  ]) {
+    const response = await f.request(path, 'POST', {
+      request_id: `timing-boundary-${status}-${Date.parse(time)}`,
+      action: 'add',
+      event_id: null,
+      revision: 0,
+      value: { time, kind: 'email_opened', presence: {} },
+    });
+    assert.equal(response.status, status, time);
+  }
+});
 
 test('source filters separate participant observations from delivery in the shared sample campaigns', async () => {
   const f = setup();
@@ -18,12 +275,12 @@ test('source filters separate participant observations from delivery in the shar
   const publicEvents = await read('source=public');
   assert.deepEqual(publicEvents.totals, {
     accepted: 0,
-    opened: 304,
-    clicked: 46,
-    submitted: 12,
-    reported: 63,
+    opened: 460,
+    clicked: 54,
+    submitted: 10,
+    reported: 68,
   });
-  assert.equal(publicEvents.event_total, 425);
+  assert.equal(publicEvents.event_total, 592);
   assert.ok(
     publicEvents.events.every((e) => e.source === 'public' && e.kind.value !== 'email_sent'),
   );
@@ -35,9 +292,16 @@ test('source filters separate participant observations from delivery in the shar
     submitted: 0,
     reported: 0,
   });
-  const selected = await read('source=public&recipients=20001&event=email_opened,link_clicked');
+  const selected = await read('source=public&recipients=20010&event=email_opened,link_clicked');
   assert.equal(selected.recipient_total, 1);
   assert.deepEqual(selected.totals, {
+    accepted: 0,
+    opened: 3,
+    clicked: 2,
+    submitted: 0,
+    reported: 0,
+  });
+  assert.deepEqual(selected.unique, {
     accepted: 0,
     opened: 1,
     clicked: 1,
@@ -50,16 +314,16 @@ test('source filters separate participant observations from delivery in the shar
     opened: 0,
     clicked: 0,
     submitted: 0,
-    reported: 70,
+    reported: 67,
   });
   assert.ok(mailbox.events.every((e) => e.kind.value === 'email_reported'));
   const operator = await read('source=operator');
   assert.deepEqual(operator.totals, {
     accepted: 0,
-    opened: 16,
-    clicked: 2,
-    submitted: 0,
-    reported: 7,
+    opened: 31,
+    clicked: 4,
+    submitted: 2,
+    reported: 5,
   });
   assert.equal((await read('source=legacy')).event_total, 0);
   assert.equal((await read('source=mailbox&event=link_clicked')).event_total, 0);

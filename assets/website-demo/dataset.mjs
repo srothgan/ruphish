@@ -1,8 +1,9 @@
 // Shared synthetic scenario. No SQL, network, credentials, or submitted user content.
 import source from './data.json' with { type: 'json' };
 import { starterContent } from './starter-content.mjs';
+import { DAY, campaignTiming, recipientOutcomes, recipientHistory } from './timing.mjs';
 
-export const DAY = 86400;
+export { DAY };
 export const features = Object.freeze(source.features);
 export const iso = (seconds) => new Date(seconds * 1000).toISOString();
 export const draftId = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -148,31 +149,19 @@ export function dataset(now) {
     code: i === 0 ? 'ok' : 'connection_failed',
     history: [run(i + 1, i !== 0, false)],
   }));
-  const configs = [
-    ...source.campaigns,
-    {
-      name: source.scheduled,
-      ago: -3,
-      size: 12,
-      opened: 0,
-      clicked: 0,
-      submitted: 0,
-      reported: 0,
-      complete: false,
-      failed: 0,
-    },
-  ];
-  const campaigns = configs.map((c, index) => {
+  const campaigns = source.campaigns.map((c, index) => {
     const id = index + 1;
-    const launch = now - c.ago * DAY;
-    const status = c.ago < 0 ? 'Queued' : c.complete ? 'Completed' : 'In progress';
+    const key = `${source.seed}/${id}`;
+    const { launch, sendBy, end, status } = campaignTiming(c, now);
+    const created = Math.min(launch - DAY, now - DAY);
+    const outcomes = recipientOutcomes(c, key);
     const template = templates[index % templates.length];
     const header = {
       id,
       name: c.name,
       status,
       launch_date: iso(launch),
-      send_by_date: null,
+      send_by_date: iso(sendBy),
       url: domains[0].origin,
       template: { id: template.id, name: template.name },
       page: { id: 1, name: pages[0].name },
@@ -185,7 +174,6 @@ export function dataset(now) {
       domain_id: 1,
       domain_block: null,
     };
-    let eventId = id * 100000;
     const results = Array.from({ length: c.size + c.failed }, (_, n) => {
       const failed = n >= c.size;
       const person = failed
@@ -197,49 +185,47 @@ export function dataset(now) {
           }
         : recipients[n];
       const resultId = id * 10000 + n + 1;
-      const sent = launch + n * 7;
-      const state = c.ago < 0 ? 'ready' : failed ? 'failed' : 'accepted';
-      const events = [];
+      // Match the production minute-level send schedule over the complete audience.
+      const due = launch + Math.floor(((sendBy - launch) * n) / ((c.size + c.failed) * 60)) * 60;
+      const sent = due + 1;
+      const state = sent >= now ? 'ready' : failed ? 'failed' : 'accepted';
       // Sample operator additions alongside automatic tracking; reports also arrive by mailbox.
       const interactionSource = n % 20 === 19 ? 'operator' : 'public';
-      const add = (kind, delay, password_present = null, source = interactionSource) =>
-        events.push({
-          id: ++eventId,
-          recipient_id: resultId,
-          email: person.email,
-          time: iso(sent + delay),
-          kind,
-          source,
-          password_present,
-        });
-      if (state === 'accepted') {
-        add('Email Sent', 0, null, 'application');
-        if (n < c.opened) {
-          add('Email Opened', 900);
-        }
-        if (n < c.clicked) {
-          add('Clicked Link', 1800);
-        }
-        if (n < c.submitted) {
-          add('Submitted Data', 2100, true);
-        }
-        if (n >= c.size - c.reported) {
-          add(
-            'Email Reported',
-            3600,
-            null,
-            interactionSource === 'operator' ? 'operator' : n % 2 === 0 ? 'mailbox' : 'public',
-          );
-        }
-      }
+      const events =
+        state !== 'accepted'
+          ? []
+          : recipientHistory(
+              {
+                key: `${key}/${resultId}`,
+                sent,
+                end,
+                ...Object.fromEntries(
+                  Object.entries(outcomes).map(([kind, members]) => [kind, members.has(n)]),
+                ),
+              },
+              now,
+            ).map(({ kind, at, slot }) => ({
+              id: resultId * 100 + slot,
+              recipient_id: resultId,
+              email: person.email,
+              time: iso(at),
+              kind,
+              source:
+                kind === 'Email Sent'
+                  ? 'application'
+                  : kind === 'Email Reported' && interactionSource !== 'operator' && n % 2 === 0
+                    ? 'mailbox'
+                    : interactionSource,
+              password_present: kind === 'Submitted Data' ? true : null,
+            }));
       const attempts =
         state === 'ready'
           ? []
           : [
               {
                 generation: 1,
-                started: sent,
-                finished: sent + 1,
+                started: due,
+                finished: sent,
                 state,
                 stage: failed ? 'Envelope' : 'Data',
                 smtp_code: failed ? 550 : 250,
@@ -251,14 +237,14 @@ export function dataset(now) {
         id: resultId,
         rid: `demo-recipient-${resultId}`,
         state,
-        due: sent,
-        send_date: iso(sent),
-        modified_date: iso(sent),
+        due,
+        send_date: iso(due),
+        modified_date: events.at(-1)?.time ?? iso(state === 'ready' ? created : sent),
         attempts,
         events,
       };
     });
-    return { header, results };
+    return { header, created, end, results };
   });
   const selection = { groups: [{ id: 1 }], template: { id: 1 }, page: { id: 1 }, smtp: { id: 1 } };
   const drafts = source.drafts.map((name, i) => ({

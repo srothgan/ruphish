@@ -780,8 +780,7 @@ export function createDemoApi({
             !/(Z|[+-]\d{2}:\d{2})$/.test(v.time) ||
             at > now ||
             at < Date.parse(c.header.launch_date) / 1000 ||
-            (c.header.status === 'Completed' &&
-              at > Date.parse(c.header.launch_date) / 1000 + DAY) ||
+            (c.header.status === 'Completed' && at > c.end) ||
             Object.keys(v).some((k) => !['kind', 'time', 'presence'].includes(k)) ||
             !v.presence ||
             Object.keys(v.presence).some(

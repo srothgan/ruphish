@@ -106,7 +106,7 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
         assert.equal(value.recent.length, 4);
       }
       if (path === '/api/campaigns/3/delivery') {
-        assert.equal(value.campaign.send_by_date, null);
+        assert.equal(value.campaign.send_by_date, '2026-10-23T13:00:00Z');
       }
       if (path.includes('posture')) {
         assert.equal(value.delivered, 937);
@@ -134,14 +134,14 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
       200,
     );
     for (const [query, totals] of [
-      ['source=public', { accepted: 0, opened: 304, clicked: 46, submitted: 12, reported: 63 }],
+      ['source=public', { accepted: 0, opened: 460, clicked: 54, submitted: 10, reported: 68 }],
       ['source=application', { accepted: 617, opened: 0, clicked: 0, submitted: 0, reported: 0 }],
       [
-        'source=public&recipients=20001&event=email_opened,link_clicked',
-        { accepted: 0, opened: 1, clicked: 1, submitted: 0, reported: 0 },
+        'source=public&recipients=20010&event=email_opened,link_clicked',
+        { accepted: 0, opened: 3, clicked: 2, submitted: 0, reported: 0 },
       ],
-      ['source=mailbox', { accepted: 0, opened: 0, clicked: 0, submitted: 0, reported: 70 }],
-      ['source=operator', { accepted: 0, opened: 16, clicked: 2, submitted: 0, reported: 7 }],
+      ['source=mailbox', { accepted: 0, opened: 0, clicked: 0, submitted: 0, reported: 67 }],
+      ['source=operator', { accepted: 0, opened: 31, clicked: 4, submitted: 2, reported: 5 }],
       [
         'source=mailbox&event=link_clicked',
         { accepted: 0, opened: 0, clicked: 0, submitted: 0, reported: 0 },
@@ -160,6 +160,9 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
       assert.deepEqual(sample.totals, totals, path);
       assert.equal(actual.event_total, sample.event_total, path);
       assert.equal(actual.recipient_total, sample.recipient_total, path);
+      assert.deepEqual(actual.unique, sample.unique, path);
+      assert.deepEqual(actual.first_observed, sample.first_observed, path);
+      assert.deepEqual(actual.last_observed, sample.last_observed, path);
     }
     const exportPath =
       '/api/campaigns/3/export?format=csv&scope=recipients&recipients=30001,30002&limit=1&offset=1';
@@ -195,6 +198,26 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
       const count = (table) => db.prepare(`SELECT count(*) AS n FROM ${table}`).get().n;
       assert.equal(count('users'), 6);
       assert.equal(count('campaigns'), 4);
+      assert.deepEqual(
+        db
+          .prepare('SELECT completed_date FROM campaigns ORDER BY id')
+          .all()
+          .map((r) => r.completed_date),
+        ['2026-09-11T17:00:00.000Z', '2026-10-12T17:00:00.000Z', '', ''],
+      );
+      assert.equal(
+        db.prepare('SELECT status FROM results WHERE id=20010').get().status,
+        'Clicked Link',
+        'later reopens do not downgrade progression',
+      );
+      assert.equal(
+        db
+          .prepare(
+            "SELECT count(*) AS n FROM events WHERE recipient_id=20010 AND kind='email_opened'",
+          )
+          .get().n,
+        3,
+      );
       const recipient = dataset(1793016000).campaigns[2].results[0];
       const stored = db
         .prepare('SELECT send_date,modified_date FROM results WHERE id=?')

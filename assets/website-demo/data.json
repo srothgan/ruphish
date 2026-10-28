@@ -1,13 +1,15 @@
 {
-  "version": 1,
+  "version": 2,
+  "seed": "ruphish-demo-v2",
   "features": { "verification_enabled": true, "reporting_mailboxes_enabled": true, "webhooks_enabled": true },
   "first_names": ["Alex", "Sam", "Robin", "Morgan", "Jamie", "Taylor", "Casey", "Avery"],
   "last_names": ["Rivera", "Lee", "Meyer", "Brooks", "Patel", "Winter", "Chen", "Berg"],
   "departments": ["Operations", "Engineering", "Finance", "People & culture"],
   "campaigns": [
-    { "name": "Quarterly awareness baseline", "ago": 54, "size": 400, "opened": 260, "clicked": 72, "submitted": 28, "reported": 44, "complete": true, "failed": 0 },
-    { "name": "Benefits enrollment", "ago": 21, "size": 617, "opened": 320, "clicked": 48, "submitted": 12, "reported": 140, "complete": true, "failed": 0 },
-    { "name": "Delivery notification", "ago": 2, "size": 320, "opened": 170, "clicked": 22, "submitted": 6, "reported": 98, "complete": false, "failed": 12 }
+    { "name": "Quarterly awareness baseline", "ago": 50, "launch_minute": 555, "send_minutes": 45, "track_days": 7, "size": 400, "opened": 260, "clicked": 72, "submitted": 28, "reported": 44, "failed": 0 },
+    { "name": "Benefits enrollment", "ago": 22, "launch_minute": 540, "send_minutes": 360, "track_days": 10, "size": 617, "opened": 320, "clicked": 48, "submitted": 12, "reported": 140, "failed": 0 },
+    { "name": "Delivery notification", "ago": 2, "launch_minute": 600, "send_minutes": 180, "track_days": 7, "size": 320, "opened": 170, "clicked": 22, "submitted": 6, "reported": 98, "failed": 12 },
+    { "name": "Upcoming awareness exercise", "ago": -6, "launch_minute": 570, "send_minutes": 30, "track_days": 7, "size": 12, "opened": 0, "clicked": 0, "submitted": 0, "reported": 0, "failed": 0 }
   ],
   "templates": [
     { "starter": "microsoft-shared-document", "name": "Microsoft 365 - Shared document (EN)", "brand": "Microsoft" },
@@ -38,6 +40,5 @@
     { "name": "Analytics delivery", "path": "analytics", "active": true, "failed": true }
   ],
   "mailboxes": ["Security reports", "Training reports"],
-  "drafts": ["New starter awareness", "Quarterly follow-up"],
-  "scheduled": "Upcoming awareness exercise"
+  "drafts": ["New starter awareness", "Quarterly follow-up"]
 }

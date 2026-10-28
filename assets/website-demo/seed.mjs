@@ -1,6 +1,6 @@
 // The SQL consumer of the same complete dataset used by the public browser demo.
 import { randomBytes } from 'node:crypto';
-import { dataset, DAY, iso, features } from './dataset.mjs';
+import { dataset, iso, features } from './dataset.mjs';
 
 export function seed(db, now = Math.floor(Date.now() / 1000)) {
   const data = dataset(now);
@@ -156,22 +156,21 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
         );
       }
     }
-    for (const { header: c, results } of data.campaigns) {
-      const launch = Date.parse(c.launch_date) / 1000;
+    for (const { header: c, created, end, results } of data.campaigns) {
       run(
         'INSERT INTO campaigns(id,user_id,name,created_date,completed_date,template_id,page_id,status,url,smtp_id,launch_date,send_by_date) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
         c.id,
         owner,
         c.name,
-        iso(launch - DAY),
-        c.status === 'Completed' ? iso(launch + DAY) : '',
+        iso(created),
+        c.status === 'Completed' ? iso(end) : '',
         c.template.id,
         c.page.id,
         c.status,
         c.url,
         c.smtp.id,
         c.launch_date,
-        c.send_by_date ?? '',
+        c.send_by_date,
       );
       run(
         'INSERT INTO ruphish_campaign_policy(campaign_id,redirect_url) VALUES(?,?)',
@@ -197,7 +196,9 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
             ? 'Error'
             : r.state === 'ready'
               ? 'Sending'
-              : (r.events.filter((e) => e.kind !== 'Email Reported').at(-1)?.kind ?? 'Email Sent');
+              : ['Submitted Data', 'Clicked Link', 'Email Opened', 'Email Sent'].find((kind) =>
+                  r.events.some((e) => e.kind === kind),
+                );
         run(
           'INSERT INTO results(id,campaign_id,user_id,r_id,email,first_name,last_name,status,ip,latitude,longitude,position,send_date,reported,modified_date) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
           r.id,
