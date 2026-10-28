@@ -671,17 +671,22 @@ async fn recipient_history(
             events: history
                 .events
                 .iter()
-                .map(|e| reads::HistoryEvent {
-                    id: e.id,
-                    time: date(&e.time),
-                    at: datetime::parse_stored(&e.time)
-                        .ok()
-                        .filter(|t| *t != datetime::ZERO_TIMESTAMP)
-                        .map(|t| t.as_second()),
-                    message: e.message.clone(),
-                    details: e.details.clone(),
+                .map(|e| {
+                    Ok(reads::HistoryEvent {
+                        correction: e.correction.clone().ok_or_else(|| {
+                            error(ruphish_application::resources::Error::Internal)
+                        })?,
+                        id: e.id,
+                        time: date(&e.time),
+                        at: datetime::parse_stored(&e.time)
+                            .ok()
+                            .filter(|t| *t != datetime::ZERO_TIMESTAMP)
+                            .map(|t| t.as_second()),
+                        message: e.message.clone(),
+                        details: e.details.clone(),
+                    })
                 })
-                .collect(),
+                .collect::<Result<Vec<_>, Rejection>>()?,
             next_attempt: history.next_attempt,
             next_event: history.next_event,
         },

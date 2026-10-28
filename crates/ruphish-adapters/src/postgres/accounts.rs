@@ -316,6 +316,7 @@ impl Repository for Accounts {
                     "DELETE FROM ruphish_campaign_launch WHERE owner_id=$1",
                     "DELETE FROM ruphish_profile_cooldown WHERE profile_id IN (SELECT id FROM smtp WHERE user_id=$1)",
                     "DELETE FROM ruphish_legacy_queue_issues WHERE mail_log_id IN (SELECT id FROM mail_logs WHERE user_id=$1)",
+                    "DELETE FROM ruphish_event_changes WHERE owner_id=$1",
                     "DELETE FROM events WHERE campaign_id IN (SELECT id FROM campaigns WHERE user_id=$1)",
                     "DELETE FROM results WHERE user_id=$1",
                     "DELETE FROM mail_logs WHERE user_id=$1",

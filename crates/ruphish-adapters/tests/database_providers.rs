@@ -16,6 +16,89 @@ use sqlx::{
 };
 use std::path::PathBuf;
 
+#[path = "support/event_corrections.rs"]
+mod event_corrections;
+
+#[tokio::test]
+#[ignore = "Requires canonical MySQL fixture"]
+async fn mysql_event_corrections_preserve_history_and_reopen() {
+    let (mut inspect, config) = fixture().await;
+    let db = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    sqlx::raw_sql(event_corrections::SEED)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    db.close().await;
+    sqlx::raw_sql("DROP VIEW effective_event_history; DROP VIEW ruphish_event_records; DROP TABLE ruphish_event_changes; DELETE FROM _sqlx_migrations WHERE version=8;").execute(&mut inspect).await.unwrap();
+    let db = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    event_corrections::contract(&db).await;
+    db.close().await;
+    let reopened = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    assert!(
+        reopened
+            .campaigns()
+            .inspect_event(event_corrections::OWNER, 10, 11, 101, None)
+            .await
+            .unwrap()
+            .record
+            .excluded
+    );
+    reopened.close().await;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE `{}`",
+        config.database
+    )))
+    .execute(&mut inspect)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires canonical PostgreSQL fixture"]
+async fn postgres_event_corrections_preserve_history_and_reopen() {
+    let (mut admin, config) = postgres_fixture().await;
+    let db = database::open(Config::Postgres(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    let mut inspect = postgres_inspect(&config).await;
+    sqlx::raw_sql(event_corrections::SEED)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    sqlx::query("SELECT setval(pg_get_serial_sequence('events','id'),105)")
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    db.close().await;
+    sqlx::raw_sql("DROP VIEW effective_event_history; DROP VIEW ruphish_event_records; DROP TABLE ruphish_event_changes; DELETE FROM _sqlx_migrations WHERE version=8;").execute(&mut inspect).await.unwrap();
+    let db = database::open(Config::Postgres(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    event_corrections::contract(&db).await;
+    db.close().await;
+    let reopened = database::open(Config::Postgres(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    assert!(
+        reopened
+            .campaigns()
+            .inspect_event(event_corrections::OWNER, 10, 11, 101, None)
+            .await
+            .unwrap()
+            .record
+            .excluded
+    );
+    reopened.close().await;
+    inspect.close().await.unwrap();
+    postgres_cleanup(&mut admin, &config).await;
+}
+
 #[path = "support/campaign_drafts.rs"]
 mod campaign_drafts;
 #[path = "support/company_settings.rs"]
@@ -1250,6 +1333,20 @@ async fn sqlite_provider_contract() {
     )
     .await
     .unwrap();
+    sqlx::raw_sql("DROP VIEW effective_event_history; DROP VIEW ruphish_event_records; DROP TABLE ruphish_event_changes; DROP TRIGGER ruphish_event_insert; DELETE FROM ruphish_schema WHERE version=14;").execute(&mut previous).await.unwrap();
+    let prior_trigger = include_str!("../migrations/sqlite/12_settings.sql")
+        .split_once("CREATE TRIGGER ruphish_event_insert")
+        .unwrap()
+        .1
+        .split_once("INSERT INTO ruphish_schema")
+        .unwrap()
+        .0;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "CREATE TRIGGER ruphish_event_insert{prior_trigger}"
+    )))
+    .execute(&mut previous)
+    .await
+    .unwrap();
     sqlx::raw_sql("DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM ruphish_schema WHERE version=13; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut previous).await.unwrap();
     previous.close().await.unwrap();
     let db = database::open(
@@ -1315,7 +1412,7 @@ async fn mysql_provider_contract() {
     peer.close().await;
     db.close().await;
     // Reconstruct the immediately preceding schema, then verify its populated upgrade.
-    sqlx::raw_sql("DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM _sqlx_migrations WHERE version=7; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut inspector).await.unwrap();
+    sqlx::raw_sql("DROP VIEW effective_event_history; DROP VIEW ruphish_event_records; DROP TABLE ruphish_event_changes; DELETE FROM _sqlx_migrations WHERE version=8; DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM _sqlx_migrations WHERE version=7; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut inspector).await.unwrap();
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
         .unwrap();
@@ -2103,7 +2200,7 @@ async fn postgres_provider_contract() {
     db.close().await;
     // Reconstruct the immediately preceding schema, then verify its populated upgrade.
     let mut previous = postgres_inspect(&config).await;
-    sqlx::raw_sql("DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM _sqlx_migrations WHERE version=7; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut previous).await.unwrap();
+    sqlx::raw_sql("DROP VIEW effective_event_history; DROP VIEW ruphish_event_records; DROP TABLE ruphish_event_changes; DELETE FROM _sqlx_migrations WHERE version=8; DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM _sqlx_migrations WHERE version=7; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut previous).await.unwrap();
     previous.close().await.unwrap();
     let db = database::open(Config::Postgres(config.clone()), Policy::default())
         .await

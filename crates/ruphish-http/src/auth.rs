@@ -178,6 +178,7 @@ pub fn router<S: SessionStore + Clone>(
         .merge(super::campaigns::routes())
         .merge(super::domains::routes())
         .merge(super::reporting::routes())
+        .merge(super::event_edit::routes())
         .merge(super::overview::routes())
         .merge(super::integrations::routes())
         .merge(super::starter_templates::routes())
@@ -538,6 +539,16 @@ impl Context {
             return Err(auth_error(AccountError::ResetRequired.into()));
         }
         Ok(user)
+    }
+    pub(crate) async fn event_actor(
+        &self,
+        user: ruphish_application::auth::Identity,
+    ) -> Result<ruphish_application::auth::Identity, Rejection> {
+        if self.explicit_api_key() {
+            return Ok(user);
+        }
+        let (_, actor) = self.identity().await?;
+        Ok(actor.map(|a| a.identity).unwrap_or(user))
     }
     async fn establish(
         &self,

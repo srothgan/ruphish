@@ -129,6 +129,9 @@ pub enum EventSort {
 /// Recorded observation provenance.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Source {
+    /// Explicit operator addition, never a participant webhook.
+    #[serde(rename = "operator")]
+    Operator,
     /// Imported event history.
     #[serde(rename = "legacy")]
     Legacy,
@@ -146,6 +149,7 @@ impl Source {
     /// Decode the stored identifier; invalid state is not silently defaulted.
     pub fn from_stored(value: &str) -> Option<Self> {
         match value {
+            "operator" => Some(Self::Operator),
             "legacy" => Some(Self::Legacy),
             "application" => Some(Self::Application),
             "public" => Some(Self::Public),
@@ -156,6 +160,7 @@ impl Source {
     /// Stable value used by storage, presentation and tabular exports.
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::Operator => "operator",
             Self::Legacy => "legacy",
             Self::Application => "application",
             Self::Public => "public",

@@ -16,3 +16,5 @@ Select a column heading to sort ascending; select it again to reverse the order.
 Filters apply before totals and pagination. Moving between table pages does not change the full filtered aggregate. Visible Results pages refresh automatically about five seconds after each completed read, including completed campaigns. Filters, ordering, page and recipient selection stay in place. Hidden pages pause periodic refresh; leaving the page stops its timer. Temporary failures retain the last confirmed result and increase the retry delay up to 160 seconds; use the visible error/retry before drawing conclusions from stale data. Access-denied or missing-record failures remove stale results and stop periodic retries.
 
 Use [exports](exports.md) to download all matching rows, and [metric definitions](metrics.md) to distinguish recorded events from summary progression.
+
+Use [event corrections](correcting-events.md) in the expanded table to edit, exclude, add or restore individual events. Charts and counts use effective events; original evidence remains inspectable.

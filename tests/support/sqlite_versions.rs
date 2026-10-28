@@ -46,7 +46,7 @@ pub async fn restore_version_ten_tables(pool: &sqlx::SqlitePool) -> Result<(), s
         .execute(&mut *tx)
         .await?;
     }
-    sqlx::raw_sql("DROP TRIGGER ruphish_event_insert; DROP TRIGGER ruphish_event_delete; DROP TABLE ruphish_learning_pages; DROP VIEW ruphish_domain_policy; DROP TABLE ruphish_campaign_closures; DROP TABLE ruphish_settings; DROP VIEW event_history; DROP TABLE events; DROP TABLE pages; DROP TABLE ruphish_campaign_policy; DROP TABLE ruphish_event_receipts;")
+    sqlx::raw_sql("DROP VIEW effective_event_history; DROP VIEW ruphish_event_records; DROP TABLE ruphish_event_changes; DROP TRIGGER ruphish_event_insert; DROP TRIGGER ruphish_event_delete; DROP TABLE ruphish_learning_pages; DROP VIEW ruphish_domain_policy; DROP TABLE ruphish_campaign_closures; DROP TABLE ruphish_settings; DROP VIEW event_history; DROP TABLE events; DROP TABLE pages; DROP TABLE ruphish_campaign_policy; DROP TABLE ruphish_event_receipts;")
         .execute(&mut *tx).await?;
     for table in [
         "events",

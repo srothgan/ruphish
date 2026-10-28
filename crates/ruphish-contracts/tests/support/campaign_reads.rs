@@ -186,6 +186,12 @@ fn named_metrics_and_classified_observations_reject_missing_or_unknown_values() 
             "{pointer}"
         );
     }
+    let mut missing_revision = fixture.clone();
+    missing_revision["events"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("revision");
+    assert!(serde_json::from_value::<Results>(missing_revision).is_err());
     let mut imported = fixture;
     imported["events"][0]["kind"] = json!({"type":"historical","value":"Proxied request"});
     let value: Results = serde_json::from_value(imported).unwrap();

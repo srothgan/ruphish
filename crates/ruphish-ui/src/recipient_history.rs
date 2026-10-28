@@ -92,14 +92,24 @@ impl History {
                 .is_some_and(|(oldest, newest)| oldest > newest)
         };
         let attempt_gap = !older && disjoint("attempts", "generation", &self.attempts);
-        let event_gap = !older && disjoint("events", "id", &self.events);
+        let event_gap = !older
+            && (value["refresh_event_gap"] == true || disjoint("events", "id", &self.events));
         for (key, id, map) in [
             ("attempts", "generation", &mut self.attempts),
             ("events", "id", &mut self.events),
         ] {
             for row in value[key].as_array().into_iter().flatten() {
                 if let Some(id) = row[id].as_i64() {
-                    if older {
+                    if key == "events" {
+                        let revision =
+                            |v: &Value| v["correction"]["revision"].as_i64().unwrap_or(0);
+                        if map
+                            .get(&id)
+                            .is_none_or(|old| revision(row) >= revision(old))
+                        {
+                            map.insert(id, row.clone());
+                        }
+                    } else if older {
                         map.entry(id).or_insert_with(|| row.clone());
                     } else {
                         map.insert(id, row.clone());
@@ -136,6 +146,20 @@ pub fn tone(state: &str) -> &'static str {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn refresh_cannot_undo_a_saved_correction_and_revalidates_older_rows() {
+        let mut history = History::default();
+        history.toggle();
+        let (r, _) = history.begin(false).unwrap();
+        history.finish(r,Ok(json!({"events":[{"id":5,"correction":{"revision":2,"excluded":true}}],"next_event":5})));
+        let (r, _) = history.begin(true).unwrap();
+        history.finish(r,Ok(json!({"events":[{"id":1,"correction":{"revision":0,"excluded":false}}],"next_event":null})));
+        let (r, _) = history.begin(false).unwrap();
+        history.finish(r,Ok(json!({"events":[{"id":100},{"id":5,"correction":{"revision":1,"excluded":false}},{"id":1,"correction":{"revision":1,"excluded":true}}],"refresh_event_gap":true,"next_event":100})));
+        assert_eq!(history.events[&5]["correction"]["revision"], 2);
+        assert_eq!(history.events[&1]["correction"]["excluded"], true);
+        assert_eq!(history.next_event, Some(100));
+    }
     #[test]
     fn expansion_refresh_retry_and_older_pages_preserve_confirmed_history() {
         let mut h = History::default();

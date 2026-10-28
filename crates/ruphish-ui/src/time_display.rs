@@ -5,7 +5,7 @@ use ruphish_ui::datetime::{Label, instant as parse_value};
 use ruphish_ui::display_preferences::DisplayPreferences;
 use serde_json::Value;
 
-fn zone() -> TimeZone {
+pub(super) fn zone() -> TimeZone {
     use_context::<DisplayPreferences>()
         .map(DisplayPreferences::zone)
         .unwrap_or_else(ruphish_ui::browser_datetime::detected_zone)

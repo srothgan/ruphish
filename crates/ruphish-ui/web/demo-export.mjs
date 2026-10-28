@@ -52,7 +52,7 @@ export function workbook(sheets) {
 }
 
 const recipientHeaders = ['Recipient ID', 'Email', 'Name', 'Delivery', 'Accepted events', 'Open events', 'Click events', 'Submission events', 'Report events', 'Historical reported', 'First Name', 'Last Name', 'Position', 'Send Date (UTC)', 'Modified Date (UTC)'];
-const eventHeaders = ['Event ID', 'Recipient ID', 'Email', 'Time (UTC)', 'Event', 'Source', 'Password present'];
+const eventHeaders = ['Event ID', 'Recipient ID', 'Email', 'Time (UTC)', 'Event', 'Source', 'Password present', 'Correction revision'];
 
 function storedDate(value) {
     if (typeof value !== 'string') return '';
@@ -82,7 +82,7 @@ export function exportResponse(value, query) {
         return new Response(JSON.stringify(scope === 'all' ? value : rows), { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
     }
     const recipients = [recipientHeaders, ...value.recipients.map(r => [r.id, r.email, r.name, r.delivery ?? 'historical', ...countValues(r.counts), String(r.historical_reported), r.first_name ?? '', r.last_name ?? '', r.position ?? '', storedDate(r.send_date), storedDate(r.modified_date)])];
-    const events = [eventHeaders, ...value.events.map(e => [e.id, e.recipient_id ?? '', e.email, e.time, eventLabel(e.kind), e.source, e.password_present === null ? '' : String(e.password_present)])];
+    const events = [eventHeaders, ...value.events.map(e => [e.id, e.recipient_id ?? '', e.email, e.time, eventLabel(e.kind), e.source, e.password_present === null ? '' : String(e.password_present), e.revision??0])];
     let bytes, mime;
     if (format === 'csv') {
         const cell = value => `"${protectedText(value).replaceAll('"', '""')}"`;

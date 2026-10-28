@@ -794,3 +794,7 @@
 .campaign-sections { display:flex; flex-wrap:wrap; gap:1rem; border-bottom:1px solid var(--line); margin-bottom:1.5rem; }
 .campaign-sections a { padding:.75rem .25rem; border-bottom:3px solid transparent; }
 .campaign-sections a[aria-current="page"] { border-bottom-color:currentColor; font-weight:600; }
+
+.event-edit-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1rem; }
+.event-editor { padding: 1rem; border: 1px solid var(--line); }
+.event-excluded { opacity: .7; }

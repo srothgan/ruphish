@@ -75,3 +75,6 @@ fn main() {
 
 #[cfg(target_arch = "wasm32")]
 mod time_display;
+
+#[cfg(target_arch = "wasm32")]
+mod event_table;

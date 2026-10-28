@@ -221,6 +221,8 @@ pub struct History {
 /// Sanitized historical event with optional normalized time.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HistoryEvent {
+    /// Original values, origin and correction state.
+    pub correction: ruphish_domain::event_edit::Record,
     /// Event identity.
     pub id: i64,
     /// Preserved timestamp.
@@ -252,7 +254,7 @@ pub struct Results {
     pub unique: crate::reporting::Counts,
     /// Cumulative recipient progression.
     pub progression: crate::reporting::Counts,
-    /// Raw event counts.
+    /// Effective event counts.
     pub totals: crate::reporting::Counts,
     /// Matching recipients before pagination.
     pub recipient_total: i64,
@@ -286,9 +288,11 @@ pub struct ResultRecipient {
     pub historical_reported: bool,
 }
 
-/// One recorded observation; no participant-entered values.
+/// One effective observation; no participant-entered values.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResultEvent {
+    /// Latest applied correction revision; zero means original evidence.
+    pub revision: i64,
     /// Event identity.
     pub id: i64,
     /// Recipient when resolvable.

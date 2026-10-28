@@ -7,6 +7,35 @@ import { readFileSync } from 'node:fs';
 
 const now = 1793016000;
 
+test('event corrections keep originals, reject stale revisions and change only effective results', async () => {
+    const data=dataset(now), f=setup(new Map(),data); await f.login();
+    const c=data.campaigns.find(c=>c.header.status==='Completed');
+    const r=c.results.find(r=>r.events.some(e=>e.kind==='Clicked Link'));
+    const e=r.events.find(e=>e.kind==='Clicked Link');
+    const path=`/api/campaigns/${c.header.id}/recipients/${r.id}/events`;
+    const body={request_id:'demo-event-correction-key',event_id:e.id,revision:0,action:'exclude',value:null};
+    const before=(await f.request(`/api/campaigns/${c.header.id}/results`)).value;
+    const saved=await f.request(path,'POST',body);
+    assert.equal(saved.status,200); assert.equal(saved.value.excluded,true); assert.equal(saved.value.source,e.source);
+    assert.deepEqual((await f.request(path,'POST',body)).value,saved.value);
+    assert.equal((await f.request(path,'POST',{...body,request_id:'demo-event-conflict-key'})).status,412);
+    const after=(await f.request(`/api/campaigns/${c.header.id}/results`)).value;
+    assert.equal(after.totals.clicked,before.totals.clicked-1);
+    const audit=(await f.request(`${path}/${e.id}`)).value;
+    assert.equal(audit.audit.length,1); assert.equal(audit.record.original.kind.value,'link_clicked');
+    const restored=await f.request(path,'POST',{...body,request_id:'demo-event-restore-key',revision:1,action:'restore'});
+    assert.equal(restored.value.excluded,false);
+    const add={request_id:'demo-event-add-key',event_id:null,revision:0,action:'add',value:{time:e.time,kind:'email_reported',presence:{username_present:null,password_present:null}}};
+    const added=await f.request(path,'POST',add); assert.equal(added.status,200); assert.equal(added.value.source,'operator');
+    assert.deepEqual((await f.request(path,'POST',add)).value,added.value);
+    assert.equal((await f.request(path,'POST',{...add,request_id:'demo-event-private-key',value:{...add.value,presence:{password:'forbidden'}}})).status,400);
+    const edit={request_id:'demo-event-type-key',event_id:added.value.id,revision:1,action:'edit',value:{time:e.time,kind:'link_clicked',presence:{}}};
+    assert.equal((await f.request(path,'POST',edit)).status,200);
+    const effective=(await f.request(`/api/campaigns/${c.header.id}/results?source=operator`)).value.events;
+    assert.equal(effective.find(e=>e.id===added.value.id).password_present,null);
+    assert.equal(c.header.status,'Completed');
+});
+
 test('configured resources and the demo starter picker use the existing authored starters', async () => {
     const f = setup(); await f.login();
     const catalog = (await f.request('/api/starter-templates/')).value;
@@ -172,7 +201,7 @@ test('event downloads share exclusive time bounds and retain the event schema wh
         return (await f.request('/api/import/group/review', 'POST', { content: await response.text(), columns: ['Email', 'Event', 'Time (UTC)', 'Password present'] })).value;
     };
     const before = await download(`until=${at}`), during = await download(`from=${at}&until=${at + 1}`);
-    assert.deepEqual(before.columns, ['Event ID', 'Recipient ID', 'Email', 'Time (UTC)', 'Event', 'Source', 'Password present']);
+    assert.deepEqual(before.columns, ['Event ID', 'Recipient ID', 'Email', 'Time (UTC)', 'Event', 'Source', 'Password present', 'Correction revision']);
     assert.deepEqual(before.targets, []);
     assert.deepEqual(during.targets, [{ email: 'person001@example.test', first_name: 'Email Sent', last_name: firstEvent.time, position: '' }]);
     const analysis = await f.request(`/api/campaigns/3/results?recipient=30001&from=${at}&until=${at + 1}`);

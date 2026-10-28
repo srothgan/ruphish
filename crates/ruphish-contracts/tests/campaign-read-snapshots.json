@@ -168,7 +168,8 @@
         "password_present": true,
         "recipient_id": 1,
         "source": "legacy",
-        "time": "2026-10-19T13:29:09Z"
+        "time": "2026-10-19T13:29:09Z",
+        "revision": 0
       },
       {
         "email": "browser@example.test",
@@ -180,7 +181,8 @@
         "password_present": null,
         "recipient_id": 1,
         "source": "legacy",
-        "time": "2026-10-19T13:26:28Z"
+        "time": "2026-10-19T13:26:28Z",
+        "revision": 0
       },
       {
         "email": "browser@example.test",
@@ -192,7 +194,8 @@
         "password_present": null,
         "recipient_id": 1,
         "source": "legacy",
-        "time": "2026-10-19T13:24:43Z"
+        "time": "2026-10-19T13:24:43Z",
+        "revision": 0
       },
       {
         "email": "browser@example.test",
@@ -204,7 +207,8 @@
         "password_present": null,
         "recipient_id": 1,
         "source": "legacy",
-        "time": "2026-10-19T13:18:43Z"
+        "time": "2026-10-19T13:18:43Z",
+        "revision": 0
       },
       {
         "email": "",
@@ -216,7 +220,8 @@
         "password_present": null,
         "recipient_id": null,
         "source": "legacy",
-        "time": "2026-10-19T13:18:42Z"
+        "time": "2026-10-19T13:18:42Z",
+        "revision": 0
       }
     ],
     "id": 1,

@@ -415,6 +415,7 @@ fn detail(api: Api, id: i64, recipient: Option<i64>) -> impl IntoView {
                         <option value="">{tr!(ui.all_sources)}</option>
                         <option value="public">{tr!(ui.public_tracking)}</option>
                         <option value="mailbox">{tr!(ui.reporting_mailbox)}</option>
+                        <option value="operator">{tr!(ui.event_operator)}</option>
                         <option value="application">{tr!(ui.application)}</option>
                         <option value="legacy">{tr!(ui.legacy_history)}</option>
                     </Select> <Field label=trs!(ui.from)>

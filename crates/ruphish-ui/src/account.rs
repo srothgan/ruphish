@@ -411,6 +411,7 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         .is_some_and(|u| u.permissions.iter().any(|p| p == "modify_system"));
     let required = user.as_ref().is_some_and(|u| u.password_change_required);
     let token = StoredValue::new(session.csrf_token.clone());
+    provide_context(crate::event_table::Csrf(token));
     let message = Message::new(String::new());
     let actor = session.actor.clone();
     let active = actor.is_some();

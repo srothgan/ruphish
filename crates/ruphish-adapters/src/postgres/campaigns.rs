@@ -195,13 +195,14 @@ async fn load_aggregate(
         });
     }
     let mut events = Vec::new();
-    for e in sqlx::query("SELECT * FROM event_history WHERE campaign_id=$1 ORDER BY id")
+    for e in sqlx::query("SELECT * FROM effective_event_history WHERE campaign_id=$1 ORDER BY id")
         .bind(id)
         .fetch_all(&mut *c)
         .await
         .map_err(storage)?
     {
         events.push(Event {
+            correction: None,
             recipient_id: e.try_get("recipient_id").map_err(storage)?,
             id: e.try_get("id").map_err(storage)?,
             email: text(&e, "email")?,
@@ -484,6 +485,7 @@ impl Repository for Campaigns {
             "DELETE FROM ruphish_campaign_domains WHERE campaign_id=$1",
             "DELETE FROM ruphish_campaign_policy WHERE campaign_id=$1",
             "DELETE FROM ruphish_campaign_groups WHERE campaign_id=$1",
+            "DELETE FROM ruphish_event_changes WHERE campaign_id=$1",
             "DELETE FROM events WHERE campaign_id=$1",
             "DELETE FROM results WHERE campaign_id=$1",
             "DELETE FROM mail_logs WHERE campaign_id=$1",
@@ -616,7 +618,7 @@ impl Repository for Campaigns {
         }
         let mut activity = Vec::new();
         for e in sqlx::query(
-            "SELECT * FROM event_history WHERE campaign_id=$1 ORDER BY id DESC LIMIT 50",
+            "SELECT * FROM effective_event_history WHERE campaign_id=$1 ORDER BY id DESC LIMIT 50",
         )
         .bind(id)
         .fetch_all(&mut *tx)
@@ -624,6 +626,7 @@ impl Repository for Campaigns {
         .map_err(storage)?
         {
             activity.push(Event {
+                correction: None,
                 recipient_id: e.try_get("recipient_id").map_err(storage)?,
                 id: e.try_get("id").map_err(storage)?,
                 email: text(&e, "email")?,
@@ -672,13 +675,25 @@ impl Repository for Campaigns {
         rows.truncate(100);
         let mut events = Vec::new();
         for e in rows {
+            let record = super::event_edit::load(
+                &mut tx,
+                campaign,
+                result,
+                e.try_get("id").map_err(storage)?,
+            )
+            .await?;
             events.push(Event {
+                correction: Some(record.clone()),
                 recipient_id: e.try_get("recipient_id").map_err(storage)?,
                 id: e.try_get("id").map_err(storage)?,
                 email: text(&e, "email")?,
-                time: text(&e, "time")?,
-                message: text(&e, "message")?,
-                details: crate::participant_privacy::details(&text(&e, "details")?),
+                time: record.current.time.clone(),
+                message: record.current.kind.label().to_owned(),
+                details: if record.revision > 0 {
+                    crate::event_edit::details(&record.current)?
+                } else {
+                    crate::participant_privacy::details(&text(&e, "details")?)
+                },
             });
         }
         tx.commit()

@@ -20,7 +20,7 @@ const CTE: &str = r#"WITH parameters AS (SELECT $1::bigint AS campaign, $2::bigi
  WHERE r.campaign_id=(SELECT campaign FROM parameters) AND ((SELECT recipient FROM parameters) IS NULL OR r.id=(SELECT recipient FROM parameters)) AND ((SELECT search FROM parameters)='' OR strpos(lower(CONCAT(r.email,' ',COALESCE(r.first_name,''),' ',COALESCE(r.last_name,''))),lower((SELECT search FROM parameters)))>0)
  AND (cardinality((SELECT ids FROM parameters))=0 OR r.id=ANY((SELECT ids FROM parameters)::bigint[]))
 ), observed AS (
- SELECT e.* FROM event_history e
+ SELECT e.* FROM effective_event_history e
  LEFT JOIN audience a ON a.id=e.recipient_id
  WHERE e.campaign_id=(SELECT campaign FROM parameters) AND ((SELECT since FROM parameters) IS NULL OR (CASE WHEN e.time>='1000' THEN floor(extract(epoch FROM e.time::timestamptz))::bigint END)>=(SELECT since FROM parameters)) AND ((SELECT until_time FROM parameters) IS NULL OR (CASE WHEN e.time>='1000' THEN floor(extract(epoch FROM e.time::timestamptz))::bigint END)<(SELECT until_time FROM parameters))
  AND ((SELECT event_kind FROM parameters)='' OR e.message=(SELECT event_kind FROM parameters)) AND ((SELECT source_filter FROM parameters)='' OR e.source=(SELECT source_filter FROM parameters))
@@ -186,6 +186,7 @@ impl Snapshots for Reports {
                 serde_json::from_str(&crate::participant_privacy::details(&details))
                     .unwrap_or_default();
             events.push(Event {
+                revision: r.try_get("revision").map_err(storage)?,
                 id: r.try_get("id").map_err(storage)?,
                 recipient_id: r.try_get("recipient_id").map_err(storage)?,
                 email: r.try_get("email").map_err(storage)?,

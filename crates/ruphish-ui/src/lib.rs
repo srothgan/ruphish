@@ -60,3 +60,5 @@ pub mod display_preferences;
 pub mod local_storage;
 pub mod starter_names;
 pub mod starter_selection;
+
+pub mod event_editor;

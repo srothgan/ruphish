@@ -1,7 +1,5 @@
 //! Stable recipient rows with an independently loaded, expandable history panel.
-use crate::shared::components::{
-    ActionButton, ButtonStyle, DataTable, StatusBadge, StatusTone, TableSorting,
-};
+use crate::shared::components::{ActionButton, ButtonStyle, StatusBadge, StatusTone};
 use crate::{
     account::copy_text,
     campaigns::{array, text},
@@ -33,32 +31,66 @@ fn fetch(
     let Some((request, query)) = request else {
         return;
     };
+    let previous_newest = history.with_untracked(|h| h.events.last_key_value().map(|(id, _)| *id));
+    let cursors = if older {
+        Vec::new()
+    } else {
+        history.with_untracked(|h| {
+            h.events
+                .keys()
+                .rev()
+                .copied()
+                .collect::<Vec<_>>()
+                .chunks(100)
+                .filter_map(|page| page.first().and_then(|id| id.checked_add(1)))
+                .collect::<Vec<_>>()
+        })
+    };
     tasks.spawn(async move {
-        let response = api
-            .get(&format!(
-                "/api/campaigns/{}/recipients/{result}/history{query}",
+        let read = async {
+            let path = format!(
+                "/api/campaigns/{}/recipients/{result}/history",
                 campaign.get_value()
-            ))
-            .await
-            .map_err(|e| {
-                if e.is_terminal() {
-                    history.update(|h| {
-                        h.events.clear();
-                        h.attempts.clear();
-                        h.next_event = None;
-                        h.next_attempt = None;
-                    });
+            );
+            let mut value: ruphish_contracts::campaign_reads::History =
+                api.read(&format!("{path}{query}")).await?;
+            if value.result_id != result {
+                return Err(api.invalid_read_err());
+            }
+            let gap = value
+                .events
+                .iter()
+                .map(|e| e.id)
+                .min()
+                .zip(previous_newest)
+                .is_some_and(|(oldest, previous)| oldest > previous);
+            // Revalidate already loaded pages by their saved IDs. A burst of new
+            // observations cannot turn a refresh into an unbounded history walk.
+            for cursor in cursors {
+                let page: ruphish_contracts::campaign_reads::History = api
+                    .read(&format!("{path}?before_attempt=0&before_event={cursor}"))
+                    .await?;
+                if page.result_id != result {
+                    return Err(api.invalid_read_err());
                 }
-                e.message
-            })
-            .and_then(|value| {
-                let value: ruphish_contracts::campaign_reads::History =
-                    serde_json::from_value(value).map_err(|_| api.invalid_read())?;
-                if value.result_id != result {
-                    return Err(api.invalid_read());
-                }
-                serde_json::to_value(value).map_err(|_| api.invalid_read())
-            });
+                value.events.extend(page.events);
+            }
+            let mut value = serde_json::to_value(value).map_err(|_| api.invalid_read_err())?;
+            value["refresh_event_gap"] = gap.into();
+            Ok(value)
+        }
+        .await;
+        let response = read.map_err(|e| {
+            if e.is_terminal() {
+                history.update(|h| {
+                    h.events.clear();
+                    h.attempts.clear();
+                    h.next_event = None;
+                    h.next_attempt = None;
+                });
+            }
+            e.message
+        });
         history.update(|h| h.finish(request, response));
     });
 }
@@ -209,11 +241,6 @@ pub(super) fn recipient_detail(
             ruphish_ui::query::document_visible(),
         );
     let tasks = ruphish_ui::view_tasks::ViewTasks::default();
-    let sorting = TableSorting::new(
-        "recipient-history-events",
-        "time",
-        ruphish_domain::reporting::SortDirection::Desc,
-    );
     let attempts = Memo::new(move |_| history.with(|h| h.attempts.clone()));
     let copy_message = RwSignal::new(String::new());
     let open = Memo::new(move |_| history.with(|h| h.open));
@@ -302,48 +329,7 @@ pub(super) fn recipient_detail(
             <div class="recipient-history-columns">
                 <section>
                     <h4>{tr!(ui.recipient_events)}</h4>
-                    <DataTable
-                        sorting=sorting
-                        columns=vec!["time", "message", ""]
-                        label=trs!(ui.recipient_events)
-                        headers=vec![trs!(ui.time), trs!(ui.event), trs!(ui.details)]
-                    >
-                        {move || {
-                            sorting
-                                .json(
-                                    history
-                                        .with(|h| h.events.values().cloned().collect::<Vec<_>>()),
-                                    &["time"],
-                                )
-                                .into_iter()
-                                .map(|event| {
-                                    view! {
-                                        <tr>
-                                            <td>{instant(&event["time"])}</td>
-                                            <td>
-                                                {ruphish_ui::localization::event_label(
-                                                    i18n,
-                                                    &text(&event, "message"),
-                                                )}
-                                            </td>
-                                            <td>
-                                                {serde_json::from_str::<Value>(&text(&event, "details"))
-                                                    .ok()
-                                                    .and_then(|v| v["password_present"].as_bool())
-                                                    .map(|v| {
-                                                        if v {
-                                                            leptos_i18n::t_string!(i18n, ui.password_field_was_nonempty)
-                                                        } else {
-                                                            leptos_i18n::t_string!(i18n, ui.password_field_was_empty)
-                                                        }
-                                                    })}
-                                            </td>
-                                        </tr>
-                                    }
-                                })
-                                .collect_view()
-                        }}
-                    </DataTable>
+                    {crate::event_table::table(api, campaign, result, history)}
                     <Show when=move || {
                         !history.with(History::loading)
                             && history.with(|h| h.error.is_none() && h.events.is_empty())

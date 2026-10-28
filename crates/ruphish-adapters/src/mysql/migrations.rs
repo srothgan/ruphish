@@ -70,6 +70,13 @@ fn migrator() -> Migrator {
                 include_str!("../../migrations/mysql/7_learning_pages.sql").into_sql_str(),
                 false,
             ),
+            Migration::new(
+                8,
+                Cow::Borrowed("event corrections"),
+                MigrationType::Simple,
+                include_str!("../../migrations/mysql/8_event_corrections.sql").into_sql_str(),
+                false,
+            ),
         ]),
         locking: false,
         ..Migrator::DEFAULT
@@ -293,6 +300,11 @@ fn current_tables() -> BTreeSet<String> {
     ]);
     tables.insert("ruphish_learning_pages".into());
     tables.insert("event_history".into());
+    tables.extend([
+        "ruphish_event_changes".into(),
+        "ruphish_event_records".into(),
+        "effective_event_history".into(),
+    ]);
     tables
 }
 async fn validate_current(c: &mut MySqlConnection) -> Result<(), Error> {
@@ -323,7 +335,7 @@ async fn validate_current(c: &mut MySqlConnection) -> Result<(), Error> {
     if actual != allowed {
         return Err(Error::UnsupportedSchema);
     }
-    let customized:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE()) OR EXISTS(SELECT 1 FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE()) OR EXISTS(SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND (ENGINE<>'InnoDB' OR (TABLE_TYPE<>'BASE TABLE' AND TABLE_NAME NOT IN ('event_history','ruphish_domain_policy'))))").fetch_one(&mut *c).await.map_err(storage_error)?;
+    let customized:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE()) OR EXISTS(SELECT 1 FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE()) OR EXISTS(SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND (ENGINE<>'InnoDB' OR (TABLE_TYPE<>'BASE TABLE' AND TABLE_NAME NOT IN ('event_history','ruphish_domain_policy','ruphish_event_records','effective_event_history'))))").fetch_one(&mut *c).await.map_err(storage_error)?;
     if customized {
         return Err(Error::UnsupportedSchema);
     }
@@ -352,6 +364,21 @@ async fn validate_current(c: &mut MySqlConnection) -> Result<(), Error> {
         &schema,
     ) {
         return Err(Error::UnsupportedSchema);
+    }
+    for (name, expected) in [
+        (
+            "ruphish_event_records",
+            include_str!("ruphish_event_records.sql"),
+        ),
+        (
+            "effective_event_history",
+            include_str!("effective_event_history.sql"),
+        ),
+    ] {
+        let actual: String = sqlx::query_scalar("SELECT VIEW_DEFINITION FROM information_schema.VIEWS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?").bind(name).fetch_one(&mut *c).await.map_err(storage_error)?;
+        if actual.replace(&format!("`{schema}`."), "").trim() != expected.trim() {
+            return Err(Error::UnsupportedSchema);
+        }
     }
     Ok(())
 }

@@ -490,6 +490,44 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
     assert_eq!(last["message"], "Clicked Link");
     assert_eq!(last["time"], clicked["results"][0]["modified_date"]);
     let html = view.text().unwrap();
+    let recipient = get(
+        &admin,
+        &format!("/api/campaigns/{}/results", campaign["id"]),
+    )["recipients"][0]["id"]
+        .as_i64()
+        .unwrap();
+    let history = get(
+        &admin,
+        &format!(
+            "/api/campaigns/{}/recipients/{recipient}/history",
+            campaign["id"]
+        ),
+    );
+    let event = history["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["message"] == "Clicked Link")
+        .unwrap();
+    let correction=client().post(format!("{admin}/api/campaigns/{}/recipients/{recipient}/events",campaign["id"]))
+        .bearer_auth("synthetic-bootstrap-token").json(&json!({"request_id":"real-public-click-correction","event_id":event["id"],"revision":0,"action":"exclude","value":null})).send().unwrap();
+    assert_eq!(correction.status(), 200, "{}", correction.text().unwrap());
+    assert_eq!(
+        get(
+            &admin,
+            &format!("/api/campaigns/{}/results", campaign["id"])
+        )["totals"]["clicked"],
+        0
+    );
+    assert_eq!(browser.get(&url).send().unwrap().status(), 200);
+    assert_eq!(
+        get(
+            &admin,
+            &format!("/api/campaigns/{}/results", campaign["id"])
+        )["totals"]["clicked"],
+        1,
+        "A new real landing request contributes independently of the excluded observation"
+    );
     assert!(html.contains("name=\"password\""));
     assert!(!html.contains("authoredCanary"));
     assert_eq!(
