@@ -16,6 +16,7 @@ macro_rules! email {
             name: $name,
             brand: $brand,
             html: include_str!(concat!("../starter-templates/emails/", $id, "/email.html")),
+            script: None,
             kind: Kind::Email,
             subject: include_str!(concat!("../starter-templates/emails/", $id, "/subject.txt")),
             text: include_str!(concat!("../starter-templates/emails/", $id, "/email.txt")),
@@ -25,6 +26,9 @@ macro_rules! email {
 }
 macro_rules! page {
     ($id:literal, $brand:literal, $name:literal, $logo:expr) => {
+        page!($id, $brand, $name, $logo, None)
+    };
+    ($id:literal, $brand:literal, $name:literal, $logo:expr, $script:expr) => {
         Source {
             id: concat!("page-", $id),
             name: $name,
@@ -35,6 +39,7 @@ macro_rules! page {
                 "/landing.html"
             )),
             kind: Kind::LandingPage,
+            script: $script,
             subject: "",
             text: "",
             logo: $logo,
@@ -54,6 +59,7 @@ macro_rules! learning {
                 "/learning.html"
             )),
             kind: Kind::LearningPage,
+            script: None,
             subject: "",
             text: "",
             logo: Some((".learning-logo", 48, "Learning page header")),
@@ -64,6 +70,63 @@ macro_rules! learning {
 // These files are part of the executable, including future binary/container builds.
 // No runtime filesystem lookup, remote service, mutable registry or database linkage.
 const CATALOG: &[Source] = &[
+    email!(
+        "onedrive-document-invitation",
+        "Microsoft",
+        "OneDrive - Document sharing invitation (EN)"
+    ),
+    email!(
+        "google-drive-document-invitation",
+        "Google",
+        "Google Drive - Document sharing invitation (EN)"
+    ),
+    email!(
+        "dropbox-file-invitation",
+        "Dropbox",
+        "Dropbox - File sharing invitation (EN)"
+    ),
+    page!(
+        "onedrive-shared-document",
+        "Microsoft",
+        "OneDrive / SharePoint - Shared document",
+        Some((".microsoft", 36, "Entra company branding")),
+        Some(include_str!("starter_templates/interaction.js"))
+    ),
+    page!(
+        "google-drive-shared-document",
+        "Google",
+        "Google Drive - Shared document",
+        None,
+        Some(include_str!("starter_templates/interaction.js"))
+    ),
+    page!(
+        "dropbox-shared-file",
+        "Dropbox",
+        "Dropbox - Shared file",
+        None,
+        Some(include_str!("starter_templates/interaction.js"))
+    ),
+    page!(
+        "microsoft-two-step",
+        "Microsoft",
+        "Microsoft Entra - Two-step sign-in",
+        Some((".microsoft", 36, "Entra company branding")),
+        Some(include_str!("starter_templates/interaction.js"))
+    ),
+    page!(
+        "microsoft-two-step-side-panel",
+        "Microsoft",
+        "Microsoft Entra - Two-step sign-in (side panel)",
+        Some((".microsoft", 36, "Entra company branding")),
+        Some(include_str!("starter_templates/interaction.js"))
+    ),
+    page!(
+        "google-workspace-two-step",
+        "Google",
+        "Google Workspace - Two-step sign-in",
+        None,
+        Some(include_str!("starter_templates/interaction.js"))
+    ),
     email!(
         "microsoft-shared-document",
         "Microsoft",

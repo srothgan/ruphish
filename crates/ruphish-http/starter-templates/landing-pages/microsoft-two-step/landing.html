@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><title>Sign in to your account</title>
+<!-- Independent simulation layout. See interactive-references.md for upstream references and adaptation boundaries. Existing embedded logo provenance remains in licenses/sources.json. -->
+<style>* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; color: #1b1b1b; font: 15px/1.5 "Segoe UI", Arial, sans-serif; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; opacity: .65; }
+button:focus-visible, input:focus-visible { outline: 2px solid #0067b8; outline-offset: 3px; }
+fieldset { min-inline-size: 0; border: 0; padding: 0; margin: 0; }
+.page { min-height: 100vh; display: flex; flex-direction: column; }
+.login-area { flex: 1; display: grid; place-items: center; padding: 48px 24px; }
+.login { width: 100%; max-width: 440px; padding: 44px; background: #fff; box-shadow: 0 2px 6px #0003; }
+.brand { display: flex; align-items: center; gap: 8px; font-size: 21px; line-height: 24px; font-weight: 600; color: #737373; }
+.brand img { display: block; width: 24px; height: 24px; }
+h1 { font-size: 24px; line-height: 1.3; font-weight: 600; margin: 22px 0 12px; }
+.intro { margin: 0 0 16px; }
+.field { margin: 18px 0 8px; }
+.field label { display: block; font-size: 13px; margin-bottom: 4px; }
+.field input { width: 100%; height: 38px; border: 0; border-bottom: 1px solid #666; border-radius: 0; padding: 6px 0; background: #fff; color: inherit; }
+.actions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; margin-top: 28px; }
+.primary { min-width: 108px; min-height: 36px; padding: 7px 16px; border: 1px solid #0067b8; background: #0067b8; color: #fff; }
+.primary:hover { background: #005da6; }
+.text-button { padding: 6px 0; border: 0; background: transparent; color: #0067b8; text-align: left; }
+.account-row { display: flex; align-items: center; gap: 8px; margin: 18px 0 0; }
+.account-row [data-account] { overflow-wrap: anywhere; }
+.back { flex: 0 0 auto; width: 30px; min-height: 30px; border: 0; background: transparent; color: inherit; font-size: 22px; }
+.back:hover { background: #eee; border-radius: 50%; }
+.reveal { display: flex; gap: 9px; align-items: center; margin-top: 16px; font-size: 13px; }
+.reveal input { width: 18px; height: 18px; margin: 0; accent-color: #0067b8; }
+.footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 20px; padding: 12px 24px; font-size: 12px; color: #555; }
+.footer a { color: inherit; text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
+[data-failure] { color: #b10e1e; }
+.form-notice { font-size: 13px; }
+.noscript { margin: 16px; padding: 16px; background: #fff; color: #b10e1e; }
+@media (max-width: 600px) { .login-area { padding: 24px; align-items: start; } .login { padding: 16px 0; box-shadow: none; } body { background: #fff !important; } .footer { justify-content: flex-start; } }
+body { background: #f2f2f2; }
+.ms-side .login-area { grid-template-columns: minmax(0, 1fr) 460px; padding: 0; align-items: stretch; }
+.ms-side .side-art { background: linear-gradient(135deg, #e4eaf0, #dce6e9 55%, #eef0ee); min-height: 100%; }
+.ms-side .login { max-width: none; box-shadow: none; padding: 100px 48px 48px; }
+.ms-side .footer { background: #fff; }
+@media (max-width: 760px) { .ms-side .side-art { display: none; } .ms-side .login-area { display: grid; grid-template-columns: 1fr; place-items: center; padding: 24px; } .ms-side .login { max-width: 440px; padding: 28px; } }
+
+.account-row:has([data-account][hidden]) { display: none; }
+</style></head><body class="ms">
+<main class="page" data-login-flow="two-step" data-identifier-title="Sign in" data-password-title="Enter password"><div class="login-area"><section class="login" data-login aria-label="Account sign-in"><div class="brand microsoft"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAENSURBVHhe7dyxCcJgFEbRPw4guIITOYC7uIwD2OowriC4QGwlhWCTS+Cc8nWP23/T+3Scx4bsb89peft2eYxN/bNbHliXADEBYgLEBIgJEBMgJkBMgJgAMQFiAsQEiAkQEyAmQEyAmAAxAWICxASICRATICZATICYADEBYgLEBIgJEBMgJkBMgJgAMQFiAsQEiAkQEyAmQEyAmAAxAQAAAFY2jetrUxtr43z4uRk3323G8QcBYgLEBIgJEBMgJkBMgJgAMQFiAsQEiAkQEyAmQEyAmAAxAWICxASICRATICZATICYADEBYgLEBIgJEBMgJkBMgJgAMQFiAsQEiAkQEyAmQEyAmAAxAWICxD6l3AyeLyC7VgAAAABJRU5ErkJggg==" alt="Microsoft" width="48" height="48"><span>Microsoft</span></div><div class="columns"><div><div class="account-row"><button class="back" type="button" data-back aria-label="Use another account">&#8592;</button><span data-account hidden></span></div><h1 data-title>Sign in</h1><p class="intro" data-identifier-copy>Use your work or school account.</p></div><form><fieldset data-identifier><div class="field"><label for="email">Email address</label><input id="email" name="username" type="email" value="" autocomplete="username" required></div><div class="actions"><button class="primary" type="submit" data-next>Next</button></div></fieldset><fieldset data-credential disabled hidden><div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><label class="reveal"><input type="checkbox" data-reveal>Show password</label><div class="actions"><button class="primary" type="submit" data-final>Sign in</button></div></fieldset><p class="form-notice" data-failure role="alert" hidden>This page could not submit. Reload the page and try again.</p></form></div></section></div>
+<footer class="footer"><span>English (United States)</span><span>Privacy</span><span>Terms</span></footer></main><noscript><p class="noscript">JavaScript is required to continue.</p></noscript>
+</body></html>

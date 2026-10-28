@@ -44,6 +44,14 @@ Keep the admin campaign view open alongside DevTools Network on the public page.
 10. Exercise custom validation, `type="button"` intermediate steps, dynamic fields and final `window.ruphish.submit(form)`. Cancelled submit events must not be tracked; a final accepted event must use the same presence-only body and retry semantics. In editor/starter/test-email previews, scripts run but built-in submissions show preview feedback and create no events or campaign redirects. Source editing and saved-source overview remain inert.
 11. Import a ZIP with root `index.html`, a script, images and nested CSS/font dependencies. Review and save; verify source preservation after editing, duplication, export/import and reload. Check external resources with controlled endpoints and appropriate CORS, then test missing dependencies and unavailable remote assets. No import may silently substitute unrelated content or claim missing assets were packaged.
 
+## Interactive starter templates
+
+- Confirm the catalog offers 25 landing pages and 23 emails, including six new interactive pages and three matching document invitations. Existing entries must remain independently selectable.
+- Preview each new page at desktop and narrow widths. Check logo placement, readable file cards, labels, keyboard focus, native required-field feedback and the Microsoft side-panel layout. Compare the intended compositions with the [reference notes](../../../crates/ruphish-http/starter-templates/interactive-references.md); no automated test establishes visual fidelity.
+- Open each document card, continue from email to password where applicable, reveal the synthetic password and go back. The password must clear while the email remains. Use Enter in both steps and confirm it activates the current action. Repeat with recipient-email prefill and supported company-logo options, then add a copy and reopen its editor preview.
+- Verify intermediate actions create no submission requests. Final submission must show preview feedback in previews and send only the collector's presence-only payload in a synthetic campaign. Repeated clicks must not create duplicate submissions. Interrupt final delivery and recover with **Retry this submission**; close and reopen a completed preview to restart.
+- Preview the three new invitation emails in HTML and plain text. Confirm sender and filename match the corresponding landing card and the campaign link opens that page. Edit both independent copies when customizing those details.
+
 ## Record the boundary
 
 A passing direct HTTP test cannot prove browser sandbox enforcement or that a browser sent no entered values. Inspect built-in collector requests separately from authored code and configured reverse-proxy behavior. Arbitrary authored code can read or transmit input; its requests are outside the collector guarantee. Retain synthetic evidence without publishing credentials, tokens or fixture secrets.

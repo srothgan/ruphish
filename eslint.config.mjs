@@ -71,4 +71,8 @@ export default [
       globals: { ...globals.browser, endpoint: 'readonly', messages: 'readonly' },
     },
   },
+  {
+    files: ['crates/ruphish-http/src/starter_templates/interaction.js'],
+    languageOptions: { sourceType: 'script', globals: globals.browser },
+  },
 ];

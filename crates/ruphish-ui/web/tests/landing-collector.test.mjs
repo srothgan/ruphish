@@ -11,6 +11,10 @@ const source = await readFile(
   new URL('../../../ruphish-adapters/src/landing-collector.js', import.meta.url),
   'utf8',
 );
+const starterInteraction = await readFile(
+  new URL('../../../ruphish-http/src/starter_templates/interaction.js', import.meta.url),
+  'utf8',
+);
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 const ok = () => ({ ok: true, json: async () => ({ success: true }) });
 function page(
@@ -46,6 +50,9 @@ test('every shipped starter login reports presence only, including prefill and c
   const brands = new Map([
     ['microsoft-full-screen', '.microsoft'],
     ['microsoft-side-panel', '.microsoft'],
+    ['microsoft-two-step', '.microsoft'],
+    ['microsoft-two-step-side-panel', '.microsoft'],
+    ['onedrive-shared-document', '.microsoft'],
     ['zoom', '.masthead'],
     ['salesforce', 'img.logo'],
     ['workday', '.brand'],
@@ -67,7 +74,16 @@ test('every shipped starter login reports presence only, including prefill and c
       for (const variant of variants) {
         const p = page(variant);
         try {
+          if (p.window.document.querySelector('[data-login-flow]')) {
+            p.window.eval(starterInteraction);
+            p.window.document.querySelector('[data-open]')?.click();
+          }
           p.form.querySelector('input[type=email]').value = 'USERNAME-CANARY@example.test';
+          if (p.window.document.querySelector('[data-login-flow="two-step"]')) {
+            submit(p);
+            await tick();
+            assert.equal(p.requests.length, 0, `${slug}: identifier is local`);
+          }
           p.form.querySelector('input[type=password]').value = 'PASSWORD-CANARY';
           submit(p);
           await tick();
