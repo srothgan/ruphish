@@ -926,7 +926,7 @@ export function createDemoApi({
       method === 'POST'
     ) {
       return json({
-        html: '<h1>Sample preview</h1><p>The public demo displays sample content. Submitted content is not sent to a server.</p>',
+        html: body.html,
         warnings: [],
       });
     }

@@ -445,6 +445,14 @@ test('the full starter catalog is independent of the preloaded sample resources'
     assert.equal(typeof entry.resource.html, 'string');
     assert.equal('id' in entry.resource, false);
     assert.equal('modified_date' in entry.resource, false);
+    const previewPath = {
+      email: '/api/util/preview',
+      landing_page: '/api/pages/preview',
+      learning_page: '/api/learning-pages/preview',
+    }[row.kind];
+    const preview = await f.request(previewPath, 'POST', { html: entry.resource.html });
+    assert.equal(preview.status, 200, row.id);
+    assert.equal(preview.value.html, entry.resource.html, row.id);
   }
   assert.equal((await f.request('/api/starter-templates/not-found')).status, 404);
   for (const [family, id, source] of [
