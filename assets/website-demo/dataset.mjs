@@ -1,6 +1,6 @@
 // Shared synthetic scenario. No SQL, network, credentials, or submitted user content.
 import source from './data.json' with { type: 'json' };
-import { starterContent } from './starter-content.mjs';
+import { starterCatalog } from '../../crates/ruphish-http/src/starter_templates/catalog.mjs';
 import { DAY, campaignTiming, recipientOutcomes, recipientHistory } from './timing.mjs';
 
 export { DAY };
@@ -31,25 +31,25 @@ export function dataset(now) {
     resource('New starters', 4, { targets: recipients.slice(0, 12) }),
     resource('Next exercise audience', 5, { targets: [] }),
   );
-  const templates = source.templates.map((entry, i) =>
-    resource(entry.name, i, {
-      ...starterContent.templates[i],
-      envelope_sender: '',
-      attachments: [],
-    }),
-  );
-  const pages = source.pages.map((entry, i) =>
-    resource(entry.name, i, {
-      ...starterContent.pages[i],
-      ...policy,
-    }),
-  );
-  const learning = source.learning_pages.map((entry, i) =>
-    resource(entry.name, i, {
-      public_id: String(i + 1).padStart(32, '0'),
-      ...starterContent.learning_pages[i],
-    }),
-  );
+  const starter = (id, kind) => {
+    const entry = starterCatalog.find((entry) => entry.summary.id === id);
+    if (!entry || entry.summary.kind !== kind) {
+      throw new Error(`Invalid sample resource: ${id}`);
+    }
+    return structuredClone(entry.resource);
+  };
+  const templates = source.templates.map((id, i) => {
+    const content = starter(id, 'email');
+    return resource(content.name, i, { ...content, envelope_sender: '' });
+  });
+  const pages = source.pages.map((id, i) => {
+    const content = starter(id, 'landing_page');
+    return resource(content.name, i, { ...content, ...policy });
+  });
+  const learning = source.learning_pages.map((id, i) => {
+    const content = starter(id, 'learning_page');
+    return resource(content.name, i, { ...content, public_id: String(i + 1).padStart(32, '0') });
+  });
   const smtp = ['Awareness team', 'Training team'].map((name, i) =>
     resource(name, i, {
       interface_type: 'SMTP',
@@ -264,27 +264,6 @@ export function dataset(now) {
     campaign_id: null,
     status: 'draft',
   }));
-  const starters = [
-    ['templates', 'email', templates],
-    ['pages', 'landing_page', pages],
-    ['learning_pages', 'learning_page', learning],
-  ].flatMap(([family, kind, resources]) =>
-    source[family].map((entry, i) => ({
-      summary: {
-        id: `${{ email: 'email', landing_page: 'page', learning_page: 'learning' }[kind]}-${entry.starter}`,
-        name: entry.name,
-        brand: entry.brand,
-        kind,
-        prefill: kind === 'landing_page',
-        company_logo:
-          entry.company_logo ??
-          (kind === 'learning_page'
-            ? { selector: '.learning-logo', height: 48, context: 'Learning page header' }
-            : null),
-      },
-      resource: resources[i],
-    })),
-  );
   return {
     now,
     groups,
@@ -298,6 +277,5 @@ export function dataset(now) {
     'reporting-mailboxes': mailboxes,
     campaigns,
     drafts,
-    starters,
   };
 }

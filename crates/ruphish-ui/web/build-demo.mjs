@@ -2,7 +2,10 @@
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { readFile, writeFile } from 'node:fs/promises';
-import { starterContent, starterNotices } from '../../../assets/website-demo/starter-content.mjs';
+import {
+  starterCatalog,
+  starterNotices,
+} from '../../ruphish-http/src/starter_templates/catalog.mjs';
 await build({
   entryPoints: [fileURLToPath(new URL('./demo-http.mjs', import.meta.url))],
   outfile: fileURLToPath(new URL('./generated/demo.js', import.meta.url)),
@@ -16,12 +19,15 @@ await build({
   },
   plugins: [
     {
-      name: 'static-starter-content',
+      name: 'static-starter-catalog',
       setup(build) {
-        build.onLoad({ filter: /[\\/]assets[\\/]website-demo[\\/]starter-content\.mjs$/ }, () => ({
-          contents: `export const starterContent = ${JSON.stringify(starterContent)};`,
-          loader: 'js',
-        }));
+        build.onLoad(
+          { filter: /[\\/]ruphish-http[\\/]src[\\/]starter_templates[\\/]catalog\.mjs$/ },
+          () => ({
+            contents: `export const starterCatalog = ${JSON.stringify(starterCatalog)};`,
+            loader: 'js',
+          }),
+        );
       },
     },
   ],

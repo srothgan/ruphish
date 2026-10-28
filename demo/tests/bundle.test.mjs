@@ -34,6 +34,15 @@ test('the generated browser bundle logs in and reads real starter content withou
     };
     await read('/auth/login', { username: 'demo', password: 'demodemo' });
     assert.equal((await read('/auth/session')).user.username, 'demo');
+    const catalog = await read('/api/starter-templates/');
+    assert.equal(catalog.filter((row) => row.kind === 'email').length, 23);
+    assert.equal(catalog.filter((row) => row.kind === 'landing_page').length, 25);
+    assert.equal(catalog.filter((row) => row.kind === 'learning_page').length, 3);
+    const interactive = await read('/api/starter-templates/page-microsoft-two-step');
+    assert.match(interactive.resource.html, /<script data-starter-interaction>/);
+    assert.match(interactive.resource.html, /window\.ruphish\.submit\(form\)/);
+    const invitation = await read('/api/starter-templates/email-onedrive-document-invitation');
+    assert.match(invitation.resource.subject, /Project handover\.docx/);
     assert.match((await read('/api/templates/1')).html, /Microsoft/);
     assert.match((await read('/api/pages/1')).html, /Sign in to your account/);
     assert.match((await read('/api/learning-pages/1')).preview_html, /SLAM/);

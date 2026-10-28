@@ -1,3 +1,4 @@
+import { starterCatalog } from '../../ruphish-http/src/starter_templates/catalog.mjs';
 // Browser-only simulation of the existing wire contracts. No HTTP fallback or persistent resources.
 import { dataset, DAY, iso, policy, features } from '../../../assets/website-demo/dataset.mjs';
 import { exportResponse } from './demo-export.mjs';
@@ -955,7 +956,7 @@ export function createDemoApi({
       }
     }
     if (path.startsWith('/api/starter-templates') && method === 'GET') {
-      const entries = data.starters;
+      const entries = starterCatalog;
       if (path === '/api/starter-templates') {
         return json(entries.map((e) => e.summary));
       }

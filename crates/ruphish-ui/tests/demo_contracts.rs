@@ -94,6 +94,13 @@ fn demo_responses_decode_through_the_existing_contracts() {
     decode::<Vec<integrations::Mailbox>>(&values, "/api/reporting-mailboxes/");
     decode::<Vec<domains::Domain>>(&values, "/api/domains/");
     decode::<Vec<starter_templates::Summary>>(&values, "/api/starter-templates/");
+    for row in values["/api/starter-templates/"]
+        .as_array()
+        .expect("catalog")
+    {
+        let id = row["id"].as_str().expect("catalog ID");
+        decode::<starter_templates::Entry>(&values, &format!("/api/starter-templates/{id}"));
+    }
     decode::<resources::GroupSummaries>(&values, "/api/groups/summary");
     for (family, kind) in [
         ("groups", resource_details::Kind::Group),

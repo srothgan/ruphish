@@ -45,6 +45,7 @@ export default [
       'website/*.config.{js,mjs}',
       'website/tools/**/*.{js,mjs}',
       'crates/ruphish-ui/web/build*.mjs',
+      'crates/ruphish-http/src/starter_templates/catalog.mjs',
       'crates/ruphish-ui/web/tests/**/*.{js,mjs}',
     ],
     languageOptions: { globals: globals.node },

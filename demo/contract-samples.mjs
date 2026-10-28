@@ -45,6 +45,10 @@ for (const path of [
 ]) {
   responses[path] = await read(path);
 }
+for (const entry of responses['/api/starter-templates/']) {
+  const path = `/api/starter-templates/${entry.id}`;
+  responses[path] = await read(path);
+}
 for (const family of ['groups', 'templates', 'pages', 'learning-pages', 'smtp']) {
   for (const suffix of ['summary', '1']) {
     responses[`/api/${family}/${suffix}`] = await read(`/api/${family}/${suffix}`);
