@@ -134,18 +134,21 @@ export function analysis(campaign, query, now, paginate = true) {
       (!selected.size || selected.has(r.id)) &&
       (!search || `${r.email} ${r.first_name} ${r.last_name}`.toLocaleLowerCase().includes(search)),
   );
-  const events = results
+  const eligibleEvents = results
     .flatMap((r) => r.events)
     .filter((e) => {
       const at = Date.parse(e.time) / 1000;
-      return (
-        at >= from &&
-        at < until &&
-        (!selectedEvents.length || selectedEvents.includes(eventKinds[e.kind])) &&
-        (!query.get('source') || query.get('source') === e.source)
-      );
+      return at >= from && at < until && (!query.get('source') || query.get('source') === e.source);
     })
     .sort(byTime);
+  const matchingRecipients = new Set(
+    eligibleEvents
+      .filter((e) => selectedEvents.includes(eventKinds[e.kind]))
+      .map((e) => e.recipient_id),
+  );
+  const events = selectedEvents.length
+    ? eligibleEvents.filter((e) => matchingRecipients.has(e.recipient_id))
+    : eligibleEvents;
   const eventMap = new Map();
   for (const e of events) {
     if (!eventMap.has(e.recipient_id)) {

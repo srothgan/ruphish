@@ -340,11 +340,11 @@ fn progression_is_shared_across_summaries_without_inventing_recorded_events() {
         let filtered = fetch("/api/campaigns/1/results?event=form_submitted&limit=1");
         assert_eq!(
             filtered["progression"],
-            json!({"accepted":0,"opened":2,"clicked":2,"submitted":2,"reported":0})
+            json!({"accepted":2,"opened":2,"clicked":2,"submitted":2,"reported":0})
         );
         assert_eq!(
             filtered["unique"],
-            json!({"accepted":0,"opened":0,"clicked":0,"submitted":2,"reported":0})
+            json!({"accepted":2,"opened":0,"clicked":0,"submitted":2,"reported":0})
         );
         let recipient = fetch("/api/campaigns/1/results?recipient=5");
         assert_eq!(

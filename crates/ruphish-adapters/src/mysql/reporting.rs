@@ -15,17 +15,21 @@ impl Reports {
 fn storage(error: sqlx::Error) -> Error {
     crate::mysql::resource_error(error)
 }
+// Qualify recipients by event kind within the time/source scope, then retain all
+// eligible event kinds for that selection. Without an event filter, preserve
+// unattributed history and recipients without observations.
 const CTE: &str = r#"WITH parameters AS (SELECT ? AS campaign, ? AS since, ? AS until_time, ? AS recipient, CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_0900_bin AS event_kind, CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_0900_bin AS search, CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_0900_bin AS source_filter, CAST(? AS JSON) AS ids), audience AS (
  SELECT r.*,d.state AS delivery FROM results r LEFT JOIN ruphish_delivery d ON d.result_id=r.id
  WHERE r.campaign_id=(SELECT campaign FROM parameters) AND ((SELECT recipient FROM parameters) IS NULL OR r.id=(SELECT recipient FROM parameters)) AND ((SELECT search FROM parameters)='' OR instr(lower(CONCAT(r.email,' ',COALESCE(r.first_name,''),' ',COALESCE(r.last_name,''))),lower((SELECT search FROM parameters)))>0)
  AND (JSON_LENGTH((SELECT ids FROM parameters))=0 OR r.id IN (SELECT selected_ids.value FROM parameters p JOIN JSON_TABLE(p.ids,'$[*]' COLUMNS(value BIGINT PATH '$')) selected_ids ON TRUE))
-), observed AS (
+), eligible AS (
  SELECT e.* FROM event_history e
  LEFT JOIN audience a ON a.id=e.recipient_id
  WHERE e.campaign_id=(SELECT campaign FROM parameters) AND ((SELECT since FROM parameters) IS NULL OR __EVENT_SECOND__>=(SELECT since FROM parameters)) AND ((SELECT until_time FROM parameters) IS NULL OR __EVENT_SECOND__<(SELECT until_time FROM parameters))
- AND ((SELECT event_kind FROM parameters)='[]' OR e.message IN (SELECT selected_events.value FROM parameters p JOIN JSON_TABLE(p.event_kind,'$[*]' COLUMNS(value VARCHAR(64) PATH '$')) selected_events ON TRUE)) AND ((SELECT source_filter FROM parameters)='' OR e.source=(SELECT source_filter FROM parameters))
+ AND ((SELECT source_filter FROM parameters)='' OR e.source=(SELECT source_filter FROM parameters))
  AND (((SELECT recipient FROM parameters) IS NULL AND (SELECT search FROM parameters)='' AND JSON_LENGTH((SELECT ids FROM parameters))=0) OR a.id IS NOT NULL)
-), selected AS (SELECT * FROM audience a WHERE ((SELECT event_kind FROM parameters)='[]' AND (SELECT source_filter FROM parameters)='') OR EXISTS(SELECT 1 FROM observed o WHERE o.recipient_id=a.id))
+), selected AS (SELECT * FROM audience a WHERE ((SELECT event_kind FROM parameters)='[]' AND (SELECT source_filter FROM parameters)='') OR EXISTS(SELECT 1 FROM eligible e WHERE e.recipient_id=a.id AND ((SELECT event_kind FROM parameters)='[]' OR e.message IN (SELECT selected_events.value FROM parameters p JOIN JSON_TABLE(p.event_kind,'$[*]' COLUMNS(value VARCHAR(64) PATH '$')) selected_events ON TRUE))))
+, observed AS (SELECT e.* FROM eligible e WHERE (SELECT event_kind FROM parameters)='[]' OR EXISTS(SELECT 1 FROM selected s WHERE s.id=e.recipient_id))
 "#;
 const TYPES: [&str; 5] = [
     "Email Sent",

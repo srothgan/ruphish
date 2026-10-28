@@ -15,17 +15,21 @@ impl Reports {
 fn storage(error: sqlx::Error) -> Error {
     crate::postgres::resource_error(error)
 }
+// Qualify recipients by event kind within the time/source scope, then retain all
+// eligible event kinds for that selection. Without an event filter, preserve
+// unattributed history and recipients without observations.
 const CTE: &str = r#"WITH parameters AS (SELECT $1::bigint AS campaign, $2::bigint AS since, $3::bigint AS until_time, $4::bigint AS recipient, $5::text AS event_kind, $6::text AS search, $7::text AS source_filter, $8::bigint[] AS ids), audience AS (
  SELECT r.*,d.state AS delivery FROM results r LEFT JOIN ruphish_delivery d ON d.result_id=r.id
  WHERE r.campaign_id=(SELECT campaign FROM parameters) AND ((SELECT recipient FROM parameters) IS NULL OR r.id=(SELECT recipient FROM parameters)) AND ((SELECT search FROM parameters)='' OR strpos(lower(CONCAT(r.email,' ',COALESCE(r.first_name,''),' ',COALESCE(r.last_name,''))),lower((SELECT search FROM parameters)))>0)
  AND (cardinality((SELECT ids FROM parameters))=0 OR r.id=ANY((SELECT ids FROM parameters)::bigint[]))
-), observed AS (
+), eligible AS (
  SELECT e.* FROM event_history e
  LEFT JOIN audience a ON a.id=e.recipient_id
  WHERE e.campaign_id=(SELECT campaign FROM parameters) AND ((SELECT since FROM parameters) IS NULL OR (CASE WHEN e.time>='1000' THEN floor(extract(epoch FROM e.time::timestamptz))::bigint END)>=(SELECT since FROM parameters)) AND ((SELECT until_time FROM parameters) IS NULL OR (CASE WHEN e.time>='1000' THEN floor(extract(epoch FROM e.time::timestamptz))::bigint END)<(SELECT until_time FROM parameters))
- AND ((SELECT event_kind FROM parameters)='[]' OR e.message IN (SELECT jsonb_array_elements_text((SELECT event_kind FROM parameters)::jsonb))) AND ((SELECT source_filter FROM parameters)='' OR e.source=(SELECT source_filter FROM parameters))
+ AND ((SELECT source_filter FROM parameters)='' OR e.source=(SELECT source_filter FROM parameters))
  AND (((SELECT recipient FROM parameters) IS NULL AND (SELECT search FROM parameters)='' AND cardinality((SELECT ids FROM parameters))=0) OR a.id IS NOT NULL)
-), selected AS (SELECT * FROM audience a WHERE ((SELECT event_kind FROM parameters)='[]' AND (SELECT source_filter FROM parameters)='') OR EXISTS(SELECT 1 FROM observed o WHERE o.recipient_id=a.id))
+), selected AS (SELECT * FROM audience a WHERE ((SELECT event_kind FROM parameters)='[]' AND (SELECT source_filter FROM parameters)='') OR EXISTS(SELECT 1 FROM eligible e WHERE e.recipient_id=a.id AND ((SELECT event_kind FROM parameters)='[]' OR e.message IN (SELECT jsonb_array_elements_text((SELECT event_kind FROM parameters)::jsonb)))))
+, observed AS (SELECT e.* FROM eligible e WHERE (SELECT event_kind FROM parameters)='[]' OR EXISTS(SELECT 1 FROM selected s WHERE s.id=e.recipient_id))
 "#;
 const TYPES: [&str; 5] = [
     "Email Sent",

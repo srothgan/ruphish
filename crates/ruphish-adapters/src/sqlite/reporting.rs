@@ -15,17 +15,21 @@ impl Reports {
 fn storage(error: sqlx::Error) -> Error {
     crate::sqlite::resource_error(error)
 }
+// Qualify recipients by event kind within the time/source scope, then retain all
+// eligible event kinds for that selection. Without an event filter, preserve
+// unattributed history and recipients without observations.
 const CTE: &str = r#"WITH audience AS (
  SELECT r.*,d.state AS delivery FROM results r LEFT JOIN ruphish_delivery d ON d.result_id=r.id
  WHERE r.campaign_id=?1 AND (?4 IS NULL OR r.id=?4) AND (?6='' OR instr(lower(r.email||' '||COALESCE(r.first_name,'')||' '||COALESCE(r.last_name,'')),lower(?6))>0)
  AND (?8='[]' OR r.id IN (SELECT value FROM json_each(?8)))
-), observed AS (
+), eligible AS (
  SELECT e.* FROM event_history e
  LEFT JOIN audience a ON a.id=e.recipient_id
  WHERE e.campaign_id=?1 AND (?2 IS NULL OR unixepoch(e.time)>=?2) AND (?3 IS NULL OR unixepoch(e.time)<?3)
- AND (?5='[]' OR e.message IN (SELECT value FROM json_each(?5))) AND (?7='' OR e.source=?7)
+ AND (?7='' OR e.source=?7)
  AND ((?4 IS NULL AND ?6='' AND ?8='[]') OR a.id IS NOT NULL)
-), selected AS (SELECT * FROM audience a WHERE (?5='[]' AND ?7='') OR EXISTS(SELECT 1 FROM observed o WHERE o.recipient_id=a.id))
+), selected AS (SELECT * FROM audience a WHERE (?5='[]' AND ?7='') OR EXISTS(SELECT 1 FROM eligible e WHERE e.recipient_id=a.id AND (?5='[]' OR e.message IN (SELECT value FROM json_each(?5)))))
+, observed AS (SELECT e.* FROM eligible e WHERE ?5='[]' OR EXISTS(SELECT 1 FROM selected s WHERE s.id=e.recipient_id))
 "#;
 const TYPES: [&str; 5] = [
     "Email Sent",

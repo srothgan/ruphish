@@ -29,7 +29,7 @@ The dashboard shows compact rates for recent campaigns. Each rate uses that camp
 
 ## Campaign Results scope
 
-Results applies recipient, event, source, and time filters before aggregation and pagination. Its lower time bound is inclusive; its upper bound is exclusive. Recipient detail shows that recipient's full observation history and delivery attempts; the campaign's selected filters remain available when returning.
+Results applies recipient selection, source, and time filters before aggregation and pagination. The event selector includes recipients with any selected event in the time/source scope, then counts all of their recorded event types within that scope. Its lower time bound is inclusive; its upper bound is exclusive. Recipient detail shows that recipient's full observation history and delivery attempts; the campaign's selected filters remain available when returning.
 
 ## Historical and automated activity
 

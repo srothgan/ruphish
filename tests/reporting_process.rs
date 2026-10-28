@@ -1013,14 +1013,14 @@ fn analysis_multiselect_filters_chart_pages_and_exports_and_rejects_invalid_iden
         &base,
         "/api/campaigns/91/results?recipients=91,92&event=email_opened,link_clicked&limit=1&offset=1",
     );
-    assert_eq!(union["event_total"], 2);
+    assert_eq!(union["event_total"], 3);
     assert_eq!(
         union["totals"],
-        json!({"accepted":0,"opened":1,"clicked":1,"submitted":0,"reported":0})
+        json!({"accepted":0,"opened":1,"clicked":1,"submitted":0,"reported":1})
     );
     assert_eq!(union["first_observed"]["opened"], 1790856001_i64);
     assert_eq!(union["last_observed"]["clicked"], 1790942442_i64);
-    assert!(union["first_observed"]["reported"].is_null());
+    assert_eq!(union["first_observed"]["reported"], 1793448001_i64);
     let all_union = get(
         &client,
         &base,
@@ -1035,7 +1035,7 @@ fn analysis_multiselect_filters_chart_pages_and_exports_and_rejects_invalid_iden
         None,
     );
     assert_eq!(union_export.status(), 200);
-    assert_eq!(union_export.text().unwrap().lines().count(), 3);
+    assert_eq!(union_export.text().unwrap().lines().count(), 4);
     let duplicate = get(&client, &base, "/api/campaigns/91/results?recipients=91,91");
     assert_eq!(duplicate["recipient_total"], 1);
     assert_eq!(duplicate["event_total"], 2);

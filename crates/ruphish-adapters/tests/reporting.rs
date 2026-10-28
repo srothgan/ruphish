@@ -294,8 +294,10 @@ async fn observations_filters_and_exports_preserve_evidence_without_credentials_
         .analysis(caller(), campaign, selected)
         .await
         .unwrap();
-    assert_eq!(selected.progression, [0, 0, 0, 0, 1]);
-    assert_eq!(selected.event_total, 2);
+    assert_eq!(selected.progression, [0, 1, 1, 1, 1]);
+    assert_eq!(selected.unique, [0, 0, 1, 1, 1]);
+    assert_eq!(selected.totals, [0, 0, 1, 1, 2]);
+    assert_eq!(selected.event_total, 4);
     assert_eq!(selected.recipient_total, 1);
     assert!(
         reports

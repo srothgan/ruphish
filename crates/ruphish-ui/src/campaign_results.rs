@@ -318,7 +318,7 @@ fn detail(api: Api, id: i64) -> impl IntoView {
                                 />
                             </Field>
                             <fieldset class="event-type-filter">
-                                <legend>{tr!(ui.event_types)}</legend>
+                                <legend>{tr!(ui.recipients_with_any_event)}</legend>
                                 {[
                                     ruphish_domain::events::Kind::EmailOpened,
                                     ruphish_domain::events::Kind::LinkClicked,

@@ -906,7 +906,7 @@
     "not_observed": "Not observed",
     "since_acceptance": "Since sending",
     "review_delivery": "Review delivery and events",
-    "event_types": "Event types",
+    "recipients_with_any_event": "Recipients with any selected event",
     "retry_requested": "Retry requested",
     "resend_requested": "Resend requested despite uncertain delivery",
     "acceptance_confirmed": "Marked as sent manually",

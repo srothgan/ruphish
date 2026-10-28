@@ -1026,24 +1026,124 @@ test('one dataset has complete references and safe participant history', () => {
   assert.deepEqual(dataset(now), data);
 });
 
-test('multiple event kinds preserve union totals and occurrence bounds across pages', async () => {
+test('event selection retains recipient activity within exclusive time bounds across pages and exports', async () => {
   const data = dataset(now);
+  const c = data.campaigns.find((c) => c.header.id === 2);
+  c.results = c.results.slice(0, 4);
+  c.results.forEach((r) => {
+    r.events = [];
+  });
+  const from = now - 10;
+  for (const [id, recipient, second, kind, source = 'public'] of [
+    [99001, 0, 0, 'Email Opened'],
+    [99002, 0, 1, 'Submitted Data'],
+    [99003, 0, 2, 'Clicked Link'],
+    [99004, 0, 3, 'Submitted Data'],
+    [99005, 0, 4, 'Email Reported', 'operator'],
+    [99006, 0, 5, 'Email Opened'],
+    [99007, 1, -1, 'Submitted Data'],
+    [99008, 1, 2, 'Clicked Link'],
+    [99009, 1, 5, 'Submitted Data'],
+    [99010, 2, 0, 'Email Reported'],
+    [99011, 2, 4, 'Clicked Link'],
+  ]) {
+    const r = c.results[recipient];
+    r.events.push({
+      id,
+      recipient_id: r.id,
+      email: r.email,
+      time: new Date((from + second) * 1000).toISOString(),
+      kind,
+      source,
+      password_present: null,
+    });
+  }
   const f = setup(new Map(), data);
   await f.login();
-  const c = data.campaigns.find((c) =>
-    c.results.some((r) => r.events.some((e) => e.kind === 'Clicked Link')),
+  const path = `/api/campaigns/2/results?from=${from}&until=${from + 5}&event_sort=time&event_order=asc`;
+  const read = async (query) => {
+    const response = await f.request(`${path}&${query}`);
+    assert.equal(response.status, 200);
+    return response.value;
+  };
+  const single = await read('event=form_submitted');
+  assert.deepEqual(
+    single.recipients.map((r) => r.id),
+    [20001],
   );
-  const path = `/api/campaigns/${c.header.id}/results?event=email_opened,link_clicked`;
-  const full = (await f.request(path + '&limit=200')).value;
-  const page = (await f.request(path + '&limit=1&offset=1')).value;
-  assert.deepEqual(page.totals, full.totals);
-  assert.deepEqual(page.first_observed, full.first_observed);
-  assert.deepEqual(page.last_observed, full.last_observed);
-  assert.equal(page.totals.accepted, 0);
-  assert.equal(page.totals.submitted, 0);
-  assert.ok(full.totals.opened > 0 && full.totals.clicked > 0);
-  assert.ok(full.events.every((e) => ['email_opened', 'link_clicked'].includes(e.kind.value)));
-  assert.equal((await f.request(path + ',invalid')).status, 400);
+  assert.deepEqual(
+    single.events.map((e) => e.id),
+    [99001, 99002, 99003, 99004, 99005],
+  );
+  assert.deepEqual(single.totals, {
+    accepted: 0,
+    opened: 1,
+    clicked: 1,
+    submitted: 2,
+    reported: 1,
+  });
+  assert.deepEqual(single.unique, {
+    accepted: 0,
+    opened: 1,
+    clicked: 1,
+    submitted: 1,
+    reported: 1,
+  });
+  assert.deepEqual(single.recipients[0].counts, single.totals);
+  assert.deepEqual(single.participant_buckets.at(-1).counts, single.unique);
+  const selection = 'event=form_submitted,email_reported';
+  const full = await read(selection);
+  const page = await read(`${selection}&limit=1&offset=1`);
+  assert.deepEqual(full.recipients.map((r) => r.id).sort(), [20001, 20003]);
+  assert.equal(full.event_total, 7);
+  assert.equal(page.events.length, 1);
+  assert.equal(page.recipients.length, 1);
+  assert.deepEqual(full.totals, { accepted: 0, opened: 1, clicked: 2, submitted: 2, reported: 2 });
+  assert.deepEqual(full.unique, { accepted: 0, opened: 1, clicked: 2, submitted: 1, reported: 2 });
+  for (const field of [
+    'totals',
+    'unique',
+    'first_observed',
+    'last_observed',
+    'buckets',
+    'participant_buckets',
+  ]) {
+    assert.deepEqual(page[field], full[field]);
+  }
+  const response = await f.api.execute(
+    new Request(
+      `https://demo.example.test/api/campaigns/2/export?from=${from}&until=${from + 5}&${selection}&event_order=asc&limit=1&offset=1&format=csv&scope=events`,
+    ),
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(
+    (await response.text())
+      .trim()
+      .split(/\r?\n/)
+      .slice(1)
+      .map((line) => Number(JSON.parse(line.split(',')[0]))),
+    [99001, 99010, 99002, 99003, 99004, 99005, 99011],
+  );
+  assert.deepEqual((await read('event=form_submitted&source=public')).totals, {
+    accepted: 0,
+    opened: 1,
+    clicked: 1,
+    submitted: 2,
+    reported: 0,
+  });
+  for (const restriction of [
+    'source=operator',
+    'recipients=20002,20003',
+    'recipient=20002',
+    'search=does-not-exist',
+  ]) {
+    const empty = await read(`event=form_submitted&${restriction}`);
+    assert.equal(empty.recipient_total, 0);
+    assert.equal(empty.event_total, 0);
+    assert.deepEqual(empty.participant_buckets, []);
+  }
+  assert.equal((await read('')).recipient_total, 4);
+  assert.equal((await f.request(path + '&event=invalid')).status, 400);
 });
 
 test('campaign participant series deduplicates across buckets, filters and pages while recipient counts retain repeats', async () => {
