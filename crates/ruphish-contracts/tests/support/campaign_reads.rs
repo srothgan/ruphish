@@ -165,6 +165,16 @@ fn saved_draft_structure_is_complete_even_when_values_are_unfinished() {
 #[test]
 fn named_metrics_and_classified_observations_reject_missing_or_unknown_values() {
     let fixture = snapshots()["analysis"].clone();
+    let decoded: Results = serde_json::from_value(fixture.clone()).unwrap();
+    let observed = [
+        Some(1792415923),
+        Some(1792416283),
+        Some(1792416388),
+        Some(1792416549),
+        None,
+    ];
+    assert_eq!(decoded.first_observed.values(), observed);
+    assert_eq!(decoded.last_observed.values(), observed);
     for field in ["accepted", "opened", "clicked", "submitted", "reported"] {
         let mut broken = fixture.clone();
         broken["totals"].as_object_mut().unwrap().remove(field);
@@ -172,6 +182,14 @@ fn named_metrics_and_classified_observations_reject_missing_or_unknown_values() 
             serde_json::from_value::<Results>(broken).is_err(),
             "missing {field}"
         );
+        for times in ["first_observed", "last_observed"] {
+            let mut broken = fixture.clone();
+            broken[times].as_object_mut().unwrap().remove(field);
+            assert!(
+                serde_json::from_value::<Results>(broken).is_err(),
+                "missing {times}.{field}"
+            );
+        }
     }
     for pointer in [
         "/status",
@@ -186,12 +204,23 @@ fn named_metrics_and_classified_observations_reject_missing_or_unknown_values() 
             "{pointer}"
         );
     }
-    let mut missing_revision = fixture.clone();
-    missing_revision["events"][0]
+    let mut missing_edited = fixture.clone();
+    missing_edited["events"][0]
         .as_object_mut()
         .unwrap()
-        .remove("revision");
-    assert!(serde_json::from_value::<Results>(missing_revision).is_err());
+        .remove("edited");
+    assert!(serde_json::from_value::<Results>(missing_edited).is_err());
+    for edited in [json!(false), json!(true)] {
+        let mut value = fixture.clone();
+        value["events"][0]["edited"] = edited.clone();
+        let decoded: Results = serde_json::from_value(value).unwrap();
+        assert_eq!(json!(decoded.events[0].edited), edited);
+    }
+    for invalid in [Value::Null, json!(0), json!("false")] {
+        let mut value = fixture.clone();
+        value["events"][0]["edited"] = invalid;
+        assert!(serde_json::from_value::<Results>(value).is_err());
+    }
     let mut imported = fixture;
     imported["events"][0]["kind"] = json!({"type":"historical","value":"Proxied request"});
     let value: Results = serde_json::from_value(imported).unwrap();

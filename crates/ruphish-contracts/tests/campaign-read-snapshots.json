@@ -169,7 +169,7 @@
         "recipient_id": 1,
         "source": "legacy",
         "time": "2026-10-19T13:29:09Z",
-        "revision": 0
+        "edited": false
       },
       {
         "email": "browser@example.test",
@@ -182,7 +182,7 @@
         "recipient_id": 1,
         "source": "legacy",
         "time": "2026-10-19T13:26:28Z",
-        "revision": 0
+        "edited": false
       },
       {
         "email": "browser@example.test",
@@ -195,7 +195,7 @@
         "recipient_id": 1,
         "source": "legacy",
         "time": "2026-10-19T13:24:43Z",
-        "revision": 0
+        "edited": false
       },
       {
         "email": "browser@example.test",
@@ -208,7 +208,7 @@
         "recipient_id": 1,
         "source": "legacy",
         "time": "2026-10-19T13:18:43Z",
-        "revision": 0
+        "edited": false
       },
       {
         "email": "",
@@ -221,7 +221,7 @@
         "recipient_id": null,
         "source": "legacy",
         "time": "2026-10-19T13:18:42Z",
-        "revision": 0
+        "edited": false
       }
     ],
     "id": 1,
@@ -264,6 +264,20 @@
       "clicked": 1,
       "submitted": 1,
       "reported": 0
+    },
+    "first_observed": {
+      "accepted": 1792415923,
+      "opened": 1792416283,
+      "clicked": 1792416388,
+      "submitted": 1792416549,
+      "reported": null
+    },
+    "last_observed": {
+      "accepted": 1792415923,
+      "opened": 1792416283,
+      "clicked": 1792416388,
+      "submitted": 1792416549,
+      "reported": null
     }
   }
 }
