@@ -1,21 +1,34 @@
-import {TemplateVault} from './template-html.mjs';
+import { TemplateVault } from './template-html.mjs';
 
 // Transform a copy only. No repository marker or new template syntax survives import.
 export function preparePage(source, prefill, brandingJson, logo, staticContent = false) {
-  if (staticContent && prefill) throw new Error('starter_invalid');
+  if (staticContent && prefill) {
+    throw new Error('starter_invalid');
+  }
   const branding = brandingJson ? JSON.parse(brandingJson) : null;
-  if (!prefill && !branding) return source;
+  if (!prefill && !branding) {
+    return source;
+  }
   const vault = staticContent ? null : new TemplateVault(source);
-  const document = new DOMParser().parseFromString(vault ? vault.mask(source) : source, 'text/html');
+  const document = new DOMParser().parseFromString(
+    vault ? vault.mask(source) : source,
+    'text/html',
+  );
   if (prefill) {
     const fields = document.querySelectorAll('input[name="username"]');
-    if (fields.length !== 1 || fields[0].type !== 'email') throw new Error('starter_invalid');
+    if (fields.length !== 1 || fields[0].type !== 'email') {
+      throw new Error('starter_invalid');
+    }
     fields[0].setAttribute('value', vault.mask('{{.Email | html}}'));
   }
   if (branding) {
-    if (!/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(logo)) throw new Error('starter_logo_required');
+    if (!/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(logo)) {
+      throw new Error('starter_logo_required');
+    }
     const targets = document.querySelectorAll(branding.selector);
-    if (targets.length !== 1) throw new Error('starter_invalid');
+    if (targets.length !== 1) {
+      throw new Error('starter_invalid');
+    }
     const target = targets[0];
     const image = document.createElement('img');
     image.src = logo;
@@ -29,12 +42,20 @@ export function preparePage(source, prefill, brandingJson, logo, staticContent =
       target.replaceChildren(image);
     }
   }
-  return '<!DOCTYPE html>\n' + (vault ? vault.export(document) : document.documentElement.outerHTML);
+  return (
+    '<!DOCTYPE html>\n' + (vault ? vault.export(document) : document.documentElement.outerHTML)
+  );
 }
 
 export function validateLogoFile(file) {
-  if (!file || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type) ||
-      file.size <= 0 || file.size > 5 * 1024 * 1024) throw new Error('starter_logo_invalid');
+  if (
+    !file ||
+    !['image/png', 'image/jpeg', 'image/webp'].includes(file.type) ||
+    file.size <= 0 ||
+    file.size > 5 * 1024 * 1024
+  ) {
+    throw new Error('starter_logo_invalid');
+  }
 }
 
 export async function readLogo(input) {
@@ -45,8 +66,14 @@ export async function readLogo(input) {
     const image = new Image();
     image.src = url;
     await image.decode();
-    if (!image.naturalWidth || !image.naturalHeight || image.naturalWidth > 4096 || image.naturalHeight > 4096)
+    if (
+      !image.naturalWidth ||
+      !image.naturalHeight ||
+      image.naturalWidth > 4096 ||
+      image.naturalHeight > 4096
+    ) {
       throw new Error('starter_logo_invalid');
+    }
     // Rasterize instead of trusting the extension/MIME, stripping metadata and active content.
     const scale = Math.min(1, 640 / image.naturalWidth, 240 / image.naturalHeight);
     const canvas = document.createElement('canvas');

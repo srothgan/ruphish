@@ -4,7 +4,9 @@ import { parseHTML } from 'linkedom';
 import { setupNavigation } from '../src/navigation.mjs';
 
 function fixture(matches = true) {
-  const { document, window } = parseHTML('<html><body><header><button aria-controls="nav" aria-expanded="false" hidden>Menu</button><nav id="nav"><a href="/docs/"><span>Docs</span></a><a href="https://demo.ruphish.com/">Demo</a></nav></header><main>Content</main></body></html>');
+  const { document, window } = parseHTML(
+    '<html><body><header><button aria-controls="nav" aria-expanded="false" hidden>Menu</button><nav id="nav"><a href="/docs/"><span>Docs</span></a><a href="https://demo.ruphish.com/">Demo</a></nav></header><main>Content</main></body></html>',
+  );
   const header = document.querySelector('header');
   const button = document.querySelector('button');
   const nav = document.querySelector('nav');
@@ -34,7 +36,9 @@ test('mobile navigation opens only on click and closes on a second click or link
 test('Escape closes the menu and returns focus to its button', () => {
   const { window, button, nav, click } = fixture();
   let focused = false;
-  button.focus = () => { focused = true; };
+  button.focus = () => {
+    focused = true;
+  };
   click(button);
   const escape = new window.Event('keydown', { bubbles: true, cancelable: true });
   escape.key = 'Escape';

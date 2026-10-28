@@ -20,54 +20,79 @@ let exited;
 
 async function start() {
   child = spawn('/app/ruphish', ['--config', config, '--mode', 'admin', '--disable-mailer'], {
-    cwd: '/app', stdio: ['ignore', 'inherit', 'inherit'],
+    cwd: '/app',
+    stdio: ['ignore', 'inherit', 'inherit'],
     env: { ...process.env, GOPHISH_INITIAL_ADMIN_PASSWORD: password },
   });
   let spawnError;
   exited = new Promise((resolve) => {
-    child.once('error', (error) => { spawnError = error; });
+    child.once('error', (error) => {
+      spawnError = error;
+    });
     child.once('close', (code, signal) => resolve({ code, signal }));
   });
   const deadline = Date.now() + 60_000;
   let readiness = 'no response';
   while (Date.now() < deadline) {
-    if (spawnError) throw spawnError;
-    if (child.exitCode !== null || child.signalCode !== null) throw new Error('Application exited before readiness.');
+    if (spawnError) {
+      throw spawnError;
+    }
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error('Application exited before readiness.');
+    }
     try {
       const response = await fetch(base + '/auth/session', { signal: AbortSignal.timeout(2000) });
-      if (response.ok) return;
+      if (response.ok) {
+        return;
+      }
       readiness = `HTTP ${response.status}`;
-    } catch (error) { readiness = error.cause?.code ?? error.message; }
+    } catch (error) {
+      readiness = error.cause?.code ?? error.message;
+    }
     await delay(250);
   }
   throw new Error(`Application startup timed out: ${readiness}`);
 }
 
 async function stop() {
-  if (!child) return;
+  if (!child) {
+    return;
+  }
   const current = child;
   child = undefined;
   current.kill('SIGTERM');
   const timeout = setTimeout(() => current.kill('SIGKILL'), 15_000);
   try {
     const result = await exited;
-    if (result.code !== 0) throw new Error(`Application shutdown failed: ${JSON.stringify(result)}`);
+    if (result.code !== 0) {
+      throw new Error(`Application shutdown failed: ${JSON.stringify(result)}`);
+    }
   } finally {
     clearTimeout(timeout);
   }
 }
 
 try {
-  await writeFile(config, JSON.stringify({
-    admin_server: { listen_url: '127.0.0.1:3333', use_tls: false },
-    db_name: 'sqlite3', db_path: database,
-    logging: { level: 'warn' }, contact_address: 'awareness@example.test',
-  }), { mode: 0o600 });
+  await writeFile(
+    config,
+    JSON.stringify({
+      admin_server: { listen_url: '127.0.0.1:3333', use_tls: false },
+      db_name: 'sqlite3',
+      db_path: database,
+      logging: { level: 'warn' },
+      contact_address: 'awareness@example.test',
+    }),
+    { mode: 0o600 },
+  );
   console.log('Initializing a fresh disposable SQLite database.');
   await start();
   await stop();
   const db = new DatabaseSync(database);
-  try { seed(db); } finally { db.close(); }
+  try {
+    seed(db);
+  } finally {
+    db.close();
+  }
   console.log('Seeded the complete dashboard dataset once.');
   await start();
   await capture(base, password, screenshot);
@@ -75,9 +100,13 @@ try {
   // The final rename is on the output filesystem, so a failed capture/copy keeps the old image.
   await copyFile(screenshot, pending);
   await rename(pending, '/output/dashboard.png');
-  console.log('Replaced assets/dashboard.png (3024 x 1964). Copy it to website/public/dashboard.png manually when ready.');
+  console.log(
+    'Replaced assets/dashboard.png (3024 x 1964). Copy it to website/public/dashboard.png manually when ready.',
+  );
 } finally {
-  try { await stop(); } finally {
+  try {
+    await stop();
+  } finally {
     await rm(pending, { force: true });
     await rm(state, { recursive: true, force: true });
   }

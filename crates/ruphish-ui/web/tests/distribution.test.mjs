@@ -52,7 +52,9 @@ test('completed distribution can be promoted immediately and retains nested asse
       });
       assert.deepEqual(await readdir(staging), ['admin']);
       // Same promotion order as Trunk, including replacement of an older build.
-      if (generation > 0) await rm(served, { recursive: true });
+      if (generation > 0) {
+        await rm(served, { recursive: true });
+      }
       await rename(path.join(staging, 'admin'), served);
       const manifest = JSON.parse(await readFile(path.join(served, 'asset-manifest.json'), 'utf8'));
       assert.deepEqual(Object.keys(manifest).sort(), [...assets.keys()].sort());
@@ -73,10 +75,15 @@ test('a conflicting admin subtree fails packaging without overwriting its conten
     await mkdir(path.join(temporary, 'admin'));
     await writeFile(path.join(temporary, 'admin', 'sentinel.txt'), 'keep this file');
     await writeFile(path.join(temporary, 'index.html'), 'new document');
-    await assert.rejects(execute(process.execPath, [generator, 'manifest'], {
-      env: { ...process.env, TRUNK_STAGING_DIR: temporary },
-    }));
-    assert.equal(await readFile(path.join(temporary, 'admin', 'sentinel.txt'), 'utf8'), 'keep this file');
+    await assert.rejects(
+      execute(process.execPath, [generator, 'manifest'], {
+        env: { ...process.env, TRUNK_STAGING_DIR: temporary },
+      }),
+    );
+    assert.equal(
+      await readFile(path.join(temporary, 'admin', 'sentinel.txt'), 'utf8'),
+      'keep this file',
+    );
     assert.equal(await readFile(path.join(temporary, 'index.html'), 'utf8'), 'new document');
   } finally {
     await rm(temporary, { recursive: true, force: true });
