@@ -78,8 +78,13 @@ impl From<crate::auth::Error> for Error {
 pub trait Repository: Send + Sync {
     /// Read the caller-owned resources in stable identifier order.
     async fn list(&self, caller: Identity, kind: Kind) -> Result<Vec<Resource>, Error>;
-    /// Read metadata without loading content, attachments or credentials.
-    async fn summaries(&self, caller: Identity, kind: Kind) -> Result<Vec<Summary>, Error>;
+    /// Read metadata without content or credentials, optionally restricted to one owned identifier.
+    async fn summaries(
+        &self,
+        caller: Identity,
+        kind: Kind,
+        id: Option<i64>,
+    ) -> Result<Vec<Summary>, Error>;
     /// Read one resource after checking current ownership.
     async fn get(&self, caller: Identity, kind: Kind, id: i64) -> Result<Resource, Error>;
     /// Resolve a legacy resource name and load its content in the same authorized snapshot.
@@ -132,6 +137,7 @@ pub struct Service {
     repository: Arc<dyn Repository>,
     validator: Arc<dyn Validator>,
     tools: Arc<dyn ContentTools>,
+    pub(crate) content_work: crate::content_work::ContentWork,
 }
 
 /// Reason a CSV record cannot be imported.
@@ -184,42 +190,98 @@ pub trait ContentTools: Send + Sync {
     /// Decode MIME bodies and optionally rewrite links.
     fn email(&self, content: &[u8], convert_links: bool) -> Result<EmailImport, Error>;
     /// Fetch and transform a site through the destination policy.
-    async fn site(&self, url: &str) -> Result<String, Error>;
+    async fn site(
+        &self,
+        url: &str,
+        work: &crate::content_work::ContentWork,
+    ) -> Result<String, Error>;
     /// Render a draft using supplied recipient variables.
     fn preview(&self, source: &str, recipient: &Recipient) -> Result<String, Error>;
 }
 impl Service {
     /// Same document preparation and diagnostics as the corresponding public page route.
-    pub fn page_preview(
+    pub async fn page_preview(
         &self,
         html: &str,
         mode: PagePreview<'_>,
     ) -> Result<(String, Vec<PageWarning>), Error> {
-        self.validator.page_preview(html, mode)
+        let html = html.to_owned();
+        let recipient = match mode {
+            PagePreview::Landing(recipient) => Some(recipient.clone()),
+            PagePreview::Learning => None,
+        };
+        let validator = self.validator.clone();
+        self.content_work
+            .run(move || {
+                let mode = recipient
+                    .as_ref()
+                    .map_or(PagePreview::Learning, PagePreview::Landing);
+                validator.page_preview(&html, mode)
+            })
+            .await
     }
     /// Compose the concrete dependencies for this boundary.
     pub fn new(
         repository: Arc<dyn Repository>,
         validator: Arc<dyn Validator>,
         tools: Arc<dyn ContentTools>,
+        content_work: crate::content_work::ContentWork,
     ) -> Self {
         Self {
             repository,
             validator,
             tools,
+            content_work,
         }
     }
-    /// Import and preview adapters; HTTP callers authorize before invoking these operations.
-    pub fn tools(&self) -> &dyn ContentTools {
-        self.tools.as_ref()
+    /// Import a page bundle after transport authorization, with bounded parser work.
+    pub async fn page_bundle(&self, content: String) -> Result<String, Error> {
+        let tools = self.tools.clone();
+        self.content_work
+            .run(move || tools.page_bundle(&content))
+            .await
+    }
+    /// Parse an owned CSV upload without occupying an async request worker.
+    pub async fn csv(
+        &self,
+        bytes: Vec<u8>,
+        columns: Option<[String; 4]>,
+    ) -> Result<CsvImport, Error> {
+        let tools = self.tools.clone();
+        self.content_work
+            .run(move || tools.csv(&bytes, columns))
+            .await
+    }
+    /// Decode an owned MIME upload with bounded parser work.
+    pub async fn email(&self, content: String, convert_links: bool) -> Result<EmailImport, Error> {
+        let tools = self.tools.clone();
+        self.content_work
+            .run(move || tools.email(content.as_bytes(), convert_links))
+            .await
+    }
+    /// Fetch through the outbound policy and admit the resulting content transformation.
+    pub async fn site(&self, url: &str) -> Result<String, Error> {
+        self.tools.site(url, &self.content_work).await
+    }
+    /// Render a standalone message preview with bounded template processing.
+    pub async fn preview(&self, source: String, recipient: Recipient) -> Result<String, Error> {
+        let tools = self.tools.clone();
+        self.content_work
+            .run(move || tools.preview(&source, &recipient))
+            .await
     }
     /// Read the caller-owned resources in stable identifier order.
     pub async fn list(&self, caller: Identity, kind: Kind) -> Result<Vec<Resource>, Error> {
         self.repository.list(caller, kind).await
     }
-    /// Read metadata without loading content, attachments or credentials.
-    pub async fn summaries(&self, caller: Identity, kind: Kind) -> Result<Vec<Summary>, Error> {
-        self.repository.summaries(caller, kind).await
+    /// Read metadata without content or credentials, optionally restricted to one owned identifier.
+    pub async fn summaries(
+        &self,
+        caller: Identity,
+        kind: Kind,
+        id: Option<i64>,
+    ) -> Result<Vec<Summary>, Error> {
+        self.repository.summaries(caller, kind, id).await
     }
     /// Read one resource after checking current ownership.
     pub async fn get(&self, caller: Identity, kind: Kind, id: i64) -> Result<Resource, Error> {
@@ -238,21 +300,31 @@ impl Service {
     pub async fn save(
         &self,
         caller: Identity,
-        mut value: Input,
+        value: Input,
         id: Option<i64>,
         expected: Option<String>,
     ) -> Result<Resource, Error> {
-        self.validate(&mut value)?;
+        let value = self.validate(value).await?;
         self.repository.save(caller, value, id, expected).await
     }
     /// Apply the same authoritative validation to saved resources and inline profiles.
-    pub fn validate(&self, value: &mut Input) -> Result<(), Error> {
-        value.validation().finish()?;
-        self.validator.validate(value)
+    pub async fn validate(&self, value: Input) -> Result<Input, Error> {
+        let validator = self.validator.clone();
+        self.content_work
+            .run(move || {
+                value.validation().finish()?;
+                validator.validate(&value)?;
+                Ok(value)
+            })
+            .await
     }
     /// Reuse serving-time form diagnostics for save, preview and campaign review.
-    pub fn page_warnings(&self, html: &str) -> Result<Vec<PageWarning>, Error> {
-        self.validator.page_warnings(html)
+    pub async fn page_warnings(&self, html: &str) -> Result<Vec<PageWarning>, Error> {
+        let html = html.to_owned();
+        let validator = self.validator.clone();
+        self.content_work
+            .run(move || validator.page_warnings(&html))
+            .await
     }
     /// Delete only after ownership, revision and live-usage checks.
     pub async fn delete(

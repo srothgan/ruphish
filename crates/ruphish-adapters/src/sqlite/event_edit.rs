@@ -20,7 +20,7 @@ async fn insert(
         return Err(Error::Internal);
     };
     let details = crate::event_edit::details(fact)?;
-    let row = sqlx::query(sqlx::AssertSqlSafe(crate::event_edit::sql("INSERT INTO events(campaign_id,recipient_id,email,time,kind,metadata,source,create_key) SELECT ?,id,email,?,?,?,'operator',? FROM results WHERE id=?", false)))
+    let row = sqlx::query(sqlx::AssertSqlSafe(crate::sql::placeholders("INSERT INTO events(campaign_id,recipient_id,email,time,kind,metadata,source,create_key) SELECT ?,id,email,?,?,?,'operator',? FROM results WHERE id=?", false)))
         .bind(campaign).bind(&fact.time).bind(kind.key()).bind(details).bind(create_key).bind(recipient).execute(c).await.map_err(storage)?;
     Ok(row.last_insert_rowid())
 }

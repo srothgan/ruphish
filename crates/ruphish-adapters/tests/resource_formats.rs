@@ -128,7 +128,7 @@ fn semantic_page_layout_preserves_authored_landing_behavior_and_restricts_learni
 
 #[test]
 fn learning_pages_are_static_and_preserve_explanations_without_collectors_or_form_checks() {
-    let source = r#"<!doctype html><html lang="de"><body class="lesson"><style>.lesson{color:navy}</style><h1>Recognize suspicious messages</h1><p>{{.FirstName}} stays literal</p><a href="https://example.test/help">Help</a><form action="https://outside.invalid"><input name="password" type="password"><button>Submit</button></form><textarea>private</textarea><div contenteditable>Editable</div><script>unsafe()</script><img src="https://outside.invalid/pixel"></body></html>"#;
+    let source = r#"<!doctype html><html lang="de"><body class="lesson"><style>.lesson{color:navy}</style><h1>Recognize suspicious messages</h1><p>{{.FirstName}} stays literal</p><a href="https://example.test/help">Help</a><form action="https://outside.invalid"><fieldset><legend>Recognize the warning</legend><label for="password">Keep this explanation</label><input id="password" name="password" type="password"></fieldset><button>Discard button text</button></form><textarea>Discard private text</textarea><select><option>Discard choice</option></select><datalist><option>Discard suggestion</option></datalist><div contenteditable>Editable</div><script>unsafe()</script><img src="https://outside.invalid/pixel"></body></html>"#;
     let document =
         ruphish_adapters::landing::render(source, ruphish_adapters::landing::Mode::Learning)
             .unwrap();
@@ -137,12 +137,34 @@ fn learning_pages_are_static_and_preserve_explanations_without_collectors_or_for
     assert!(document.html.contains("https://example.test/help"));
     assert!(document.html.contains("class=\"lesson\""));
     assert!(document.html.contains("lang=\"de\""));
+    let parsed = scraper::Html::parse_document(&document.html);
+    for (selector, expected) in [
+        ("fieldset > legend", "Recognize the warning"),
+        ("fieldset > label[for='password']", "Keep this explanation"),
+    ] {
+        let selector = scraper::Selector::parse(selector).unwrap();
+        assert_eq!(
+            parsed
+                .select(&selector)
+                .next()
+                .unwrap()
+                .text()
+                .collect::<String>(),
+            expected
+        );
+    }
     for forbidden in [
         "<script",
         "<form",
         "<input",
         "<textarea",
         "<button",
+        "<select",
+        "<datalist",
+        "Discard button text",
+        "Discard private text",
+        "Discard choice",
+        "Discard suggestion",
         "contenteditable",
         "outside.invalid",
         "event_id",

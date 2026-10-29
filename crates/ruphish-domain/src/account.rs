@@ -59,12 +59,6 @@ pub enum AccountError {
     /// Password setup is incomplete.
     #[error("Password change required")]
     ResetRequired,
-    /// Usernames must not be empty.
-    #[error("No username provided")]
-    EmptyUsername,
-    /// A role must be supplied.
-    #[error("No role specified")]
-    EmptyRole,
     /// An ordinary user cannot edit privileged account attributes.
     #[error("Permission denied")]
     Escalation,
@@ -121,16 +115,6 @@ impl Account {
             return Err(AccountError::Forbidden);
         }
         Ok(())
-    }
-}
-
-/// Validate identity fields without changing the user's spelling or whitespace.
-pub fn validate_fields(username: &str, role: &str) -> Result<(), AccountError> {
-    let report = validation(username, role);
-    match report.issues().first().map(|i| i.field.as_str()) {
-        Some("username") => Err(AccountError::EmptyUsername),
-        Some(_) => Err(AccountError::EmptyRole),
-        None => Ok(()),
     }
 }
 

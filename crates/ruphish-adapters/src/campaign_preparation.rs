@@ -1,5 +1,35 @@
-//! Campaign URL template validation shared by persistence providers.
-use ruphish_application::resources::Error;
+//! Campaign content validation shared by persistence providers.
+use ruphish_application::{
+    campaign::InteractionPolicy,
+    content_work::ContentWork,
+    resources::{Content, Error, Resource},
+};
+
+/// Validate owned content without moving provider transactions onto blocking workers.
+pub(crate) async fn validate_content(
+    work: &ContentWork,
+    page: Resource,
+    policy: InteractionPolicy,
+    url: String,
+) -> Result<(Resource, InteractionPolicy), Error> {
+    work.run(move || {
+        let sample = crate::resources::sample();
+        let redirect = crate::resources::render(&policy.redirect_url, &sample)?;
+        crate::landing::redirect(&redirect, &url)?;
+        if let Content::Page(page) = &page.content {
+            crate::landing::render(
+                &page.html,
+                crate::landing::Mode::Landing {
+                    context: &sample,
+                    endpoint: None,
+                },
+            )?;
+        }
+        Ok((page, policy))
+    })
+    .await
+}
+
 pub(crate) fn url(source: &str) -> Result<String, Error> {
     let sample = crate::resources::sample();
     let url = crate::resources::render(source, &sample).map_err(|e| e.at("url"))?;

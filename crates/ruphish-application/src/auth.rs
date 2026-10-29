@@ -11,9 +11,6 @@ pub enum Error {
     /// Independent field failures, separate from authentication and transport errors.
     #[error(transparent)]
     Validation(#[from] ruphish_domain::validation::Report),
-    /// Invalid display override.
-    #[error(transparent)]
-    Preferences(#[from] ruphish_domain::preferences::Error),
     /// Safe persistence classification retained for reconciliation and retry policy.
     #[error("Account operation could not be completed")]
     Storage(#[from] crate::storage::Error),

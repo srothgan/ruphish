@@ -10,7 +10,7 @@ use axum::{
     response::Response,
     routing::get,
 };
-use ruphish_application::{overview as app, resources::Error};
+use ruphish_application::overview as app;
 use ruphish_contracts::errors::ErrorCode;
 use ruphish_contracts::overview as wire;
 use serde::Deserialize;
@@ -30,13 +30,6 @@ fn counts(p: app::Posture) -> wire::Posture {
         credentials_entered: p.credentials_entered,
     }
 }
-fn json(value: impl serde::Serialize) -> Result<Response, Rejection> {
-    response(
-        StatusCode::OK,
-        &serde_json::to_value(value).map_err(|_| error(Error::Internal))?,
-        None,
-    )
-}
 async fn snapshot(context: Context) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
     let s = context
@@ -47,40 +40,44 @@ async fn snapshot(context: Context) -> Result<Response, Rejection> {
         )
         .await
         .map_err(error)?;
-    json(wire::Snapshot {
-        as_of: s.as_of,
-        recent: s
-            .recent
-            .into_iter()
-            .map(|c| wire::RecentCampaign {
-                id: c.id,
-                name: c.name,
-                status: c.status,
-                launch: crate::response::stored_date(&c.launch),
-                recipients: c.recipients,
-                outcomes: counts(c.outcomes),
-            })
-            .collect(),
-        inventory: wire::Inventory {
-            templates: s.inventory.templates,
-            pages: s.inventory.pages,
-            groups: s.inventory.groups,
-            profiles: s.inventory.profiles,
-            domains: s.inventory.domains,
-            domains_verified: s.inventory.domains_verified,
-            reporting_mailboxes: s.inventory.reporting_mailboxes,
+    response(
+        StatusCode::OK,
+        &wire::Snapshot {
+            as_of: s.as_of,
+            recent: s
+                .recent
+                .into_iter()
+                .map(|c| wire::RecentCampaign {
+                    id: c.id,
+                    name: c.name,
+                    status: c.status,
+                    launch: crate::response::stored_date(&c.launch),
+                    recipients: c.recipients,
+                    outcomes: counts(c.outcomes),
+                })
+                .collect(),
+            inventory: wire::Inventory {
+                templates: s.inventory.templates,
+                pages: s.inventory.pages,
+                groups: s.inventory.groups,
+                profiles: s.inventory.profiles,
+                domains: s.inventory.domains,
+                domains_verified: s.inventory.domains_verified,
+                reporting_mailboxes: s.inventory.reporting_mailboxes,
+            },
+            attention: wire::Attention {
+                unverified_enabled_domains: s.attention.unverified_enabled_domains,
+                delivery_problems: s.attention.delivery_problems,
+                campaign_ids: s.attention.campaign_ids,
+                next_launch: s.attention.next_launch.map(|n| wire::NextLaunch {
+                    id: n.id,
+                    name: n.name,
+                    launch: n.launch,
+                }),
+            },
         },
-        attention: wire::Attention {
-            unverified_enabled_domains: s.attention.unverified_enabled_domains,
-            delivery_problems: s.attention.delivery_problems,
-            campaign_ids: s.attention.campaign_ids,
-            next_launch: s.attention.next_launch.map(|n| wire::NextLaunch {
-                id: n.id,
-                name: n.name,
-                launch: n.launch,
-            }),
-        },
-    })
+        None,
+    )
 }
 
 #[derive(Deserialize, Default)]
@@ -121,20 +118,24 @@ async fn posture(
         .posture(user.identity, window, now)
         .await
         .map_err(error)?;
-    json(wire::PostureResponse {
-        window: window.as_str().into(),
-        since: window.since(now),
-        as_of: now,
-        counts: counts(p.counts),
-        previous: p.previous.map(|previous| wire::PreviousPeriod {
-            since: previous.since,
-            until: previous.until,
-            counts: wire::InteractionCounts {
-                opened: previous.counts.opened,
-                clicked: previous.counts.clicked,
-                reported: previous.counts.reported,
-                credentials_entered: previous.counts.credentials_entered,
-            },
-        }),
-    })
+    response(
+        StatusCode::OK,
+        &wire::PostureResponse {
+            window: window.as_str().into(),
+            since: window.since(now),
+            as_of: now,
+            counts: counts(p.counts),
+            previous: p.previous.map(|previous| wire::PreviousPeriod {
+                since: previous.since,
+                until: previous.until,
+                counts: wire::InteractionCounts {
+                    opened: previous.counts.opened,
+                    clicked: previous.counts.clicked,
+                    reported: previous.counts.reported,
+                    credentials_entered: previous.counts.credentials_entered,
+                },
+            }),
+        },
+        None,
+    )
 }

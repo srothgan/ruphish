@@ -5,7 +5,9 @@ use crate::resource_queries::ResourceQueries;
 use crate::shared::components::*;
 use leptos::{html, prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use ruphish_domain::reporting::SortDirection;
-use ruphish_ui::table_state::{scalar as sort_scalar, timestamp as sort_timestamp};
+use ruphish_ui::table_state::{
+    Value as SortValue, scalar as sort_scalar, timestamp as sort_timestamp,
+};
 use ruphish_ui::{
     import_drafts::{ImportDrafts, ImportedDraft},
     import_state::{ImportError, ImportReview},
@@ -380,7 +382,7 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
                             .rows(
                                 visible.get(),
                                 |row, key| match key {
-                                    "count" => row.count.into(),
+                                    "count" => row.count.map_or(SortValue::Missing, Into::into),
                                     "modified_date" => {
                                         sort_timestamp(
                                             row.modified_date.as_deref().unwrap_or_default(),
@@ -399,7 +401,12 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
                                         <th scope="row">
                                             <a href=format!("/{}/{id}", family.route())>{v.name}</a>
                                         </th>
-                                        <td>{v.count}</td>
+                                        <td>
+                                            {move || match v.count {
+                                                Some(count) => count.to_string(),
+                                                None => leptos_i18n::t_string!(i18n, ui.unknown).into(),
+                                            }}
+                                        </td>
                                         <td>
                                             {crate::time_display::instant(
                                                 &serde_json::json!(v.modified_date),
@@ -487,16 +494,15 @@ impl Editor {
         input_type: &'static str,
     ) -> impl IntoView {
         view! {
-            <Field label=label>
-                <TextInput
-                    id=key
-                    name=key
-                    input_type=input_type
-                    autocomplete="off"
-                    value=Signal::derive(move || self.text(key))
-                    on_input=move |e| self.set(key, json!(event_target_value(&e)))
-                />
-            </Field>
+            <TextField
+                label=label
+                id=key
+                name=key
+                input_type=input_type
+                autocomplete="off"
+                value=Signal::derive(move || self.text(key))
+                on_input=move |value| self.set(key, json!(value))
+            />
         }
     }
     fn flag(self, key: &'static str, label: Signal<String>) -> impl IntoView {
@@ -811,12 +817,12 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
             let resource =
                 ResourceQueries::decode_detail(api, family, value, (id != 0).then_some(id))?;
             // Editing owns an incomplete JSON document, separate from confirmed read records.
-            let value = serde_json::to_value(resource).map_err(|_| api.invalid_read_err())?;
-            Ok((value, revision))
+            let value = serde_json::to_value(&resource).map_err(|_| api.invalid_read_err())?;
+            Ok((value, revision, resource))
         });
     editor.busy.set(false);
     match result {
-        Ok((value, revision)) => {
+        Ok((value, revision, resource)) => {
             #[cfg(feature = "demo")]
             api.notifications.show(if id == 0 {
                 DemoNotice::Created
@@ -824,9 +830,7 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
                 DemoNotice::Saved
             });
             editor.diagnostics.set(warnings_for(&value));
-            if let Some(id) = value["id"].as_i64() {
-                queries.saved(family, id);
-            }
+            queries.saved(family, &resource);
             editor
                 .draft
                 .update(|d| d.saved(&submitted, value, revision));

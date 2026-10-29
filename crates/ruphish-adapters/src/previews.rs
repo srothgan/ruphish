@@ -41,31 +41,24 @@ impl Previews for PreviewService {
             return Err(Error::NotFound("Preview"));
         }
         let snapshot = self.store.snapshot(rid).await?;
-        let permit = self
-            .rendering
-            .clone()
-            .acquire_owned()
-            .await
-            .map_err(|_| Error::Internal)?;
-        tokio::task::spawn_blocking(move || {
-            let _permit = permit;
-            let context = crate::smtp::context(&snapshot.message)?;
-            crate::landing::render(
-                &snapshot.page.html,
-                crate::landing::Mode::Landing {
-                    context: &context,
-                    endpoint: None,
-                },
-            )
-            .map(|document| document.html)
-            .map_err(|error| match error {
-                crate::landing::RenderError::Template(_) => {
-                    crate::resources::invalid("Preview could not be rendered")
-                }
-                crate::landing::RenderError::Document(error) => error,
+        ruphish_application::content_work::ContentWork::new(self.rendering.clone())
+            .run(move || {
+                let context = crate::smtp::context(&snapshot.message)?;
+                crate::landing::render(
+                    &snapshot.page.html,
+                    crate::landing::Mode::Landing {
+                        context: &context,
+                        endpoint: None,
+                    },
+                )
+                .map(|document| document.html)
+                .map_err(|error| match error {
+                    crate::landing::RenderError::Template(_) => {
+                        crate::resources::invalid("Preview could not be rendered")
+                    }
+                    crate::landing::RenderError::Document(error) => error,
+                })
             })
-        })
-        .await
-        .map_err(|_| Error::Internal)?
+            .await
     }
 }

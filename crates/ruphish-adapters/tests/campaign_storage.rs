@@ -1007,3 +1007,37 @@ async fn duplicate_attributes_are_reviewable_and_first_recipient_wins_within_a_g
     assert_eq!(campaign.results[0].recipient.first_name, "Alice");
     db.close().await;
 }
+
+#[tokio::test]
+async fn oversized_audience_rejects_before_loading_later_groups() {
+    let (fixture, path) = fixture().await;
+    let db = prepared_database(&path, &fixture).await;
+    sqlx::raw_sql("DELETE FROM group_targets WHERE group_id=1; WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<100000) INSERT INTO targets(first_name,last_name,email,position) SELECT 'Sample','',printf('cap-%d@example.test',x),'' FROM n; INSERT INTO group_targets(group_id,target_id) SELECT 1,id FROM targets WHERE email LIKE 'cap-%' ORDER BY id;")
+        .execute(&db.inspection_pool()).await.unwrap();
+    let mut request = input(&fixture);
+    request.groups.push(Selection {
+        id: 999999,
+        ..Default::default()
+    });
+    let failure = db
+        .campaigns()
+        .prepare(caller(), &request, 1_900_000_000)
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(failure.to_string(), "Campaign exceeds 100000 recipients");
+    assert!(
+        matches!(failure, ruphish_application::resources::Error::Field { field, .. } if field == "selection.groups")
+    );
+    request.groups.truncate(1);
+    let prepared = db
+        .campaigns()
+        .prepare(caller(), &request, 1_900_000_000)
+        .await
+        .unwrap();
+    assert_eq!(prepared.recipients.len(), 100_000);
+    assert_eq!(prepared.recipients[0].email, "cap-1@example.test");
+    assert_eq!(prepared.recipients[99_999].email, "cap-100000@example.test");
+    assert_eq!(prepared.conflict_count, 0);
+    db.close().await;
+}

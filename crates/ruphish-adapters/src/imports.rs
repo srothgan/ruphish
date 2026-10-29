@@ -132,9 +132,13 @@ impl ContentTools for Tools {
             html,
         })
     }
-    async fn site(&self, address: &str) -> Result<String, Error> {
+    async fn site(
+        &self,
+        address: &str,
+        work: &ruphish_application::content_work::ContentWork,
+    ) -> Result<String, Error> {
         let (source, final_url) = self.policy.fetch(address).await?;
-        site_document(&source, &final_url)
+        work.run(move || site_document(&source, &final_url)).await
     }
     fn preview(&self, source: &str, recipient: &Recipient) -> Result<String, Error> {
         let ctx = crate::resources::sample_for(recipient);

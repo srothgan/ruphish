@@ -588,6 +588,160 @@ async fn deleted_detail_is_not_reused_when_reconciliation_fails() {
 }
 
 #[wasm_bindgen_test]
+async fn confirmed_resource_saves_survive_late_reads_and_failed_refreshes() {
+    use ruphish_contracts::resource_details::{Kind, decode};
+    use ruphish_ui::resource_inventory::{SummaryRow, saved};
+    use serde_json::json;
+
+    super::locale_window::install();
+    let _ = any_spawner::Executor::init_wasm_bindgen();
+    for group in [false, true] {
+        for creation in [false, true] {
+            let owner = Owner::new();
+            let old_started = Gate::new();
+            let old_release = Gate::new();
+            let new_started = Gate::new();
+            let new_release = Gate::new();
+            let calls = Rc::new(Cell::new(0));
+            let mut baseline = vec![SummaryRow {
+                id: 99,
+                name: "Other".into(),
+                modified_date: None,
+                count: Some(4),
+            }];
+            if !creation {
+                baseline.push(SummaryRow {
+                    id: 7,
+                    name: "Old name".into(),
+                    modified_date: None,
+                    count: Some(9),
+                });
+            }
+            let mut refreshed = baseline
+                .iter()
+                .filter(|row| row.id != 7)
+                .cloned()
+                .collect::<Vec<_>>();
+            refreshed.push(SummaryRow {
+                id: 7,
+                name: "Server name".into(),
+                modified_date: Some("2026-10-29T10:00:00Z".into()),
+                count: Some(3),
+            });
+            let (query, view, second) =
+                owner.with(|| {
+                    let (
+                        old_started,
+                        old_release,
+                        new_started,
+                        new_release,
+                        calls,
+                        baseline,
+                        refreshed,
+                    ) = (
+                        old_started.clone(),
+                        old_release.clone(),
+                        new_started.clone(),
+                        new_release.clone(),
+                        calls.clone(),
+                        baseline.clone(),
+                        refreshed.clone(),
+                    );
+                    let query = Query::new(client(), move |_: u8| {
+                        let call = calls.get();
+                        calls.set(call + 1);
+                        let (
+                            old_started,
+                            old_release,
+                            new_started,
+                            new_release,
+                            baseline,
+                            refreshed,
+                        ) = (
+                            old_started.clone(),
+                            old_release.clone(),
+                            new_started.clone(),
+                            new_release.clone(),
+                            baseline.clone(),
+                            refreshed.clone(),
+                        );
+                        async move {
+                            match call {
+                                0 => Ok(baseline),
+                                1 => {
+                                    old_started.release();
+                                    old_release.wait().await;
+                                    Ok(baseline)
+                                }
+                                2 => {
+                                    new_started.release();
+                                    new_release.wait().await;
+                                    Err(ApiError::http(
+                                        503,
+                                        "SERVICE_BUSY".into(),
+                                        "Refresh failed".into(),
+                                    ))
+                                }
+                                _ => Ok(refreshed),
+                            }
+                        }
+                    });
+                    (query, query.observe(|| 1), query.observe(|| 1))
+                });
+            until(&owner, move || {
+                view.data.get().is_some() && second.data.get().is_some()
+            })
+            .await;
+            assert_eq!(calls.get(), 1);
+            query.invalidate(1);
+            old_started.wait().await;
+            let mut response =
+                json!({"id":7,"name":"Server name","modified_date":"2026-10-29T10:00:00Z"});
+            let kind = if group {
+                response["targets"] = json!([{ "email":"confirmed@example.test","first_name":"","last_name":"","position":"" }]);
+                Kind::Group
+            } else {
+                response["html"] = json!("");
+                response["redirect_url"] = json!("");
+                Kind::Page
+            };
+            let resource = decode(kind, response).unwrap();
+            query.confirmed(1, |rows| saved(rows, &resource));
+            let mut expected = refreshed.clone();
+            expected[1].count = if group {
+                Some(1)
+            } else if creation {
+                None
+            } else {
+                Some(9)
+            };
+            assert_eq!(view.data.get_untracked(), Some(expected.clone()));
+            assert_eq!(second.data.get_untracked(), Some(expected.clone()));
+            new_started.wait().await;
+            old_release.release();
+            any_spawner::Executor::tick().await;
+            assert_eq!(view.data.get_untracked(), Some(expected.clone()));
+            new_release.release();
+            until(&owner, move || {
+                view.error.get().is_some() && !view.fetching.get()
+            })
+            .await;
+            assert_eq!(view.data.get_untracked(), Some(expected.clone()));
+            assert_eq!(second.data.get_untracked(), Some(expected));
+            assert_eq!(view.failure.get_untracked().unwrap().status, 503);
+            view.refresh.run(());
+            until(&owner, move || {
+                view.error.get().is_none() && !view.fetching.get()
+            })
+            .await;
+            assert_eq!(view.data.get_untracked(), Some(refreshed));
+            assert_eq!(calls.get(), 4);
+            owner.cleanup();
+        }
+    }
+}
+
+#[wasm_bindgen_test]
 async fn changed_keys_and_separate_session_clients_never_share_confirmed_values() {
     super::locale_window::install();
     let _ = any_spawner::Executor::init_wasm_bindgen();

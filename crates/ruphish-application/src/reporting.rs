@@ -38,6 +38,20 @@ pub struct Filter {
     /// Requested rows (1..200).
     pub limit: usize,
 }
+impl Filter {
+    /// Validate query bounds shared by every provider before opening a snapshot.
+    pub fn validate(&self) -> Result<(), Error> {
+        if !ruphish_domain::reporting::valid_window(self.from, self.until, self.limit)
+            || self.offset > 1_000_000
+            || self.search.len() > 256
+            || self.recipients.len() > 200
+            || self.recipients.iter().any(|id| *id <= 0)
+        {
+            return Err(Error::Invalid("analysis_invalid_filter".into()));
+        }
+        Ok(())
+    }
+}
 impl Default for Filter {
     fn default() -> Self {
         Self {

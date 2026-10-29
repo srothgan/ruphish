@@ -337,10 +337,21 @@ fn learning_pages_redirect_without_tracking_survive_restart_and_reject_adversari
     let submit = format!("{origin}/?rid={rid}");
     let landing_served = browser.get(&submit).send().unwrap();
     assert_eq!(landing_served.status(), 200);
+    let landing_policy = landing_served.headers()["content-security-policy"]
+        .to_str()
+        .unwrap();
+    for directive in [
+        "sandbox allow-scripts allow-forms;",
+        "form-action 'none'",
+        "frame-ancestors 'none'",
+    ] {
+        assert!(landing_policy.contains(directive), "{directive}");
+    }
+    assert!(!landing_policy.contains("allow-same-origin"));
     let parity = directory.path().join("page-preview-parity.json");
     std::fs::write(&parity, serde_json::to_vec(&json!([
         {"kind":"learning","preview":preview["html"],"served":html,"title":"Learning document title","visible":["Learn to inspect the sender","{{.FirstName}} is literal"]},
-        {"kind":"landing","preview":landing_preview["html"],"served":landing_served.text().unwrap(),"title":"Landing for Alice","visible":["Hello Alice"]}
+        {"kind":"landing","preview":landing_preview["html"],"served":landing_served.text().unwrap(),"title":"Landing for Alice","visible":["Hello Alice"],"endpoint":submit}
     ])).unwrap()).unwrap();
     let checked = std::process::Command::new("node")
         .arg(

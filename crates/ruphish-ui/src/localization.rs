@@ -235,15 +235,6 @@ pub fn verification_error(
     }
 }
 
-/// Translate the semantic trend label without changing its styling or arithmetic.
-pub fn trend_label(context: leptos_i18n::I18nContext<Locale>, tone: &str) -> String {
-    match tone {
-        "improving" => leptos_i18n::t_string!(context, ui.improving).to_owned(),
-        "worsening" => leptos_i18n::t_string!(context, ui.worsening).to_owned(),
-        _ => leptos_i18n::t_string!(context, ui.neutral).to_owned(),
-    }
-}
-
 /// Translate a received error once, retaining its stable support code.
 pub fn failure_label(context: leptos_i18n::I18nContext<Locale>, code: &str) -> String {
     #[cfg(feature = "demo")]

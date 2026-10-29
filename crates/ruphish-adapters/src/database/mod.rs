@@ -94,7 +94,10 @@ pub async fn open(config: Config, policy: Policy) -> Result<Database, Error> {
                 sessions: Arc::new(sqlite::sessions::Sessions::new(pool.clone())),
                 accounts: Arc::new(sqlite::accounts::Accounts::new(pool.clone())),
                 resources: Arc::new(sqlite::resources::Resources::new(pool.clone())),
-                campaigns: Arc::new(sqlite::campaigns::Campaigns::new(pool.clone())),
+                campaigns: Arc::new(sqlite::campaigns::Campaigns::new(
+                    pool.clone(),
+                    app::content_work::ContentWork::new(rendering.clone()),
+                )),
                 domains: Arc::new(sqlite::domains::Domains::new(pool.clone())),
                 interactions: Arc::new(crate::public_interactions::Interactions::new(
                     Arc::new(sqlite::interactions::Interactions::new(pool.clone())),
@@ -126,7 +129,10 @@ pub async fn open(config: Config, policy: Policy) -> Result<Database, Error> {
                 sessions: Arc::new(mysql::sessions::Sessions::new(pool.clone())),
                 accounts: Arc::new(mysql::accounts::Accounts::new(pool.clone())),
                 resources: Arc::new(mysql::resources::Resources::new(pool.clone())),
-                campaigns: Arc::new(mysql::campaigns::Campaigns::new(pool.clone())),
+                campaigns: Arc::new(mysql::campaigns::Campaigns::new(
+                    pool.clone(),
+                    app::content_work::ContentWork::new(rendering.clone()),
+                )),
                 domains: Arc::new(mysql::domains::Domains::new(pool.clone())),
                 interactions: Arc::new(crate::public_interactions::Interactions::new(
                     Arc::new(mysql::interactions::Interactions::new(pool.clone())),
@@ -158,7 +164,10 @@ pub async fn open(config: Config, policy: Policy) -> Result<Database, Error> {
                 sessions: Arc::new(postgres::sessions::Sessions::new(pool.clone())),
                 accounts: Arc::new(postgres::accounts::Accounts::new(pool.clone())),
                 resources: Arc::new(postgres::resources::Resources::new(pool.clone())),
-                campaigns: Arc::new(postgres::campaigns::Campaigns::new(pool.clone())),
+                campaigns: Arc::new(postgres::campaigns::Campaigns::new(
+                    pool.clone(),
+                    app::content_work::ContentWork::new(rendering.clone()),
+                )),
                 domains: Arc::new(postgres::domains::Domains::new(pool.clone())),
                 interactions: Arc::new(crate::public_interactions::Interactions::new(
                     Arc::new(postgres::interactions::Interactions::new(pool.clone())),
@@ -184,6 +193,10 @@ pub async fn open(config: Config, policy: Policy) -> Result<Database, Error> {
 }
 
 impl Database {
+    /// Share bounded content execution with administrative parsing and composition.
+    pub fn content_work(&self) -> app::content_work::ContentWork {
+        app::content_work::ContentWork::new(self.rendering.clone())
+    }
     /// Read-only readiness capability; callers use the application's bounded health service.
     pub fn health(&self) -> Arc<dyn app::health::Storage> {
         self.health.clone()

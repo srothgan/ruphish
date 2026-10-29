@@ -6,17 +6,14 @@ use ruphish_contracts::{campaign_reads as reads, reporting::Filter};
 use ruphish_ui::{api_error::ApiError, query::Query, results_state};
 use serde_json::Value;
 
-#[derive(Clone, Debug)]
-pub(crate) struct DeliverySnapshot {
-    pub value: Value,
-}
+use std::sync::Arc;
 
 #[derive(Clone, Copy)]
 pub(crate) struct CampaignQueries {
     overview: OverviewQueries,
     pub context: Query<String, reads::Header>,
     pub directory: Query<(String, String, String, String), reads::Directory>,
-    pub delivery: Query<(String, String, String, String), DeliverySnapshot>,
+    pub delivery: Query<(String, String, String, String), Arc<reads::Delivery>>,
     pub results: Query<(i64, String), reads::Results>,
     pub recipient_results: Query<(i64, i64, usize), reads::Results>,
     pub draft: Query<String, Value>,
@@ -82,12 +79,12 @@ impl CampaignQueries {
                         value.next_after = None;
                         value.next_cursor = None;
                     }
-                    Ok(DeliverySnapshot {
-                        value: encoded(api, value)?,
-                    })
+                    Ok(Arc::new(value))
                 },
             )
-            .with_automatic_refresh(|v| v.value["campaign"]["status"] != "Completed"),
+            .with_automatic_refresh(|v| {
+                v.campaign.status != ruphish_domain::campaign::CampaignStatus::Completed
+            }),
             results: Query::new(client, move |(id, query): (i64, String)| async move {
                 Self::read_results_query(api, id, &query).await
             })

@@ -114,6 +114,62 @@ async fn closing_a_dialog_does_not_cancel_its_user_list_reload_or_history_retry(
 }
 
 #[wasm_bindgen_test]
+async fn mounted_history_rejects_a_delayed_terminal_callback_after_an_edit() {
+    use ruphish_ui::api_error::ApiError;
+    let _ = any_spawner::Executor::init_wasm_bindgen();
+    for status in [403, 404] {
+        let owner = Owner::new();
+        let response = Gate::new();
+        let started = Gate::new();
+        let done = Gate::new();
+        let history = owner.with(|| {
+            let tasks = ViewTasks::default();
+            let history = RwSignal::new(History::default());
+            history.update(History::toggle);
+            let initial = history.try_update(|h| h.begin(false)).flatten().unwrap().0;
+            history.update(|h| {
+                h.finish(
+                    initial,
+                    Ok(serde_json::json!({
+                        "events":[{"id":9,"record":{"revision":0}}],
+                        "attempts":[{"generation":3,"state":"accepted"}],
+                        "next_event":9,"next_attempt":3
+                    })),
+                )
+            });
+            let ticket = history.try_update(|h| h.begin(false)).flatten().unwrap().0;
+            let (response, started, done) = (response.clone(), started.clone(), done.clone());
+            tasks.spawn(async move {
+                started.release();
+                response.wait().await;
+                let read = Err(ApiError::http(status, String::new(), "Obsolete".into()));
+                // Same callback boundary as campaign_delivery::fetch.
+                history.update(|h| h.finish(ticket, read));
+                done.release();
+            });
+            history
+        });
+        started.wait().await;
+        history.update(History::invalidate_reads);
+        history.update(|h| {
+            h.events
+                .insert(9, serde_json::json!({"id":9,"record":{"revision":1}}));
+        });
+        response.release();
+        done.wait().await;
+        history.with_untracked(|h| {
+            assert!(h.open);
+            assert_eq!(h.events[&9]["record"]["revision"], 1);
+            assert_eq!(h.attempts[&3]["state"], "accepted");
+            assert_eq!(h.next_event, Some(9));
+            assert_eq!(h.next_attempt, Some(3));
+            assert!(h.error.is_none());
+        });
+        owner.cleanup();
+    }
+}
+
+#[wasm_bindgen_test]
 async fn leaving_the_page_cancels_pending_work_and_prevents_late_state_writes() {
     let _ = any_spawner::Executor::init_wasm_bindgen();
     let owner = Owner::new();

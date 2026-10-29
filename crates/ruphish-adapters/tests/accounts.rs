@@ -8,6 +8,103 @@ use ruphish_application::auth::{Edit, Error, Service};
 use std::{path::Path, sync::Arc};
 use support::DatabaseFixture;
 
+struct SessionFault {
+    repository: Arc<dyn ruphish_application::auth::Repository>,
+    fault: &'static str,
+}
+
+#[async_trait::async_trait]
+impl ruphish_application::auth::Repository for SessionFault {
+    async fn by_id(&self, id: i64) -> Result<ruphish_application::auth::Account, Error> {
+        use ruphish_application::storage;
+        match self.fault {
+            "busy" => Err(storage::Error::Busy.into()),
+            "unavailable" => Err(storage::Error::Unavailable.into()),
+            "missing" => Err(Error::NotFound),
+            _ => {
+                let mut account = self.repository.by_id(id).await?;
+                account.role.permissions.clear();
+                Ok(account)
+            }
+        }
+    }
+    async fn by_name(&self, name: &str) -> Result<ruphish_application::auth::Account, Error> {
+        self.repository.by_name(name).await
+    }
+    async fn by_key(&self, key: &str) -> Result<ruphish_application::auth::Account, Error> {
+        self.repository.by_key(key).await
+    }
+    async fn list(
+        &self,
+        caller: ruphish_application::auth::Identity,
+    ) -> Result<Vec<ruphish_application::auth::Account>, Error> {
+        self.repository.list(caller).await
+    }
+    async fn write(
+        &self,
+        caller: ruphish_application::auth::Identity,
+        write: ruphish_application::auth::Write,
+    ) -> Result<Option<ruphish_application::auth::Account>, Error> {
+        self.repository.write(caller, write).await
+    }
+}
+
+#[tokio::test]
+async fn delivery_authorization_retains_storage_and_permission_classifications() {
+    use ruphish_application::{auth, delivery, resources, storage};
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("delivery-auth.db");
+    std::fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/authentication/legacy-accounts.sqlite3"),
+        &path,
+    )
+    .unwrap();
+    let db = DatabaseFixture::open(&path, "").await.unwrap();
+    let repository = db.accounts();
+    let actor = repository.by_id(1).await.unwrap().identity;
+    let resources = resources::Service::new(
+        db.resources(),
+        Arc::new(ruphish_adapters::resources::Validate),
+        Arc::new(ruphish_adapters::imports::Tools {
+            policy: Default::default(),
+        }),
+        db.content_work(),
+    );
+    for fault in ["busy", "unavailable", "missing", "forbidden"] {
+        let accounts = auth::Service::new(
+            Arc::new(SessionFault {
+                repository: repository.clone(),
+                fault,
+            }),
+            Arc::new(PasswordWorker::default()),
+        );
+        let delivery = delivery::Service::new(
+            accounts,
+            resources.clone(),
+            Arc::new(ruphish_adapters::smtp::Smtp::new(
+                Default::default(),
+                String::new(),
+            )),
+            db.previews(),
+        );
+        // An absent profile also prevents transport if authorization unexpectedly succeeds.
+        let error = delivery
+            .connect(actor, delivery::ProfileSelection::Saved(-1))
+            .await
+            .unwrap_err();
+        let observed = match error {
+            resources::Error::Storage(storage::Error::Busy) => "busy",
+            resources::Error::Storage(storage::Error::Unavailable) => "unavailable",
+            resources::Error::Policy(auth::AccountError::Unauthorized) => "missing",
+            resources::Error::Policy(auth::AccountError::Forbidden) => "forbidden",
+            _ => "wrong classification",
+        };
+        assert_eq!(observed, fault);
+    }
+    db.close().await;
+}
+
 #[tokio::test]
 async fn imported_accounts_lookups_roles_and_password_failure_are_atomic() {
     let directory = tempfile::tempdir().unwrap();

@@ -5,6 +5,7 @@ use ruphish_domain::{
     account::*,
     campaign::{DeliveryState, resolve_delivery},
     integrations::*,
+    validation::{Code, Report},
 };
 
 #[test]
@@ -96,10 +97,25 @@ fn mailbox() -> MailboxEdit {
     }
 }
 
+fn diagnostics(report: Report, expected: &[(&str, Code)], message: &str) {
+    let report = report.finish().unwrap_err();
+    assert_eq!(report.issues().len(), expected.len());
+    for (field, code) in expected {
+        assert!(
+            report
+                .issues()
+                .iter()
+                .any(|issue| issue.field == *field && issue.code == *code),
+            "Missing diagnostic {field}: {code:?} in {report:?}"
+        );
+    }
+    assert_eq!(report.message(), message);
+}
+
 #[test]
 fn configuration_bounds_and_checkpoint_identity_are_preserved() {
     let mut edit = mailbox();
-    assert!(edit.validate().is_ok());
+    assert!(edit.validation().finish().is_ok());
     assert!(!edit.resets_checkpoint("mail.example.test", 993, "service", "INBOX"));
     for (host, port, user, folder) in [
         ("other.example.test", 993, "service", "INBOX"),
@@ -118,15 +134,23 @@ fn configuration_bounds_and_checkpoint_identity_are_preserved() {
     assert!(!edit.resets_checkpoint("mail.example.test", 993, "service", "INBOX"));
     for frequency in [30, 31_540_000] {
         edit.frequency = frequency;
-        assert!(edit.validate().is_ok());
+        assert!(edit.validation().finish().is_ok());
     }
     for frequency in [0, 29, 31_540_001] {
         edit.frequency = frequency;
-        assert_eq!(edit.validate(), Err(Error::MailboxConfiguration));
+        diagnostics(
+            edit.validation(),
+            &[("frequency", Code::Invalid)],
+            "mailbox_invalid_configuration",
+        );
     }
     edit = mailbox();
     edit.host = "mail.example.test/path".into();
-    assert_eq!(edit.validate(), Err(Error::MailboxConfiguration));
+    diagnostics(
+        edit.validation(),
+        &[("host", Code::Invalid)],
+        "mailbox_invalid_configuration",
+    );
     let mut hook = WebhookEdit {
         name: "Events".into(),
         url: "https://receiver.example.test/hook".into(),
@@ -134,14 +158,45 @@ fn configuration_bounds_and_checkpoint_identity_are_preserved() {
         active: true,
         revision: None,
     };
-    assert!(hook.validate().is_ok());
+    assert!(hook.validation().finish().is_ok());
     hook.secret = Some(String::new());
-    assert_eq!(hook.validate(), Err(Error::WebhookSecret));
+    diagnostics(
+        hook.validation(),
+        &[("secret", Code::Invalid)],
+        "webhook_secret_required",
+    );
     hook.secret = None;
     hook.url = "https://user:pass@receiver.example.test".into();
-    assert_eq!(hook.validate(), Err(Error::WebhookConfiguration));
+    diagnostics(
+        hook.validation(),
+        &[("url", Code::Invalid)],
+        "webhook_invalid_configuration",
+    );
     hook.url = "not a URL".into();
-    assert_eq!(hook.validate(), Err(Error::WebhookUrl));
+    diagnostics(
+        hook.validation(),
+        &[("url", Code::InvalidUrl)],
+        "webhook_invalid_url",
+    );
+    // Independent failures remain visible together, instead of collapsing to
+    // the old wrapper's first coarse enum variant.
+    hook.name.clear();
+    hook.secret = Some(String::new());
+    diagnostics(
+        hook.validation(),
+        &[
+            ("name", Code::Invalid),
+            ("url", Code::InvalidUrl),
+            ("secret", Code::Invalid),
+        ],
+        "webhook_invalid_url",
+    );
+    edit.frequency = 0;
+    diagnostics(
+        edit.validation(),
+        &[("host", Code::Invalid), ("frequency", Code::Invalid)],
+        "mailbox_invalid_configuration",
+    );
 }
 
 #[test]

@@ -87,7 +87,7 @@ async fn listing(context: Context, only_validated: bool) -> Result<Response, Rej
         .map(encode)
         .filter(|d| !only_validated || d.eligible)
         .collect();
-    response(StatusCode::OK, &serde_json::json!(items), None)
+    response(StatusCode::OK, &items, None)
 }
 async fn list(context: Context) -> Result<Response, Rejection> {
     listing(context, false).await
@@ -104,11 +104,7 @@ async fn read(context: Context, Path(id): Path<i64>) -> Result<Response, Rejecti
             .await
             .map_err(error)?,
     );
-    response(
-        StatusCode::OK,
-        &serde_json::json!(domain),
-        Some(&domain.revision.to_string()),
-    )
+    response(StatusCode::OK, &domain, Some(&domain.revision.to_string()))
 }
 async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
@@ -141,7 +137,7 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
         } else {
             StatusCode::CREATED
         },
-        &serde_json::json!(domain),
+        &domain,
         Some(&domain.revision.to_string()),
     )
 }
@@ -160,7 +156,7 @@ async fn verify(context: Context, Path(id): Path<i64>) -> Result<Response, Rejec
             .await
             .map_err(error)?,
     );
-    response(StatusCode::ACCEPTED, &serde_json::json!(domain), None)
+    response(StatusCode::ACCEPTED, &domain, None)
 }
 async fn delete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;

@@ -16,6 +16,80 @@ use sqlx::{
 };
 use std::path::PathBuf;
 
+#[path = "support/reporting_filters.rs"]
+mod reporting_filters;
+
+#[path = "support/resource_summaries.rs"]
+mod resource_summaries;
+
+#[tokio::test]
+async fn sqlite_resource_summaries() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("summaries.db");
+    let db = database::open(
+        Config::Sqlite {
+            path: path.clone(),
+            migrations_prefix: String::new(),
+        },
+        Policy::default(),
+    )
+    .await
+    .unwrap();
+    let mut inspect = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
+    )
+    .await
+    .unwrap();
+    sqlx::raw_sql(resource_summaries::SEED)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    resource_summaries::contract(&db).await;
+    inspect.close().await.unwrap();
+    db.close().await;
+}
+
+#[tokio::test]
+#[ignore = "Requires canonical MySQL fixture"]
+async fn mysql_resource_summaries() {
+    let (mut inspect, config) = fixture().await;
+    let db = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    let seed = resource_summaries::SEED.replace("INSERT INTO groups", "INSERT INTO `groups`");
+    sqlx::raw_sql(sqlx::AssertSqlSafe(seed))
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    resource_summaries::contract(&db).await;
+    db.close().await;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE `{}`",
+        config.database
+    )))
+    .execute(&mut inspect)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires canonical PostgreSQL fixture"]
+async fn postgres_resource_summaries() {
+    let (mut admin, config) = postgres_fixture().await;
+    let db = database::open(Config::Postgres(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    let mut inspect = postgres_inspect(&config).await;
+    sqlx::raw_sql(resource_summaries::SEED)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    resource_summaries::contract(&db).await;
+    inspect.close().await.unwrap();
+    db.close().await;
+    postgres_cleanup(&mut admin, &config).await;
+}
+
 #[path = "support/event_edits.rs"]
 mod event_edits;
 
@@ -872,6 +946,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         "idempotent launch returns the same campaign"
     );
     assert_eq!(campaign.results.len(), 1);
+    reporting_filters::contract(db, actor, campaign.id, campaign.results[0].id).await;
     assert!(matches!(
         resources
             .delete(actor, Kind::Template, template.id, None)

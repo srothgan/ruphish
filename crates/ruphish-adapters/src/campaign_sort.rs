@@ -123,19 +123,3 @@ SELECT k.* FROM keyed k CROSS JOIN position p WHERE p.active=0 OR
 ORDER BY sort_present {dir},{key_text} {dir},sort_number {dir},k.kind ASC,{draft} ASC,campaign_id ASC LIMIT ?"#
     )
 }
-pub(crate) fn placeholders(sql: String, provider: &str) -> String {
-    if provider != "postgres" {
-        return sql;
-    }
-    let mut index = 0;
-    sql.chars()
-        .map(|c| {
-            if c == '?' {
-                index += 1;
-                format!("${index}")
-            } else {
-                c.to_string()
-            }
-        })
-        .collect()
-}

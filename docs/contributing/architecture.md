@@ -31,6 +31,10 @@ The participant listener binds campaign requests to verified origins and campaig
 
 ZIP landing imports run in memory without extraction or outbound fetches. Local resources become embedded HTML/CSS dependencies under document limits, so existing page persistence, copying, export and deletion own their lifecycle across all database providers. See [landing-page authoring](../user-guide/landing-pages.md) for import limits and custom collector integration, and [manual browser checks](testing/manual-ui.md) for enforcement that source/protocol tests cannot establish.
 
+Administrative imports, content validation, previews, campaign mail review and test-mail composition run as owned blocking work through application services. They share the installation's rendering admission capacity with public pages and stored previews. The blocking task retains its permit until computation finishes, even if the request is cancelled; an HTTP timeout does not preempt parsing. Authorization precedes administrative processing, and persistence rechecks authorization and revisions before effects.
+
+Campaign preparation aggregates each selected group as it is resolved and stops when a new unique recipient would exceed the campaign ceiling. The prepared audience owns the retained recipient records; group selections retain only identity, name, revision and original row count for review and launch. This preserves first-occurrence precedence and duplicate/conflict reporting without retaining every group's full content. Individual group loading still belongs to its provider.
+
 ## Background work
 
 Campaign, domain-verification, webhook, and mailbox workers use persisted claims and checkpoints. Providers own atomic persistence and ownership fencing; shared orchestration performs external work outside long-lived SQL transactions. A network side effect can succeed while acknowledgement fails, so recovery must represent uncertainty instead of promising exactly-once delivery.
