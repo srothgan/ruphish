@@ -12,7 +12,7 @@ Use this procedure for a recognized legacy SQLite or MySQL database. First read 
 1. Record the Gophish build, database engine/version, migration history, configuration, public origins, and external integrations. Inventory scheduled and active campaigns and any messages whose delivery is uncertain.
 2. Stop all writers and workers for the backup. Take a consistent database backup using the engine's supported method, and save configuration, certificates/keys, and needed assets separately. Confirm that the backup can be restored.
 3. Restore into an isolated rehearsal location. Restrict outbound access so the copy cannot deliver campaign mail, call production webhooks, or alter reporting mailboxes. `--disable-mailer` controls campaign sending; it is not a universal switch for all integrations.
-4. Build the target Ruphish checkout and prepare its current UI distribution. Translate configuration using the [configuration reference](../administration/configuration.md), including TLS trust, database credentials, and origin verification settings.
+4. Build the target Ruphish checkout and prepare its current UI distribution. Translate configuration using the [configuration reference](../administration/configuration.md), including TLS trust, database credentials, and origin verification settings. Remove `migrations_prefix`; the release accepts only embedded migrations.
 5. Start Ruphish against the copy and inspect startup logs. An unrecognized or inconsistent history is a stop condition, not a reason to clear migration tables or create an empty replacement database.
 
 SQLite creates a verified snapshot before upgrading supported legacy state. MySQL uses staged tables and retained originals with an upgrade journal. These protections supplement your own backup; preserve the original until verification is complete.
@@ -21,7 +21,7 @@ SQLite creates a verified snapshot before upgrading supported legacy state. MySQ
 
 ### What carries across
 
-The same-engine upgrade transforms a recognized database in place. It is not a JSON import that recreates every object with new IDs. The following describes source-supported upgrade behavior; verify it against your database copy before cutover.
+The same-engine upgrade converts a recognized Gophish database in place to Ruphish application schema v1. It preserves supported object IDs and relationships while applying the transformations below. Verify the result against your database copy before cutover.
 
 | Data | Upgrade treatment | Follow-up |
 | --- | --- | --- |

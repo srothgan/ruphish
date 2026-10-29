@@ -1,1 +1,0 @@
-CREATE INDEX ruphish_campaign_domain ON ruphish_campaign_domains(domain_id,campaign_id);

@@ -5,6 +5,8 @@ sidebar:
   order: 5
 ---
 
+Ruphish validates the database schema and recorded migration checksums before opening an installation. Existing Gophish users follow [Migrate from Gophish](from-gophish.md) for the supported SQLite and MySQL conversion paths.
+
 Upgrade the native executable, UI distribution, and compatible database state as one installation. The server verifies the browser asset manifest at startup; mixing an old distribution with changed inputs is not a valid upgrade check.
 
 1. Record the current and target revisions, toolchains, database provider/version, configuration, and integration state. Review target changes for migrations, configuration changes, and API differences.
@@ -18,8 +20,8 @@ Do not edit migration history or schema metadata to bypass a startup rejection. 
 
 No general database downgrade command is documented. Recovery uses the compatible previous application and a verified pre-upgrade backup. Account password changes and newly written state can prevent a newer database from being usable by an older application even when it opens successfully.
 
-## Observation schema upgrade
+## Release migration history
 
-SQLite schema 11 and server schema 5 give events canonical kinds, explicit recipient attribution, source metadata, and linked submission receipts. Existing IDs and timestamps remain. Historical receipts without an event link remain valid retry tombstones; ambiguous historical recipient attribution remains unresolved. Capture flags are removed from active page/campaign-policy storage and ignored in API inputs. Campaign summaries remain unique by recipient; recipient analysis counts repeats. Retain the pre-upgrade backup: older executables cannot read the new schema, and MySQL DDL interruptions require recovery from that backup.
+SQLite, MySQL, and PostgreSQL each have one `1_baseline.sql` defining application schema v1. Fresh installations create that schema directly. Supported Gophish conversions use the same baseline. Repeated startup of a current installation validates its history and structure without repeating conversion or creating another recovery copy.
 
-Before upgrading MySQL, grant the service account database-scoped `CREATE VIEW` and `SHOW VIEW` in addition to its existing migration privileges. The migration creates and validates the `event_history` compatibility view.
+MySQL service accounts require database-scoped `CREATE VIEW` and `SHOW VIEW` privileges for application views. See the provider guides for [SQLite](../administration/databases/sqlite.md), [MySQL](../administration/databases/mysql.md), and [PostgreSQL](../administration/databases/postgresql.md) for provisioning and recovery requirements.

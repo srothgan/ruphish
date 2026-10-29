@@ -80,7 +80,7 @@ async fn verify_domain(db: &DatabaseFixture, fixture: &Fixture, now: i64) {
 }
 
 async fn prepared_database(path: &Path, fixture: &Fixture) -> DatabaseFixture {
-    let db = DatabaseFixture::open(path, "").await.unwrap();
+    let db = DatabaseFixture::open(path).await.unwrap();
     verify_domain(&db, fixture, 1_900_000_000).await;
     db
 }

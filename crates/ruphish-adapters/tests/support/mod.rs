@@ -15,11 +15,10 @@ pub struct DatabaseFixture {
     inspection: SqlitePool,
 }
 impl DatabaseFixture {
-    pub async fn open(path: &Path, migrations_prefix: &str) -> Result<Self, Error> {
+    pub async fn open(path: &Path) -> Result<Self, Error> {
         let provider = database::open(
             Config::Sqlite {
                 path: path.to_owned(),
-                migrations_prefix: migrations_prefix.to_owned(),
             },
             Policy::new(&["127.0.0.1".into()]).map_err(|_| Error::Unavailable)?,
         )

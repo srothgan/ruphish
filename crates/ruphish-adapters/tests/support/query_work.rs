@@ -320,21 +320,20 @@ async fn recovery(inspect: &mut Inspector) {
     }
 }
 
-async fn upgrade_indexes(inspect: &mut Inspector, config: impl Fn() -> Config) {
+async fn baseline_indexes(inspect: &mut Inspector, config: impl Fn() -> Config) {
     inspect.execute("INSERT INTO ruphish_mailbox_runs(id,mailbox_id,started,finished,code) VALUES(99,99,1,2,'preserved')").await;
-    let (provider, previous) = match inspect {
-        Inspector::Sqlite(_) => ("sqlite", performance_versions::SQLITE),
-        Inspector::Mysql(_) => ("mysql", performance_versions::MYSQL),
-        Inspector::Postgres(_) => ("postgres", performance_versions::POSTGRES),
+    let provider = match inspect {
+        Inspector::Sqlite(_) => "sqlite",
+        Inspector::Mysql(_) => "mysql",
+        Inspector::Postgres(_) => "postgres",
     };
-    inspect.execute(previous).await;
     for _ in 0..2 {
         let db = database::open(config(), Policy::default()).await.unwrap();
         db.close().await;
         assert_eq!(inspect.scalar("SELECT count(*) FROM ruphish_mailbox_runs WHERE id=99 AND finished=2 AND code='preserved'").await, 1);
     }
     // Missing and altered indexes must be rejected, not silently repaired or
-    // accepted under the new migration version. Preserve existing history.
+    // accepted under the baseline history. Preserve existing data.
     let drop_index = if provider == "mysql" {
         "DROP INDEX ruphish_mailbox_runs_unfinished ON ruphish_mailbox_runs"
     } else {
@@ -360,9 +359,9 @@ async fn upgrade_indexes(inspect: &mut Inspector, config: impl Fn() -> Config) {
     });
     inspect.execute(drop_index).await;
     let migration = match provider {
-        "mysql" => include_str!("../../migrations/mysql/8_worker_recovery.sql"),
-        "postgres" => include_str!("../../migrations/postgres/8_worker_recovery.sql"),
-        _ => include_str!("../../migrations/sqlite/14_worker_recovery.sql"),
+        "mysql" => include_str!("../../migrations/mysql/1_baseline.sql"),
+        "postgres" => include_str!("../../migrations/postgres/1_baseline.sql"),
+        _ => include_str!("../../migrations/sqlite/1_baseline.sql"),
     };
     let original = migration
         .lines()
@@ -378,15 +377,9 @@ async fn upgrade_indexes(inspect: &mut Inspector, config: impl Fn() -> Config) {
 async fn sqlite_recovery_query_work() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("work.db");
-    let db = database::open(
-        Config::Sqlite {
-            path: path.clone(),
-            migrations_prefix: String::new(),
-        },
-        Policy::default(),
-    )
-    .await
-    .unwrap();
+    let db = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+        .await
+        .unwrap();
     db.close().await;
     let connection = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
@@ -394,11 +387,7 @@ async fn sqlite_recovery_query_work() {
     .await
     .unwrap();
     let mut inspect = Inspector::Sqlite(connection);
-    upgrade_indexes(&mut inspect, || Config::Sqlite {
-        path: path.clone(),
-        migrations_prefix: String::new(),
-    })
-    .await;
+    baseline_indexes(&mut inspect, || Config::Sqlite { path: path.clone() }).await;
     recovery(&mut inspect).await;
 }
 
@@ -413,7 +402,7 @@ async fn mysql_recovery_query_work() {
     let mut inspect = Inspector::Mysql(connection);
     println!("Disposable MySQL database: {}", config.database);
     let outcome = std::panic::AssertUnwindSafe(async {
-        upgrade_indexes(&mut inspect, || Config::MySql(config.clone())).await;
+        baseline_indexes(&mut inspect, || Config::MySql(config.clone())).await;
         recovery(&mut inspect).await;
     })
     .catch_unwind()
@@ -437,7 +426,7 @@ async fn postgres_recovery_query_work() {
     let mut inspect = Inspector::Postgres(postgres_inspect(&config).await);
     println!("Disposable PostgreSQL database: {}", config.database);
     let outcome = std::panic::AssertUnwindSafe(async {
-        upgrade_indexes(&mut inspect, || Config::Postgres(config.clone())).await;
+        baseline_indexes(&mut inspect, || Config::Postgres(config.clone())).await;
         recovery(&mut inspect).await;
     })
     .catch_unwind()
@@ -453,15 +442,9 @@ async fn postgres_recovery_query_work() {
 async fn sqlite_fairness_query_work() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("work.db");
-    let db = database::open(
-        Config::Sqlite {
-            path: path.clone(),
-            migrations_prefix: String::new(),
-        },
-        Policy::default(),
-    )
-    .await
-    .unwrap();
+    let db = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+        .await
+        .unwrap();
     db.close().await;
     let connection = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
@@ -597,15 +580,9 @@ mod summary_sql;
 async fn sqlite_summaries_query_work() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("work.db");
-    let db = database::open(
-        Config::Sqlite {
-            path: path.clone(),
-            migrations_prefix: String::new(),
-        },
-        Policy::default(),
-    )
-    .await
-    .unwrap();
+    let db = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+        .await
+        .unwrap();
     db.close().await;
     let connection = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
@@ -756,15 +733,9 @@ async fn summaries(inspect: &mut Inspector) {
 async fn sqlite_mailbox_history_query_work() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("work.db");
-    let db = database::open(
-        Config::Sqlite {
-            path: path.clone(),
-            migrations_prefix: String::new(),
-        },
-        Policy::default(),
-    )
-    .await
-    .unwrap();
+    let db = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+        .await
+        .unwrap();
     db.close().await;
     let connection = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
@@ -881,15 +852,9 @@ async fn mailbox_history(inspect: &mut Inspector) {
 async fn sqlite_inventory_query_work() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("work.db");
-    let db = database::open(
-        Config::Sqlite {
-            path: path.clone(),
-            migrations_prefix: String::new(),
-        },
-        Policy::default(),
-    )
-    .await
-    .unwrap();
+    let db = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+        .await
+        .unwrap();
     db.close().await;
     let connection = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),

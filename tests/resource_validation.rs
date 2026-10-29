@@ -39,15 +39,9 @@ async fn page_save_reuses_authoritative_diagnostics_and_preserves_failure_atomic
     let directory = workspace();
     let path = directory.path().join("validation.sqlite3");
     let policy = Policy::default();
-    let db = database::open(
-        Config::Sqlite {
-            path: path.clone(),
-            migrations_prefix: String::new(),
-        },
-        policy.clone(),
-    )
-    .await
-    .unwrap();
+    let db = database::open(Config::Sqlite { path: path.clone() }, policy.clone())
+        .await
+        .unwrap();
     db.bootstrap(
         Some("synthetic-bootstrap-password".into()),
         Some("synthetic-bootstrap-token".into()),

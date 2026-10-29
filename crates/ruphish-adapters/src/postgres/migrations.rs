@@ -6,95 +6,16 @@ use sqlx::{
     migrate::{Migrate, Migration, MigrationType, Migrator},
 };
 use std::borrow::Cow;
-const BASELINE: &str = include_str!("../../migrations/postgres/1_application.sql");
+const BASELINE: &str = include_str!("../../migrations/postgres/1_baseline.sql");
 fn migrator() -> Migrator {
     Migrator {
-        migrations: Cow::Owned(vec![
-            Migration::new(
-                1,
-                Cow::Borrowed("application"),
-                MigrationType::Simple,
-                BASELINE.into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                2,
-                Cow::Borrowed("user preferences"),
-                MigrationType::Simple,
-                include_str!("../../migrations/postgres/2_user_preferences.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                3,
-                Cow::Borrowed("UTC offset preference"),
-                MigrationType::Simple,
-                include_str!("../../migrations/postgres/3_utc_offset.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                4,
-                Cow::Borrowed("campaign drafts"),
-                MigrationType::Simple,
-                include_str!("../../migrations/postgres/4_campaign_drafts.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                5,
-                Cow::Borrowed("observations"),
-                MigrationType::Simple,
-                include_str!("../../migrations/postgres/5_observations.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                6,
-                Cow::Borrowed("company settings"),
-                MigrationType::Simple,
-                include_str!("../../migrations/postgres/6_settings.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                7,
-                Cow::Borrowed("learning pages"),
-                MigrationType::Simple,
-                include_str!("../../migrations/postgres/7_learning_pages.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                8,
-                Cow::Borrowed("worker recovery indexes"),
-                MigrationType::Simple,
-                include_str!("../../migrations/postgres/8_worker_recovery.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                9,
-                Cow::Borrowed("campaign fairness index"),
-                MigrationType::Simple,
-                include_str!("../../migrations/postgres/9_campaign_fairness.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                10,
-                Cow::Borrowed("resource reference indexes"),
-                MigrationType::Simple,
-                include_str!("../../migrations/postgres/10_resource_references.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                11,
-                Cow::Borrowed("mailbox history index"),
-                MigrationType::Simple,
-                include_str!("../../migrations/postgres/11_mailbox_history.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                12,
-                Cow::Borrowed("inventory domain indexes"),
-                MigrationType::Simple,
-                include_str!("../../migrations/postgres/12_inventory_domains.sql").into_sql_str(),
-                false,
-            ),
-        ]),
+        migrations: Cow::Owned(vec![Migration::new(
+            1,
+            Cow::Borrowed("release baseline"),
+            MigrationType::Simple,
+            BASELINE.into_sql_str(),
+            false,
+        )]),
         locking: false,
         ..Migrator::DEFAULT
     }
@@ -201,7 +122,7 @@ async fn verify(c: &mut PgConnection) -> Result<(), Error> {
             .map_err(storage_error)?;
     if !crate::observation_schema::matches(
         &definition,
-        include_str!("../../migrations/postgres/5_observations.sql"),
+        include_str!("../../migrations/postgres/1_baseline.sql"),
         "ruphish",
     ) {
         return Err(Error::UnsupportedSchema);

@@ -37,4 +37,4 @@ Keep the listener settings alongside this fragment. Supply the named password en
 
 Use typed settings, not a DSN. Remove MySQL settings, legacy `db_sslca_path`, and custom migration paths. Unset `PGOPTIONS`, `PGSSLCERT`, `PGSSLKEY`, and `PGSSLROOTCERT`; application configuration owns session/TLS policy. Password files are not read.
 
-PostgreSQL starts from a fresh Ruphish baseline. There is no historical Gophish PostgreSQL upgrade or cross-engine importer. Unknown populated databases, modified migration history, and schema drift are rejected. Transactional DDL helps recover failed migrations but does not replace operator backups; PostgreSQL does not generate a recovery-copy path for you.
+Fresh PostgreSQL installations initialize application schema v1 directly. There is no historical Gophish PostgreSQL upgrade or cross-engine importer. Unknown populated databases, modified migration history, and schema drift are rejected. Transactional DDL helps recover failed migrations but does not replace operator backups; PostgreSQL does not generate a recovery-copy path for you.

@@ -14,7 +14,6 @@ async fn open(path: &Path) -> Database {
     database::open(
         Config::Sqlite {
             path: path.to_owned(),
-            migrations_prefix: String::new(),
         },
         Policy::default(),
     )
@@ -123,14 +122,7 @@ async fn failed_configuration_never_falls_back_or_leaks_driver_details() {
     let path = directory.path().join("connection-secret-canary.db");
     std::fs::write(&path, b"not a database; secret fixture bytes").unwrap();
     let before = std::fs::read(&path).unwrap();
-    let result = database::open(
-        Config::Sqlite {
-            path: path.clone(),
-            migrations_prefix: String::new(),
-        },
-        Policy::default(),
-    )
-    .await;
+    let result = database::open(Config::Sqlite { path: path.clone() }, Policy::default()).await;
     assert!(matches!(result, Err(Error::Unavailable)));
     if let Err(error) = result {
         for rendered in [error.to_string(), format!("{error:?}")] {
@@ -139,19 +131,4 @@ async fn failed_configuration_never_falls_back_or_leaks_driver_details() {
         }
     }
     assert_eq!(std::fs::read(&path).unwrap(), before);
-    let absent = directory.path().join("must-not-be-created.db");
-    let result = database::open(
-        Config::Sqlite {
-            path: absent.clone(),
-            migrations_prefix: directory
-                .path()
-                .join("missing_")
-                .to_string_lossy()
-                .into_owned(),
-        },
-        Policy::default(),
-    )
-    .await;
-    assert!(result.is_err());
-    assert!(!absent.exists());
 }

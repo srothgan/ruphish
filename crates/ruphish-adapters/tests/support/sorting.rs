@@ -701,10 +701,7 @@ async fn event_selection(db: &Database) {
 async fn sqlite_sorted_tables_cover_complete_sets_and_exports() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("sorting.db");
-    let config = Config::Sqlite {
-        path: path.clone(),
-        migrations_prefix: String::new(),
-    };
+    let config = Config::Sqlite { path: path.clone() };
     let db = database::open(config, Policy::default()).await.unwrap();
     bootstrap_sorting(&db).await;
     let mut inspect = sqlx::SqliteConnection::connect_with(

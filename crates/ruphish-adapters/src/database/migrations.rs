@@ -1,5 +1,4 @@
-//! Explicit file-based legacy migration capabilities.
-//! Server database providers will own their own startup migration paths.
+//! Explicit source assessment and complete SQLite initialization/conversion.
 use super::{Error, sqlite, upgrade_error};
 use std::path::Path;
 
@@ -34,13 +33,12 @@ pub async fn inspect_mysql(config: &super::MySqlConfig) -> Result<MySqlInspectio
 }
 /// Latest supported Goose schema version, not a Ruphish schema version.
 pub const LATEST_LEGACY_VERSION: i64 = sqlite::LATEST_LEGACY_VERSION;
-/// Create a legacy-compatible baseline without bootstrap accounts.
-/// Normal installations use [`super::open`] to apply all Ruphish migrations too.
-pub async fn create_legacy_baseline(path: &Path) -> Result<(), Error> {
+/// Create the complete release baseline without bootstrap accounts.
+pub async fn create_baseline(path: &Path) -> Result<(), Error> {
     sqlite::create(path).await.map_err(upgrade_error)
 }
 /// Upgrade a coherent file snapshot without changing the source or clobbering output.
-/// Normal startup subsequently applies Ruphish-specific migrations.
+/// The destination is a complete current Ruphish database.
 pub async fn upgrade_copy(source: &Path, destination: &Path) -> Result<(), Error> {
     sqlite::upgrade_copy(source, destination)
         .await

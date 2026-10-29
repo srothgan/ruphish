@@ -12,8 +12,10 @@ fn go_configuration_observations_preserve_merges_except_rejected_unknown_fields(
         let body = observation["body"].as_str().unwrap();
         std::fs::write(&path, body).unwrap();
         let result = load(&path);
-        // Security deviation: legacy ignored unknown root/listener fields.
-        let unknown = body.contains("unknown") || body.contains("csrf_key\":12");
+        // Deliberate deviations: reject unknown fields and the removed migration prefix.
+        let unknown = body.contains("migrations_prefix")
+            || body.contains("unknown")
+            || body.contains("csrf_key\":12");
         assert_eq!(
             result.is_ok(),
             observation["accepted"].as_bool().unwrap() && !unknown,
@@ -38,9 +40,14 @@ fn go_configuration_observations_preserve_merges_except_rejected_unknown_fields(
                     json!(values)
                 };
             }
+            let mut expected = observation["expected"].clone();
+            expected
+                .as_object_mut()
+                .unwrap()
+                .remove("migrations_prefix");
             assert_eq!(
-                json!({"admin_server":admin,"phish_server":server(&config.phish),"db_name":config.db_name,"db_path":config.db_path,"db_sslca_path":config.db_sslca_path,"migrations_prefix":format!("{}{}", config.migrations_prefix, config.db_name),"test_flag":false,"contact_address":config.contact_address,"logging":{"filename":config.logging.filename,"level":config.logging.level}}),
-                observation["expected"],
+                json!({"admin_server":admin,"phish_server":server(&config.phish),"db_name":config.db_name,"db_path":config.db_path,"db_sslca_path":config.db_sslca_path,"test_flag":false,"contact_address":config.contact_address,"logging":{"filename":config.logging.filename,"level":config.logging.level}}),
+                expected,
                 "{body}"
             );
         }

@@ -46,8 +46,6 @@ pub enum Config {
     Sqlite {
         /// File to open or initialize.
         path: PathBuf,
-        /// Optional legacy migration-directory compatibility check.
-        migrations_prefix: String,
     },
 }
 
@@ -79,11 +77,8 @@ enum Backend {
 /// Outbound policy applies to integration operations, never to database routing.
 pub async fn open(config: Config, policy: Policy) -> Result<Database, Error> {
     match config {
-        Config::Sqlite {
-            path,
-            migrations_prefix,
-        } => {
-            let backend = sqlite::StartupDatabase::open(&path, &migrations_prefix)
+        Config::Sqlite { path } => {
+            let backend = sqlite::StartupDatabase::open(&path)
                 .await
                 .map_err(startup_error)?;
             let pool = backend.pool();

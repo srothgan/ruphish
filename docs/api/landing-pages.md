@@ -27,7 +27,7 @@ The saved object adds `id`, `modified_date`, and `warnings`. Updates require the
 
 ## Interaction tracking
 
-The API has no capture settings. Every supported submission records an event and password presence. Neither pages nor campaign overrides can disable this built-in tracking or enable stored usernames, passwords, OTPs, arbitrary field values, or value derivatives. The retired `capture_credentials` and `capture_passwords` fields are absent from responses.
+The API has no capture settings. Every supported submission records an event and password presence. Neither pages nor campaign overrides can disable this built-in tracking or enable stored usernames, passwords, OTPs, arbitrary field values, or value derivatives. Responses omit `capture_credentials` and `capture_passwords`.
 
 The served page preserves authored scripts, event handlers and visual assets while enforcing managed native submissions and an opaque-origin sandbox. Custom code can make independent requests; it is outside the built-in presence-only guarantee. See [landing pages](../user-guide/landing-pages.md) for supported content, asset imports and `window.ruphish.submit(form)`, and [participant data](../user-guide/participant-data.md) for the privacy boundary.
 

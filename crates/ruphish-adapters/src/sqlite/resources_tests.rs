@@ -10,7 +10,7 @@ async fn group_summary_work_does_not_scale_with_unrelated_memberships()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("summary-work.db");
-    let database = crate::sqlite::StartupDatabase::open(&path, "").await?;
+    let database = crate::sqlite::StartupDatabase::open(&path).await?;
     database.close().await;
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(1)

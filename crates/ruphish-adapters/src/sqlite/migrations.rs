@@ -1,103 +1,94 @@
-//! Embedded upstream SQLite migrations; see migrations/gophish/provenance.json.
-pub(super) const MIGRATIONS: &[(i64, &str)] = &[
-    (
-        20160118194630,
-        include_str!("../../migrations/gophish/20160118194630_init.sql"),
-    ),
-    (
-        20160131153104,
-        include_str!("../../migrations/gophish/20160131153104_0.1.2_add_event_details.sql"),
-    ),
-    (
-        20160211211220,
-        include_str!("../../migrations/gophish/20160211211220_0.1.2_add_ignore_cert_errors.sql"),
-    ),
-    (
-        20160217211342,
-        include_str!("../../migrations/gophish/20160217211342_0.1.2_create_from_col_results.sql"),
-    ),
-    (
-        20160225173824,
-        include_str!("../../migrations/gophish/20160225173824_0.1.2_capture_credentials.sql"),
-    ),
-    (
-        20160227180335,
-        include_str!("../../migrations/gophish/20160227180335_0.1.2_store-smtp-settings.sql"),
-    ),
-    (
-        20160317214457,
-        include_str!("../../migrations/gophish/20160317214457_0.2_redirect_url.sql"),
-    ),
-    (
-        20160605210903,
-        include_str!("../../migrations/gophish/20160605210903_0.2_campaign_scheduling.sql"),
-    ),
-    (
-        20170104220731,
-        include_str!("../../migrations/gophish/20170104220731_0.2_result_statuses.sql"),
-    ),
-    (
-        20170219122503,
-        include_str!("../../migrations/gophish/20170219122503_0.2.1_email_headers.sql"),
-    ),
-    (
-        20170827141312,
-        include_str!("../../migrations/gophish/20170827141312_0.4_utc_dates.sql"),
-    ),
-    (
-        20171027213457,
-        include_str!("../../migrations/gophish/20171027213457_0.4.1_maillogs.sql"),
-    ),
-    (
-        20171208201932,
-        include_str!("../../migrations/gophish/20171208201932_0.4.1_next_send_date.sql"),
-    ),
-    (
-        20180223101813,
-        include_str!("../../migrations/gophish/20180223101813_0.5.1_user_reporting.sql"),
-    ),
-    (
-        20180524203752,
-        include_str!("../../migrations/gophish/20180524203752_0.7.0_result_last_modified.sql"),
-    ),
-    (
-        20180527213648,
-        include_str!("../../migrations/gophish/20180527213648_0.7.0_store_email_request.sql"),
-    ),
-    (
-        20180830215615,
-        include_str!("../../migrations/gophish/20180830215615_0.7.0_send_by_date.sql"),
-    ),
-    (
-        20190105192341,
-        include_str!("../../migrations/gophish/20190105192341_0.8.0_rbac.sql"),
-    ),
-    (
-        20191104103306,
-        include_str!("../../migrations/gophish/20191104103306_0.9.0_create_webhooks.sql"),
-    ),
-    (
-        20200116000000,
-        include_str!("../../migrations/gophish/20200116000000_0.9.0_imap.sql"),
-    ),
-    (
-        20200619000000,
-        include_str!("../../migrations/gophish/20200619000000_0.11.0_password_policy.sql"),
-    ),
-    (
-        20200730000000,
-        include_str!("../../migrations/gophish/20200730000000_0.11.0_imap_ignore_cert_errors.sql"),
-    ),
-    (
-        20200914000000,
-        include_str!("../../migrations/gophish/20200914000000_0.11.0_last_login.sql"),
-    ),
-    (
-        20201201000000,
-        include_str!("../../migrations/gophish/20201201000000_0.11.0_account_locked.sql"),
-    ),
-    (
-        20220321133237,
-        include_str!("../../migrations/gophish/20220321133237_0.4.1_envelope_sender.sql"),
-    ),
-];
+//! Release migration history. Gophish recognition and conversion live in `legacy`.
+use super::{UpgradeError, legacy, schema};
+use sqlx::{
+    SqlSafeStr, SqliteConnection,
+    migrate::{Migration, MigrationType, Migrator},
+};
+use std::borrow::Cow;
+
+pub(super) const BASELINE: &str = include_str!("../../migrations/sqlite/1_baseline.sql");
+
+pub(super) fn migrator() -> Migrator {
+    Migrator {
+        migrations: Cow::Owned(vec![Migration::new(
+            1,
+            Cow::Borrowed("release baseline"),
+            MigrationType::Simple,
+            BASELINE.into_sql_str(),
+            false,
+        )]),
+        locking: false,
+        ..Migrator::DEFAULT
+    }
+}
+
+pub(super) async fn initialize(c: &mut SqliteConnection) -> Result<(), UpgradeError> {
+    migrator()
+        .run_direct(None, &mut *c, false)
+        .await
+        .map_err(|e| UpgradeError::Unrecognized(format!("Application migration failed: {e}")))?;
+    Ok(())
+}
+
+/// A recognized source, before any mutation. Old Ruphish histories are unsupported.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum Source {
+    Application(i64),
+    Gophish(i64),
+}
+
+pub(super) async fn inspect(c: &mut SqliteConnection) -> Result<Source, UpgradeError> {
+    let integrity: String = sqlx::query_scalar("PRAGMA integrity_check")
+        .fetch_one(&mut *c)
+        .await?;
+    if integrity != "ok" {
+        return Err(UpgradeError::Unrecognized(integrity));
+    }
+    let application: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='_sqlx_migrations')",
+    )
+    .fetch_one(&mut *c)
+    .await?;
+    if application {
+        let rows: Vec<(i64, bool, Vec<u8>)> = sqlx::query_as(
+            "SELECT version,success,checksum FROM _sqlx_migrations ORDER BY version",
+        )
+        .fetch_all(&mut *c)
+        .await?;
+        let migrations = migrator();
+        if rows.is_empty()
+            || rows.len() > migrations.migrations.len()
+            || !rows.iter().zip(migrations.iter()).all(
+                |((version, success, checksum), expected)| {
+                    *version == expected.version
+                        && *success
+                        && checksum.as_slice() == expected.checksum.as_ref()
+                },
+            )
+        {
+            return Err(UpgradeError::Unrecognized(
+                "Unsupported Ruphish schema history".into(),
+            ));
+        }
+        let version = rows
+            .last()
+            .map(|row| row.0)
+            .ok_or_else(|| UpgradeError::Unrecognized("Empty application history".into()))?;
+        schema::validate_version(c, version).await?;
+        Ok(Source::Application(version))
+    } else {
+        legacy::inspect(c).await.map(Source::Gophish)
+    }
+}
+
+pub(super) async fn upgrade(c: &mut SqliteConnection, source: Source) -> Result<(), UpgradeError> {
+    match source {
+        Source::Gophish(version) => legacy::convert(c, version).await?,
+        Source::Application(_) => initialize(c).await?,
+    }
+    schema::validate(c).await
+}
+
+pub(super) fn current(source: &Source) -> bool {
+    matches!(source, Source::Application(version) if migrator().iter().last().is_some_and(|migration| migration.version == *version))
+}

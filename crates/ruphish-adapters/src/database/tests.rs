@@ -35,7 +35,6 @@ fn administrative_content_uses_shared_rendering_admission_and_owned_inputs() {
         let db = open(
             Config::Sqlite {
                 path: dir.path().join("content.db"),
-                migrations_prefix: String::new(),
             },
             Policy::default(),
         )
@@ -143,7 +142,7 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
                     .join("../../tests/fixtures/campaigns/queued.sqlite3"),
                 &path,
             ).unwrap();
-            let db = open(Config::Sqlite {path, migrations_prefix: String::new()}, Policy::default()).await.unwrap();
+            let db = open(Config::Sqlite {path,}, Policy::default()).await.unwrap();
             let inspection_pool = match &db.backend { super::Backend::Sqlite(db) => db.pool(), _ => unreachable!() };
             let now = OffsetDateTime::now_utc().unix_timestamp();
             sqlx::query("UPDATE ruphish_settings SET verification_enabled=1").execute(&inspection_pool).await.unwrap();
@@ -250,7 +249,7 @@ fn preview_rendering_releases_connection_and_preserves_owned_snapshot() {
                     .join("../../tests/fixtures/campaigns/queued.sqlite3"),
                 &path,
             ).unwrap();
-            let db = open(Config::Sqlite { path, migrations_prefix: String::new() }, Policy::default()).await.unwrap();
+            let db = open(Config::Sqlite { path, }, Policy::default()).await.unwrap();
             let inspection_pool = match &db.backend { super::Backend::Sqlite(db) => db.pool(), _ => unreachable!() };
             sqlx::query("UPDATE pages SET html=?")
                 .bind(if scenario == "invalid" { "{{if}}" } else { "<h1>Hello {{.FirstName}}</h1>" })

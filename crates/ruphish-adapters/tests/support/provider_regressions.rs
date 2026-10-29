@@ -268,15 +268,9 @@ async fn postgres_facade_retains_busy_across_capabilities() {
 async fn sqlite_facade_retains_busy_across_capabilities() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("busy.db");
-    let db = database::open(
-        Config::Sqlite {
-            path: path.clone(),
-            migrations_prefix: String::new(),
-        },
-        Policy::default(),
-    )
-    .await
-    .unwrap();
+    let db = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+        .await
+        .unwrap();
     let (actor, original) = replacement_fixture(&db).await;
     let mut inspector = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),

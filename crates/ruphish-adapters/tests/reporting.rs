@@ -27,7 +27,7 @@ async fn fixture() -> (tempfile::TempDir, DatabaseFixture) {
         &path,
     )
     .unwrap();
-    let database = DatabaseFixture::open(&path, "").await.unwrap();
+    let database = DatabaseFixture::open(&path).await.unwrap();
     let settings = database.settings().get(caller()).await.unwrap();
     let mut policy = settings.policy;
     policy.webhooks_enabled = true;
@@ -475,7 +475,7 @@ async fn committed_events_retry_after_receiver_failure_and_rollback_never_sends(
         .await
         .unwrap();
     database.close().await;
-    let reopened = DatabaseFixture::open(&directory.path().join("reporting.db"), "")
+    let reopened = DatabaseFixture::open(&directory.path().join("reporting.db"))
         .await
         .unwrap();
     let restarted = reopened.integrations();
@@ -597,7 +597,7 @@ async fn legacy_mailbox_and_location_migration_is_recoverable_and_idempotent() {
         .unwrap();
     sqlx::raw_sql("UPDATE results SET ip='192.0.2.42',latitude=51.5,longitude=7.2; INSERT INTO imap(user_id,host,port,username,password,tls,enabled,folder,imap_freq,modified_date,last_login,ignore_cert_errors) VALUES(1,'imap.example.test',993,'reports','LEGACY-SERVICE-SECRET',1,1,'Reports',60,'2025-01-02T03:04:05.123456789Z','2025-01-03T04:05:06Z',1); INSERT INTO imap(user_id,host,port,enabled) VALUES(1,'',99999,1);").execute(&mut legacy).await.unwrap();
     legacy.close().await.unwrap();
-    let db = DatabaseFixture::open(&path, "").await.unwrap();
+    let db = DatabaseFixture::open(&path).await.unwrap();
     let backup = db.backup_path().unwrap().to_path_buf();
     let store = db.integrations();
     let rows = store.mailboxes(caller()).await.unwrap();
@@ -630,7 +630,7 @@ async fn legacy_mailbox_and_location_migration_is_recoverable_and_idempotent() {
     assert_eq!(old, 0, "one authoritative credential store after migration");
     let ids: Vec<_> = rows.iter().map(|r| r.id).collect();
     db.close().await;
-    let reopened = DatabaseFixture::open(&path, "").await.unwrap();
+    let reopened = DatabaseFixture::open(&path).await.unwrap();
     let again = reopened.integrations().mailboxes(caller()).await.unwrap();
     assert!(again.iter().find(|r| r.enabled).unwrap().ignore_cert_errors);
     assert_eq!(ids, again.iter().map(|r| r.id).collect::<Vec<_>>());
@@ -856,7 +856,7 @@ async fn mailbox_disconnects_back_off_across_restart_and_invalid_claims_do_not_c
     for (index, expected_delay) in [60, 120, 240, 480, 960, 1920, 3600].into_iter().enumerate() {
         if index == 3 {
             database.close().await;
-            database = DatabaseFixture::open(&directory.path().join("reporting.db"), "")
+            database = DatabaseFixture::open(&directory.path().join("reporting.db"))
                 .await
                 .unwrap();
         }

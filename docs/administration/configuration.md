@@ -39,7 +39,6 @@ For an explicit installation, copy this minimal SQLite configuration into your c
   },
   "db_name": "sqlite3",
   "db_path": "ruphish.db",
-  "migrations_prefix": "",
   "logging": { "filename": "ruphish.log", "level": "info", "max_size_bytes": 10485760, "max_files": 5 }
 }
 ```
@@ -55,13 +54,12 @@ For an explicit installation, copy this minimal SQLite configuration into your c
 | `db_sslca_path` | string | Legacy MySQL CA path; incompatible with typed MySQL settings and other providers |
 | `mysql` | object/null | [Typed MySQL settings](databases/mysql.md) |
 | `postgres` | object/null | [Typed PostgreSQL settings](databases/postgresql.md) |
-| `migrations_prefix` | string | Empty uses embedded migrations; a nonempty value selects a verified legacy SQLite migration directory |
 | `contact_address` | string | Contact address exposed by the public transparency response |
 | `logging` | object | Output file and level |
 | `domain_verification` | object | Installation-owned DNS/HTTPS/proxy policy |
 | `test_flag` | boolean | Accepted for configuration compatibility; cannot enable a test mode |
 
-SQLite external migration directories must match the verified migration set; they are not arbitrary startup SQL. Server databases use embedded application migrations. See the provider guides before changing migration settings.
+All providers use embedded migrations. External migration directories and the Gophish `migrations_prefix` field are unsupported. Omit that field when translating a Gophish configuration; supplying it, even as an empty string, is rejected. See [migration from Gophish](../migration/from-gophish.md).
 
 ## Listener fields
 

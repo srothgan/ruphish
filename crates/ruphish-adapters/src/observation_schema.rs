@@ -5,7 +5,7 @@ pub(crate) fn matches(actual: &str, migration: &str, schema: &str) -> bool {
     let Some((_, definition)) = migration.split_once("CREATE VIEW event_history AS ") else {
         return false;
     };
-    tokens(actual, schema) == tokens(definition.trim_end_matches([';', '\n', '\r']), schema)
+    tokens(actual, schema) == tokens(definition.split(';').next().unwrap_or_default(), schema)
 }
 
 fn tokens(sql: &str, schema: &str) -> Vec<String> {

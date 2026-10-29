@@ -45,7 +45,6 @@ pub(crate) struct Config {
     pub(crate) db_sslca_path: PathBuf,
     pub(crate) postgres: Option<ruphish_adapters::database::PostgresConfig>,
     pub(crate) mysql: Option<ruphish_adapters::database::MySqlConfig>,
-    pub(crate) migrations_prefix: String,
     pub(crate) contact_address: String,
     pub(crate) logging: Logging,
 }
@@ -97,15 +96,6 @@ impl Config {
         }
         if self.db_name == "sqlite3" {
             resolve(&mut self.db_path, base);
-            if !self.migrations_prefix.is_empty() {
-                let mut prefix = PathBuf::from(&self.migrations_prefix);
-                resolve(&mut prefix, base);
-                self.migrations_prefix = prefix.into_os_string().into_string().map_err(|_| {
-                    ConfigError::Invalid(
-                        "Migration directory must be representable as Unicode".into(),
-                    )
-                })?;
-            }
         }
         for path in [
             self.mysql
@@ -171,14 +161,12 @@ impl Config {
                 }
                 Ok(Database::Sqlite {
                     path: self.db_path.clone(),
-                    migrations_prefix: self.migrations_prefix.clone(),
                 })
             }
             "postgres" => {
                 if self.mysql.is_some()
                     || !self.db_path.as_os_str().is_empty()
                     || !self.db_sslca_path.as_os_str().is_empty()
-                    || !matches!(self.migrations_prefix.as_str(), "" | "db/db_" | "./db/db_")
                 {
                     return Err(ConfigError::Invalid("PostgreSQL requires its typed settings and embedded migrations; remove other database settings".into()));
                 }
@@ -197,9 +185,6 @@ impl Config {
                     ));
                 }
 
-                if !matches!(self.migrations_prefix.as_str(), "" | "db/db_" | "./db/db_") {
-                    return Err(ConfigError::Invalid("MySQL uses embedded application migrations; custom migrations_prefix is unsupported".into()));
-                }
                 let settings = if let Some(settings) = &self.mysql {
                     if !self.db_path.as_os_str().is_empty()
                         || !self.db_sslca_path.as_os_str().is_empty()
@@ -293,7 +278,6 @@ impl Apply for Config {
             "db_sslca_path" => scalar(&mut self.db_sslca_path, value),
             "postgres" => scalar(&mut self.postgres, value),
             "mysql" => scalar(&mut self.mysql, value),
-            "migrations_prefix" => scalar(&mut self.migrations_prefix, value),
             "contact_address" => scalar(&mut self.contact_address, value),
             "logging" if value.get() == "null" => {
                 self.logging = Logging::default();

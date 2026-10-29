@@ -1,5 +1,5 @@
--- MySQL application baseline. UTC wire timestamps retain nanosecond revisions.
--- Tables use exact comparisons; search queries choose their own semantics.
+-- Ruphish release baseline. Fresh installs and direct Gophish conversions share this schema.
+
 CREATE TABLE `users` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
   `username` VARCHAR(255) NOT NULL,
@@ -58,8 +58,6 @@ CREATE TABLE `pages` (
   `name` VARCHAR(255),
   `html` LONGTEXT,
   `modified_date` VARCHAR(40),
-  `capture_credentials` BOOLEAN,
-  `capture_passwords` BOOLEAN,
   `redirect_url` LONGTEXT,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -82,8 +80,13 @@ CREATE TABLE `events` (
   `campaign_id` BIGINT,
   `email` VARCHAR(255),
   `time` VARCHAR(40),
-  `message` VARCHAR(255),
-  `details` LONGTEXT,
+  `kind` VARCHAR(255),
+  `metadata` LONGTEXT,
+  recipient_id BIGINT,
+  source VARCHAR(255) NOT NULL DEFAULT 'application',
+  edited BOOLEAN NOT NULL DEFAULT FALSE,
+  revision BIGINT NOT NULL DEFAULT 0,
+  create_key VARCHAR(64),
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -235,9 +238,8 @@ CREATE TABLE `ruphish_campaign_groups` (
 
 CREATE TABLE `ruphish_campaign_policy` (
   `campaign_id` BIGINT NOT NULL,
-  `capture_credentials` BIGINT NOT NULL,
-  `capture_passwords` BIGINT NOT NULL,
   `redirect_url` LONGTEXT NOT NULL,
+  learning_page_id bigint DEFAULT NULL,
   PRIMARY KEY (`campaign_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -332,12 +334,6 @@ CREATE TABLE `ruphish_campaign_domains` (
   PRIMARY KEY (`campaign_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
-CREATE TABLE `ruphish_submission_ids` (
-  `result_id` BIGINT NOT NULL,
-  `event_id` VARCHAR(255) NOT NULL,
-  PRIMARY KEY (`result_id`,`event_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
-
 CREATE TABLE `ruphish_domain_checks` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
   `domain_id` BIGINT NOT NULL,
@@ -352,12 +348,6 @@ CREATE TABLE `ruphish_domain_checks` (
   UNIQUE KEY active_domain_check (`active_domain`),
   CHECK (outcome IS NULL OR outcome IN ('passed','failed','timed_out')),
   CHECK ((finished_at IS NULL AND outcome IS NULL) OR (finished_at IS NOT NULL AND outcome IS NOT NULL))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
-
-CREATE TABLE `ruphish_event_sources` (
-  `event_id` BIGINT NOT NULL,
-  `source` VARCHAR(255) NOT NULL,
-  PRIMARY KEY (`event_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `ruphish_webhook_state` (
@@ -448,7 +438,59 @@ CREATE TABLE `ruphish_write_guards` (
   `scope` VARCHAR(255) NOT NULL,
   PRIMARY KEY (`scope`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
-INSERT INTO ruphish_write_guards VALUES ('accounts'),('cookie-key');
+
+CREATE TABLE `ruphish_event_receipts` (
+  `result_id` BIGINT NOT NULL,
+  `request_id` VARCHAR(255) NOT NULL,
+  event_id BIGINT,
+  PRIMARY KEY (`result_id`,`request_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
+CREATE TABLE ruphish_user_preferences (
+  user_id BIGINT NOT NULL PRIMARY KEY,
+  language VARCHAR(128),
+  format_locale VARCHAR(128),
+  time_zone VARCHAR(128),
+  show_utc_offset BOOLEAN NOT NULL DEFAULT TRUE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
+CREATE TABLE ruphish_campaign_drafts (
+ id VARCHAR(64) COLLATE utf8mb4_0900_bin NOT NULL PRIMARY KEY,
+ owner_id BIGINT NOT NULL,
+ revision BIGINT NOT NULL,
+ name VARCHAR(255) COLLATE utf8mb4_0900_bin NOT NULL,
+ configuration LONGTEXT NOT NULL,
+ schema_version BIGINT NOT NULL,
+ step BIGINT NOT NULL,
+ created BIGINT NOT NULL,
+ modified BIGINT NOT NULL,
+ campaign_id BIGINT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
+CREATE TABLE ruphish_settings (
+ id BIGINT NOT NULL PRIMARY KEY CHECK (id=1),
+ revision BIGINT NOT NULL,
+ verification_enabled BOOLEAN NOT NULL,
+ verification_expires BOOLEAN NOT NULL,
+ verification_validity_seconds BIGINT NOT NULL,
+ verification_recheck_seconds BIGINT NOT NULL,
+ reporting_mailboxes_enabled BOOLEAN NOT NULL,
+ webhooks_enabled BOOLEAN NOT NULL,
+ updated_at BIGINT NOT NULL,
+ updated_by BIGINT
+) ENGINE=InnoDB;
+
+CREATE TABLE ruphish_campaign_closures (
+ token VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY,
+ actor_id BIGINT NOT NULL,
+ expires_at BIGINT NOT NULL,
+ campaign_ids LONGTEXT NOT NULL,
+ result LONGTEXT
+) ENGINE=InnoDB;
+
+CREATE TABLE ruphish_learning_pages (id bigint NOT NULL AUTO_INCREMENT PRIMARY KEY, user_id bigint NOT NULL, name varchar(255) NOT NULL, modified_date varchar(255) NOT NULL, html longtext DEFAULT NULL, public_id varchar(32) DEFAULT NULL, UNIQUE KEY ruphish_learning_pages_public_id(public_id), UNIQUE KEY ruphish_learning_pages_owner_name(user_id,name)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
+-- Indexes
 CREATE UNIQUE INDEX `users_0` ON `users` (username);
 CREATE UNIQUE INDEX `users_1` ON `users` (api_key);
 CREATE INDEX `templates_0` ON `templates` (user_id,name);
@@ -469,7 +511,37 @@ CREATE INDEX `ruphish_delivery_1` ON `ruphish_delivery` (campaign_id,state);
 CREATE INDEX `ruphish_domains_0` ON `ruphish_domains` (due,lease_until);
 CREATE INDEX `ruphish_domain_checks_0` ON `ruphish_domain_checks` (domain_id,id);
 CREATE INDEX `ruphish_webhook_jobs_0` ON `ruphish_webhook_jobs` (state,due,lease);
+CREATE INDEX events_recipient_identity ON events(recipient_id,id);
+CREATE UNIQUE INDEX events_create_key ON events(campaign_id,recipient_id,create_key);
+CREATE INDEX ruphish_campaign_drafts_owner ON ruphish_campaign_drafts(owner_id, id);
+CREATE INDEX ruphish_mailbox_runs_unfinished ON ruphish_mailbox_runs(mailbox_id,finished);
+CREATE INDEX ruphish_webhook_attempts_unfinished ON ruphish_webhook_attempts(job_id,finished);
+CREATE INDEX ruphish_delivery_fairness ON ruphish_delivery(campaign_id,last_claim);
+CREATE INDEX ruphish_campaign_template ON campaigns(template_id,status);
+CREATE INDEX ruphish_campaign_page ON campaigns(page_id,status);
+CREATE INDEX ruphish_campaign_profile ON campaigns(smtp_id,status);
+CREATE INDEX ruphish_campaign_learning_page ON ruphish_campaign_policy(learning_page_id,campaign_id);
+CREATE INDEX ruphish_mailbox_history ON ruphish_mailbox_runs(mailbox_id,id);
+CREATE INDEX ruphish_campaign_domain ON ruphish_campaign_domains(domain_id,campaign_id);
 
+-- Initial data
+INSERT INTO ruphish_write_guards VALUES ('accounts'),('cookie-key');
 INSERT INTO roles(id,slug,name,description) VALUES (1,'admin','Admin','System administrator with full permissions'),(2,'user','User','User role with edit access to objects and campaigns');
 INSERT INTO permissions(id,slug,name,description) VALUES (1,'view_objects','View Objects','View objects'),(2,'modify_objects','Modify Objects','Create and edit objects'),(3,'modify_system','Modify System','Manage system-wide configuration');
 INSERT INTO role_permissions VALUES (1,1),(1,2),(1,3),(2,1),(2,2);
+INSERT INTO ruphish_settings VALUES (1,1,FALSE,TRUE,86400,21600,FALSE,FALSE,0,NULL);
+
+-- Views
+CREATE VIEW ruphish_domain_policy AS
+ SELECT d.id,
+ CASE WHEN NOT s.verification_enabled THEN 9223372036854775807
+      WHEN d.verified_until<=0 THEN 0
+      WHEN NOT s.verification_expires THEN 9223372036854775807
+      ELSE d.checked_at+s.verification_validity_seconds END AS eligible_until,
+ (NOT s.verification_enabled OR d.verified_until>0) AS serves,
+ s.verification_enabled AS verification_required,
+ CASE WHEN s.verification_enabled AND s.verification_expires AND d.verified_until>0
+      THEN d.checked_at+s.verification_validity_seconds ELSE NULL END AS expires_at
+ FROM ruphish_domains d CROSS JOIN ruphish_settings s WHERE s.id=1;
+
+CREATE VIEW event_history AS SELECT id,campaign_id,email,time,CASE kind WHEN 'campaign_created' THEN 'Campaign Created' WHEN 'email_sent' THEN 'Email Sent' WHEN 'email_error' THEN 'Error Sending Email' WHEN 'email_opened' THEN 'Email Opened' WHEN 'link_clicked' THEN 'Clicked Link' WHEN 'form_submitted' THEN 'Submitted Data' WHEN 'email_reported' THEN 'Email Reported' WHEN 'delivery_reconciled' THEN 'Delivery reconciled' ELSE kind END AS message,metadata AS details,recipient_id,source,edited,revision FROM events;

@@ -8,12 +8,8 @@
 crates/ruphish-ui/assets/recipient-template.csv text eol=lf
 # Preserve the exact bytes used by fixture manifests and copied SQL provenance.
 tests/fixtures/** -text
-crates/ruphish-adapters/migrations/gophish/** -text
-# Pin checksum inputs to their tested working-tree endings on every OS.
-# SQL baselines already use CRLF; the MySQL transformation source uses LF.
-crates/ruphish-adapters/migrations/mysql/** text eol=crlf
-crates/ruphish-adapters/migrations/postgres/** text eol=crlf
-crates/ruphish-adapters/src/mysql/upgrade.rs text eol=lf
+# Keep release migration checksums identical across platform checkouts.
+crates/ruphish-adapters/migrations/** text eol=lf
 # Container entrypoints must retain POSIX line endings on Windows checkouts.
 tests/acceptance/*.sh text eol=lf
 docker/*.sh text eol=lf

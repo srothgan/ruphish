@@ -529,10 +529,7 @@ pub(super) async fn exercise(db: &Database) {
 async fn sqlite_company_settings_and_closure() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("policy.db");
-    let config = || Config::Sqlite {
-        path: path.clone(),
-        migrations_prefix: String::new(),
-    };
+    let config = || Config::Sqlite { path: path.clone() };
     let db = database::open(config(), Policy::default()).await.unwrap();
     exercise(&db).await;
     db.close().await;
@@ -572,12 +569,14 @@ async fn mysql_company_settings_and_closure() {
             .reporting_mailboxes_enabled
     );
     db.close().await;
-    sqlx::raw_sql("DROP VIEW ruphish_domain_policy; DROP TABLE ruphish_campaign_closures; DROP TABLE ruphish_settings; DELETE FROM _sqlx_migrations WHERE version=6;").execute(&mut inspect).await.unwrap();
-    let db = database::open(Config::MySql(config.clone()), Policy::default())
-        .await
-        .unwrap();
-    assert_upgraded(&db).await;
-    db.close().await;
+    sqlx::raw_sql("DROP VIEW ruphish_domain_policy; DROP TABLE ruphish_campaign_closures; DROP TABLE ruphish_settings;").execute(&mut inspect).await.unwrap();
+    assert!(
+        matches!(
+            database::open(Config::MySql(config.clone()), Policy::default()).await,
+            Err(database::Error::UnsupportedSchema)
+        ),
+        "missing release tables must not be reinitialized"
+    );
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
         "DROP DATABASE `{}`",
         config.database
@@ -613,13 +612,15 @@ async fn postgres_company_settings_and_closure() {
     );
     db.close().await;
     let mut inspect = postgres_inspect(&config).await;
-    sqlx::raw_sql("DROP VIEW ruphish_domain_policy; DROP TABLE ruphish_campaign_closures; DROP TABLE ruphish_settings; DELETE FROM _sqlx_migrations WHERE version=6;").execute(&mut inspect).await.unwrap();
+    sqlx::raw_sql("DROP VIEW ruphish_domain_policy; DROP TABLE ruphish_campaign_closures; DROP TABLE ruphish_settings;").execute(&mut inspect).await.unwrap();
     inspect.close().await.unwrap();
-    let db = database::open(Config::Postgres(config.clone()), Policy::default())
-        .await
-        .unwrap();
-    assert_upgraded(&db).await;
-    db.close().await;
+    assert!(
+        matches!(
+            database::open(Config::Postgres(config.clone()), Policy::default()).await,
+            Err(database::Error::UnsupportedSchema)
+        ),
+        "missing release tables must not be reinitialized"
+    );
     postgres_cleanup(&mut admin, &config).await;
 }
 
@@ -627,15 +628,9 @@ async fn postgres_company_settings_and_closure() {
 async fn sqlite_policy_and_closure_roll_back_all_related_writes() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("atomic-policy.db");
-    let db = database::open(
-        Config::Sqlite {
-            path: path.clone(),
-            migrations_prefix: String::new(),
-        },
-        Policy::default(),
-    )
-    .await
-    .unwrap();
+    let db = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+        .await
+        .unwrap();
     let who = account(&db).await.identity;
     let inspect =
         sqlx::SqlitePool::connect_with(sqlx::sqlite::SqliteConnectOptions::new().filename(&path))
@@ -760,7 +755,7 @@ async fn assert_integration_defaults(
     assert_eq!(initial.policy.webhooks_enabled, webhook);
     if mailbox {
         assert_eq!(
-            db.integrations().mailbox(who, 99).await.unwrap().enabled,
+            db.integrations().mailboxes(who).await.unwrap()[0].enabled,
             enabled
         );
     }
@@ -793,7 +788,7 @@ async fn sqlite_settings_upgrade_uses_integration_presence_without_enabling_veri
         let path = dir.path().join("upgrade.db");
         std::fs::copy(
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../../tests/fixtures/observations/ruphish-v10.sqlite3"),
+                .join("../../tests/fixtures/campaigns/queued.sqlite3"),
             &path,
         )
         .unwrap();
@@ -802,7 +797,7 @@ async fn sqlite_settings_upgrade_uses_integration_presence_without_enabling_veri
         )
         .await
         .unwrap();
-        sqlx::raw_sql(sqlx::AssertSqlSafe(integration_presence_sql(
+        sqlx::raw_sql(sqlx::AssertSqlSafe(legacy_integration_presence_sql(
             mailbox, webhook, enabled,
         )))
         .execute(&inspect)
@@ -813,10 +808,7 @@ async fn sqlite_settings_upgrade_uses_integration_presence_without_enabling_veri
             .await
             .unwrap();
         inspect.close().await;
-        let config = || Config::Sqlite {
-            path: path.clone(),
-            migrations_prefix: String::new(),
-        };
+        let config = || Config::Sqlite { path: path.clone() };
         let db = database::open(config(), Policy::default()).await.unwrap();
         assert!(db.backup_path().is_some());
         let saved = assert_integration_defaults(&db, mailbox, webhook, enabled).await;
@@ -847,7 +839,7 @@ async fn sqlite_settings_upgrade_uses_integration_presence_without_enabling_veri
         if mailbox {
             assert_eq!(
                 sqlx::query_scalar::<_, String>(
-                    "SELECT password FROM ruphish_mailboxes WHERE id=99"
+                    "SELECT password FROM ruphish_mailboxes WHERE owner_id=1"
                 )
                 .fetch_one(&inspect)
                 .await
@@ -878,18 +870,25 @@ async fn presence_account(db: &Database) {
         .unwrap();
 }
 
+fn legacy_integration_presence_sql(mailbox: bool, webhook: bool, enabled: bool) -> String {
+    let mut sql = "DELETE FROM imap; DELETE FROM webhooks;".to_owned();
+    if mailbox {
+        sql.push_str(&format!("INSERT INTO imap(user_id,enabled,host,port,username,password,tls,folder) VALUES(1,{enabled},'127.0.0.1',993,'service','preserved-mailbox-secret',TRUE,'INBOX');"));
+    }
+    if webhook {
+        sql.push_str(&format!("INSERT INTO webhooks(id,name,url,secret,is_active) VALUES(99,'Existing endpoint','http://127.0.0.1:1/events','preserved-service-secret',{enabled});"));
+    }
+    sql
+}
+
 #[tokio::test]
 #[ignore = "Requires canonical MySQL fixture"]
-async fn mysql_settings_upgrade_uses_integration_presence_without_enabling_verification() {
-    let (mut inspect, config) = fixture().await;
-    let db = database::open(Config::MySql(config.clone()), Policy::default())
-        .await
-        .unwrap();
-    presence_account(&db).await;
-    db.close().await;
+async fn mysql_gophish_settings_derive_integration_presence() {
     for (mailbox, webhook, enabled) in INTEGRATION_CASES {
-        sqlx::raw_sql("DROP VIEW ruphish_domain_policy; DROP TABLE ruphish_campaign_closures; DROP TABLE ruphish_settings; DELETE FROM _sqlx_migrations WHERE version=6;").execute(&mut inspect).await.unwrap();
-        sqlx::raw_sql(sqlx::AssertSqlSafe(integration_presence_sql(
+        let (mut inspect, config) = fixture().await;
+        latest_legacy(&mut inspect).await;
+        sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id) VALUES(1,'admin','preserved-hash','preserved-key',1); INSERT INTO campaigns(id,user_id,name,status,url) VALUES(1,1,'Legacy campaign','Completed','https://existing.example.test');").execute(&mut inspect).await.unwrap();
+        sqlx::raw_sql(sqlx::AssertSqlSafe(legacy_integration_presence_sql(
             mailbox, webhook, enabled,
         )))
         .execute(&mut inspect)
@@ -905,61 +904,52 @@ async fn mysql_settings_upgrade_uses_integration_presence_without_enabling_verif
             .unwrap();
         assert_saved_policy(&db, &saved).await;
         db.close().await;
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "DROP DATABASE `{}`",
+            config.database
+        )))
+        .execute(&mut inspect)
+        .await
+        .unwrap();
     }
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-        "DROP DATABASE `{}`",
-        config.database
-    )))
-    .execute(&mut inspect)
-    .await
-    .unwrap();
 }
 
 #[tokio::test]
 #[ignore = "Requires canonical PostgreSQL fixture"]
-async fn postgres_settings_upgrade_uses_integration_presence_without_enabling_verification() {
-    let (mut admin, config) = postgres_fixture().await;
-    let db = database::open(Config::Postgres(config.clone()), Policy::default())
-        .await
-        .unwrap();
-    presence_account(&db).await;
-    db.close().await;
+async fn postgres_baseline_settings_require_explicit_enablement_and_survive_reopen() {
     for (mailbox, webhook, enabled) in INTEGRATION_CASES {
+        let (mut admin, config) = postgres_fixture().await;
+        let db = database::open(Config::Postgres(config.clone()), Policy::default())
+            .await
+            .unwrap();
+        presence_account(&db).await;
         let mut inspect = postgres_inspect(&config).await;
-        sqlx::raw_sql("DROP VIEW ruphish_domain_policy; DROP TABLE ruphish_campaign_closures; DROP TABLE ruphish_settings; DELETE FROM _sqlx_migrations WHERE version=6;").execute(&mut inspect).await.unwrap();
         sqlx::raw_sql(sqlx::AssertSqlSafe(integration_presence_sql(
             mailbox, webhook, enabled,
         )))
         .execute(&mut inspect)
         .await
         .unwrap();
-        inspect.close().await.unwrap();
-        let db = database::open(Config::Postgres(config.clone()), Policy::default())
+        let who = db.accounts().by_name("admin").await.unwrap().identity;
+        let initial = db.settings().get(who).await.unwrap();
+        assert!(!initial.policy.webhooks_enabled && !initial.policy.reporting_mailboxes_enabled);
+        let mut policy = initial.policy;
+        policy.webhooks_enabled = webhook;
+        policy.reporting_mailboxes_enabled = mailbox;
+        db.settings()
+            .save(who, initial.revision, policy, 1_900_000_000)
             .await
             .unwrap();
         let saved = assert_integration_defaults(&db, mailbox, webhook, enabled).await;
+        inspect.close().await.unwrap();
         db.close().await;
         let db = database::open(Config::Postgres(config.clone()), Policy::default())
             .await
             .unwrap();
         assert_saved_policy(&db, &saved).await;
         db.close().await;
+        postgres_cleanup(&mut admin, &config).await;
     }
-    postgres_cleanup(&mut admin, &config).await;
-}
-
-async fn assert_upgraded(db: &Database) {
-    let who = db.accounts().by_name("admin").await.unwrap().identity;
-    let policy = db.settings().get(who).await.unwrap().policy;
-    assert!(!policy.verification_enabled);
-    assert!(policy.webhooks_enabled);
-    assert!(!policy.reporting_mailboxes_enabled);
-    assert_eq!(db.domains().list(who).await.unwrap().len(), 1);
-    assert_eq!(db.integrations().webhooks(who).await.unwrap().len(), 1);
-    assert_eq!(
-        db.campaigns().get(who, 1).await.unwrap().status.as_str(),
-        "Completed"
-    );
 }
 
 async fn contention_setup(

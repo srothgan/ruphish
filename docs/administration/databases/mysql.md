@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-Provision an InnoDB/UTF-8 database and a dedicated service account. Grant database-scoped `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `ALTER`, `DROP`, `INDEX`, `CREATE VIEW`, and `SHOW VIEW` for runtime operations and automatic migrations. Observation migration v5 introduces the `event_history` compatibility view and requires the two view privileges before upgrade. Server-wide privileges, triggers, and database/account creation permissions are not required.
+Provision an InnoDB/UTF-8 database and a dedicated service account. Grant database-scoped `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `ALTER`, `DROP`, `INDEX`, `CREATE VIEW`, and `SHOW VIEW` for runtime operations and automatic migrations. The release baseline includes `event_history` and `ruphish_domain_policy` views and requires both view privileges. Server-wide privileges, triggers, and database/account creation permissions are not required.
 
 Replace the SQLite fields with this configuration fragment:
 
@@ -41,6 +41,6 @@ Typed settings cannot be combined with a legacy DSN or `db_sslca_path`. Supporte
 
 ## Upgrade and recovery
 
-Stop application writers and take an operator-managed backup first. Recognized legacy upgrades copy into staging tables, verify data, and publish with an atomic rename. Original `rp_original_*` tables and `_ruphish_upgrade` form the recovery record; do not rename/delete them independently.
+Stop application writers and take an operator-managed backup first. Recognized Gophish upgrades copy directly into staging tables with the final release schema, verify data, and publish the tables with an atomic rename. Views and the application migration record are finalized afterward; the journal allows interrupted publication to resume. Original `rp_original_*` tables and `_ruphish_upgrade` form the recovery record; do not rename/delete them independently.
 
 Pre-UTC histories require the original fixed offset. The application does not infer it from today's server time zone; mixed historical offsets need assessment before migration. MySQL DDL is not generally transactional, so an interrupted ordinary schema migration can require recovery from backup. See [migration verification and rollback](../../migration/verification-and-rollback.md).
