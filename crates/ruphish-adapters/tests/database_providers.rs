@@ -26,15 +26,9 @@ mod resource_summaries;
 async fn sqlite_resource_summaries() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("summaries.db");
-    let db = database::open(
-        Config::Sqlite {
-            path: path.clone(),
-            migrations_prefix: String::new(),
-        },
-        Policy::default(),
-    )
-    .await
-    .unwrap();
+    let db = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+        .await
+        .unwrap();
     let mut inspect = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
     )
@@ -197,19 +191,18 @@ mod health;
 mod learning_pages;
 #[path = "support/mysql_proxy.rs"]
 mod mysql_proxy;
-#[path = "support/observation_versions.rs"]
-mod observation_versions;
+#[path = "support/observation_history.rs"]
+mod observation_history;
 
 #[tokio::test]
 #[ignore = "Requires canonical MySQL fixture and RUPHISH_MYSQL_TEST_PORT"]
-async fn mysql_observation_upgrade_preserves_populated_v4_history_and_retry_tombstones() {
+async fn mysql_baseline_preserves_populated_history_and_retry_tombstones() {
     let (mut inspect, config) = fixture().await;
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
         .unwrap();
     db.close().await;
-    observation_versions::mysql(&mut inspect).await;
-    sqlx::raw_sql(observation_versions::HISTORY)
+    sqlx::raw_sql(observation_history::HISTORY)
         .execute(&mut inspect)
         .await
         .unwrap();
@@ -217,8 +210,8 @@ async fn mysql_observation_upgrade_preserves_populated_v4_history_and_retry_tomb
         let db = database::open(Config::MySql(config.clone()), Policy::default())
             .await
             .unwrap();
-        observation_versions::verify_history(
-            sqlx::query_as(observation_versions::READ_HISTORY)
+        observation_history::verify_history(
+            sqlx::query_as(observation_history::READ_HISTORY)
                 .fetch_all(&mut inspect)
                 .await
                 .unwrap(),
@@ -242,15 +235,14 @@ async fn mysql_observation_upgrade_preserves_populated_v4_history_and_retry_tomb
 
 #[tokio::test]
 #[ignore = "Requires canonical PostgreSQL fixture and RUPHISH_POSTGRES_TEST_PORT"]
-async fn postgres_observation_upgrade_preserves_populated_v4_history_and_retry_tombstones() {
+async fn postgres_baseline_preserves_populated_history_and_retry_tombstones() {
     let (mut admin, config) = postgres_fixture().await;
     let db = database::open(Config::Postgres(config.clone()), Policy::default())
         .await
         .unwrap();
     db.close().await;
     let mut inspect = postgres_inspect(&config).await;
-    observation_versions::postgres(&mut inspect).await;
-    sqlx::raw_sql(observation_versions::HISTORY)
+    sqlx::raw_sql(observation_history::HISTORY)
         .execute(&mut inspect)
         .await
         .unwrap();
@@ -258,8 +250,8 @@ async fn postgres_observation_upgrade_preserves_populated_v4_history_and_retry_t
         let db = database::open(Config::Postgres(config.clone()), Policy::default())
             .await
             .unwrap();
-        observation_versions::verify_history(
-            sqlx::query_as(observation_versions::READ_HISTORY)
+        observation_history::verify_history(
+            sqlx::query_as(observation_history::READ_HISTORY)
                 .fetch_all(&mut inspect)
                 .await
                 .unwrap(),
@@ -1394,49 +1386,27 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
 async fn sqlite_provider_contract() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("state.db");
-    let db = database::open(
-        Config::Sqlite {
-            path: path.clone(),
-            migrations_prefix: String::new(),
-        },
-        Policy::default(),
-    )
-    .await
-    .unwrap();
+    let db = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+        .await
+        .unwrap();
     workflows(&db).await;
-    let peer = database::open(
-        Config::Sqlite {
-            path: path.clone(),
-            migrations_prefix: String::new(),
-        },
-        Policy::default(),
-    )
-    .await
-    .unwrap();
+    let peer = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+        .await
+        .unwrap();
     last_admin_race(&db, &peer).await;
     peer.close().await;
     db.close().await;
-    // Reconstruct the schema before learning pages and performance indexes, then verify its populated upgrade.
+    // Reopen populated release tables, preserving campaign policy and learning-page defaults.
     let mut previous = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
     )
     .await
     .unwrap();
-    sqlx::raw_sql(performance_versions::SQLITE)
-        .execute(&mut previous)
+    sqlx::raw_sql("UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut previous).await.unwrap();
+    previous.close().await.unwrap();
+    let db = database::open(Config::Sqlite { path }, Policy::default())
         .await
         .unwrap();
-    sqlx::raw_sql("DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM ruphish_schema WHERE version=13; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut previous).await.unwrap();
-    previous.close().await.unwrap();
-    let db = database::open(
-        Config::Sqlite {
-            path,
-            migrations_prefix: String::new(),
-        },
-        Policy::default(),
-    )
-    .await
-    .unwrap();
     assert!(db.bootstrap(None, None).await.unwrap().is_none());
     let actor = db.accounts().by_name("admin").await.unwrap().identity;
     let upgraded = db.campaigns().list(actor).await.unwrap();
@@ -1490,12 +1460,8 @@ async fn mysql_provider_contract() {
     last_admin_race(&db, &peer).await;
     peer.close().await;
     db.close().await;
-    // Reconstruct the schema before learning pages and performance indexes, then verify its populated upgrade.
-    sqlx::raw_sql(performance_versions::MYSQL)
-        .execute(&mut inspector)
-        .await
-        .unwrap();
-    sqlx::raw_sql("DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM _sqlx_migrations WHERE version=7; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut inspector).await.unwrap();
+    // Reopen populated release tables, preserving campaign policy and learning-page defaults.
+    sqlx::raw_sql("UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut inspector).await.unwrap();
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
         .unwrap();
@@ -1738,15 +1704,9 @@ async fn assert_failed_replacement_is_atomic(
 async fn sqlite_rolls_back_partial_resource_replacement() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("state.db");
-    let db = database::open(
-        Config::Sqlite {
-            path: path.clone(),
-            migrations_prefix: String::new(),
-        },
-        Policy::default(),
-    )
-    .await
-    .unwrap();
+    let db = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+        .await
+        .unwrap();
     let (actor, original) = replacement_fixture(&db).await;
     let mut inspector = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new().filename(path),
@@ -2281,13 +2241,9 @@ async fn postgres_provider_contract() {
     last_admin_race(&db, &peer).await;
     peer.close().await;
     db.close().await;
-    // Reconstruct the schema before learning pages and performance indexes, then verify its populated upgrade.
+    // Reopen populated release tables, preserving campaign policy and learning-page defaults.
     let mut previous = postgres_inspect(&config).await;
-    sqlx::raw_sql(performance_versions::POSTGRES)
-        .execute(&mut previous)
-        .await
-        .unwrap();
-    sqlx::raw_sql("DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM _sqlx_migrations WHERE version=7; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut previous).await.unwrap();
+    sqlx::raw_sql("UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut previous).await.unwrap();
     previous.close().await.unwrap();
     let db = database::open(Config::Postgres(config.clone()), Policy::default())
         .await
@@ -2937,7 +2893,7 @@ async fn postgres_deadlock_rolls_back_the_losing_edit_and_recovers() {
 
 #[tokio::test]
 #[ignore = "Requires canonical MySQL fixture and RUPHISH_MYSQL_TEST_PORT"]
-async fn mysql_preferences_migrate_existing_accounts_and_survive_reopen() {
+async fn mysql_preferences_preserve_existing_accounts_and_survive_reopen() {
     let (mut inspect, config) = fixture().await;
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
@@ -2950,8 +2906,10 @@ async fn mysql_preferences_migrate_existing_accounts_and_survive_reopen() {
     .unwrap();
     let original = db.accounts().by_name("admin").await.unwrap();
     db.close().await;
-    observation_versions::mysql(&mut inspect).await;
-    sqlx::raw_sql("DROP TABLE ruphish_campaign_drafts; DROP TABLE ruphish_user_preferences; DELETE FROM _sqlx_migrations WHERE version>=2; UPDATE users SET password_change_required=FALSE").execute(&mut inspect).await.unwrap();
+    sqlx::raw_sql("UPDATE users SET password_change_required=FALSE")
+        .execute(&mut inspect)
+        .await
+        .unwrap();
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
         .unwrap();
@@ -2970,8 +2928,6 @@ async fn mysql_preferences_migrate_existing_accounts_and_survive_reopen() {
         .await
         .unwrap();
     db.close().await;
-    observation_versions::mysql(&mut inspect).await;
-    sqlx::raw_sql("DROP TABLE ruphish_campaign_drafts; ALTER TABLE ruphish_user_preferences DROP COLUMN show_utc_offset; DELETE FROM _sqlx_migrations WHERE version>=3;").execute(&mut inspect).await.unwrap();
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
         .unwrap();
@@ -2982,7 +2938,7 @@ async fn mysql_preferences_migrate_existing_accounts_and_survive_reopen() {
             .unwrap()
             .preferences,
         auth::Preferences {
-            show_utc_offset: true,
+            show_utc_offset: false,
             ..chosen.clone()
         }
     );
@@ -3014,7 +2970,7 @@ async fn mysql_preferences_migrate_existing_accounts_and_survive_reopen() {
 
 #[tokio::test]
 #[ignore = "Requires canonical PostgreSQL fixture and RUPHISH_POSTGRES_TEST_PORT"]
-async fn postgres_preferences_migrate_existing_accounts_and_survive_reopen() {
+async fn postgres_preferences_preserve_existing_accounts_and_survive_reopen() {
     let (mut inspect, config) = postgres_fixture().await;
     let db = database::open(Config::Postgres(config.clone()), Policy::default())
         .await
@@ -3028,8 +2984,10 @@ async fn postgres_preferences_migrate_existing_accounts_and_survive_reopen() {
     let original = db.accounts().by_name("admin").await.unwrap();
     db.close().await;
     let mut connection = postgres_inspect(&config).await;
-    observation_versions::postgres(&mut connection).await;
-    sqlx::raw_sql("DROP TABLE ruphish_campaign_drafts; DROP TABLE ruphish_user_preferences; DELETE FROM _sqlx_migrations WHERE version>=2; UPDATE users SET password_change_required=FALSE").execute(&mut connection).await.unwrap();
+    sqlx::raw_sql("UPDATE users SET password_change_required=FALSE")
+        .execute(&mut connection)
+        .await
+        .unwrap();
     connection.close().await.unwrap();
     let db = database::open(Config::Postgres(config.clone()), Policy::default())
         .await
@@ -3049,10 +3007,6 @@ async fn postgres_preferences_migrate_existing_accounts_and_survive_reopen() {
         .await
         .unwrap();
     db.close().await;
-    let mut connection = postgres_inspect(&config).await;
-    observation_versions::postgres(&mut connection).await;
-    sqlx::raw_sql("DROP TABLE ruphish_campaign_drafts; ALTER TABLE ruphish_user_preferences DROP COLUMN show_utc_offset; DELETE FROM _sqlx_migrations WHERE version>=3;").execute(&mut connection).await.unwrap();
-    connection.close().await.unwrap();
     let db = database::open(Config::Postgres(config.clone()), Policy::default())
         .await
         .unwrap();
@@ -3063,7 +3017,7 @@ async fn postgres_preferences_migrate_existing_accounts_and_survive_reopen() {
             .unwrap()
             .preferences,
         auth::Preferences {
-            show_utc_offset: true,
+            show_utc_offset: false,
             ..chosen.clone()
         }
     );
@@ -3089,10 +3043,3 @@ async fn postgres_preferences_migrate_existing_accounts_and_survive_reopen() {
 
 #[path = "support/query_work.rs"]
 mod query_work;
-
-mod performance_versions {
-    pub const SQLITE: &str = include_str!("../../../tests/support/performance_versions/sqlite.sql");
-    pub const MYSQL: &str = include_str!("../../../tests/support/performance_versions/mysql.sql");
-    pub const POSTGRES: &str =
-        include_str!("../../../tests/support/performance_versions/postgres.sql");
-}

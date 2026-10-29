@@ -9,7 +9,7 @@ use sqlx::{
 };
 use std::{borrow::Cow, collections::BTreeSet};
 
-pub(super) const BASELINE: &str = include_str!("../../migrations/mysql/1_application.sql");
+pub(super) const BASELINE: &str = include_str!("../../migrations/mysql/1_baseline.sql");
 const JOURNAL: &str = "_ruphish_upgrade";
 pub(super) const STAGE: &str = "rp_stage_";
 const ORIGINAL: &str = "rp_original_";
@@ -17,7 +17,7 @@ const ORIGINAL: &str = "rp_original_";
 fn baseline() -> Migration {
     Migration::new(
         1,
-        Cow::Borrowed("application"),
+        Cow::Borrowed("release baseline"),
         MigrationType::Simple,
         BASELINE.into_sql_str(),
         false,
@@ -26,86 +26,7 @@ fn baseline() -> Migration {
 
 fn migrator() -> Migrator {
     Migrator {
-        migrations: Cow::Owned(vec![
-            baseline(),
-            Migration::new(
-                2,
-                Cow::Borrowed("user preferences"),
-                MigrationType::Simple,
-                include_str!("../../migrations/mysql/2_user_preferences.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                3,
-                Cow::Borrowed("UTC offset preference"),
-                MigrationType::Simple,
-                include_str!("../../migrations/mysql/3_utc_offset.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                4,
-                Cow::Borrowed("campaign drafts"),
-                MigrationType::Simple,
-                include_str!("../../migrations/mysql/4_campaign_drafts.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                5,
-                Cow::Borrowed("observations"),
-                MigrationType::Simple,
-                include_str!("../../migrations/mysql/5_observations.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                6,
-                Cow::Borrowed("company settings"),
-                MigrationType::Simple,
-                include_str!("../../migrations/mysql/6_settings.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                7,
-                Cow::Borrowed("learning pages"),
-                MigrationType::Simple,
-                include_str!("../../migrations/mysql/7_learning_pages.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                8,
-                Cow::Borrowed("worker recovery indexes"),
-                MigrationType::Simple,
-                include_str!("../../migrations/mysql/8_worker_recovery.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                9,
-                Cow::Borrowed("campaign fairness index"),
-                MigrationType::Simple,
-                include_str!("../../migrations/mysql/9_campaign_fairness.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                10,
-                Cow::Borrowed("resource reference indexes"),
-                MigrationType::Simple,
-                include_str!("../../migrations/mysql/10_resource_references.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                11,
-                Cow::Borrowed("mailbox history index"),
-                MigrationType::Simple,
-                include_str!("../../migrations/mysql/11_mailbox_history.sql").into_sql_str(),
-                false,
-            ),
-            Migration::new(
-                12,
-                Cow::Borrowed("inventory domain indexes"),
-                MigrationType::Simple,
-                include_str!("../../migrations/mysql/12_inventory_domains.sql").into_sql_str(),
-                false,
-            ),
-        ]),
+        migrations: Cow::Owned(vec![baseline()]),
         locking: false,
         ..Migrator::DEFAULT
     }
@@ -172,7 +93,7 @@ pub(super) async fn prepare(c: &mut MySqlConnection, config: &MySqlConfig) -> Re
 fn checksum() -> String {
     let mut hash = Sha256::new();
     hash.update(BASELINE.as_bytes());
-    hash.update(include_bytes!("upgrade.rs"));
+    hash.update(b"gophish-to-release-v1");
     hex::encode(hash.finalize())
 }
 
@@ -206,9 +127,7 @@ async fn resume(c: &mut MySqlConnection, _config: &MySqlConfig) -> Result<(), Er
     let published = source
         .iter()
         .all(|name| actual.contains(&format!("{ORIGINAL}{name}")))
-        // Later application migrations replace baseline source/receipt tables.
-        // Their history and exact schema are still checked below by SQLx and inventory.
-        && (expected.is_subset(&actual) || current_tables().is_subset(&actual))
+        && expected.is_subset(&actual)
         && !actual.iter().any(|name| name.starts_with(STAGE));
     if !published {
         if !matches!(phase.as_str(), "preparing" | "copied")
@@ -254,6 +173,15 @@ async fn resume(c: &mut MySqlConnection, _config: &MySqlConfig) -> Result<(), Er
     }
     // The atomic rename is its own durable publication marker. A disconnect between
     // rename and history publication is reconciled from complete table-name sets.
+    if phase != "published" {
+        // Views are published after the table rename. Retrying an interrupted
+        // publication is safe; a completed installation is only validated.
+        let (_, views) = BASELINE
+            .split_once("-- Views")
+            .ok_or(Error::UnsupportedSchema)?;
+        statement(c, views.replace("CREATE VIEW ", "CREATE OR REPLACE VIEW ")).await?;
+        validate_columns(c).await?;
+    }
     let migration = baseline();
     sqlx::raw_sql("CREATE TABLE IF NOT EXISTS _sqlx_migrations (version BIGINT PRIMARY KEY, description TEXT NOT NULL, installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, success BOOLEAN NOT NULL, checksum BLOB NOT NULL, execution_time BIGINT NOT NULL)").execute(&mut *c).await.map_err(storage_error)?;
     let mut tx = c.begin().await.map_err(storage_error)?;
@@ -263,7 +191,7 @@ async fn resume(c: &mut MySqlConnection, _config: &MySqlConfig) -> Result<(), Er
             .await
             .map_err(storage_error)?;
     if !recorded {
-        sqlx::query("INSERT INTO _sqlx_migrations(version,description,success,checksum,execution_time) VALUES(1,'application',true,?,0)")
+        sqlx::query("INSERT INTO _sqlx_migrations(version,description,success,checksum,execution_time) VALUES(1,'release baseline',true,?,0)")
             .bind(migration.checksum.as_ref()).execute(&mut *tx).await.map_err(storage_error)?;
     }
     sqlx::query("UPDATE _ruphish_upgrade SET phase='published' WHERE id=1")
@@ -281,12 +209,15 @@ async fn resume(c: &mut MySqlConnection, _config: &MySqlConfig) -> Result<(), Er
 async fn create_stage(c: &mut MySqlConnection) -> Result<(), Error> {
     // This transforms identifiers in our embedded DDL only, never runtime SQL or input.
     // Longest first prevents a table name from matching another name's prefix.
-    let mut ddl = BASELINE.to_owned();
+    let (tables_sql, _) = BASELINE
+        .split_once("-- Views")
+        .ok_or(Error::UnsupportedSchema)?;
+    let mut ddl = tables_sql.to_owned();
     let mut known: Vec<_> = tables().into_iter().collect();
     known.sort_by_key(|n| std::cmp::Reverse(n.len()));
     for name in known {
         ddl = ddl.replace(&format!("`{name}`"), &format!("`{STAGE}{name}`"));
-        for prefix in ["CREATE TABLE ", "INSERT INTO "] {
+        for prefix in ["CREATE TABLE ", "INSERT INTO ", "ON "] {
             ddl = ddl.replace(
                 &format!("{prefix}{name} "),
                 &format!("{prefix}{STAGE}{name} "),
@@ -317,24 +248,14 @@ pub(super) async fn statement(c: &mut MySqlConnection, sql: String) -> Result<()
 }
 
 fn current_tables() -> BTreeSet<String> {
-    let mut tables = tables();
-    tables.remove("ruphish_event_sources");
-    tables.remove("ruphish_submission_ids");
-    tables.insert("ruphish_event_receipts".into());
-    tables.extend([
-        "ruphish_settings".into(),
-        "ruphish_campaign_closures".into(),
-        "ruphish_domain_policy".into(),
-    ]);
-    tables.insert("ruphish_learning_pages".into());
-    tables.insert("event_history".into());
-    tables
+    tables()
+        .into_iter()
+        .chain(["event_history".into(), "ruphish_domain_policy".into()])
+        .collect()
 }
 async fn validate_current(c: &mut MySqlConnection) -> Result<(), Error> {
     let actual = names(c).await?;
-    let mut expected = current_tables();
-    expected.insert("ruphish_user_preferences".into());
-    expected.insert("ruphish_campaign_drafts".into());
+    let expected = current_tables();
     if !expected.is_subset(&actual) {
         return Err(Error::UnsupportedSchema);
     }
@@ -383,7 +304,7 @@ async fn validate_current(c: &mut MySqlConnection) -> Result<(), Error> {
         .map_err(storage_error)?;
     if !crate::observation_schema::matches(
         &definition,
-        include_str!("../../migrations/mysql/5_observations.sql"),
+        include_str!("../../migrations/mysql/1_baseline.sql"),
         &schema,
     ) {
         return Err(Error::UnsupportedSchema);
@@ -403,8 +324,6 @@ async fn validate_columns(c: &mut MySqlConnection) -> Result<(), Error> {
     let mut application = current_tables();
     application.remove("event_history");
     application.remove("ruphish_domain_policy");
-    application.insert("ruphish_user_preferences".into());
-    application.insert("ruphish_campaign_drafts".into());
     let mut actual = Vec::new();
     for row in rows {
         let value: serde_json::Value =

@@ -354,7 +354,7 @@ fn killing_a_process_during_migration_leaves_the_old_database_recoverable_and_re
     .unwrap();
     database(
         directory.path(),
-        "CREATE TRIGGER stall_migration BEFORE INSERT ON goose_db_version BEGIN SELECT count(*) FROM (WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM n WHERE x<1000000000) SELECT x FROM n); END",
+        "WITH RECURSIVE n(x) AS (VALUES(1000) UNION ALL SELECT x+1 FROM n WHERE x<101000) INSERT INTO events(id,campaign_id,email,time,message) SELECT x,53,'history@example.test','2020-01-01 00:00:00','Email Sent' FROM n",
     );
     let mut process = Process::start(directory.path(), "phish");
     let deadline = Instant::now() + Duration::from_secs(15);
@@ -383,14 +383,10 @@ fn killing_a_process_during_migration_leaves_the_old_database_recoverable_and_re
     }
     process.crash();
     assert_eq!(version(directory.path()), 20160118194630);
-    database(directory.path(), "DROP TRIGGER stall_migration");
     let mut restarted = Process::start(directory.path(), "phish");
     restarted.ready();
     restarted.stop();
-    assert_eq!(
-        version(directory.path()),
-        ruphish_adapters::database::migrations::LATEST_LEGACY_VERSION
-    );
+    assert_eq!(version(directory.path()), 1);
 }
 
 impl Drop for Process {
@@ -537,9 +533,18 @@ fn database(directory: &Path, sql: &str) -> Vec<sqlx::sqlite::SqliteRow> {
 
 fn version(directory: &Path) -> i64 {
     use sqlx::Row;
+    let current: i64 = database(
+        directory,
+        "SELECT count(*) AS current FROM sqlite_master WHERE name='_sqlx_migrations'",
+    )[0]
+    .get("current");
     database(
         directory,
-        "SELECT max(version_id) AS version FROM goose_db_version WHERE is_applied=1",
+        if current == 1 {
+            "SELECT max(version) AS version FROM _sqlx_migrations WHERE success=1"
+        } else {
+            "SELECT max(version_id) AS version FROM goose_db_version WHERE is_applied=1"
+        },
     )[0]
     .get("version")
 }
@@ -837,11 +842,7 @@ fn every_populated_goose_version_starts_in_place_with_a_verified_recoverable_sna
         // Preservation is an offline assertion. Background workers may write after
         // readiness; concurrent access is covered by the dedicated shared-DB tests.
         process.stop();
-        assert_eq!(
-            version(directory.path()),
-            ruphish_adapters::database::migrations::LATEST_LEGACY_VERSION,
-            "{old}"
-        );
+        assert_eq!(version(directory.path()), 1, "{old}");
         let rows = database(
             directory.path(),
             "SELECT username,hash,api_key FROM users WHERE id=17",
@@ -863,7 +864,7 @@ fn every_populated_goose_version_starts_in_place_with_a_verified_recoverable_sna
         let snapshots = backups(directory.path());
         assert_eq!(
             snapshots.len(),
-            1, // Every Go schema receives the independently versioned authentication upgrade.
+            1, // Every Gophish schema receives one verified pre-conversion snapshot.
         );
         if let Some(snapshot) = snapshots.first() {
             let restore = tempfile::tempdir().unwrap();
@@ -1001,11 +1002,12 @@ fn migration_failures_roll_back_and_retain_a_snapshot_while_invalid_databases_ar
     for mutation in [
         "UPDATE goose_db_version SET version_id=99999999999999 WHERE version_id=(SELECT max(version_id) FROM goose_db_version)",
         "ALTER TABLE templates DROP COLUMN subject",
-        "CREATE TRIGGER fail_upgrade BEFORE INSERT ON goose_db_version BEGIN SELECT RAISE(ABORT,'injected migration failure'); END",
+        "CREATE TRIGGER unexpected AFTER INSERT ON events BEGIN SELECT 1; END",
+        "INSERT INTO imap(user_id,host,port,username,password) VALUES(NULL,'mail.example.test',993,'synthetic','fixture-only')",
     ] {
         let directory = workspace();
         std::fs::copy(
-            fixture("compatibility/20160118194630.sqlite3"),
+            fixture("compatibility/20220321133237.sqlite3"),
             directory.path().join("installation.sqlite3"),
         )
         .unwrap();
@@ -1022,16 +1024,13 @@ fn migration_failures_roll_back_and_retain_a_snapshot_while_invalid_databases_ar
                 .get::<String, _>(0),
             "historical-key"
         );
-        if mutation.starts_with("CREATE TRIGGER") {
+        if mutation.starts_with("INSERT INTO imap") {
             assert_eq!(backups(directory.path()).len(), 1);
-            database(directory.path(), "DROP TRIGGER fail_upgrade");
+            database(directory.path(), "DELETE FROM imap WHERE user_id IS NULL");
             let mut fixed = Process::start(directory.path(), "phish");
             fixed.ready();
             fixed.stop();
-            assert_eq!(
-                version(directory.path()),
-                ruphish_adapters::database::migrations::LATEST_LEGACY_VERSION
-            );
+            assert_eq!(version(directory.path()), 1);
         }
     }
     let directory = workspace();

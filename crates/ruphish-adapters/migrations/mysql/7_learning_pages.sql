@@ -1,2 +1,0 @@
-CREATE TABLE ruphish_learning_pages (id bigint NOT NULL AUTO_INCREMENT PRIMARY KEY, user_id bigint NOT NULL, name varchar(255) NOT NULL, modified_date varchar(255) NOT NULL, html longtext DEFAULT NULL, public_id varchar(32) DEFAULT NULL, UNIQUE KEY ruphish_learning_pages_public_id(public_id), UNIQUE KEY ruphish_learning_pages_owner_name(user_id,name)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
-ALTER TABLE ruphish_campaign_policy ADD COLUMN learning_page_id bigint DEFAULT NULL;

@@ -12,7 +12,7 @@ Ruphish is a phishing-simulation application with a native Rust server and a Rus
 
 **[Try the demo](https://demo.ruphish.com/)** with username `demo` and password `demodemo`.
 
-Ruphish is a successor to Gophish with its own API, a new interface, persistent campaign drafts, verified domains, richer analysis, and explicit delivery recovery. Migration preserves supported database histories and authored Go-template behavior. Adapt automation to the documented Ruphish API and review the [documented differences](https://ruphish.com/docs/migration/differences-from-gophish/) before migrating.
+Ruphish is a successor to Gophish with its own API, a new interface, persistent campaign drafts, verified domains, richer analysis, and explicit delivery recovery. Supported Gophish SQLite and MySQL databases migrate directly to Ruphish, preserving supported data and authored Go-template behavior. Adapt automation to the documented Ruphish API and review the [documented differences](https://ruphish.com/docs/migration/differences-from-gophish/) before migrating.
 
 ![Ruphish dashboard showing campaign outcomes, recent campaigns, and deliveries needing review.](assets/dashboard.png)
 

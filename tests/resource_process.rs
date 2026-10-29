@@ -1424,7 +1424,7 @@ fn groups_round_trip_isolate_recipients_clear_fields_and_survive_restart() {
         let pool = sqlx::SqlitePool::connect(&format!("sqlite:{}",directory.path().join("installation.sqlite3").display())).await.unwrap();
         let epoch: i64 = sqlx::query_scalar("SELECT COALESCE((SELECT epoch FROM ruphish_auth_state WHERE user_id=1),0)").fetch_one(&pool).await.unwrap();
         let provider = ruphish_adapters::database::open(ruphish_adapters::database::Config::Sqlite {
-            path: directory.path().join("installation.sqlite3"), migrations_prefix: String::new(),
+            path: directory.path().join("installation.sqlite3"),
         }, ruphish_adapters::outbound::Policy::default()).await.unwrap();
         let repository = provider.resources();
         let caller = Identity{id:1,epoch};

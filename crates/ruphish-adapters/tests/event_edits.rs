@@ -11,7 +11,7 @@ use scenarios::*;
 async fn event_rows_are_mutated_deleted_and_persisted_without_audit_tables() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("events.db");
-    let db = support::DatabaseFixture::open(&path, "").await.unwrap();
+    let db = support::DatabaseFixture::open(&path).await.unwrap();
     let pool = db.inspection_pool();
     sqlx::raw_sql(SEED).execute(&pool).await.unwrap();
     sqlx::raw_sql("INSERT INTO webhooks(id,name,url,secret,is_active) VALUES(1,'Fixture','http://127.0.0.1:9/','',1); INSERT INTO ruphish_webhook_state VALUES(1,1); UPDATE ruphish_settings SET webhooks_enabled=1; INSERT INTO ruphish_webhook_jobs(webhook_id,revision,event_id) VALUES(1,1,101),(1,1,102);").execute(&pool).await.unwrap();
@@ -70,7 +70,7 @@ async fn event_rows_are_mutated_deleted_and_persisted_without_audit_tables() {
         .unwrap();
     assert_eq!(auto, (false, 0));
     db.close().await;
-    let reopened = support::DatabaseFixture::open(&path, "").await.unwrap();
+    let reopened = support::DatabaseFixture::open(&path).await.unwrap();
     let events = reopened
         .campaigns()
         .recipient_history(OWNER, 10, 11, None, None)
@@ -95,7 +95,7 @@ async fn event_rows_are_mutated_deleted_and_persisted_without_audit_tables() {
 async fn event_schema_reopens_with_lf_and_crlf_without_rewriting_history() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("line-endings.db");
-    let db = support::DatabaseFixture::open(&path, "").await.unwrap();
+    let db = support::DatabaseFixture::open(&path).await.unwrap();
     let pool = db.inspection_pool();
     sqlx::raw_sql(SEED).execute(&pool).await.unwrap();
     let definition: String =
@@ -125,7 +125,7 @@ async fn event_schema_reopens_with_lf_and_crlf_without_rewriting_history() {
             .unwrap();
         raw.close().await.unwrap();
 
-        let reopened = support::DatabaseFixture::open(&path, "").await.unwrap();
+        let reopened = support::DatabaseFixture::open(&path).await.unwrap();
         let pool = reopened.inspection_pool();
         let after: String =
             sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE name='ruphish_event_insert'")
@@ -153,7 +153,7 @@ async fn event_retry_index_and_webhook_trigger_drift_are_rejected_and_recoverabl
     use sqlx::Connection;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("schema.db");
-    let db = support::DatabaseFixture::open(&path, "").await.unwrap();
+    let db = support::DatabaseFixture::open(&path).await.unwrap();
     db.close().await;
     let mut raw = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
@@ -173,7 +173,7 @@ async fn event_retry_index_and_webhook_trigger_drift_are_rejected_and_recoverabl
             .await
             .unwrap();
         sqlx::raw_sql(damage).execute(&mut raw).await.unwrap();
-        assert!(support::DatabaseFixture::open(&path, "").await.is_err());
+        assert!(support::DatabaseFixture::open(&path).await.is_err());
         if name == "ruphish_event_insert" {
             sqlx::query("DROP TRIGGER ruphish_event_insert")
                 .execute(&mut raw)
@@ -184,7 +184,7 @@ async fn event_retry_index_and_webhook_trigger_drift_are_rejected_and_recoverabl
             .execute(&mut raw)
             .await
             .unwrap();
-        let recovered = support::DatabaseFixture::open(&path, "").await.unwrap();
+        let recovered = support::DatabaseFixture::open(&path).await.unwrap();
         recovered.close().await;
     }
     raw.close().await.unwrap();

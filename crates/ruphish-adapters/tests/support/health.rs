@@ -6,15 +6,9 @@ use ruphish_application::health::Service;
 async fn sqlite_health_checks_application_storage_and_closed_pool() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("state.db");
-    let db = database::open(
-        Config::Sqlite {
-            path: path.clone(),
-            migrations_prefix: String::new(),
-        },
-        Policy::default(),
-    )
-    .await
-    .unwrap();
+    let db = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+        .await
+        .unwrap();
     let health = Service::new(db.health());
     health.started();
     assert!(health.ready().await);

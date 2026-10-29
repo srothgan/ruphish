@@ -21,6 +21,11 @@ async fn all_populated_goose_versions_upgrade_without_losing_records_or_the_sour
     )
     .unwrap();
     let directory = tempfile::tempdir().unwrap();
+    let fresh = directory.path().join("fresh.db");
+    migrations::create_baseline(&fresh).await.unwrap();
+    let mut fresh_connection = open(&fresh).await.unwrap();
+    let expected_schema = schema(&mut fresh_connection).await.unwrap();
+    fresh_connection.close().await.unwrap();
     for version in versions {
         let source = fixtures().join(format!("compatibility/{version}.sqlite3"));
         let original_bytes = fs::read(&source).unwrap();
@@ -34,6 +39,11 @@ async fn all_populated_goose_versions_upgrade_without_losing_records_or_the_sour
             "original {version} changed"
         );
         let mut connection = open(&destination).await.unwrap();
+        assert_eq!(
+            schema(&mut connection).await.unwrap(),
+            expected_schema,
+            "schema at {version}"
+        );
         let user = sqlx::query("SELECT username,hash,api_key,role_id FROM users WHERE id=17")
             .fetch_one(&mut connection)
             .await
@@ -76,7 +86,7 @@ async fn all_populated_goose_versions_upgrade_without_losing_records_or_the_sour
                 "preserved-rid",
             ),
             (
-                "SELECT message FROM events WHERE id=61 AND campaign_id=53",
+                "SELECT message FROM event_history WHERE id=61 AND campaign_id=53",
                 "Email Sent",
             ),
         ] {
@@ -109,12 +119,12 @@ async fn all_populated_goose_versions_upgrade_without_losing_records_or_the_sour
         }
         assert_eq!(
             sqlx::query_scalar::<_, i64>(
-                "SELECT max(version_id) FROM goose_db_version WHERE is_applied=1"
+                "SELECT max(version) FROM _sqlx_migrations WHERE success=1"
             )
             .fetch_one(&mut connection)
             .await
             .unwrap(),
-            migrations::LATEST_LEGACY_VERSION
+            1
         );
         connection.close().await.unwrap();
     }
@@ -143,11 +153,15 @@ async fn latest_real_gophish_database_is_preserved_and_repeated_upgrades_are_ide
             "ada@example.test"
         );
         assert_eq!(
-            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM goose_db_version")
-                .fetch_one(&mut connection)
-                .await
-                .unwrap(),
-            26
+            sqlx::query_scalar::<_, i64>(if path == &original {
+                "SELECT count(*) FROM goose_db_version"
+            } else {
+                "SELECT count(*) FROM _sqlx_migrations WHERE version=1 AND success=1"
+            })
+            .fetch_one(&mut connection)
+            .await
+            .unwrap(),
+            if path == &original { 26 } else { 1 }
         );
         connection.close().await.unwrap();
     }
@@ -157,9 +171,9 @@ async fn latest_real_gophish_database_is_preserved_and_repeated_upgrades_are_ide
 async fn fresh_schema_has_no_implicit_accounts_and_never_overwrites_existing_files() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("fresh.db");
-    migrations::create_legacy_baseline(&path).await.unwrap();
+    migrations::create_baseline(&path).await.unwrap();
     let before = fs::read(&path).unwrap();
-    assert!(migrations::create_legacy_baseline(&path).await.is_err());
+    assert!(migrations::create_baseline(&path).await.is_err());
     assert!(migrations::upgrade_copy(&path, &path).await.is_err());
     assert_eq!(fs::read(&path).unwrap(), before);
     let mut connection = open(&path).await.unwrap();
@@ -297,4 +311,137 @@ async fn old_smtp_profiles_are_converted_with_their_campaign_and_owner() {
             .await
             .is_err()
     );
+}
+
+async fn schema(
+    connection: &mut SqliteConnection,
+) -> Result<Vec<(String, String, String)>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT type,name,sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY type,name",
+    )
+    .fetch_all(connection)
+    .await
+}
+
+#[tokio::test]
+async fn conversion_preserves_deleted_identity_high_water_marks() {
+    let directory = tempfile::tempdir().unwrap();
+    let source = directory.path().join("source.db");
+    let destination = directory.path().join("converted.db");
+    fs::copy(
+        fixtures().join("gophish-v0.12.1/legacy-latest.sqlite3"),
+        &source,
+    )
+    .unwrap();
+    let mut connection = open(&source).await.unwrap();
+    sqlx::raw_sql("INSERT INTO groups(id,name) VALUES(9000,'deleted'); DELETE FROM groups WHERE id=9000; DELETE FROM attachments; INSERT INTO attachments(id,name) VALUES(8000,'deleted'); DELETE FROM attachments;").execute(&mut connection).await.unwrap();
+    connection.close().await.unwrap();
+    migrations::upgrade_copy(&source, &destination)
+        .await
+        .unwrap();
+    let mut converted = open(&destination).await.unwrap();
+    for (query, retired) in [
+        ("INSERT INTO groups(name) VALUES('new') RETURNING id", 9000),
+        (
+            "INSERT INTO attachments(name) VALUES('new') RETURNING id",
+            8000,
+        ),
+    ] {
+        let id: i64 = sqlx::query_scalar(query)
+            .fetch_one(&mut converted)
+            .await
+            .unwrap();
+        assert!(id > retired, "reused retired identity {id}");
+    }
+    converted.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn in_place_conversion_failure_rolls_back_and_retains_a_verified_backup() {
+    let directory = tempfile::tempdir().unwrap();
+    let source = directory.path().join("source.db");
+    fs::copy(
+        fixtures().join("gophish-v0.12.1/legacy-latest.sqlite3"),
+        &source,
+    )
+    .unwrap();
+    let mut connection = open(&source).await.unwrap();
+    sqlx::raw_sql("INSERT INTO imap(user_id,host,port,username,password) VALUES(NULL,'mail.example.test',993,'synthetic','fixture-only');")
+        .execute(&mut connection)
+        .await
+        .unwrap();
+    let original_schema = schema(&mut connection).await.unwrap();
+    connection.close().await.unwrap();
+    let result = ruphish_adapters::database::open(
+        ruphish_adapters::database::Config::Sqlite {
+            path: source.clone(),
+        },
+        ruphish_adapters::outbound::Policy::new(&[]).unwrap(),
+    )
+    .await;
+    assert!(result.is_err());
+    let backups: Vec<_> = fs::read_dir(directory.path())
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| {
+            p.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("ruphish-pre-upgrade-")
+        })
+        .collect();
+    assert_eq!(backups.len(), 1);
+    for path in [&source, &backups[0]] {
+        let mut connection = open(path).await.unwrap();
+        assert_eq!(schema(&mut connection).await.unwrap(), original_schema);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM imap WHERE user_id IS NULL")
+                .fetch_one(&mut connection)
+                .await
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("PRAGMA integrity_check")
+                .fetch_one(&mut connection)
+                .await
+                .unwrap(),
+            "ok"
+        );
+        connection.close().await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn application_history_and_schema_drift_are_rejected_without_blessing_them() {
+    let directory = tempfile::tempdir().unwrap();
+    for (index, mutation) in [
+        "UPDATE _sqlx_migrations SET checksum=x'00'",
+        "UPDATE _sqlx_migrations SET success=0",
+        "UPDATE _sqlx_migrations SET version=99",
+        "DELETE FROM _sqlx_migrations",
+        "DROP INDEX ruphish_campaign_domain",
+        "DROP TRIGGER ruphish_event_insert",
+        "ALTER TABLE users ADD COLUMN unexpected TEXT",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let source = directory.path().join(format!("current-{index}.db"));
+        let output = directory.path().join(format!("output-{index}.db"));
+        migrations::create_baseline(&source).await.unwrap();
+        let mut connection = open(&source).await.unwrap();
+        sqlx::raw_sql(*mutation)
+            .execute(&mut connection)
+            .await
+            .unwrap();
+        connection.close().await.unwrap();
+        let before = fs::read(&source).unwrap();
+        assert!(
+            migrations::upgrade_copy(&source, &output).await.is_err(),
+            "{mutation}"
+        );
+        assert!(!output.exists());
+        assert_eq!(fs::read(&source).unwrap(), before);
+    }
 }

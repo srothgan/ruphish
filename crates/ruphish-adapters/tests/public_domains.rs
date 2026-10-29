@@ -16,13 +16,12 @@ fn caller() -> Identity {
 }
 
 #[tokio::test]
-async fn observation_upgrade_preserves_history_retry_tombstones_and_repeated_events_across_restart()
-{
+async fn gophish_conversion_preserves_history_and_new_retry_receipts_survive_restart() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("observations.db");
     std::fs::copy(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../tests/fixtures/observations/ruphish-v10.sqlite3"),
+            .join("../../tests/fixtures/campaigns/queued.sqlite3"),
         &path,
     )
     .unwrap();
@@ -32,21 +31,18 @@ async fn observation_upgrade_preserves_history_retry_tombstones_and_repeated_eve
             .unwrap();
     sqlx::raw_sql(r#"
         INSERT INTO webhooks(id,name,url,secret,is_active) VALUES(7,'Observation fixture','http://127.0.0.1:1/unused','',1);
-        INSERT INTO ruphish_webhook_state(webhook_id,revision) VALUES(7,1);
         INSERT INTO results(id,campaign_id,user_id,email,r_id,status) VALUES(3,1,1,'bob@example.test','ambiguous-bob','Email Sent');
         INSERT INTO events(id,campaign_id,email,time,message,details) VALUES
         (40,1,'alice@example.test','2026-10-20T12:00:00Z','Submitted Data','{"password_present":true,"password":"HISTORICAL-PRIVATE-CANARY"}'),
         (41,1,'missing@example.test','2026-10-20T12:00:00Z','Email Opened',''),
         (42,1,'bob@example.test','2026-10-20T12:00:00Z','Email Opened','');
-        INSERT INTO ruphish_submission_ids VALUES(1,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
-        UPDATE ruphish_event_sources SET source='public' WHERE event_id=40;
-        UPDATE ruphish_domains SET verified_until=9999999999;
     "#).execute(&raw).await.unwrap();
     raw.close().await;
-    let db = DatabaseFixture::open(&path, "").await.unwrap();
+    let db = DatabaseFixture::open(&path).await.unwrap();
     enable_verification(&db, true).await;
     assert!(db.backup_path().is_some());
     let pool = db.inspection_pool();
+    sqlx::raw_sql("INSERT INTO ruphish_event_receipts(result_id,request_id) VALUES(1,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'); UPDATE ruphish_domains SET checked_at=1900000000,verified_until=1900086400;").execute(&pool).await.unwrap();
     let historical: (String, String, Option<i64>, String) =
         sqlx::query_as("SELECT kind,metadata,recipient_id,source FROM events WHERE id=40")
             .fetch_one(&pool)
@@ -54,12 +50,7 @@ async fn observation_upgrade_preserves_history_retry_tombstones_and_repeated_eve
             .unwrap();
     assert_eq!(
         historical,
-        (
-            "form_submitted".into(),
-            "{\"password_present\":true}".into(),
-            Some(1),
-            "public".into()
-        )
+        ("form_submitted".into(), "".into(), Some(1), "legacy".into())
     );
     assert_eq!(
         sqlx::query_scalar::<_, Option<i64>>("SELECT recipient_id FROM events WHERE id=42")
@@ -132,8 +123,8 @@ async fn observation_upgrade_preserves_history_retry_tombstones_and_repeated_eve
             .await
             .unwrap();
     assert_eq!(
-        jobs, 9,
-        "historical and new events enqueue once, retries enqueue nothing"
+        jobs, 6,
+        "conversion does not replay historical webhooks; new events enqueue once"
     );
     drop(public);
     db.close().await;
@@ -143,7 +134,7 @@ async fn observation_upgrade_preserves_history_retry_tombstones_and_repeated_eve
             .windows(b"HISTORICAL-PRIVATE-CANARY".len())
             .any(|bytes| bytes == b"HISTORICAL-PRIVATE-CANARY")
     );
-    let db = DatabaseFixture::open(&path, "").await.unwrap();
+    let db = DatabaseFixture::open(&path).await.unwrap();
     assert!(db.backup_path().is_none());
     db.interactions()
         .interact(
@@ -212,7 +203,7 @@ async fn fixture() -> (tempfile::TempDir, DatabaseFixture) {
         &path,
     )
     .unwrap();
-    let db = DatabaseFixture::open(&path, "").await.unwrap();
+    let db = DatabaseFixture::open(&path).await.unwrap();
     enable_verification(&db, false).await;
     (dir, db)
 }
@@ -924,7 +915,7 @@ async fn queued_and_running_checks_survive_reopen_and_expired_workers_cannot_pub
     let before = store.request_check(caller(), id, now).await.unwrap();
     let queued_id = before.active_check.unwrap().id;
     db.close().await;
-    let db = DatabaseFixture::open(&dir.path().join("state.db"), "")
+    let db = DatabaseFixture::open(&dir.path().join("state.db"))
         .await
         .unwrap();
     let store = db.domains();
@@ -940,7 +931,7 @@ async fn queued_and_running_checks_survive_reopen_and_expired_workers_cannot_pub
     );
     let old = store.claim(now).await.unwrap().unwrap();
     db.close().await;
-    let db = DatabaseFixture::open(&dir.path().join("state.db"), "")
+    let db = DatabaseFixture::open(&dir.path().join("state.db"))
         .await
         .unwrap();
     let store = db.domains();
@@ -971,40 +962,22 @@ async fn queued_and_running_checks_survive_reopen_and_expired_workers_cannot_pub
 }
 
 #[tokio::test]
-async fn version_four_upgrade_preserves_known_history_without_inventing_duration_or_trusting_a_failed_recheck()
- {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("state.db");
+async fn pre_release_ruphish_history_is_rejected_without_changes() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("old.db");
     std::fs::copy(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../tests/fixtures/observations/ruphish-v10.sqlite3"),
+            .join("../../tests/fixtures/campaigns/queued.sqlite3"),
         &path,
     )
     .unwrap();
-    let raw =
+    let pool =
         sqlx::SqlitePool::connect_with(sqlx::sqlite::SqliteConnectOptions::new().filename(&path))
             .await
             .unwrap();
-    sqlx::raw_sql("DROP TRIGGER ruphish_event_insert; DROP TRIGGER ruphish_event_delete; DROP INDEX ruphish_events_campaign_time; DROP INDEX ruphish_events_recipient; CREATE INDEX ruphish_events_recipient ON events(campaign_id,email); DROP TABLE ruphish_event_sources; DROP TABLE ruphish_webhook_state; DROP TABLE ruphish_webhook_jobs; DROP TABLE ruphish_webhook_attempts; DROP TABLE ruphish_mailbox_messages; DROP TABLE ruphish_mailbox_runs; DROP TABLE ruphish_mailboxes; DROP TABLE ruphish_domain_checks; DROP TABLE ruphish_campaign_drafts; DROP TABLE ruphish_user_preferences; DELETE FROM ruphish_schema WHERE version>=5; UPDATE ruphish_domains SET checked_at=200,verified_until=9999999999,code='domain_txt_mismatch',lease_until=9999999999;").execute(&raw).await.unwrap();
-    raw.close().await;
-    let db = DatabaseFixture::open(&dir.path().join("state.db"), "")
-        .await
-        .unwrap();
-    let upgraded = db.domains().get(caller(), 1).await.unwrap();
-    assert_eq!(upgraded.challenge, "synthetic-challenge");
-    assert_eq!(upgraded.verified_until, 0);
-    assert_eq!(upgraded.history.len(), 1);
-    assert_eq!(upgraded.history[0].finished_at, Some(200));
-    assert_eq!(upgraded.history[0].started_at, None);
-    assert_eq!(upgraded.history[0].state, "failed");
-    assert!(upgraded.active_check.is_none());
-    let first_id = upgraded.history[0].id;
-    db.close().await;
-    let db = DatabaseFixture::open(&dir.path().join("state.db"), "")
-        .await
-        .unwrap();
-    let again = db.domains().get(caller(), 1).await.unwrap();
-    assert_eq!(again.history.len(), 1);
-    assert_eq!(again.history[0].id, first_id);
-    db.close().await;
+    sqlx::raw_sql("CREATE TABLE ruphish_schema(version INTEGER PRIMARY KEY NOT NULL,name TEXT NOT NULL); INSERT INTO ruphish_schema VALUES(1,'authentication-v1');").execute(&pool).await.unwrap();
+    pool.close().await;
+    let original = std::fs::read(&path).unwrap();
+    assert!(DatabaseFixture::open(&path).await.is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), original);
 }

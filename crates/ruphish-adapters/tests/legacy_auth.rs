@@ -60,7 +60,7 @@ async fn password_change_preserves_original_rejections_and_verifies_the_new_hash
     use ruphish_application::auth::{Error, Service};
     use std::sync::Arc;
     let directory = tempfile::tempdir().unwrap();
-    let database = DatabaseFixture::open(&directory.path().join("accounts.db"), "")
+    let database = DatabaseFixture::open(&directory.path().join("accounts.db"))
         .await
         .unwrap();
     database

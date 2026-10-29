@@ -88,12 +88,22 @@ pub(super) async fn copy(c: &mut MySqlConnection, version: i64, offset: &str) ->
                 continue;
             }
             names.push(format!("`{name}`"));
-            let value = if table == "events" && name == "details"
+            let value = if table == "events" && name == "metadata"
                 || table == "results" && name == "ip"
             {
                 "''".to_owned()
             } else if table == "results" && matches!(name.as_str(), "latitude" | "longitude") {
                 "0".to_owned()
+            } else if table == "events" && name == "kind" {
+                "CASE message WHEN 'Campaign Created' THEN 'campaign_created' WHEN 'Email Sent' THEN 'email_sent' WHEN 'Error Sending Email' THEN 'email_error' WHEN 'Email Opened' THEN 'email_opened' WHEN 'Clicked Link' THEN 'link_clicked' WHEN 'Submitted Data' THEN 'form_submitted' WHEN 'Email Reported' THEN 'email_reported' WHEN 'Delivery reconciled' THEN 'delivery_reconciled' ELSE message END".into()
+            } else if table == "events" && name == "source" {
+                "'legacy'".into()
+            } else if table == "events" && name == "recipient_id" {
+                "(SELECT min(r.id) FROM results r WHERE r.campaign_id=events.campaign_id AND r.email=events.email HAVING count(*)=1)".into()
+            } else if table == "events" && matches!(name.as_str(), "edited" | "revision") {
+                "0".into()
+            } else if table == "events" && name == "create_key" {
+                "NULL".into()
             } else if let Some(ty) = known.get(name) {
                 if matches!(ty.as_str(), "datetime" | "timestamp") {
                     // DATETIME has no offset. Apply an explicit source interpretation
@@ -161,7 +171,7 @@ pub(super) async fn copy(c: &mut MySqlConnection, version: i64, offset: &str) ->
         .await?;
     }
     if version < 20170104231222 {
-        statement(c, "UPDATE rp_stage_results r SET status=CASE WHEN EXISTS(SELECT 1 FROM rp_stage_events e WHERE e.campaign_id=r.campaign_id AND e.email=r.email AND e.message='Submitted Data') THEN 'Submitted Data' WHEN EXISTS(SELECT 1 FROM rp_stage_events e WHERE e.campaign_id=r.campaign_id AND e.email=r.email AND e.message='Clicked Link') THEN 'Clicked Link' ELSE status END WHERE status='Success'".into()).await?;
+        statement(c, "UPDATE rp_stage_results r SET status=CASE WHEN EXISTS(SELECT 1 FROM rp_stage_events e WHERE e.campaign_id=r.campaign_id AND e.email=r.email AND e.kind='form_submitted') THEN 'Submitted Data' WHEN EXISTS(SELECT 1 FROM rp_stage_events e WHERE e.campaign_id=r.campaign_id AND e.email=r.email AND e.kind='link_clicked') THEN 'Clicked Link' ELSE status END WHERE status='Success'".into()).await?;
     }
     if version < 20180524203752 {
         statement(c, "UPDATE rp_stage_results r SET modified_date=COALESCE((SELECT max(e.time) FROM rp_stage_events e WHERE e.campaign_id=r.campaign_id AND e.email=r.email),'0001-01-01T00:00:00Z')".into()).await?;
@@ -196,15 +206,15 @@ async fn columns(
 }
 
 async fn initialize_work(c: &mut MySqlConnection) -> Result<(), Error> {
-    statement(c, "INSERT INTO rp_stage_ruphish_campaign_policy SELECT c.id,COALESCE(p.capture_credentials,0),COALESCE(p.capture_passwords,0),COALESCE(p.redirect_url,'') FROM rp_stage_campaigns c JOIN rp_stage_pages p ON p.id=c.page_id AND p.user_id=c.user_id;
-INSERT INTO rp_stage_ruphish_event_sources SELECT id,'legacy' FROM rp_stage_events;
+    statement(c, "INSERT INTO rp_stage_ruphish_campaign_policy(campaign_id,redirect_url) SELECT c.id,COALESCE(p.redirect_url,'') FROM rp_stage_campaigns c JOIN rp_stage_pages p ON p.id=c.page_id AND p.user_id=c.user_id;
 INSERT INTO rp_stage_ruphish_webhook_state SELECT id,1 FROM rp_stage_webhooks;
 INSERT INTO rp_stage_ruphish_legacy_queue_issues SELECT m.id,'Unresolved or ambiguous legacy queue association' FROM rp_stage_mail_logs m WHERE (SELECT count(*) FROM rp_stage_results r JOIN rp_stage_campaigns c ON c.id=r.campaign_id JOIN rp_stage_users u ON u.id=c.user_id WHERE r.r_id=m.r_id AND r.user_id=m.user_id AND r.campaign_id=m.campaign_id AND c.user_id=m.user_id)<>1 OR (SELECT count(*) FROM rp_stage_results r WHERE r.r_id=m.r_id)<>1 OR (SELECT count(*) FROM rp_stage_mail_logs d WHERE d.r_id=m.r_id)<>1 OR COALESCE(m.send_attempt,0) NOT BETWEEN 0 AND 8 OR m.send_date<'1970-01-01';
 INSERT INTO rp_stage_ruphish_delivery(result_id,campaign_id,state,due,retries,code) SELECT r.id,m.campaign_id,CASE WHEN c.status='Completed' THEN 'cancelled' WHEN COALESCE(m.processing,0)<>0 THEN 'unknown' WHEN p.campaign_id IS NULL THEN 'blocked' ELSE 'ready' END,TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',STR_TO_DATE(LEFT(m.send_date,19),'%Y-%m-%dT%H:%i:%s')),COALESCE(m.send_attempt,0),CASE WHEN COALESCE(m.processing,0)<>0 THEN 'legacy_delivery_outcome_unknown' WHEN p.campaign_id IS NULL THEN 'campaign_page_missing' ELSE '' END FROM rp_stage_mail_logs m JOIN rp_stage_results r ON r.r_id=m.r_id AND r.campaign_id=m.campaign_id AND r.user_id=m.user_id JOIN rp_stage_campaigns c ON c.id=m.campaign_id LEFT JOIN rp_stage_ruphish_campaign_policy p ON p.campaign_id=c.id WHERE m.id NOT IN (SELECT mail_log_id FROM rp_stage_ruphish_legacy_queue_issues);
 DELETE FROM rp_stage_mail_logs WHERE id NOT IN (SELECT mail_log_id FROM rp_stage_ruphish_legacy_queue_issues);
 INSERT INTO rp_stage_ruphish_mailboxes(owner_id,name,enabled,host,port,username,password,tls,folder,restrict_domain,delete_reported,frequency,modified_date,last_login,ignore_cert_errors)
 SELECT user_id,CONCAT('Imported reporting mailbox ',ROW_NUMBER() OVER (ORDER BY user_id,host,username)),CASE WHEN port BETWEEN 1 AND 65535 AND length(host)>0 AND length(username)>0 AND length(password)>0 THEN COALESCE(enabled,0) ELSE 0 END,COALESCE(host,''),CASE WHEN port BETWEEN 1 AND 65535 THEN port ELSE 993 END,COALESCE(username,''),COALESCE(password,''),COALESCE(tls,1),COALESCE(NULLIF(folder,''),'INBOX'),COALESCE(restrict_domain,''),COALESCE(delete_reported_campaign_email,0),CASE WHEN imap_freq BETWEEN 30 AND 31540000 THEN imap_freq ELSE 60 END,COALESCE(modified_date,'0001-01-01T00:00:00Z'),COALESCE(last_login,'0001-01-01T00:00:00Z'),COALESCE(ignore_cert_errors,0)<>0 FROM rp_stage_imap;
-DELETE FROM rp_stage_imap;".into()).await
+DELETE FROM rp_stage_imap;
+UPDATE rp_stage_ruphish_settings SET reporting_mailboxes_enabled=EXISTS(SELECT 1 FROM rp_stage_ruphish_mailboxes),webhooks_enabled=EXISTS(SELECT 1 FROM rp_stage_webhooks) WHERE id=1;".into()).await
 }
 
 async fn import_domains(c: &mut MySqlConnection) -> Result<(), Error> {

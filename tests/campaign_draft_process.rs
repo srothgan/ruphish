@@ -1,7 +1,5 @@
 //! Saved-draft behavior through the real executable, with independent SQLite inspection.
 use super::*;
-#[path = "support/sqlite_versions.rs"]
-mod sqlite_versions;
 
 fn request(base: &str, method: &str, path: &str, body: &Value) -> reqwest::blocking::Response {
     client()
@@ -441,7 +439,7 @@ fn campaign_draft_missing_resource_and_past_schedule_preserve_work_until_correct
 }
 
 #[test]
-fn campaign_draft_additive_upgrade_preserves_existing_campaign_and_is_repeatable() {
+fn campaign_drafts_and_existing_campaigns_survive_repeated_startup() {
     let directory = workspace();
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let input = resources(&base, "127.0.0.1:9");
@@ -450,23 +448,6 @@ fn campaign_draft_additive_upgrade_preserves_existing_campaign_and_is_repeatable
     let existing = read(&base, &path);
     let before = counts(directory.path());
     process.stop();
-    // Independent previous-version schema: preserve populated execution tables.
-    tokio::runtime::Runtime::new().unwrap().block_on(async {
-        let pool = sqlx::SqlitePool::connect_with(
-            sqlx::sqlite::SqliteConnectOptions::new()
-                .filename(directory.path().join("installation.sqlite3")),
-        )
-        .await
-        .unwrap();
-        sqlite_versions::restore_version_nine_tables(&pool)
-            .await
-            .unwrap();
-        pool.close().await;
-    });
-    sql(
-        directory.path(),
-        "DROP TABLE ruphish_campaign_drafts; DELETE FROM ruphish_schema WHERE version>=9;",
-    );
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
     assert_eq!(read(&base, &path), existing);
     assert_eq!(counts(directory.path()), before);

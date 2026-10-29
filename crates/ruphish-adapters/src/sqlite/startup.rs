@@ -1,4 +1,7 @@
-use super::{MIGRATIONS, UpgradeError, apply_pending, connect, inspect};
+use super::{
+    UpgradeError, connect,
+    migrations::{self, inspect},
+};
 use sqlx::{
     Connection, Row, SqliteConnection, SqlitePool,
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
@@ -41,8 +44,7 @@ impl StartupDatabase {
     ///
     /// All old application instances must be stopped before a schema upgrade. The
     /// short filesystem lock serializes cooperating startup operations, not Go writers.
-    pub async fn open(path: &Path, migrations_prefix: &str) -> Result<Self, StartupError> {
-        verify_migrations(migrations_prefix)?;
+    pub async fn open(path: &Path) -> Result<Self, StartupError> {
         let path = resolved(path)?;
         let _startup_lock = startup_lock(&path).await?;
         let fresh = !path.try_exists()?;
@@ -50,11 +52,6 @@ impl StartupDatabase {
             super::create(&path).await?;
         }
         let mut connection = connect(&path, false).await?;
-        if fresh {
-            let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
-            super::auth_schema::migrate(&mut transaction).await?;
-            transaction.commit().await?;
-        }
         let prepared = prepare(&mut connection, &path).await;
         let closed = connection.close().await;
         let backup = prepared?;
@@ -211,12 +208,8 @@ async fn prepare(
     // Hold the write reservation before taking a snapshot: no committed writes can
     // appear between the recoverable backup and the migration transaction.
     let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
-    let count = inspect(&mut transaction, false).await?;
-    if count == MIGRATIONS.len()
-        && super::auth_schema::validate_version(&mut transaction).await?
-        && super::auth_schema::version(&mut transaction).await?
-            == super::auth_schema::LATEST_VERSION
-    {
+    let source = inspect(&mut transaction).await?;
+    if migrations::current(&source) {
         transaction.rollback().await?;
         return Ok(None);
     }
@@ -237,9 +230,9 @@ async fn prepare(
     snapshot?;
     closed?;
     let mut backup = connect(temporary.path(), true).await?;
-    let verified = inspect(&mut backup, false).await;
+    let verified = inspect(&mut backup).await;
     let closed = backup.close().await;
-    if verified? != count {
+    if verified? != source {
         return Err(StartupError::Invalid(
             "Backup history changed during verification".into(),
         ));
@@ -251,48 +244,8 @@ async fn prepare(
         .persist_noclobber(&backup_path)
         .map_err(|error| error.error)?;
     drop(file);
-    apply_pending(&mut transaction, count).await?;
-    super::auth_schema::migrate(&mut transaction).await?;
-    inspect(&mut transaction, false).await?;
+    migrations::upgrade(&mut transaction, source).await?;
+    inspect(&mut transaction).await?;
     transaction.commit().await?;
     Ok(Some(backup_path))
-}
-
-fn verify_migrations(prefix: &str) -> Result<(), StartupError> {
-    let directory = PathBuf::from(format!("{prefix}sqlite3"));
-    if matches!(prefix, "" | "db/db_" | "./db/db_") && !directory.try_exists()? {
-        return Ok(());
-    }
-    let mut found = std::collections::BTreeSet::new();
-    for entry in std::fs::read_dir(directory)? {
-        let entry = entry?;
-        if entry.path().extension().is_none_or(|value| value != "sql") {
-            continue;
-        }
-        let name = entry.file_name().to_string_lossy().into_owned();
-        let version = name
-            .split('_')
-            .next()
-            .and_then(|value| value.parse::<i64>().ok());
-        let expected = MIGRATIONS.iter().find(|(id, _)| Some(*id) == version);
-        let Some((id, source)) = expected else {
-            return Err(StartupError::Invalid(
-                "Custom migration directory contains an unsupported version".into(),
-            ));
-        };
-        if !found.insert(*id)
-            || std::fs::read_to_string(entry.path())?.replace("\r\n", "\n")
-                != source.replace("\r\n", "\n")
-        {
-            return Err(StartupError::Invalid(
-                "Custom migrations differ from the supported, verified migration set".into(),
-            ));
-        }
-    }
-    if found.len() != MIGRATIONS.len() {
-        return Err(StartupError::Invalid(
-            "Custom migration directory is incomplete".into(),
-        ));
-    }
-    Ok(())
 }

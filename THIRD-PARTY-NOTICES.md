@@ -4,7 +4,7 @@ Ruphish's own MIT license is in [LICENSE](LICENSE). Retain the applicable third-
 
 ## Gophish
 
-Ruphish includes SQL migrations copied from Gophish under `crates/ruphish-adapters/migrations/gophish/`, along with copied or adapted compatibility test material under `tests/`. The reference is [Gophish 0.12.1, commit 95618469799295e2c0fec980805a2dfbb818816b](https://github.com/gophish/gophish/tree/95618469799295e2c0fec980805a2dfbb818816b). The following original notice applies to that reused material; its product name identifies the upstream software.
+Ruphish includes SQL derived from Gophish in its release baselines, and original Gophish migration fixtures under `tests/fixtures/sqlite-legacy/` and `tests/fixtures/mysql-legacy/`, along with copied or adapted compatibility test material under `tests/`. The reference is [Gophish 0.12.1, commit 95618469799295e2c0fec980805a2dfbb818816b](https://github.com/gophish/gophish/tree/95618469799295e2c0fec980805a2dfbb818816b). The following original notice applies to that reused material; its product name identifies the upstream software.
 
 ```text
 The MIT License (MIT)

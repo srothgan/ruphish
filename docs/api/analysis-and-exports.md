@@ -49,7 +49,7 @@ Recipient rows contain `id`, `email`, `name`, `delivery`, `counts`, and `histori
 
 Event rows contain `id`, nullable `recipient_id`, `email`, UTC `time`, `kind`, `source`, nullable `password_present` and `username_present`, and boolean `edited`. The nullable fields must still be present. `source` is `legacy`, `application`, `public`, `mailbox`, or `operator`. Missing presence evidence is not the same as `false`. Historical reported state is separate from an observed report event.
 
-A recognized event uses a classified kind such as `{"type":"known","value":"form_submitted"}`. Unrecognized imported names remain explicit history, for example `{"type":"historical","value":"Proxied request"}`. They remain visible in event rows and exports but never contribute to a known action's metrics. CSV and XLSX retain readable event names. There are no aliases for superseded pre-release reporting formats.
+A recognized event uses a classified kind such as `{"type":"known","value":"form_submitted"}`. Unrecognized imported names remain explicit history, for example `{"type":"historical","value":"Proxied request"}`. They remain visible in event rows and exports but never contribute to a known action's metrics. CSV and XLSX retain readable event names.
 
 ## Downloads
 

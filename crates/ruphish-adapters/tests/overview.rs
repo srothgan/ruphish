@@ -12,7 +12,7 @@ const NOW: i64 = 2_000_000_000;
 const OWNER: Identity = Identity { id: 1, epoch: 0 };
 async fn setup() -> (tempfile::TempDir, DatabaseFixture, Arc<dyn Repository>) {
     let dir = tempfile::tempdir().unwrap();
-    let db = DatabaseFixture::open(&dir.path().join("overview.db"), "")
+    let db = DatabaseFixture::open(&dir.path().join("overview.db"))
         .await
         .unwrap();
     let pool = db.inspection_pool();

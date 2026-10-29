@@ -15,11 +15,11 @@ use tower_sessions_core::{
 #[tokio::test]
 async fn late_session_write_cannot_restore_logout_across_independent_stores() {
     let temporary = tempfile::tempdir().unwrap();
-    let database = DatabaseFixture::open(&temporary.path().join("accounts.db"), "")
+    let database = DatabaseFixture::open(&temporary.path().join("accounts.db"))
         .await
         .unwrap();
     let a = Arc::new(database.sessions());
-    let other = DatabaseFixture::open(&temporary.path().join("accounts.db"), "")
+    let other = DatabaseFixture::open(&temporary.path().join("accounts.db"))
         .await
         .unwrap();
     let b = Arc::new(other.sessions());
@@ -42,7 +42,7 @@ async fn late_session_write_cannot_restore_logout_across_independent_stores() {
 async fn collision_expiry_storage_failure_and_restart_preserve_session_boundaries() {
     let temporary = tempfile::tempdir().unwrap();
     let path = temporary.path().join("accounts.db");
-    let database = DatabaseFixture::open(&path, "").await.unwrap();
+    let database = DatabaseFixture::open(&path).await.unwrap();
     let store = database.sessions();
     let key = store.cookie_key().await.unwrap();
     let mut original = Record {
@@ -69,7 +69,7 @@ async fn collision_expiry_storage_failure_and_restart_preserve_session_boundarie
     store.cleanup().await.unwrap();
     drop(store);
     database.close().await;
-    let restarted = DatabaseFixture::open(&path, "").await.unwrap();
+    let restarted = DatabaseFixture::open(&path).await.unwrap();
     let store = restarted.sessions();
     assert_eq!(key, store.cookie_key().await.unwrap());
     assert_eq!(

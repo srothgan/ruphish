@@ -11,8 +11,6 @@ use ruphish_application::{
     resources::Error,
 };
 use std::sync::Arc;
-#[path = "../../../../tests/support/sqlite_versions.rs"]
-mod sqlite_versions;
 
 fn admin() -> Identity {
     Identity { id: 1, epoch: 0 }
@@ -26,15 +24,9 @@ async fn fixture() -> (tempfile::TempDir, database::Database, sqlx::SqlitePool) 
         &path,
     )
     .unwrap();
-    let db = database::open(
-        Config::Sqlite {
-            path: path.clone(),
-            migrations_prefix: String::new(),
-        },
-        Policy::default(),
-    )
-    .await
-    .unwrap();
+    let db = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+        .await
+        .unwrap();
     let pool =
         sqlx::SqlitePool::connect_with(sqlx::sqlite::SqliteConnectOptions::new().filename(path))
             .await
@@ -297,7 +289,7 @@ async fn legacy_campaign_list_rejects_large_graphs_but_directory_remains_availab
 }
 
 #[tokio::test]
-async fn integration_identity_upgrade_preserves_populated_version_nine_and_restarts() {
+async fn integration_identity_preserves_populated_history_across_restarts() {
     let (dir, db, pool) = fixture().await;
     let original = db
         .integrations()
@@ -357,27 +349,14 @@ async fn integration_identity_upgrade_preserves_populated_version_nine_and_resta
         snapshots.push((snapshot, before));
     }
     tx.commit().await.unwrap();
-    sqlite_versions::restore_version_nine_tables(&pool)
-        .await
-        .unwrap();
-    sqlx::query("DELETE FROM ruphish_schema WHERE version=10")
-        .execute(&pool)
-        .await
-        .unwrap();
     db.close().await;
     pool.close().await;
 
     let path = dir.path().join("security.db");
-    let upgraded = database::open(
-        Config::Sqlite {
-            path: path.clone(),
-            migrations_prefix: String::new(),
-        },
-        Policy::default(),
-    )
-    .await
-    .unwrap();
-    assert!(upgraded.backup_path().unwrap().is_file());
+    let upgraded = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+        .await
+        .unwrap();
+    assert!(upgraded.backup_path().is_none());
     let inspect =
         sqlx::SqlitePool::connect_with(sqlx::sqlite::SqliteConnectOptions::new().filename(&path))
             .await
@@ -389,7 +368,7 @@ async fn integration_identity_upgrade_preserves_populated_version_nine_and_resta
             .unwrap();
         assert_eq!(
             before, after,
-            "upgrade preserves every persisted integration field"
+            "reopening preserves every persisted integration field"
         );
     }
     let worker = Integrations::new(inspect.clone(), Policy::default());
@@ -411,15 +390,9 @@ async fn integration_identity_upgrade_preserves_populated_version_nine_and_resta
         .unwrap();
     upgraded.close().await;
     inspect.close().await;
-    let reopened = database::open(
-        Config::Sqlite {
-            path,
-            migrations_prefix: String::new(),
-        },
-        Policy::default(),
-    )
-    .await
-    .unwrap();
+    let reopened = database::open(Config::Sqlite { path }, Policy::default())
+        .await
+        .unwrap();
     assert!(reopened.backup_path().is_none());
     let replacement = reopened
         .integrations()

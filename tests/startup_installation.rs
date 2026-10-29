@@ -20,7 +20,6 @@ fn generated_defaults_are_private_sqlite_settings_and_existing_edits_are_preserv
     assert!(!config.db_path.file_name().unwrap().is_empty());
     assert_eq!(config.logging.filename, paths.logs.join("ruphish.log"));
     assert_eq!(config.admin.key_path, paths.data.join("ruphish_admin.key"));
-    assert!(config.migrations_prefix.is_empty());
     assert!(
         !config.db_path.exists(),
         "configuration generation does not initialize storage"

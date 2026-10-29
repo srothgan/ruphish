@@ -31,7 +31,7 @@ An open or click is a recorded request. Mail scanners, image proxies, and automa
 
 Ruphish replaces the backend with Rust and the administration interface with Rust/WASM. It preserves familiar concepts and many HTTP and template contracts, while making intentional changes to participant data handling, domain verification, authentication, and operations.
 
-Ruphish is a successor to Gophish with its own API. Supported database migration and authored Go-template behavior remain requirements; automation must use the documented Ruphish contracts. The [compatibility guide](../migration/compatibility.md) explains what carries forward and which integrations need adaptation.
+Ruphish is a successor to Gophish with its own API. It supports direct migration of recognized Gophish SQLite and MySQL databases and authored Go-template behavior. Automation uses the documented Ruphish contracts. The [compatibility guide](../migration/compatibility.md) explains what carries forward and which integrations need adaptation.
 
 ## Installation options
 

@@ -1,7 +1,5 @@
 //! Transactional account workflows against real SQLite, including failure injection.
 #![allow(clippy::unwrap_used, reason = "Integration setup and assertions")]
-#[path = "../../../tests/support/sqlite_versions.rs"]
-mod sqlite_versions;
 mod support;
 use ruphish_adapters::password_worker::{self, PasswordWorker};
 use ruphish_application::auth::{Edit, Error, Service};
@@ -60,7 +58,7 @@ async fn delivery_authorization_retains_storage_and_permission_classifications()
         &path,
     )
     .unwrap();
-    let db = DatabaseFixture::open(&path, "").await.unwrap();
+    let db = DatabaseFixture::open(&path).await.unwrap();
     let repository = db.accounts();
     let actor = repository.by_id(1).await.unwrap().identity;
     let resources = resources::Service::new(
@@ -115,7 +113,7 @@ async fn imported_accounts_lookups_roles_and_password_failure_are_atomic() {
         &path,
     )
     .unwrap();
-    let db = DatabaseFixture::open(&path, "").await.unwrap();
+    let db = DatabaseFixture::open(&path).await.unwrap();
     let pool = db.inspection_pool();
     let repo = db.accounts();
     let service = Service::new(repo.clone(), Arc::new(PasswordWorker::default()));
@@ -241,7 +239,7 @@ async fn imported_accounts_lookups_roles_and_password_failure_are_atomic() {
     assert_eq!(winner.identity.epoch, changed.identity.epoch + 1);
     assert_eq!(repo.by_id(1).await.unwrap().hash, winner.hash);
     db.close().await;
-    let reopened = DatabaseFixture::open(&path, "").await.unwrap();
+    let reopened = DatabaseFixture::open(&path).await.unwrap();
     assert!(reopened.backup_path().is_none());
     let repo = reopened.accounts();
     assert_eq!(repo.by_id(1).await.unwrap().hash, winner.hash);
@@ -258,7 +256,7 @@ async fn deletion_rolls_back_owned_records_then_preserves_other_owners_and_share
         &path,
     )
     .unwrap();
-    let db = DatabaseFixture::open(&path, "").await.unwrap();
+    let db = DatabaseFixture::open(&path).await.unwrap();
     let pool = db.inspection_pool();
     sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id,password_change_required,account_locked) VALUES(100,'surviving-admin','unused','surviving-key',1,0,0); INSERT INTO groups(id,user_id,name) VALUES(101,100,'Other owner'); INSERT INTO group_targets(group_id,target_id) SELECT 101,id FROM targets; CREATE TRIGGER fail_delete BEFORE DELETE ON users WHEN OLD.id=17 BEGIN SELECT RAISE(ABORT,'synthetic late delete failure'); END;").execute(&pool).await.unwrap();
     let repo = db.accounts();
@@ -383,13 +381,13 @@ async fn deletion_rolls_back_owned_records_then_preserves_other_owners_and_share
 #[tokio::test]
 async fn unsupported_auth_history_and_partial_schemas_are_refused_without_reinitializing() {
     for sql in [
-        "UPDATE ruphish_schema SET version=999 WHERE version=(SELECT max(version) FROM ruphish_schema)",
+        "UPDATE _sqlx_migrations SET version=999 WHERE version=1",
         "DROP TABLE ruphish_auth_state",
         "ALTER TABLE ruphish_sessions ADD COLUMN unsupported TEXT",
     ] {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("accounts.db");
-        let db = DatabaseFixture::open(&path, "").await.unwrap();
+        let db = DatabaseFixture::open(&path).await.unwrap();
         db.bootstrap(
             Some("original-password".into()),
             Some("original-key".into()),
@@ -402,7 +400,7 @@ async fn unsupported_auth_history_and_partial_schemas_are_refused_without_reinit
             .unwrap();
         db.close().await;
         let bytes = std::fs::read(&path).unwrap();
-        assert!(DatabaseFixture::open(&path, "").await.is_err(), "{sql}");
+        assert!(DatabaseFixture::open(&path).await.is_err(), "{sql}");
         assert_eq!(
             std::fs::read(&path).unwrap(),
             bytes,
@@ -412,10 +410,10 @@ async fn unsupported_auth_history_and_partial_schemas_are_refused_without_reinit
 }
 
 #[tokio::test]
-async fn preferences_upgrade_keeps_a_recoverable_original_and_failed_writes_preserve_choices() {
+async fn preferences_survive_reopen_and_failed_writes_preserve_choices() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("preferences.db");
-    let db = DatabaseFixture::open(&path, "").await.unwrap();
+    let db = DatabaseFixture::open(&path).await.unwrap();
     db.bootstrap(
         Some("Preferences fixture password 42!".into()),
         Some("preferences-fixture-key".into()),
@@ -423,14 +421,14 @@ async fn preferences_upgrade_keeps_a_recoverable_original_and_failed_writes_pres
     .await
     .unwrap();
     let pool = db.inspection_pool();
-    sqlite_versions::restore_version_nine_tables(&pool)
+    sqlx::raw_sql("UPDATE users SET password_change_required=0;")
+        .execute(&pool)
         .await
         .unwrap();
-    sqlx::raw_sql("UPDATE users SET password_change_required=0; DROP TABLE ruphish_campaign_drafts; DROP TABLE ruphish_user_preferences; DELETE FROM ruphish_schema WHERE version>=7;").execute(&pool).await.unwrap();
     pool.close().await;
     db.close().await;
-    let upgraded = DatabaseFixture::open(&path, "").await.unwrap();
-    assert!(upgraded.has_recovery_backup());
+    let upgraded = DatabaseFixture::open(&path).await.unwrap();
+    assert!(!upgraded.has_recovery_backup());
     let pool = upgraded.inspection_pool();
     let service = Service::new(upgraded.accounts(), Arc::new(PasswordWorker::default()));
     let actor = upgraded.accounts().by_name("admin").await.unwrap();
@@ -469,13 +467,9 @@ async fn preferences_upgrade_keeps_a_recoverable_original_and_failed_writes_pres
         .execute(&pool)
         .await
         .unwrap();
-    sqlite_versions::restore_version_nine_tables(&pool)
-        .await
-        .unwrap();
-    sqlx::raw_sql("DROP TABLE ruphish_campaign_drafts; ALTER TABLE ruphish_user_preferences DROP COLUMN show_utc_offset; DELETE FROM ruphish_schema WHERE version>=8;").execute(&pool).await.unwrap();
     pool.close().await;
     upgraded.close().await;
-    let reopened = DatabaseFixture::open(&path, "").await.unwrap();
+    let reopened = DatabaseFixture::open(&path).await.unwrap();
     assert_eq!(
         reopened
             .accounts()
@@ -484,7 +478,7 @@ async fn preferences_upgrade_keeps_a_recoverable_original_and_failed_writes_pres
             .unwrap()
             .preferences,
         ruphish_application::auth::Preferences {
-            show_utc_offset: true,
+            show_utc_offset: false,
             ..selected.clone()
         }
     );
@@ -497,7 +491,7 @@ async fn preferences_upgrade_keeps_a_recoverable_original_and_failed_writes_pres
         .await
         .unwrap();
     reopened.close().await;
-    let reopened = DatabaseFixture::open(&path, "").await.unwrap();
+    let reopened = DatabaseFixture::open(&path).await.unwrap();
     assert_eq!(
         reopened
             .accounts()

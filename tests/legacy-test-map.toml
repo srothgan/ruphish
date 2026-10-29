@@ -1,4 +1,5 @@
 # Existing Go scenarios; status and target_test distinguish implemented equivalents from planned work.
+# Release baseline: supported Gophish data converts directly; pre-release Ruphish histories and migrations_prefix are intentionally unsupported.
 # DEC-046: inherited MIME scenarios preserve rendered content, headers and attachments;
 # HTML additionally receives the managed tracking image. See docs/contributing/email-tracking.md
 # and crates/ruphish-adapters/tests/email_tracking.rs for the approved output difference.

@@ -1,0 +1,3162 @@
+[
+  {
+    "version": 20160118194630,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0]
+      ],
+      "smtp": [
+        ["smtp_id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0]
+      ]
+    }
+  },
+  {
+    "version": 20160131153104,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0]
+      ],
+      "smtp": [
+        ["smtp_id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0]
+      ]
+    }
+  },
+  {
+    "version": 20160211211220,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0]
+      ],
+      "smtp": [
+        ["smtp_id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0]
+      ]
+    }
+  },
+  {
+    "version": 20160217211342,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0]
+      ],
+      "smtp": [
+        ["smtp_id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0]
+      ]
+    }
+  },
+  {
+    "version": 20160225173824,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0]
+      ],
+      "smtp": [
+        ["smtp_id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0]
+      ]
+    }
+  },
+  {
+    "version": 20160227180335,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0]
+      ]
+    }
+  },
+  {
+    "version": 20160317214457,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0]
+      ]
+    }
+  },
+  {
+    "version": 20160605210903,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0],
+        ["launch_date","DATETIME",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0]
+      ]
+    }
+  },
+  {
+    "version": 20170104220731,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0],
+        ["launch_date","DATETIME",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0]
+      ]
+    }
+  },
+  {
+    "version": 20170219122503,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0],
+        ["launch_date","DATETIME",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "headers": [
+        ["id","INTEGER",0,null,1],
+        ["key","varchar(255)",0,null,0],
+        ["value","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0]
+      ]
+    }
+  },
+  {
+    "version": 20170827141312,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0],
+        ["launch_date","DATETIME",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "headers": [
+        ["id","INTEGER",0,null,1],
+        ["key","varchar(255)",0,null,0],
+        ["value","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0]
+      ]
+    }
+  },
+  {
+    "version": 20171027213457,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0],
+        ["launch_date","DATETIME",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "headers": [
+        ["id","INTEGER",0,null,1],
+        ["key","varchar(255)",0,null,0],
+        ["value","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0]
+      ],
+      "mail_logs": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","INTEGER",0,null,0],
+        ["user_id","INTEGER",0,null,0],
+        ["send_date","datetime",0,null,0],
+        ["send_attempt","INTEGER",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["processing","boolean",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0]
+      ]
+    }
+  },
+  {
+    "version": 20171208201932,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0],
+        ["launch_date","DATETIME",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "headers": [
+        ["id","INTEGER",0,null,1],
+        ["key","varchar(255)",0,null,0],
+        ["value","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0]
+      ],
+      "mail_logs": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","INTEGER",0,null,0],
+        ["user_id","INTEGER",0,null,0],
+        ["send_date","datetime",0,null,0],
+        ["send_attempt","INTEGER",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["processing","boolean",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0],
+        ["send_date","DATETIME",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0]
+      ]
+    }
+  },
+  {
+    "version": 20180223101813,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0],
+        ["launch_date","DATETIME",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "headers": [
+        ["id","INTEGER",0,null,1],
+        ["key","varchar(255)",0,null,0],
+        ["value","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0]
+      ],
+      "mail_logs": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","INTEGER",0,null,0],
+        ["user_id","INTEGER",0,null,0],
+        ["send_date","datetime",0,null,0],
+        ["send_attempt","INTEGER",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["processing","boolean",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0],
+        ["send_date","DATETIME",0,null,0],
+        ["reported","boolean",0,"0",0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0]
+      ]
+    }
+  },
+  {
+    "version": 20180524203752,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0],
+        ["launch_date","DATETIME",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "headers": [
+        ["id","INTEGER",0,null,1],
+        ["key","varchar(255)",0,null,0],
+        ["value","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0]
+      ],
+      "mail_logs": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","INTEGER",0,null,0],
+        ["user_id","INTEGER",0,null,0],
+        ["send_date","datetime",0,null,0],
+        ["send_attempt","INTEGER",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["processing","boolean",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0],
+        ["send_date","DATETIME",0,null,0],
+        ["reported","boolean",0,"0",0],
+        ["modified_date","DATETIME",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0]
+      ]
+    }
+  },
+  {
+    "version": 20180527213648,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0],
+        ["launch_date","DATETIME",0,null,0]
+      ],
+      "email_requests": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","INTEGER",0,null,0],
+        ["template_id","INTEGER",0,null,0],
+        ["page_id","INTEGER",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "headers": [
+        ["id","INTEGER",0,null,1],
+        ["key","varchar(255)",0,null,0],
+        ["value","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0]
+      ],
+      "mail_logs": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","INTEGER",0,null,0],
+        ["user_id","INTEGER",0,null,0],
+        ["send_date","datetime",0,null,0],
+        ["send_attempt","INTEGER",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["processing","boolean",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0],
+        ["send_date","DATETIME",0,null,0],
+        ["reported","boolean",0,"0",0],
+        ["modified_date","DATETIME",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0]
+      ]
+    }
+  },
+  {
+    "version": 20180830215615,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0],
+        ["launch_date","DATETIME",0,null,0],
+        ["send_by_date","DATETIME",0,null,0]
+      ],
+      "email_requests": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","INTEGER",0,null,0],
+        ["template_id","INTEGER",0,null,0],
+        ["page_id","INTEGER",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "headers": [
+        ["id","INTEGER",0,null,1],
+        ["key","varchar(255)",0,null,0],
+        ["value","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0]
+      ],
+      "mail_logs": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","INTEGER",0,null,0],
+        ["user_id","INTEGER",0,null,0],
+        ["send_date","datetime",0,null,0],
+        ["send_attempt","INTEGER",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["processing","boolean",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0],
+        ["send_date","DATETIME",0,null,0],
+        ["reported","boolean",0,"0",0],
+        ["modified_date","DATETIME",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0]
+      ]
+    }
+  },
+  {
+    "version": 20190105192341,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0],
+        ["launch_date","DATETIME",0,null,0],
+        ["send_by_date","DATETIME",0,null,0]
+      ],
+      "email_requests": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","INTEGER",0,null,0],
+        ["template_id","INTEGER",0,null,0],
+        ["page_id","INTEGER",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "headers": [
+        ["id","INTEGER",0,null,1],
+        ["key","varchar(255)",0,null,0],
+        ["value","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0]
+      ],
+      "mail_logs": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","INTEGER",0,null,0],
+        ["user_id","INTEGER",0,null,0],
+        ["send_date","datetime",0,null,0],
+        ["send_attempt","INTEGER",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["processing","boolean",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "permissions": [
+        ["id","INTEGER",0,null,1],
+        ["slug","VARCHAR(255)",1,null,0],
+        ["name","VARCHAR(255)",1,null,0],
+        ["description","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0],
+        ["send_date","DATETIME",0,null,0],
+        ["reported","boolean",0,"0",0],
+        ["modified_date","DATETIME",0,null,0]
+      ],
+      "role_permissions": [
+        ["role_id","INTEGER",1,null,0],
+        ["permission_id","INTEGER",1,null,0]
+      ],
+      "roles": [
+        ["id","INTEGER",0,null,1],
+        ["slug","VARCHAR(255)",1,null,0],
+        ["name","VARCHAR(255)",1,null,0],
+        ["description","VARCHAR(255)",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0],
+        ["role_id","INTEGER",0,null,0]
+      ]
+    }
+  },
+  {
+    "version": 20191104103306,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0],
+        ["launch_date","DATETIME",0,null,0],
+        ["send_by_date","DATETIME",0,null,0]
+      ],
+      "email_requests": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","INTEGER",0,null,0],
+        ["template_id","INTEGER",0,null,0],
+        ["page_id","INTEGER",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "headers": [
+        ["id","INTEGER",0,null,1],
+        ["key","varchar(255)",0,null,0],
+        ["value","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0]
+      ],
+      "mail_logs": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","INTEGER",0,null,0],
+        ["user_id","INTEGER",0,null,0],
+        ["send_date","datetime",0,null,0],
+        ["send_attempt","INTEGER",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["processing","boolean",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "permissions": [
+        ["id","INTEGER",0,null,1],
+        ["slug","VARCHAR(255)",1,null,0],
+        ["name","VARCHAR(255)",1,null,0],
+        ["description","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0],
+        ["send_date","DATETIME",0,null,0],
+        ["reported","boolean",0,"0",0],
+        ["modified_date","DATETIME",0,null,0]
+      ],
+      "role_permissions": [
+        ["role_id","INTEGER",1,null,0],
+        ["permission_id","INTEGER",1,null,0]
+      ],
+      "roles": [
+        ["id","INTEGER",0,null,1],
+        ["slug","VARCHAR(255)",1,null,0],
+        ["name","VARCHAR(255)",1,null,0],
+        ["description","VARCHAR(255)",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0],
+        ["role_id","INTEGER",0,null,0]
+      ],
+      "webhooks": [
+        ["id","INTEGER",0,null,1],
+        ["name","varchar(255)",0,null,0],
+        ["url","varchar(1000)",0,null,0],
+        ["secret","varchar(255)",0,null,0],
+        ["is_active","boolean",0,"0",0]
+      ]
+    }
+  },
+  {
+    "version": 20200116000000,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0],
+        ["launch_date","DATETIME",0,null,0],
+        ["send_by_date","DATETIME",0,null,0]
+      ],
+      "email_requests": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","INTEGER",0,null,0],
+        ["template_id","INTEGER",0,null,0],
+        ["page_id","INTEGER",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "headers": [
+        ["id","INTEGER",0,null,1],
+        ["key","varchar(255)",0,null,0],
+        ["value","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0]
+      ],
+      "imap": [
+        ["user_id","bigint",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["port","INTEGER",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["tls","BOOLEAN",0,null,0],
+        ["enabled","BOOLEAN",0,null,0],
+        ["folder","varchar(255)",0,null,0],
+        ["restrict_domain","varchar(255)",0,null,0],
+        ["delete_reported_campaign_email","BOOLEAN",0,null,0],
+        ["last_login","datetime",0,null,0],
+        ["imap_freq","INTEGER",0,null,0]
+      ],
+      "mail_logs": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","INTEGER",0,null,0],
+        ["user_id","INTEGER",0,null,0],
+        ["send_date","datetime",0,null,0],
+        ["send_attempt","INTEGER",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["processing","boolean",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "permissions": [
+        ["id","INTEGER",0,null,1],
+        ["slug","VARCHAR(255)",1,null,0],
+        ["name","VARCHAR(255)",1,null,0],
+        ["description","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0],
+        ["send_date","DATETIME",0,null,0],
+        ["reported","boolean",0,"0",0],
+        ["modified_date","DATETIME",0,null,0]
+      ],
+      "role_permissions": [
+        ["role_id","INTEGER",1,null,0],
+        ["permission_id","INTEGER",1,null,0]
+      ],
+      "roles": [
+        ["id","INTEGER",0,null,1],
+        ["slug","VARCHAR(255)",1,null,0],
+        ["name","VARCHAR(255)",1,null,0],
+        ["description","VARCHAR(255)",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0],
+        ["role_id","INTEGER",0,null,0]
+      ],
+      "webhooks": [
+        ["id","INTEGER",0,null,1],
+        ["name","varchar(255)",0,null,0],
+        ["url","varchar(1000)",0,null,0],
+        ["secret","varchar(255)",0,null,0],
+        ["is_active","boolean",0,"0",0]
+      ]
+    }
+  },
+  {
+    "version": 20200619000000,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0],
+        ["launch_date","DATETIME",0,null,0],
+        ["send_by_date","DATETIME",0,null,0]
+      ],
+      "email_requests": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","INTEGER",0,null,0],
+        ["template_id","INTEGER",0,null,0],
+        ["page_id","INTEGER",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "headers": [
+        ["id","INTEGER",0,null,1],
+        ["key","varchar(255)",0,null,0],
+        ["value","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0]
+      ],
+      "imap": [
+        ["user_id","bigint",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["port","INTEGER",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["tls","BOOLEAN",0,null,0],
+        ["enabled","BOOLEAN",0,null,0],
+        ["folder","varchar(255)",0,null,0],
+        ["restrict_domain","varchar(255)",0,null,0],
+        ["delete_reported_campaign_email","BOOLEAN",0,null,0],
+        ["last_login","datetime",0,null,0],
+        ["imap_freq","INTEGER",0,null,0]
+      ],
+      "mail_logs": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","INTEGER",0,null,0],
+        ["user_id","INTEGER",0,null,0],
+        ["send_date","datetime",0,null,0],
+        ["send_attempt","INTEGER",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["processing","boolean",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "permissions": [
+        ["id","INTEGER",0,null,1],
+        ["slug","VARCHAR(255)",1,null,0],
+        ["name","VARCHAR(255)",1,null,0],
+        ["description","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0],
+        ["send_date","DATETIME",0,null,0],
+        ["reported","boolean",0,"0",0],
+        ["modified_date","DATETIME",0,null,0]
+      ],
+      "role_permissions": [
+        ["role_id","INTEGER",1,null,0],
+        ["permission_id","INTEGER",1,null,0]
+      ],
+      "roles": [
+        ["id","INTEGER",0,null,1],
+        ["slug","VARCHAR(255)",1,null,0],
+        ["name","VARCHAR(255)",1,null,0],
+        ["description","VARCHAR(255)",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0],
+        ["role_id","INTEGER",0,null,0],
+        ["password_change_required","BOOLEAN",0,null,0]
+      ],
+      "webhooks": [
+        ["id","INTEGER",0,null,1],
+        ["name","varchar(255)",0,null,0],
+        ["url","varchar(1000)",0,null,0],
+        ["secret","varchar(255)",0,null,0],
+        ["is_active","boolean",0,"0",0]
+      ]
+    }
+  },
+  {
+    "version": 20200730000000,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0],
+        ["launch_date","DATETIME",0,null,0],
+        ["send_by_date","DATETIME",0,null,0]
+      ],
+      "email_requests": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","INTEGER",0,null,0],
+        ["template_id","INTEGER",0,null,0],
+        ["page_id","INTEGER",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "headers": [
+        ["id","INTEGER",0,null,1],
+        ["key","varchar(255)",0,null,0],
+        ["value","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0]
+      ],
+      "imap": [
+        ["user_id","bigint",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["port","INTEGER",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["tls","BOOLEAN",0,null,0],
+        ["enabled","BOOLEAN",0,null,0],
+        ["folder","varchar(255)",0,null,0],
+        ["restrict_domain","varchar(255)",0,null,0],
+        ["delete_reported_campaign_email","BOOLEAN",0,null,0],
+        ["last_login","datetime",0,null,0],
+        ["imap_freq","INTEGER",0,null,0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "mail_logs": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","INTEGER",0,null,0],
+        ["user_id","INTEGER",0,null,0],
+        ["send_date","datetime",0,null,0],
+        ["send_attempt","INTEGER",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["processing","boolean",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "permissions": [
+        ["id","INTEGER",0,null,1],
+        ["slug","VARCHAR(255)",1,null,0],
+        ["name","VARCHAR(255)",1,null,0],
+        ["description","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0],
+        ["send_date","DATETIME",0,null,0],
+        ["reported","boolean",0,"0",0],
+        ["modified_date","DATETIME",0,null,0]
+      ],
+      "role_permissions": [
+        ["role_id","INTEGER",1,null,0],
+        ["permission_id","INTEGER",1,null,0]
+      ],
+      "roles": [
+        ["id","INTEGER",0,null,1],
+        ["slug","VARCHAR(255)",1,null,0],
+        ["name","VARCHAR(255)",1,null,0],
+        ["description","VARCHAR(255)",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0],
+        ["role_id","INTEGER",0,null,0],
+        ["password_change_required","BOOLEAN",0,null,0]
+      ],
+      "webhooks": [
+        ["id","INTEGER",0,null,1],
+        ["name","varchar(255)",0,null,0],
+        ["url","varchar(1000)",0,null,0],
+        ["secret","varchar(255)",0,null,0],
+        ["is_active","boolean",0,"0",0]
+      ]
+    }
+  },
+  {
+    "version": 20200914000000,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0],
+        ["launch_date","DATETIME",0,null,0],
+        ["send_by_date","DATETIME",0,null,0]
+      ],
+      "email_requests": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","INTEGER",0,null,0],
+        ["template_id","INTEGER",0,null,0],
+        ["page_id","INTEGER",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "headers": [
+        ["id","INTEGER",0,null,1],
+        ["key","varchar(255)",0,null,0],
+        ["value","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0]
+      ],
+      "imap": [
+        ["user_id","bigint",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["port","INTEGER",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["tls","BOOLEAN",0,null,0],
+        ["enabled","BOOLEAN",0,null,0],
+        ["folder","varchar(255)",0,null,0],
+        ["restrict_domain","varchar(255)",0,null,0],
+        ["delete_reported_campaign_email","BOOLEAN",0,null,0],
+        ["last_login","datetime",0,null,0],
+        ["imap_freq","INTEGER",0,null,0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "mail_logs": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","INTEGER",0,null,0],
+        ["user_id","INTEGER",0,null,0],
+        ["send_date","datetime",0,null,0],
+        ["send_attempt","INTEGER",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["processing","boolean",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "permissions": [
+        ["id","INTEGER",0,null,1],
+        ["slug","VARCHAR(255)",1,null,0],
+        ["name","VARCHAR(255)",1,null,0],
+        ["description","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0],
+        ["send_date","DATETIME",0,null,0],
+        ["reported","boolean",0,"0",0],
+        ["modified_date","DATETIME",0,null,0]
+      ],
+      "role_permissions": [
+        ["role_id","INTEGER",1,null,0],
+        ["permission_id","INTEGER",1,null,0]
+      ],
+      "roles": [
+        ["id","INTEGER",0,null,1],
+        ["slug","VARCHAR(255)",1,null,0],
+        ["name","VARCHAR(255)",1,null,0],
+        ["description","VARCHAR(255)",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0],
+        ["role_id","INTEGER",0,null,0],
+        ["password_change_required","BOOLEAN",0,null,0],
+        ["last_login","datetime",0,null,0]
+      ],
+      "webhooks": [
+        ["id","INTEGER",0,null,1],
+        ["name","varchar(255)",0,null,0],
+        ["url","varchar(1000)",0,null,0],
+        ["secret","varchar(255)",0,null,0],
+        ["is_active","boolean",0,"0",0]
+      ]
+    }
+  },
+  {
+    "version": 20201201000000,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0],
+        ["launch_date","DATETIME",0,null,0],
+        ["send_by_date","DATETIME",0,null,0]
+      ],
+      "email_requests": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","INTEGER",0,null,0],
+        ["template_id","INTEGER",0,null,0],
+        ["page_id","INTEGER",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "headers": [
+        ["id","INTEGER",0,null,1],
+        ["key","varchar(255)",0,null,0],
+        ["value","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0]
+      ],
+      "imap": [
+        ["user_id","bigint",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["port","INTEGER",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["tls","BOOLEAN",0,null,0],
+        ["enabled","BOOLEAN",0,null,0],
+        ["folder","varchar(255)",0,null,0],
+        ["restrict_domain","varchar(255)",0,null,0],
+        ["delete_reported_campaign_email","BOOLEAN",0,null,0],
+        ["last_login","datetime",0,null,0],
+        ["imap_freq","INTEGER",0,null,0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "mail_logs": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","INTEGER",0,null,0],
+        ["user_id","INTEGER",0,null,0],
+        ["send_date","datetime",0,null,0],
+        ["send_attempt","INTEGER",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["processing","boolean",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "permissions": [
+        ["id","INTEGER",0,null,1],
+        ["slug","VARCHAR(255)",1,null,0],
+        ["name","VARCHAR(255)",1,null,0],
+        ["description","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0],
+        ["send_date","DATETIME",0,null,0],
+        ["reported","boolean",0,"0",0],
+        ["modified_date","DATETIME",0,null,0]
+      ],
+      "role_permissions": [
+        ["role_id","INTEGER",1,null,0],
+        ["permission_id","INTEGER",1,null,0]
+      ],
+      "roles": [
+        ["id","INTEGER",0,null,1],
+        ["slug","VARCHAR(255)",1,null,0],
+        ["name","VARCHAR(255)",1,null,0],
+        ["description","VARCHAR(255)",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0],
+        ["role_id","INTEGER",0,null,0],
+        ["password_change_required","BOOLEAN",0,null,0],
+        ["last_login","datetime",0,null,0],
+        ["account_locked","BOOLEAN",0,null,0]
+      ],
+      "webhooks": [
+        ["id","INTEGER",0,null,1],
+        ["name","varchar(255)",0,null,0],
+        ["url","varchar(1000)",0,null,0],
+        ["secret","varchar(255)",0,null,0],
+        ["is_active","boolean",0,"0",0]
+      ]
+    }
+  },
+  {
+    "version": 20220321133237,
+    "tables": {
+      "attachments": [
+        ["id","INTEGER",0,null,1],
+        ["template_id","bigint",0,null,0],
+        ["content","varchar(255)",0,null,0],
+        ["type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0]
+      ],
+      "campaigns": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",1,null,0],
+        ["created_date","datetime",0,null,0],
+        ["completed_date","datetime",0,null,0],
+        ["template_id","bigint",0,null,0],
+        ["page_id","bigint",0,null,0],
+        ["status","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0],
+        ["launch_date","DATETIME",0,null,0],
+        ["send_by_date","DATETIME",0,null,0]
+      ],
+      "email_requests": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","INTEGER",0,null,0],
+        ["template_id","INTEGER",0,null,0],
+        ["page_id","INTEGER",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0],
+        ["url","varchar(255)",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0]
+      ],
+      "events": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["time","datetime",0,null,0],
+        ["message","varchar(255)",0,null,0],
+        ["details","BLOB",0,null,0]
+      ],
+      "group_targets": [
+        ["group_id","bigint",0,null,0],
+        ["target_id","bigint",0,null,0]
+      ],
+      "groups": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0]
+      ],
+      "headers": [
+        ["id","INTEGER",0,null,1],
+        ["key","varchar(255)",0,null,0],
+        ["value","varchar(255)",0,null,0],
+        ["smtp_id","bigint",0,null,0]
+      ],
+      "imap": [
+        ["user_id","bigint",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["port","INTEGER",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["tls","BOOLEAN",0,null,0],
+        ["enabled","BOOLEAN",0,null,0],
+        ["folder","varchar(255)",0,null,0],
+        ["restrict_domain","varchar(255)",0,null,0],
+        ["delete_reported_campaign_email","BOOLEAN",0,null,0],
+        ["last_login","datetime",0,null,0],
+        ["imap_freq","INTEGER",0,null,0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "mail_logs": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","INTEGER",0,null,0],
+        ["user_id","INTEGER",0,null,0],
+        ["send_date","datetime",0,null,0],
+        ["send_attempt","INTEGER",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["processing","boolean",0,null,0]
+      ],
+      "pages": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["capture_credentials","BOOLEAN",0,null,0],
+        ["capture_passwords","BOOLEAN",0,null,0],
+        ["redirect_url","VARCHAR(255)",0,null,0]
+      ],
+      "permissions": [
+        ["id","INTEGER",0,null,1],
+        ["slug","VARCHAR(255)",1,null,0],
+        ["name","VARCHAR(255)",1,null,0],
+        ["description","VARCHAR(255)",0,null,0]
+      ],
+      "results": [
+        ["id","INTEGER",0,null,1],
+        ["campaign_id","bigint",0,null,0],
+        ["user_id","bigint",0,null,0],
+        ["r_id","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["status","varchar(255)",1,null,0],
+        ["ip","varchar(255)",0,null,0],
+        ["latitude","REAL",0,null,0],
+        ["longitude","REAL",0,null,0],
+        ["position","VARCHAR(255)",0,null,0],
+        ["send_date","DATETIME",0,null,0],
+        ["reported","boolean",0,"0",0],
+        ["modified_date","DATETIME",0,null,0]
+      ],
+      "role_permissions": [
+        ["role_id","INTEGER",1,null,0],
+        ["permission_id","INTEGER",1,null,0]
+      ],
+      "roles": [
+        ["id","INTEGER",0,null,1],
+        ["slug","VARCHAR(255)",1,null,0],
+        ["name","VARCHAR(255)",1,null,0],
+        ["description","VARCHAR(255)",0,null,0]
+      ],
+      "smtp": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["interface_type","varchar(255)",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["host","varchar(255)",0,null,0],
+        ["username","varchar(255)",0,null,0],
+        ["password","varchar(255)",0,null,0],
+        ["from_address","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,"CURRENT_TIMESTAMP",0],
+        ["ignore_cert_errors","BOOLEAN",0,null,0]
+      ],
+      "targets": [
+        ["id","INTEGER",0,null,1],
+        ["first_name","varchar(255)",0,null,0],
+        ["last_name","varchar(255)",0,null,0],
+        ["email","varchar(255)",0,null,0],
+        ["position","varchar(255)",0,null,0]
+      ],
+      "templates": [
+        ["id","INTEGER",0,null,1],
+        ["user_id","bigint",0,null,0],
+        ["name","varchar(255)",0,null,0],
+        ["subject","varchar(255)",0,null,0],
+        ["text","varchar(255)",0,null,0],
+        ["html","varchar(255)",0,null,0],
+        ["modified_date","datetime",0,null,0],
+        ["envelope_sender","varchar(255)",0,null,0]
+      ],
+      "users": [
+        ["id","INTEGER",0,null,1],
+        ["username","varchar(255)",1,null,0],
+        ["hash","varchar(255)",0,null,0],
+        ["api_key","varchar(255)",1,null,0],
+        ["role_id","INTEGER",0,null,0],
+        ["password_change_required","BOOLEAN",0,null,0],
+        ["last_login","datetime",0,null,0],
+        ["account_locked","BOOLEAN",0,null,0]
+      ],
+      "webhooks": [
+        ["id","INTEGER",0,null,1],
+        ["name","varchar(255)",0,null,0],
+        ["url","varchar(1000)",0,null,0],
+        ["secret","varchar(255)",0,null,0],
+        ["is_active","boolean",0,"0",0]
+      ]
+    }
+  }
+]

@@ -104,7 +104,6 @@ async function init() {
     },
     db_name: 'sqlite3',
     db_path: '/lab/data/ruphish.db',
-    migrations_prefix: 'db/db_',
     logging: { filename: '', level: 'info' },
     domain_verification: {
       resolvers: ['172.30.53.53:53'],
