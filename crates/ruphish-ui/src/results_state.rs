@@ -63,6 +63,28 @@ pub fn address(path: &str, filter: &Filter, export: bool) -> String {
     }
 }
 
+/// Link to complete recipient history while retaining the originating Results URL.
+pub fn recipient_address(campaign: i64, recipient: i64, origin: &str) -> String {
+    let query = url::form_urlencoded::Serializer::new(String::new())
+        .append_pair("return_to", &results_return(campaign, Some(origin)))
+        .finish();
+    format!("/campaigns/{campaign}/results/recipients/{recipient}?{query}")
+}
+
+/// Accept only a local Results destination for this campaign, including its query.
+pub fn results_return(campaign: i64, origin: Option<&str>) -> String {
+    let fallback = format!("/campaigns/{campaign}/results");
+    origin
+        .filter(|value| {
+            value.split('?').next() == Some(fallback.as_str())
+                && !value
+                    .chars()
+                    .any(|c| c.is_control() || matches!(c, '\\' | '#'))
+        })
+        .map(str::to_owned)
+        .unwrap_or(fallback)
+}
+
 /// Whole-number tick spacing, with at most six intervals and a visible zero baseline.
 pub fn count_axis(maximum: i64) -> (i64, i64) {
     let maximum = maximum.max(1);
@@ -104,6 +126,30 @@ pub fn time_axis(first: i64, last: i64, width: usize) -> (i64, Vec<i64>) {
 #[allow(clippy::unwrap_used, reason = "Independent transformation assertions")]
 mod tests {
     use super::*;
+    #[test]
+    fn recipient_return_preserves_results_query_and_rejects_other_destinations() {
+        let origin = "/campaigns/7/results?recipients=2%2C9&event=link_clicked&source=public&from=100&until=200&sort=name&order=desc&offset=50&limit=25";
+        let address = recipient_address(7, 9, origin);
+        let parsed = url::Url::parse(&format!("https://admin.example.test{address}")).unwrap();
+        let target = parsed
+            .query_pairs()
+            .find(|(key, _)| key == "return_to")
+            .unwrap()
+            .1;
+        assert_eq!(results_return(7, Some(&target)), origin);
+        for invalid in [
+            None,
+            Some("https://evil.test/campaigns/7/results"),
+            Some("//evil.test"),
+            Some("/campaigns/8/results?offset=50"),
+            Some("/campaigns/7/results/recipients/9"),
+            Some("/campaigns/7/results#bad"),
+            Some("/campaigns/7/results?x=\n"),
+        ] {
+            assert_eq!(results_return(7, invalid), "/campaigns/7/results");
+        }
+    }
+
     #[test]
     fn bookmark_and_download_filters_round_trip_without_empty_or_irrelevant_parameters() {
         let mut filter = Filter::default();

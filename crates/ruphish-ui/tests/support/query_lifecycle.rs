@@ -1289,3 +1289,187 @@ async fn unknown_campaign_state_waits_for_explicit_retry_and_completed_state_nev
     owner.cleanup();
     assert_eq!(pollTimerCount(), 0);
 }
+
+#[wasm_bindgen_test]
+async fn settings_drafts_recover_across_sessions_refresh_failures_and_late_reads() {
+    use ruphish_contracts::settings::{Policy, Settings};
+    use ruphish_ui::settings_state::Draft;
+    super::locale_window::install();
+    let _ = any_spawner::Executor::init_wasm_bindgen();
+    let owner = Owner::new();
+    let server = Rc::new(RefCell::new(Settings {
+        revision: 1,
+        policy: Policy::default(),
+        updated_at: 0,
+        updated_by: None,
+    }));
+    let fail = Rc::new(Cell::new(false));
+    let hold = Rc::new(Cell::new(false));
+    let started = Gate::new();
+    let release = Gate::new();
+    let (query, view, draft) = owner.with(|| {
+        let (server, fail, hold, started, release) = (
+            server.clone(),
+            fail.clone(),
+            hold.clone(),
+            started.clone(),
+            release.clone(),
+        );
+        let query = Query::new(client(), move |()| {
+            let response = server.borrow().clone();
+            let failed = fail.get();
+            let held = hold.replace(false);
+            let (started, release) = (started.clone(), release.clone());
+            async move {
+                if held {
+                    started.release();
+                    release.wait().await;
+                }
+                if failed {
+                    Err(ApiError::http(
+                        503,
+                        "SERVICE_BUSY".into(),
+                        "Refresh failed".into(),
+                    ))
+                } else {
+                    Ok(response)
+                }
+            }
+        });
+        let view = query.observe(|| ());
+        let draft = RwSignal::new(None::<Draft>);
+        Effect::new(move || {
+            if let Some(saved) = view.data.get() {
+                draft.update(|d| match d {
+                    Some(d) => d.refresh(Some(saved)),
+                    None => *d = Some(Draft::from_saved(saved)),
+                });
+            }
+        });
+        (query, view, draft)
+    });
+    until(&owner, move || draft.with(|d| d.is_some())).await;
+    server.borrow_mut().revision = 2;
+    server.borrow_mut().policy.verification_validity_seconds = 172800;
+    view.refresh.run(());
+    until(&owner, move || {
+        draft.with(|d| {
+            d.as_ref()
+                .and_then(Draft::edited)
+                .is_some_and(|(r, _)| r == 2)
+        })
+    })
+    .await;
+    assert!(!draft.get_untracked().unwrap().dirty());
+    assert_eq!(draft.get_untracked().unwrap().validity, "172800");
+    draft.update(|d| d.as_mut().unwrap().validity = "my unfinished edit".into());
+    server.borrow_mut().revision = 3;
+    server.borrow_mut().policy.webhooks_enabled = true;
+    fail.set(true);
+    view.refresh.run(());
+    until(&owner, move || {
+        view.error.get().is_some() && !view.fetching.get()
+    })
+    .await;
+    assert_eq!(
+        draft.get_untracked().unwrap().validity,
+        "my unfinished edit"
+    );
+    fail.set(false);
+    view.refresh.run(());
+    until(&owner, move || {
+        view.data
+            .with(|v| v.as_ref().is_some_and(|v| v.revision == 3))
+            && !view.fetching.get()
+    })
+    .await;
+    assert!(
+        draft
+            .get_untracked()
+            .unwrap()
+            .conflicts(&view.data.get_untracked().unwrap())
+    );
+    assert_eq!(
+        draft.get_untracked().unwrap().validity,
+        "my unfinished edit"
+    );
+    draft.set(Some(Draft::from_saved(view.data.get_untracked().unwrap())));
+    assert_eq!(draft.get_untracked().unwrap().edited().unwrap().0, 3);
+    hold.set(true);
+    view.refresh.run(());
+    started.wait().await;
+    let mut saved = server.borrow().clone();
+    saved.revision = 4;
+    saved.policy.verification_validity_seconds = 259200;
+    draft.set(Some(Draft::from_saved(saved.clone())));
+    fail.set(true);
+    query.confirmed((), |value| *value = saved);
+    release.release();
+    until(&owner, move || {
+        view.error.get().is_some() && !view.fetching.get()
+    })
+    .await;
+    assert_eq!(view.data.get_untracked().unwrap().revision, 4);
+    assert_eq!(draft.get_untracked().unwrap().edited().unwrap().0, 4);
+    assert_eq!(draft.get_untracked().unwrap().validity, "259200");
+    assert!(!draft.get_untracked().unwrap().dirty());
+    owner.cleanup();
+}
+
+#[wasm_bindgen_test]
+async fn shared_response_presentation_does_not_copy_payload_per_cell_read() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    #[derive(Debug)]
+    struct Payload {
+        rows: Vec<u64>,
+        copies: Arc<AtomicUsize>,
+    }
+    impl Clone for Payload {
+        fn clone(&self) -> Self {
+            self.copies.fetch_add(1, Ordering::Relaxed);
+            Self {
+                rows: self.rows.clone(),
+                copies: self.copies.clone(),
+            }
+        }
+    }
+    super::locale_window::install();
+    let _ = any_spawner::Executor::init_wasm_bindgen();
+    for count in [1, 50, 200] {
+        let owner = Owner::new();
+        let copies = Arc::new(AtomicUsize::new(0));
+        let response = Arc::new(Payload {
+            rows: (0..count).collect(),
+            copies: copies.clone(),
+        });
+        let source = response.clone();
+        let (view, shown) = owner.with(|| {
+            let query = Query::new(client(), move |(): ()| {
+                let response = source.clone();
+                async move { Ok(response) }
+            });
+            let view = query.observe(|| ());
+            (view, view.presentation(|| ()).data)
+        });
+        until(&owner, move || shown.with(Option::is_some)).await;
+        for id in 0..count {
+            for _ in 0..10 {
+                let value = shown.get_untracked().unwrap();
+                assert!(Arc::ptr_eq(&value, &response));
+                assert_eq!(value.rows.get(id as usize), Some(&id));
+            }
+        }
+        view.refresh.run(());
+        until(&owner, move || !view.fetching.get()).await;
+        assert!(Arc::ptr_eq(&shown.get_untracked().unwrap(), &response));
+        assert_eq!(
+            copies.load(Ordering::Relaxed),
+            0,
+            "payload copies must not scale with rows or cell reads"
+        );
+        owner.cleanup();
+    }
+}

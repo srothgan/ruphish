@@ -31,6 +31,7 @@ pub mod query;
 pub mod api_error;
 pub mod form_state;
 pub mod form_validation;
+pub mod settings_state;
 
 /// Build an isolated preview document without changing the stored source.
 ///

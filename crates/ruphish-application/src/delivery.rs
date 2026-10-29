@@ -239,10 +239,8 @@ impl Service {
                     modified_date: String::new(),
                     content: Content::Profile(profile),
                 };
-                self.resources
-                    .validate(draft)
-                    .await?
-                    .resolve_password(previous.as_ref())
+                let (validated, _) = self.resources.validate(draft).await?;
+                validated.resolve_password(previous.as_ref())
             }
         };
         match selected.content {

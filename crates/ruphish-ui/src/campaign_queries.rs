@@ -14,7 +14,7 @@ pub(crate) struct CampaignQueries {
     pub context: Query<String, reads::Header>,
     pub directory: Query<(String, String, String, String), reads::Directory>,
     pub delivery: Query<(String, String, String, String), Arc<reads::Delivery>>,
-    pub results: Query<(i64, String), reads::Results>,
+    pub results: Query<(i64, String), Arc<reads::Results>>,
     pub recipient_results: Query<(i64, i64, usize), reads::Results>,
     pub draft: Query<String, Value>,
 }
@@ -86,7 +86,9 @@ impl CampaignQueries {
                 v.campaign.status != ruphish_domain::campaign::CampaignStatus::Completed
             }),
             results: Query::new(client, move |(id, query): (i64, String)| async move {
-                Self::read_results_query(api, id, &query).await
+                Self::read_results_query(api, id, &query)
+                    .await
+                    .map(Arc::new)
             })
             .with_automatic_refresh(|v| {
                 v.status != ruphish_domain::campaign::CampaignStatus::Completed
@@ -207,7 +209,7 @@ impl CampaignQueries {
         api: Api,
         id: i64,
         filter: &Filter,
-    ) -> Result<reads::Results, ApiError> {
+    ) -> Result<Arc<reads::Results>, ApiError> {
         let snapshot = self.results.fetch(Self::results_key(id, filter)).await;
         if let Some(error) = snapshot.error {
             return Err(error);

@@ -801,39 +801,16 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
             },
         ));
     }
-    let findings = if let Content::LearningPage(page) = &value.content {
-        Some(
-            context
-                .resources()
-                .page_preview(&page.html, app::PagePreview::Learning)
-                .await
-                .map_err(|e| error(e.at("html")))?
-                .1,
-        )
-    } else if let Content::Page(page) = &value.content {
-        Some(
-            context
-                .resources()
-                .page_warnings(&page.html)
-                .await
-                .map_err(|e| error(e.at("html")))?,
-        )
-    } else {
-        None
-    };
-    let saved = context
+    let (saved, findings) = context
         .resources()
         .save(user.identity, value, id, expected(&context)?)
         .await
         .map_err(error)?;
     let mut wire = encode(&saved);
-    if let Some(findings) = findings {
-        let findings = Some(warnings(findings));
-        match &mut wire.content {
-            details::Content::Page(page) => page.warnings = findings,
-            details::Content::LearningPage(page) => page.warnings = findings,
-            _ => return Err(error(app::Error::Internal)),
-        }
+    match &mut wire.content {
+        details::Content::Page(page) => page.warnings = Some(warnings(findings)),
+        details::Content::LearningPage(page) => page.warnings = Some(warnings(findings)),
+        _ => {}
     }
     response(
         if id.is_some() {

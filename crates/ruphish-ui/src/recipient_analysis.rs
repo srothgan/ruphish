@@ -37,22 +37,13 @@ pub(super) fn page(api: Api) -> impl IntoView {
 
 fn detail(api: Api, campaign: i64, recipient: i64) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
-    let location = leptos_router::hooks::use_location();
-    let navigate = leptos_router::hooks::use_navigate();
-    Effect::new(move |_| {
-        if !location.search.get().is_empty() {
-            navigate(
-                &format!("/campaigns/{campaign}/results/recipients/{recipient}"),
-                leptos_router::NavigateOptions {
-                    replace: true,
-                    scroll: false,
-                    ..Default::default()
-                },
-            );
-        }
-    });
+    let query = leptos_router::hooks::use_query_map();
     let queries = expect_context::<CampaignQueries>();
-    let back = format!("/campaigns/{campaign}/results");
+    let back = Signal::derive(move || {
+        query.with(|q| {
+            ruphish_ui::results_state::results_return(campaign, q.get("return_to").as_deref())
+        })
+    });
     let visible = RwSignal::new(50usize);
     let read = queries.recipient_results.observe_polling(
         move || (campaign, recipient, visible.get()),
@@ -317,7 +308,7 @@ fn detail(api: Api, campaign: i64, recipient: i64) -> impl IntoView {
             has_data=loaded
             fetching=read.fetching
             retry=read.refresh
-            back_href=format!("/campaigns/{campaign}/results")
+            back_href=back
             back_label=trs!(ui.back_to_campaign_results)
         >
             {content}

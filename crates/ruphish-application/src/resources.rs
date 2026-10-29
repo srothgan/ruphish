@@ -126,8 +126,8 @@ pub trait Validator: Send + Sync {
         html: &str,
         mode: PagePreview<'_>,
     ) -> Result<(String, Vec<PageWarning>), Error>;
-    /// Check content rules without persisting or performing delivery.
-    fn validate(&self, resource: &Input) -> Result<(), Error>;
+    /// Check content rules and return advisory diagnostics without persistence or delivery.
+    fn validate(&self, resource: &Input) -> Result<Vec<PageWarning>, Error>;
     /// Inspect the processed landing document without storing diagnostic state.
     fn page_warnings(&self, html: &str) -> Result<Vec<PageWarning>, Error>;
 }
@@ -296,25 +296,26 @@ impl Service {
     ) -> Result<Resource, Error> {
         self.repository.get_by_name(caller, kind, name).await
     }
-    /// Validate and atomically persist a complete replacement.
+    /// Validate and atomically persist a complete replacement, returning its diagnostics.
     pub async fn save(
         &self,
         caller: Identity,
         value: Input,
         id: Option<i64>,
         expected: Option<String>,
-    ) -> Result<Resource, Error> {
-        let value = self.validate(value).await?;
-        self.repository.save(caller, value, id, expected).await
+    ) -> Result<(Resource, Vec<PageWarning>), Error> {
+        let (value, warnings) = self.validate(value).await?;
+        let saved = self.repository.save(caller, value, id, expected).await?;
+        Ok((saved, warnings))
     }
-    /// Apply the same authoritative validation to saved resources and inline profiles.
-    pub async fn validate(&self, value: Input) -> Result<Input, Error> {
+    /// Return the validated input and diagnostics for saves or inline profiles.
+    pub async fn validate(&self, value: Input) -> Result<(Input, Vec<PageWarning>), Error> {
         let validator = self.validator.clone();
         self.content_work
             .run(move || {
                 value.validation().finish()?;
-                validator.validate(&value)?;
-                Ok(value)
+                let warnings = validator.validate(&value)?;
+                Ok((value, warnings))
             })
             .await
     }

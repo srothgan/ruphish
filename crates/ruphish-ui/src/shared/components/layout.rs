@@ -109,12 +109,11 @@ pub(crate) fn ReadBoundary(
     #[prop(into)] has_data: Signal<bool>,
     #[prop(into)] fetching: Signal<bool>,
     retry: Callback<()>,
-    #[prop(into)] back_href: String,
+    #[prop(into)] back_href: Signal<String>,
     #[prop(into)] back_label: Signal<String>,
     children: Children,
 ) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
-    let back_href = StoredValue::new(back_href);
     let blocked = Signal::derive(move || {
         failure.with(|error| {
             error
@@ -144,7 +143,11 @@ pub(crate) fn ReadBoundary(
     view! {
         <Show when=move || blocked.get()>
             <StatusPage title=title message=message status=status>
-                <ActionLink href=back_href.get_value()>{move || back_label.get()}</ActionLink>
+                {move || {
+                    view! {
+                        <ActionLink href=back_href.get()>{move || back_label.get()}</ActionLink>
+                    }
+                }}
                 <Show when=move || failure.with(|e| e.as_ref().is_some_and(|e| !e.is_terminal()))>
                     <ActionButton disabled=fetching on_click=move |_| retry.run(())>
                         {tr!(ui.retry_loading)}

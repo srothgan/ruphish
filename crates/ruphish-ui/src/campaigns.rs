@@ -1765,11 +1765,7 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
         data.with(|page| {
             page.as_ref()
                 .map(|page| {
-                    page.items
-                        .iter()
-                        .enumerate()
-                        .map(|(index, row)| (row.id, index))
-                        .collect::<std::collections::HashMap<_, _>>()
+                    ruphish_ui::table_state::row_positions(page.items.iter().map(|row| row.id))
                 })
                 .unwrap_or_default()
         })

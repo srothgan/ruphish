@@ -42,6 +42,8 @@ mod public_process;
 mod reporting_process;
 #[path = "resource_process.rs"]
 mod resource_process;
+#[path = "resource_validation.rs"]
+mod resource_validation;
 #[path = "server_database_process.rs"]
 mod server_database_process;
 #[path = "settings_process.rs"]

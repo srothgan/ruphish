@@ -5,8 +5,17 @@ import { createDemoApi, preferences } from '../../demo-api.mjs';
 import { dataset } from '../../../../../assets/website-demo/dataset.mjs';
 
 const scenario = process.argv[2];
+const returnOrigin =
+  '/campaigns/2/results?source=public&event=link_clicked&from=0&until=1999999999&sort=name&order=desc&offset=1&limit=25';
 const path =
   {
+    'results-refresh': '/campaigns/2/results',
+    'recipient-return': returnOrigin,
+    'recipient-error-return':
+      '/campaigns/2/results/recipients/999999?return_to=' + encodeURIComponent(returnOrigin),
+    'recipient-direct': '/campaigns/2/results/recipients/20003',
+    'recipient-foreign-return':
+      '/campaigns/2/results/recipients/20003?return_to=%2Fcampaigns%2F3%2Fresults%3Foffset%3D50',
     'delivery-missing': '/campaigns/2/delivery?recipient=999999',
     'delivery-refresh': '/campaigns/2/delivery',
     'event-editor': '/campaigns/2/delivery?recipient=20003',
@@ -75,6 +84,7 @@ let failure =
   scenario === 'missing' ? 404 : scenario === 'forbidden' ? 403 : scenario === 'retry' ? 503 : null;
 let hold = false;
 let release;
+let resultsMode = 'initial';
 let deliveryMode = 'initial';
 let holdDelivery = false;
 let releaseDelivery;
@@ -106,6 +116,28 @@ globalThis.fetch = async (request, options) => {
             status: Number(scenario.slice(-3)),
           }),
         );
+    });
+  }
+  if (scenario === 'results-refresh' && url.pathname === '/api/campaigns/2/results') {
+    if (resultsMode === 'failure') {
+      return new Response(JSON.stringify({ success: false, code: 'TEST_FAILURE' }), {
+        status: 503,
+      });
+    }
+    const response = await api.execute(request, options);
+    const value = await response.json();
+    if (resultsMode === 'reordered') {
+      value.recipients.reverse();
+      value.recipients.find((row) => row.id === 20003).email = 'updated@example.test';
+    } else if (resultsMode === 'removed') {
+      value.recipients = value.recipients.filter((row) => row.id !== 20003);
+    } else if (resultsMode === 'empty') {
+      value.recipients = [];
+      value.recipient_total = 0;
+    }
+    return new Response(JSON.stringify(value), {
+      status: response.status,
+      headers: response.headers,
     });
   }
   if (scenario === 'delivery-refresh' && url.pathname === '/api/campaigns/2/delivery') {
@@ -156,6 +188,90 @@ const settled = () =>
   regions().length > 0 &&
   regions().every((e) => e.dataset.ready === 'true' && e.getAttribute('aria-busy') === 'false');
 const resultsPath = '/campaigns/2/results';
+
+if (scenario === 'results-refresh') {
+  await until(() => settled() && document.querySelectorAll('.recipient-outcome').length > 1);
+  const rows = () => [...document.querySelectorAll('.recipient-outcome')];
+  const id = (row) => new URL(row.querySelector('a').href).pathname.split('/').at(-1);
+  const original = rows().map(id);
+  const retained = rows().find((row) => id(row) === '20003');
+  assert.ok(retained);
+  const refresh = () => document.querySelector('.refresh-indicator').closest('button').click();
+  resultsMode = 'reordered';
+  refresh();
+  await until(() => settled() && retained.textContent.includes('updated@example.test'));
+  assert.deepEqual(rows().map(id), [...original].reverse());
+  assert.equal(
+    rows().find((row) => id(row) === '20003'),
+    retained,
+  );
+  resultsMode = 'failure';
+  const before = requests.length;
+  refresh();
+  await until(
+    () => requests.length > before && settled() && document.querySelector('.query-refresh-error'),
+  );
+  assert.equal(
+    rows().find((row) => id(row) === '20003'),
+    retained,
+  );
+  assert.ok(retained.textContent.includes('updated@example.test'));
+  resultsMode = 'removed';
+  refresh();
+  await until(() => settled() && !rows().some((row) => id(row) === '20003'));
+  assert.deepEqual(
+    rows().map(id),
+    original.filter((value) => value !== '20003'),
+  );
+  resultsMode = 'empty';
+  refresh();
+  await until(() => settled() && rows().length === 0);
+  process.exit(0);
+}
+
+if (scenario.startsWith('recipient-')) {
+  if (scenario === 'recipient-return') {
+    await until(() => settled() && document.querySelector('.recipient-outcome a'));
+    const link = document.querySelector('.recipient-outcome a');
+    assert.equal(new URL(link.href).searchParams.get('return_to'), returnOrigin);
+    link.click();
+  }
+  if (scenario === 'recipient-error-return') {
+    await until(() => document.querySelector('a[href="' + returnOrigin + '"]'));
+  } else {
+    await until(
+      () =>
+        win.location.pathname.startsWith(resultsPath + '/recipients/') &&
+        settled() &&
+        document.querySelector('a.breadcrumb'),
+    );
+    const recipient = win.location.pathname.split('/').at(-1);
+    const history = requests
+      .map((request) => new URL(request, win.location.origin))
+      .filter(
+        (url) =>
+          url.pathname === '/api/campaigns/2/results' &&
+          url.searchParams.get('recipient') === recipient,
+      );
+    assert.ok(history.length > 0);
+    for (const url of history) {
+      for (const key of ['source', 'event', 'from', 'until', 'recipients', 'return_to']) {
+        assert.equal(url.searchParams.has(key), false, 'recipient history must not inherit ' + key);
+      }
+      assert.equal(url.searchParams.get('event_order'), 'asc');
+    }
+  }
+  const expected = ['recipient-return', 'recipient-error-return'].includes(scenario)
+    ? returnOrigin
+    : resultsPath;
+  const back =
+    document.querySelector('a.breadcrumb') ?? document.querySelector('a[href="' + expected + '"]');
+  assert.equal(back.getAttribute('href'), expected);
+  back.click();
+  await until(() => win.location.pathname + win.location.search === expected && settled());
+  assert.ok(document.querySelector('.analysis-filters'));
+  process.exit(0);
+}
 
 if (scenario === 'delivery-missing') {
   await until(() => document.querySelector('.query-failure [role="alert"]'));

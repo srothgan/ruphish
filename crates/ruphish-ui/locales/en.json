@@ -53,6 +53,7 @@
     "settings_mailboxes_help": "Turn off to stop checking reporting mailboxes. Saved accounts and previous reports are kept.",
     "settings_webhooks_help": "Turn off to stop sending webhook notifications. Missed notifications won't be sent when you turn this back on.",
     "settings_saved": "Company settings saved.",
+    "settings_changed_review": "Saved settings changed. Your edits have been kept. Discard edits to load and review the current settings before saving.",
     "settings_discard": "Discard edits",
     "settings_danger_zone": "Danger zone",
     "close_all_campaigns": "Close all active campaigns",
