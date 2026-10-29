@@ -59,6 +59,20 @@ fn migrator() -> Migrator {
                 include_str!("../../migrations/postgres/7_learning_pages.sql").into_sql_str(),
                 false,
             ),
+            Migration::new(
+                8,
+                Cow::Borrowed("worker recovery indexes"),
+                MigrationType::Simple,
+                include_str!("../../migrations/postgres/8_worker_recovery.sql").into_sql_str(),
+                false,
+            ),
+            Migration::new(
+                9,
+                Cow::Borrowed("campaign fairness index"),
+                MigrationType::Simple,
+                include_str!("../../migrations/postgres/9_campaign_fairness.sql").into_sql_str(),
+                false,
+            ),
         ]),
         locking: false,
         ..Migrator::DEFAULT

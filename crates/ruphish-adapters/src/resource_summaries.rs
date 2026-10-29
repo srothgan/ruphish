@@ -1,6 +1,23 @@
 //! Shared count semantics for provider resource metadata queries.
 use ruphish_application::resources::Kind;
 
+pub(crate) enum Dialect {
+    Sqlite,
+    Mysql,
+    Postgres,
+}
+
+/// One snapshot statement; identifiers still come from each provider's closed kind map.
+pub(crate) fn query(kind: Kind, table: &'static str, dialect: Dialect) -> String {
+    let (selection, total) = match dialect {
+        Dialect::Sqlite => ("r.user_id=? AND (? IS NULL OR r.id=?)", "COALESCE(counts.total,0)"),
+        Dialect::Mysql => ("r.user_id=? AND (? IS NULL OR r.id=?)", "CAST(COALESCE(counts.total,0) AS SIGNED)"),
+        Dialect::Postgres => ("r.user_id=$1 AND ($2::BIGINT IS NULL OR r.id=$2)", "CAST(COALESCE(counts.total,0) AS BIGINT)"),
+    };
+    let counts = counts(kind);
+    format!("WITH selected_resources AS (SELECT r.id,r.name,r.modified_date FROM {table} r WHERE {selection}) SELECT r.id,r.name,r.modified_date,{total} AS total FROM selected_resources r LEFT JOIN ({counts}) counts ON counts.resource_id=r.id ORDER BY r.id")
+}
+
 /// Count only IDs in the provider's `selected_resources` CTE.
 /// Resource ownership selects IDs; reference ownership does not change counts.
 /// Providers own identifiers, binds and snapshots.

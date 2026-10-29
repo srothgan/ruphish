@@ -67,7 +67,7 @@ impl MailboxQueue for Integrations {
             return Ok(None);
         };
         let c = config(&r)?;
-        sqlx::query("UPDATE ruphish_mailbox_runs SET finished=$1,code='interrupted' WHERE mailbox_id=$2 AND finished IS NULL").bind(clock).bind(c.id).execute(&mut *tx).await.map_err(db)?;
+        sqlx::query(crate::postgres::worker_sql::MAILBOX).bind(clock).bind(c.id).execute(&mut *tx).await.map_err(db)?;
         let frequency = u32::try_from(r.try_get::<i64, _>("frequency").map_err(db)?)
             .map_err(|_| Error::Internal)?;
         let failures = u32::try_from(r.try_get::<i64, _>("failures").map_err(db)?)

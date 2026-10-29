@@ -18,11 +18,7 @@ fn storage(error: sqlx::Error) -> Error {
     crate::sqlite::resource_error(error)
 }
 fn summary_query(kind: Kind) -> String {
-    let counts = crate::resource_summaries::counts(kind);
-    format!(
-        "WITH selected_resources AS (SELECT r.id,r.name,r.modified_date FROM {} r WHERE r.user_id=? AND (? IS NULL OR r.id=?)) SELECT r.id,r.name,r.modified_date,COALESCE(counts.total,0) AS total FROM selected_resources r LEFT JOIN ({counts}) counts ON counts.resource_id=r.id ORDER BY r.id",
-        table(kind)
-    )
+    crate::resource_summaries::query(kind, table(kind), crate::resource_summaries::Dialect::Sqlite)
 }
 fn table(kind: Kind) -> &'static str {
     match kind {

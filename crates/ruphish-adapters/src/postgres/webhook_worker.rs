@@ -50,7 +50,7 @@ impl WebhookQueue for Integrations {
         let expired:Vec<i64> = sqlx::query_scalar("SELECT id FROM ruphish_webhook_jobs WHERE webhook_id=$1 AND state='running' AND lease<=$2 FOR UPDATE").bind(webhook).bind(clock).fetch_all(&mut *tx).await.map_err(db)?;
         for id in expired {
             sqlx::query("UPDATE ruphish_webhook_jobs SET state=CASE WHEN attempt>=8 THEN 'failed' ELSE 'retry' END,code='outcome_unconfirmed' WHERE id=$1").bind(id).execute(&mut *tx).await.map_err(db)?;
-            sqlx::query("UPDATE ruphish_webhook_attempts SET finished=$1,code='outcome_unconfirmed' WHERE job_id=$2 AND finished IS NULL").bind(clock).bind(id).execute(&mut *tx).await.map_err(db)?;
+            sqlx::query(crate::postgres::worker_sql::WEBHOOK).bind(clock).bind(id).execute(&mut *tx).await.map_err(db)?;
         }
         let job:Option<i64> = sqlx::query_scalar("SELECT j.id FROM ruphish_webhook_jobs j WHERE j.webhook_id=$1 AND j.state IN ('queued','retry') AND j.due<=$2 AND EXISTS(SELECT 1 FROM ruphish_webhook_state s WHERE s.webhook_id=j.webhook_id AND s.revision=j.revision) ORDER BY j.due,j.id LIMIT 1 FOR UPDATE SKIP LOCKED").bind(webhook).bind(clock).fetch_optional(&mut *tx).await.map_err(db)?;
         let Some(job) = job else {

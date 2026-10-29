@@ -10,6 +10,7 @@ pub async fn restore_version_ten_tables(pool: &sqlx::SqlitePool) -> Result<(), s
     )
     .await?;
     let mut tx = pool.begin().await?;
+    sqlx::raw_sql(performance_versions::before_indexes("sqlite")).execute(&mut *tx).await?;
     // Copy through the historical projection into independently recorded schemas.
     // Preserve populated history, policies and retry tombstones while restoring v10.
     for (table, source) in [
@@ -107,3 +108,6 @@ pub async fn restore_version_nine_tables(pool: &sqlx::SqlitePool) -> Result<(), 
         .await?;
     tx.commit().await
 }
+
+#[path = "performance_versions.rs"]
+mod performance_versions;

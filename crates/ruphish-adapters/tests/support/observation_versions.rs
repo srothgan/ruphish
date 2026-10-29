@@ -64,6 +64,7 @@ fn definitions(baseline: &str) -> String {
 }
 
 pub async fn mysql(c: &mut sqlx::MySqlConnection) {
+    sqlx::raw_sql(super::performance_versions::before_indexes("mysql")).execute(&mut *c).await.unwrap();
     let populated: i64 = sqlx::query_scalar("SELECT (SELECT count(*) FROM events)+(SELECT count(*) FROM pages)+(SELECT count(*) FROM ruphish_campaign_policy)+(SELECT count(*) FROM ruphish_event_receipts)").fetch_one(&mut *c).await.unwrap();
     assert_eq!(
         populated, 0,
@@ -78,6 +79,7 @@ pub async fn mysql(c: &mut sqlx::MySqlConnection) {
 }
 
 pub async fn postgres(c: &mut sqlx::PgConnection) {
+    sqlx::raw_sql(super::performance_versions::before_indexes("postgres")).execute(&mut *c).await.unwrap();
     let populated: i64 = sqlx::query_scalar("SELECT (SELECT count(*) FROM events)+(SELECT count(*) FROM pages)+(SELECT count(*) FROM ruphish_campaign_policy)+(SELECT count(*) FROM ruphish_event_receipts)").fetch_one(&mut *c).await.unwrap();
     assert_eq!(
         populated, 0,

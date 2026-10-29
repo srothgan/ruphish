@@ -1422,6 +1422,7 @@ async fn sqlite_provider_contract() {
     )
     .await
     .unwrap();
+    sqlx::raw_sql(performance_versions::before_indexes("sqlite")).execute(&mut previous).await.unwrap();
     sqlx::raw_sql("DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM ruphish_schema WHERE version=13; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut previous).await.unwrap();
     previous.close().await.unwrap();
     let db = database::open(
@@ -1487,6 +1488,7 @@ async fn mysql_provider_contract() {
     peer.close().await;
     db.close().await;
     // Reconstruct the immediately preceding schema, then verify its populated upgrade.
+    sqlx::raw_sql(performance_versions::before_indexes("mysql")).execute(&mut inspector).await.unwrap();
     sqlx::raw_sql("DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM _sqlx_migrations WHERE version=7; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut inspector).await.unwrap();
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
@@ -2275,6 +2277,7 @@ async fn postgres_provider_contract() {
     db.close().await;
     // Reconstruct the immediately preceding schema, then verify its populated upgrade.
     let mut previous = postgres_inspect(&config).await;
+    sqlx::raw_sql(performance_versions::before_indexes("postgres")).execute(&mut previous).await.unwrap();
     sqlx::raw_sql("DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM _sqlx_migrations WHERE version=7; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut previous).await.unwrap();
     previous.close().await.unwrap();
     let db = database::open(Config::Postgres(config.clone()), Policy::default())
@@ -3074,3 +3077,9 @@ async fn postgres_preferences_migrate_existing_accounts_and_survive_reopen() {
     db.close().await;
     postgres_cleanup(&mut inspect, &config).await;
 }
+
+#[path = "support/query_work.rs"]
+mod query_work;
+
+#[path = "../../../tests/support/performance_versions.rs"]
+mod performance_versions;

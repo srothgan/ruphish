@@ -258,10 +258,8 @@ impl Repository for Resources {
             .await
             .map_err(storage)?;
         authorize(&mut tx, caller, false).await?;
-        let counts = crate::resource_summaries::counts(kind);
-        let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
-            "WITH selected_resources AS (SELECT r.id,r.name,r.modified_date FROM {} r WHERE r.user_id=? AND (? IS NULL OR r.id=?)) SELECT r.id,r.name,r.modified_date,CAST(COALESCE(counts.total,0) AS SIGNED) AS total FROM selected_resources r LEFT JOIN ({counts}) counts ON counts.resource_id=r.id ORDER BY r.id",
-            table(kind)
+        let rows = sqlx::query(sqlx::AssertSqlSafe(crate::resource_summaries::query(
+            kind, table(kind), crate::resource_summaries::Dialect::Mysql,
         )))
         .bind(caller.id)
         .bind(id)
