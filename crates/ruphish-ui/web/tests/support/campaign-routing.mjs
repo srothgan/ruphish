@@ -9,6 +9,7 @@ const returnOrigin =
   '/campaigns/2/results?source=public&event=link_clicked&from=0&until=1999999999&sort=name&order=desc&offset=1&limit=25';
 const path =
   {
+    'results-chart': '/campaigns/2/results',
     'results-refresh': '/campaigns/2/results',
     'recipient-return': returnOrigin,
     'recipient-error-return':
@@ -71,6 +72,36 @@ Object.assign(preferences, { language: 'de', format_locale: 'de-DE', time_zone: 
 const now = 1793016000;
 const data = dataset(now);
 const campaign = data.campaigns.find((c) => c.header.id === 2);
+if (scenario === 'results-chart') {
+  // Real synthetic API aggregation: repeats must not become new participants.
+  campaign.results = campaign.results.slice(0, 2);
+  const start = Math.floor(now / 3600) * 3600 - 4 * 3600;
+  const schedules = [
+    [
+      ['Email Opened', 0],
+      ['Clicked Link', 1],
+      ['Email Opened', 2],
+      ['Clicked Link', 2],
+    ],
+    [
+      ['Email Opened', 1],
+      ['Email Reported', 3],
+    ],
+  ];
+  campaign.results.forEach((recipient, index) => {
+    recipient.events = schedules[index].map(([kind, hour], slot) => ({
+      id: recipient.id * 100 + slot,
+      recipient_id: recipient.id,
+      email: recipient.email,
+      time: new Date((start + hour * 3600 + 10) * 1000).toISOString(),
+      kind,
+      source: 'public',
+      password_present: null,
+      username_present: null,
+      edited: false,
+    }));
+  });
+}
 campaign.header.status =
   scenario === 'active-entry'
     ? 'In progress'
@@ -118,7 +149,10 @@ globalThis.fetch = async (request, options) => {
         );
     });
   }
-  if (scenario === 'results-refresh' && url.pathname === '/api/campaigns/2/results') {
+  if (
+    ['results-refresh', 'results-chart'].includes(scenario) &&
+    url.pathname === '/api/campaigns/2/results'
+  ) {
     if (resultsMode === 'failure') {
       return new Response(JSON.stringify({ success: false, code: 'TEST_FAILURE' }), {
         status: 503,
@@ -188,6 +222,151 @@ const settled = () =>
   regions().length > 0 &&
   regions().every((e) => e.dataset.ready === 'true' && e.getAttribute('aria-busy') === 'false');
 const resultsPath = '/campaigns/2/results';
+
+if (scenario === 'results-chart') {
+  await until(() => settled() && document.querySelectorAll('.analysis-bin').length === 4);
+  const chart = document.querySelector('.analysis-chart');
+  const select = chart.querySelector('select');
+  const bins = () => [...chart.querySelectorAll('.analysis-bin')];
+  const tooltip = () => chart.querySelector('[role="tooltip"]');
+  const values = async () => {
+    const counts = [];
+    for (const bin of bins()) {
+      bin.focus();
+      await until(tooltip);
+      counts.push([...tooltip().querySelectorAll('dd')].map((cell) => Number(cell.textContent)));
+      bin.blur();
+      await until(() => !tooltip());
+    }
+    return counts;
+  };
+  assert.equal(select.value, 'cumulative');
+  assert.deepEqual(await values(), [
+    [1, 0, 0, 0],
+    [2, 1, 0, 0],
+    [2, 1, 0, 0],
+    [2, 1, 0, 1],
+  ]);
+  const ticks = chart.querySelector('.analysis-x-labels').textContent;
+  const targets = bins().map((bin) => [bin.style.left, bin.style.width]);
+  assert.deepEqual(targets, [
+    ['0%', '25%'],
+    ['25%', '25%'],
+    ['50%', '25%'],
+    ['75%', '25%'],
+  ]);
+  select.focus();
+  bins()[0].dispatchEvent(new win.MouseEvent('mouseenter'));
+  await until(tooltip);
+  const before = requests.length;
+  const address = win.location.href;
+  select.focus();
+  select.value = 'per_interval';
+  select.dispatchEvent(new win.Event('change', { bubbles: true }));
+  await until(
+    () =>
+      !tooltip() && chart.querySelector('svg').getAttribute('aria-label').includes('pro Intervall'),
+  );
+  assert.equal(requests.length, before, 'changing the view does not fetch results');
+  assert.equal(win.location.href, address, 'chart mode is not a URL filter');
+  assert.equal(chart.querySelector('.analysis-x-labels').textContent, ticks);
+  assert.deepEqual(
+    bins().map((bin) => [bin.style.left, bin.style.width]),
+    targets,
+  );
+  assert.deepEqual(await values(), [
+    [1, 0, 0, 0],
+    [1, 1, 0, 0],
+    [0, 0, 0, 0],
+    [0, 0, 0, 1],
+  ]);
+  assert.deepEqual(
+    [...chart.querySelectorAll('.series-opened circle')].map((p) => p.getAttribute('cx')),
+    ['12.5%', '37.5%', '62.5%', '87.5%'],
+  );
+  assert.equal(chart.querySelectorAll('.series-opened circle')[2].getAttribute('cy'), '100%');
+  const legend = [...chart.querySelectorAll('.analysis-legend button')];
+  legend[1].click();
+  await until(() => legend[1].getAttribute('aria-pressed') === 'false');
+  select.focus();
+  select.value = 'cumulative';
+  select.dispatchEvent(new win.Event('change', { bubbles: true }));
+  await until(() => chart.querySelector('svg').getAttribute('aria-label').includes('kumuliert'));
+  assert.equal(legend[1].getAttribute('aria-pressed'), 'false');
+  assert.equal(chart.querySelector('svg .series-clicked'), null);
+  select.focus();
+  select.value = 'per_interval';
+  select.dispatchEvent(new win.Event('change', { bubbles: true }));
+  await until(() =>
+    chart.querySelector('svg').getAttribute('aria-label').includes('pro Intervall'),
+  );
+  const refresh = () => document.querySelector('.refresh-indicator').closest('button').click();
+  resultsMode = 'failure';
+  refresh();
+  await until(() => settled() && document.querySelector('.query-refresh-error'));
+  assert.equal(select.value, 'per_interval');
+  assert.equal(document.querySelector('.analysis-chart'), chart);
+  resultsMode = 'initial';
+  const recipient = campaign.results[0];
+  recipient.events.push({ ...recipient.events[1], id: 999999, kind: 'Submitted Data' });
+  bins()[1].focus();
+  await until(tooltip);
+  refresh();
+  await until(() => settled() && !document.querySelector('.query-refresh-error') && !tooltip());
+  assert.equal(select.value, 'per_interval');
+  assert.deepEqual(await values(), [
+    [1, 0, 0],
+    [1, 1, 0],
+    [0, 0, 0],
+    [0, 0, 1],
+  ]);
+  const form = document.querySelector('.analysis-filters');
+  for (const source of ['operator', 'public']) {
+    const filter = form.querySelector('select');
+    filter.value = source;
+    filter.dispatchEvent(new win.Event('change', { bubbles: true }));
+    hold = true;
+    form.querySelector('button[type="submit"]').click();
+    await until(() => release && !settled());
+    assert.equal(select.value, 'per_interval');
+    hold = false;
+    release();
+    release = null;
+    await until(() => win.location.search.includes(source) && settled());
+    assert.equal(document.querySelector('.analysis-chart'), chart);
+    assert.equal(select.value, 'per_interval');
+    if (source === 'operator') {
+      assert.equal(bins().length, 0);
+    }
+  }
+  await until(() => bins().length === 4);
+  const currentLegend = [...chart.querySelectorAll('.analysis-legend button')];
+  assert.equal(currentLegend[1].getAttribute('aria-pressed'), 'false');
+  for (const button of currentLegend.filter(
+    (button) => button.getAttribute('aria-pressed') === 'true',
+  )) {
+    button.click();
+  }
+  await until(() => chart.querySelector('[role="status"]'));
+  assert.equal(chart.querySelector('.analysis-plot').parentElement.hidden, true);
+  currentLegend[0].click();
+  await until(() => !chart.querySelector('[role="status"]'));
+  bins()[0].focus();
+  await until(tooltip);
+  bins()[0].dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await until(() => !tooltip());
+  document.querySelector('.campaign-sections a[href="/campaigns/2/delivery"]').click();
+  await until(() => win.location.pathname.endsWith('/delivery') && settled());
+  document.querySelector('.campaign-sections a[href="/campaigns/2/results"]').click();
+  await until(
+    () =>
+      win.location.pathname === resultsPath &&
+      settled() &&
+      document.querySelector('.analysis-chart select'),
+  );
+  assert.equal(document.querySelector('.analysis-chart select').value, 'cumulative');
+  process.exit(0);
+}
 
 if (scenario === 'results-refresh') {
   await until(() => settled() && document.querySelectorAll('.recipient-outcome').length > 1);

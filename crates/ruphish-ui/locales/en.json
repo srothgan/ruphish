@@ -151,7 +151,7 @@
     "clear_filters": "Clear filters",
     "apply_filters": "Apply filters",
     "what_these_observations_mean": "How these results are counted",
-    "the_chart_recipient_table_and_exports_show_recorded_events_only_opens_are_image": "Campaign totals and the cumulative chart count each participant once per action within the selected filters. Recipient details and event exports retain every occurrence. Opens and clicks are tracking requests and may come from automated scanners. Events without usable timestamps are not plotted.",
+    "the_chart_recipient_table_and_exports_show_recorded_events_only_opens_are_image": "Campaign totals and both chart views count each participant once per action within the selected filters. Cumulative shows totals through each interval; Per interval shows first recorded actions during each interval, excluding its end. Recipient details and event exports retain every occurrence. Opens and clicks are tracking requests and may come from automated scanners. Events without usable timestamps are not plotted.",
     "recipient_observations": "Participant activity",
     "legacy_report_time_unknown": "Legacy report; time unknown",
     "details": "Details",
@@ -163,7 +163,12 @@
     "recorded_events_over_time": "Participants over time",
     "activity_over_time": "Participants over time",
     "no_recorded_activity_matches_these_filters": "No participant activity matches these filters.",
-    "event_counts_over_time_use_the_interval_buttons_below_for_exact_values": "Cumulative participants per action; use the interval buttons for exact counts.",
+    "chart_view": "View",
+    "chart_cumulative": "Cumulative",
+    "chart_per_interval": "Per interval",
+    "chart_cumulative_description": "Cumulative participants per action; use the interval buttons for exact counts.",
+    "chart_per_interval_description": "Participants recording their first action per interval; interval ends are exclusive. Use the interval buttons for exact counts.",
+    "select_event_type_to_show_activity": "Select an event type in the legend to show activity.",
     "visible_event_types": "Visible event types",
     "refresh": "Refresh",
     "create_campaign": "Create campaign",
@@ -1011,7 +1016,9 @@
     "unavailable_draft_group": "Unavailable group (ID {{id}}) - clear to remove",
     "first_interaction_after_acceptance": "First recorded activity {{ duration }} after sending.",
     "participants_through_intervals": "Cumulative participants · {{ minutes }}-minute intervals · {{ zone }}",
-    "participants_through": "Participants by {{ end }}"
+    "participants_through": "Participants before {{ end }}",
+    "first_actions_intervals": "First recorded actions · {{ minutes }}-minute intervals · {{ zone }}",
+    "first_actions_between": "First recorded actions: {{ start }}–{{ end }} (end exclusive)"
   },
   "editor": {
     "source": "HTML source",

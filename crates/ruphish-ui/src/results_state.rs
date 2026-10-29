@@ -1,6 +1,207 @@
 //! Reporting URL and chart transformations shared by the UI and functional tests.
 use ruphish_contracts::reporting::Filter;
 
+/// Local presentation choice; it never participates in API filters or URLs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ChartMode {
+    /// Participants through the end of each interval.
+    #[default]
+    Cumulative,
+    /// First matching actions during each interval.
+    PerInterval,
+}
+
+impl ChartMode {
+    /// Value used by the shared select control.
+    pub fn value(self) -> &'static str {
+        match self {
+            Self::Cumulative => "cumulative",
+            Self::PerInterval => "per_interval",
+        }
+    }
+
+    /// Interpret a selection without introducing a persistent preference.
+    pub fn from_value(value: &str) -> Option<Self> {
+        match value {
+            "cumulative" => Some(Self::Cumulative),
+            "per_interval" => Some(Self::PerInterval),
+            _ => None,
+        }
+    }
+
+    /// Cumulative totals belong at the end; interval counts at the midpoint.
+    pub fn point_time(self, interval: &ChartInterval) -> i64 {
+        match self {
+            Self::Cumulative => interval.end,
+            Self::PerInterval => interval.start + (interval.end - interval.start) / 2,
+        }
+    }
+
+    /// Derive displayed counts from one complete cumulative snapshot.
+    pub fn project(self, cumulative: &[ChartInterval]) -> Vec<ChartInterval> {
+        let mut previous = [0; 4];
+        cumulative
+            .iter()
+            .map(|interval| {
+                let counts = match self {
+                    Self::Cumulative => interval.counts,
+                    Self::PerInterval => std::array::from_fn(|i| interval.counts[i] - previous[i]),
+                };
+                previous = interval.counts;
+                ChartInterval {
+                    counts,
+                    ..*interval
+                }
+            })
+            .collect()
+    }
+}
+
+/// One half-open UTC interval, with opened/clicked/submitted/reported counts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChartInterval {
+    /// Inclusive start in UTC seconds.
+    pub start: i64,
+    /// Exclusive end in UTC seconds.
+    pub end: i64,
+    /// Participants per action, either cumulative or new during this interval.
+    pub counts: [i64; 4],
+}
+
+/// Normalize authorized participant buckets before applying either chart mode.
+/// Omit leading delivery-only intervals, but retain every later quiet interval.
+pub fn participant_intervals(
+    buckets: &[ruphish_contracts::campaign_reads::Bucket],
+    seconds: i64,
+) -> Vec<ChartInterval> {
+    buckets
+        .iter()
+        .skip_while(|bucket| bucket.counts.values()[1..].iter().all(|count| *count == 0))
+        .map(|bucket| {
+            let values = bucket.counts.values();
+            ChartInterval {
+                start: bucket.time,
+                end: bucket.time + seconds,
+                counts: std::array::from_fn(|i| values[i + 1]),
+            }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod chart_tests {
+    use super::{ChartInterval, ChartMode, participant_intervals};
+    use ruphish_contracts::{campaign_reads::Bucket, reporting::Counts};
+
+    #[test]
+    fn both_modes_keep_the_same_intervals_and_independent_action_counts() {
+        let buckets = [
+            (0, [0, 0, 0, 0]),
+            (60, [3, 1, 0, 0]),
+            (120, [5, 1, 1, 0]),
+            (180, [5, 1, 1, 0]),
+            (240, [6, 2, 1, 1]),
+            (300, [6, 2, 1, 1]),
+        ]
+        .map(|(time, [opened, clicked, submitted, reported])| Bucket {
+            time,
+            counts: Counts {
+                accepted: 20,
+                opened,
+                clicked,
+                submitted,
+                reported,
+            },
+        });
+        let cumulative = participant_intervals(&buckets, 60);
+        assert_eq!(
+            cumulative
+                .iter()
+                .map(|b| (b.start, b.end))
+                .collect::<Vec<_>>(),
+            [(60, 120), (120, 180), (180, 240), (240, 300), (300, 360)]
+        );
+        assert_eq!(ChartMode::Cumulative.project(&cumulative), cumulative);
+        let intervals = ChartMode::PerInterval.project(&cumulative);
+        assert_eq!(
+            intervals.iter().map(|b| b.counts).collect::<Vec<_>>(),
+            [
+                [3, 1, 0, 0],
+                [2, 0, 1, 0],
+                [0, 0, 0, 0],
+                [1, 1, 0, 1],
+                [0, 0, 0, 0]
+            ]
+        );
+        assert_eq!(
+            intervals
+                .iter()
+                .map(|b| (b.start, b.end))
+                .collect::<Vec<_>>(),
+            [(60, 120), (120, 180), (180, 240), (240, 300), (300, 360)]
+        );
+        let totals: [i64; 4] = std::array::from_fn(|i| intervals.iter().map(|b| b.counts[i]).sum());
+        assert_eq!(totals, [6, 2, 1, 1]);
+    }
+
+    #[test]
+    fn empty_delivery_only_and_single_interval_snapshots_are_explicit() {
+        assert!(participant_intervals(&[], 60).is_empty());
+        assert!(
+            participant_intervals(
+                &[Bucket {
+                    time: 0,
+                    counts: Counts {
+                        accepted: 20,
+                        ..Default::default()
+                    },
+                }],
+                60
+            )
+            .is_empty()
+        );
+        let single = [ChartInterval {
+            start: 120,
+            end: 180,
+            counts: [0, 1, 0, 0],
+        }];
+        for mode in [ChartMode::Cumulative, ChartMode::PerInterval] {
+            assert!(mode.project(&[]).is_empty());
+            assert_eq!(mode.project(&single), single);
+        }
+        assert_eq!(ChartMode::Cumulative.point_time(&single[0]), 180);
+        assert_eq!(ChartMode::PerInterval.point_time(&single[0]), 150);
+    }
+
+    #[test]
+    fn each_projection_starts_from_the_current_snapshot() {
+        let old = [ChartInterval {
+            start: 0,
+            end: 60,
+            counts: [10, 4, 0, 0],
+        }];
+        let corrected = [ChartInterval {
+            start: 0,
+            end: 60,
+            counts: [2, 0, 0, 0],
+        }];
+        assert_eq!(
+            ChartMode::PerInterval.project(&old)[0].counts,
+            [10, 4, 0, 0]
+        );
+        assert_eq!(
+            ChartMode::PerInterval.project(&corrected)[0].counts,
+            [2, 0, 0, 0]
+        );
+        assert_eq!(ChartMode::default(), ChartMode::Cumulative);
+        assert_eq!(
+            ChartMode::from_value("per_interval"),
+            Some(ChartMode::PerInterval)
+        );
+        assert_eq!(ChartMode::from_value("unknown"), None);
+    }
+}
+
 /// Encode only active analysis filters; export options belong only to download requests.
 pub fn query(filter: &Filter, export: bool) -> String {
     let mut pairs = Vec::<(&str, String)>::new();
