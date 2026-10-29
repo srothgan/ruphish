@@ -4,6 +4,7 @@
 //! drivers, delivery clients, or the admin UI.
 pub mod auth;
 pub mod campaign;
+pub mod content_work;
 pub mod delivery;
 pub mod domains;
 pub mod health;

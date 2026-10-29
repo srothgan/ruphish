@@ -19,9 +19,9 @@ Ruphish separates individual effective events from summary progression. [Event e
 
 Effective event totals include repeated observations and operator additions, use edited values, and omit deleted events. Unique counts include each attributable recipient once for the selected event type. Progression counts infer that a clicked or submitted recipient has reached the opened stage, and a submitted recipient has reached the clicked stage. Acceptance and reports are never inferred.
 
-Campaign Results summary cards, the dashboard, and the campaign execution overview count each recipient at most once per category within a campaign. Recipient detail counts use effective events, including repeats. The event table also retains excluded observations and original evidence for inspection. A retry of the same submission delivery is deduplicated. Campaign Results retains separately labelled event totals and activity charts.
+Campaign Results summary cards, the dashboard, and the campaign execution overview count each recipient at most once per category within a campaign. Recipient detail counts use effective events, including repeats. The event table shows the current stored observations. [Editing events](correcting-events.md) replaces their values, and deleting events permanently removes them; previous values and deleted events cannot be restored. A retry of the same submission delivery is deduplicated. Campaign Results retains separately labelled event totals and activity charts.
 
-Those inferences do not add timeline events or invent timestamps. Charts and event exports use effective events and their corrected occurrence times. The event table separately identifies origin, edits and exclusions. Password presence requires an explicit positive boolean; submission alone does not mean credentials were entered.
+Those inferences do not add timeline events or invent timestamps. Charts and event exports use effective events and their corrected occurrence times. The event table identifies each event's origin and whether it has been edited. Password presence requires an explicit positive boolean; submission alone does not mean credentials were entered.
 
 ## Dashboard scope
 

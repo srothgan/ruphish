@@ -21,7 +21,7 @@ impl Campaigns {
         let limit = limit.clamp(1, 200);
         let rows = if let Some(order) = &after.sorted {
             let position = order.after.clone().unwrap_or_default();
-            let sql = crate::campaign_sort::placeholders(
+            let sql = crate::sql::placeholders(
                 format!(
                     "{} {}",
                     r#"WITH data AS (
@@ -37,7 +37,7 @@ FROM campaigns c WHERE c.user_id=? AND ?=1 AND (?=0 OR (?=1 AND c.status='Comple
                         "mysql"
                     )
                 ),
-                "mysql",
+                false,
             );
             sqlx::query(sqlx::AssertSqlSafe(sql))
                 .bind(caller.id)

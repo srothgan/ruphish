@@ -1,0 +1,9 @@
+//! Owner inventory and domain usage reads.
+pub(crate) const TEMPLATES: &str = "SELECT count(*) FROM templates WHERE user_id=$1";
+pub(crate) const PAGES: &str = "SELECT count(*) FROM pages WHERE user_id=$1";
+pub(crate) const GROUPS: &str = "SELECT count(*) FROM groups WHERE user_id=$1";
+pub(crate) const PROFILES: &str = "SELECT count(*) FROM smtp WHERE user_id=$1";
+// Keep campaign existence probes inside selected domain references; joining can
+// otherwise scan unrelated campaigns. The closed PostgreSQL ID range avoids
+// dominant-parent equality estimates under skew, as in resource summaries.
+pub(crate) const DOMAINS: &str = "SELECT d.*,(SELECT verification_required FROM ruphish_domain_policy WHERE id=d.id) AS verification_required,(SELECT eligible_until FROM ruphish_domain_policy WHERE id=d.id) AS eligible_until,(SELECT expires_at FROM ruphish_domain_policy WHERE id=d.id) AS expires_at,a.id AS active_id,a.started_at AS active_started_at,a.scheduled_at AS active_scheduled_at,(SELECT count(*) FROM ruphish_campaign_domains cd WHERE cd.domain_id BETWEEN d.id AND d.id AND (SELECT 1 FROM campaigns c WHERE c.id=cd.campaign_id) IS NOT NULL) AS campaigns FROM ruphish_domains d LEFT JOIN ruphish_domain_checks a ON a.domain_id=d.id AND a.finished_at IS NULL";

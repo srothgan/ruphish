@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 
-for (const { kind, preview, served, title, visible } of JSON.parse(
+for (const { kind, preview, served, title, visible, endpoint } of JSON.parse(
   await readFile(process.argv[2], 'utf8'),
 )) {
   const draft = new JSDOM(preview);
@@ -39,9 +39,15 @@ for (const { kind, preview, served, title, visible } of JSON.parse(
         doc.querySelectorAll('form[action],form[target],[formaction],[formtarget]').length,
         0,
       );
-      assert.match(
-        doc.querySelector('meta[http-equiv="Content-Security-Policy"]').content,
-        /form-action 'none'/,
+      const policy = doc.querySelector('meta[http-equiv="Content-Security-Policy"]').content;
+      for (const directive of ["form-action 'none'", "frame-src 'none'", "object-src 'none'"]) {
+        assert.ok(policy.includes(directive), directive);
+      }
+      assert.equal(doc.querySelectorAll('base').length, 1);
+      assert.equal(
+        doc.querySelector('script'),
+        doc.querySelector('[data-ruphish-collector]'),
+        'managed setup precedes authored code',
       );
     }
   }
@@ -49,10 +55,10 @@ for (const { kind, preview, served, title, visible } of JSON.parse(
     const previewBase = expected.querySelector('base');
     const liveBase = actual.querySelector('base');
     assert.equal(previewBase.href, 'https://preview.invalid/');
-    assert.match(liveBase.href, /^https:\/\/.*\?rid=/);
+    assert.equal(liveBase.href, endpoint, 'live base uses the exact recipient endpoint');
     const previewCollector = expected.querySelector('[data-ruphish-collector]');
     const liveCollector = actual.querySelector('[data-ruphish-collector]');
-    const liveEndpoint = `const endpoint=${JSON.stringify(liveBase.href)};`;
+    const liveEndpoint = `const endpoint=${JSON.stringify(endpoint)};`;
     assert.ok(liveCollector.textContent.includes(liveEndpoint));
     assert.ok(previewCollector.textContent.includes('const endpoint=null;'));
     // Normalize only these verified differences; compare all remaining markup and script content.

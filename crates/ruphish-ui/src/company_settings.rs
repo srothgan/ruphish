@@ -3,8 +3,8 @@ use crate::{
     client::Api, feedback::Message, management_queries::ManagementQueries, shared::components::*,
 };
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
-use ruphish_contracts::settings::{ClosurePreview, ClosureResult, Features, Policy, Settings};
-use ruphish_ui::{tr, trs};
+use ruphish_contracts::settings::{ClosurePreview, ClosureResult, Features, Settings};
+use ruphish_ui::{settings_state::Draft, tr, trs};
 use serde_json::json;
 
 pub(super) fn disabled(admin: bool) -> impl IntoView {
@@ -28,9 +28,13 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
     let queries = expect_context::<ManagementQueries>();
     let read = queries.settings.observe(|| ());
-    let draft = RwSignal::new(None::<(i64, Policy)>);
-    let validity = RwSignal::new(String::new());
-    let recheck = RwSignal::new(String::new());
+    let draft = RwSignal::new(None::<Draft>);
+    let validity = Signal::derive(move || {
+        draft.with(|d| d.as_ref().map(|d| d.validity.clone()).unwrap_or_default())
+    });
+    let recheck = Signal::derive(move || {
+        draft.with(|d| d.as_ref().map(|d| d.recheck.clone()).unwrap_or_default())
+    });
     let token = StoredValue::new(token);
     let busy = RwSignal::new(false);
     let message = Message::new(String::new());
@@ -39,32 +43,32 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
     let confirmation = RwSignal::new(String::new());
     let closure_message = Message::new(String::new());
     Effect::new(move || {
-        if draft.get().is_none()
-            && let Some(saved) = read.data.get()
-        {
-            validity.set(saved.policy.verification_validity_seconds.to_string());
-            recheck.set(saved.policy.verification_recheck_seconds.to_string());
-            draft.set(Some((saved.revision, saved.policy)));
+        if let Some(saved) = read.data.get() {
+            draft.update(|value| match value {
+                Some(value) => value.refresh(Some(saved)),
+                None => *value = Some(Draft::from_saved(saved)),
+            });
         }
     });
-    let edited = move || {
-        let (revision, mut policy) = draft.get()?;
-        policy.verification_validity_seconds = validity.get().parse::<i64>().ok()?;
-        policy.verification_recheck_seconds = recheck.get().parse::<i64>().ok()?;
-        Some((revision, policy))
-    };
-    let dirty = move || match (edited(), read.data.get()) {
-        (Some((_, p)), Some(saved)) => p != saved.policy,
-        (None, Some(_)) => true,
-        _ => false,
+    let edited = move || draft.with(|d| d.as_ref().and_then(Draft::edited));
+    let dirty = move || draft.with(|d| d.as_ref().is_some_and(Draft::dirty));
+    let conflict = move || {
+        read.data.with(|saved| {
+            draft.with(|d| {
+                d.as_ref()
+                    .zip(saved.as_ref())
+                    .is_some_and(|(d, saved)| d.conflicts(saved))
+            })
+        })
     };
     crate::navigation::protect_draft(move || dirty() || busy.get() || closure.get().is_some());
     let validation = FormValidation::new(move || {
-        let Some((_, mut policy)) = draft.get() else {
+        let Some(current) = draft.get() else {
             return Default::default();
         };
+        let mut policy = current.policy;
         let mut report = ruphish_domain::validation::Report::default();
-        match validity.get().parse::<i64>() {
+        match current.validity.parse::<i64>() {
             Ok(value) => policy.verification_validity_seconds = value,
             Err(_) => report.reject(
                 "verification_validity_seconds",
@@ -72,7 +76,7 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                 "Enter whole seconds",
             ),
         }
-        match recheck.get().parse::<i64>() {
+        match current.recheck.parse::<i64>() {
             Ok(value) => policy.verification_recheck_seconds = value,
             Err(_) => report.reject(
                 "verification_recheck_seconds",
@@ -84,7 +88,7 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
         report
     });
     let save = Callback::new(move |()| {
-        if busy.get_untracked() {
+        if busy.get_untracked() || conflict() {
             return;
         }
         if !validation.check() {
@@ -113,7 +117,7 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                     #[cfg(feature = "demo")]
                     api.notifications.show(DemoNotice::Saved);
                     api.set_features(Features::from(&saved.policy));
-                    draft.set(Some((saved.revision, saved.policy.clone())));
+                    draft.set(Some(Draft::from_saved(saved.clone())));
                     queries.settings.confirmed((), |value| *value = saved);
                     queries.policy_changed();
                     confirming_policy.set(false);
@@ -207,7 +211,7 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                         novalidate
                         on:submit=move |event: leptos::ev::SubmitEvent| {
                             event.prevent_default();
-                            if validation.check() {
+                            if !conflict() && validation.check() {
                                 confirming_policy.set(true);
                             }
                         }
@@ -223,14 +227,14 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                                         checked=Signal::derive(move || {
                                             draft
                                                 .with(|d| {
-                                                    d.as_ref().is_some_and(|(_, p)| p.verification_enabled)
+                                                    d.as_ref().is_some_and(|d| d.policy.verification_enabled)
                                                 })
                                         })
                                         on_toggle=Callback::new(move |v| {
                                             draft
                                                 .update(|d| {
-                                                    if let Some((_, p)) = d {
-                                                        p.verification_enabled = v;
+                                                    if let Some(d) = d {
+                                                        d.policy.verification_enabled = v;
                                                     }
                                                 })
                                         })
@@ -239,7 +243,7 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                                     <Show when=move || {
                                         draft
                                             .with(|d| {
-                                                d.as_ref().is_some_and(|(_, p)| p.verification_enabled)
+                                                d.as_ref().is_some_and(|d| d.policy.verification_enabled)
                                             })
                                             || validation
                                                 .error("verification_validity_seconds")
@@ -253,14 +257,14 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                                             checked=Signal::derive(move || {
                                                 draft
                                                     .with(|d| {
-                                                        d.as_ref().is_some_and(|(_, p)| p.verification_expires)
+                                                        d.as_ref().is_some_and(|d| d.policy.verification_expires)
                                                     })
                                             })
                                             on_toggle=Callback::new(move |v| {
                                                 draft
                                                     .update(|d| {
-                                                        if let Some((_, p)) = d {
-                                                            p.verification_expires = v;
+                                                        if let Some(d) = d {
+                                                            d.policy.verification_expires = v;
                                                         }
                                                     })
                                             })
@@ -272,7 +276,14 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                                                     step="1"
                                                     validation_field="verification_validity_seconds"
                                                     value=validity
-                                                    on_input=move |e| validity.set(event_target_value(&e))
+                                                    on_input=move |e| {
+                                                        draft
+                                                            .update(|d| {
+                                                                if let Some(d) = d {
+                                                                    d.validity = event_target_value(&e);
+                                                                }
+                                                            })
+                                                    }
                                                 />
                                             </Field>
                                             <Field label=trs!(ui.settings_recheck_seconds)>
@@ -281,7 +292,14 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                                                     step="1"
                                                     validation_field="verification_recheck_seconds"
                                                     value=recheck
-                                                    on_input=move |e| recheck.set(event_target_value(&e))
+                                                    on_input=move |e| {
+                                                        draft
+                                                            .update(|d| {
+                                                                if let Some(d) = d {
+                                                                    d.recheck = event_target_value(&e);
+                                                                }
+                                                            })
+                                                    }
                                                 />
                                             </Field>
                                         </div>
@@ -296,14 +314,14 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                                             draft
                                                 .with(|d| {
                                                     d.as_ref()
-                                                        .is_some_and(|(_, p)| p.reporting_mailboxes_enabled)
+                                                        .is_some_and(|d| d.policy.reporting_mailboxes_enabled)
                                                 })
                                         })
                                         on_toggle=Callback::new(move |v| {
                                             draft
                                                 .update(|d| {
-                                                    if let Some((_, p)) = d {
-                                                        p.reporting_mailboxes_enabled = v;
+                                                    if let Some(d) = d {
+                                                        d.policy.reporting_mailboxes_enabled = v;
                                                     }
                                                 })
                                         })
@@ -314,30 +332,36 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                                         checked=Signal::derive(move || {
                                             draft
                                                 .with(|d| {
-                                                    d.as_ref().is_some_and(|(_, p)| p.webhooks_enabled)
+                                                    d.as_ref().is_some_and(|d| d.policy.webhooks_enabled)
                                                 })
                                         })
                                         on_toggle=Callback::new(move |v| {
                                             draft
                                                 .update(|d| {
-                                                    if let Some((_, p)) = d {
-                                                        p.webhooks_enabled = v;
+                                                    if let Some(d) = d {
+                                                        d.policy.webhooks_enabled = v;
                                                     }
                                                 })
                                         })
                                     />
                                     <p>{tr!(ui.settings_webhooks_help)}</p>
                                 </section>
+                                <Show when=conflict>
+                                    <p role="status">{tr!(ui.settings_changed_review)}</p>
+                                </Show>
                                 <div class="management-actions">
                                     <ActionButton
                                         kind="submit"
                                         style=ButtonStyle::Primary
-                                        disabled=Signal::derive(move || !dirty())
+                                        disabled=Signal::derive(move || !dirty() || conflict())
                                     >
                                         {tr!(ui.save_changes)}
                                     </ActionButton>
                                     <ActionButton on_click=move |_| {
-                                        draft.set(None);
+                                        if let Some(saved) = read.data.get_untracked() {
+                                            draft.set(Some(Draft::from_saved(saved)));
+                                            confirming_policy.set(false);
+                                        }
                                     }>{tr!(ui.settings_discard)}</ActionButton>
                                 </div>
                             </div>
@@ -375,7 +399,7 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                                 {tr!(ui.cancel)}
                             </ActionButton>
                             <ActionButton
-                                disabled=busy
+                                disabled=Signal::derive(move || busy.get() || conflict())
                                 style=ButtonStyle::Primary
                                 on_click=move |_| save.run(())
                             >

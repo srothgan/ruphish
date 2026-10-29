@@ -1329,8 +1329,6 @@ pub(crate) fn policy_code(error: &AccountError) -> ErrorCode {
         AccountError::Unauthorized => ErrorCode::AuthRequired,
         AccountError::Forbidden | AccountError::Escalation => ErrorCode::AuthForbidden,
         AccountError::ResetRequired => ErrorCode::PasswordChangeRequired,
-        AccountError::EmptyUsername => ErrorCode::UsernameRequired,
-        AccountError::EmptyRole => ErrorCode::RoleRequired,
         AccountError::LastAdmin => ErrorCode::LastAdmin,
         AccountError::SelfDeletion => ErrorCode::SelfDeletion,
     }
@@ -1357,7 +1355,6 @@ fn auth_code(error: &Error) -> ErrorCode {
             None => ErrorCode::RequestInvalid,
         },
         Error::Policy(error) => policy_code(error),
-        Error::Preferences(_) => ErrorCode::PreferencesInvalid,
         Error::Password(error) => match error {
             PasswordError::Empty => ErrorCode::PasswordRequired,
             PasswordError::TooShort => ErrorCode::PasswordTooShort,

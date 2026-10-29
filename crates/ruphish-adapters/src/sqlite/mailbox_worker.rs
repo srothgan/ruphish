@@ -28,21 +28,12 @@ pub(super) fn config(r: &SqliteRow) -> Result<Config, Error> {
 impl MailboxQueue for Integrations {
     async fn claim_mailbox(&self, clock: i64) -> Result<Option<MailboxClaim>, Error> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(db)?;
-        sqlx::query(
-            r#"
-                UPDATE ruphish_mailbox_runs
-                SET finished=?,code='interrupted'
-                WHERE finished IS NULL
-                AND mailbox_id IN (SELECT id
-                FROM ruphish_mailboxes
-                WHERE lease<=?)
-            "#,
-        )
-        .bind(clock)
-        .bind(clock)
-        .execute(&mut *tx)
-        .await
-        .map_err(db)?;
+        sqlx::query(crate::sqlite::worker_sql::MAILBOX)
+            .bind(clock)
+            .bind(clock)
+            .execute(&mut *tx)
+            .await
+            .map_err(db)?;
         let row = sqlx::query(
             r#"
                 SELECT m.*

@@ -23,22 +23,12 @@ impl Worker for Integrations {
 impl WebhookQueue for Integrations {
     async fn claim_webhook(&self, clock: i64) -> Result<Option<WebhookClaim>, Error> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(db)?;
-        sqlx::query(
-            r#"
-                UPDATE ruphish_webhook_attempts
-                SET finished=?,code='outcome_unconfirmed'
-                WHERE finished IS NULL
-                AND job_id IN (SELECT id
-                FROM ruphish_webhook_jobs
-                WHERE state='running'
-                AND lease<=?)
-            "#,
-        )
-        .bind(clock)
-        .bind(clock)
-        .execute(&mut *tx)
-        .await
-        .map_err(db)?;
+        sqlx::query(crate::sqlite::worker_sql::WEBHOOK)
+            .bind(clock)
+            .bind(clock)
+            .execute(&mut *tx)
+            .await
+            .map_err(db)?;
         sqlx::query(r#"
                 UPDATE ruphish_webhook_jobs
                 SET state=CASE WHEN attempt>=8 THEN 'failed' ELSE 'retry' END,code='outcome_unconfirmed'

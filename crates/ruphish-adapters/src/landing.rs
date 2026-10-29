@@ -80,13 +80,10 @@ fn prepare_learning(source: &str) -> Result<Document, Error> {
         .rm_clean_content_tags(&["style"])
         // Fragment sanitization must not turn document metadata into visible body text.
         // The first head title is escaped and placed back into the document head below.
-        .add_clean_content_tags(&["title"])
-        // Full authored pages need semantic containers omitted by Ammonia's fragment defaults.
+        .add_clean_content_tags(&["title", "textarea", "select", "button", "datalist"])
+        // Static learning pages need semantic containers omitted by fragment defaults.
         // Attributes and descendants still pass through the same content policy.
-        .add_tags(&[
-            "main", "section", "style", "form", "input", "textarea", "select", "option",
-            "optgroup", "button", "label", "fieldset", "legend", "datalist",
-        ])
+        .add_tags(&["main", "section", "style", "label", "fieldset", "legend"])
         .add_generic_attributes(&[
             "id",
             "class",
@@ -99,53 +96,6 @@ fn prepare_learning(source: &str) -> Result<Document, Error> {
             "aria-describedby",
             "aria-labelledby",
         ])
-        .add_tag_attributes("form", &["id", "name", "autocomplete"])
-        .add_tag_attributes(
-            "input",
-            &[
-                "name",
-                "id",
-                "type",
-                "value",
-                "placeholder",
-                "required",
-                "disabled",
-                "readonly",
-                "checked",
-                "autocomplete",
-                "min",
-                "max",
-                "minlength",
-                "maxlength",
-                "pattern",
-                "step",
-                "form",
-                "list",
-            ],
-        )
-        .add_tag_attributes(
-            "textarea",
-            &[
-                "name",
-                "id",
-                "placeholder",
-                "required",
-                "disabled",
-                "readonly",
-                "autocomplete",
-                "rows",
-                "cols",
-                "maxlength",
-                "form",
-            ],
-        )
-        .add_tag_attributes(
-            "select",
-            &["name", "id", "required", "disabled", "multiple", "form"],
-        )
-        .add_tag_attributes("option", &["value", "selected", "disabled"])
-        .add_tag_attributes("optgroup", &["label", "disabled"])
-        .add_tag_attributes("button", &["type", "name", "value", "disabled", "form"])
         .add_tag_attributes("label", &["for"])
         .add_tag_attributes("fieldset", &["disabled", "name", "form"])
         .attribute_filter(|element, attribute, value| {
@@ -154,7 +104,7 @@ fn prepare_learning(source: &str) -> Result<Document, Error> {
             {
                 return None;
             }
-            // Network-loaded resources are excluded from this initial policy. Data images
+            // Network-loaded resources are excluded from static learning content. Data images
             // are independent documents; they cannot execute in the parent document.
             if element == "img" && matches!(attribute, "src" | "srcset") {
                 return (attribute == "src"
@@ -169,13 +119,6 @@ fn prepare_learning(source: &str) -> Result<Document, Error> {
             }
             Some(value.into())
         });
-    cleaner.rm_tags(&[
-        "form", "input", "textarea", "select", "option", "optgroup", "button", "datalist",
-    ]);
-    let mut attributes = cleaner.clone_tag_attributes();
-    attributes.retain(|tag, _| !matches!(*tag, "textarea" | "select" | "button" | "datalist"));
-    cleaner.tag_attributes(attributes);
-    cleaner.add_clean_content_tags(&["textarea", "select", "button", "datalist"]);
     let body = cleaner.clean(source).to_string();
     let mut warnings = diagnostics::inspect(source, &body)?;
     warnings

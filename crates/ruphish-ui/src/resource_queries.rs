@@ -9,15 +9,8 @@ use ruphish_contracts::resource_details::Resource;
 use ruphish_contracts::resources::{GroupSummaries, ResourceSummaries};
 use ruphish_ui::api_error::ApiError;
 use ruphish_ui::query::{Query, QueryView};
+use ruphish_ui::resource_inventory::{self, SummaryRow};
 use serde_json::Value;
-
-#[derive(Clone, Debug)]
-pub(crate) struct SummaryRow {
-    pub id: i64,
-    pub name: String,
-    pub modified_date: Option<String>,
-    pub count: usize,
-}
 
 #[derive(Clone, Copy)]
 pub(crate) struct ResourceQueries {
@@ -40,7 +33,7 @@ impl ResourceQueries {
                         id: row.id,
                         name: row.name,
                         modified_date: row.modified_date,
-                        count: row.num_targets,
+                        count: Some(row.num_targets),
                     })
                     .collect())
             } else {
@@ -52,7 +45,7 @@ impl ResourceQueries {
                         id: row.id,
                         name: row.name,
                         modified_date: row.modified_date,
-                        count: row.active_campaigns,
+                        count: Some(row.active_campaigns),
                     })
                     .collect())
             }
@@ -106,20 +99,21 @@ impl ResourceQueries {
         self.summaries.observe(move || family)
     }
 
-    pub fn saved(self, family: Family, id: i64) {
-        self.refresh_inventory(family);
-        self.details.invalidate((family, id.to_string()));
+    pub fn saved(self, family: Family, resource: &Resource) {
+        // Query::confirmed updates the existing cache and cancels obsolete reads
+        // before refetching; a failed refresh retains this confirmed metadata.
+        self.summaries
+            .confirmed(family, |rows| resource_inventory::saved(rows, resource));
+        self.overview.inventory_changed();
+        self.campaigns.resources_changed();
+        self.details
+            .invalidate((family, resource.metadata.id.to_string()));
     }
 
     /// Refresh after a create attempt, including an unknown transport outcome.
     pub fn refresh_inventory(self, family: Family) {
         self.overview.inventory_changed();
         self.campaigns.resources_changed();
-        // TODO: If bug reports show confusion after a successful save followed by
-        // a failed list refresh, consider applying confirmed summary fields from
-        // the save response before invalidation. Do not invent missing counts;
-        // cover failed refreshes and late responses. For now, retaining the last
-        // confirmed list with the localized stale-data warning and retry is intentional.
         self.summaries.invalidate(family);
     }
 

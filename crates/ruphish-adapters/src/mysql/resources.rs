@@ -248,39 +248,40 @@ impl Repository for Resources {
             .map_err(|e| Error::Storage(crate::mysql::commit_error(e)))?;
         Ok(result)
     }
-    async fn summaries(&self, caller: Identity, kind: Kind) -> Result<Vec<Summary>, Error> {
+    async fn summaries(
+        &self,
+        caller: Identity,
+        kind: Kind,
+        id: Option<i64>,
+    ) -> Result<Vec<Summary>, Error> {
         let mut tx = crate::mysql::locks::snapshot(&self.pool)
             .await
             .map_err(storage)?;
         authorize(&mut tx, caller, false).await?;
-        let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
-            "SELECT id,name,modified_date FROM {} WHERE user_id=? ORDER BY id",
-            table(kind)
+        let rows = sqlx::query(sqlx::AssertSqlSafe(crate::resource_summaries::query(
+            kind,
+            table(kind),
+            crate::resource_summaries::Dialect::Mysql,
         )))
         .bind(caller.id)
+        .bind(id)
+        .bind(id)
         .fetch_all(&mut *tx)
         .await
         .map_err(storage)?;
-        let mut result = Vec::with_capacity(rows.len());
-        for row in rows {
-            let id = row.try_get("id").map_err(storage)?;
-            let num_targets = if kind == Kind::Group {
-                sqlx::query_scalar("SELECT count(*) FROM group_targets WHERE group_id=?")
-                    .bind(id)
-                    .fetch_one(&mut *tx)
-                    .await
-                    .map_err(storage)?
-            } else {
-                0
-            };
-            result.push(Summary {
-                id,
-                name: text(&row, "name")?,
-                modified_date: timestamp(&row)?,
-                num_targets,
-                active_campaigns: usage(&mut tx, kind, id).await?,
-            });
-        }
+        let result = rows
+            .iter()
+            .map(|row| {
+                let total = row.try_get("total").map_err(storage)?;
+                Ok(Summary {
+                    id: row.try_get("id").map_err(storage)?,
+                    name: text(row, "name")?,
+                    modified_date: timestamp(row)?,
+                    num_targets: if kind == Kind::Group { total } else { 0 },
+                    active_campaigns: if kind == Kind::Group { 0 } else { total },
+                })
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
         tx.commit()
             .await
             .map_err(|e| Error::Storage(crate::mysql::commit_error(e)))?;

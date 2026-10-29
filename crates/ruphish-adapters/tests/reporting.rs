@@ -212,6 +212,16 @@ async fn recipient_exports_preserve_audience_fields_and_stored_dates_across_page
         .execute(&pool)
         .await
         .unwrap();
+    let ordinary = reports
+        .analysis(caller(), campaign, selected())
+        .await
+        .unwrap();
+    assert_eq!(ordinary.recipient_total, 3);
+    assert_eq!(
+        ordinary.recipients.len(),
+        1,
+        "ordinary pagination is independent of export admission"
+    );
     for format in ["csv", "xlsx"] {
         assert!(
             matches!(

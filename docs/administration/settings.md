@@ -17,7 +17,7 @@ When verification is enabled, successful evidence normally expires after 24 hour
 
 Disabling reporting mailboxes or webhooks hides the navigation entry and shows an explanatory message when its URL is visited directly. Saved configurations, service credentials, checkpoints, and history remain available. Network validation/check/resume actions are rejected while disabled. Mailbox polling stops. Disabling webhooks cancels pending deliveries; events occurring while disabled do not create a backlog to replay when re-enabled. An external operation already authorized before the change may finish.
 
-Save the policy and confirm the warning. Concurrent changes cause a revision conflict; refresh and review the current values before saving again.
+Save the policy and confirm the warning. Concurrent changes cause a revision conflict. Refresh loads the current policy into a form with no edits. If you have unsaved edits, refresh keeps them and asks you to discard them before using the newer policy. Choose **Discard edits**, review the current values, and reapply any intended changes before saving again. A failed refresh keeps your draft available.
 
 ## Close all active campaigns
 

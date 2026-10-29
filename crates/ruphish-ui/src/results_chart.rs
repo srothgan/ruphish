@@ -364,22 +364,32 @@ pub(super) fn ActivityChart(data: Signal<Vec<Bucket>>, interval: Signal<i64>) ->
 }
 
 /// Mutually exclusive current delivery states; retries never double-count recipients.
-pub(super) fn delivery_donut(data: Signal<serde_json::Value>) -> impl IntoView {
+pub(super) fn delivery_donut(
+    data: Signal<Option<std::sync::Arc<ruphish_contracts::campaign_reads::Delivery>>>,
+) -> impl IntoView {
+    use ruphish_domain::campaign::DeliveryState;
     let states = [
-        "ready",
-        "preparing",
-        "submitting",
-        "retry",
-        "accepted",
-        "failed",
-        "blocked",
-        "unknown",
-        "cancelled",
+        DeliveryState::Ready,
+        DeliveryState::Preparing,
+        DeliveryState::Submitting,
+        DeliveryState::Retry,
+        DeliveryState::Accepted,
+        DeliveryState::Failed,
+        DeliveryState::Blocked,
+        DeliveryState::Unknown,
+        DeliveryState::Cancelled,
     ];
     let total = Signal::derive(move || {
         states
             .iter()
-            .map(|state| data.get()["counts"][state].as_i64().unwrap_or(0).max(0))
+            .map(|state| {
+                data.with(|page| {
+                    page.as_ref()
+                        .and_then(|page| page.counts.get(state).copied())
+                        .unwrap_or(0)
+                })
+                .max(0)
+            })
             .sum::<i64>()
     });
     view! {
@@ -392,8 +402,14 @@ pub(super) fn delivery_donut(data: Signal<serde_json::Value>) -> impl IntoView {
                     states
                         .into_iter()
                         .map(|state| {
-                            let color = delivery_color(state);
-                            let count = data.get()["counts"][state].as_i64().unwrap_or(0).max(0);
+                            let color = delivery_color(state.as_str());
+                            let count = data
+                                .with(|page| {
+                                    page.as_ref()
+                                        .and_then(|page| page.counts.get(&state).copied())
+                                        .unwrap_or(0)
+                                })
+                                .max(0);
                             let size = if all > 0 {
                                 100.0 * count as f64 / all as f64
                             } else {

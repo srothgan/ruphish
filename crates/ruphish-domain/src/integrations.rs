@@ -42,43 +42,7 @@ pub struct MailboxEdit {
     pub revision: Option<i64>,
 }
 
-/// Safe configuration rejection with the established external diagnostic code.
-#[derive(Debug, PartialEq, Eq, thiserror::Error)]
-pub enum Error {
-    /// Invalid mailbox endpoint, polling interval or credential bounds.
-    #[error("mailbox_invalid_configuration")]
-    MailboxConfiguration,
-    /// A webhook URL cannot be parsed.
-    #[error("webhook_invalid_url")]
-    WebhookUrl,
-    /// Invalid webhook endpoint or label.
-    #[error("webhook_invalid_configuration")]
-    WebhookConfiguration,
-    /// An explicitly supplied signing secret is empty or too large.
-    #[error("webhook_secret_required")]
-    WebhookSecret,
-}
-impl WebhookEdit {
-    /// Validate configuration without network access.
-    pub fn validate(&self) -> Result<(), Error> {
-        self.validation()
-            .finish()
-            .map_err(|report| match report.issues().first() {
-                Some(issue) if issue.code == crate::validation::Code::InvalidUrl => {
-                    Error::WebhookUrl
-                }
-                Some(issue) if issue.field == "secret" => Error::WebhookSecret,
-                _ => Error::WebhookConfiguration,
-            })
-    }
-}
 impl MailboxEdit {
-    /// Validate configuration without network access.
-    pub fn validate(&self) -> Result<(), Error> {
-        self.validation()
-            .finish()
-            .map_err(|_| Error::MailboxConfiguration)
-    }
     /// Only a change of mailbox identity invalidates saved UID progress.
     pub fn resets_checkpoint(&self, host: &str, port: i64, username: &str, folder: &str) -> bool {
         self.host != host

@@ -16,6 +16,80 @@ use sqlx::{
 };
 use std::path::PathBuf;
 
+#[path = "support/reporting_filters.rs"]
+mod reporting_filters;
+
+#[path = "support/resource_summaries.rs"]
+mod resource_summaries;
+
+#[tokio::test]
+async fn sqlite_resource_summaries() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("summaries.db");
+    let db = database::open(
+        Config::Sqlite {
+            path: path.clone(),
+            migrations_prefix: String::new(),
+        },
+        Policy::default(),
+    )
+    .await
+    .unwrap();
+    let mut inspect = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
+    )
+    .await
+    .unwrap();
+    sqlx::raw_sql(resource_summaries::SEED)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    resource_summaries::contract(&db).await;
+    inspect.close().await.unwrap();
+    db.close().await;
+}
+
+#[tokio::test]
+#[ignore = "Requires canonical MySQL fixture"]
+async fn mysql_resource_summaries() {
+    let (mut inspect, config) = fixture().await;
+    let db = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    let seed = resource_summaries::SEED.replace("INSERT INTO groups", "INSERT INTO `groups`");
+    sqlx::raw_sql(sqlx::AssertSqlSafe(seed))
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    resource_summaries::contract(&db).await;
+    db.close().await;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE `{}`",
+        config.database
+    )))
+    .execute(&mut inspect)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires canonical PostgreSQL fixture"]
+async fn postgres_resource_summaries() {
+    let (mut admin, config) = postgres_fixture().await;
+    let db = database::open(Config::Postgres(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    let mut inspect = postgres_inspect(&config).await;
+    sqlx::raw_sql(resource_summaries::SEED)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    resource_summaries::contract(&db).await;
+    inspect.close().await.unwrap();
+    db.close().await;
+    postgres_cleanup(&mut admin, &config).await;
+}
+
 #[path = "support/event_edits.rs"]
 mod event_edits;
 
@@ -872,6 +946,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         "idempotent launch returns the same campaign"
     );
     assert_eq!(campaign.results.len(), 1);
+    reporting_filters::contract(db, actor, campaign.id, campaign.results[0].id).await;
     assert!(matches!(
         resources
             .delete(actor, Kind::Template, template.id, None)
@@ -1341,12 +1416,16 @@ async fn sqlite_provider_contract() {
     last_admin_race(&db, &peer).await;
     peer.close().await;
     db.close().await;
-    // Reconstruct the immediately preceding schema, then verify its populated upgrade.
+    // Reconstruct the schema before learning pages and performance indexes, then verify its populated upgrade.
     let mut previous = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
     )
     .await
     .unwrap();
+    sqlx::raw_sql(performance_versions::SQLITE)
+        .execute(&mut previous)
+        .await
+        .unwrap();
     sqlx::raw_sql("DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM ruphish_schema WHERE version=13; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut previous).await.unwrap();
     previous.close().await.unwrap();
     let db = database::open(
@@ -1411,7 +1490,11 @@ async fn mysql_provider_contract() {
     last_admin_race(&db, &peer).await;
     peer.close().await;
     db.close().await;
-    // Reconstruct the immediately preceding schema, then verify its populated upgrade.
+    // Reconstruct the schema before learning pages and performance indexes, then verify its populated upgrade.
+    sqlx::raw_sql(performance_versions::MYSQL)
+        .execute(&mut inspector)
+        .await
+        .unwrap();
     sqlx::raw_sql("DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM _sqlx_migrations WHERE version=7; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut inspector).await.unwrap();
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
@@ -2198,8 +2281,12 @@ async fn postgres_provider_contract() {
     last_admin_race(&db, &peer).await;
     peer.close().await;
     db.close().await;
-    // Reconstruct the immediately preceding schema, then verify its populated upgrade.
+    // Reconstruct the schema before learning pages and performance indexes, then verify its populated upgrade.
     let mut previous = postgres_inspect(&config).await;
+    sqlx::raw_sql(performance_versions::POSTGRES)
+        .execute(&mut previous)
+        .await
+        .unwrap();
     sqlx::raw_sql("DROP TABLE ruphish_learning_pages; ALTER TABLE ruphish_campaign_policy DROP COLUMN learning_page_id; DELETE FROM _sqlx_migrations WHERE version=7; UPDATE ruphish_campaign_policy SET redirect_url='https://example.test/preserved-after-upgrade';").execute(&mut previous).await.unwrap();
     previous.close().await.unwrap();
     let db = database::open(Config::Postgres(config.clone()), Policy::default())
@@ -2998,4 +3085,14 @@ async fn postgres_preferences_migrate_existing_accounts_and_survive_reopen() {
     );
     db.close().await;
     postgres_cleanup(&mut inspect, &config).await;
+}
+
+#[path = "support/query_work.rs"]
+mod query_work;
+
+mod performance_versions {
+    pub const SQLITE: &str = include_str!("../../../tests/support/performance_versions/sqlite.sql");
+    pub const MYSQL: &str = include_str!("../../../tests/support/performance_versions/mysql.sql");
+    pub const POSTGRES: &str =
+        include_str!("../../../tests/support/performance_versions/postgres.sql");
 }

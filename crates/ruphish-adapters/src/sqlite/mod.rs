@@ -309,15 +309,50 @@ async fn validate_schema(
         .execute(&mut expected)
         .await?;
     }
+    if auth_schema::version(connection).await? >= 14 {
+        sqlx::raw_sql(include_str!(
+            "../../migrations/sqlite/14_worker_recovery.sql"
+        ))
+        .execute(&mut expected)
+        .await?;
+    }
+    if auth_schema::version(connection).await? >= 15 {
+        sqlx::raw_sql(include_str!(
+            "../../migrations/sqlite/15_campaign_fairness.sql"
+        ))
+        .execute(&mut expected)
+        .await?;
+    }
+    if auth_schema::version(connection).await? >= 16 {
+        sqlx::raw_sql(include_str!(
+            "../../migrations/sqlite/16_resource_references.sql"
+        ))
+        .execute(&mut expected)
+        .await?;
+    }
+    if auth_schema::version(connection).await? >= 17 {
+        sqlx::raw_sql(include_str!(
+            "../../migrations/sqlite/17_mailbox_history.sql"
+        ))
+        .execute(&mut expected)
+        .await?;
+    }
+    if auth_schema::version(connection).await? >= 18 {
+        sqlx::raw_sql(include_str!(
+            "../../migrations/sqlite/18_inventory_domains.sql"
+        ))
+        .execute(&mut expected)
+        .await?;
+    }
     if auth_schema::version(connection).await? >= 11 {
-        const OBJECTS: &str = "SELECT name,sql FROM sqlite_master WHERE name IN ('event_history','ruphish_event_insert','ruphish_event_delete','events_recipient_identity','events_create_key') ORDER BY name";
+        const OBJECTS: &str = "SELECT name,sql FROM sqlite_master WHERE name IN ('event_history','ruphish_event_insert','ruphish_event_delete','events_recipient_identity','events_create_key','ruphish_mailbox_runs_unfinished','ruphish_webhook_attempts_unfinished','ruphish_delivery_fairness','ruphish_campaign_template','ruphish_campaign_page','ruphish_campaign_profile','ruphish_campaign_learning_page','ruphish_mailbox_history','ruphish_campaign_domain','ruphish_templates_owner','ruphish_pages_owner','ruphish_groups_owner','ruphish_smtp_owner') ORDER BY name";
         let actual: Vec<(String, String)> =
             sqlx::query_as(OBJECTS).fetch_all(&mut *connection).await?;
         let definitions: Vec<(String, String)> =
             sqlx::query_as(OBJECTS).fetch_all(&mut expected).await?;
         // SQLite retains the SQL's original line endings; include_str! retains
         // the checkout's. Compare across checkouts without rewriting stored SQL
-        // or ignoring other differences in the event objects.
+        // or ignoring other differences in the versioned views, triggers or indexes.
         let normalize = |(name, sql): (String, String)| (name, sql.replace("\r\n", "\n"));
         if !actual
             .into_iter()
@@ -325,7 +360,7 @@ async fn validate_schema(
             .eq(definitions.into_iter().map(normalize))
         {
             return Err(UpgradeError::Unrecognized(
-                "event schema differs from its migration".into(),
+                "versioned schema objects differ from their migrations".into(),
             ));
         }
     }
@@ -365,3 +400,6 @@ pub(super) mod settings;
 mod settings_schema;
 
 mod event_edit;
+
+mod inventory_sql;
+mod worker_sql;

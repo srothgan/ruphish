@@ -21,25 +21,6 @@ pub(crate) fn details(fact: &Fact) -> Result<String, ruphish_application::resour
     })
     .map_err(|_| ruphish_application::resources::Error::Internal)
 }
-/// Only repository-owned literals are translated; no caller data enters SQL text.
-pub(crate) fn sql(statement: &str, postgres: bool) -> String {
-    if !postgres {
-        return statement.to_owned();
-    }
-    let mut n = 0;
-    statement
-        .chars()
-        .map(|c| {
-            if c == '?' {
-                n += 1;
-                format!("${n}")
-            } else {
-                c.to_string()
-            }
-        })
-        .collect()
-}
-
 macro_rules! repository {
     ($connection:ty, $postgres:expr) => {
         use ruphish_application::{auth::Identity, event_edit::*, resources::Error};
@@ -47,7 +28,7 @@ macro_rules! repository {
         use sqlx::Row;
         macro_rules! query {
             ($sql:expr) => {
-                sqlx::query(sqlx::AssertSqlSafe(crate::event_edit::sql($sql, $postgres)))
+                sqlx::query(sqlx::AssertSqlSafe(crate::sql::placeholders($sql, $postgres)))
             };
         }
         async fn authorize(

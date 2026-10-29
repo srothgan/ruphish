@@ -28,6 +28,32 @@ pub(crate) fn Field(
 }
 
 #[component]
+pub(crate) fn TextField(
+    #[prop(into)] label: Signal<String>,
+    #[prop(into)] value: Signal<String>,
+    #[prop(into)] on_input: Callback<String>,
+    #[prop(into, optional)] validation_field: String,
+    #[prop(default = "text")] input_type: &'static str,
+    #[prop(default = "")] id: &'static str,
+    #[prop(default = "")] name: &'static str,
+    #[prop(default = "")] autocomplete: &'static str,
+) -> impl IntoView {
+    view! {
+        <Field label=label>
+            <TextInput
+                validation_field=validation_field
+                id=id
+                name=name
+                input_type=input_type
+                autocomplete=autocomplete
+                value=value
+                on_input=move |event| on_input.run(event_target_value(&event))
+            />
+        </Field>
+    }
+}
+
+#[component]
 pub(crate) fn SecretField(
     #[prop(default = true)] required: bool,
     #[prop(into, optional)] validation_field: String,

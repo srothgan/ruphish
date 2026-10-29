@@ -13,7 +13,6 @@ use axum::{
 use ruphish_application::reporting as app;
 use ruphish_contracts::reporting::Filter;
 use ruphish_contracts::{campaign_reads as reads, errors::ErrorCode};
-use serde_json::json;
 fn filter(f: &Filter) -> Result<app::Filter, Rejection> {
     let recipients = if f.recipients.is_empty() {
         Vec::new()
@@ -158,7 +157,7 @@ async fn read(
             })
             .collect(),
     };
-    response(StatusCode::OK, &json!(value), None)
+    response(StatusCode::OK, &value, None)
 }
 async fn export(
     c: Context,

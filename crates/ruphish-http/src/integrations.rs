@@ -94,16 +94,14 @@ async fn hooks(context: Context) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
     response(
         StatusCode::OK,
-        &json!(
-            context
-                .integrations()
-                .webhooks(user.identity)
-                .await
-                .map_err(error)?
-                .into_iter()
-                .map(webhook)
-                .collect::<Vec<_>>()
-        ),
+        &context
+            .integrations()
+            .webhooks(user.identity)
+            .await
+            .map_err(error)?
+            .into_iter()
+            .map(webhook)
+            .collect::<Vec<_>>(),
         None,
     )
 }
@@ -111,16 +109,14 @@ async fn mailboxes(context: Context) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
     response(
         StatusCode::OK,
-        &json!(
-            context
-                .integrations()
-                .mailboxes(user.identity)
-                .await
-                .map_err(error)?
-                .into_iter()
-                .map(mailbox)
-                .collect::<Vec<_>>()
-        ),
+        &context
+            .integrations()
+            .mailboxes(user.identity)
+            .await
+            .map_err(error)?
+            .into_iter()
+            .map(mailbox)
+            .collect::<Vec<_>>(),
         None,
     )
 }

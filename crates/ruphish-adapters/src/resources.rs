@@ -121,7 +121,7 @@ impl Validator for Validate {
         )?
         .warnings)
     }
-    fn validate(&self, resource: &Input) -> Result<(), Error> {
+    fn validate(&self, resource: &Input) -> Result<Vec<PageWarning>, Error> {
         let context = sample();
         match &resource.content {
             Content::Group(targets) => {
@@ -149,15 +149,18 @@ impl Validator for Validate {
                 }
             }
             Content::LearningPage(p) => {
-                self.page_preview(&p.html, PagePreview::Learning)
-                    .map_err(|e| e.at("html"))?;
+                return self
+                    .page_preview(&p.html, PagePreview::Learning)
+                    .map(|(_, warnings)| warnings)
+                    .map_err(|e| e.at("html"));
             }
             Content::Page(p) => {
-                self.page_warnings(&p.html).map_err(|e| e.at("html"))?;
+                let warnings = self.page_warnings(&p.html).map_err(|e| e.at("html"))?;
                 let redirect =
                     render(&p.redirect_url, &context).map_err(|e| e.at("redirect_url"))?;
                 crate::landing::redirect(&redirect, "https://example.test")
                     .map_err(|e| e.at("redirect_url"))?;
+                return Ok(warnings);
             }
             Content::Profile(p) => {
                 mailbox(&p.from_address).map_err(|e| e.at("from_address"))?;
@@ -179,7 +182,7 @@ impl Validator for Validate {
                 }
             }
         }
-        Ok(())
+        Ok(Vec::new())
     }
 }
 /// Apply the legacy Office/text template rules without filesystem extraction.

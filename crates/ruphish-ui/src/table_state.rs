@@ -1,6 +1,16 @@
 //! Table ordering uses typed values, never formatted DOM text or row positions.
 use ruphish_domain::reporting::SortDirection;
 
+/// Index stable row IDs once per response so cells can locate rows without scanning them.
+pub fn row_positions<K: Eq + std::hash::Hash>(
+    ids: impl IntoIterator<Item = K>,
+) -> std::collections::HashMap<K, usize> {
+    ids.into_iter()
+        .enumerate()
+        .map(|(position, id)| (id, position))
+        .collect()
+}
+
 /// Column identity and direction; page owners retain this across refreshes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Sort {
@@ -143,5 +153,58 @@ pub fn ratio(numerator: i64, denominator: i64) -> Value {
         Value::Missing
     } else {
         Value::Ratio(numerator, denominator)
+    }
+}
+
+#[cfg(test)]
+mod row_index_tests {
+    use super::row_positions;
+    use std::{
+        cell::Cell,
+        hash::{Hash, Hasher},
+    };
+
+    thread_local! { static WORK: Cell<usize> = const { Cell::new(0) }; }
+    struct Id(usize);
+    impl PartialEq for Id {
+        fn eq(&self, other: &Self) -> bool {
+            WORK.with(|work| work.set(work.get() + 1));
+            self.0 == other.0
+        }
+    }
+    impl Eq for Id {}
+    impl Hash for Id {
+        fn hash<H: Hasher>(&self, state: &mut H) {
+            WORK.with(|work| work.set(work.get() + 1));
+            self.0.hash(state);
+        }
+    }
+
+    #[test]
+    fn row_index_work_scales_with_rows_and_cell_reads_instead_of_their_product() {
+        for count in [50, 500, 5000] {
+            WORK.with(|work| work.set(0));
+            // Reverse order makes the independently expected positions differ from IDs.
+            let positions = row_positions((0..count).rev().map(Id));
+            assert_eq!(positions.len(), count);
+            let build = WORK.with(|work| work.replace(0));
+            for id in 0..count {
+                for _ in 0..10 {
+                    assert_eq!(positions.get(&Id(id)), Some(&(count - id - 1)));
+                }
+            }
+            assert_eq!(positions.get(&Id(count)), None);
+            let reads = WORK.with(Cell::get);
+            // Count real key hashing/comparisons, not elapsed time or emitted rows.
+            // Allow normal randomized-table collisions without permitting a row scan per cell.
+            assert!(
+                build <= count * 10,
+                "{count} rows require {build} construction operations"
+            );
+            assert!(
+                reads <= (count * 10 + 1) * 8,
+                "{count} rows require {reads} lookup operations"
+            );
+        }
     }
 }

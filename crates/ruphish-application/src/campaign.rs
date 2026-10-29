@@ -49,6 +49,18 @@ pub struct Create {
     /// Owner-scoped launch key and canonical request digest.
     pub idempotency: Option<(String, String)>,
 }
+/// Immutable selection metadata retained after consuming a group's recipients.
+pub struct PreparedGroup {
+    /// Owned group identity.
+    pub id: i64,
+    /// Display name at preparation time.
+    pub name: String,
+    /// Revision checked in the selection transaction.
+    pub modified_date: String,
+    /// Original row count, including duplicates, for review totals.
+    pub recipient_count: usize,
+}
+
 /// Resolved, reviewable resource input and unique audience.
 pub struct Prepared {
     /// Verified domain resolved in the same resource-selection transaction.
@@ -57,8 +69,8 @@ pub struct Prepared {
     pub conflict_count: usize,
     /// First one hundred conflicting pairs, with retained attributes first.
     pub conflicts: Vec<(crate::resources::Recipient, crate::resources::Recipient)>,
-    /// Group content in selection order.
-    pub groups: Vec<Resource>,
+    /// Group metadata in selection order; audience rows have one owner below.
+    pub groups: Vec<PreparedGroup>,
     /// Resolved email template.
     pub template: Resource,
     /// Resolved landing page.

@@ -76,6 +76,7 @@ fn detail(api: Api, id: i64) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
     let navigate = StoredValue::new(use_navigate());
     let path = StoredValue::new(format!("/campaigns/{id}/results"));
+    let location = leptos_router::hooks::use_location();
     let filters = filters();
     let selected = RwSignal::new(Vec::<i64>::new());
     let selected_event = RwSignal::new(String::new());
@@ -94,6 +95,15 @@ fn detail(api: Api, id: i64) -> impl IntoView {
     );
     let presentation = read.presentation(move || selection.get());
     let data = presentation.data;
+    let positions = Memo::new(move |_| {
+        data.with(|page| {
+            page.as_ref()
+                .map(|page| {
+                    ruphish_ui::table_state::row_positions(page.recipients.iter().map(|row| row.id))
+                })
+                .unwrap_or_default()
+        })
+    });
     let loading = read.fetching;
     let loaded = Signal::derive(move || data.with(Option::is_some));
     let applying = presentation.pending;
@@ -165,7 +175,7 @@ fn detail(api: Api, id: i64) -> impl IntoView {
                 .map(|value| {
                     let rows = value
                         .recipients
-                        .into_iter()
+                        .iter()
                         .map(|r| {
                             (
                                 r.id,
@@ -463,30 +473,50 @@ fn detail(api: Api, id: i64) -> impl IntoView {
                             key=|id| *id
                             children=move |recipient_id| {
                                 let row = Signal::derive(move || {
-                                    data.with(|v| {
-                                        v.as_ref()
-                                            .and_then(|v| {
-                                                v.recipients.iter().find(|r| r.id == recipient_id)
-                                            })
-                                            .cloned()
-                                    })
+                                    data.get()
+                                        .zip(positions.with(|p| p.get(&recipient_id).copied()))
                                 });
                                 view! {
                                     <tr class="recipient-outcome">
                                         <th scope="row">
-                                            <span>{move || row.get().map(|r| r.email)}</span>
-                                            <small>{move || row.get().map(|r| r.name)}</small>
+                                            <span>
+                                                {move || {
+                                                    row.get()
+                                                        .and_then(|(page, index)| {
+                                                            page.recipients.get(index).map(|r| r.email.clone())
+                                                        })
+                                                }}
+                                            </span>
+                                            <small>
+                                                {move || {
+                                                    row.get()
+                                                        .and_then(|(page, index)| {
+                                                            page.recipients.get(index).map(|r| r.name.clone())
+                                                        })
+                                                }}
+                                            </small>
                                         </th>
                                         {(1..5)
                                             .map(move |index| {
                                                 view! {
                                                     <td>
                                                         <ActivityIndicator recorded=Signal::derive(move || {
-                                                            row.get().is_some_and(|r| r.counts.values()[index] > 0)
+                                                            row.get()
+                                                                .is_some_and(|(page, position)| {
+                                                                    page.recipients
+                                                                        .get(position)
+                                                                        .is_some_and(|r| r.counts.values()[index] > 0)
+                                                                })
                                                         }) />
                                                         <Show when=move || {
                                                             index == 4
-                                                                && row.get().is_some_and(|r| r.historical_reported)
+                                                                && row
+                                                                    .get()
+                                                                    .is_some_and(|(page, position)| {
+                                                                        page.recipients
+                                                                            .get(position)
+                                                                            .is_some_and(|r| r.historical_reported)
+                                                                    })
                                                         }>
                                                             <small>{tr!(ui.legacy_report_time_unknown)}</small>
                                                         </Show>
@@ -496,9 +526,21 @@ fn detail(api: Api, id: i64) -> impl IntoView {
                                             .collect_view()}
                                         <td>
                                             {move || {
+                                                let search = location.search.get();
+                                                let origin = if search.is_empty() {
+                                                    location.pathname.get()
+                                                } else {
+                                                    format!(
+                                                        "{}?{}",
+                                                        location.pathname.get(),
+                                                        search.trim_start_matches('?'),
+                                                    )
+                                                };
                                                 view! {
-                                                    <ActionLink href=format!(
-                                                        "/campaigns/{id}/results/recipients/{recipient_id}",
+                                                    <ActionLink href=ruphish_ui::results_state::recipient_address(
+                                                        id,
+                                                        recipient_id,
+                                                        &origin,
                                                     )>{tr!(ui.recipient_analysis)}</ActionLink>
                                                 }
                                             }}

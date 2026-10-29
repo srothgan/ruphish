@@ -63,3 +63,6 @@ pub(super) fn resource_error(error: sqlx::Error) -> ruphish_application::resourc
 pub(super) mod settings;
 
 mod event_edit;
+
+mod inventory_sql;
+mod worker_sql;
