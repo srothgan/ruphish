@@ -151,7 +151,7 @@
     "clear_filters": "Filter zurücksetzen",
     "apply_filters": "Filter anwenden",
     "what_these_observations_mean": "So werden diese Ergebnisse gezählt",
-    "the_chart_recipient_table_and_exports_show_recorded_events_only_opens_are_image": "Kampagnenzahlen und das kumulierte Diagramm zählen jeden Teilnehmer innerhalb der ausgewählten Filter pro Aktion einmal. Empfängerdetails und Ereignisexporte enthalten alle einzelnen Aktionen. Öffnungen und Klicks sind Tracking-Aufrufe und können durch automatische Scanner entstehen. Ereignisse ohne verwertbaren Zeitpunkt werden nicht im Diagramm dargestellt.",
+    "the_chart_recipient_table_and_exports_show_recorded_events_only_opens_are_image": "Kampagnenzahlen und beide Diagrammansichten zählen jeden Teilnehmer innerhalb der ausgewählten Filter pro Aktion einmal. Kumuliert zeigt die Gesamtzahlen bis zum jeweiligen Intervallende; Pro Intervall zeigt die ersten erfassten Aktionen im jeweiligen Intervall, ohne dessen Endzeitpunkt. Empfängerdetails und Ereignisexporte enthalten alle einzelnen Aktionen. Öffnungen und Klicks sind Tracking-Aufrufe und können durch automatische Scanner entstehen. Ereignisse ohne verwertbaren Zeitpunkt werden nicht im Diagramm dargestellt.",
     "recipient_observations": "Teilnehmeraktivität",
     "legacy_report_time_unknown": "Übernommene Meldung; Zeitpunkt unbekannt",
     "details": "Details",
@@ -163,7 +163,12 @@
     "recorded_events_over_time": "Teilnehmer im Zeitverlauf",
     "activity_over_time": "Teilnehmer im Zeitverlauf",
     "no_recorded_activity_matches_these_filters": "Keine Teilnehmeraktivität entspricht diesen Filtern.",
-    "event_counts_over_time_use_the_interval_buttons_below_for_exact_values": "Teilnehmer pro Aktion, kumuliert; genaue Werte finden Sie über die Intervallschaltflächen.",
+    "chart_view": "Ansicht",
+    "chart_cumulative": "Kumuliert",
+    "chart_per_interval": "Pro Intervall",
+    "chart_cumulative_description": "Teilnehmer pro Aktion, kumuliert; genaue Werte finden Sie über die Intervallschaltflächen.",
+    "chart_per_interval_description": "Teilnehmer mit ihrer ersten Aktion pro Intervall; der Endzeitpunkt ist ausgeschlossen. Genaue Werte finden Sie über die Intervallschaltflächen.",
+    "select_event_type_to_show_activity": "Wähle einen Ereignistyp in der Legende, um Aktivitäten anzuzeigen.",
     "visible_event_types": "Sichtbare Ereignistypen",
     "refresh": "Aktualisieren",
     "create_campaign": "Kampagne erstellen",
@@ -1011,7 +1016,9 @@
     "unavailable_draft_group": "Nicht verfügbare Gruppe (ID {{id}}) - abwählen zum Entfernen",
     "first_interaction_after_acceptance": "Erste erfasste Aktivität {{ duration }} nach dem Versand.",
     "participants_through_intervals": "Teilnehmer, kumuliert · {{ minutes }}-Minuten-Intervalle · {{ zone }}",
-    "participants_through": "Teilnehmer bis {{ end }}"
+    "participants_through": "Teilnehmer vor {{ end }}",
+    "first_actions_intervals": "Erste erfasste Aktionen · {{ minutes }}-Minuten-Intervalle · {{ zone }}",
+    "first_actions_between": "Erste erfasste Aktionen: {{ start }}–{{ end }} (Ende ausgeschlossen)"
   },
   "editor": {
     "source": "HTML-Quelltext",

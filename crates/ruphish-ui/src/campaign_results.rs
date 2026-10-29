@@ -3,7 +3,7 @@ use crate::{
     campaign_queries::CampaignQueries,
     client::Api,
     feedback::Message,
-    results_chart::{ActivityChart, Bucket, labels},
+    results_chart::{ActivityChart, labels},
     shared::components::*,
     time_display::{local_input, parse_input},
 };
@@ -238,31 +238,15 @@ fn detail(api: Api, id: i64) -> impl IntoView {
             }),
         }
     };
-    let chart = Signal::derive(move || {
+    let chart = Memo::new(move |_| {
         data.with(|value| {
             value
                 .as_ref()
                 .map(|v| {
-                    let first = v
-                        .participant_buckets
-                        .iter()
-                        .position(|b| b.counts.values()[1..].iter().any(|count| *count > 0));
-                    let last = v
-                        .participant_buckets
-                        .iter()
-                        .rposition(|b| b.counts.values()[1..].iter().any(|count| *count > 0));
-                    first
-                        .zip(last)
-                        .map(|(first, last)| {
-                            v.participant_buckets[first..=last]
-                                .iter()
-                                .map(|b| Bucket {
-                                    time: b.time + v.bucket_seconds,
-                                    counts: b.counts.values(),
-                                })
-                                .collect::<Vec<_>>()
-                        })
-                        .unwrap_or_default()
+                    ruphish_ui::results_state::participant_intervals(
+                        &v.participant_buckets,
+                        v.bucket_seconds,
+                    )
                 })
                 .unwrap_or_default()
         })
