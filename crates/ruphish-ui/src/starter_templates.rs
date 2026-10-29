@@ -201,12 +201,12 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                         .await
                         .and_then(|(saved, _)| {
                             ResourceQueries::decode_detail(api, family, saved, None)
-                                .map(|resource| resource.metadata.id)
                                 .map_err(|e| e.message)
                         });
                     match response {
-                        Ok(id) => {
-                            resources.saved(family, id);
+                        Ok(resource) => {
+                            resources.saved(family, &resource);
+                            let id = resource.metadata.id;
                             #[cfg(feature = "demo")]
                             api.notifications.show(DemoNotice::Created);
                             Ok(format!("/{}/{id}", family.route()))

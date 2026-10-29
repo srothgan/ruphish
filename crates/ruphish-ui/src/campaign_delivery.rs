@@ -2,16 +2,13 @@
 use crate::shared::components::{
     ActionButton, ButtonStyle, Dialog, QueryBoundary, StatusBadge, StatusTone,
 };
-use crate::{
-    account::copy_text,
-    campaigns::{array, text},
-    client::Api,
-    time_display::instant,
-};
+use crate::{account::copy_text, campaigns::text, client::Api, time_display::instant};
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
+use ruphish_contracts::campaign_reads::DeliveryRow;
+use ruphish_domain::campaign::DeliveryState;
 use ruphish_ui::recipient_history::{History, tone};
 use ruphish_ui::{tr, trs};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 #[derive(Clone, Copy)]
 pub(super) struct Controls {
@@ -82,18 +79,7 @@ fn fetch(
             Ok(value)
         }
         .await;
-        let response = read.map_err(|e| {
-            if e.is_terminal() {
-                history.update(|h| {
-                    h.events.clear();
-                    h.attempts.clear();
-                    h.next_event = None;
-                    h.next_attempt = None;
-                });
-            }
-            e.message
-        });
-        history.update(|h| h.finish(request, response));
+        history.update(|h| h.finish(request, read));
     });
 }
 
@@ -101,17 +87,11 @@ pub(super) fn recipient_row(
     api: Api,
     campaign: StoredValue<String>,
     result: i64,
-    data: Signal<Value>,
+    row: Signal<Option<DeliveryRow>>,
     controls: Controls,
 ) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
-    let row = Memo::new(move |_| {
-        array(&data.get(), "items")
-            .into_iter()
-            .find(|r| r["id"] == result)
-            .unwrap_or(Value::Null)
-    });
     let query = leptos_router::hooks::use_query_map();
     let mut initial = History::default();
     if query
@@ -136,7 +116,7 @@ pub(super) fn recipient_row(
                     id=button_id.clone()
                     aria-label=move || {
                         leptos_i18n::t_string!(
-                            i18n, messages.recipient_history_for_arg0, arg0 = (text(&row.get(),"email")).to_string()
+                            i18n, messages.recipient_history_for_arg0, arg0 = (row.with(|row| row.as_ref().map(|row| row.email.clone()).unwrap_or_default())).to_string()
                         )
                     }
                     aria-expanded=move || open.get().to_string()
@@ -156,47 +136,71 @@ pub(super) fn recipient_row(
                     </svg>
                 </button>
             </td>
-            <th scope="row">{move || text(&row.get(), "email")}</th>
+            <th scope="row">
+                {move || {
+                    row.with(|row| row.as_ref().map(|row| row.email.clone()).unwrap_or_default())
+                }}
+            </th>
             <td>
                 <StatusBadge tone=Signal::derive(move || status_tone(
-                    &text(&row.get(), "state"),
+                    row.with(|row| row.as_ref().map(|row| row.state.as_str()).unwrap_or_default()),
                 ))>
                     {move || {
-                        let value = row.get();
-                        if text(&value, "state") == "ready"
-                            && value["due"]
-                                .as_i64()
-                                .is_some_and(|due| due > (js_sys::Date::now() / 1000.0) as i64)
-                        {
-                            leptos_i18n::t_string!(i18n, ui.scheduled).to_string()
-                        } else {
-                            ruphish_ui::localization::delivery_label(i18n, &text(&value, "state"))
-                        }
+                        row.with(|row| {
+                            row.as_ref()
+                                .map(|value| {
+                                    if value.state == DeliveryState::Ready
+                                        && value.due > (js_sys::Date::now() / 1000.0) as i64
+                                    {
+                                        leptos_i18n::t_string!(i18n, ui.scheduled).to_string()
+                                    } else {
+                                        ruphish_ui::localization::delivery_label(
+                                            i18n,
+                                            value.state.as_str(),
+                                        )
+                                    }
+                                })
+                                .unwrap_or_default()
+                        })
                     }}
                 </StatusBadge>
                 <small class="delivery-code">
                     {move || ruphish_ui::localization::delivery_failure_label(
                         i18n,
-                        &text(&row.get(), "code"),
+                        &row
+                            .with(|row| {
+                                row.as_ref().map(|row| row.code.clone()).unwrap_or_default()
+                            }),
                     )}
                 </small>
             </td>
             <td>
                 <small>
                     {move || {
-                        if matches!(text(&row.get(), "state").as_str(), "ready" | "retry") {
+                        if row
+                            .with(|row| {
+                                row.as_ref()
+                                    .is_some_and(|row| {
+                                        matches!(
+                                            row.state,
+                                            DeliveryState::Ready | DeliveryState::Retry
+                                        )
+                                    })
+                            })
+                        {
                             leptos_i18n::t_string!(i18n, ui.next_attempt).to_string()
                         } else {
                             leptos_i18n::t_string!(i18n, ui.last_scheduled_attempt).to_string()
                         }
                     }}
                 </small>
-                {move || instant(&row.get()["due"])}
+                {move || row.with(|row| row.as_ref().map(|row| instant(&row.due.into())))}
             </td>
             <td>
                 <span>
                     {move || {
-                        let count = row.get()["attempt_count"].as_u64().unwrap_or(0);
+                        let count = row
+                            .with(|row| row.as_ref().map(|row| row.attempt_count).unwrap_or(0));
                         if count == 1 {
                             leptos_i18n::t_string!(i18n, messages.attempt_one).to_owned()
                         } else {
@@ -207,22 +211,54 @@ pub(super) fn recipient_row(
                 <div class="recipient-actions">
                     <Show when=move || {
                         controls.can_edit
-                            && matches!(text(&row.get(), "state").as_str(), "failed" | "blocked")
+                            && row
+                                .with(|row| {
+                                    row.as_ref()
+                                        .is_some_and(|row| {
+                                            matches!(
+                                                row.state,
+                                                DeliveryState::Failed | DeliveryState::Blocked
+                                            )
+                                        })
+                                })
                     }>
                         <ActionButton
                             disabled=Signal::derive(move || busy.get())
                             on_click=move |_| {
-                                action.set(Some(("retry".into(), row.get_untracked())))
+                                if let Some(row) = row.get_untracked() {
+                                    action
+                                        .set(
+                                            Some((
+                                                "retry".into(),
+                                                json!({"id":row.id,"generation":row.generation}),
+                                            )),
+                                        )
+                                }
                             }
                         >
                             {tr!(ui.retry_after_correction)}
                         </ActionButton>
                     </Show>
-                    <Show when=move || controls.can_edit && text(&row.get(), "state") == "unknown">
+                    <Show when=move || {
+                        controls.can_edit
+                            && row
+                                .with(|row| {
+                                    row.as_ref()
+                                        .is_some_and(|row| row.state == DeliveryState::Unknown)
+                                })
+                    }>
                         <ActionButton
                             disabled=Signal::derive(move || busy.get())
                             on_click=move |_| {
-                                action.set(Some(("confirm_accepted".into(), row.get_untracked())))
+                                if let Some(row) = row.get_untracked() {
+                                    action
+                                        .set(
+                                            Some((
+                                                "confirm_accepted".into(),
+                                                json!({"id":row.id,"generation":row.generation}),
+                                            )),
+                                        )
+                                }
                             }
                         >
                             {tr!(ui.confirm_accepted)}
@@ -231,7 +267,15 @@ pub(super) fn recipient_row(
                             style=ButtonStyle::Ghost
                             disabled=Signal::derive(move || busy.get())
                             on_click=move |_| {
-                                action.set(Some(("resend_unknown".into(), row.get_untracked())))
+                                if let Some(row) = row.get_untracked() {
+                                    action
+                                        .set(
+                                            Some((
+                                                "resend_unknown".into(),
+                                                json!({"id":row.id,"generation":row.generation}),
+                                            )),
+                                        )
+                                }
                             }
                         >
                             {tr!(ui.resend_despite_uncertainty)}
@@ -245,7 +289,7 @@ pub(super) fn recipient_row(
                 <div id=panel_id aria-labelledby=button_id>
                     <Show when=move || {
                         open.get()
-                    }>{recipient_detail(api, campaign, result, history, data)}</Show>
+                    }>{recipient_detail(api, campaign, result, history, row)}</Show>
                 </div>
             </td>
         </tr>
@@ -257,7 +301,7 @@ pub(super) fn recipient_detail(
     campaign: StoredValue<String>,
     result: i64,
     history: RwSignal<History>,
-    refresh: Signal<Value>,
+    row: Signal<Option<DeliveryRow>>,
 ) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
     let editing = RwSignal::new(false);
@@ -283,7 +327,7 @@ pub(super) fn recipient_detail(
     let copy_message = RwSignal::new(String::new());
     let open = Memo::new(move |_| history.with(|h| h.open));
     Effect::new(move |_| {
-        refresh.track();
+        row.track();
         if open.get() && history.with_untracked(|h| h.error.is_none()) {
             fetch(tasks, api, campaign, result, history, false);
         }
@@ -361,10 +405,7 @@ pub(super) fn recipient_detail(
                                 <h2>{tr!(ui.edit_timeline)}</h2>
                                 <p>
                                     {move || {
-                                        array(&refresh.get(), "items")
-                                            .into_iter()
-                                            .find(|row| row["id"] == result)
-                                            .map(|row| text(&row, "email"))
+                                        row.with(|row| row.as_ref().map(|row| row.email.clone()))
                                     }}
                                 </p>
                             </div>

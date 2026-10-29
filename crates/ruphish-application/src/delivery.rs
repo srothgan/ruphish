@@ -148,7 +148,7 @@ impl Service {
         })
     }
     /// Review a coherently resolved campaign without creating public preview state.
-    pub fn review_campaign(
+    pub async fn review_campaign(
         &self,
         prepared: crate::campaign::Prepared,
         url: String,
@@ -158,8 +158,12 @@ impl Service {
             .first()
             .cloned()
             .ok_or_else(|| Error::Invalid("Campaign audience is empty".into()))?;
-        self.sender
-            .review(&self.campaign_message(prepared, recipient, url)?)
+        let message = self.campaign_message(prepared, recipient, url)?;
+        let sender = self.sender.clone();
+        self.resources
+            .content_work
+            .run(move || sender.review(&message))
+            .await
     }
     /// Explicitly send one test from owned, revision-checked campaign selections.
     pub async fn test_campaign(
@@ -174,7 +178,15 @@ impl Service {
         self.submit_test(caller, message).await
     }
     async fn submit_test(&self, caller: Identity, message: MessageInput) -> Result<(), Error> {
-        let mail = self.sender.compose(&message)?;
+        let sender = self.sender.clone();
+        let (message, mail) = self
+            .resources
+            .content_work
+            .run(move || {
+                let mail = sender.compose(&message)?;
+                Ok((message, mail))
+            })
+            .await?;
         if message.template_id != 0 {
             self.previews.store(caller, &message).await?;
         }
@@ -201,14 +213,7 @@ impl Service {
     async fn authorize(&self, caller: Identity) -> Result<(), Error> {
         self.accounts
             .session(caller)
-            .await
-            .map_err(|e| match e {
-                crate::auth::Error::Policy(p) => Error::Policy(p),
-                crate::auth::Error::NotFound => {
-                    Error::Policy(crate::auth::AccountError::Unauthorized)
-                }
-                _ => Error::Internal,
-            })?
+            .await?
             .require("modify_objects")?;
         Ok(())
     }
@@ -228,14 +233,16 @@ impl Service {
                 } else {
                     None
                 };
-                let mut draft = Input {
+                let draft = Input {
                     id: id.unwrap_or_default(),
                     name: String::new(),
                     modified_date: String::new(),
                     content: Content::Profile(profile),
                 };
-                self.resources.validate(&mut draft)?;
-                draft.resolve_password(previous.as_ref())
+                self.resources
+                    .validate(draft)
+                    .await?
+                    .resolve_password(previous.as_ref())
             }
         };
         match selected.content {

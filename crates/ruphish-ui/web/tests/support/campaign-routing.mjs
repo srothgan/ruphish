@@ -7,7 +7,11 @@ import { dataset } from '../../../../../assets/website-demo/dataset.mjs';
 const scenario = process.argv[2];
 const path =
   {
+    'delivery-missing': '/campaigns/2/delivery?recipient=999999',
+    'delivery-refresh': '/campaigns/2/delivery',
     'event-editor': '/campaigns/2/delivery?recipient=20003',
+    'event-editor-stale-403': '/campaigns/2/delivery?recipient=20003',
+    'event-editor-stale-404': '/campaigns/2/delivery?recipient=20003',
     'completed-direct': '/campaigns/2/results',
     bookmark: '/campaigns/2?source=mailbox#history',
     dashboard: '/',
@@ -71,6 +75,11 @@ let failure =
   scenario === 'missing' ? 404 : scenario === 'forbidden' ? 403 : scenario === 'retry' ? 503 : null;
 let hold = false;
 let release;
+let deliveryMode = 'initial';
+let holdDelivery = false;
+let releaseDelivery;
+let holdHistory = false;
+let releaseHistory;
 globalThis.fetch = async (request, options) => {
   const url = new URL(request.url);
   requests.push(url.pathname + url.search);
@@ -86,6 +95,40 @@ globalThis.fetch = async (request, options) => {
   if (hold && url.pathname === '/api/campaigns/2/results') {
     await new Promise((resolve) => {
       release = resolve;
+    });
+  }
+  if (holdHistory && url.pathname === '/api/campaigns/2/recipients/20003/history') {
+    holdHistory = false;
+    return new Promise((resolve) => {
+      releaseHistory = () =>
+        resolve(
+          new Response(JSON.stringify({ success: false, code: 'TEST_FAILURE' }), {
+            status: Number(scenario.slice(-3)),
+          }),
+        );
+    });
+  }
+  if (scenario === 'delivery-refresh' && url.pathname === '/api/campaigns/2/delivery') {
+    if (holdDelivery) {
+      await new Promise((resolve) => {
+        releaseDelivery = resolve;
+      });
+    }
+    const response = await api.execute(request, options);
+    const value = await response.json();
+    if (deliveryMode === 'reordered') {
+      value.items.reverse();
+      value.items.find((row) => row.id === 20003).email = 'updated@example.test';
+    } else if (deliveryMode === 'removed') {
+      value.items = value.items.filter((row) => row.id !== 20003);
+    } else if (deliveryMode === 'empty') {
+      value.items = [];
+      value.next_after = null;
+      value.next_cursor = null;
+    }
+    return new Response(JSON.stringify(value), {
+      status: response.status,
+      headers: response.headers,
     });
   }
   return api.execute(request, options);
@@ -114,7 +157,83 @@ const settled = () =>
   regions().every((e) => e.dataset.ready === 'true' && e.getAttribute('aria-busy') === 'false');
 const resultsPath = '/campaigns/2/results';
 
-if (scenario === 'event-editor') {
+if (scenario === 'delivery-missing') {
+  await until(() => document.querySelector('.query-failure [role="alert"]'));
+  assert.equal(document.querySelectorAll('.recipient-summary').length, 0);
+  assert.ok(requests.includes('/api/campaigns/2/delivery?after=999998&limit=1'));
+  assert.equal(win.location.search, '?recipient=999999');
+  process.exit(0);
+}
+
+if (scenario === 'delivery-refresh') {
+  await until(() => settled() && document.querySelectorAll('.recipient-summary').length > 1);
+  const first = document.querySelector('.recipient-toggle').id;
+  const pagination = () => document.querySelectorAll('.management-footer button');
+  pagination()[1].click();
+  await until(() => settled() && document.querySelector('.recipient-toggle').id !== first);
+  assert.ok(
+    requests.some(
+      (path) => path.startsWith('/api/campaigns/2/delivery?cursor=') && !path.includes('cursor=&'),
+    ),
+  );
+  pagination()[0].click();
+  await until(() => settled() && document.querySelector('.recipient-toggle').id === first);
+  const toggle = document.querySelector('#recipient-toggle-20003');
+  toggle.click();
+  await until(() => document.querySelector('#recipient-history-20003 .delivery-timeline li'));
+  const summary = toggle.closest('tr');
+  const history = document.querySelector('#recipient-history-20003');
+  const originalOrder = [...document.querySelectorAll('.recipient-toggle')].map(
+    (button) => button.id,
+  );
+  const refresh = () => document.querySelector('.refresh-indicator').closest('button').click();
+  deliveryMode = 'reordered';
+  holdDelivery = true;
+  refresh();
+  await until(() => releaseDelivery);
+  assert.equal(document.querySelector('#recipient-toggle-20003'), toggle);
+  assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+  assert.equal(document.querySelector('#recipient-history-20003'), history);
+  assert.ok(
+    history.querySelector('.delivery-timeline li'),
+    'confirmed history remains while refreshing',
+  );
+  holdDelivery = false;
+  releaseDelivery();
+  await until(() => settled() && summary.textContent.includes('updated@example.test'));
+  assert.deepEqual(
+    [...document.querySelectorAll('.recipient-toggle')].map((button) => button.id),
+    originalOrder.toReversed(),
+  );
+  assert.equal(
+    document.querySelector('#recipient-toggle-20003'),
+    toggle,
+    'reordering preserves recipient identity',
+  );
+  assert.equal(document.querySelector('#recipient-history-20003'), history);
+  assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+  deliveryMode = 'removed';
+  refresh();
+  await until(() => settled() && !document.querySelector('#recipient-toggle-20003'));
+  assert.equal(document.querySelector('#recipient-history-20003'), null);
+  assert.ok(
+    [...document.querySelectorAll('.recipient-toggle')].every(
+      (button) => button.getAttribute('aria-expanded') === 'false',
+    ),
+    'removal must not transfer expansion to another recipient',
+  );
+  deliveryMode = 'empty';
+  refresh();
+  await until(() => settled() && document.querySelectorAll('.recipient-summary').length === 0);
+  assert.equal(
+    document.querySelector('.query-placeholder'),
+    null,
+    'a confirmed empty page is loaded',
+  );
+  process.exit(0);
+}
+
+if (scenario.startsWith('event-editor')) {
   await until(
     () => settled() && document.querySelector('.recipient-history .delivery-timeline li'),
   );
@@ -175,6 +294,7 @@ if (scenario === 'event-editor') {
   await until(() => form.querySelector('.event-correction-presence'));
   change(form.querySelectorAll('select')[1], 'true');
   change(form.querySelectorAll('select')[2], 'false');
+  holdHistory = scenario.startsWith('event-editor-stale-');
   form.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
   await until(() => !document.querySelector('form.event-correction'));
   assert.equal(review.hidden, false);
@@ -205,6 +325,10 @@ if (scenario === 'event-editor') {
     'creating an operator event must not show Edited',
   );
   assert.deepEqual(changes[0].value.presence, { username_present: false, password_present: true });
+  if (scenario.startsWith('event-editor-stale-')) {
+    await until(() => releaseHistory);
+  }
+  const mountedHistory = document.querySelector('.recipient-history');
   operatorRow().querySelector('.table-actions button').click();
   await until(() => document.querySelector('form.event-correction'));
   form = document.querySelector('form.event-correction');
@@ -222,6 +346,16 @@ if (scenario === 'event-editor') {
   assert.equal(added.source, 'operator');
   assert.equal(added.revision, 1);
   assert.equal(operatorRow().cells[3].textContent.trim(), 'Bearbeitet');
+  if (releaseHistory) {
+    releaseHistory();
+    // Drain the Fetch/body/WASM callback microtasks and reactive effects.
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(document.querySelector('.recipient-history'), mountedHistory);
+    assert.ok(operatorRow(), 'an obsolete terminal read cannot erase the confirmed edit');
+    assert.equal(operatorRow().cells[3].textContent.trim(), 'Bearbeitet');
+    assert.ok(mountedHistory.querySelector('.delivery-timeline li'));
+    assert.ok(mountedHistory.querySelector('.recipient-attempts .delivery-attempt'));
+  }
   operatorRow().querySelectorAll('.table-actions button')[1].click();
   await until(() => document.querySelector('form.event-correction'));
   form = document.querySelector('form.event-correction');

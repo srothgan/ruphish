@@ -352,8 +352,6 @@ pub(super) fn page(api: Api, token: String, kind: Kind, editing: bool) -> impl I
     }
 }
 
-// TODO: Evaluate consolidating resource and integration field helpers through the
-// shared form components, keeping feature-specific validation and draft state local.
 fn field(
     draft: RwSignal<Value>,
     key: &'static str,
@@ -361,32 +359,30 @@ fn field(
     input_type: &'static str,
 ) -> impl IntoView {
     view! {
-        <Field label=label>
-            <TextInput
-                validation_field=key
-                input_type=input_type
-                value=Signal::derive(move || {
-                    let value = draft.get();
-                    value[key]
-                        .as_str()
-                        .map(str::to_owned)
-                        .unwrap_or_else(|| {
-                            value[key].as_u64().map(|n| n.to_string()).unwrap_or_default()
-                        })
-                })
-                on_input=move |event| {
-                    let value = event_target_value(&event);
-                    draft
-                        .update(|draft| {
-                            draft[key] = if input_type == "number" {
-                                value.parse::<u32>().map_or(Value::Null, |n| json!(n))
-                            } else {
-                                json!(value)
-                            };
-                        });
-                }
-            />
-        </Field>
+        <TextField
+            label=label
+            validation_field=key
+            input_type=input_type
+            value=Signal::derive(move || {
+                let value = draft.get();
+                value[key]
+                    .as_str()
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| {
+                        value[key].as_u64().map(|n| n.to_string()).unwrap_or_default()
+                    })
+            })
+            on_input=move |value: String| {
+                draft
+                    .update(|draft| {
+                        draft[key] = if input_type == "number" {
+                            value.parse::<u32>().map_or(Value::Null, |n| json!(n))
+                        } else {
+                            json!(value)
+                        };
+                    });
+            }
+        />
     }
 }
 

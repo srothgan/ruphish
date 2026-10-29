@@ -1,4 +1,5 @@
 //! Recipient expansion survives table refresh; history merges only confirmed responses.
+use crate::api_error::ApiError;
 use serde_json::Value;
 use std::collections::BTreeMap;
 
@@ -73,8 +74,8 @@ impl History {
         };
         Some((self.sequence, query))
     }
-    /// Replace revalidated events on refresh; append older pages and preserve attempt state.
-    pub fn finish(&mut self, request: u64, result: Result<Value, String>) {
+    /// Accept current responses before changing records, cursors or failure state.
+    pub fn finish(&mut self, request: u64, result: Result<Value, ApiError>) {
         let Some((active, older)) = self.active else {
             return;
         };
@@ -85,7 +86,16 @@ impl History {
         let value = match result {
             Ok(v) => v,
             Err(e) => {
-                self.error = Some(e);
+                if e.is_terminal() {
+                    self.events.clear();
+                    self.attempts.clear();
+                    self.next_event = None;
+                    self.next_attempt = None;
+                    self.initialized = false;
+                    self.older_loaded = false;
+                    self.retry_older = false;
+                }
+                self.error = Some(e.message);
                 return;
             }
         };
@@ -160,6 +170,65 @@ mod tests {
     use super::*;
     use serde_json::json;
     #[test]
+    fn obsolete_terminal_failures_cannot_erase_a_confirmed_edit_or_new_request() {
+        for status in [401, 403, 404] {
+            let mut history = History::default();
+            history.toggle();
+            let (initial, _) = history.begin(false).unwrap();
+            history.finish(
+                initial,
+                Ok(json!({
+                    "events":[{"id":5,"record":{"revision":0}}],
+                    "attempts":[{"generation":2,"state":"accepted"}],
+                    "next_event":5,"next_attempt":2
+                })),
+            );
+            let (stale, _) = history.begin(false).unwrap();
+            // Same mounted history: the event-edit acknowledgement invalidates reads.
+            history.invalidate_reads();
+            history
+                .events
+                .insert(5, json!({"id":5,"record":{"revision":1}}));
+            let (current, _) = history.begin(true).unwrap();
+            history.finish(
+                stale,
+                Err(ApiError::http(status, String::new(), "Obsolete".into())),
+            );
+            assert_eq!(history.events[&5]["record"]["revision"], 1);
+            assert_eq!(history.attempts[&2]["state"], "accepted");
+            assert_eq!(history.next_event, Some(5));
+            assert_eq!(history.next_attempt, Some(2));
+            assert!(history.loading());
+            assert!(history.error.is_none());
+            assert!(history.has_loaded());
+            history.finish(
+                current,
+                Err(ApiError::http(503, String::new(), "Retry".into())),
+            );
+            assert_eq!(history.error.as_deref(), Some("Retry"));
+            assert_eq!(history.events.len(), 1);
+            assert_eq!(history.attempts.len(), 1);
+            assert_eq!(history.next_event, Some(5));
+            assert_eq!(history.next_attempt, Some(2));
+            assert!(history.retry_older);
+            let (current, _) = history.begin(true).unwrap();
+            history.finish(
+                current,
+                Err(ApiError::http(status, String::new(), "Current".into())),
+            );
+            assert!(history.events.is_empty());
+            assert!(history.attempts.is_empty());
+            assert!(history.next_event.is_none());
+            assert!(history.next_attempt.is_none());
+            assert!(!history.has_loaded());
+            assert!(!history.loading());
+            assert!(!history.retry_older);
+            assert_eq!(history.error.as_deref(), Some("Current"));
+            assert!(history.open);
+        }
+    }
+
+    #[test]
     fn confirmed_writes_invalidate_old_reads_and_refresh_removes_deleted_rows() {
         let mut history = History::default();
         history.toggle();
@@ -199,7 +268,7 @@ mod tests {
         h.finish(first,Ok(json!({"attempts":[{"generation":2,"state":"submitting"}],"events":[{"id":102}],"next_event":102,"next_attempt":2})));
         let (old, query) = h.begin(true).unwrap();
         assert_eq!(query, "?before_attempt=2&before_event=102");
-        h.finish(old, Err("Connection failed".into()));
+        h.finish(old, Err(ApiError::local("Connection failed".into())));
         assert!(h.open);
         assert_eq!(h.events.len(), 1);
         assert!(h.retry_older);
@@ -215,10 +284,10 @@ mod tests {
         h.toggle();
         h.toggle();
         let (current, _) = h.begin(false).unwrap();
-        h.finish(stale, Err("Stale failure".into()));
+        h.finish(stale, Err(ApiError::local("Stale failure".into())));
         assert!(h.loading());
         assert!(h.error.is_none());
-        h.finish(current, Err("Current failure".into()));
+        h.finish(current, Err(ApiError::local("Current failure".into())));
         assert!(!h.loading());
         assert!(h.error.is_some());
         assert_eq!(h.events.len(), 3);

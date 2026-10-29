@@ -25,7 +25,7 @@ async fn read(context: Context) -> Result<Response, Rejection> {
     let settings = context.settings().get(user.identity).await.map_err(error)?;
     response(
         StatusCode::OK,
-        &serde_json::json!(settings),
+        &settings,
         Some(&settings.revision.to_string()),
     )
 }
@@ -64,7 +64,7 @@ async fn save(context: Context, body: Bytes) -> Result<Response, Rejection> {
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &serde_json::json!(settings),
+        &settings,
         Some(&settings.revision.to_string()),
     )
 }
@@ -78,7 +78,7 @@ async fn preview(context: Context) -> Result<Response, Rejection> {
         )
         .await
         .map_err(error)?;
-    response(StatusCode::OK, &serde_json::json!(preview), None)
+    response(StatusCode::OK, &preview, None)
 }
 async fn close(context: Context, body: Bytes) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
@@ -107,5 +107,5 @@ async fn close(context: Context, body: Bytes) -> Result<Response, Rejection> {
         )
         .await
         .map_err(error)?;
-    response(StatusCode::OK, &serde_json::json!(result), None)
+    response(StatusCode::OK, &result, None)
 }

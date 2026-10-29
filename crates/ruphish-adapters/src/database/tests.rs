@@ -24,6 +24,98 @@ impl Drop for Release {
 }
 
 #[test]
+fn administrative_content_uses_shared_rendering_admission_and_owned_inputs() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .max_blocking_threads(1)
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let dir = tempfile::tempdir().unwrap();
+        let db = open(
+            Config::Sqlite {
+                path: dir.path().join("content.db"),
+                migrations_prefix: String::new(),
+            },
+            Policy::default(),
+        )
+        .await
+        .unwrap();
+        let resources = ruphish_application::resources::Service::new(
+            db.resources(),
+            std::sync::Arc::new(crate::resources::Validate),
+            std::sync::Arc::new(crate::imports::Tools {
+                policy: Policy::default(),
+            }),
+            db.content_work(),
+        );
+        for cancelled in [false, true] {
+            let (release, blocked) = std::sync::mpsc::channel();
+            let mut release = Release(Some(release));
+            let (started, start) = tokio::sync::oneshot::channel();
+            let blocker = tokio::task::spawn_blocking(move || {
+                let _ = started.send(());
+                blocked.recv_timeout(Duration::from_secs(20)).unwrap();
+            });
+            start.await.unwrap();
+            let service = resources.clone();
+            let request = tokio::spawn(async move {
+                service
+                    .preview(
+                        "<p>Hello {{.FirstName}}</p>".into(),
+                        ruphish_application::resources::Recipient {
+                            first_name: "Ada".into(),
+                            last_name: String::new(),
+                            email: "ada@example.test".into(),
+                            position: String::new(),
+                        },
+                    )
+                    .await
+            });
+            tokio::time::timeout(Duration::from_secs(20), async {
+                while db.rendering.available_permits() == 8 && !request.is_finished() {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .unwrap();
+            assert!(
+                !request.is_finished(),
+                "the actual template must wait for a blocking worker"
+            );
+            assert_eq!(db.rendering.available_permits(), 7);
+            if cancelled {
+                request.abort();
+                assert!(request.await.unwrap_err().is_cancelled());
+                assert_eq!(db.rendering.available_permits(), 7);
+                release.0.take().unwrap().send(()).unwrap();
+            } else {
+                release.0.take().unwrap().send(()).unwrap();
+                assert!(request.await.unwrap().unwrap().contains("Hello Ada"));
+            }
+            blocker.await.unwrap();
+            let permits =
+                tokio::time::timeout(Duration::from_secs(20), db.rendering.acquire_many(8))
+                    .await
+                    .unwrap()
+                    .unwrap();
+            drop(permits);
+        }
+        assert!(resources.page_bundle("invalid ZIP".into()).await.is_err());
+        let (html, _) = resources
+            .page_preview(
+                "<p>Explanation</p><input value=secret>",
+                ruphish_application::resources::PagePreview::Learning,
+            )
+            .await
+            .unwrap();
+        assert!(html.contains("Explanation"));
+        assert!(!html.contains("secret"));
+        db.close().await;
+    });
+}
+
+#[test]
 fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
     for scenario in [
         "snapshot",

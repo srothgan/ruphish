@@ -1,4 +1,5 @@
 //! Observed-event analysis with a separate cumulative progression summary.
+use crate::reporting::{MAX_EXPORT_BYTES, MAX_EXPORT_ROWS, METRIC_LABELS};
 use ruphish_application::{auth::Identity, reporting::*, resources::Error};
 use sqlx::{MySqlPool, Row};
 
@@ -31,13 +32,6 @@ const CTE: &str = r#"WITH parameters AS (SELECT ? AS campaign, ? AS since, ? AS 
 ), selected AS (SELECT * FROM audience a WHERE ((SELECT event_kind FROM parameters)='[]' AND (SELECT source_filter FROM parameters)='') OR EXISTS(SELECT 1 FROM eligible e WHERE e.recipient_id=a.id AND ((SELECT event_kind FROM parameters)='[]' OR e.message IN (SELECT selected_events.value FROM parameters p JOIN JSON_TABLE(p.event_kind,'$[*]' COLUMNS(value VARCHAR(64) PATH '$')) selected_events ON TRUE))))
 , observed AS (SELECT e.* FROM eligible e WHERE (SELECT event_kind FROM parameters)='[]' OR EXISTS(SELECT 1 FROM selected s WHERE s.id=e.recipient_id))
 "#;
-const TYPES: [&str; 5] = [
-    "Email Sent",
-    "Email Opened",
-    "Clicked Link",
-    "Submitted Data",
-    "Email Reported",
-];
 #[async_trait::async_trait]
 impl Snapshots for Reports {
     async fn snapshot(
@@ -47,14 +41,7 @@ impl Snapshots for Reports {
         f: &Filter,
         export: bool,
     ) -> Result<Analysis, Error> {
-        if !ruphish_domain::reporting::valid_window(f.from, f.until, f.limit)
-            || f.offset > 1_000_000
-            || f.search.len() > 256
-            || f.recipients.len() > 200
-            || f.recipients.iter().any(|id| *id <= 0)
-        {
-            return Err(Error::Invalid("analysis_invalid_filter".into()));
-        }
+        f.validate()?;
         let mut tx = crate::mysql::locks::snapshot(&self.pool)
             .await
             .map_err(storage)?;
@@ -137,7 +124,7 @@ impl Snapshots for Reports {
         let mut totals = [0; 5];
         for r in metrics {
             let kind: String = r.try_get("message").map_err(storage)?;
-            if let Some(i) = TYPES.iter().position(|s| *s == kind) {
+            if let Some(i) = METRIC_LABELS.iter().position(|s| *s == kind) {
                 first_observed[i] = r.try_get("first_observed").map_err(storage)?;
                 last_observed[i] = r.try_get("last_observed").map_err(storage)?;
                 unique[i] = r.try_get("unique_count").map_err(storage)?;
@@ -167,21 +154,25 @@ impl Snapshots for Reports {
         .map_err(storage)?;
         let event_total: i64 = counts.try_get("events").map_err(storage)?;
         let recipient_total: i64 = counts.try_get("recipients").map_err(storage)?;
-        if export && (event_total > 100_000 || recipient_total > 100_000) {
+        if export
+            && (event_total > MAX_EXPORT_ROWS as i64 || recipient_total > MAX_EXPORT_ROWS as i64)
+        {
             return Err(Error::Invalid("export_too_large: narrow the time range or recipient filter (100000 rows per sheet maximum)".into()));
         }
-        let size = query!(r#"
-                SELECT COALESCE((SELECT CAST(sum(length(CONCAT(COALESCE(email,''),COALESCE(time,''),COALESCE(message,''),COALESCE(details,'')))) AS SIGNED)
-                FROM observed),0) + COALESCE((SELECT CAST(sum(length(CONCAT(COALESCE(email,''),COALESCE(first_name,''),COALESCE(last_name,''),COALESCE(position,''),COALESCE(send_date,''),COALESCE(modified_date,'')))) AS SIGNED)
-                FROM selected),0) AS bytes
-            "#)
-            .fetch_one(&mut *tx).await.map_err(storage)?.try_get::<i64,_>("bytes").map_err(storage)?;
-        if size > 32 * 1024 * 1024 && export {
-            return Err(Error::Invalid(
-                "export_too_large: narrow the filters (32 MiB input limit)".into(),
-            ));
+        if export {
+            let size = query!(r#"
+                    SELECT COALESCE((SELECT CAST(sum(length(CONCAT(COALESCE(email,''),COALESCE(time,''),COALESCE(message,''),COALESCE(details,'')))) AS SIGNED)
+                    FROM observed),0) + COALESCE((SELECT CAST(sum(length(CONCAT(COALESCE(email,''),COALESCE(first_name,''),COALESCE(last_name,''),COALESCE(position,''),COALESCE(send_date,''),COALESCE(modified_date,'')))) AS SIGNED)
+                    FROM selected),0) AS bytes
+                "#)
+                .fetch_one(&mut *tx).await.map_err(storage)?.try_get::<i64,_>("bytes").map_err(storage)?;
+            if size > MAX_EXPORT_BYTES {
+                return Err(Error::Invalid(
+                    "export_too_large: narrow the filters (32 MiB input limit)".into(),
+                ));
+            }
         }
-        let limit = if export { 100_000 } else { f.limit };
+        let limit = if export { MAX_EXPORT_ROWS } else { f.limit };
         let offset = if export { 0 } else { f.offset };
         let event_order = crate::reporting::event_order(f, "mysql");
         let rows = query!(format!(
@@ -300,7 +291,7 @@ impl Snapshots for Reports {
         let mut buckets = std::collections::BTreeMap::<i64, [i64; 5]>::new();
         for r in rows {
             let kind: String = r.try_get("message").map_err(storage)?;
-            if let Some(i) = TYPES.iter().position(|s| *s == kind) {
+            if let Some(i) = METRIC_LABELS.iter().position(|s| *s == kind) {
                 buckets
                     .entry(r.try_get("bucket").map_err(storage)?)
                     .or_default()[i] = r.try_get("total").map_err(storage)?;
@@ -336,7 +327,7 @@ impl Snapshots for Reports {
         let mut participant_increments = std::collections::BTreeMap::<i64, [i64; 5]>::new();
         for row in participant_rows {
             let kind: String = row.try_get("message").map_err(storage)?;
-            if let Some(i) = TYPES.iter().position(|s| *s == kind) {
+            if let Some(i) = METRIC_LABELS.iter().position(|s| *s == kind) {
                 participant_increments
                     .entry(row.try_get("bucket").map_err(storage)?)
                     .or_default()[i] = row.try_get("total").map_err(storage)?;

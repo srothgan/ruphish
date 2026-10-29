@@ -17,6 +17,13 @@ impl Resources {
 fn storage(error: sqlx::Error) -> Error {
     crate::sqlite::resource_error(error)
 }
+fn summary_query(kind: Kind) -> String {
+    let counts = crate::resource_summaries::counts(kind);
+    format!(
+        "WITH selected_resources AS (SELECT r.id,r.name,r.modified_date FROM {} r WHERE r.user_id=? AND (? IS NULL OR r.id=?)) SELECT r.id,r.name,r.modified_date,COALESCE(counts.total,0) AS total FROM selected_resources r LEFT JOIN ({counts}) counts ON counts.resource_id=r.id ORDER BY r.id",
+        table(kind)
+    )
+}
 fn table(kind: Kind) -> &'static str {
     match kind {
         Kind::Group => "groups",
@@ -240,37 +247,34 @@ impl Repository for Resources {
         tx.commit().await.map_err(storage)?;
         Ok(result)
     }
-    async fn summaries(&self, caller: Identity, kind: Kind) -> Result<Vec<Summary>, Error> {
+    async fn summaries(
+        &self,
+        caller: Identity,
+        kind: Kind,
+        id: Option<i64>,
+    ) -> Result<Vec<Summary>, Error> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         authorize(&mut tx, caller, false).await?;
-        let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
-            "SELECT id,name,modified_date FROM {} WHERE user_id=? ORDER BY id",
-            table(kind)
-        )))
-        .bind(caller.id)
-        .fetch_all(&mut *tx)
-        .await
-        .map_err(storage)?;
-        let mut result = Vec::with_capacity(rows.len());
-        for row in rows {
-            let id = row.try_get("id").map_err(storage)?;
-            let num_targets = if kind == Kind::Group {
-                sqlx::query_scalar("SELECT count(*) FROM group_targets WHERE group_id=?")
-                    .bind(id)
-                    .fetch_one(&mut *tx)
-                    .await
-                    .map_err(storage)?
-            } else {
-                0
-            };
-            result.push(Summary {
-                id,
-                name: text(&row, "name")?,
-                modified_date: timestamp(&row)?,
-                num_targets,
-                active_campaigns: usage(&mut tx, kind, id).await?,
-            });
-        }
+        let rows = sqlx::query(sqlx::AssertSqlSafe(summary_query(kind)))
+            .bind(caller.id)
+            .bind(id)
+            .bind(id)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(storage)?;
+        let result = rows
+            .iter()
+            .map(|row| {
+                let total = row.try_get("total").map_err(storage)?;
+                Ok(Summary {
+                    id: row.try_get("id").map_err(storage)?,
+                    name: text(row, "name")?,
+                    modified_date: timestamp(row)?,
+                    num_targets: if kind == Kind::Group { total } else { 0 },
+                    active_campaigns: if kind == Kind::Group { 0 } else { total },
+                })
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
         tx.commit().await.map_err(storage)?;
         Ok(result)
     }
@@ -498,3 +502,7 @@ impl Repository for Resources {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "resources_tests.rs"]
+mod tests;

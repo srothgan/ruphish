@@ -300,16 +300,17 @@ async fn prepare_inner(context: Context, body: Bytes, draft: bool) -> Result<Res
             last_name: r.last_name.clone(),
             position: r.position.clone(),
         };
-    let total: usize = p
-        .groups
-        .iter()
-        .map(|g| match &g.content {
-            ruphish_application::resources::Content::Group(rows) => rows.len(),
-            _ => 0,
-        })
-        .sum();
+    let total: usize = p.groups.iter().map(|g| g.recipient_count).sum();
     let selection = workflow::Selection {
-        groups: p.groups.iter().map(selected).collect(),
+        groups: p
+            .groups
+            .iter()
+            .map(|g| workflow::ReviewedResource {
+                id: g.id,
+                name: g.name.clone(),
+                revision: g.modified_date.clone(),
+            })
+            .collect(),
         template: selected(&p.template),
         page: selected(&p.page),
         smtp: selected(&p.profile),
@@ -332,6 +333,7 @@ async fn prepare_inner(context: Context, body: Bytes, draft: bool) -> Result<Res
             context
                 .resources()
                 .page_warnings(&page.html)
+                .await
                 .map_err(error)?,
         )
     } else {
@@ -340,6 +342,7 @@ async fn prepare_inner(context: Context, body: Bytes, draft: bool) -> Result<Res
     let preview = context
         .delivery()
         .review_campaign(p, input.url)
+        .await
         .map_err(error)?;
     response(
         StatusCode::OK,

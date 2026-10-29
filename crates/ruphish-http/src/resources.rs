@@ -110,8 +110,8 @@ async fn import_group(
         })?;
         let report = context
             .resources()
-            .tools()
-            .csv(&bytes, None)
+            .csv(bytes.to_vec(), None)
+            .await
             .map_err(error)?;
         if !report.errors.is_empty() {
             return Err(failure(
@@ -134,8 +134,8 @@ async fn review_group(context: Context, body: Bytes) -> Result<Response, Rejecti
     let request: CsvRequest = parse(&body)?;
     let report = context
         .resources()
-        .tools()
-        .csv(request.content.as_bytes(), request.columns)
+        .csv(request.content.into_bytes(), request.columns)
+        .await
         .map_err(error)?;
     response(
         StatusCode::OK,
@@ -171,8 +171,8 @@ async fn import_email(context: Context, body: Bytes) -> Result<Response, Rejecti
     let request: EmailRequest = parse(&body)?;
     let imported = context
         .resources()
-        .tools()
-        .email(request.content.as_bytes(), request.convert_links)
+        .email(request.content, request.convert_links)
+        .await
         .map_err(error)?;
     response(
         StatusCode::OK,
@@ -198,8 +198,8 @@ async fn import_page_bundle(context: Context, body: Bytes) -> Result<Response, R
     let request: PageBundleRequest = parse(&body)?;
     let html = context
         .resources()
-        .tools()
-        .page_bundle(&request.content)
+        .page_bundle(request.content)
+        .await
         .map_err(error)?;
     response(StatusCode::OK, &summaries_wire::HtmlImport { html }, None)
 }
@@ -208,7 +208,6 @@ async fn import_site(context: Context, body: Bytes) -> Result<Response, Rejectio
     let request: SiteRequest = parse(&body)?;
     let html = context
         .resources()
-        .tools()
         .site(&request.url)
         .await
         .map_err(error)?;
@@ -249,6 +248,7 @@ async fn preview_page(
     let (html, findings) = context
         .resources()
         .page_preview(&request.html, mode)
+        .await
         .map_err(error)?;
     response(
         StatusCode::OK,
@@ -265,6 +265,7 @@ async fn validate_page(context: Context, body: Bytes) -> Result<Response, Reject
     let findings = context
         .resources()
         .page_warnings(&request.html)
+        .await
         .map_err(error)?;
     response(
         StatusCode::OK,
@@ -280,20 +281,21 @@ async fn preview(context: Context, body: Bytes) -> Result<Response, Rejection> {
     let r = request.recipient;
     let html = context
         .resources()
-        .tools()
         .preview(
-            &request.html,
-            &app::Recipient {
+            request.html.clone(),
+            app::Recipient {
                 email: r.email,
                 first_name: r.first_name,
                 last_name: r.last_name,
                 position: r.position,
             },
         )
+        .await
         .map_err(error)?;
     let findings = context
         .resources()
         .page_warnings(&request.html)
+        .await
         .map_err(error)?;
     response(
         StatusCode::OK,
@@ -749,6 +751,7 @@ async fn read(context: Context, Path(id): Path<i64>) -> Result<Response, Rejecti
             context
                 .resources()
                 .page_warnings(&page.html)
+                .await
                 .map_err(error)?,
         ));
     }
@@ -756,6 +759,7 @@ async fn read(context: Context, Path(id): Path<i64>) -> Result<Response, Rejecti
         let (html, findings) = context
             .resources()
             .page_preview(&page.html, app::PagePreview::Learning)
+            .await
             .map_err(error)?;
         page.preview_html = Some(html);
         page.warnings = Some(warnings(findings));
@@ -802,6 +806,7 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
             context
                 .resources()
                 .page_preview(&page.html, app::PagePreview::Learning)
+                .await
                 .map_err(|e| error(e.at("html")))?
                 .1,
         )
@@ -810,6 +815,7 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
             context
                 .resources()
                 .page_warnings(&page.html)
+                .await
                 .map_err(|e| error(e.at("html")))?,
         )
     } else {
@@ -891,7 +897,7 @@ async fn summaries(context: Context) -> Result<Response, Rejection> {
     let kind = kind(&context)?;
     let values = context
         .resources()
-        .summaries(user.identity, kind)
+        .summaries(user.identity, kind, None)
         .await
         .map_err(error)?;
     if kind == Kind::Group {
@@ -926,12 +932,11 @@ async fn group_summary(context: Context, Path(id): Path<i64>) -> Result<Response
     let user = context.api(None).await?;
     let values = context
         .resources()
-        .summaries(user.identity, Kind::Group)
+        .summaries(user.identity, Kind::Group, Some(id))
         .await
         .map_err(error)?;
     let value = values
-        .iter()
-        .find(|v| v.id == id)
+        .first()
         .ok_or_else(|| error(app::Error::NotFound("Group")))?;
     response(StatusCode::OK, &group_summary_value(value)?, None)
 }

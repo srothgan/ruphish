@@ -3,10 +3,15 @@ use crate::campaign_queries::CampaignQueries;
 use crate::{client::Api, feedback::Message, resources::ResourceAccess, shared::components::*};
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use leptos_router::hooks::{use_navigate, use_params_map, use_query_map};
-use ruphish_domain::reporting::SortDirection;
+use ruphish_contracts::campaign_reads as reads;
+use ruphish_domain::{
+    campaign::{CampaignStatus, DeliveryState},
+    reporting::SortDirection,
+};
 use ruphish_ui::campaign_state::Draft;
 use ruphish_ui::{tr, trs};
 use serde_json::{Value, json};
+use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
 use crate::time_display::{instant, zone_name as local_zone};
@@ -1755,24 +1760,23 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
         }
     };
     let delivery = read.presentation(move || delivery_key.get());
-    let data = Signal::derive(move || {
-        let mut value = delivery
-            .data
-            .get()
-            .map(|snapshot| snapshot.value)
-            .unwrap_or_else(|| json!({}));
-        value["campaign"] = context
-            .data
-            .get()
-            .map(|value| json!(value))
-            .unwrap_or(Value::Null);
-        value
+    let data = delivery.data;
+    let positions = Memo::new(move |_| {
+        data.with(|page| {
+            page.as_ref()
+                .map(|page| {
+                    page.items
+                        .iter()
+                        .enumerate()
+                        .map(|(index, row)| (row.id, index))
+                        .collect::<std::collections::HashMap<_, _>>()
+                })
+                .unwrap_or_default()
+        })
     });
     let confirmed = Signal::derive(move || context.data.with(Option::is_some));
     let next = Signal::derive(move || {
-        data.get()["next_cursor"]
-            .as_str()
-            .map(str::to_owned)
+        data.with(|page| page.as_ref().and_then(|page| page.next_cursor.clone()))
             .filter(|next| *next != after.get())
     });
     crate::campaign_queries::RefreshState::register(context.fetching);
@@ -1880,14 +1884,16 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
             <PageHeader
                 title=Signal::derive(move || {
                     if confirmed.get() {
-                        text(&data.get()["campaign"], "name")
+                        context
+                            .data
+                            .with(|c| c.as_ref().map(|c| c.name.clone()).unwrap_or_default())
                     } else {
                         leptos_i18n::t_string!(i18n,ui.campaign).to_owned()
                     }
                 })
                 badge=Signal::derive(move || ruphish_ui::localization::event_label(
                     i18n,
-                    &text(&data.get()["campaign"], "status"),
+                    context.data.with(|c| c.as_ref().map(|c| c.status.as_str()).unwrap_or_default()),
                 ))
             >
                 <RefreshButton
@@ -1923,7 +1929,12 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
                             hidden=!can_edit
                             disabled=Signal::derive(move || {
                                 busy.get() || !confirmed.get()
-                                    || data.get()["campaign"]["status"] == "Completed"
+                                    || context
+                                        .data
+                                        .with(|c| {
+                                            c.as_ref()
+                                                .is_some_and(|c| c.status == CampaignStatus::Completed)
+                                        })
                             })
                             on_click=move |_| {
                                 action.set(Some(("complete".into(), Value::Null)));
@@ -1947,12 +1958,18 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
             <div class="campaign-heading-facts" hidden=move || !confirmed.get()>
                 <span>
                     {tr!(ui.scheduled_launch)}": "
-                    {move || instant(&data.get()["campaign"]["launch_date"])}
+                    {move || {
+                        context
+                            .data
+                            .with(|c| instant(
+                                &c.as_ref().and_then(|c| c.launch_date.clone()).into(),
+                            ))
+                    }}
                 </span>
                 <span>
                     <strong>{tr!(ui.recipients)}":"</strong>
                     " "
-                    {move || data.get()["campaign"]["total"].as_i64()}
+                    {move || context.data.with(|c| c.as_ref().map(|c| c.total))}
                 </span>
             </div>
             <nav class="campaign-sections" aria-label=move || trs!(ui.campaign).get()>
@@ -1997,7 +2014,11 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
                                     noun=trs!(ui.campaign_delivery)
                                     refresh=read.refresh
                                 >
-                                    <Show when=move || data.get()["mailer_enabled"] == false>
+                                    <Show when=move || {
+                                        data.with(|page| {
+                                            page.as_ref().is_some_and(|page| !page.mailer_enabled)
+                                        })
+                                    }>
                                         <p class="form-message error">
                                             {tr!(ui.delivery_processing_is_disabled_in_this_process)}
                                         </p>
@@ -2029,10 +2050,13 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
                                         >
                                             <For
                                                 each=move || {
-                                                    array(&data.get(), "items")
-                                                        .into_iter()
-                                                        .filter_map(|r| r["id"].as_i64())
-                                                        .collect::<Vec<_>>()
+                                                    data.with(|page| {
+                                                        page.as_ref()
+                                                            .map(|page| {
+                                                                page.items.iter().map(|row| row.id).collect::<Vec<_>>()
+                                                            })
+                                                            .unwrap_or_default()
+                                                    })
                                                 }
                                                 key=|id| *id
                                                 children=move |result| {
@@ -2040,7 +2064,17 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
                                                         api,
                                                         id,
                                                         result,
-                                                        data,
+                                                        Signal::derive(move || {
+                                                            let index = positions
+                                                                .with(|positions| positions.get(&result).copied());
+                                                            data.with(|page| {
+                                                                page.as_ref()
+                                                                    .and_then(|page| {
+                                                                        index.and_then(|index| page.items.get(index))
+                                                                    })
+                                                                    .cloned()
+                                                            })
+                                                        }),
                                                         crate::campaign_delivery::Controls {
                                                             busy,
                                                             can_edit,
@@ -2077,10 +2111,12 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
                     }
                     Section::Results => crate::campaign_results::page(api).into_any(),
                     Section::Setup => {
-                        view! { {move || campaign_setup(&data.get()["campaign"])} }.into_any()
+                        view! { {move || context.data.with(|c| c.as_ref().map(campaign_setup))} }
+                            .into_any()
                     }
                     Section::Connections => {
-                        view! { {move || campaign_context(&data.get()["campaign"])} }.into_any()
+                        view! { {move || context.data.with(|c| c.as_ref().map(campaign_context))} }
+                            .into_any()
                     }
                 }}
                 {move || {
@@ -2136,10 +2172,15 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
                                     )
                                 }
                             };
-                            let counts = data.get_untracked();
+                            let counts = data
+                                .with_untracked(|page| {
+                                    page.as_ref()
+                                        .map(|page| page.counts.clone())
+                                        .unwrap_or_default()
+                                });
                             let description = if matches!(kind.as_str(), "complete" | "delete") {
                                 leptos_i18n::t_string!(
-                                    i18n, messages.arg0_pending_arg1_preparing_arg2_submitting_arg3, arg0 = (description).to_string(), arg1 = (["ready","retry","blocked"].iter().map(|k|counts["counts"][*k].as_i64().unwrap_or(0)).sum::<i64>()).to_string(), arg2 = (counts["counts"]["preparing"].as_i64().unwrap_or(0)).to_string(), arg3 = (counts["counts"]["submitting"].as_i64().unwrap_or(0)).to_string()
+                                    i18n, messages.arg0_pending_arg1_preparing_arg2_submitting_arg3, arg0 = (description).to_string(), arg1 = ([DeliveryState::Ready,DeliveryState::Retry,DeliveryState::Blocked].iter().map(|k|counts.get(k).copied().unwrap_or(0)).sum::<i64>()).to_string(), arg2 = (counts.get(&DeliveryState::Preparing).copied().unwrap_or(0)).to_string(), arg3 = (counts.get(&DeliveryState::Submitting).copied().unwrap_or(0)).to_string()
                                 )
                             } else {
                                 description.to_owned()
@@ -2174,63 +2215,63 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
     }
 }
 
-fn delivery_progress(data: Signal<Value>) -> impl IntoView {
+fn delivery_progress(data: Signal<Option<Arc<reads::Delivery>>>) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
     let states = [
         (
-            "ready",
+            DeliveryState::Ready,
             "neutral",
             trs!(ui.queued_waiting_for_its_scheduled_time_or_an_available_worker),
         ),
         (
-            "preparing",
+            DeliveryState::Preparing,
             "active",
             trs!(
                 ui.a_worker_claimed_this_recipient_and_is_preparing_the_sending_attempt_after_a_cra
             ),
         ),
         (
-            "submitting",
+            DeliveryState::Submitting,
             "active",
             trs!(
                 ui.submission_has_been_authorized_but_smtp_acceptance_is_not_yet_recorded_after_a_c
             ),
         ),
         (
-            "retry",
+            DeliveryState::Retry,
             "warning",
             trs!(ui.a_retryable_failure_was_recorded_another_attempt_is_scheduled_with_a_delay),
         ),
         (
-            "accepted",
+            DeliveryState::Accepted,
             "success",
             trs!(
                 ui.smtp_acceptance_was_recorded_or_explicitly_confirmed_by_an_operator_using_mail_s
             ),
         ),
         (
-            "failed",
+            DeliveryState::Failed,
             "failure",
             trs!(
                 ui.content_preparation_failed_the_message_was_permanently_rejected_or_the_retry_lim
             ),
         ),
         (
-            "blocked",
+            DeliveryState::Blocked,
             "warning",
             trs!(
                 ui.an_account_resource_or_smtp_configuration_problem_prevents_automatic_progress_co
             ),
         ),
         (
-            "unknown",
+            DeliveryState::Unknown,
             "warning",
             trs!(
                 ui.the_message_may_have_been_accepted_but_its_outcome_could_not_be_confirmed_check
             ),
         ),
         (
-            "cancelled",
+            DeliveryState::Cancelled,
             "neutral",
             trs!(ui.pending_work_was_cancelled_messages_already_submitted_cannot_be_recalled),
         ),
@@ -2246,25 +2287,36 @@ fn delivery_progress(data: Signal<Value>) -> impl IntoView {
                         .map(move |(state, tone, explanation)| {
                             let label = Signal::derive(move || ruphish_ui::localization::delivery_label(
                                 i18n,
-                                state,
+                                state.as_str(),
                             ));
                             view! {
                                 <div
                                     class=format!("delivery-metric {tone}")
                                     class:has-count={move || {
-                                        data.get()["counts"][state].as_i64().unwrap_or(0) > 0
+                                        data
+                                            .with(|page| {
+                                                page.as_ref()
+                                                    .and_then(|page| page.counts.get(&state).copied())
+                                                    .unwrap_or(0)
+                                            }) > 0
                                     }}
                                 >
                                     <dt>
                                         <span>{move || label.get()}</span>
                                         <InfoPopover
-                                            id=format!("delivery-help-{state}")
+                                            id=format!("delivery-help-{}", state.as_str())
                                             label=label
                                             explanation=explanation
                                         />
                                     </dt>
                                     <dd>
-                                        {move || data.get()["counts"][state].as_i64().unwrap_or(0)}
+                                        {move || {
+                                            data.with(|page| {
+                                                page.as_ref()
+                                                    .and_then(|page| page.counts.get(&state).copied())
+                                                    .unwrap_or(0)
+                                            })
+                                        }}
                                     </dd>
                                 </div>
                             }
@@ -2276,12 +2328,12 @@ fn delivery_progress(data: Signal<Value>) -> impl IntoView {
     }
 }
 
-fn campaign_context(c: &Value) -> impl IntoView + use<> {
+fn campaign_context(c: &reads::Header) -> impl IntoView + use<> {
     let i18n = ruphish_ui::localization::use_i18n();
 
-    let resource = |key: &str, label: Signal<String>, route: &str| {
-        let id = c[key]["id"].as_i64().unwrap_or(0);
-        let name = c[key]["name"].as_str().map(str::to_owned);
+    let resource = |resource: &reads::Resource, label: Signal<String>, route: &str| {
+        let id = resource.id;
+        let name = resource.name.clone();
         view! {
             <div>
                 <dt>{move || label.get()}</dt>
@@ -2312,13 +2364,13 @@ fn campaign_context(c: &Value) -> impl IntoView + use<> {
         }
     };
     let resources = view! {
-        {resource("template", trs!(ui.email_template), "templates")}
-        {resource("page", trs!(ui.landing_page), "pages")}
-        {resource("smtp", trs!(ui.sending_profile), "smtp")}
+        {resource(&c.template, trs!(ui.email_template), "templates")}
+        {resource(&c.page, trs!(ui.landing_page), "pages")}
+        {resource(&c.smtp, trs!(ui.sending_profile), "smtp")}
     };
     let c = c.clone();
-    let template_sender = text(&c, "template_sender");
-    let destination = c["policy"].clone();
+    let template_sender = c.template_sender.clone().unwrap_or_default();
+    let destination = c.policy.clone();
     view! {
         <Card class="resource-read-panel campaign-context" label=trs!(ui.campaign_details)>
             <h2>{tr!(ui.campaign_details)}</h2>
@@ -2326,7 +2378,7 @@ fn campaign_context(c: &Value) -> impl IntoView + use<> {
                 {resources} <div>
                     <dt>{tr!(ui.redirect_destination)}</dt>
                     <dd>
-                        {match destination["learning_page_id"].as_i64() {
+                        {match destination.as_ref().and_then(|policy| policy.learning_page_id) {
                             Some(id) => {
                                 view! {
                                     <a href=format!(
@@ -2335,14 +2387,20 @@ fn campaign_context(c: &Value) -> impl IntoView + use<> {
                                 }
                                     .into_any()
                             }
-                            None => text(&destination, "redirect_url").into_any(),
+                            None => {
+                                destination
+                                    .map(|policy| policy.redirect_url)
+                                    .unwrap_or_default()
+                                    .into_any()
+                            }
                         }}
                     </dd>
                 </div> <div>
                     <dt>{tr!(ui.email_subject_template)}</dt>
                     <dd>
-                        {c["subject"]
-                            .as_str()
+                        {c
+                            .subject
+                            .as_deref()
                             .map(|s| {
                                 if s.is_empty() {
                                     leptos_i18n::t_string!(i18n, ui.no_subject)
@@ -2356,8 +2414,9 @@ fn campaign_context(c: &Value) -> impl IntoView + use<> {
                 </div> <div>
                     <dt>{tr!(ui.sending_profile_from_address)}</dt>
                     <dd>
-                        {c["profile_sender"]
-                            .as_str()
+                        {c
+                            .profile_sender
+                            .as_deref()
                             .unwrap_or(leptos_i18n::t_string!(i18n, ui.unavailable))
                             .to_owned()}
                     </dd>
@@ -2383,7 +2442,7 @@ fn campaign_context(c: &Value) -> impl IntoView + use<> {
     }
 }
 
-fn campaign_setup(c: &Value) -> impl IntoView + use<> {
+fn campaign_setup(c: &reads::Header) -> impl IntoView + use<> {
     let c = c.clone();
     let i18n = ruphish_ui::localization::use_i18n();
     view! {
@@ -2392,25 +2451,25 @@ fn campaign_setup(c: &Value) -> impl IntoView + use<> {
             <dl class="resource-facts">
                 <div>
                     <dt>{tr!(ui.recipients)}</dt>
-                    <dd>{c["total"].as_u64().unwrap_or(0)}</dd>
+                    <dd>{c.total}</dd>
                 </div>
                 <div>
                     <dt>{tr!(ui.scheduled_launch)}</dt>
-                    <dd class="data-value">{instant(&c["launch_date"])}</dd>
+                    <dd class="data-value">{instant(&c.launch_date.clone().into())}</dd>
                 </div>
                 <div>
                     <dt>{tr!(ui.initial_distribution_end)}</dt>
                     <dd>
-                        {if c["send_by_date"].is_null() {
+                        {if c.send_by_date.is_none() {
                             leptos_i18n::t_string!(i18n, ui.no_distribution_window).into()
                         } else {
-                            instant(&c["send_by_date"])
+                            instant(&c.send_by_date.clone().into())
                         }}
                     </dd>
                 </div>
                 <div>
                     <dt>{tr!(ui.public_campaign_url)}</dt>
-                    <dd>{text(&c, "url")}</dd>
+                    <dd>{c.url.clone()}</dd>
                 </div>
             </dl>
         </Card>

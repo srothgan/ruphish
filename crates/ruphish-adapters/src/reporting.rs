@@ -1,6 +1,17 @@
 //! Shared export orchestration over authorized provider snapshots.
 use ruphish_application::{auth::Identity, reporting::*, resources::Error};
 use std::sync::Arc;
+// Array positions are shared by raw totals, distinct observations and export projections.
+pub(crate) const METRIC_LABELS: [&str; 5] = [
+    Kind::EmailSent.label(),
+    Kind::EmailOpened.label(),
+    Kind::LinkClicked.label(),
+    Kind::FormSubmitted.label(),
+    Kind::EmailReported.label(),
+];
+pub(crate) const MAX_EXPORT_ROWS: usize = 100_000;
+pub(crate) const MAX_EXPORT_BYTES: i64 = 32 * 1024 * 1024;
+
 pub(crate) struct Reporting {
     store: Arc<dyn Snapshots>,
     exports: Arc<tokio::sync::Semaphore>,

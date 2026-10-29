@@ -25,6 +25,8 @@ Do not hand-edit generated JS/CSS or move staging into the served directory. The
 
 Keep confirmed resource data separate from incomplete form state. Preserve recoverable edits after a failed save, reconcile revision conflicts explicitly, and guard navigation that would discard work. Do not store API keys, service credentials, or imported resource bodies in URLs to retain a draft.
 
+After a confirmed resource save, reconcile its metadata into the existing inventory query cache before refreshing. The query owner cancels obsolete reads so a pre-save response cannot restore old metadata. A retryable refresh failure retains the confirmed row with the existing stale-data warning. Group counts come from confirmed recipients; saves do not return active-campaign counts, so edits retain the last known count and creations show an unknown count until a summary read succeeds. Failed or uncertain writes never promote submitted draft fields to confirmed inventory data. An inventory that has never loaded is still unavailable until its full read succeeds.
+
 Use shared localization and date/time helpers; avoid literal English strings or feature-specific timestamp parsers. The [localization guide](localization.md) explains translation keys, error-code mapping, and independent account preferences.
 
 ## Campaign reads and transitions

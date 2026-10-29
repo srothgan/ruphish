@@ -12,6 +12,7 @@ pub mod preference_state;
 pub mod preview_state;
 pub mod read_state;
 pub mod recipient_history;
+pub mod resource_inventory;
 pub mod resource_state;
 pub mod results_state;
 pub mod select_options;

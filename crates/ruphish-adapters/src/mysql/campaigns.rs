@@ -15,11 +15,15 @@ use sqlx::{MySqlConnection, MySqlPool, Row, mysql::MySqlRow};
 #[derive(Clone)]
 pub struct Campaigns {
     pub(super) pool: MySqlPool,
+    content_work: ruphish_application::content_work::ContentWork,
 }
 impl Campaigns {
     /// Use the existing startup/migration lifetime.
-    pub fn new(pool: MySqlPool) -> Self {
-        Self { pool }
+    pub fn new(
+        pool: MySqlPool,
+        content_work: ruphish_application::content_work::ContentWork,
+    ) -> Self {
+        Self { pool, content_work }
     }
 }
 fn storage(error: sqlx::Error) -> Error {
@@ -56,6 +60,7 @@ async fn selection(
     Ok(resource)
 }
 async fn prepare_authorized(
+    work: &ruphish_application::content_work::ContentWork,
     c: &mut MySqlConnection,
     caller: Identity,
     input: &Create,
@@ -64,14 +69,15 @@ async fn prepare_authorized(
     crate::database::text::bounded(&input.name, 255)?;
     let launch = ruphish_application::campaign::preparation::validate(input, now)?;
     let mut groups = Vec::new();
+    let mut audience = ruphish_application::campaign::preparation::AudienceBuilder::default();
     for s in &input.groups {
-        groups.push(selection(c, caller.id, Kind::Group, s).await?);
+        groups.push(audience.add_group(selection(c, caller.id, Kind::Group, s).await?)?);
     }
     let ruphish_application::campaign::preparation::Audience {
         recipients,
         conflicts,
         conflict_count,
-    } = ruphish_application::campaign::preparation::audience(&groups)?;
+    } = audience.finish()?;
     let template = selection(c, caller.id, Kind::Template, &input.template).await?;
     let page = selection(c, caller.id, Kind::Page, &input.page).await?;
     let profile = selection(c, caller.id, Kind::Profile, &input.profile).await?;
@@ -81,20 +87,13 @@ async fn prepare_authorized(
     }
     // Validate syntax using the same renderer; recipient-dependent failures are still
     // checked before every individual submission.
-    let sample = crate::resources::sample();
-    let url = crate::campaign_preparation::url(&input.url)?;
+    let source = input.url.clone();
+    let url = work
+        .run(move || crate::campaign_preparation::url(&source))
+        .await?;
     let domain_id = super::domains::eligible(c, caller.id, &url, now).await?;
-    let redirect = crate::resources::render(&policy.redirect_url, &sample)?;
-    crate::landing::redirect(&redirect, &url)?;
-    if let Content::Page(page) = &page.content {
-        crate::landing::render(
-            &page.html,
-            crate::landing::Mode::Landing {
-                context: &sample,
-                endpoint: None,
-            },
-        )?;
-    }
+    let (page, policy) =
+        crate::campaign_preparation::validate_content(work, page, policy, url).await?;
     Ok(Prepared {
         domain_id,
         conflicts,
@@ -379,7 +378,7 @@ impl Repository for Campaigns {
             .await
             .map_err(storage)?;
         super::resources::authorize(&mut tx, caller, true).await?;
-        let value = prepare_authorized(&mut tx, caller, input, now).await?;
+        let value = prepare_authorized(&self.content_work, &mut tx, caller, input, now).await?;
         tx.commit()
             .await
             .map_err(|e| Error::Storage(crate::mysql::commit_error(e)))?;
@@ -551,12 +550,12 @@ impl Repository for Campaigns {
                 "mysql",
             )
             .replace("campaign_id", "campaign_id_key");
-            let sql = crate::campaign_sort::placeholders(
+            let sql = crate::sql::placeholders(
                 format!(
                     "{} {tail}",
                     r#"WITH data AS (SELECT d.*,r.r_id,r.email,1 AS kind,'' AS draft_id,d.result_id AS campaign_id_key,(SELECT count(*) FROM ruphish_delivery_attempt a WHERE a.result_id=d.result_id) AS attempt_count FROM ruphish_delivery d JOIN results r ON r.id=d.result_id WHERE d.campaign_id=?)"#
                 ),
-                "mysql",
+                false,
             );
             sqlx::query(sqlx::AssertSqlSafe(sql))
                 .bind(id)
@@ -810,7 +809,7 @@ impl Campaigns {
                 return load(&mut tx,caller.id,row.try_get("campaign_id").map_err(storage)?).await;
             }
         }
-        let p = prepare_authorized(&mut tx, caller, &input, now).await?;
+        let p = prepare_authorized(&self.content_work, &mut tx, caller, &input, now).await?;
         let created = stamp(now)?;
         let launch = stamp(p.launch)?;
         let end = input.send_by.map(stamp).transpose()?.unwrap_or(ZERO.into());
