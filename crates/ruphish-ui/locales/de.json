@@ -53,7 +53,7 @@
     "settings_mailboxes_help": "Deaktivieren, um keine Meldepostfächer mehr abzufragen. Gespeicherte Konten und bisherige Meldungen bleiben erhalten.",
     "settings_webhooks_help": "Deaktivieren, um keine Webhook-Benachrichtigungen mehr zu senden. Verpasste Benachrichtigungen werden nach dem Aktivieren nicht nachgesendet.",
     "settings_saved": "Unternehmenseinstellungen gespeichert.",
-    "settings_changed_review": "Die gespeicherten Einstellungen wurden ge?ndert. Ihre Eingaben bleiben erhalten. Verwerfen Sie Ihre ?nderungen, um die aktuellen Einstellungen zu laden und vor dem Speichern zu pr?fen.",
+    "settings_changed_review": "Die gespeicherten Einstellungen wurden geändert. Ihre Eingaben bleiben erhalten. Verwerfen Sie Ihre Änderungen, um die aktuellen Einstellungen zu laden und vor dem Speichern zu prüfen.",
     "settings_discard": "Änderungen verwerfen",
     "settings_danger_zone": "Gefahrenbereich",
     "close_all_campaigns": "Alle aktiven Kampagnen schließen",
