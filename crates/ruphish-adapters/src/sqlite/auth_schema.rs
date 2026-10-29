@@ -2,7 +2,7 @@
 use super::UpgradeError;
 use sqlx::SqliteConnection;
 
-const HISTORY: [(i64, &str); 13] = [
+const HISTORY: [(i64, &str); 18] = [
     (1, "authentication-v1"),
     (2, "campaign-execution-v1"),
     (3, "participant-privacy-v1"),
@@ -16,6 +16,11 @@ const HISTORY: [(i64, &str); 13] = [
     (11, "observations-v1"),
     (12, "company-settings-v1"),
     (13, "learning-pages-v1"),
+    (14, "worker-recovery-indexes-v1"),
+    (15, "campaign-fairness-index-v1"),
+    (16, "resource-reference-indexes-v1"),
+    (17, "mailbox-history-index-v1"),
+    (18, "inventory-domain-indexes-v1"),
 ];
 
 pub(super) const LATEST_VERSION: i64 = HISTORY[HISTORY.len() - 1].0;
@@ -112,6 +117,41 @@ pub(super) async fn migrate(connection: &mut SqliteConnection) -> Result<(), Upg
     if version(connection).await? == 12 {
         sqlx::raw_sql(include_str!(
             "../../migrations/sqlite/13_learning_pages.sql"
+        ))
+        .execute(&mut *connection)
+        .await?;
+    }
+    if version(connection).await? == 13 {
+        sqlx::raw_sql(include_str!(
+            "../../migrations/sqlite/14_worker_recovery.sql"
+        ))
+        .execute(&mut *connection)
+        .await?;
+    }
+    if version(connection).await? == 14 {
+        sqlx::raw_sql(include_str!(
+            "../../migrations/sqlite/15_campaign_fairness.sql"
+        ))
+        .execute(&mut *connection)
+        .await?;
+    }
+    if version(connection).await? == 15 {
+        sqlx::raw_sql(include_str!(
+            "../../migrations/sqlite/16_resource_references.sql"
+        ))
+        .execute(&mut *connection)
+        .await?;
+    }
+    if version(connection).await? == 16 {
+        sqlx::raw_sql(include_str!(
+            "../../migrations/sqlite/17_mailbox_history.sql"
+        ))
+        .execute(&mut *connection)
+        .await?;
+    }
+    if version(connection).await? == 17 {
+        sqlx::raw_sql(include_str!(
+            "../../migrations/sqlite/18_inventory_domains.sql"
         ))
         .execute(&mut *connection)
         .await?;

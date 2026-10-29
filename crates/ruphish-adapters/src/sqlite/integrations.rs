@@ -321,13 +321,11 @@ impl Repository for Integrations {
                 .map_err(db)?
                 .ok_or(Error::NotFound("Reporting mailbox"))?,
         )?;
-        for r in sqlx::query(
-            "SELECT * FROM ruphish_mailbox_runs WHERE mailbox_id=? ORDER BY id DESC LIMIT 30",
-        )
-        .bind(id)
-        .fetch_all(&mut *tx)
-        .await
-        .map_err(db)?
+        for r in sqlx::query(super::worker_sql::MAILBOX_HISTORY)
+            .bind(id)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(db)?
         {
             value.history.push(Run {
                 event_id: None,

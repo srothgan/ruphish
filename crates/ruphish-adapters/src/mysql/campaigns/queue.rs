@@ -294,9 +294,21 @@ async fn recover(pool: &MySqlPool, now: i64) -> Result<(), Error> {
         {
             continue;
         }
-        sqlx::query("UPDATE ruphish_delivery_attempt SET state='abandoned',finished=? WHERE state='preparing' AND EXISTS(SELECT 1 FROM ruphish_delivery d WHERE d.result_id=ruphish_delivery_attempt.result_id AND d.generation=ruphish_delivery_attempt.generation AND d.state='preparing' AND d.lease_until<=? AND d.campaign_id=?)").bind(now).bind(now).bind(campaign).execute(&mut *tx).await.map_err(storage)?;
+        sqlx::query(crate::mysql::worker_sql::DELIVERY_PREPARING)
+            .bind(now)
+            .bind(now)
+            .bind(campaign)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
         sqlx::query("UPDATE ruphish_delivery SET state='ready',lease_until=0 WHERE state='preparing' AND lease_until<=? AND campaign_id=?").bind(now).bind(campaign).execute(&mut *tx).await.map_err(storage)?;
-        sqlx::query("UPDATE ruphish_delivery_attempt SET state='unknown',finished=? WHERE state='submitting' AND EXISTS(SELECT 1 FROM ruphish_delivery d WHERE d.result_id=ruphish_delivery_attempt.result_id AND d.generation=ruphish_delivery_attempt.generation AND d.state='submitting' AND d.lease_until<=? AND d.campaign_id=?)").bind(now).bind(now).bind(campaign).execute(&mut *tx).await.map_err(storage)?;
+        sqlx::query(crate::mysql::worker_sql::DELIVERY_SUBMITTING)
+            .bind(now)
+            .bind(now)
+            .bind(campaign)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
         let recipients:Vec<(i64,String)>=sqlx::query_as("SELECT r.id,r.email FROM ruphish_delivery d JOIN results r ON r.id=d.result_id WHERE d.state='submitting' AND d.lease_until<=? AND d.campaign_id=?").bind(now).bind(campaign).fetch_all(&mut *tx).await.map_err(storage)?;
         for (result_id, email) in recipients {
             let inserted=sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id) VALUES(?,?,?,'email_error','{\"code\":\"delivery_outcome_unknown\"}',?)").bind(campaign).bind(email).bind(stamp(now)?).bind(result_id).execute(&mut *tx).await.map_err(storage)?;
@@ -322,5 +334,13 @@ async fn candidate(
     now: i64,
     id: Option<i64>,
 ) -> Result<Option<MySqlRow>, Error> {
-    sqlx::query("WITH fairness AS (SELECT campaign_id,max(last_claim) AS last_claim FROM ruphish_delivery GROUP BY campaign_id) SELECT d.*,c.user_id,c.template_id,c.page_id,c.smtp_id,c.url,r.r_id,r.email,r.first_name,r.last_name,r.position FROM ruphish_delivery d JOIN fairness f ON f.campaign_id=d.campaign_id JOIN campaigns c ON c.id=d.campaign_id JOIN results r ON r.id=d.result_id WHERE (? IS NULL OR d.result_id=?) AND d.state IN ('ready','retry') AND d.due<=? AND c.status!='Completed' AND EXISTS(SELECT 1 FROM ruphish_campaign_domains cd JOIN ruphish_domains domain ON domain.id=cd.domain_id AND domain.owner_id=c.user_id WHERE cd.campaign_id=c.id AND domain.enabled=1 AND (SELECT eligible_until FROM ruphish_domain_policy WHERE id=domain.id)>?) AND NOT EXISTS(SELECT 1 FROM ruphish_delivery busy JOIN campaigns bc ON bc.id=busy.campaign_id WHERE busy.state IN ('preparing','submitting') AND bc.smtp_id=c.smtp_id) AND NOT EXISTS(SELECT 1 FROM ruphish_profile_cooldown cool JOIN smtp p ON p.id=cool.profile_id WHERE cool.profile_id=c.smtp_id AND cool.revision=p.modified_date AND (cool.blocked=1 OR cool.until_time>?)) ORDER BY f.last_claim,d.due,d.result_id LIMIT 1").bind(id).bind(id).bind(now).bind(now).bind(now).fetch_optional(c).await.map_err(storage)
+    sqlx::query(crate::mysql::worker_sql::CANDIDATE)
+        .bind(id)
+        .bind(id)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .fetch_optional(c)
+        .await
+        .map_err(storage)
 }

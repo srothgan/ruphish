@@ -69,22 +69,22 @@ impl Repository for Overview {
             .fetch_one(&mut *tx)
             .await
             .map_err(storage)?,
-            templates: sqlx::query_scalar("SELECT count(*) FROM templates WHERE user_id=?")
+            templates: sqlx::query_scalar(super::inventory_sql::TEMPLATES)
                 .bind(owner)
                 .fetch_one(&mut *tx)
                 .await
                 .map_err(storage)?,
-            pages: sqlx::query_scalar("SELECT count(*) FROM pages WHERE user_id=?")
+            pages: sqlx::query_scalar(super::inventory_sql::PAGES)
                 .bind(owner)
                 .fetch_one(&mut *tx)
                 .await
                 .map_err(storage)?,
-            groups: sqlx::query_scalar("SELECT count(*) FROM groups WHERE user_id=?")
+            groups: sqlx::query_scalar(super::inventory_sql::GROUPS)
                 .bind(owner)
                 .fetch_one(&mut *tx)
                 .await
                 .map_err(storage)?,
-            profiles: sqlx::query_scalar("SELECT count(*) FROM smtp WHERE user_id=?")
+            profiles: sqlx::query_scalar(super::inventory_sql::PROFILES)
                 .bind(owner)
                 .fetch_one(&mut *tx)
                 .await

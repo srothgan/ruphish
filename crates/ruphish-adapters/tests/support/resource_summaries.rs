@@ -13,6 +13,8 @@ INSERT INTO smtp(id,user_id,name,modified_date) VALUES(10,1,'Used','2026-01-01T0
 INSERT INTO ruphish_learning_pages(id,user_id,name,modified_date) VALUES(10,1,'Used','2026-01-01T00:00:00Z'),(11,1,'Unused','2026-01-01T00:00:00Z'),(20,2,'Other','2026-01-01T00:00:00Z');
 INSERT INTO campaigns(id,user_id,name,status,template_id,page_id,smtp_id) VALUES(1,1,'Running','In progress',10,10,10),(2,1,'Done','Completed',10,10,10),(3,1,'Legacy null',NULL,10,10,10),(4,1,'Legacy empty','',10,10,10),(5,2,'Other','In progress',20,20,20);
 INSERT INTO ruphish_campaign_policy(campaign_id,redirect_url,learning_page_id) VALUES(1,'',10),(2,'',10),(3,'',10),(4,'',10),(5,'',20);
+-- A dangling legacy policy has no campaign and must not count as an active NULL status.
+INSERT INTO ruphish_campaign_policy(campaign_id,redirect_url,learning_page_id) VALUES(7,'',10);
 -- Legacy cross-owner references still count against the referenced resource.
 INSERT INTO campaigns(id,user_id,name,status,template_id,page_id,smtp_id) VALUES(6,2,'Legacy reference','In progress',10,10,10);
 INSERT INTO ruphish_campaign_policy(campaign_id,redirect_url,learning_page_id) VALUES(6,'',10);
