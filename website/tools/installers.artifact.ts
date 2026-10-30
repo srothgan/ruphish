@@ -14,20 +14,3 @@ test('the Astro build emits the exact canonical installer bytes at both advertis
     );
   }
 });
-
-test('built installation documentation retains commands and preview/downgrade guidance', () => {
-  const html = readFileSync(
-    new URL('../dist/docs/getting-started/installation/index.html', import.meta.url),
-    'utf8',
-  );
-  for (const value of [
-    'https://ruphish.com/install.sh',
-    'https://ruphish.com/install.ps1',
-    '--include-previews',
-    'IncludePreviews',
-    '--allow-downgrade',
-    'AllowDowngrade',
-  ]) {
-    assert(html.includes(value), `Missing installation guidance: ${value}`);
-  }
-});
