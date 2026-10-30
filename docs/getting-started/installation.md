@@ -5,6 +5,8 @@ sidebar:
   order: 4
 ---
 
+<!-- Release documentation decision: Present Docker as the primary recommended deployment option. Publish native binaries as a secondary option for operators who manage their own hosting, service setup, and TLS certificates. Binary release scope covers building, packaging, and verification; it does not include service integration or installers. Update the installation guidance when distribution artifacts are published. -->
+
 The intended installation options are a release binary and a Docker image. Both will provide the server and administration interface.
 
 ## Release binary

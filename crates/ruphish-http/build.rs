@@ -24,7 +24,13 @@ struct Logo {
     context: String,
 }
 
+#[path = "asset_distribution.rs"]
+#[cfg(feature = "embedded-assets")]
+mod asset_distribution;
+
 fn main() -> Result<(), Box<dyn Error>> {
+    #[cfg(feature = "embedded-assets")]
+    embed_admin()?;
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed=starter-templates/catalog.json");
     let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?).join("starter-templates");
@@ -76,6 +82,62 @@ fn main() -> Result<(), Box<dyn Error>> {
     std::fs::write(
         PathBuf::from(std::env::var("OUT_DIR")?).join("starter_catalog.rs"),
         output,
+    )?;
+    Ok(())
+}
+
+#[cfg(feature = "embedded-assets")]
+fn embed_admin() -> Result<(), Box<dyn Error>> {
+    println!("cargo::rerun-if-changed=asset_distribution.rs");
+    use std::io::Write as _;
+    let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?).join("../../dist/admin");
+    println!("cargo::rerun-if-changed={}", root.display());
+    let assets = asset_distribution::load(&root).map_err(|error| {
+        format!("Cannot embed admin assets; run trunk build --release --locked first: {error}")
+    })?;
+    let output_dir = PathBuf::from(std::env::var("OUT_DIR")?).join("admin");
+    std::fs::create_dir_all(&output_dir)?;
+    let mut source = String::from("vec![\n");
+    for (index, (name, bytes)) in assets.into_iter().enumerate() {
+        // Copy the validated snapshot into OUT_DIR: include_bytes must consume
+        // those same bytes even if another Trunk build later replaces dist/admin.
+        let identity = output_dir.join(format!("{index}.identity"));
+        std::fs::write(&identity, &bytes)?;
+        let mut gzip = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::best());
+        gzip.write_all(&bytes)?;
+        let gzip = gzip.finish()?;
+        let mut brotli = Vec::new();
+        let parameters = brotli::enc::BrotliEncoderParams {
+            quality: 9,
+            ..Default::default()
+        };
+        brotli::BrotliCompress(&mut bytes.as_slice(), &mut brotli, &parameters)?;
+        let gzip_path = output_dir.join(format!("{index}.gz"));
+        let brotli_path = output_dir.join(format!("{index}.br"));
+        std::fs::write(&gzip_path, &gzip)?;
+        std::fs::write(&brotli_path, &brotli)?;
+        let representation = |path: &std::path::Path, bytes: &[u8]| {
+            use sha2::{Digest, Sha256};
+            format!(
+                "crate::static_asset::Representation {{ bytes: axum::body::Bytes::from_static(include_bytes!({path:?})), etag: {:?}.into() }}",
+                format!("\"{}\"", hex::encode(Sha256::digest(bytes)))
+            )
+        };
+        writeln!(
+            source,
+            "({name:?}.into(), Asset {{ identity: {}, gzip: Some({}), brotli: Some({}) }}),",
+            representation(&identity, &bytes),
+            representation(&gzip_path, &gzip),
+            representation(&brotli_path, &brotli)
+        )?;
+    }
+    source.push(']');
+    std::fs::write(
+        output_dir
+            .parent()
+            .ok_or("Missing build output parent")?
+            .join("admin_assets.rs"),
+        source,
     )?;
     Ok(())
 }

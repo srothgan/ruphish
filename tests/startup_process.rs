@@ -58,6 +58,9 @@ use domain_network::tls_fixture;
 #[path = "support/webhook_receiver.rs"]
 mod webhook_receiver;
 
+#[path = "standalone_binary.rs"]
+mod standalone_binary;
+
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 
 struct Process {
@@ -97,6 +100,24 @@ impl Process {
         token: Option<&str>,
         options: &[&str],
     ) -> Self {
+        Self::with_executable(
+            directory,
+            mode,
+            password,
+            token,
+            options,
+            Path::new(env!("CARGO_BIN_EXE_ruphish")),
+        )
+    }
+
+    fn with_executable(
+        directory: &Path,
+        mode: &str,
+        password: Option<&str>,
+        token: Option<&str>,
+        options: &[&str],
+        executable: &Path,
+    ) -> Self {
         let started = Instant::now();
         let pair = native_pty_system()
             .openpty(PtySize {
@@ -106,7 +127,7 @@ impl Process {
                 pixel_height: 0,
             })
             .unwrap();
-        let mut command = CommandBuilder::new(env!("CARGO_BIN_EXE_ruphish"));
+        let mut command = CommandBuilder::new(executable);
         command.cwd(directory);
         command.args(["--mode", mode]);
         if !options.contains(&"--config") {
@@ -667,8 +688,14 @@ fn update_manifest(directory: &Path, name: &str, bytes: &[u8]) {
 #[test]
 fn graceful_shutdown_finishes_an_in_progress_asset_response_and_bounds_idle_connections() {
     let directory = workspace();
-    let content = vec![b'x'; 32 * 1024 * 1024];
-    update_manifest(directory.path(), "large.js", &content);
+    #[cfg(not(feature = "embedded-assets"))]
+    let (route, content) = {
+        let content = vec![b'x'; 32 * 1024 * 1024];
+        update_manifest(directory.path(), "large.js", &content);
+        ("large.js".to_owned(), content)
+    };
+    #[cfg(feature = "embedded-assets")]
+    let (route, content) = standalone_binary::wasm();
     let mut process = Process::start(directory.path(), "all");
     let ready = process.ready();
     let admin = ready["admin"].as_str().unwrap();
@@ -676,7 +703,7 @@ fn graceful_shutdown_finishes_an_in_progress_asset_response_and_bounds_idle_conn
     idle.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nX-Incomplete:")
         .unwrap();
     let response = client()
-        .get(format!("http://{admin}/large.js"))
+        .get(format!("http://{admin}/{route}"))
         .timeout(Duration::from_secs(14))
         .send()
         .unwrap();
@@ -805,10 +832,21 @@ fn raw_traversal_requests_cannot_escape_assets_and_modified_distributions_fail_p
     )
     .unwrap();
     let mut stale = Process::start(directory.path(), "admin");
-    stale.fail();
-    let output = stale.output();
-    assert!(output.contains("Load administration assets"), "{output}");
-    assert!(output.contains("rebuild with Trunk"), "{output}");
+    if cfg!(feature = "embedded-assets") {
+        let address = stale.ready()["admin"].as_str().unwrap().to_owned();
+        let response = client()
+            .get(format!("http://{address}/visual-frame.js"))
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        assert_ne!(response.bytes().unwrap().as_ref(), b"stale-generation");
+        stale.stop();
+    } else {
+        stale.fail();
+        let output = stale.output();
+        assert!(output.contains("Load administration assets"), "{output}");
+        assert!(output.contains("rebuild with Trunk"), "{output}");
+    }
 }
 
 #[cfg(unix)]
@@ -823,8 +861,21 @@ fn asset_symlinks_outside_the_distribution_are_rejected_before_startup() {
     )
     .unwrap();
     let mut process = Process::start(directory.path(), "admin");
-    process.fail();
-    assert!(!directory.path().join("installation.sqlite3").exists());
+    if cfg!(feature = "embedded-assets") {
+        let address = process.ready()["admin"].as_str().unwrap().to_owned();
+        assert_eq!(
+            client()
+                .get(format!("http://{address}/escape.js"))
+                .send()
+                .unwrap()
+                .status(),
+            404
+        );
+        process.stop();
+    } else {
+        process.fail();
+        assert!(!directory.path().join("installation.sqlite3").exists());
+    }
 }
 
 #[test]
@@ -1080,6 +1131,7 @@ fn mode_selection_and_short_startup_locks_allow_separate_servers_to_share_one_da
 fn preflight_failures_never_publish_readiness_or_create_a_database_and_release_reserved_ports() {
     for case in [
         "second-port",
+        #[cfg(not(feature = "embedded-assets"))]
         "assets",
         "logging",
         "mysql",

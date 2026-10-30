@@ -151,9 +151,17 @@ fn os_default_config_creates_sqlite_logs_and_preserves_login_across_working_dire
         b"malicious loose example",
     )
     .unwrap();
+    // Stop after config initialization without binding fixed default ports or creating data.
+    #[cfg(windows)]
+    let log_blocker = profile.path().join("local/ruphish/logs/ruphish.log");
+    #[cfg(target_os = "linux")]
+    let log_blocker = profile.path().join("state/ruphish/ruphish.log");
+    #[cfg(target_os = "macos")]
+    let log_blocker = profile.path().join("home/Library/Logs/ruphish/ruphish.log");
+    std::fs::create_dir_all(&log_blocker).unwrap();
     let output = failed(default_command(initial.path(), profile.path()));
-    // Development builds still require assets until package 13 embeds them.
-    assert!(output.contains("Load administration assets"), "{output}");
+    assert!(output.contains("Open application log"), "{output}");
+    std::fs::remove_dir(log_blocker).unwrap();
     let path = default_config(profile.path());
     let mut config: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     assert_eq!(config["db_name"], "sqlite3");
@@ -287,8 +295,10 @@ fn absent_empty_and_relative_xdg_variables_use_home_directories() {
                 command.env_remove(variable);
             }
         }
+        let log_blocker = profile.path().join("home/.local/state/ruphish/ruphish.log");
+        std::fs::create_dir_all(&log_blocker).unwrap();
         let output = failed(command);
-        assert!(output.contains("Load administration assets"), "{output}");
+        assert!(output.contains("Open application log"), "{output}");
         let home = profile.path().join("home");
         let config: Value = serde_json::from_slice(
             &std::fs::read(home.join(".config/ruphish/config.json")).unwrap(),
@@ -381,6 +391,7 @@ fn startup_diagnostics_identify_port_tls_assets_and_log_failures_without_echoing
     for (case, expected) in [
         ("port", "Bind administration listener"),
         ("tls", "Prepare administration TLS"),
+        #[cfg(not(feature = "embedded-assets"))]
         ("assets", "Load administration assets"),
         ("log", "Open application log"),
     ] {
