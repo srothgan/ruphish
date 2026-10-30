@@ -194,7 +194,9 @@ test('reporting stages are ordered without becoming build or deployment prerequi
       .trim()
       .replace(/[[\]]/g, '')
       .split(/,\s*/) ?? [];
-  assert.deepEqual(dependencies('demo'), []);
+  assert.deepEqual(dependencies('demo-read'), []);
+  assert.deepEqual(dependencies('demo-main'), []);
+  assert.deepEqual(dependencies('demo'), ['demo-read', 'demo-main']);
   assert.deepEqual(dependencies('deploy-demo'), ['demo']);
   assert.deepEqual(dependencies('demo-comment-start'), []);
   assert.deepEqual(dependencies('demo-comment-approval'), ['demo', 'demo-comment-start']);

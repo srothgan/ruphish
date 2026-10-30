@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+# Shipped artifacts and their validation never consume mutable CI caches.
+cache-mode: none
+
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -66,7 +69,6 @@ jobs:
       - uses: ./.github/actions/toolchain
         with:
           browser: 'true'
-          cache-group: release-browser
       - run: npm ci --prefix crates/ruphish-ui/web
       - run: trunk build --release --locked
       - run: node --test crates/ruphish-ui/web/tests/ui-interactions.artifact.mjs
@@ -107,8 +109,6 @@ jobs:
           ref: ${{ needs.metadata.outputs.commit }}
           persist-credentials: false
       - uses: ./.github/actions/toolchain
-        with:
-          cache-group: release-${{ matrix.target }}
       - name: Keep disposable fixtures on job storage
         run: >-
           node -e "for (const name of ['TMPDIR', 'TMP', 'TEMP']) require('node:fs').appendFileSync(process.env.GITHUB_ENV, name + '=' + process.env.RUNNER_TEMP + '\n')"

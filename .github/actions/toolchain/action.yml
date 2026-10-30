@@ -1,5 +1,5 @@
 name: Validation toolchain
-description: Restore cached compilation and install pinned tools; does not run checks.
+description: Restore reusable dependencies and install pinned tools; does not run checks.
 inputs:
   browser:
     description: Install Trunk and the WASM test runner
@@ -11,8 +11,11 @@ inputs:
     description: Install cargo-deny
     default: 'false'
   cache-group:
-    description: Separate native and browser compilation caches
+    description: Separate incompatible compilation workloads
     default: native
+  cache-save:
+    description: Populate the dependency cache from this job when writes are allowed
+    default: 'true'
 runs:
   using: composite
   steps:
@@ -20,22 +23,36 @@ runs:
       with:
         node-version: '26.8.1'
         package-manager-cache: false
-    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-          .ci-tools
-        key: validation-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.cache-group }}-${{ hashFiles('rust-toolchain.toml', 'Trunk.toml', '.github/actions/**') }}-${{ hashFiles('Cargo.lock', '**/Cargo.toml') }}-${{ github.sha }}
-        restore-keys: |
-          validation-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.cache-group }}-${{ hashFiles('rust-toolchain.toml', 'Trunk.toml', '.github/actions/**') }}-${{ hashFiles('Cargo.lock', '**/Cargo.toml') }}-
-          validation-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.cache-group }}-${{ hashFiles('rust-toolchain.toml', 'Trunk.toml', '.github/actions/**') }}-
     - name: Select pinned Rust toolchain
       shell: bash
       run: |
         rustup show
         echo "$GITHUB_WORKSPACE/.ci-tools/bin" >> "$GITHUB_PATH"
+    - name: Read enforced cache access
+      id: cache
+      shell: bash
+      run: |
+        node --input-type=module <<'NODE'
+        import { appendFileSync } from 'node:fs';
+        const mode = process.env.ACTIONS_CACHE_MODE;
+        if (!['read', 'write', 'none'].includes(mode)) throw new Error('Unexpected cache mode: ' + mode);
+        appendFileSync(process.env.GITHUB_OUTPUT, `restore=${mode !== 'none'}\nsave=${mode === 'write'}\n`);
+        NODE
+    - name: Reuse compiled dependencies
+      if: steps.cache.outputs.restore == 'true' && inputs.dependencies != 'true'
+      uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      with:
+        prefix-key: dependencies-v1
+        shared-key: ${{ inputs.cache-group }}
+        cache-bin: 'false'
+        save-if: ${{ steps.cache.outputs.save == 'true' && inputs.cache-save == 'true' }}
+    - name: Restore pinned tools
+      if: steps.cache.outputs.restore == 'true' && (inputs.browser == 'true' || inputs.format-ui == 'true' || inputs.dependencies == 'true')
+      id: tools
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: .ci-tools
+        key: tools-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.browser }}-${{ inputs.format-ui }}-${{ inputs.dependencies }}-${{ hashFiles('rust-toolchain.toml', 'Trunk.toml', '.github/actions/toolchain/action.yml', '.github/actions/trunk/**') }}
     - name: Install pinned precompiled Trunk
       if: inputs.browser == 'true'
       uses: ./.github/actions/trunk
@@ -54,3 +71,9 @@ runs:
       shell: bash
       run: |
         if ! command -v cargo-deny >/dev/null; then cargo install cargo-deny --version 0.19.9 --locked --profile dev --root .ci-tools; fi
+    - name: Save pinned tools
+      if: steps.cache.outputs.save == 'true' && steps.tools.outputs.cache-hit != 'true' && (inputs.browser == 'true' || inputs.format-ui == 'true' || inputs.dependencies == 'true')
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: .ci-tools
+        key: ${{ steps.tools.outputs.cache-primary-key }}

@@ -68,7 +68,7 @@ jobs:
         id: distribution
         with:
           path: dist/admin
-          key: admin-assets-v1-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', '.cargo/**', 'Trunk.toml', 'crates/ruphish-ui/**', 'crates/ruphish-domain/**', 'crates/ruphish-contracts/**') }}
+          key: admin-assets-v2-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', '.cargo/**', 'Trunk.toml', 'crates/ruphish-ui/**', 'crates/ruphish-domain/**', 'crates/ruphish-contracts/**') }}
       - uses: ./.github/actions/toolchain
         with:
           browser: 'true'
@@ -160,7 +160,8 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/toolchain
         with:
-          cache-group: provider-${{ matrix.engine }}
+          # The full native suite owns this cache; provider jobs only consume it.
+          cache-save: 'false'
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: admin-distribution
@@ -254,7 +255,6 @@ jobs:
       - uses: ./.github/actions/toolchain
         with:
           dependencies: 'true'
-          cache-group: policy
       - run: npm audit --prefix crates/ruphish-ui/web
       - run: npm audit
       - run: cargo deny check bans licenses sources advisories

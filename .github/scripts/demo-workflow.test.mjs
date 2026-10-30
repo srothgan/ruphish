@@ -78,7 +78,9 @@ test('demo selection respects the canonical filter and full runs bypass it', () 
 
 test('PR owns the demo build and gate; nightly and release do not depend on it', () => {
   const pr = jobBodies(read('pr'));
-  assert.match(pr.demo, /uses: \.\/\.github\/workflows\/demo\.yml/);
+  for (const name of ['demo-read', 'demo-main']) {
+    assert.match(pr[name], /uses: \.\/\.github\/workflows\/demo\.yml/);
+  }
   assert.match(pr.gate, /needs: \[[^\]]*\bdemo\b/);
   for (const name of ['nightly', 'release']) {
     const jobs = jobBodies(read(name));

@@ -10,37 +10,80 @@ on:
 permissions:
   contents: read
 
+cache-mode: read
+
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   checks:
+    if: &cache-reader ${{ !(github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) }}
     uses: ./.github/workflows/validation.yml
     with:
       full: ${{ github.event_name == 'workflow_dispatch' }}
-  demo:
+  checks-main:
+    if: &cache-writer github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    cache-mode: write
+    uses: ./.github/workflows/validation.yml
+    with:
+      full: ${{ github.event_name == 'workflow_dispatch' }}
+  demo-read:
+    if: *cache-reader
     uses: ./.github/workflows/demo.yml
     with:
       full: ${{ github.event_name == 'workflow_dispatch' }}
-  gate:
-    name: PR gate
-    needs: [checks, demo]
+  demo-main:
+    if: *cache-writer
+    cache-mode: write
+    uses: ./.github/workflows/demo.yml
+    with:
+      full: ${{ github.event_name == 'workflow_dispatch' }}
+  demo:
+    name: Demo result
+    needs: [demo-read, demo-main]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    cache-mode: none
+    outputs:
+      demo_changed: ${{ needs.demo-read.outputs.demo_changed || needs.demo-main.outputs.demo_changed }}
+    steps:
+      - env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node --input-type=module <<'NODE'
+          const results = Object.values(JSON.parse(process.env.RESULTS)).map(job => job.result).sort();
+          if (results.join(',') !== 'skipped,success') throw new Error('Exactly one demo build must succeed');
+          NODE
+  gate:
+    name: PR gate
+    needs: [checks, checks-main, demo]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    cache-mode: none
     steps:
       - env:
           RESULT: ${{ needs.checks.result }}
+          MAIN_RESULT: ${{ needs.checks-main.result }}
           DEMO_RESULT: ${{ needs.demo.result }}
-        run: test "$RESULT" = success && test "$DEMO_RESULT" = success
+        run: |
+          node --input-type=module <<'NODE'
+          const results = [process.env.RESULT, process.env.MAIN_RESULT].sort();
+          if (results.join(',') !== 'skipped,success' || process.env.DEMO_RESULT !== 'success') {
+            throw new Error('Exactly one validation run and the demo must succeed');
+          }
+          NODE
 
   deploy-demo:
     name: Deploy prebuilt demo
+    cache-mode: none
     needs: demo
     # Credentials exist only in protected deployment environments. Forks and
     # Dependabot still build/test affected inputs, but receive no deployment token.
     if: >-
+      !cancelled() && needs.demo.result == 'success' &&
       vars.DEMO_DEPLOY_ENABLED == 'true' &&
       needs.demo.outputs.demo_changed == 'true' &&
       (github.event_name == 'push' && github.ref == 'refs/heads/main' ||
@@ -152,6 +195,7 @@ jobs:
 
   demo-comment-start:
     name: Announce demo preview
+    cache-mode: none
     if: >-
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -185,6 +229,7 @@ jobs:
 
   demo-comment-approval:
     name: Report demo awaiting approval
+    cache-mode: none
     needs: [demo, demo-comment-start]
     if: >-
       always() && !cancelled() &&
@@ -208,6 +253,7 @@ jobs:
 
   demo-comment:
     name: Report demo preview result
+    cache-mode: none
     needs: [demo, deploy-demo, demo-comment-start, demo-comment-approval]
     if: >-
       always() && !cancelled() &&
