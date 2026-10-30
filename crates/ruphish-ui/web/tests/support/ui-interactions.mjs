@@ -478,12 +478,13 @@ if (scenario.startsWith('form-')) {
     );
     assert.equal(checks.length, 1, 'exactly one page check action');
     const check = checks[0];
+    assert.ok(check.closest('.editor-toolbar'), 'page check shares the editor toolbar');
     if (scenario === 'form-page') {
-      assert.ok(check.closest('.editor-toolbar'), 'landing check shares the editor toolbar');
       assert.equal(form.querySelector('#redirect_url').closest('.content-editor'), null);
     }
     const checkRequests = () => writes.filter((write) => write.path.endsWith('/validate'));
     const results = () => form.querySelector('.page-check-results');
+    assert.ok(results().closest('.content-editor'), 'check feedback belongs to the editor');
     replace('<p>Before</p>');
     check.click();
     await until(() => releaseValidation);

@@ -1116,14 +1116,15 @@ fn content_workspace(
                     }
                     actions=Box::new(move || {
                         view! {
-                            {(family == Family::Pages)
+                            {matches!(family, Family::Pages | Family::LearningPages)
                                 .then(|| page_check_button(api, token, editor, family))}
                         }
                             .into_any()
                     })
                     feedback=Box::new(move || {
                         view! {
-                            {(family == Family::Pages).then(|| page_check_results(editor, family))}
+                            {matches!(family, Family::Pages | Family::LearningPages)
+                                .then(|| page_check_results(editor, family))}
                         }
                             .into_any()
                     })
@@ -1152,7 +1153,8 @@ fn content_workspace(
                             leptos_i18n::t_string!(i18n, ui.email_clients_may_render_it_differently),
                         )}
                 </p>
-                {(family == Family::Pages).then(|| page_check_results(editor, family))}
+                {matches!(family, Family::Pages | Family::LearningPages)
+                    .then(|| page_check_results(editor, family))}
                 <Show when=move || preview.with(|p| p.loading)>
                     <p role="status">{tr!(ui.rendering_preview)}</p>
                 </Show>
@@ -1328,17 +1330,6 @@ fn content_fields(
                                 }}
                             </ul>
                         </div>
-                    }
-                })}
-            {(family == Family::LearningPages)
-                .then(|| {
-                    view! {
-                        <section class="resource-section">
-                            <h2>{tr!(ui.learning_checks)}</h2>
-                            {page_check_button(api, token, editor, family)}
-                            {page_check_results(editor, family)}
-                            <p>{tr!(ui.learning_static_help)}</p>
-                        </section>
                     }
                 })}
             {(family == Family::Pages)
