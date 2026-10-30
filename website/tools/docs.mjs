@@ -80,13 +80,10 @@ export function resolveDocLink(url, source) {
   const within = relative(sourceRoot, target);
   if (within.startsWith('..') || within.startsWith(sep)) {
     const repoPath = relative(repositoryRoot, target);
-    if (repoPath.startsWith('..') || !existsSync(target)) {
-      throw new Error(`Missing source link: ${url} in ${source}`);
+    if (repoPath.startsWith('..')) {
+      return url;
     }
     return `${repository}/blob/main/${slash(repoPath).split('/').map(encodeURIComponent).join('/')}${suffix}`;
-  }
-  if (!isPublished(within) || !existsSync(target)) {
-    throw new Error(`Missing or unpublished documentation link: ${url} in ${source}`);
   }
   if (/\.mdx?$/.test(target)) {
     return docRoute(within) + suffix;

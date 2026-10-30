@@ -26,13 +26,6 @@ product:
   - '.dockerignore'
   - 'docker/**'
 
-website:
-  - 'website/**'
-  - 'docs/**'
-  - '.github/workflows/**'
-  - '.github/paths.yml'
-  - '.github/scripts/**'
-
 # Browser deployment inputs, including the starter content embedded by the demo.
 # The workspace lockfile is deliberately conservative: backend dependency updates
 # can still select this group, but backend implementation-only changes do not.

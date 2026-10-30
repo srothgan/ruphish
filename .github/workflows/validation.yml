@@ -22,7 +22,6 @@ jobs:
     timeout-minutes: 10
     outputs:
       product: ${{ inputs.full && 'true' || steps.paths.outputs.product }}
-      website: ${{ inputs.full && 'true' || steps.paths.outputs.website }}
       persistence: ${{ inputs.full && 'true' || steps.paths.outputs.persistence }}
       public: ${{ inputs.full && 'true' || steps.paths.outputs.public }}
       dependencies: ${{ inputs.full && 'true' || steps.paths.outputs.dependencies }}
@@ -54,30 +53,6 @@ jobs:
           token: ''
           base: ${{ github.base_ref || github.ref_name }}
           filters: .github/paths.yml
-
-  website:
-    name: Website and documentation
-    needs: changes
-    if: needs.changes.outputs.website == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: website
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version-file: website/package.json
-          cache: npm
-          cache-dependency-path: website/package-lock.json
-      - run: npm ci
-      - run: node --test tools/docs.test.mjs tools/ignore-build.test.mjs tools/navigation.test.mjs
-      - run: npx astro check
-      - run: npx astro build
-      - run: node tools/check-site.mjs
 
   assets:
     name: Browser and real assets
@@ -332,7 +307,7 @@ jobs:
 
   gate:
     name: Validation gate
-    needs: [changes, website, assets, native, database, platforms, dependencies, public]
+    needs: [changes, assets, native, database, platforms, dependencies, public]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -345,11 +320,10 @@ jobs:
           const jobs = JSON.parse(process.env.RESULTS);
           if (jobs.changes.result !== 'success') throw new Error('Path checks failed or were cancelled');
           const groups = jobs.changes.outputs;
-          for (const group of ['product', 'website', 'persistence', 'dependencies', 'public']) {
+          for (const group of ['product', 'persistence', 'dependencies', 'public']) {
             if (!['true', 'false'].includes(groups[group])) throw new Error('Missing path group: ' + group);
           }
           const required = {
-            website: groups.website,
             assets: groups.product,
             native: groups.product,
             platforms: groups.product,

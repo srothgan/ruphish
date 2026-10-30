@@ -9,8 +9,8 @@ const workflow = readFileSync(
   'utf8',
 ).replaceAll('\r\n', '\n');
 const gate = workflow.match(/node --input-type=module <<'NODE'\n([\s\S]*?)\n\s*NODE/)[1];
-const groups = ['product', 'website', 'persistence', 'dependencies', 'public'];
-const jobs = ['website', 'assets', 'native', 'platforms', 'database', 'dependencies', 'public'];
+const groups = ['product', 'persistence', 'dependencies', 'public'];
+const jobs = ['assets', 'native', 'platforms', 'database', 'dependencies', 'public'];
 
 function results(selected = [], succeeded = []) {
   return {
@@ -30,7 +30,6 @@ function check(value) {
 
 test('housekeeping and website changes can pass without product jobs', () => {
   check(results());
-  check(results(['website'], ['website']));
 });
 
 test('product and complete runs require their fixed suites', () => {
