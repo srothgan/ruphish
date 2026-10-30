@@ -1444,15 +1444,34 @@ async fn shared_response_presentation_does_not_copy_payload_per_cell_read() {
             copies: copies.clone(),
         });
         let source = response.clone();
+        let refresh = Rc::new(Cell::new(false));
+        let refresh_started = Gate::new();
+        let refresh_release = Gate::new();
         let (view, shown) = owner.with(|| {
+            let (refresh, started, release) = (
+                refresh.clone(),
+                refresh_started.clone(),
+                refresh_release.clone(),
+            );
             let query = Query::new(client(), move |(): ()| {
                 let response = source.clone();
-                async move { Ok(response) }
+                let held = refresh.replace(false);
+                let (started, release) = (started.clone(), release.clone());
+                async move {
+                    if held {
+                        started.release();
+                        release.wait().await;
+                    }
+                    Ok(response)
+                }
             });
             let view = query.observe(|| ());
             (view, view.presentation(|| ()).data)
         });
-        until(&owner, move || shown.with(Option::is_some)).await;
+        until(&owner, move || {
+            shown.with(Option::is_some) && !view.fetching.get()
+        })
+        .await;
         for id in 0..count {
             for _ in 0..10 {
                 let value = shown.get_untracked().unwrap();
@@ -1460,7 +1479,13 @@ async fn shared_response_presentation_does_not_copy_payload_per_cell_read() {
                 assert_eq!(value.rows.get(id as usize), Some(&id));
             }
         }
+        refresh.set(true);
         view.refresh.run(());
+        // An idle subscription alone cannot prove that the requested refresh ran.
+        refresh_started.wait().await;
+        assert!(view.fetching.get_untracked());
+        assert!(Arc::ptr_eq(&shown.get_untracked().unwrap(), &response));
+        refresh_release.release();
         until(&owner, move || !view.fetching.get()).await;
         assert!(Arc::ptr_eq(&shown.get_untracked().unwrap(), &response));
         assert_eq!(
