@@ -15,6 +15,7 @@ import { visualFrameDocument } from './visual-shell.mjs';
 
 export function mountEditor(
   parent,
+  modes,
   source,
   onChange,
   variablesJson,
@@ -30,7 +31,6 @@ export function mountEditor(
     node.textContent = t(key);
   };
   const variables = JSON.parse(variablesJson);
-  const modes = document.createElement('div');
   modes.className = 'editor-mode';
   const mode = document.createElement('strong');
   setText(mode, 'source');
@@ -61,7 +61,7 @@ export function mountEditor(
   sourcePane.className = 'source';
   const container = document.createElement('div');
   modes.append(mode, variableLabel, sourceButton, open);
-  parent.append(modes, note, sourcePane, container);
+  parent.append(note, sourcePane, container);
   note.setAttribute('role', 'status');
   setText(note, 'source_help');
   const editable = new Compartment();
@@ -250,6 +250,7 @@ export function mountEditor(
     destroy() {
       closeVisual();
       view.destroy();
+      modes.replaceChildren();
       parent.replaceChildren();
     },
   };

@@ -467,6 +467,9 @@ struct Editor {
     epoch: RwSignal<u64>,
     busy: RwSignal<bool>,
     visual_pending: RwSignal<bool>,
+    checking: RwSignal<bool>,
+    check_message: Message,
+    html_revision: StoredValue<u64>,
     diagnostics: RwSignal<
         Option<(
             String,
@@ -483,6 +486,11 @@ impl Editor {
             .with(|d| d.value()[key].as_str().unwrap_or("").to_owned())
     }
     fn set(self, key: &str, value: Value) {
+        if key == "html" {
+            self.html_revision.update_value(|revision| *revision += 1);
+            self.diagnostics.set(None);
+            self.check_message.clear();
+        }
         self.validation.edited(key);
         self.draft.update(|d| d.edit(|v| v[key] = value));
     }
@@ -548,6 +556,9 @@ fn edit(
         epoch: RwSignal::new(0),
         busy: RwSignal::new(false),
         visual_pending: RwSignal::new(false),
+        checking: RwSignal::new(false),
+        check_message: Message::new(String::new()),
+        html_revision: StoredValue::new(0),
         diagnostics: RwSignal::new(None),
         readonly: !use_context::<ResourceAccess>().is_some_and(|access| access.0),
         replace_url,
@@ -1016,6 +1027,8 @@ fn content_workspace(
         let Some(generation) = preview.try_update(|p| p.begin(source.clone())) else {
             return;
         };
+        let revision = editor.html_revision.get_value();
+        let epoch = editor.epoch.get_untracked();
         spawn_local(async move {
             let body = json!({"html":source,"recipient":{"email":"alice@example.test","first_name":"Alice","last_name":"Example","position":"Analyst"}});
             let result = api
@@ -1033,7 +1046,8 @@ fn content_workspace(
                 .await
                 .and_then(|(value, _)| {
                     if matches!(family, Family::Pages | Family::LearningPages)
-                        && editor.text("html") == source
+                        && editor.html_revision.get_value() == revision
+                        && editor.epoch.get_untracked() == epoch
                     {
                         let warnings =
                             serde_json::from_value(value["warnings"].clone()).map_err(|_| {
@@ -1088,19 +1102,32 @@ fn content_workspace(
                 {tr!(ui.visual_editor_not_ready)}
             </p>
             <TabPanel id="content-edit" selected=Signal::derive(move || !showing_preview.get())>
-                {crate::editor::content_editor(
-                    Signal::derive(move || editor.text("html")),
-                    Callback::new(move |value| editor.set("html", json!(value))),
-                    editor.epoch,
-                    editor.message,
-                    editor.visual_pending,
-                    editor.readonly,
-                    match family {
+                <crate::editor::ContentEditor
+                    source=Signal::derive(move || editor.text("html"))
+                    changed=Callback::new(move |value| editor.set("html", json!(value)))
+                    epoch=editor.epoch
+                    message=editor.message
+                    visual_pending=editor.visual_pending
+                    readonly=editor.readonly
+                    kind=match family {
                         Family::LearningPages => crate::editor::ContentKind::Learning,
                         Family::Pages => crate::editor::ContentKind::Landing,
                         _ => crate::editor::ContentKind::Email,
-                    },
-                )}
+                    }
+                    actions=Box::new(move || {
+                        view! {
+                            {(family == Family::Pages)
+                                .then(|| page_check_button(api, token, editor, family))}
+                        }
+                            .into_any()
+                    })
+                    feedback=Box::new(move || {
+                        view! {
+                            {(family == Family::Pages).then(|| page_check_results(editor, family))}
+                        }
+                            .into_any()
+                    })
+                />
             </TabPanel>
             <TabPanel
                 id="content-preview"
@@ -1125,6 +1152,7 @@ fn content_workspace(
                             leptos_i18n::t_string!(i18n, ui.email_clients_may_render_it_differently),
                         )}
                 </p>
+                {(family == Family::Pages).then(|| page_check_results(editor, family))}
                 <Show when=move || preview.with(|p| p.loading)>
                     <p role="status">{tr!(ui.rendering_preview)}</p>
                 </Show>
@@ -1302,123 +1330,147 @@ fn content_fields(
                         </div>
                     }
                 })}
-            {matches!(family, Family::Pages | Family::LearningPages)
+            {(family == Family::LearningPages)
                 .then(|| {
                     view! {
                         <section class="resource-section">
-                            <h2>
-                                {move || {
-                                    if family == Family::LearningPages {
-                                        leptos_i18n::t_string!(i18n, ui.learning_checks)
-                                    } else {
-                                        leptos_i18n::t_string!(i18n, ui.landing_page_checks)
-                                    }
-                                }}
-                            </h2>
-                            <ActionButton
-                                kind="button"
-                                disabled=editor.visual_pending
-                                on_click=move |_| {
-                                    let source = editor.text("html");
-                                    spawn_local(async move {
-                                        let body = json!({"html":source});
-                                        match api
-                                            .resource(
-                                                "POST",
-                                                if family == Family::LearningPages {
-                                                    "/api/learning-pages/validate"
-                                                } else {
-                                                    "/api/pages/validate"
-                                                },
-                                                &token.get_value(),
-                                                Some(&body),
-                                                None,
-                                            )
-                                            .await
-                                        {
-                                            Ok((value, _)) if editor.text("html") == source => {
-                                                match serde_json::from_value(value["warnings"].clone()) {
-                                                    Ok(warnings) => {
-                                                        editor.diagnostics.set(Some((source, warnings)))
-                                                    }
-                                                    Err(_) => {
-                                                        editor
-                                                            .message
-                                                            .error(
-                                                                leptos_i18n::t_string!(i18n, ui.validation_response_invalid)
-                                                                    .into(),
-                                                            )
-                                                    }
-                                                }
-                                            }
-                                            Err(error) if editor.text("html") == source => {
-                                                editor.message.error(error)
-                                            }
-                                            _ => {}
-                                        }
-                                    });
-                                }
-                            >
-                                {move || {
-                                    if family == Family::LearningPages {
-                                        leptos_i18n::t_string!(i18n, ui.check_learning)
-                                    } else {
-                                        leptos_i18n::t_string!(i18n, ui.check_landing_page)
-                                    }
-                                }}
-                            </ActionButton>
-                            {page_warnings(
-                                Signal::derive(move || {
-                                    editor
-                                        .diagnostics
-                                        .get()
-                                        .filter(|(source, _)| *source == editor.text("html"))
-                                        .map(|(_, warnings)| warnings)
-                                        .unwrap_or_default()
-                                }),
-                            )}
-                            <Show when=move || {
-                                editor
-                                    .diagnostics
-                                    .get()
-                                    .is_some_and(|(source, warnings)| {
-                                        source == editor.text("html") && warnings.is_empty()
-                                    })
-                            }>
-                                <p role="status">
-                                    {move || {
-                                        if family == Family::LearningPages {
-                                            leptos_i18n::t_string!(i18n, ui.no_learning_warnings)
-                                        } else {
-                                            leptos_i18n::t_string!(i18n, ui.no_landing_page_warnings)
-                                        }
-                                    }}
-                                </p>
-                            </Show>
-                            <Show when=move || family == Family::LearningPages>
-                                <p>{tr!(ui.learning_static_help)}</p>
-                            </Show>
-                            <Show when=move || family == Family::Pages>
-                                <p>{tr!(ui.landing_content_help)}</p>
-                                <p>{tr!(ui.all_submissions_recorded)}</p>
-                                {editor
-                                    .field(
-                                        "redirect_url",
-                                        trs!(ui.redirect_url_after_submission_optional),
-                                        "text",
-                                    )}
-                                <p>
-                                    {tr!(
-                                        ui.track_only_whether_fields_were_filled_and_submitted_entered_usernames_passwords
-                                    )}
-                                </p>
-                            </Show>
+                            <h2>{tr!(ui.learning_checks)}</h2>
+                            {page_check_button(api, token, editor, family)}
+                            {page_check_results(editor, family)}
+                            <p>{tr!(ui.learning_static_help)}</p>
                         </section>
+                    }
+                })}
+            {(family == Family::Pages)
+                .then(|| {
+                    view! {
+                        <div class="resource-section">
+                            {editor
+                                .field(
+                                    "redirect_url",
+                                    trs!(ui.redirect_url_after_submission_optional),
+                                    "text",
+                                )}
+                        </div>
                     }
                 })}
         </section>
     }
 }
+fn page_check_button(
+    api: Api,
+    token: StoredValue<String>,
+    editor: Editor,
+    family: Family,
+) -> impl IntoView {
+    let i18n = ruphish_ui::localization::use_i18n();
+    view! {
+        <ActionButton
+            disabled=Signal::derive(move || editor.visual_pending.get() || editor.checking.get())
+            busy=Signal::derive(move || editor.checking.get().to_string())
+            on_click=move |_| {
+                if editor.checking.get_untracked() {
+                    return;
+                }
+                editor.checking.set(true);
+                editor.check_message.clear();
+                editor.diagnostics.set(None);
+                let source = editor.text("html");
+                let revision = editor.html_revision.get_value();
+                let epoch = editor.epoch.get_untracked();
+                spawn_local(async move {
+                    let body = json!({"html":source});
+                    let result = api
+                        .resource(
+                            "POST",
+                            if family == Family::LearningPages {
+                                "/api/learning-pages/validate"
+                            } else {
+                                "/api/pages/validate"
+                            },
+                            &token.get_value(),
+                            Some(&body),
+                            None,
+                        )
+                        .await;
+                    editor.checking.set(false);
+                    if editor.html_revision.get_value() != revision
+                        || editor.epoch.get_untracked() != epoch
+                    {
+                        return;
+                    }
+                    match result {
+                        Ok((value, _)) => {
+                            match serde_json::from_value(value["warnings"].clone()) {
+                                Ok(warnings) => editor.diagnostics.set(Some((source, warnings))),
+                                Err(_) => {
+                                    editor
+                                        .check_message
+                                        .error(
+                                            leptos_i18n::t_string!(i18n, ui.validation_response_invalid)
+                                                .into(),
+                                        )
+                                }
+                            }
+                        }
+                        Err(error) => editor.check_message.error(error),
+                    }
+                });
+            }
+        >
+            <LoadingLabel loading=editor
+                .checking
+                .into()>
+                {move || {
+                    if family == Family::LearningPages {
+                        leptos_i18n::t_string!(i18n, ui.check_learning)
+                    } else {
+                        leptos_i18n::t_string!(i18n, ui.check_landing_page)
+                    }
+                }}
+            </LoadingLabel>
+        </ActionButton>
+    }
+}
+
+fn page_check_results(editor: Editor, family: Family) -> impl IntoView {
+    let i18n = ruphish_ui::localization::use_i18n();
+    view! {
+        <div class="page-check-results" aria-live="polite">
+            {editor.check_message.view()}
+            {page_warnings(
+                Signal::derive(move || {
+                    editor
+                        .diagnostics
+                        .get()
+                        .filter(|(source, _)| *source == editor.text("html"))
+                        .map(|(_, warnings)| warnings)
+                        .unwrap_or_default()
+                }),
+            )}
+            <Show when=move || {
+                editor
+                    .diagnostics
+                    .get()
+                    .is_some_and(|(source, warnings)| {
+                        source == editor.text("html") && warnings.is_empty()
+                    })
+            }>
+                <p role="status">
+                    {move || {
+                        if family == Family::LearningPages {
+                            leptos_i18n::t_string!(i18n, ui.no_learning_warnings)
+                        } else {
+                            leptos_i18n::t_string!(i18n, ui.no_landing_page_warnings)
+                        }
+                    }}
+                </p>
+            </Show>
+
+        </div>
+    }
+}
+
 fn profile_fields(editor: Editor) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
     let has_saved_password = Signal::derive(move || {
@@ -1836,30 +1888,37 @@ fn ImportPanel(api: Api, token: String, family: Family, open: RwSignal<bool>) ->
                     />
                 </label>
                 <Show when=move || mode.get() == "csv">
-                    <div class="resource-columns">
-                        {[
-                            trs!(ui.email_column),
-                            trs!(ui.first_name_column),
-                            trs!(ui.last_name_column),
-                            trs!(ui.position_column),
-                        ]
-                            .into_iter()
-                            .enumerate()
-                            .map(|(i, label)| {
-                                view! {
-                                    <label>
-                                        {label}
-                                        <TextInput
-                                            value=Signal::derive(move || columns.get()[i].clone())
-                                            on_input=move |e| {
-                                                columns.update(|v| v[i] = event_target_value(&e))
-                                            }
-                                        />
-                                    </label>
-                                }
-                            })
-                            .collect_view()}
-                    </div>
+                    <details>
+                        <summary>{tr!(ui.advanced)}</summary>
+                        <div class="disclosure-content">
+                            <h3>{tr!(ui.column_mapping)}</h3>
+                            <p>{tr!(ui.column_mapping_help)}</p>
+                            <div class="resource-columns">
+                                {[
+                                    trs!(ui.email_column),
+                                    trs!(ui.first_name_column),
+                                    trs!(ui.last_name_column),
+                                    trs!(ui.position_column),
+                                ]
+                                    .into_iter()
+                                    .enumerate()
+                                    .map(|(i, label)| {
+                                        view! {
+                                            <label>
+                                                {label}
+                                                <TextInput
+                                                    value=Signal::derive(move || columns.get()[i].clone())
+                                                    on_input=move |e| {
+                                                        columns.update(|v| v[i] = event_target_value(&e))
+                                                    }
+                                                />
+                                            </label>
+                                        }
+                                    })
+                                    .collect_view()}
+                            </div>
+                        </div>
+                    </details>
                 </Show>
                 <Show when=move || mode.get() == "email">
                     <Checkbox

@@ -36,11 +36,17 @@ test('HTML and visual modes share edits, retain line numbers and reject stale se
     const { mountEditor } = await import('../editor.mjs');
     const { EditorView } = await import('@codemirror/view');
     const host = window.document.querySelector('#host');
+    const toolbar = window.document.createElement('div');
+    const content = window.document.createElement('div');
+    const action = window.document.createElement('button');
+    action.textContent = 'Check page';
+    host.append(toolbar, action, content);
     const source = '<p>Bonjour José</p><script>window.authoredProbe=true</script>';
     const changes = [];
     const visualStates = [];
     editor = mountEditor(
-      host,
+      content,
+      toolbar,
       source,
       (value) => changes.push(value),
       '["FirstName","URL"]',
@@ -141,8 +147,11 @@ test('HTML and visual modes share edits, retain line numbers and reject stale se
     assert.equal(view.state.phrase('Completions'), 'Vervollständigungen');
     editor.setLocale('en');
     editor.destroy();
+    assert.equal(toolbar.childElementCount, 0, 'destroy releases the supplied toolbar controls');
+    assert.equal(action.isConnected, true, 'feature-owned actions survive editor cleanup');
     editor = mountEditor(
-      host,
+      content,
+      toolbar,
       source,
       (value) => changes.push(value),
       '["FirstName","URL"]',
@@ -160,7 +169,8 @@ test('HTML and visual modes share edits, retain line numbers and reject stale se
     editor.destroy();
     const explanation = '<p>Literal {{.FirstName}} explanation</p>';
     editor = mountEditor(
-      host,
+      content,
+      toolbar,
       explanation,
       (value) => changes.push(value),
       '[]',

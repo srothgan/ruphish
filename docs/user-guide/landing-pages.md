@@ -58,7 +58,7 @@ A redirect can be an HTTP(S) or relative destination, including supported templa
 
 ## Page checks, preview, and testing
 
-Use **Check landing page** to inspect the current source. Saving, loading, previewing, and campaign review also return advisory warnings from the processed sample page. Checks flag disabled or unnamed password controls, missing form association, duplicate IDs, repaired HTML and forms with no usable submission control. Warnings do not prevent saving and do not certify arbitrary scripts. Verify template-dependent forms with representative recipients.
+Use **Check landing page** at the right of the editor toolbar, beside the field picker and source/visual controls, to inspect the current unsaved source. Results appear below the toolbar and clear when the HTML changes. The check does not save or change your draft, execute scripts, or test redirects. The optional redirect remains a separate field below the editor. Saving, loading, previewing, and campaign review also return advisory warnings from the processed sample page. Checks flag disabled or unnamed password controls, missing form association, duplicate IDs, repaired HTML and forms with no usable submission control. Warnings do not prevent saving and do not certify arbitrary scripts. Verify template-dependent forms with representative recipients.
 
 The editor's **Preview** tab and landing starter previews run scripts and external resources in an isolated frame. Built-in submissions show preview feedback and create no campaign results or campaign redirects. Custom scripts can still contact their own external services. The visual editor and saved-source overview remain inert; use the editor Preview tab to test behavior.
 

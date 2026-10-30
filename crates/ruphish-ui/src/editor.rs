@@ -10,6 +10,7 @@ extern "C" {
     #[wasm_bindgen(catch, js_name = mountEditor)]
     fn mount_editor(
         parent: &web_sys::HtmlElement,
+        toolbar: &web_sys::HtmlElement,
         source: &str,
         on_change: &js_sys::Function,
         variables: &str,
@@ -103,7 +104,8 @@ pub(super) enum ContentKind {
 }
 
 /// Embed the established source/visual editor without giving it a competing draft.
-pub(super) fn content_editor(
+#[component]
+pub(super) fn ContentEditor(
     source: Signal<String>,
     changed: Callback<String>,
     epoch: RwSignal<u64>,
@@ -111,13 +113,19 @@ pub(super) fn content_editor(
     visual_pending: RwSignal<bool>,
     readonly: bool,
     kind: ContentKind,
+    #[prop(optional)] actions: Option<Children>,
+    #[prop(optional)] feedback: Option<Children>,
 ) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
     let node = NodeRef::<html::Div>::new();
+    let toolbar = NodeRef::<html::Div>::new();
     let handle = StoredValue::new_local(None::<EditorHandle>);
     Effect::new(move |_| {
         let Some(parent) = node.get() else {
+            return;
+        };
+        let Some(toolbar) = toolbar.get() else {
             return;
         };
         if handle.with_value(Option::is_some) {
@@ -142,6 +150,7 @@ pub(super) fn content_editor(
         };
         match mount_editor(
             &parent,
+            &toolbar,
             &source.get_untracked(),
             callback.as_ref().unchecked_ref(),
             &variables,
@@ -189,5 +198,14 @@ pub(super) fn content_editor(
             }
         })
     });
-    view! { <div class="content-editor" node_ref=node></div> }
+    view! {
+        <div class="content-editor">
+            <div class="editor-toolbar">
+                <div class="editor-mode" node_ref=toolbar></div>
+                {actions.map(|actions| actions())}
+            </div>
+            {feedback.map(|feedback| feedback())}
+            <div node_ref=node></div>
+        </div>
+    }
 }
