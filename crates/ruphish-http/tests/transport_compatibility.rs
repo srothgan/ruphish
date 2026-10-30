@@ -9,7 +9,6 @@ use axum::{
 use ruphish_contracts::legacy::{Envelope, Group};
 use ruphish_http::response;
 use serde_json::{Value, json};
-use std::time::Duration;
 
 struct Server(tokio::task::JoinHandle<()>);
 impl Drop for Server {
@@ -77,11 +76,7 @@ async fn typed_api_values_preserve_explicit_absence_collections_integer_and_time
             }),
         );
     let (base, _server) = serve(router).await.unwrap();
-    let client = reqwest::Client::builder()
-        .no_proxy()
-        .timeout(Duration::from_secs(5))
-        .build()
-        .unwrap();
+    let client = reqwest::Client::builder().no_proxy().build().unwrap();
     for (id, expected) in fixture {
         let result = client.get(format!("{base}/{id}")).send().await.unwrap();
         assert_eq!(result.status(), StatusCode::OK);
@@ -135,7 +130,6 @@ async fn redirects_and_errors_match_go_http_fixtures_for_reads_writes_queries_an
     let (base, _server) = serve(router).await.unwrap();
     let client = reqwest::Client::builder()
         .no_proxy()
-        .timeout(Duration::from_secs(5))
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .unwrap();

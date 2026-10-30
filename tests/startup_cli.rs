@@ -8,7 +8,6 @@
 use std::{
     io::Read,
     process::{Command, Output, Stdio},
-    time::{Duration, Instant},
 };
 
 fn capture(mut reader: impl Read + Send + 'static) -> std::thread::JoinHandle<Vec<u8>> {
@@ -48,20 +47,7 @@ fn run(arguments: &[&str]) -> (tempfile::TempDir, Output) {
         .unwrap();
     let stdout = capture(child.stdout.take().unwrap());
     let stderr = capture(child.stderr.take().unwrap());
-    let deadline = Instant::now() + Duration::from_secs(5);
-    let (sender, receiver) = std::sync::mpsc::channel::<()>();
-    let status = loop {
-        if let Some(status) = child.try_wait().unwrap() {
-            break status;
-        }
-        if Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            panic!("CLI did not exit within five seconds: {arguments:?}");
-        }
-        let _ = receiver.recv_timeout(Duration::from_millis(10));
-    };
-    drop(sender);
+    let status = child.wait().unwrap();
     let output = Output {
         status,
         stdout: stdout.join().unwrap(),

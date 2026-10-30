@@ -7,7 +7,6 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
-    time::Duration,
 };
 
 #[derive(Default)]
@@ -25,6 +24,7 @@ pub struct Mailbox {
     pub state: Arc<Mutex<State>>,
     stop: Arc<AtomicBool>,
     thread: Option<std::thread::JoinHandle<()>>,
+    connections: super::connection::Connections,
 }
 impl Mailbox {
     pub fn new() -> Self {
@@ -50,18 +50,17 @@ impl Mailbox {
         let observed = state.clone();
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = stop.clone();
+        let connections = super::connection::Connections::default();
+        let active = connections.clone();
         let thread = std::thread::spawn(move || {
             for socket in listener.incoming() {
                 if stopping.load(Ordering::Relaxed) {
                     break;
                 }
                 let Ok(socket) = socket else { continue };
-                socket
-                    .set_read_timeout(Some(Duration::from_secs(3)))
-                    .unwrap();
-                socket
-                    .set_write_timeout(Some(Duration::from_secs(3)))
-                    .unwrap();
+                let Some(_connection) = active.track(&socket) else {
+                    break;
+                };
                 let socket = if starttls {
                     let mut peer = BufReader::new(socket);
                     peer.get_mut().write_all(b"* OK fixture ready\r\n").unwrap();
@@ -184,6 +183,7 @@ impl Mailbox {
             certificate,
             state,
             stop,
+            connections,
             thread: Some(thread),
         }
     }
@@ -191,6 +191,7 @@ impl Mailbox {
 impl Drop for Mailbox {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
+        self.connections.close();
         let _ = TcpStream::connect(self.address);
         if let Some(thread) = self.thread.take() {
             thread.join().unwrap();

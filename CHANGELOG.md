@@ -1,6 +1,8 @@
 # Changelog
 
-## 0.1.0 (Unreleased)
+Development previews and release candidates have short notes on GitHub Releases. This changelog records user-facing changes for final releases.
+
+## Unreleased
 
 Initial release targeting feature parity with Gophish, with a native Rust server and a new Rust/WASM administration interface.
 
@@ -11,6 +13,7 @@ Initial release targeting feature parity with Gophish, with a native Rust server
 - Verify campaign domains, process reports through multiple IMAP mailboxes, and deliver signed webhooks.
 - Use English or German interface text with independent date-format and time-zone preferences.
 - Run with SQLite, MySQL, or PostgreSQL, with migration support for recognized Gophish SQLite and MySQL histories.
+- Deploy with Docker Compose and environment-based configuration, or use a standalone native executable with the administration UI embedded.
 - Automate through familiar Gophish resource APIs and new Ruphish endpoints, with separate `/api/`, `/auth/`, and `/internal/` interfaces.
 - Track participant interactions and optional password presence instead of collecting entered credentials or other form values.
 

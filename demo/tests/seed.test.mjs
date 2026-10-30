@@ -7,7 +7,6 @@ import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { createServer } from 'node:net';
 import { DatabaseSync } from 'node:sqlite';
-import { setTimeout as delay } from 'node:timers/promises';
 import { dataset } from '../../assets/website-demo/dataset.mjs';
 import { seed } from '../../assets/website-demo/seed.mjs';
 import { createDemoApi } from '../../crates/ruphish-ui/web/demo-api.mjs';
@@ -42,28 +41,25 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
       env: { ...process.env, GOPHISH_INITIAL_ADMIN_PASSWORD: 'Synthetic-Seed-Test-Only-942!' },
     });
     closed = once(child, 'close');
-    // Startup output may contain bootstrap credentials; never relay it into test output.
+    // Observe readiness without relaying bootstrap credentials into test output.
     child.stdout.resume();
-    child.stderr.resume();
-    let readiness = 'no response';
-    for (let attempt = 0; attempt < 600; attempt++) {
-      if (child.exitCode !== null) {
-        throw new Error('Disposable seed application exited before readiness');
-      }
-      try {
-        const response = await fetch(`http://127.0.0.1:${port}/auth/session`, {
-          signal: AbortSignal.timeout(1000),
-        });
-        readiness = `HTTP ${response.status}`;
-        if (response.ok) {
-          return;
+    child.stderr.setEncoding('utf8');
+    await new Promise((resolve, reject) => {
+      let output = '';
+      const read = (chunk) => {
+        output = (output + chunk).slice(-4096);
+        if (/RUPHISH_READY \{[^\n]*\}/.test(output)) {
+          child.stderr.off('data', read);
+          child.stderr.resume();
+          resolve();
         }
-      } catch {
-        /* Starting. */
-      }
-      await delay(100);
-    }
-    throw new Error(`Disposable seed application startup timed out: ${readiness}`);
+      };
+      child.stderr.on('data', read);
+      child.once('error', reject);
+      child.once('exit', () =>
+        reject(new Error('Disposable seed application exited before readiness')),
+      );
+    });
   }
   try {
     await writeFile(

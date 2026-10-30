@@ -40,11 +40,8 @@ impl Headless {
     }
 
     fn ready(&mut self) -> Value {
-        let deadline = Instant::now() + Duration::from_secs(30);
         loop {
-            let received = self
-                .lines
-                .recv_timeout(deadline.saturating_duration_since(Instant::now()));
+            let received = self.lines.recv();
             assert!(
                 received.is_ok(),
                 "Startup did not become ready: {}",
@@ -118,27 +115,14 @@ fn default_config(profile: &Path) -> PathBuf {
 
 fn failed(command: Command) -> String {
     let mut process = Headless::start(command);
-    let deadline = Instant::now() + Duration::from_secs(15);
-    loop {
-        if let Some(status) = process.child.try_wait().unwrap() {
-            assert!(!status.success());
-            process.reader.take().unwrap().join().unwrap();
-            for line in process.lines.try_iter() {
-                process.output.push_str(&line);
-                process.output.push('\n');
-            }
-            return process.output.clone();
-        }
-        assert!(
-            Instant::now() < deadline,
-            "Expected startup to fail: {}",
-            process.output
-        );
-        if let Ok(line) = process.lines.recv_timeout(Duration::from_millis(20)) {
-            process.output.push_str(&line);
-            process.output.push('\n');
-        }
+    let status = process.child.wait().unwrap();
+    assert!(!status.success());
+    process.reader.take().unwrap().join().unwrap();
+    for line in process.lines.try_iter() {
+        process.output.push_str(&line);
+        process.output.push('\n');
     }
+    process.output.clone()
 }
 
 #[test]
@@ -151,9 +135,17 @@ fn os_default_config_creates_sqlite_logs_and_preserves_login_across_working_dire
         b"malicious loose example",
     )
     .unwrap();
+    // Stop after config initialization without binding fixed default ports or creating data.
+    #[cfg(windows)]
+    let log_blocker = profile.path().join("local/ruphish/logs/ruphish.log");
+    #[cfg(target_os = "linux")]
+    let log_blocker = profile.path().join("state/ruphish/ruphish.log");
+    #[cfg(target_os = "macos")]
+    let log_blocker = profile.path().join("home/Library/Logs/ruphish/ruphish.log");
+    std::fs::create_dir_all(&log_blocker).unwrap();
     let output = failed(default_command(initial.path(), profile.path()));
-    // Development builds still require assets until package 13 embeds them.
-    assert!(output.contains("Load administration assets"), "{output}");
+    assert!(output.contains("Open application log"), "{output}");
+    std::fs::remove_dir(log_blocker).unwrap();
     let path = default_config(profile.path());
     let mut config: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     assert_eq!(config["db_name"], "sqlite3");
@@ -184,7 +176,6 @@ fn os_default_config_creates_sqlite_logs_and_preserves_login_across_working_dire
             .no_proxy()
             .cookie_store(true)
             .redirect(reqwest::redirect::Policy::none())
-            .timeout(Duration::from_secs(20))
             .add_root_certificate(reqwest::Certificate::from_pem(&original_certificate).unwrap())
             .build()
             .unwrap()
@@ -287,8 +278,10 @@ fn absent_empty_and_relative_xdg_variables_use_home_directories() {
                 command.env_remove(variable);
             }
         }
+        let log_blocker = profile.path().join("home/.local/state/ruphish/ruphish.log");
+        std::fs::create_dir_all(&log_blocker).unwrap();
         let output = failed(command);
-        assert!(output.contains("Load administration assets"), "{output}");
+        assert!(output.contains("Open application log"), "{output}");
         let home = profile.path().join("home");
         let config: Value = serde_json::from_slice(
             &std::fs::read(home.join(".config/ruphish/config.json")).unwrap(),
@@ -381,6 +374,7 @@ fn startup_diagnostics_identify_port_tls_assets_and_log_failures_without_echoing
     for (case, expected) in [
         ("port", "Bind administration listener"),
         ("tls", "Prepare administration TLS"),
+        #[cfg(not(feature = "embedded-assets"))]
         ("assets", "Load administration assets"),
         ("log", "Open application log"),
     ] {

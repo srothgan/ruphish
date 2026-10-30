@@ -14,6 +14,7 @@ pub struct Receiver {
     stop: Arc<AtomicBool>,
     thread: Option<std::thread::JoinHandle<()>>,
     address: std::net::SocketAddr,
+    connections: super::connection::Connections,
 }
 impl Receiver {
     pub fn new() -> Self {
@@ -24,15 +25,17 @@ impl Receiver {
         let code = status.clone();
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = stop.clone();
+        let connections = super::connection::Connections::default();
+        let active = connections.clone();
         let thread = std::thread::spawn(move || {
             for stream in listener.incoming() {
                 if stopping.load(Ordering::SeqCst) {
                     break;
                 }
                 let mut stream = stream.unwrap();
-                stream
-                    .set_read_timeout(Some(Duration::from_secs(3)))
-                    .unwrap();
+                let Some(_connection) = active.track(&stream) else {
+                    break;
+                };
                 let mut bytes = Vec::new();
                 let mut buffer = [0; 4096];
                 let end = loop {
@@ -92,6 +95,7 @@ impl Receiver {
             requests,
             status,
             stop,
+            connections,
             thread: Some(thread),
             address,
         }
@@ -110,6 +114,7 @@ fn header<'a>(headers: &'a str, name: &str) -> &'a str {
 impl Drop for Receiver {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
+        self.connections.close();
         let _ = TcpStream::connect(self.address);
         if let Some(thread) = self.thread.take() {
             thread.join().unwrap();

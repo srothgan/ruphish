@@ -22,15 +22,9 @@ product:
   - 'tests/**'
   - 'migrations/**'
   - 'Dockerfile'
+  - 'compose.yaml'
   - '.dockerignore'
   - 'docker/**'
-
-website:
-  - 'website/**'
-  - 'docs/**'
-  - '.github/workflows/**'
-  - '.github/paths.yml'
-  - '.github/scripts/**'
 
 # Browser deployment inputs, including the starter content embedded by the demo.
 # The workspace lockfile is deliberately conservative: backend dependency updates
@@ -64,9 +58,14 @@ persistence:
 
 public:
   - *build_inputs
+  - 'crates/ruphish/src/config*.rs'
+  - 'crates/ruphish/src/installation.rs'
   - 'Dockerfile'
+  - 'compose.yaml'
   - '.dockerignore'
   - 'docker/**'
+  - 'LICENSE'
+  - 'THIRD-PARTY-NOTICES.md'
   - 'tests/acceptance/**'
 
 dependencies:

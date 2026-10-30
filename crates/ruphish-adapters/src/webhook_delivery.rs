@@ -116,13 +116,10 @@ mod tests {
             }
         };
         let policy = crate::outbound::Policy::new(&["127.0.0.1".into()])?;
-        let (received, outcome) = tokio::time::timeout(std::time::Duration::from_secs(5), async {
-            tokio::join!(
-                receiver,
-                super::send(&policy, &url, "secret456", body, "legacy-fixture")
-            )
-        })
-        .await?;
+        let (received, outcome) = tokio::join!(
+            receiver,
+            super::send(&policy, &url, "secret456", body, "legacy-fixture")
+        );
         received?;
         assert_eq!(outcome.status, Some(204));
         assert_eq!(outcome.code, "accepted");

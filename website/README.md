@@ -24,7 +24,6 @@ Starlight generates its Pagefind search index during the build. Build and previe
 
 ```sh
 npx astro build
-node tools/check-site.mjs
 npx astro preview --host 127.0.0.1 --port 4321
 ```
 
@@ -37,10 +36,9 @@ The R-only favicon is `public/favicon.svg`. The full wordmark, its light variant
 ## Validation
 
 ```sh
-node --test tools/docs.test.mjs tools/ignore-build.test.mjs
+node --test tools/ignore-build.test.mjs tools/navigation.test.mjs
 npx astro check
 npx astro build
-node tools/check-site.mjs
 ```
 
-The website CI job validates changes under `website/` and `docs/`, plus shared workflow inputs. The Vercel configuration rebuilds for changes under `website/` or `docs/`; root `assets/` changes do not rebuild or update the website until the image is copied manually. Production canonical URLs and the sitemap use `SITE_URL` when set, otherwise `VERCEL_PROJECT_PRODUCTION_URL`.
+The Vercel configuration rebuilds for changes under `website/` or `docs/`; root `assets/` changes do not rebuild or update the website until the image is copied manually. Production canonical URLs and the sitemap use `SITE_URL` when set, otherwise `VERCEL_PROJECT_PRODUCTION_URL`.

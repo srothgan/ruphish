@@ -8,7 +8,6 @@ pub(super) fn browser() -> Client {
         .no_proxy()
         .cookie_store(true)
         .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(20))
         .build()
         .unwrap()
 }
@@ -178,7 +177,7 @@ fn generic_self_password_updates_require_the_dedicated_reauthenticated_flow() {
 
 #[test]
 fn dedicated_user_pages_preserve_browser_crud_and_reject_unauthorized_access() {
-    let directory = workspace();
+    let directory = workspace_with_built_assets();
     let mut process = Process::start(directory.path(), "admin");
     let base = endpoint(&mut process);
     let admin = browser();
@@ -496,7 +495,7 @@ fn unknown_browser_pages_load_the_real_ui_without_masking_protocol_or_asset_erro
 
 #[test]
 fn browser_detail_navigation_preserves_ownership_and_handles_deleted_records() {
-    let directory = workspace();
+    let directory = workspace_with_built_assets();
     let mut process = Process::start(directory.path(), "admin");
     let base = endpoint(&mut process);
     let admin = browser();
@@ -2031,14 +2030,12 @@ fn verified_https_cookie_tampering_expiry_and_logout_replay() {
         .cookie_store(true)
         .add_root_certificate(cert.clone())
         .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(20))
         .build()
         .unwrap();
     let plain = Client::builder()
         .no_proxy()
         .add_root_certificate(cert)
         .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(20))
         .build()
         .unwrap();
     let login = sign_in(&browser, &base, "admin", "synthetic-bootstrap-password");
@@ -2265,8 +2262,7 @@ fn browser_origin_checks_support_http1_and_http2_over_verified_tls() {
             .cookie_store(true)
             .resolve("localhost", address)
             .add_root_certificate(cert.clone())
-            .redirect(reqwest::redirect::Policy::none())
-            .timeout(Duration::from_secs(20));
+            .redirect(reqwest::redirect::Policy::none());
         let browser = if version == reqwest::Version::HTTP_11 {
             builder.http1_only()
         } else {

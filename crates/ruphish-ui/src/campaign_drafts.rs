@@ -119,8 +119,7 @@ fn load(api: Api, token: String, id: String, editing: bool) -> impl IntoView {
             loading.set(false);
         });
     });
-    // Only a newly loaded record should replace the form. Initial preference reads
-    // must not subscribe this factory and discard unsaved edits on preference changes.
+    // Only a newly loaded record replaces the mounted form.
     let content = view! {
         <QueryBoundary
             fetching=loading.into()
@@ -132,12 +131,16 @@ fn load(api: Api, token: String, id: String, editing: bool) -> impl IntoView {
 
             {move || {
                 data.get()
-                    .map(|saved| untrack(|| crate::campaigns::create(
-                        api,
-                        token.get_value(),
-                        Some(saved["configuration"].clone()),
-                        Some(saved),
-                    )))
+                    .map(|saved| {
+                        view! {
+                            <crate::campaigns::CreateCampaign
+                                api=api
+                                token=token.get_value()
+                                initial=Some(saved["configuration"].clone())
+                                saved=Some(saved)
+                            />
+                        }
+                    })
             }}
 
         </QueryBoundary>

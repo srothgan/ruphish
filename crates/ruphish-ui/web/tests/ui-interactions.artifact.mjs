@@ -4,11 +4,28 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 const execute = promisify(execFile);
-const fixture = fileURLToPath(new URL('./support/campaign-routing.mjs', import.meta.url));
+const fixture = fileURLToPath(new URL('./support/ui-interactions.mjs', import.meta.url));
 
 // Runs the built application in JSDOM with the existing synthetic API, never a live server.
 // Build the development distribution with `trunk build --locked` first.
 for (const scenario of [
+  'form-import',
+  'form-webhook',
+  'form-mailbox',
+  'form-filters',
+  'form-group',
+  'form-email',
+  'form-page',
+  'form-learning',
+  'form-smtp',
+  'form-user',
+  'form-domain',
+  'form-password',
+  'form-preferences',
+  'form-settings',
+  'form-campaign',
+  'form-draft',
+  'form-session',
   'results-chart',
   'results-refresh',
   'recipient-return',
@@ -33,9 +50,8 @@ for (const scenario of [
   'invalid',
   'new',
 ]) {
-  test(`campaign routing: ${scenario}`, async () => {
+  test(`UI interaction: ${scenario}`, async () => {
     await execute(process.execPath, [fixture, scenario], {
-      timeout: 30000,
       maxBuffer: 1024 * 1024,
     });
   });

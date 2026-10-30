@@ -76,16 +76,17 @@ test('demo selection respects the canonical filter and full runs bypass it', () 
   }
 });
 
-test('PR, nightly and release reuse the same demo workflow and keep gate coverage', () => {
-  for (const name of ['pr', 'nightly', 'release']) {
+test('PR owns the demo build and gate; nightly and release do not depend on it', () => {
+  const pr = jobBodies(read('pr'));
+  assert.match(pr.demo, /uses: \.\/\.github\/workflows\/demo\.yml/);
+  assert.match(pr.gate, /needs: \[[^\]]*\bdemo\b/);
+  for (const name of ['nightly', 'release']) {
     const jobs = jobBodies(read(name));
-    assert.match(jobs.demo, /uses: \.\/\.github\/workflows\/demo\.yml/);
-    if (name !== 'pr') {
-      assert.match(jobs.demo, /full: true/);
-    }
-    if (name !== 'nightly') {
-      assert.match(jobs.gate, /needs: \[[^\]]*\bdemo\b/);
+    assert.equal(jobs.demo, undefined);
+    assert.doesNotMatch(read(name), /uses: \.\/\.github\/workflows\/demo\.yml/);
+    for (const body of Object.values(jobs)) {
+      assert.doesNotMatch(body, /needs: \[[^\]]*\bdemo\b/);
     }
   }
-  assert.match(jobBodies(read('release')).assets, /needs: \[source, demo\]/);
+  assert.match(jobBodies(read('release')).assets, /needs: \[metadata, source\]/);
 });

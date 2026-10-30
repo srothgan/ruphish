@@ -36,9 +36,7 @@ impl Network {
                 if !allowed.load(Ordering::SeqCst) {
                     continue;
                 }
-                let Ok(mut outgoing) =
-                    TcpStream::connect_timeout(&destination, std::time::Duration::from_secs(2))
-                else {
+                let Ok(mut outgoing) = TcpStream::connect(destination) else {
                     continue;
                 };
                 guard.push(incoming.try_clone().unwrap());

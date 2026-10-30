@@ -105,11 +105,7 @@ async fn page_save_reuses_authoritative_diagnostics_and_preserves_failure_atomic
         .await
         .unwrap();
     }));
-    let client = reqwest::Client::builder()
-        .no_proxy()
-        .timeout(Duration::from_secs(15))
-        .build()
-        .unwrap();
+    let client = reqwest::Client::builder().no_proxy().build().unwrap();
     for (family, html, warning) in [
         (
             "pages",

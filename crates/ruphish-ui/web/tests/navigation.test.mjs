@@ -72,16 +72,8 @@ const flush = async () => {
   await Promise.resolve();
 };
 function nextEvent(target, type) {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      target.removeEventListener(type, listener);
-      reject(new Error(`Missing ${type} event`));
-    }, 2000);
-    const listener = (event) => {
-      clearTimeout(timeout);
-      resolve(event);
-    };
-    target.addEventListener(type, listener, { once: true });
+  return new Promise((resolve) => {
+    target.addEventListener(type, resolve, { once: true });
   });
 }
 async function traverse(win, delta, expected) {

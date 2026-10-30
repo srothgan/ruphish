@@ -6,7 +6,7 @@ use axum::{
     extract::{ConnectInfo, DefaultBodyLimit, FromRef, FromRequestParts, Path, Request},
     http::{HeaderMap, Method, StatusCode, Uri, header, request::Parts},
     middleware::{self, Next},
-    response::{Html, IntoResponse, Response},
+    response::{IntoResponse, Response},
     routing::{get, post},
 };
 use axum_csrf::{CsrfConfig, CsrfToken};
@@ -45,7 +45,7 @@ pub(crate) struct AuthState {
     settings: Arc<dyn ruphish_application::settings::Repository>,
     mailer_enabled: bool,
     csrf: CsrfConfig,
-    index: Arc<String>,
+    index: Arc<super::static_asset::Asset>,
     secure: bool,
     trusted_origins: Arc<Vec<String>>,
     limiter: Arc<LoginLimiter<DefaultClock>>,
@@ -107,7 +107,9 @@ pub fn router<S: SessionStore + Clone>(
         .with_same_site(SameSite::Strict)
         .with_expiry(Expiry::OnInactivity(Duration::hours(12)))
         .with_signed(Key::from(key));
-    let routes = Router::new()
+    // Browser documents negotiate their embedded representations themselves.
+    // Session endpoints can also return that document (for example failed login).
+    let browser_routes = Router::new()
         .route("/", get(page))
         .route("/login", get(page))
         .route("/logout", get(page))
@@ -117,16 +119,6 @@ pub fn router<S: SessionStore + Clone>(
         .route("/user", get(page))
         .route("/user/settings", get(page))
         .route("/user/password", get(page))
-        .nest(
-            "/internal",
-            Router::new()
-                .route("/preferences", get(preferences).put(save_preferences))
-                .route("/password", post(password))
-                .layer(middleware::from_fn_with_state(
-                    state.clone(),
-                    internal_session,
-                )),
-        )
         .route("/users", get(page))
         .route("/users/new", get(page))
         .route("/users/{id}/edit", get(page))
@@ -169,6 +161,18 @@ pub fn router<S: SessionStore + Clone>(
         .route("/auth/password/reset", post(password))
         .route("/auth/impersonate", post(impersonate))
         .route("/auth/impersonate/exit", post(exit_impersonation))
+        .layer(DefaultBodyLimit::max(16 * 1024));
+    let routes = Router::new()
+        .nest(
+            "/internal",
+            Router::new()
+                .route("/preferences", get(preferences).put(save_preferences))
+                .route("/password", post(password))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    internal_session,
+                )),
+        )
         .route("/api/users", get(users_slash).post(users_slash))
         .route("/api/users/", get(users).post(create))
         .route("/api/users/{id}", get(user).put(update).delete(delete))
@@ -183,6 +187,8 @@ pub fn router<S: SessionStore + Clone>(
         .merge(super::integrations::routes())
         .merge(super::starter_templates::routes())
         .merge(super::settings::routes())
+        .layer(tower_http::compression::CompressionLayer::new())
+        .merge(browser_routes)
         .layer(middleware::from_fn(security_headers))
         .fallback(missing_page)
         .with_state(state)
@@ -645,7 +651,7 @@ async fn missing_page(context: Context) -> Response {
     };
     response
         .headers_mut()
-        .insert(header::VARY, header::HeaderValue::from_static("Accept"));
+        .append(header::VARY, header::HeaderValue::from_static("Accept"));
     if head {
         *response.body_mut() = Body::empty();
     }
@@ -679,7 +685,10 @@ async fn page(context: Context) -> Response {
                     return (
                         StatusCode::FORBIDDEN,
                         context.csrf,
-                        Html((*context.state.index).clone()),
+                        context
+                            .state
+                            .index
+                            .document(&context.method, &context.headers),
                     )
                         .into_response();
                 }
@@ -696,7 +705,14 @@ async fn page(context: Context) -> Response {
             Err(error) => return error.into_response(),
         }
     }
-    (context.csrf, Html((*context.state.index).clone())).into_response()
+    (
+        context.csrf,
+        context
+            .state
+            .index
+            .document(&context.method, &context.headers),
+    )
+        .into_response()
 }
 
 async fn bootstrap(context: Context) -> Result<Response, Rejection> {
@@ -917,7 +933,10 @@ async fn login(context: Context, request: Request) -> Result<Response, Rejection
                 return Ok((
                     StatusCode::UNAUTHORIZED,
                     context.csrf,
-                    Html((*context.state.index).clone()),
+                    context
+                        .state
+                        .index
+                        .document(&context.method, &context.headers),
                 )
                     .into_response());
             }

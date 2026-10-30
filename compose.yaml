@@ -1,0 +1,25 @@
+# Local image until the release pipeline publishes versioned GHCR images.
+services:
+  ruphish:
+    image: ruphish:local
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      ADMIN_SERVER_LISTEN_URL: "0.0.0.0:3333"
+      ADMIN_SERVER_USE_TLS: "false"
+      PHISH_SERVER_LISTEN_URL: "0.0.0.0:8081"
+      PHISH_SERVER_USE_TLS: "false"
+      DB_NAME: "sqlite3"
+      LOGGING_LEVEL: "info"
+    ports:
+      - "127.0.0.1:${ADMIN_PORT:-3333}:3333"
+      - "127.0.0.1:${PHISH_PORT:-8081}:8081"
+    volumes:
+      - ruphish-data:/var/lib/ruphish
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "5"
+volumes:
+  ruphish-data:

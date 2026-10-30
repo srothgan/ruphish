@@ -3,9 +3,6 @@ use super::*;
 
 fn request(address: &str, path: &str, headers: &str, body: Option<&str>) -> u16 {
     let mut stream = std::net::TcpStream::connect(address).unwrap();
-    stream
-        .set_read_timeout(Some(Duration::from_secs(10)))
-        .unwrap();
     let method = if body.is_some() { "POST" } else { "GET" };
     let body = body.unwrap_or("");
     let request = format!(

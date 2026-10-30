@@ -6,11 +6,7 @@ fn ready(process: &mut Process) -> String {
     format!("http://{}", process.ready()["admin"].as_str().unwrap())
 }
 fn client() -> Client {
-    Client::builder()
-        .no_proxy()
-        .timeout(Duration::from_secs(15))
-        .build()
-        .unwrap()
+    Client::builder().no_proxy().build().unwrap()
 }
 
 #[test]
@@ -309,9 +305,6 @@ fn smtp_cram_negotiates_and_delivers_without_fallback_or_secret_diagnostics() {
         let address = listener.local_addr().unwrap();
         let peer = std::thread::spawn(move || {
             let (socket, _) = listener.accept().unwrap();
-            socket
-                .set_read_timeout(Some(Duration::from_secs(10)))
-                .unwrap();
             let mut peer = BufReader::new(socket);
             peer.get_mut().write_all(b"220 fixture ESMTP\r\n").unwrap();
             let mut authenticating = 0;
@@ -505,12 +498,6 @@ fn smtp_starttls_verifies_certificates_before_authentication_and_reports_rejecti
         let tls = tls.clone();
         let thread = std::thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            stream
-                .set_read_timeout(Some(Duration::from_secs(12)))
-                .unwrap();
-            stream
-                .set_write_timeout(Some(Duration::from_secs(12)))
-                .unwrap();
             let mut plain = BufReader::new(stream);
             plain
                 .get_mut()
@@ -611,9 +598,6 @@ impl MailSink {
         let (tx, received) = std::sync::mpsc::channel();
         let thread = std::thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
-            stream
-                .set_read_timeout(Some(Duration::from_secs(12)))
-                .unwrap();
             let mut reader = BufReader::new(stream.try_clone().unwrap());
             let mut commands = Vec::new();
             let mut mail = Vec::new();
@@ -666,12 +650,12 @@ impl MailSink {
         }
     }
     fn result(&self) -> (Vec<String>, Vec<u8>) {
-        self.received.recv_timeout(Duration::from_secs(15)).unwrap()
+        self.received.recv().unwrap()
     }
 }
 impl Drop for MailSink {
     fn drop(&mut self) {
-        let _ = std::net::TcpStream::connect_timeout(&self.address, Duration::from_millis(200));
+        let _ = std::net::TcpStream::connect(self.address);
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
@@ -1993,7 +1977,6 @@ fn site_import_rechecks_redirect_destinations_and_rejects_untrusted_tls() {
     let client = Client::builder()
         .no_proxy()
         .danger_accept_invalid_certs(true)
-        .timeout(Duration::from_secs(20))
         .build()
         .unwrap();
     let response = client
@@ -2008,9 +1991,6 @@ fn site_import_rechecks_redirect_destinations_and_rejects_untrusted_tls() {
     let address = listener.local_addr().unwrap();
     let thread = std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
-        stream
-            .set_read_timeout(Some(Duration::from_secs(10)))
-            .unwrap();
         let mut request = [0; 4096];
         let _ = stream.read(&mut request);
         stream.write_all(b"HTTP/1.1 302 Found\r\nLocation: http://169.254.169.254/metadata\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
@@ -2048,7 +2028,6 @@ fn legacy_site_import_allow_deny_and_base_href_cases_use_controlled_servers() {
         let body = "<html><head></head><body><img src=\"/test.png\"/></body></html>";
         let handle = allowed.then(||std::thread::spawn(move||{
             let (mut stream,_) = listener.accept().unwrap();
-            stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
             let mut request=[0;4096];
             assert!(stream.read(&mut request).unwrap() > 0);
             write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();

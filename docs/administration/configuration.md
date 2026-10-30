@@ -95,7 +95,36 @@ Resource API clients cannot change these installation settings. See [listeners a
 
 Omitting `logging.filename` means stderr only; generated configurations select `ruphish.log` in the OS log directory. A configured file is appended to and rotated, with logs also written to stderr. Positive integer `logging.max_size_bytes` defaults to `10485760` (10 MiB); positive integer `logging.max_files` defaults to `5` archives in addition to the active file. Missing or null settings use these defaults unless an earlier duplicate legacy field already set the value. A single oversized record is kept intact. Oldest archives are removed to meet the configured count; changes take effect after restart. `logging.level` defaults to the info behavior; accepted names are empty, `trace`, `debug`, `info`, `warn`, `warning`, `error`, `fatal`, and `panic`, case-insensitively. Fatal/panic levels map to error severity. See [logging](logging.md).
 
-`GOPHISH_INITIAL_ADMIN_PASSWORD` and `GOPHISH_INITIAL_ADMIN_API_TOKEN` are preserved bootstrap environment names. They are not configuration keys. Supply bootstrap credentials privately and remove them from the shell after setup. When no initial password is supplied, the application prints the generated temporary administrator password to startup stderr, including noninteractive Docker output. Supplied passwords and API tokens are never printed; generated passwords are not sent to the application log file. Typed database `password_env` fields name their own environment variable; there is no generic environment override for every JSON field.
+`GOPHISH_INITIAL_ADMIN_PASSWORD` and `GOPHISH_INITIAL_ADMIN_API_TOKEN` are preserved bootstrap environment names. They are not configuration keys. Supply bootstrap credentials privately and remove them from the shell after setup. When no initial password is supplied, the application prints the generated temporary administrator password to startup stderr, including noninteractive Docker output. Supplied passwords and API tokens are never printed; generated passwords are not sent to the application log file. Typed database `password_env` fields name their own environment variable.
+
+## Environment overrides and Docker Compose
+
+Environment settings override the loaded JSON before path resolution and final validation, in both Docker and native installations. The JSON file is never rewritten with these overrides. A malformed file still fails to load. Restart the process after changing configuration; with Compose, recreate the container using `docker compose up -d` so changed environment values take effect.
+
+Use uppercase names with underscores, without a product prefix. Strings are literal: a numeric-looking username or password remains a string. Boolean values must be `true` or `false`; numbers and arrays use JSON syntax. Quote all Compose environment values, including booleans, numbers, and JSON arrays. An empty string clears a string field; use `[]` to clear a list. Invalid types, null values for boolean/number/list settings, conflicting providers, and unknown names within the configuration prefixes below fail startup. Unrelated environment variables are ignored. Error messages do not echo supplied values.
+
+| Environment name or prefix | Supported fields |
+| --- | --- |
+| `DB_NAME`, `DB_PATH`, `DB_SSLCA_PATH`, `CONTACT_ADDRESS` | Corresponding top-level fields |
+| `ADMIN_SERVER_` | `LISTEN_URL`, `USE_TLS`, `CERT_PATH`, `KEY_PATH`, `CSRF_KEY`, `ALLOWED_INTERNAL_HOSTS`, `TRUSTED_ORIGINS` |
+| `PHISH_SERVER_` | `LISTEN_URL`, `USE_TLS`, `CERT_PATH`, `KEY_PATH` |
+| `LOGGING_` | `FILENAME`, `LEVEL`, `MAX_SIZE_BYTES`, `MAX_FILES` |
+| `DOMAIN_VERIFICATION_` | `RESOLVERS`, `ALLOWED_NETWORKS`, `TRUSTED_CA_PATH`, `TRUSTED_PROXIES` |
+| `MYSQL_` | `HOST`, `PORT`, `DATABASE`, `USERNAME`, `PASSWORD`, `PASSWORD_ENV`, `TLS`, `CA_PATH`, `MAX_CONNECTIONS`, `CONNECT_TIMEOUT_SECONDS`, `ACQUIRE_TIMEOUT_SECONDS`, `LOCK_TIMEOUT_SECONDS`, `LEGACY_TIMEZONE` |
+| `POSTGRES_` | `HOST`, `PORT`, `DATABASE`, `USERNAME`, `PASSWORD`, `PASSWORD_ENV`, `TLS`, `CA_PATH`, `MAX_CONNECTIONS`, `CONNECT_TIMEOUT_SECONDS`, `ACQUIRE_TIMEOUT_SECONDS`, `LOCK_TIMEOUT_SECONDS`, `STATEMENT_TIMEOUT_SECONDS` |
+
+For example, set these entries under the application's Compose `environment` section:
+
+```yaml
+ADMIN_SERVER_USE_TLS: "false"
+ADMIN_SERVER_TRUSTED_ORIGINS: '["https://admin.example.com"]'
+DOMAIN_VERIFICATION_TRUSTED_PROXIES: '["10.20.0.0/24"]'
+LOGGING_LEVEL: "info"
+```
+
+Setting `DB_NAME` to a different backend replaces the previous backend's connection settings from JSON, including the SQLite path or legacy MySQL DSN. Supply the new backend's required settings. Selecting the same backend preserves file settings except for explicit environment overrides. Only one provider may be configured: simultaneous MySQL/PostgreSQL settings, or server settings with SQLite, are rejected. Switching to SQLite requires `DB_PATH` when the file selected a different backend. Selecting a database does not copy or migrate data between providers.
+
+An environment password replaces a file's `password_env` source, and an environment `PASSWORD_ENV` replaces a file's direct password. Supplying both environment sources is rejected. Variables named by `PASSWORD_ENV` should use a separate name outside the reserved configuration prefixes, such as `DATABASE_SECRET`. Existing provider validation, verified TLS defaults, and connection limits still apply. Credentials are never persisted into the configuration file or included in a configuration dump.
 
 ## Parsing behavior
 

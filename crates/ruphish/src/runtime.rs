@@ -42,14 +42,12 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
     // Only selected listeners require assets/certificates. An inactive listener's
     // settings are retained but cannot accidentally bind a port or create files.
     let admin_router = if arguments.mode.admin() {
-        Some(
-            ruphish_http::server::admin_router(Path::new("dist/admin")).map_err(|error| {
-                context(
-                    "Load administration assets; rebuild with Trunk if missing or stale",
-                    error,
-                )
-            })?,
-        )
+        Some(admin_assets().map_err(|error| {
+            context(
+                "Load administration assets; rebuild with Trunk if missing or stale",
+                error,
+            )
+        })?)
     } else {
         None
     };
@@ -427,5 +425,16 @@ impl Termination {
     }
     async fn wait(&mut self) -> Result<(), std::io::Error> {
         tokio::select! { _ = self.interrupt.recv() => Ok(()), _ = self.terminate.recv() => Ok(()) }
+    }
+}
+
+fn admin_assets() -> Result<ruphish_http::server::AdminAssets, std::io::Error> {
+    #[cfg(feature = "embedded-assets")]
+    {
+        ruphish_http::server::embedded_admin_router()
+    }
+    #[cfg(not(feature = "embedded-assets"))]
+    {
+        ruphish_http::server::admin_router(Path::new("dist/admin"))
     }
 }

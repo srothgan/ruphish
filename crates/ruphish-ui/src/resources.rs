@@ -335,10 +335,9 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
                     )}
                 </ActionLink>
             </PageHeader>
-            {move || {
-                (can_edit && import_open.get())
-                    .then(|| import_panel(api, token.get_value(), family, import_open))
-            }}
+            <Show when=move || can_edit && import_open.get()>
+                <ImportPanel api=api token=token.get_value() family=family open=import_open />
+            </Show>
             {message.view()}
             <ResourceDeleteDialog
                 deletion=deletion
@@ -1352,7 +1351,9 @@ fn content_fields(
                                                     }
                                                 }
                                             }
-                                            Err(error) => editor.message.error(error),
+                                            Err(error) if editor.text("html") == source => {
+                                                editor.message.error(error)
+                                            }
                                             _ => {}
                                         }
                                     });
@@ -1567,7 +1568,8 @@ fn profile_fields(editor: Editor) -> impl IntoView {
     }
 }
 
-fn import_panel(api: Api, token: String, family: Family, open: RwSignal<bool>) -> impl IntoView {
+#[component]
+fn ImportPanel(api: Api, token: String, family: Family, open: RwSignal<bool>) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
     let token = StoredValue::new(token);
@@ -1747,9 +1749,11 @@ fn import_panel(api: Api, token: String, family: Family, open: RwSignal<bool>) -
     };
     view! {
         <Dialog
-            title=leptos_i18n::t_string!(
-                i18n, messages.import_arg0, arg0 = (family.singular()).to_string()
-            )
+            title=Signal::derive(move || {
+                leptos_i18n::t_string!(
+                    i18n, messages.import_arg0, arg0 = (family.singular()).to_string()
+                )
+            })
             on_cancel=Callback::new(move |_| open.set(false))
         >
             <div class="management-heading">

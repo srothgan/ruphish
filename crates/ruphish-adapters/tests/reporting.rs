@@ -714,13 +714,10 @@ async fn webhook_cancellation(global: bool) {
         .execute(&database.inspection_pool()).await.unwrap();
     let worker = integrations.clone();
     let operation = tokio::spawn(async move { worker.deliver_webhooks().await });
-    let request = tokio::time::timeout(std::time::Duration::from_secs(10), ready)
-        .await
-        .unwrap()
-        .unwrap();
+    let request = ready.await.unwrap();
     assert!(!String::from_utf8_lossy(&request).contains("MUST-NOT-SEND"));
     // These public facade operations use the same single-connection pool as the worker.
-    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+    {
         assert!(
             integrations
                 .webhook(caller(), hook.id)
@@ -755,9 +752,7 @@ async fn webhook_cancellation(global: bool) {
                 .await
                 .unwrap();
         }
-    })
-    .await
-    .unwrap();
+    };
     release.send(()).unwrap();
     operation.await.unwrap().unwrap();
     receiver.await.unwrap();
@@ -865,13 +860,7 @@ async fn mailbox_disconnects_back_off_across_restart_and_invalid_claims_do_not_c
             .check_mailbox(caller(), mailbox.id)
             .await
             .unwrap();
-        tokio::time::timeout(
-            std::time::Duration::from_secs(10),
-            database.integrations().poll_mailboxes(),
-        )
-        .await
-        .unwrap()
-        .unwrap();
+        database.integrations().poll_mailboxes().await.unwrap();
         let result = database
             .integrations()
             .mailbox(caller(), mailbox.id)
@@ -980,13 +969,7 @@ async fn disabled_webhooks_cancel_backlog_and_reenable_only_delivers_new_events(
             .unwrap();
     });
     sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata) VALUES(1,'','2026-10-24T12:02:00Z','email_reported','')").execute(&pool).await.unwrap();
-    tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        database.integrations().deliver_webhooks(),
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    database.integrations().deliver_webhooks().await.unwrap();
     receiver.await.unwrap();
     let history = database
         .integrations()

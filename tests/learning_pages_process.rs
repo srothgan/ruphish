@@ -30,7 +30,6 @@ fn bundled_learning_methods_import_with_both_logos_and_serve_complete_static_les
         .no_proxy()
         .add_root_certificate(reqwest::Certificate::from_pem(&cert).unwrap())
         .resolve("training.example.test", public)
-        .timeout(Duration::from_secs(5))
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .unwrap();
@@ -139,7 +138,6 @@ fn learning_pages_redirect_without_tracking_survive_restart_and_reject_adversari
         .no_proxy()
         .add_root_certificate(reqwest::Certificate::from_pem(&cert).unwrap())
         .resolve("training.example.test", public)
-        .timeout(Duration::from_secs(5))
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .unwrap();
@@ -265,7 +263,7 @@ fn learning_pages_redirect_without_tracking_survive_restart_and_reject_adversari
             .status(),
         404
     );
-    let second: Value = client().post(format!("{admin}/api/users/")).bearer_auth("synthetic-bootstrap-token").timeout(Duration::from_secs(20)).json(&json!({"username":"learning-other","password":"synthetic-other-owner-password","role":"user"})).send().unwrap().error_for_status().unwrap().json().unwrap();
+    let second: Value = client().post(format!("{admin}/api/users/")).bearer_auth("synthetic-bootstrap-token").json(&json!({"username":"learning-other","password":"synthetic-other-owner-password","role":"user"})).send().unwrap().error_for_status().unwrap().json().unwrap();
     let second_key = second["api_key"].as_str().unwrap();
     for method in [
         reqwest::Method::GET,

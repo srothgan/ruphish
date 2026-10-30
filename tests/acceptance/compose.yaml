@@ -9,7 +9,7 @@ services:
       PGDATA: /var/lib/postgresql/data
     entrypoint: [sh, /fixture/postgres-start.sh]
     volumes:
-      - ./data/postgres:/tls:ro
+      - ${RUPHISH_ACCEPTANCE_DATA_DIRECTORY:-./data}/postgres:/tls:ro
       - ./postgres-start.sh:/fixture/postgres-start.sh:ro
     tmpfs:
       - /var/lib/postgresql
@@ -30,7 +30,7 @@ services:
       MYSQL_ROOT_HOST: "%"
     command: [--ssl-ca=/tls/ca.pem, --ssl-cert=/tls/server.pem, --ssl-key=/tls/server.key]
     volumes:
-      - ./data/mysql:/tls:ro
+      - ${RUPHISH_ACCEPTANCE_DATA_DIRECTORY:-./data}/mysql:/tls:ro
     tmpfs:
       - /var/lib/mysql
     ports:
@@ -47,12 +47,10 @@ services:
     working_dir: /workspace
     environment:
       CARGO_TARGET_DIR: /target
-      CARGO_BUILD_JOBS: "1"
-      TOKIO_WORKER_THREADS: "2"
-      RAYON_NUM_THREADS: "2"
     volumes:
       - ../..:/workspace:ro
       - .:/lab
+      - ${RUPHISH_ACCEPTANCE_DATA_DIRECTORY:-./data}:/lab/data
       - target:/target
       - registry:/usr/local/cargo/registry
       - type: bind
@@ -66,6 +64,7 @@ services:
     command: [-conf, /lab/Corefile]
     volumes:
       - .:/lab:ro
+      - ${RUPHISH_ACCEPTANCE_DATA_DIRECTORY:-./data}:/lab/data:ro
     networks:
       lab:
         ipv4_address: 172.30.53.53
@@ -90,9 +89,9 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
-    env_file: ./data/bootstrap.env
+    env_file: ${RUPHISH_ACCEPTANCE_DATA_DIRECTORY:-./data}/bootstrap.env
     volumes:
-      - ./data:/lab/data
+      - ${RUPHISH_ACCEPTANCE_DATA_DIRECTORY:-./data}:/lab/data
     ports:
       - "127.0.0.1:3334:3333"
       - "127.0.0.1:8443:8443"

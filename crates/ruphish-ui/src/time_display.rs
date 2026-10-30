@@ -37,15 +37,16 @@ pub(super) fn tick(seconds: i64, step: i64, first: i64, last: i64) -> String {
         .map(render)
         .unwrap_or_else(|_| leptos_i18n::t_string!(i18n, ui.time_not_recorded).into())
 }
-pub(super) fn local_input(seconds: Option<i64>) -> String {
+pub(super) fn local_input(seconds: Option<i64>, zone: &TimeZone) -> String {
     seconds
         .and_then(|seconds| datetime::from_seconds(seconds).ok())
-        .map(|value| datetime::local_input(value, &zone()))
+        .map(|value| datetime::local_input(value, zone))
         .unwrap_or_default()
 }
 pub(super) fn parse_input(
     value: &str,
     original: Option<i64>,
+    zone: &TimeZone,
 ) -> Result<Option<i64>, datetime::Error> {
-    ruphish_ui::datetime::input_seconds(value, original, &zone())
+    ruphish_ui::datetime::input_seconds(value, original, zone)
 }

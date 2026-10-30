@@ -27,6 +27,19 @@ allow = ["BSL-1.0"]
 crate = "matchit@=0.8.4"
 allow = ["BSD-3-Clause"]
 
+# Build-only asset compressor; reviewed LICENSE.BSD-3-Clause and LICENSE.MIT.
+[[licenses.exceptions]]
+crate = "brotli@=9.1.1"
+allow = ["BSD-3-Clause"]
+
+# Brotli's build/test allocators; same upstream BSD license, exact versions only.
+[[licenses.exceptions]]
+crate = "alloc-no-stdlib@=3.0.0"
+allow = ["BSD-3-Clause"]
+[[licenses.exceptions]]
+crate = "alloc-stdlib@=0.3.0"
+allow = ["BSD-3-Clause"]
+
 # bcrypt constant-time primitives; reviewed the bundled BSD license.
 [[licenses.exceptions]]
 crate = "subtle@=2.6.1"

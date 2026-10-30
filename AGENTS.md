@@ -26,7 +26,7 @@ These rules guide implementation, review, validation, and reporting in this repo
 - **Keep fixtures isolated.** Reuse existing setup and the canonical `tests/acceptance/` fixture. Use disposable server databases, copy fixtures before mutation, preserve application-lab data, and never contact real recipients or external integration endpoints.
 - **Validate by impact.** Follow [validation](docs/contributing/testing/validation.md) for change-specific checks and commands. Cover affected consumers and real failure boundaries, including provider and recovery scenarios when relevant. Run focused regressions during implementation and applicable completion checks after edits settle; ordinary changes or commit requests do not require full acceptance.
 - **Check the actual target.** Run rustfmt, affected Clippy/tests, and Leptos formatting for changed markup. Include WASM checks for UI/browser-shared Rust and a development UI build for changed output/assets. Run relevant JavaScript tests; avoid redundant syntax checks. Prose-only changes require link/example/consistency checks, not product builds.
-- **Control validation cost.** Run one heavy workload at a time, initially with one build job/test thread and bounded Tokio/Rayon workers. Diagnose failures before retrying and rerun affected checks only. Do not duplicate Clippy with `cargo check` for identical targets or build without an executable/artifact need.
+- **Control validation cost.** Diagnose failures before retrying and rerun affected checks only. Do not duplicate Clippy with `cargo check` for identical targets or build without an executable/artifact need.
 
 ## Tools and formatting
 

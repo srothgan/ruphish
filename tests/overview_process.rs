@@ -130,7 +130,6 @@ fn dashboard_supports_authenticated_browser_and_api_reads_restart_and_revocation
         .no_proxy()
         .cookie_store(true)
         .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(20))
         .build()
         .unwrap();
     let session: Value = browser

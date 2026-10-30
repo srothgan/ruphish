@@ -12,13 +12,6 @@ use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::JsFuture;
 use wasm_bindgen_test::wasm_bindgen_test;
 
-#[wasm_bindgen::prelude::wasm_bindgen(
-    inline_js = "export function bounded(p) { return new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error('Query condition did not complete')), 5000); p.then(v => { clearTimeout(timer); resolve(v); }, e => { clearTimeout(timer); reject(e); }); }); }"
-)]
-extern "C" {
-    fn bounded(p: &js_sys::Promise) -> js_sys::Promise;
-}
-
 #[derive(Clone)]
 struct Gate {
     promise: js_sys::Promise,
@@ -37,7 +30,7 @@ impl Gate {
         self.resolve.call0(&JsValue::NULL).unwrap();
     }
     async fn wait(&self) {
-        JsFuture::from(bounded(&self.promise)).await.unwrap();
+        JsFuture::from(self.promise.clone()).await.unwrap();
     }
 }
 async fn until(owner: &Owner, condition: impl Fn() -> bool + 'static) {
@@ -975,7 +968,7 @@ async fn refresh_indicator_tracks_every_held_request_without_clearing_confirmed_
     let _ = any_spawner::Executor::init_wasm_bindgen();
     let owner = Owner::new();
     let gates = Rc::new(
-        (0..4)
+        (0..3)
             .map(|_| (Gate::new(), Gate::new()))
             .collect::<Vec<_>>(),
     );
@@ -1001,15 +994,12 @@ async fn refresh_indicator_tracks_every_held_request_without_clearing_confirmed_
         Effect::new(move |_| indicator.set(fetching.get()));
         (query, view, indicator)
     });
-    for n in 0..4 {
+    for n in 0..3 {
         if n == 1 {
             view.refresh.run(());
         }
         if n == 2 {
             query.invalidate_where(|_| true);
-        }
-        if n == 3 {
-            super::locale_window::focus();
         }
         gates[n].0.wait().await;
         any_spawner::Executor::tick().await;
@@ -1026,6 +1016,14 @@ async fn refresh_indicator_tracks_every_held_request_without_clearing_confirmed_
         any_spawner::Executor::tick().await;
         assert!(!indicator.get_untracked());
     }
+    super::locale_window::focus();
+    any_spawner::Executor::tick().await;
+    assert_eq!(
+        calls.get(),
+        3,
+        "returning to the window does not refetch resources"
+    );
+    assert!(!indicator.get_untracked());
     owner.cleanup();
 }
 
@@ -1446,15 +1444,34 @@ async fn shared_response_presentation_does_not_copy_payload_per_cell_read() {
             copies: copies.clone(),
         });
         let source = response.clone();
+        let refresh = Rc::new(Cell::new(false));
+        let refresh_started = Gate::new();
+        let refresh_release = Gate::new();
         let (view, shown) = owner.with(|| {
+            let (refresh, started, release) = (
+                refresh.clone(),
+                refresh_started.clone(),
+                refresh_release.clone(),
+            );
             let query = Query::new(client(), move |(): ()| {
                 let response = source.clone();
-                async move { Ok(response) }
+                let held = refresh.replace(false);
+                let (started, release) = (started.clone(), release.clone());
+                async move {
+                    if held {
+                        started.release();
+                        release.wait().await;
+                    }
+                    Ok(response)
+                }
             });
             let view = query.observe(|| ());
             (view, view.presentation(|| ()).data)
         });
-        until(&owner, move || shown.with(Option::is_some)).await;
+        until(&owner, move || {
+            shown.with(Option::is_some) && !view.fetching.get()
+        })
+        .await;
         for id in 0..count {
             for _ in 0..10 {
                 let value = shown.get_untracked().unwrap();
@@ -1462,7 +1479,13 @@ async fn shared_response_presentation_does_not_copy_payload_per_cell_read() {
                 assert_eq!(value.rows.get(id as usize), Some(&id));
             }
         }
+        refresh.set(true);
         view.refresh.run(());
+        // An idle subscription alone cannot prove that the requested refresh ran.
+        refresh_started.wait().await;
+        assert!(view.fetching.get_untracked());
+        assert!(Arc::ptr_eq(&shown.get_untracked().unwrap(), &response));
+        refresh_release.release();
         until(&owner, move || !view.fetching.get()).await;
         assert!(Arc::ptr_eq(&shown.get_untracked().unwrap(), &response));
         assert_eq!(

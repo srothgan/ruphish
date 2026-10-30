@@ -438,7 +438,7 @@ pub(super) fn new(api: Api, token: String) -> impl IntoView {
             .into_any();
         }
     }
-    create(api, token, initial, None).into_any()
+    view! { <CreateCampaign api=api token=token initial=initial saved=None /> }.into_any()
 }
 
 pub(super) fn detail(api: Api, token: String, section: Section) -> impl IntoView {
@@ -727,7 +727,8 @@ fn schedule(
         </section>
     }
 }
-pub(super) fn create(
+#[component]
+pub(super) fn CreateCampaign(
     api: Api,
     token: String,
     initial: Option<Value>,

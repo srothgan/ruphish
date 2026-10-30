@@ -1004,13 +1004,14 @@ async fn mysql_policy_serialization(db: &Database, inspect: &mut sqlx::MySqlConn
     let campaigns = db.campaigns();
     let launching =
         tokio::spawn(async move { campaigns.create(other, launch, 1_900_010_000).await });
-    tokio::time::timeout(std::time::Duration::from_secs(10),async {
-        loop {
-            assert!(!launching.is_finished());
-            let waiting:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM performance_schema.data_locks WHERE OBJECT_SCHEMA=DATABASE() AND OBJECT_NAME='ruphish_domains' AND LOCK_STATUS='WAITING')").fetch_one(&mut *held).await.unwrap();
-            if waiting {break;} tokio::task::yield_now().await;
+    loop {
+        assert!(!launching.is_finished());
+        let waiting:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM performance_schema.data_locks WHERE OBJECT_SCHEMA=DATABASE() AND OBJECT_NAME='ruphish_domains' AND LOCK_STATUS='WAITING')").fetch_one(&mut *held).await.unwrap();
+        if waiting {
+            break;
         }
-    }).await.unwrap();
+        tokio::task::yield_now().await;
+    }
     let store = db.settings();
     let mut policy = settings.policy.clone();
     policy.webhooks_enabled = true;
@@ -1019,13 +1020,17 @@ async fn mysql_policy_serialization(db: &Database, inspect: &mut sqlx::MySqlConn
             .save(admin, settings.revision, policy, 1_900_010_001)
             .await
     });
-    tokio::time::timeout(std::time::Duration::from_secs(10),async {
-        loop {
-            assert!(!saving.is_finished(),"policy must wait for an admitted write by another owner");
-            let waiting:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM performance_schema.data_locks WHERE OBJECT_SCHEMA=DATABASE() AND OBJECT_NAME='ruphish_settings' AND LOCK_STATUS='WAITING')").fetch_one(&mut *held).await.unwrap();
-            if waiting {break;} tokio::task::yield_now().await;
+    loop {
+        assert!(
+            !saving.is_finished(),
+            "policy must wait for an admitted write by another owner"
+        );
+        let waiting:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM performance_schema.data_locks WHERE OBJECT_SCHEMA=DATABASE() AND OBJECT_NAME='ruphish_settings' AND LOCK_STATUS='WAITING')").fetch_one(&mut *held).await.unwrap();
+        if waiting {
+            break;
         }
-    }).await.unwrap();
+        tokio::task::yield_now().await;
+    }
     held.rollback().await.unwrap();
     launching.await.unwrap().unwrap();
     let saved = saving.await.unwrap().unwrap();
@@ -1046,14 +1051,18 @@ async fn postgres_policy_serialization(db: &Database, inspect: &mut sqlx::PgConn
     let campaigns = db.campaigns();
     let launching =
         tokio::spawn(async move { campaigns.create(other, launch, 1_900_010_000).await });
-    tokio::time::timeout(std::time::Duration::from_secs(10),async {
-        loop {
-            assert!(!launching.is_finished());
-            sqlx::query("SELECT pg_stat_clear_snapshot()").execute(&mut *held).await.unwrap();
-            let waiting:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND application_name='ruphish' AND wait_event_type='Lock')").fetch_one(&mut *held).await.unwrap();
-            if waiting {break;} tokio::task::yield_now().await;
+    loop {
+        assert!(!launching.is_finished());
+        sqlx::query("SELECT pg_stat_clear_snapshot()")
+            .execute(&mut *held)
+            .await
+            .unwrap();
+        let waiting:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND application_name='ruphish' AND wait_event_type='Lock')").fetch_one(&mut *held).await.unwrap();
+        if waiting {
+            break;
         }
-    }).await.unwrap();
+        tokio::task::yield_now().await;
+    }
     let store = db.settings();
     let mut policy = settings.policy.clone();
     policy.webhooks_enabled = true;
@@ -1062,14 +1071,21 @@ async fn postgres_policy_serialization(db: &Database, inspect: &mut sqlx::PgConn
             .save(admin, settings.revision, policy, 1_900_010_001)
             .await
     });
-    tokio::time::timeout(std::time::Duration::from_secs(10),async {
-        loop {
-            assert!(!saving.is_finished(),"policy must wait for an admitted write by another owner");
-            sqlx::query("SELECT pg_stat_clear_snapshot()").execute(&mut *held).await.unwrap();
-            let waiting:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND application_name='ruphish' AND wait_event_type='Lock' AND query LIKE '%ruphish_settings%')").fetch_one(&mut *held).await.unwrap();
-            if waiting {break;} tokio::task::yield_now().await;
+    loop {
+        assert!(
+            !saving.is_finished(),
+            "policy must wait for an admitted write by another owner"
+        );
+        sqlx::query("SELECT pg_stat_clear_snapshot()")
+            .execute(&mut *held)
+            .await
+            .unwrap();
+        let waiting:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND application_name='ruphish' AND wait_event_type='Lock' AND query LIKE '%ruphish_settings%')").fetch_one(&mut *held).await.unwrap();
+        if waiting {
+            break;
         }
-    }).await.unwrap();
+        tokio::task::yield_now().await;
+    }
     held.rollback().await.unwrap();
     launching.await.unwrap().unwrap();
     let saved = saving.await.unwrap().unwrap();

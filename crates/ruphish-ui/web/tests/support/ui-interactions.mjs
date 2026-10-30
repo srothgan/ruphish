@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { JSDOM } from 'jsdom';
 import { createDemoApi, preferences } from '../../demo-api.mjs';
 import { dataset } from '../../../../../assets/website-demo/dataset.mjs';
@@ -9,6 +10,23 @@ const returnOrigin =
   '/campaigns/2/results?source=public&event=link_clicked&from=0&until=1999999999&sort=name&order=desc&offset=1&limit=25';
 const path =
   {
+    'form-import': '/groups?import=1',
+    'form-webhook': '/webhooks/new',
+    'form-mailbox': '/reporting-mailboxes/new',
+    'form-filters': returnOrigin,
+    'form-group': '/groups/new',
+    'form-email': '/templates/new',
+    'form-page': '/pages/new',
+    'form-learning': '/learning-pages/new',
+    'form-smtp': '/smtp/new',
+    'form-user': '/users/new',
+    'form-domain': '/domains/new',
+    'form-password': '/user/password',
+    'form-preferences': '/user/settings',
+    'form-settings': '/settings',
+    'form-campaign': '/campaigns/new',
+    'form-draft': '/campaigns/drafts/00000000-0000-4000-8000-000000000001/edit',
+    'form-session': '/groups/new',
     'results-chart': '/campaigns/2/results',
     'results-refresh': '/campaigns/2/results',
     'recipient-return': returnOrigin,
@@ -69,7 +87,20 @@ globalThis.Request = class extends NativeRequest {
 win.Request = globalThis.Request;
 win.Response = globalThis.Response;
 Object.assign(preferences, { language: 'de', format_locale: 'de-DE', time_zone: 'Europe/Berlin' });
+if (scenario.startsWith('form-')) {
+  preferences.language = 'en';
+}
 const now = 1793016000;
+const NativeDate = Date;
+class FixtureDate extends NativeDate {
+  constructor(...args) {
+    super(...(args.length ? args : [now * 1000]));
+  }
+  static now() {
+    return now * 1000;
+  }
+}
+globalThis.Date = win.Date = FixtureDate;
 const data = dataset(now);
 const campaign = data.campaigns.find((c) => c.header.id === 2);
 if (scenario === 'results-chart') {
@@ -121,9 +152,49 @@ let holdDelivery = false;
 let releaseDelivery;
 let holdHistory = false;
 let releaseHistory;
+let holdSession = false;
+let releaseSession;
+let sessionExpired = false;
+let releaseValidation;
+const featureOverrides = { webhooks_enabled: true, reporting_mailboxes_enabled: true };
+let failSave = false;
+const writes = [];
 globalThis.fetch = async (request, options) => {
   const url = new URL(request.url);
   requests.push(url.pathname + url.search);
+  if (scenario.startsWith('form-') && ['POST', 'PUT'].includes(request.method)) {
+    writes.push({ path: url.pathname, body: await request.clone().json() });
+    if (failSave) {
+      return new Response(JSON.stringify({ success: false, code: 'TEST_FAILURE' }), {
+        status: 503,
+      });
+    }
+    if (['/api/pages/validate', '/api/learning-pages/validate'].includes(url.pathname)) {
+      return new Promise((resolve) => {
+        releaseValidation = () =>
+          resolve(
+            new Response(JSON.stringify({ success: false, code: 'TEST_FAILURE' }), { status: 503 }),
+          );
+      });
+    }
+  }
+  if (url.pathname === '/auth/session') {
+    if (holdSession) {
+      await new Promise((resolve) => {
+        releaseSession = resolve;
+      });
+    }
+    const response = await api.execute(request, options);
+    const value = await response.json();
+    value.features = { ...value.features, ...featureOverrides };
+    if (sessionExpired) {
+      value.user = null;
+    }
+    return new Response(JSON.stringify(value), {
+      status: response.status,
+      headers: response.headers,
+    });
+  }
   if (request.method === 'POST' && url.pathname.endsWith('/events')) {
     changes.push(await request.clone().json());
   }
@@ -207,13 +278,8 @@ const { initSync } = await import(new URL(script, dist));
 initSync({ module: readFileSync(new URL(script.replace(/\.js$/, '_bg.wasm'), dist)) });
 
 async function until(condition) {
-  const deadline = Date.now() + 5000;
   while (!condition()) {
-    assert.ok(
-      Date.now() < deadline,
-      `Unmet condition at ${win.location.href}: ${win.document.body.textContent.slice(0, 300)}`,
-    );
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await nextTurn();
   }
 }
 const document = win.document;
@@ -222,6 +288,192 @@ const settled = () =>
   regions().length > 0 &&
   regions().every((e) => e.dataset.ready === 'true' && e.getAttribute('aria-busy') === 'false');
 const resultsPath = '/campaigns/2/results';
+
+if (scenario.startsWith('form-')) {
+  const selector =
+    scenario === 'form-import'
+      ? 'dialog textarea'
+      : scenario === 'form-filters'
+        ? 'form input[type="datetime-local"]'
+        : scenario === 'form-preferences'
+          ? 'form select'
+          : '.admin-content input:not([type="file"]):not([type="checkbox"])';
+  await until(
+    () =>
+      document.querySelector(selector) &&
+      regions().every((e) => e.dataset.ready === 'true' && e.getAttribute('aria-busy') === 'false'),
+  );
+  // Drain request and reactive microtasks before simulating the file picker's return.
+  await nextTurn();
+  const input = document.querySelector(selector);
+  const form =
+    input.closest(scenario === 'form-import' ? 'dialog' : 'form') ??
+    input.closest('.management-page');
+  const authored =
+    scenario === 'form-import'
+      ? 'Email,First Name,Last Name,Position\nalice@example.test,Alice,Example,Analyst\n'
+      : scenario === 'form-filters'
+        ? '2026-10-20T12:00'
+        : scenario === 'form-preferences'
+          ? 'de'
+          : scenario === 'form-settings'
+            ? '12345'
+            : 'Unfinished user input';
+  if (scenario === 'form-import') {
+    const picker = form.querySelector('input[type="file"]');
+    const file = new win.File([authored], 'recipients.csv', { type: 'text/csv' });
+    Object.defineProperty(file, 'text', { value: async () => authored });
+    Object.defineProperty(picker, 'files', { value: { 0: file, length: 1, item: () => file } });
+    picker.dispatchEvent(new win.Event('change', { bubbles: true }));
+    await until(() => input.value === authored);
+  } else {
+    input.value = authored;
+    input.dispatchEvent(
+      new win.Event(input.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }),
+    );
+  }
+  const secret = ['form-webhook', 'form-mailbox'].includes(scenario)
+    ? form.querySelector('input[type="password"]')
+    : null;
+  if (secret) {
+    secret.value = 'local-test-secret';
+    secret.dispatchEvent(new win.Event('input', { bubbles: true }));
+  }
+  const refreshSession = async () => {
+    holdSession = true;
+    win.dispatchEvent(new win.Event('focus'));
+    await until(() => releaseSession);
+    const finish = releaseSession;
+    releaseSession = null;
+    holdSession = false;
+    finish();
+    await nextTurn();
+  };
+  for (const language of ['en', 'de']) {
+    preferences.language = language;
+    if (language === 'de' && scenario === 'form-webhook') {
+      featureOverrides.reporting_mailboxes_enabled = false;
+    }
+    if (language === 'de' && scenario === 'form-mailbox') {
+      featureOverrides.webhooks_enabled = false;
+    }
+    if (scenario === 'form-filters' && language === 'de') {
+      preferences.time_zone = 'Asia/Tokyo';
+    }
+    await refreshSession();
+    assert.equal(
+      input.isConnected,
+      true,
+      `${scenario}: refreshing the session must preserve the input node`,
+    );
+    assert.equal(
+      input.value,
+      authored,
+      `${scenario}: refreshing preferences must preserve unfinished input`,
+    );
+    assert.equal(form.isConnected, true, `${scenario}: the form must stay mounted`);
+    if (secret) {
+      assert.equal(secret.value, 'local-test-secret');
+    }
+  }
+  if (['form-webhook', 'form-mailbox'].includes(scenario)) {
+    featureOverrides[
+      scenario === 'form-webhook' ? 'webhooks_enabled' : 'reporting_mailboxes_enabled'
+    ] = false;
+    await refreshSession();
+    assert.equal(input.isConnected, false, 'actual feature disablement removes its form');
+    assert.ok(
+      document.body.textContent.includes('Diese Funktion wurde von der Administration deaktiviert'),
+    );
+  }
+  if (scenario === 'form-session') {
+    sessionExpired = true;
+    await refreshSession();
+    assert.equal(
+      document.querySelector('.admin-shell'),
+      null,
+      'session expiry still removes authenticated forms',
+    );
+  }
+  if (scenario === 'form-import') {
+    form.querySelector('.import-actions button:last-child').click();
+    await until(
+      () =>
+        win.location.pathname === '/groups/new' &&
+        [...document.querySelectorAll('.recipient-table input')].some(
+          (field) => field.value === 'alice@example.test',
+        ),
+    );
+    assert.ok(
+      new URL(win.location.href).searchParams.get('draft'),
+      'review hands the imported draft to the create form',
+    );
+    assert.equal(writes.length, 1, 'review does not save a resource');
+    assert.equal(writes[0].path, '/api/import/group/review');
+    assert.equal(writes[0].body.content, authored);
+  }
+  if (scenario === 'form-filters') {
+    assert.ok(
+      form.textContent.includes('Europe/Berlin'),
+      'date inputs retain their displayed interpretation',
+    );
+    form.querySelector('button[type="submit"]').click();
+    await until(
+      () =>
+        new URL(win.location.href).searchParams.get('from') ===
+        String(Date.parse('2026-10-20T10:00:00Z') / 1000),
+    );
+  }
+  if (scenario === 'form-domain') {
+    const origin = form.querySelector('input[type="url"]');
+    origin.value = 'https://training.example.test';
+    origin.dispatchEvent(new win.Event('input', { bubbles: true }));
+    failSave = true;
+    form.querySelector('button[type="submit"]').click();
+    await until(
+      () => writes.length === 1 && document.querySelector('.form-message.error.has-content'),
+    );
+    assert.equal(input.value, authored, 'failed save preserves the draft');
+    assert.equal(origin.value, 'https://training.example.test');
+    assert.equal(writes[0].body.name, authored);
+    failSave = false;
+    form.querySelector('button[type="submit"]').click();
+    await until(() => writes.length === 2 && win.location.pathname === '/domains/1');
+    assert.deepEqual(writes[1], writes[0], 'explicit retry sends the retained draft');
+  }
+  if (['form-page', 'form-learning'].includes(scenario)) {
+    const { EditorView } = await import('@codemirror/view');
+    const editor = EditorView.findFromDOM(form.querySelector('.cm-editor'));
+    const replace = (text) =>
+      editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: text } });
+    const check = [...form.querySelectorAll('button')].find((button) =>
+      button.textContent.endsWith('prüfen'),
+    );
+    replace('<p>Before</p>');
+    check.click();
+    await until(() => releaseValidation);
+    replace('<p>Newer unsaved document</p>');
+    const finish = releaseValidation;
+    releaseValidation = null;
+    finish();
+    await nextTurn();
+    assert.equal(
+      form.querySelector('.form-message.error.has-content'),
+      null,
+      'obsolete validation errors must not annotate newer content',
+    );
+    check.click();
+    await until(() => releaseValidation);
+    releaseValidation();
+    await until(() => form.querySelector('.form-message.error.has-content'));
+    assert.equal(
+      editor.state.sliceDoc(),
+      '<p>Newer unsaved document</p>',
+      'current failures preserve authored content',
+    );
+  }
+  process.exit(0);
+}
 
 if (scenario === 'results-chart') {
   await until(() => settled() && document.querySelectorAll('.analysis-bin').length === 4);
@@ -572,12 +824,11 @@ if (scenario.startsWith('event-editor')) {
     })
       .format(new Date(time))
       .replace(' ', 'T');
-  const beforeAdd = localMinute(Date.now());
   form = await openAdd();
   const occurrence = form.querySelector('input');
-  assert.ok(
-    occurrence.value.slice(0, 16) >= beforeAdd &&
-      occurrence.value.slice(0, 16) <= localMinute(Date.now()),
+  assert.equal(
+    occurrence.value.slice(0, 16),
+    localMinute(now * 1000),
     'new events default to the current time, even in a completed campaign',
   );
   // Pick a historical occurrence before submitting to the completed fixture campaign.

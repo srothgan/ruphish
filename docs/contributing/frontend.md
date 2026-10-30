@@ -25,6 +25,8 @@ Do not hand-edit generated JS/CSS or move staging into the served directory. The
 
 Keep confirmed resource data separate from incomplete form state. Preserve recoverable edits after a failed save, reconcile revision conflicts explicitly, and guard navigation that would discard work. Do not store API keys, service credentials, or imported resource bodies in URLs to retain a draft.
 
+Mount editable forms and dialogs through stable components, keyed by record identity or explicit open/close state. Background reads and presentation changes must not reconstruct their draft owners. Session revalidation updates changed preferences and feature availability; unchanged values do not notify consumers. Resource queries load on selection, explicit refresh and confirmed mutations, with periodic reads for live campaign views. Returning focus to the window does not refetch resource queries.
+
 After a confirmed resource save, reconcile its metadata into the existing inventory query cache before refreshing. The query owner cancels obsolete reads so a pre-save response cannot restore old metadata. A retryable refresh failure retains the confirmed row with the existing stale-data warning. Group counts come from confirmed recipients; saves do not return active-campaign counts, so edits retain the last known count and creations show an unknown count until a summary read succeeds. Failed or uncertain writes never promote submitted draft fields to confirmed inventory data. An inventory that has never loaded is still unavailable until its full read succeeds.
 
 Use shared localization and date/time helpers; avoid literal English strings or feature-specific timestamp parsers. The [localization guide](localization.md) explains translation keys, error-code mapping, and independent account preferences.
@@ -39,7 +41,7 @@ The applied campaign filters live in the URL. The filter form holds only unappli
 
 Derive loading controls from query state. No confirmed presentation means initial loading; hide the data controls with the data area. A pending selection with previous data keeps the filters, summaries, chart and table mounted and shows progress in Apply. Reapplying unchanged filters is a no-op; explicit refresh has its own header control. An exact cached selection may display immediately. Background refresh retains confirmed content. Temporary failures retain the presentation with an error and retry; they must not appear as successful empty results.
 
-Campaign completion controls automatic polling and focus refresh only. It does not change selection transitions, export readiness or the content boundary. Automatic refresh requires a confirmed eligible response; an initial failure offers explicit retry. Pending requests are not restarted by the poll timer. Navigation disposes the old observer, and late responses cannot replace a newer selection.
+Campaign completion controls automatic polling only. It does not change selection transitions, export readiness or the content boundary. Automatic refresh requires a confirmed eligible response; an initial failure offers explicit retry. Pending requests are not restarted by the poll timer. Navigation disposes the old observer, and late responses cannot replace a newer selection. Unapplied filter inputs retain the time zone shown beside them until the applied filters change, so a preference refresh cannot erase or reinterpret unfinished dates.
 
 ## Form validation
 

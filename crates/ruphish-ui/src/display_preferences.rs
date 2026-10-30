@@ -45,7 +45,9 @@ impl DisplayPreferences {
         if self.value.get_untracked() != value {
             self.value.set(value);
         }
-        context.set_locale(locale);
+        if context.get_locale_untracked() != locale {
+            context.set_locale(locale);
+        }
     }
 
     /// Capture before starting a session read, so a later save takes precedence.

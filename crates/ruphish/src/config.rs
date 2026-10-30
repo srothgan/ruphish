@@ -6,6 +6,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[path = "config_environment.rs"]
+mod environment;
+
 #[derive(Clone, Default)]
 pub(crate) struct Server {
     pub(crate) listen_url: String,
@@ -63,7 +66,7 @@ pub(crate) enum ConfigError {
 
 pub(crate) fn load(path: &Path) -> Result<Config, ConfigError> {
     let source = std::fs::read(path)?;
-    decode(&source)
+    environment::decode(&source, std::env::vars_os())
 }
 
 pub(crate) fn decode(source: &[u8]) -> Result<Config, ConfigError> {
