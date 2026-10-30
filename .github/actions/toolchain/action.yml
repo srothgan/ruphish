@@ -30,14 +30,14 @@ runs:
         echo "$GITHUB_WORKSPACE/.ci-tools/bin" >> "$GITHUB_PATH"
     - name: Read enforced cache access
       id: cache
-      shell: bash
-      run: |
-        node --input-type=module <<'NODE'
-        import { appendFileSync } from 'node:fs';
-        const mode = process.env.ACTIONS_CACHE_MODE;
-        if (!['read', 'write', 'none'].includes(mode)) throw new Error('Unexpected cache mode: ' + mode);
-        appendFileSync(process.env.GITHUB_OUTPUT, `restore=${mode !== 'none'}\nsave=${mode === 'write'}\n`);
-        NODE
+      # The runner injects ACTIONS_CACHE_MODE into Node actions, not shell steps.
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      with:
+        script: |
+          const mode = process.env.ACTIONS_CACHE_MODE;
+          if (!['read', 'write', 'none'].includes(mode)) throw new Error('Unexpected cache mode: ' + mode);
+          core.setOutput('restore', mode !== 'none');
+          core.setOutput('save', mode === 'write');
     - name: Reuse compiled dependencies
       if: steps.cache.outputs.restore == 'true' && inputs.dependencies != 'true'
       uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3

@@ -88,29 +88,33 @@ test('cache modes use supported literals at workflow or job scope', () => {
   }
 });
 
-test('toolchain translates enforced token permissions and fails closed without them', () => {
-  const source = script(read('../actions/toolchain/action.yml')).replace(
-    /import .* from 'node:fs';/,
-    '',
-  );
+test('toolchain reads cache permissions in a Node action and fails closed without them', () => {
+  const step = read('../actions/toolchain/action.yml').match(
+    /^ {4}- name: Read enforced cache access\n([\s\S]*?)(?=^ {4}- name:)/m,
+  )[1];
+  // Runner v2.338.2 supplies this runtime variable to Node actions, not run steps.
+  // Keep this boundary check alongside the actual script's output assertions.
+  assert.match(step, /uses: actions\/github-script@[a-f0-9]{40}/);
+  assert.doesNotMatch(step, /^ {6}(run|shell):/m);
+  const source = step.match(/^ {8}script: \|\n([\s\S]*)/m)[1];
   for (const [access, expected] of [
-    ['read', 'restore=true\nsave=false\n'],
-    ['write', 'restore=true\nsave=true\n'],
-    ['none', 'restore=false\nsave=false\n'],
+    ['read', { restore: true, save: false }],
+    ['write', { restore: true, save: true }],
+    ['none', { restore: false, save: false }],
   ]) {
-    const writes = [];
+    const outputs = {};
     runInNewContext(source, {
-      process: { env: { ACTIONS_CACHE_MODE: access, GITHUB_OUTPUT: 'output' } },
-      appendFileSync: (path, value) => writes.push([path, value]),
+      process: { env: { ACTIONS_CACHE_MODE: access } },
+      core: { setOutput: (name, value) => (outputs[name] = value) },
     });
-    assert.deepEqual(writes, [['output', expected]]);
+    assert.deepEqual(outputs, expected);
   }
   for (const access of [undefined, '', 'write-only', 'invalid']) {
     assert.throws(
       () =>
         runInNewContext(source, {
           process: { env: { ACTIONS_CACHE_MODE: access } },
-          appendFileSync: () => assert.fail('Unexpected permission must not enable caching'),
+          core: { setOutput: () => assert.fail('Unexpected permission must not enable caching') },
         }),
       /Unexpected cache mode/,
     );
