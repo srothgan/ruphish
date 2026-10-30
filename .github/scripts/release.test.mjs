@@ -258,6 +258,7 @@ function publication(version = '0.1.0-dev.1') {
     tag: `v${version}`,
     commit: 'abc',
     publish: true,
+    image: 'ghcr.io/example/ruphish',
     image_digest: 'sha256:verified',
   };
   const files = {
@@ -372,6 +373,33 @@ test('interrupted uploads and registry/publication failures resume matching reta
       assert(!p.state.events.includes('image'));
     }
   }
+});
+
+test('private GHCR packages retain the draft and resume without reuploading or repushing', async () => {
+  const p = publication('0.1.0');
+  const verify = p.remote.verifyPublicImage;
+  const denied = new Error('unauthorized: authentication required');
+  p.remote.verifyPublicImage = async () => {
+    throw denied;
+  };
+  await assert.rejects(p.execute(), (error) => {
+    assert.equal(error.cause, denied);
+    assert.match(error.message, /ghcr.io\/example\/ruphish@sha256:verified/);
+    assert.match(error.message, /Package settings and change visibility to Public/);
+    assert.match(error.message, /rerun only the failed publication job/);
+    return true;
+  });
+  assert.equal(p.state.release.draft, true);
+  assert.equal(p.state.image, p.manifest.image_digest);
+  assert.deepEqual(p.state.assets, p.files);
+  assert(!p.state.events.includes('publish'));
+  assert(!p.state.events.includes('latest'));
+
+  p.remote.verifyPublicImage = verify;
+  p.state.events = [];
+  await p.execute();
+  assert.equal(p.state.release.draft, false);
+  assert.deepEqual(p.state.events, ['public-image', 'publish', 'latest']);
 });
 
 test('conflicting artifacts, missing published bytes, changed tags and manual runs fail closed', async () => {

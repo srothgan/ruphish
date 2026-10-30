@@ -75,7 +75,19 @@ export async function publishRelease(manifest, notes, files, remote) {
     manifest.image_digest,
     'Published image digest differs',
   );
-  await remote.verifyPublicImage(manifest.version, manifest.image_digest);
+  try {
+    await remote.verifyPublicImage(manifest.version, manifest.image_digest);
+  } catch (cause) {
+    throw new Error(
+      `Anonymous pull verification failed for ${manifest.image}@${manifest.image_digest}. ` +
+        'Release publication and latest updates have stopped; uploaded artifacts are retained. ' +
+        'New GHCR packages default to private. Open the package from the repository Packages sidebar, ' +
+        'then Package settings and change visibility to Public. If already public, inspect the registry error below. ' +
+        'After resolving it, rerun only the failed publication job in this workflow run; do not recreate the tag. ' +
+        `Registry error: ${cause.message}`,
+      { cause },
+    );
+  }
   const finals = (await remote.listReleases())
     .filter((r) => !r.draft && !r.prerelease)
     .map((r) => {
@@ -240,7 +252,7 @@ async function adapters(manifest, directory) {
       assert.equal(
         `sha256:${hash(Buffer.from(raw))}`,
         digest,
-        'Anonymous pull failed; verify GHCR package public visibility before retrying',
+        'Anonymous image digest differs from the verified release image',
       );
     },
     listReleases: () => listReleases(api),

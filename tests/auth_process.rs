@@ -177,7 +177,7 @@ fn generic_self_password_updates_require_the_dedicated_reauthenticated_flow() {
 
 #[test]
 fn dedicated_user_pages_preserve_browser_crud_and_reject_unauthorized_access() {
-    let directory = workspace();
+    let directory = workspace_with_built_assets();
     let mut process = Process::start(directory.path(), "admin");
     let base = endpoint(&mut process);
     let admin = browser();
@@ -495,7 +495,7 @@ fn unknown_browser_pages_load_the_real_ui_without_masking_protocol_or_asset_erro
 
 #[test]
 fn browser_detail_navigation_preserves_ownership_and_handles_deleted_records() {
-    let directory = workspace();
+    let directory = workspace_with_built_assets();
     let mut process = Process::start(directory.path(), "admin");
     let base = endpoint(&mut process);
     let admin = browser();
