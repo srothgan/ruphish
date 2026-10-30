@@ -5,13 +5,71 @@ sidebar:
   order: 4
 ---
 
-<!-- Release documentation decision: Present Docker as the primary recommended deployment option. Publish native binaries as a secondary option for operators who manage their own hosting, service setup, and TLS certificates. Binary release scope covers building, packaging, and verification; it does not include service integration or installers. Update the installation guidance when distribution artifacts are published. -->
-
-Docker is the primary recommended deployment option. Native release binaries are a secondary option for operators who manage their own hosting, services, and TLS certificates. Both provide the server and administration interface.
+Docker is the recommended option for persistent server hosting. Native binaries provide a local tryout without a Rust or Node installation. Both include the server and administration interface. The native installer does not create a service or start Ruphish automatically.
 
 ## Release binary
 
-> TODO before publication: Publish the release binaries and document supported platforms, download links, integrity checks, generated configuration, and first startup. Verify the packaged administration interface and upgrade procedure. Release binaries are not available yet.
+The installer sources and website release-selection API are in this repository. The commands below describe their intended deployed URLs; website deployment and verification of those URLs are still required before announcing installer availability. See [GitHub Releases](https://github.com/srothgan/ruphish/releases) for published assets; an in-progress workflow or draft is not an installable release.
+
+On Linux or macOS, run:
+
+```sh
+curl -fsSL https://ruphish.com/install.sh | sh
+```
+
+In Windows PowerShell 5.1 or PowerShell 7, run:
+
+```powershell
+irm https://ruphish.com/install.ps1 | iex
+```
+
+The default selects the highest published full version. Before a full release exists, it reports that none is available. To include development previews alongside full releases:
+
+```sh
+curl -fsSL https://ruphish.com/install.sh | sh -s -- --include-previews
+```
+
+```powershell
+& ([scriptblock]::Create((irm https://ruphish.com/install.ps1))) -IncludePreviews
+```
+
+Previews are for disposable installations; upgrades between previews or into a final release are not guaranteed. Selection follows version precedence, so `0.1.0-dev.2` precedes `0.1.0-dev.10`, which precedes `0.1.0`. The preview option can also select a full release. Each invocation resolves a version once and downloads its archive and `SHA256SUMS` from the same exact GitHub release tag.
+
+The installer targets Linux x64/ARM64 with glibc 2.36 or newer, macOS 15 or newer on Apple Silicon, and Windows x64/ARM64. Linux/macOS require `curl`, `tar`, standard POSIX utilities, and `sha256sum` or `shasum`. Windows uses built-in .NET download, ZIP, and hashing support. The staged executable must successfully report its version before replacement; missing runtime libraries or an unsupported OS leave the current installation intact. Native archives are unsigned, and macOS archives are not notarized. The installer does not disable operating-system protections.
+
+Program files live in `~/.local/share/ruphish-install/current/` with a command link at `~/.local/bin/ruphish`, or `%LOCALAPPDATA%\Programs\Ruphish\current\` on Windows. User PATH setup is optional and never changes the machine PATH. Open a new terminal after installation, or use the full-path launch command printed by the installer. A subprocess cannot update its parent shell's environment.
+
+### Inspect, choose a version, or change the destination
+
+Download the script first if you want to inspect it or pass several options:
+
+```sh
+curl -fsSL https://ruphish.com/install.sh -o install.sh
+less install.sh
+sh install.sh --help
+sh install.sh --version 0.1.0-dev.1 --no-modify-path
+```
+
+```powershell
+Invoke-WebRequest https://ruphish.com/install.ps1 -OutFile install.ps1
+Get-Content .\install.ps1
+& .\install.ps1 -Help
+& .\install.ps1 -Version 0.1.0-dev.1 -NoModifyPath
+```
+
+These version examples require that exact release to have been published. `--version` / `-Version` bypasses website version discovery and can select a preview without the preview flag. `--install-dir` / `-InstallDir` selects a dedicated absolute program directory; use the same option on future updates and removal. Existing unmanaged directories and application-data locations are refused. `--no-modify-path` / `-NoModifyPath` leaves persistent PATH configuration untouched. Do not append arguments to `irm | iex`; use the script-block form above or a saved script.
+
+### Update or remove a native installation
+
+Stop Ruphish, then rerun the installer with the desired selection options. Repeating the installed version does not replace its program files. Preview opt-in applies to each invocation. Installation never changes application configuration, databases, certificates, or logs; starting the new executable may perform migrations, so follow [backup and recovery](../administration/backup-and-recovery.md) before using existing data.
+
+A lower version triggers a prominent downgrade warning. Interactive terminals offer `Proceed? [y/N]`, with Stop as the default. Unattended runs fail unless `--allow-downgrade` / `-AllowDowngrade` is explicitly supplied. Proceeding replaces program files only: it does not reverse migrations or restore configuration. Prefer restoring a compatible backup or using separate disposable application data when returning to an older version.
+
+Download, checksum, archive-layout, or staged-executable failures preserve the installed program. An interrupted directory replacement is recovered on the next run. On Windows, stop processes holding the executable before retrying. If command-access setup fails after replacement, the installer has already printed the resulting program path; use that path while correcting PATH configuration.
+
+To remove the managed installation, run the saved script with `sh install.sh --uninstall` or `& .\install.ps1 -Uninstall`. Include a custom installation directory if you used one. Removal deletes installer-owned program files, command links, and PATH entries it owns. Application data is retained; see [default locations](../administration/configuration.md#default-locations-and-explicit-configuration). There is no automatic data-purge option.
+
+Start an installed native binary with `ruphish`, then follow [first startup](#configure-a-fresh-local-instance) below. No configuration or data is created until you launch the application.
 
 ## Docker image
 
@@ -77,7 +135,7 @@ Trunk writes the completed administration assets to `dist/admin/`. Keep that dis
 
 ## Configure a fresh local instance
 
-Run from the product root after building the administration assets:
+For an installed native binary, run `ruphish`. For a source build, run from the product root after building the administration assets:
 
 ```sh
 cargo run -p ruphish --locked
@@ -93,7 +151,7 @@ For an existing local configuration or an explicitly managed installation, pass 
 cargo run -p ruphish --locked -- --config ./config.json
 ```
 
-That file must exist. Relative paths inside an explicitly selected configuration retain their working-directory meaning. This mode does not create a per-user installation. The [configuration reference](../administration/configuration.md) provides a copyable JSON example; downloading a separate example file is unnecessary.
+For an installed binary, the equivalent command is `ruphish --config ./config.json`. That file must exist. Relative paths inside an explicitly selected configuration retain their working-directory meaning. This mode does not create a per-user installation. The [configuration reference](../administration/configuration.md) provides a copyable JSON example; downloading a separate example file is unnecessary.
 
 The public HTTP example is enough to start the application, but campaign origins require HTTPS and an enabled owned domain. Verification is additionally required when enabled in [company settings](../administration/settings.md). Use the local fixture for the tutorial, or configure [listeners and TLS](../administration/listeners-and-tls.md) for your domain.
 
