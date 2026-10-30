@@ -119,8 +119,8 @@ jobs:
       - name: Build development distribution
         if: steps.distribution.outputs.cache-hit != 'true'
         run: trunk build --locked
-      - name: Built campaign routing and loading
-        run: node --test crates/ruphish-ui/web/tests/campaign-routing.artifact.mjs
+      - name: Built forms, routing and loading
+        run: node --test crates/ruphish-ui/web/tests/ui-interactions.artifact.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: admin-distribution

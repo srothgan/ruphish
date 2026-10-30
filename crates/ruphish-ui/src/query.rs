@@ -4,7 +4,7 @@ use leptos::prelude::*;
 use leptos_fetch::{QueryClient, QueryOptions, QueryScopeLocal};
 use std::{cell::RefCell, collections::HashMap, fmt::Debug, hash::Hash, rc::Rc, time::Duration};
 
-/// Install at the app root: reuse reads for 30 seconds and revalidate on focus.
+/// Install at the app root: reuse reads for 30 seconds.
 /// Session termination hides the shell and navigates to a new document/cache.
 /// The client outlives route/authenticated-shell consumers and pending reads.
 /// Do not clear during refresh: leptos-fetch 0.4.10 can panic when the old
@@ -101,7 +101,7 @@ where
         }
     }
 
-    /// Restrict automatic focus and interval refreshes using the confirmed snapshot.
+    /// Restrict automatic interval refreshes using the confirmed snapshot.
     /// Initial loads, explicit reloads and mutation invalidations remain available.
     pub fn with_automatic_refresh(mut self, predicate: fn(&T) -> bool) -> Self {
         self.automatic = predicate;
@@ -126,31 +126,6 @@ where
             .client
             .subscribe_value_local(scope.clone(), key.clone());
         let fetching = self.client.subscribe_is_fetching_local(scope, key.clone());
-        let focus_key = key.clone();
-        let automatic_refresh = Callback::new(move |()| {
-            if !fetching.get_untracked()
-                && value.with_untracked(|v| {
-                    v.as_ref()
-                        .and_then(|s| s.data.as_ref())
-                        .is_some_and(self.automatic)
-                })
-            {
-                self.invalidate(focus_key());
-            }
-        });
-        let focus = window_event_listener(leptos::ev::focus, move |_| automatic_refresh.run(()));
-        let visible = window_event_listener(leptos::ev::visibilitychange, move |_| {
-            if web_sys::window()
-                .and_then(|w| w.document())
-                .is_some_and(|d| !d.hidden())
-            {
-                automatic_refresh.run(());
-            }
-        });
-        on_cleanup(move || {
-            focus.remove();
-            visible.remove();
-        });
         QueryView {
             data: Signal::derive(move || value.get().and_then(|s| s.data)),
             error: Signal::derive(move || value.get().and_then(|s| s.error.map(|e| e.message))),

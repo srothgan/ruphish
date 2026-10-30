@@ -51,7 +51,9 @@ impl Api {
     }
     pub(crate) fn set_features(self, value: ruphish_contracts::settings::Features) {
         self.feature_generation.update(|n| *n = n.wrapping_add(1));
-        self.features.set(value);
+        if self.features.get_untracked() != value {
+            self.features.set(value);
+        }
     }
     pub(crate) fn invalid_read(self) -> String {
         leptos_i18n::t_string!(self.i18n, ui.invalid_read_response).to_owned()

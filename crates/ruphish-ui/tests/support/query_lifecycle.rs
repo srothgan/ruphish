@@ -975,7 +975,7 @@ async fn refresh_indicator_tracks_every_held_request_without_clearing_confirmed_
     let _ = any_spawner::Executor::init_wasm_bindgen();
     let owner = Owner::new();
     let gates = Rc::new(
-        (0..4)
+        (0..3)
             .map(|_| (Gate::new(), Gate::new()))
             .collect::<Vec<_>>(),
     );
@@ -1001,15 +1001,12 @@ async fn refresh_indicator_tracks_every_held_request_without_clearing_confirmed_
         Effect::new(move |_| indicator.set(fetching.get()));
         (query, view, indicator)
     });
-    for n in 0..4 {
+    for n in 0..3 {
         if n == 1 {
             view.refresh.run(());
         }
         if n == 2 {
             query.invalidate_where(|_| true);
-        }
-        if n == 3 {
-            super::locale_window::focus();
         }
         gates[n].0.wait().await;
         any_spawner::Executor::tick().await;
@@ -1026,6 +1023,14 @@ async fn refresh_indicator_tracks_every_held_request_without_clearing_confirmed_
         any_spawner::Executor::tick().await;
         assert!(!indicator.get_untracked());
     }
+    super::locale_window::focus();
+    any_spawner::Executor::tick().await;
+    assert_eq!(
+        calls.get(),
+        3,
+        "returning to the window does not refetch resources"
+    );
+    assert!(!indicator.get_untracked());
     owner.cleanup();
 }
 

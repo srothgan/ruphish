@@ -83,6 +83,8 @@ fn detail(api: Api, id: i64) -> impl IntoView {
     let source = RwSignal::new(String::new());
     let from = RwSignal::new(String::new());
     let until = RwSignal::new(String::new());
+    // The editable dates retain their interpretation until the applied filters change.
+    let input_zone = RwSignal::new(untrack(crate::time_display::zone));
     let queries = expect_context::<CampaignQueries>();
     let selection = Memo::new(move |_| CampaignQueries::results_key(id, &filters.get()));
     let read = queries.results.observe_polling(
@@ -147,6 +149,7 @@ fn detail(api: Api, id: i64) -> impl IntoView {
     };
     Effect::new(move |_| {
         let filter = filters.get();
+        let zone = untrack(crate::time_display::zone);
         selected.set(
             filter
                 .recipients
@@ -156,8 +159,9 @@ fn detail(api: Api, id: i64) -> impl IntoView {
         );
         selected_event.set(filter.event.clone());
         source.set(filter.source.clone());
-        from.set(local_input(filter.from));
-        until.set(local_input(filter.until));
+        from.set(local_input(filter.from, &zone));
+        until.set(local_input(filter.until, &zone));
+        input_zone.set(zone);
     });
     let option_search = RwSignal::new(String::new());
     let option_state = RwSignal::new(ruphish_ui::select_options::Options::default());
@@ -205,8 +209,16 @@ fn detail(api: Api, id: i64) -> impl IntoView {
     let apply = move |event: leptos::ev::SubmitEvent| {
         event.prevent_default();
         match (
-            parse_input(&from.get_untracked(), filters.get_untracked().from),
-            parse_input(&until.get_untracked(), filters.get_untracked().until),
+            parse_input(
+                &from.get_untracked(),
+                filters.get_untracked().from,
+                &input_zone.get_untracked(),
+            ),
+            parse_input(
+                &until.get_untracked(),
+                filters.get_untracked().until,
+                &input_zone.get_untracked(),
+            ),
         ) {
             (Ok(from), Ok(until)) if !matches!((from,until),(Some(a),Some(b)) if a>=b) => {
                 let filter = Filter {
@@ -359,7 +371,7 @@ fn detail(api: Api, id: i64) -> impl IntoView {
                             <span>
                                 {move || {
                                     leptos_i18n::t_string!(
-                                        i18n, messages.arg0_from_is_inclusive_until_is_exclusive, arg0 = (crate::time_display::zone_name()).to_string()
+                                        i18n, messages.arg0_from_is_inclusive_until_is_exclusive, arg0 = ruphish_domain::datetime::zone_name(&input_zone.get()).to_owned()
                                     )
                                 }}
                             </span>

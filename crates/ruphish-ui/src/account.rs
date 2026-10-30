@@ -558,16 +558,29 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
                 </StatusPage>
             }
             .into_any()
-        } else if !(if matches!(kind, crate::integrations::Kind::Webhook) {
-            api.features.get().webhooks_enabled
         } else {
-            api.features.get().reporting_mailboxes_enabled
-        }) {
-            crate::company_settings::disabled(admin && !active).into_any()
-        } else if list {
-            crate::integrations::list(api, token.get_value(), kind).into_any()
-        } else {
-            crate::integrations::page(api, token.get_value(), kind, editing).into_any()
+            view! {
+                <Show
+                    when=move || {
+                        api.features
+                            .with(|features| {
+                                if kind.webhook() {
+                                    features.webhooks_enabled
+                                } else {
+                                    features.reporting_mailboxes_enabled
+                                }
+                            })
+                    }
+                    fallback=move || crate::company_settings::disabled(admin && !active)
+                >
+                    {if list {
+                        crate::integrations::list(api, token.get_value(), kind).into_any()
+                    } else {
+                        crate::integrations::page(api, token.get_value(), kind, editing).into_any()
+                    }}
+                </Show>
+            }
+            .into_any()
         }
     };
     let campaign_section = move |section| {
@@ -644,51 +657,27 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
             />
             <Route
                 path=path!("/webhooks")
-                view=move || move || integration_page(
-                    crate::integrations::Kind::Webhook,
-                    true,
-                    false,
-                )
+                view=move || integration_page(crate::integrations::Kind::Webhook, true, false)
             />
             <Route
                 path=path!("/webhooks/:id")
-                view=move || move || integration_page(
-                    crate::integrations::Kind::Webhook,
-                    false,
-                    false,
-                )
+                view=move || integration_page(crate::integrations::Kind::Webhook, false, false)
             />
             <Route
                 path=path!("/webhooks/:id/edit")
-                view=move || move || integration_page(
-                    crate::integrations::Kind::Webhook,
-                    false,
-                    true,
-                )
+                view=move || integration_page(crate::integrations::Kind::Webhook, false, true)
             />
             <Route
                 path=path!("/reporting-mailboxes")
-                view=move || move || integration_page(
-                    crate::integrations::Kind::Mailbox,
-                    true,
-                    false,
-                )
+                view=move || integration_page(crate::integrations::Kind::Mailbox, true, false)
             />
             <Route
                 path=path!("/reporting-mailboxes/:id")
-                view=move || move || integration_page(
-                    crate::integrations::Kind::Mailbox,
-                    false,
-                    false,
-                )
+                view=move || integration_page(crate::integrations::Kind::Mailbox, false, false)
             />
             <Route
                 path=path!("/reporting-mailboxes/:id/edit")
-                view=move || move || integration_page(
-                    crate::integrations::Kind::Mailbox,
-                    false,
-                    true,
-                )
+                view=move || integration_page(crate::integrations::Kind::Mailbox, false, true)
             />
             <Route path=path!("/campaigns/drafts/:id") view=move || draft_page(false) />
             <Route path=path!("/campaigns/drafts/:id/edit") view=move || draft_page(true) />
