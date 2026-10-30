@@ -539,10 +539,11 @@
   }
 
   /* Content editor (CodeMirror / visual frame are JS-bound; keep their hooks). */
-  .content-editor .editor-mode { display: flex; align-items: end; flex-wrap: wrap; gap: var(--s3); border-top: 1px solid var(--line); padding-top: var(--s4); }
+  .content-editor .editor-toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: var(--s3); padding-top: var(--s4); }
+  .content-editor .editor-mode { display: flex; flex: 1; align-items: end; flex-wrap: wrap; gap: var(--s3); }
   .content-editor .editor-mode strong { margin-right: auto; padding-block: var(--s2); }
   .content-editor .editor-mode label { display: grid; gap: var(--s2); max-width: 100%; margin: 0; font-weight: var(--fw-regular); }
-  .content-editor .editor-mode select, .content-editor .editor-mode button { min-height: var(--control-h); margin: 0; font-size: var(--fs-sm); line-height: 1.5; }
+  .content-editor .editor-toolbar select, .content-editor .editor-toolbar button { min-height: var(--control-h); margin: 0; font-size: var(--fs-sm); line-height: 1.5; }
   .content-editor .editor-mode select { width: 100%; max-width: 100%; }
   @media(max-width:600px) { .content-editor .editor-mode strong { flex-basis: 100%; margin-right: 0; padding: 0; } }
   .content-editor .editor-help { color: var(--muted); font-size: var(--fs-sm); margin: var(--s3) 0 var(--s4); }
@@ -588,6 +589,9 @@
   .saved-content-preview { display: block; width: 100%; min-height: 420px; border: 1px solid var(--line); border-radius: var(--r-sm); }
   .import-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
   .import-fields > label, .import-fields > button, .import-fields > .management-actions { margin: var(--s3) 0; }
+  .disclosure-content { margin-block: var(--s3); padding-inline-start: var(--s5); }
+  .disclosure-content h3 { margin: 0 0 var(--s2); font-size: var(--fs-base); }
+  .disclosure-content > p { margin: 0; color: var(--muted); font-size: var(--fs-sm); }
   .import-actions { display: flex; justify-content: space-between; gap: var(--s4); margin-top: var(--s5); }
   .import-summary { border: 1px solid var(--teal-600); border-radius: var(--r-md); background: var(--paper); padding: var(--s5) var(--s5); margin-bottom: var(--s5); }
   .import-summary h2 { margin-top: 0; }

@@ -171,10 +171,16 @@ globalThis.fetch = async (request, options) => {
     }
     if (['/api/pages/validate', '/api/learning-pages/validate'].includes(url.pathname)) {
       return new Promise((resolve) => {
-        releaseValidation = () =>
+        releaseValidation = (warnings) => {
+          releaseValidation = null;
           resolve(
-            new Response(JSON.stringify({ success: false, code: 'TEST_FAILURE' }), { status: 503 }),
+            warnings === undefined
+              ? new Response(JSON.stringify({ success: false, code: 'TEST_FAILURE' }), {
+                  status: 503,
+                })
+              : new Response(JSON.stringify({ warnings })),
           );
+        };
       });
     }
   }
@@ -311,7 +317,7 @@ if (scenario.startsWith('form-')) {
     input.closest('.management-page');
   const authored =
     scenario === 'form-import'
-      ? 'Email,First Name,Last Name,Position\nalice@example.test,Alice,Example,Analyst\n'
+      ? 'Mailadresse,First Name,Last Name,Position\nalice@example.test,Alice,Example,Analyst\n'
       : scenario === 'form-filters'
         ? '2026-10-20T12:00'
         : scenario === 'form-preferences'
@@ -326,6 +332,21 @@ if (scenario.startsWith('form-')) {
     Object.defineProperty(picker, 'files', { value: { 0: file, length: 1, item: () => file } });
     picker.dispatchEvent(new win.Event('change', { bubbles: true }));
     await until(() => input.value === authored);
+    const advanced = form.querySelector('details');
+    assert.equal(advanced.open, false, 'column mapping starts collapsed');
+    assert.equal(advanced.querySelector('summary').textContent, 'Advanced');
+    advanced.open = true;
+    const columns = [...advanced.querySelectorAll('input')];
+    assert.deepEqual(
+      columns.map((field) => field.value),
+      ['Email', 'First Name', 'Last Name', 'Position'],
+    );
+    columns[0].value = 'Mailadresse';
+    columns[0].dispatchEvent(new win.Event('input', { bubbles: true }));
+    advanced.open = false;
+    advanced.open = true;
+    assert.equal(columns[0].value, 'Mailadresse', 'collapsing preserves custom mapping');
+    advanced.open = false;
   } else {
     input.value = authored;
     input.dispatchEvent(
@@ -411,6 +432,12 @@ if (scenario.startsWith('form-')) {
     assert.equal(writes.length, 1, 'review does not save a resource');
     assert.equal(writes[0].path, '/api/import/group/review');
     assert.equal(writes[0].body.content, authored);
+    assert.deepEqual(writes[0].body.columns, [
+      'Mailadresse',
+      'First Name',
+      'Last Name',
+      'Position',
+    ]);
   }
   if (scenario === 'form-filters') {
     assert.ok(
@@ -446,30 +473,100 @@ if (scenario.startsWith('form-')) {
     const editor = EditorView.findFromDOM(form.querySelector('.cm-editor'));
     const replace = (text) =>
       editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: text } });
-    const check = [...form.querySelectorAll('button')].find((button) =>
-      button.textContent.endsWith('prüfen'),
+    const checks = [...form.querySelectorAll('button')].filter((button) =>
+      button.textContent.trim().endsWith('prüfen'),
     );
+    assert.equal(checks.length, 1, 'exactly one page check action');
+    const check = checks[0];
+    assert.ok(check.closest('.editor-toolbar'), 'page check shares the editor toolbar');
+    if (scenario === 'form-page') {
+      assert.equal(form.querySelector('#redirect_url').closest('.content-editor'), null);
+    }
+    const checkRequests = () => writes.filter((write) => write.path.endsWith('/validate'));
+    const results = () => form.querySelector('.page-check-results');
+    assert.ok(results().closest('.content-editor'), 'check feedback belongs to the editor');
     replace('<p>Before</p>');
     check.click();
     await until(() => releaseValidation);
-    replace('<p>Newer unsaved document</p>');
-    const finish = releaseValidation;
-    releaseValidation = null;
-    finish();
+    assert.equal(check.disabled, true);
+    assert.equal(check.getAttribute('aria-busy'), 'true');
+    check.click();
     await nextTurn();
+    assert.equal(checkRequests().length, 1, 'repeated clicks do not send duplicate checks');
+    assert.equal(checkRequests()[0].body.html, '<p>Before</p>');
+    replace('<p>Newer unsaved document</p>');
+    replace('<p>Before</p>');
+    releaseValidation();
+    await until(() => !check.disabled);
     assert.equal(
       form.querySelector('.form-message.error.has-content'),
       null,
-      'obsolete validation errors must not annotate newer content',
+      'obsolete validation errors must not return after editing back to the same content',
     );
+    replace('<p>Newer unsaved document</p>');
     check.click();
     await until(() => releaseValidation);
     releaseValidation();
-    await until(() => form.querySelector('.form-message.error.has-content'));
+    await until(() => results().querySelector('.form-message.error.has-content'));
     assert.equal(
       editor.state.sliceDoc(),
       '<p>Newer unsaved document</p>',
-      'current failures preserve authored content',
+      'failures preserve authored content',
+    );
+    check.click();
+    await until(() => releaseValidation);
+    assert.equal(
+      results().querySelector('.form-message.error.has-content'),
+      null,
+      'retry clears the error',
+    );
+    releaseValidation([]);
+    await until(() => results().textContent.includes('Keine Warnungen'));
+    assert.equal(check.disabled, false);
+    replace('<p>Changed after checking</p>');
+    await until(() => !results().textContent.includes('Keine Warnungen'));
+    check.click();
+    await until(() => releaseValidation);
+    replace('<p>Changed again while checking</p>');
+    releaseValidation([]);
+    await until(() => !check.disabled);
+    assert.equal(
+      results().textContent.includes('Keine Warnungen'),
+      false,
+      'late success stays hidden',
+    );
+    check.click();
+    await until(() => releaseValidation);
+    releaseValidation([{ code: 'password_disabled', control: 1 }]);
+    await until(() => results().querySelector('li'));
+    assert.ok(results().querySelector('li').textContent.includes('Passwortfeld ist deaktiviert'));
+    assert.equal(results().textContent.includes('Keine Warnungen'), false);
+    const modeButtons = form.querySelectorAll('.editor-mode button');
+    modeButtons[1].click();
+    await until(() => check.disabled);
+    const frame = form.querySelector('.visual-frame');
+    const sent = [];
+    frame.contentWindow.postMessage = (data) => sent.push(data);
+    const receive = (data) =>
+      win.dispatchEvent(new win.MessageEvent('message', { source: frame.contentWindow, data }));
+    receive({ type: 'booted' });
+    const token = sent[0].token;
+    receive({ type: 'opened', token });
+    await until(() => !check.disabled);
+    receive({ type: 'change', token, source: '<p>Visual draft</p>' });
+    await nextTurn();
+    check.click();
+    await until(() => releaseValidation);
+    assert.equal(checkRequests().at(-1).body.html, '<p>Visual draft</p>');
+    releaseValidation([]);
+    await until(() => !check.disabled);
+    modeButtons[0].click();
+    receive({ type: 'snapshot', token, source: '<p>Visual draft</p>' });
+    assert.equal(editor.state.sliceDoc(), '<p>Visual draft</p>');
+    assert.equal(check.isConnected, true, 'mode changes preserve the single check control');
+    assert.ok(
+      writes.every((write) => write.path.endsWith('/validate')),
+      'checks never save the draft',
     );
   }
   process.exit(0);

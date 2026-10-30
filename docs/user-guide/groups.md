@@ -15,7 +15,7 @@ Names must be unique within your account for newly created or renamed groups. If
 
 ## Import CSV
 
-Choose **Import** from the group list; CSV is selected by default. Select a file or paste its contents, then review the columns before continuing to the create form. Choose JSON when importing an exported group resource; imports for other resource types start with JSON.
+Choose **Import** from the group list; CSV is selected by default. Select a file or paste its contents, then continue to the create form to review the recipients. Choose JSON when importing an exported group resource; imports for other resource types start with JSON.
 
 Choose **Download recipient CSV template** in the import dialog to get a UTF-8 file with the supported headers and two synthetic example recipients. Replace the examples with your recipients, then select the file to review it before saving.
 
@@ -25,7 +25,7 @@ Alex,Rivera,alex@example.test,Operations
 Sam,Lee,sam@example.test,Support
 ```
 
-Use UTF-8; a UTF-8 byte-order mark is accepted. The email column is required. Automatic matching ignores letter case, spaces, and underscores in header names, so `First Name` and `first_name` match. Choose a mapping when your file uses different headers. Optional missing columns produce empty values.
+Use UTF-8; a UTF-8 byte-order mark is accepted. The email column is required. Automatic matching ignores letter case, spaces, and underscores in header names, so `First Name` and `first_name` match. When your file uses different headers, open **Advanced → Column mapping** and enter the corresponding CSV header names. The disclosure starts collapsed and retains your entries when closed. Optional missing columns produce empty values.
 
 Review rejected rows and download the error report if needed. Invalid addresses, encoding errors, and rows whose column count differs from the header are reported. The browser review keeps the first accepted occurrence of each case-insensitive email address and shows duplicate omissions. Acknowledge omissions/errors before creating the group.
 

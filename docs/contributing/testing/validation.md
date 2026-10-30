@@ -199,28 +199,27 @@ Run native acceptance on Linux, Windows and macOS when validating the full suppo
 
 ## GitHub selection and branch rules
 
-Three entry points own schedules and branch rules. The reusable [validation workflow](../../../.github/workflows/validation.yml) owns normal source-check commands, the dedicated [demo workflow](../../../.github/workflows/demo.yml) owns demo checks and its deployable artifact, and [paths.yml](../../../.github/paths.yml) owns the five normal path groups plus the demo group. Each group runs a fixed suite; there is no custom selector, feature-name inference, dynamic database matrix or smoke deduplication.
+Three entry points own schedules and branch rules. The reusable [validation workflow](../../../.github/workflows/validation.yml) owns normal source-check commands, the dedicated [demo workflow](../../../.github/workflows/demo.yml) owns demo checks and its deployable artifact, and [paths.yml](../../../.github/paths.yml) owns the four normal path groups plus the demo group. Each group runs a fixed suite; there is no custom selector, feature-name inference, dynamic database matrix or smoke deduplication.
 
 | File | Trigger | Validation | Required status |
 | --- | --- | --- | --- |
 | [pr.yml](../../../.github/workflows/pr.yml) | PR to main; push to main; manual full run | YAML path groups select fixed suites; a manual run selects all suites | PR gate on main |
 | [nightly.yml](../../../.github/workflows/nightly.yml) | Daily at 02:23 UTC; manual | Full development-profile source acceptance, all provider versions and native platforms, histories/recovery, dependency policy and bounded performance measurement | Monitoring; does not replace PR gates |
-| [release.yml](../../../.github/workflows/release.yml) | PR to release; manual | Full source acceptance, then optimized UI and native/executable tests on Linux x64, Windows x64 and macOS ARM64 | Release gate on release |
+| [release.yml](../../../.github/workflows/release.yml) | Version tag push; manual | Full source acceptance, optimized UI, native packages and container image verification | Release gate before tag-triggered publication; manual runs validate without publishing |
 | [validation.yml](../../../.github/workflows/validation.yml) | Called by the three entry points | Normal source checks and an internal Validation gate | Internal prerequisite of the caller's gate |
-| [demo.yml](../../../.github/workflows/demo.yml) | Called separately by the three entry points | Demo path selection, fixed demo checks/build, artifact upload and Demo gate | Required by PR and Release gates; independent prerequisite of demo deployment |
+| [demo.yml](../../../.github/workflows/demo.yml) | Called by the CI entry point in pr.yml | Demo path selection, fixed demo checks/build, artifact upload and Demo gate | Required by the PR gate; independent prerequisite of demo deployment |
 
 The CI workflow always starts for PRs to main and pushes to main, including documentation and repository housekeeping, so its gate is reported. A commit-pinned `dorny/paths-filter` action reads the YAML groups and compares the checked-out PR merge commit against its base using Git. Pushes compare main against its revision before the push, including all commits in that push. Full checkout history avoids API file-count limits and extra permissions; deleted paths and both sides of renames participate. Nightly, release and manual runs pass `full: true` and bypass path filtering. The README CI badge tracks push runs on main: it reports the checks applicable to the latest push, while nightly runs cover the full suite.
 
 | Group | Main paths | Fixed checks |
 | --- | --- | --- |
-| Website | `website/**`, `docs/**` | Website tests, Astro checks/build and site validation |
 | Product | `crates/**`, `tests/**`, `migrations/**`, `demo/**`, `assets/website-demo/**`, runtime Docker inputs and shared build inputs | Normal browser tests/lint/formatting and development assets; shared seed checks; complete native Clippy/tests on Linux x64, Windows x64 and macOS ARM64; platform asset promotion |
 | Demo | UI/domain/contracts, embedded starter content, demo data, workspace manifest/lockfile, toolchain and build/deployment inputs | Demo contracts, bundle tests, native/WASM lint, optimized build and static deployment artifact |
 | Persistence | Adapter/application/domain crates, `tests/**`, `migrations/**` and shared build inputs | Both supported MySQL and PostgreSQL versions, complete histories/schema recovery, transport checks and provider executable scenarios |
 | Public | `tests/acceptance/**`, `Dockerfile`, `.dockerignore`, `docker/**` and shared build inputs | Canonical runtime image health, shutdown/persistence and DNS/TLS/SMTP/privacy fixture |
 | Dependencies | Shared build inputs and browser npm manifests/lockfile | Cargo dependency policy and browser npm audit |
 
-Shared build inputs include workspace/crate manifests, the Cargo lockfile, toolchain and formatter configuration, `.cargo/`, Trunk, dependency policy, line-ending policy, workflow/action implementations and CI path/gate files. Workflow and path/gate changes also select website checks. Issue templates, the PR template, CODEOWNERS and Dependabot configuration do not select product acceptance. The YAML file is authoritative; add new source/build locations to the appropriate group when introducing them.
+Shared build inputs include workspace/crate manifests, the Cargo lockfile, toolchain and formatter configuration, `.cargo/`, Trunk, dependency policy, line-ending policy, workflow/action implementations, `.github/paths.yml`, and the operational scripts `.github/scripts/release.mjs` and `.github/scripts/release-publish.mjs`. Changes limited to `.github/scripts/*.test.mjs` run the always-selected JavaScript formatting, lint and functional tests plus workflow lint, without selecting product, persistence, public, dependency or demo suites. Issue templates, the PR template, CODEOWNERS and Dependabot configuration do not select product acceptance. The YAML file is authoritative; add new source/build locations to the appropriate group when introducing them.
 
 These groups intentionally trade some extra execution for predictable coverage. For example, browser-only changes also run native/platform acceptance, and an adapter change runs both provider engines and versions. No existing test guarantee is moved to nightly by this selection simplification. The bounded audience measurement remains exclusive to full runs.
 
@@ -230,14 +229,14 @@ CI uses the tools' default build, test and worker parallelism. Provider and plat
 
 Native platform and release test steps point `TMPDIR`, `TMP` and `TEMP` at GitHub's `runner.temp` directory. This keeps disposable databases and other fixtures in the job's temporary storage instead of the Windows user-profile directory. OS process metrics are optional failure diagnostics; an unavailable or timed-out metrics command does not itself fail a product test.
 
-Validation jobs use pinned actions, read-only repository permissions and checkout without persisted credentials. They receive no deployment secrets and do not publish releases. CI calls normal validation and the dedicated demo workflow in parallel, so the opt-in deployment job can proceed after its own demo artifact is ready, independently of the other checks and PR gate. The demo workflow contains no normal application jobs or duplicate workflow-lint/gate-test execution. The PR gate requires both workflows; nightly and release callers run both with `full: true`, and the Release gate continues to require demo validation. Deployment obtains its credential from a protected environment after manual approval; see [activation and credentials](../demo.md#activation-and-credentials). Validate workflow edits locally with:
+Validation jobs use pinned actions, read-only repository permissions and checkout without persisted credentials. They receive no deployment secrets and do not publish releases. CI calls normal validation and the dedicated demo workflow in parallel, so the opt-in deployment job can proceed after its own demo artifact is ready, independently of the other checks and PR gate. The demo workflow contains no normal application jobs or duplicate workflow-lint/gate-test execution. The PR gate requires both workflows. Nightly and release call normal validation with `full: true`; neither invokes the demo workflow. Deployment obtains its credential from a protected environment after manual approval; see [activation and credentials](../demo.md#activation-and-credentials). Validate workflow edits locally with:
 
 ```sh
 node --test .github/scripts/*.test.mjs demo/tests/vercel-output.test.mjs
 actionlint -shellcheck="" -pyflakes=""
 ```
 
-The gate tests execute the workflow's actual inline gate with successful, failed, cancelled, skipped and incomplete results. When path groups change, also inspect representative documentation, UI, shared Rust, persistence/migration, test-helper, build-configuration and housekeeping changes, including deleted/renamed files. Validate matching with the pinned path-filter action; workflow lint alone does not prove path coverage. Workflow-only changes do not require running product acceptance locally.
+The gate tests execute the workflow's actual inline gate with successful, failed, cancelled, skipped and incomplete results. There is no automated path-selection regression suite; the former demo-only test used a different matcher from CI and was removed. When path groups change, validate representative documentation, UI, shared Rust, persistence/migration, test-helper, build-configuration, script-test, operational-script and housekeeping changes, including deleted/renamed files, directly with the pinned path-filter action. Workflow lint alone does not prove path coverage. Workflow-only changes do not require running product acceptance locally.
 
 ## Release-profile boundary
 

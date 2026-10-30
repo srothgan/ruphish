@@ -66,7 +66,7 @@ Alex,Rivera,alex@example.test,Operations
 Sam,Lee,sam@example.test,Support
 ```
 
-Open **Groups → Import**, select the file, and inspect the column mapping and accepted rows. Continue to the create form, name the group `First exercise audience`, and save. Confirm both addresses appear. If you repeated the tutorial, choose a new resource name rather than overwriting previous work.
+Open **Groups → Import**, select the file, and use **Advanced → Column mapping** only if its headers differ from the defaults. Continue to the create form, review the accepted rows, name the group `First exercise audience`, and save. Confirm both addresses appear. If you repeated the tutorial, choose a new resource name rather than overwriting previous work.
 
 ## Write the email and landing page
 

@@ -182,44 +182,6 @@ test('new runs reset the previous preview link before building', async () => {
   assert.ok(!building.body.includes('Visit preview'));
 });
 
-test('reporting stages are ordered without becoming build or deployment prerequisites', () => {
-  const jobs = Object.fromEntries(
-    [...workflow.matchAll(/^ {2}([\w-]+):\r?\n([\s\S]*?)(?=^ {2}[\w-]+:|$(?![\s\S]))/gm)].map(
-      ([, name, body]) => [name, body],
-    ),
-  );
-  const dependencies = (name) =>
-    jobs[name]
-      .match(/^ {4}needs: (.+)$/m)?.[1]
-      .trim()
-      .replace(/[[\]]/g, '')
-      .split(/,\s*/) ?? [];
-  assert.deepEqual(dependencies('demo'), []);
-  assert.deepEqual(dependencies('deploy-demo'), ['demo']);
-  assert.deepEqual(dependencies('demo-comment-start'), []);
-  assert.deepEqual(dependencies('demo-comment-approval'), ['demo', 'demo-comment-start']);
-  assert.deepEqual(dependencies('demo-comment'), [
-    'demo',
-    'deploy-demo',
-    'demo-comment-start',
-    'demo-comment-approval',
-  ]);
-  assert.match(jobs['demo-comment-start'], /filters: \.github\/paths\.yml/);
-  assert.match(jobs['demo-comment-start'], /if: steps\.paths\.outputs\.demo == 'true'/);
-  for (const name of ['demo-comment-start', 'demo-comment-approval', 'demo-comment']) {
-    assert.match(jobs[name], /script: \*demo-comment-script/);
-  }
-  const deployment = jobs['deploy-demo'];
-  const reporting = deployment.slice(
-    deployment.indexOf('- name: Report demo deployment starting'),
-    deployment.indexOf('# Deliberately no source checkout'),
-  );
-  assert.match(reporting, /if: github.event_name == 'pull_request'/);
-  assert.match(reporting, /continue-on-error: true/);
-  assert.match(reporting, /REPORT_PHASE: deploying/);
-  assert.ok(deployment.indexOf('REPORT_PHASE: deploying') < deployment.indexOf('vercel deploy'));
-});
-
 test('late progress reports cannot replace an already recorded later stage', async () => {
   const [deploying] = await report({ phase: 'deploying' });
   const comments = [

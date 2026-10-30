@@ -8,12 +8,21 @@ on:
 permissions:
   contents: read
 
+cache-mode: read
+
 concurrency:
   group: nightly-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   checks:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    cache-mode: write
+    uses: ./.github/workflows/validation.yml
+    with:
+      full: true
+  branch-checks:
+    if: github.ref != 'refs/heads/main'
     uses: ./.github/workflows/validation.yml
     with:
       full: true
