@@ -16,7 +16,6 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
-    time::Duration,
 };
 
 pub struct Network {
@@ -26,6 +25,7 @@ pub struct Network {
     pub records: Arc<Mutex<HashMap<String, String>>>,
     stop: Arc<AtomicBool>,
     threads: Vec<std::thread::JoinHandle<()>>,
+    connections: super::connection::Connections,
 }
 impl Network {
     pub fn new(handler: impl Fn(&str, &str) -> Option<String> + Send + Sync + 'static) -> Self {
@@ -53,18 +53,17 @@ impl Network {
         );
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = stop.clone();
+        let connections = super::connection::Connections::default();
+        let active = connections.clone();
         let https = std::thread::spawn(move || {
             for connection in listener.incoming() {
                 if stopping.load(Ordering::Relaxed) {
                     break;
                 }
                 let Ok(connection) = connection else { continue };
-                connection
-                    .set_read_timeout(Some(Duration::from_secs(5)))
-                    .unwrap();
-                connection
-                    .set_write_timeout(Some(Duration::from_secs(5)))
-                    .unwrap();
+                let Some(_connection) = active.track(&connection) else {
+                    break;
+                };
                 let mut stream = rustls::StreamOwned::new(
                     rustls::ServerConnection::new(config.clone()).unwrap(),
                     connection,
@@ -111,9 +110,6 @@ impl Network {
         });
         let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
         let resolver = socket.local_addr().unwrap();
-        socket
-            .set_read_timeout(Some(Duration::from_millis(100)))
-            .unwrap();
         let records = Arc::new(Mutex::new(HashMap::<String, String>::new()));
         let values = records.clone();
         let stopping = stop.clone();
@@ -165,6 +161,7 @@ impl Network {
             certificate,
             records,
             stop,
+            connections,
             threads: vec![https, dns],
         }
     }
@@ -181,7 +178,9 @@ impl Network {
 impl Drop for Network {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
-        let _ = TcpStream::connect_timeout(&self.address, Duration::from_secs(1));
+        self.connections.close();
+        let _ = UdpSocket::bind("127.0.0.1:0").and_then(|wake| wake.send_to(&[0], self.resolver));
+        let _ = TcpStream::connect(self.address);
         for thread in self.threads.drain(..) {
             thread.join().unwrap();
         }

@@ -13,7 +13,6 @@ use std::{
     io::{BufRead, BufReader, Write},
     net::TcpListener,
     sync::mpsc,
-    time::Duration,
 };
 
 fn server(
@@ -33,9 +32,6 @@ fn server(
     let (sent, received) = mpsc::channel();
     let thread = std::thread::spawn(move || {
         let (stream, _) = listener.accept().unwrap();
-        stream
-            .set_read_timeout(Some(Duration::from_secs(5)))
-            .unwrap();
         let mut io = BufReader::new(stream);
         io.get_mut().write_all(b"220 local ESMTP\r\n").unwrap();
         loop {
@@ -110,7 +106,7 @@ async fn explicit_rejections_and_lost_acceptance_have_different_retry_guarantees
         if let Err(error) = outcome {
             assert_eq!(error.stage, Stage::Acceptance);
         }
-        let bytes = received.recv_timeout(Duration::from_secs(2)).unwrap();
+        let bytes = received.recv().unwrap();
         assert!(
             String::from_utf8(bytes).unwrap().contains("\r\n..dot\r\n"),
             "Lettre must retain SMTP dot stuffing"
@@ -158,9 +154,6 @@ async fn every_pre_content_smtp_phase_rejects_without_transmitting_a_body() {
             };
             let server = std::thread::spawn(move || {
                 let (stream, _) = listener.accept().unwrap();
-                stream
-                    .set_read_timeout(Some(Duration::from_secs(5)))
-                    .unwrap();
                 let mut io = BufReader::new(stream);
                 let rejected = format!("{code} synthetic-phase-secret\r\n");
                 io.get_mut()

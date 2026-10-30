@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { JSDOM } from 'jsdom';
 import { createDemoApi, preferences } from '../../demo-api.mjs';
 import { dataset } from '../../../../../assets/website-demo/dataset.mjs';
@@ -90,6 +91,16 @@ if (scenario.startsWith('form-')) {
   preferences.language = 'en';
 }
 const now = 1793016000;
+const NativeDate = Date;
+class FixtureDate extends NativeDate {
+  constructor(...args) {
+    super(...(args.length ? args : [now * 1000]));
+  }
+  static now() {
+    return now * 1000;
+  }
+}
+globalThis.Date = win.Date = FixtureDate;
 const data = dataset(now);
 const campaign = data.campaigns.find((c) => c.header.id === 2);
 if (scenario === 'results-chart') {
@@ -267,13 +278,8 @@ const { initSync } = await import(new URL(script, dist));
 initSync({ module: readFileSync(new URL(script.replace(/\.js$/, '_bg.wasm'), dist)) });
 
 async function until(condition) {
-  const deadline = Date.now() + 5000;
   while (!condition()) {
-    assert.ok(
-      Date.now() < deadline,
-      `Unmet condition at ${win.location.href}: ${win.document.body.textContent.slice(0, 300)}`,
-    );
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await nextTurn();
   }
 }
 const document = win.document;
@@ -297,8 +303,8 @@ if (scenario.startsWith('form-')) {
       document.querySelector(selector) &&
       regions().every((e) => e.dataset.ready === 'true' && e.getAttribute('aria-busy') === 'false'),
   );
-  // Let bootstrap and route session checks settle before simulating the file picker's return.
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  // Drain request and reactive microtasks before simulating the file picker's return.
+  await nextTurn();
   const input = document.querySelector(selector);
   const form =
     input.closest(scenario === 'form-import' ? 'dialog' : 'form') ??
@@ -341,7 +347,7 @@ if (scenario.startsWith('form-')) {
     releaseSession = null;
     holdSession = false;
     finish();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await nextTurn();
   };
   for (const language of ['en', 'de']) {
     preferences.language = language;
@@ -450,7 +456,7 @@ if (scenario.startsWith('form-')) {
     const finish = releaseValidation;
     releaseValidation = null;
     finish();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await nextTurn();
     assert.equal(
       form.querySelector('.form-message.error.has-content'),
       null,
@@ -818,12 +824,11 @@ if (scenario.startsWith('event-editor')) {
     })
       .format(new Date(time))
       .replace(' ', 'T');
-  const beforeAdd = localMinute(Date.now());
   form = await openAdd();
   const occurrence = form.querySelector('input');
-  assert.ok(
-    occurrence.value.slice(0, 16) >= beforeAdd &&
-      occurrence.value.slice(0, 16) <= localMinute(Date.now()),
+  assert.equal(
+    occurrence.value.slice(0, 16),
+    localMinute(now * 1000),
     'new events default to the current time, even in a completed campaign',
   );
   // Pick a historical occurrence before submitting to the completed fixture campaign.

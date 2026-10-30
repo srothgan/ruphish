@@ -429,6 +429,8 @@ fn final_html_preserves_authored_execution_and_assets_inside_managed_form_sandbo
     );
 }
 
+#[path = "../../../tests/support/connection.rs"]
+mod connection;
 #[path = "../../../tests/support/domain_network.rs"]
 mod domain_network;
 

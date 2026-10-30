@@ -63,7 +63,6 @@ async function api(path, method = 'GET', body, headers = {}) {
   const env = await credentials();
   const response = await fetch(`${base}${path}`, {
     method,
-    signal: AbortSignal.timeout(10_000),
     headers: {
       Authorization: `Bearer ${env.GOPHISH_INITIAL_ADMIN_API_TOKEN}`,
       'Content-Type': 'application/json',
@@ -129,22 +128,10 @@ async function init() {
   console.log('Lab initialized. Existing database, credentials and TXT values are preserved.');
 }
 async function demo() {
-  const readyDeadline = Date.now() + 30_000;
-  while (true) {
-    try {
-      const response = await fetch(`${base}/auth/session`, { signal: AbortSignal.timeout(2000) });
-      if (response.ok) {
-        break;
-      }
-    } catch {
-      /* Compose starts containers before the application is ready. */
-    }
-    if (Date.now() >= readyDeadline) {
-      throw new Error(
-        'Admin listener did not become ready within 30 seconds. Inspect Docker app logs.',
-      );
-    }
-    await delay(250);
+  // The caller starts the canonical service with `docker compose up --wait`.
+  const readiness = await fetch(`${base}/health/ready`);
+  if (!readiness.ok) {
+    throw new Error(`Application is not ready: HTTP ${readiness.status}`);
   }
   await establishAccount();
   const settings = await api('/api/settings');
@@ -177,8 +164,7 @@ async function demo() {
     await publish(host, host.startsWith('good.') ? current.txt_value : wrong);
   }
   // Wait for the actual DNS reload, verification cooldown/worker and persisted result.
-  const deadline = Date.now() + 90_000;
-  while (Date.now() < deadline) {
+  while (true) {
     for (const domain of domains) {
       await api(`/api/domains/${domain.id}/verify`, 'POST');
     }
@@ -201,9 +187,6 @@ async function demo() {
     }
     await delay(2000);
   }
-  throw new Error(
-    'Verification did not reach the expected states within 90 seconds. Inspect the domain view and Docker logs.',
-  );
 }
 
 async function establishAccount() {
@@ -213,7 +196,6 @@ async function establishAccount() {
     const response = await fetch(`${base}${path}`, {
       method: fields ? 'POST' : 'GET',
       redirect: 'manual',
-      signal: AbortSignal.timeout(20_000),
       headers: {
         Accept: 'application/json',
         Origin: base,

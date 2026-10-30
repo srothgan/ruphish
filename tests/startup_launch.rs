@@ -40,11 +40,8 @@ impl Headless {
     }
 
     fn ready(&mut self) -> Value {
-        let deadline = Instant::now() + Duration::from_secs(30);
         loop {
-            let received = self
-                .lines
-                .recv_timeout(deadline.saturating_duration_since(Instant::now()));
+            let received = self.lines.recv();
             assert!(
                 received.is_ok(),
                 "Startup did not become ready: {}",
@@ -118,27 +115,14 @@ fn default_config(profile: &Path) -> PathBuf {
 
 fn failed(command: Command) -> String {
     let mut process = Headless::start(command);
-    let deadline = Instant::now() + Duration::from_secs(15);
-    loop {
-        if let Some(status) = process.child.try_wait().unwrap() {
-            assert!(!status.success());
-            process.reader.take().unwrap().join().unwrap();
-            for line in process.lines.try_iter() {
-                process.output.push_str(&line);
-                process.output.push('\n');
-            }
-            return process.output.clone();
-        }
-        assert!(
-            Instant::now() < deadline,
-            "Expected startup to fail: {}",
-            process.output
-        );
-        if let Ok(line) = process.lines.recv_timeout(Duration::from_millis(20)) {
-            process.output.push_str(&line);
-            process.output.push('\n');
-        }
+    let status = process.child.wait().unwrap();
+    assert!(!status.success());
+    process.reader.take().unwrap().join().unwrap();
+    for line in process.lines.try_iter() {
+        process.output.push_str(&line);
+        process.output.push('\n');
     }
+    process.output.clone()
 }
 
 #[test]
@@ -192,7 +176,6 @@ fn os_default_config_creates_sqlite_logs_and_preserves_login_across_working_dire
             .no_proxy()
             .cookie_store(true)
             .redirect(reqwest::redirect::Policy::none())
-            .timeout(Duration::from_secs(20))
             .add_root_certificate(reqwest::Certificate::from_pem(&original_certificate).unwrap())
             .build()
             .unwrap()

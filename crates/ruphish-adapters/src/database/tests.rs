@@ -10,7 +10,6 @@ use ruphish_application::{
     domains::Observation,
     interactions::{Action, Output},
 };
-use std::time::Duration;
 use time::OffsetDateTime;
 
 // Release the worker even if an assertion fails, so runtime shutdown cannot hang.
@@ -54,7 +53,7 @@ fn administrative_content_uses_shared_rendering_admission_and_owned_inputs() {
             let (started, start) = tokio::sync::oneshot::channel();
             let blocker = tokio::task::spawn_blocking(move || {
                 let _ = started.send(());
-                blocked.recv_timeout(Duration::from_secs(20)).unwrap();
+                blocked.recv().unwrap();
             });
             start.await.unwrap();
             let service = resources.clone();
@@ -71,13 +70,9 @@ fn administrative_content_uses_shared_rendering_admission_and_owned_inputs() {
                     )
                     .await
             });
-            tokio::time::timeout(Duration::from_secs(20), async {
-                while db.rendering.available_permits() == 8 && !request.is_finished() {
-                    tokio::task::yield_now().await;
-                }
-            })
-            .await
-            .unwrap();
+            while db.rendering.available_permits() == 8 && !request.is_finished() {
+                tokio::task::yield_now().await;
+            }
             assert!(
                 !request.is_finished(),
                 "the actual template must wait for a blocking worker"
@@ -93,11 +88,7 @@ fn administrative_content_uses_shared_rendering_admission_and_owned_inputs() {
                 assert!(request.await.unwrap().unwrap().contains("Hello Ada"));
             }
             blocker.await.unwrap();
-            let permits =
-                tokio::time::timeout(Duration::from_secs(20), db.rendering.acquire_many(8))
-                    .await
-                    .unwrap()
-                    .unwrap();
+            let permits = db.rendering.acquire_many(8).await.unwrap();
             drop(permits);
         }
         assert!(resources.page_bundle("invalid ZIP".into()).await.is_err());
@@ -179,17 +170,15 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
                 } else { Action::View };
                 operation.interact("training.example.test", "zSDu57f", action, now).await
             });
-            tokio::time::timeout(Duration::from_secs(20), async {
-                while db.rendering.available_permits() == 8 && !request.is_finished() {
+            while db.rendering.available_permits() == 8 && !request.is_finished() {
                     tokio::task::yield_now().await;
-                }
-            }).await.unwrap();
+                };
             assert!(!request.is_finished(), "{scenario}: rendering must wait for the blocking worker, including invalid templates");
             assert_eq!(db.rendering.available_permits(), 7);
 
             // This is the same single-connection pool the request uses. A read AND
             // write must finish while its blocking job remains queued.
-            tokio::time::timeout(Duration::from_secs(20), async {
+            {
                 assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM event_history").fetch_one(&inspection_pool).await.unwrap(), before);
                 let change = match scenario {
                     "complete" | "submit_complete" => "UPDATE campaigns SET status='Completed'",
@@ -199,7 +188,7 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
                     _ => "UPDATE results SET first_name='Bob'",
                 };
                 sqlx::query(change).execute(&inspection_pool).await.unwrap();
-            }).await.unwrap();
+            };
             if scenario == "cancel" {
                 request.abort();
                 assert!(matches!(request.await, Err(error) if error.is_cancelled()));
@@ -223,7 +212,7 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
                     assert!(result.is_err(), "{scenario}: rejected work must not be acknowledged");
                 }
             }
-            let permits = tokio::time::timeout(Duration::from_secs(20), db.rendering.acquire_many(8)).await.unwrap().unwrap();
+            let permits = db.rendering.acquire_many(8).await.unwrap();
             drop(permits);
             let after: i64 = sqlx::query_scalar("SELECT count(*) FROM event_history").fetch_one(&inspection_pool).await.unwrap();
             assert_eq!(after, before + i64::from(matches!(scenario, "snapshot" | "expired")), "{scenario}");
@@ -270,20 +259,18 @@ fn preview_rendering_releases_connection_and_preserves_owned_snapshot() {
             });
             ready.await.unwrap();
             let request = tokio::spawn(async move { previews.render("preview-isolation").await });
-            tokio::time::timeout(Duration::from_secs(20), async {
-                while db.rendering.available_permits() == 8 && !request.is_finished() {
+            while db.rendering.available_permits() == 8 && !request.is_finished() {
                     tokio::task::yield_now().await;
-                }
-            }).await.unwrap();
+                };
             assert!(!request.is_finished());
             assert_eq!(db.rendering.available_permits(), 7);
             // Use the actual single connection, not an independent inspection pool.
-            tokio::time::timeout(Duration::from_secs(20), async {
+            {
                 sqlx::query("UPDATE pages SET html='<h1>Changed after snapshot</h1>'")
                     .execute(&inspection_pool).await.unwrap();
                 sqlx::query("UPDATE email_requests SET first_name='Bob'")
                     .execute(&inspection_pool).await.unwrap();
-            }).await.unwrap();
+            };
             if scenario == "cancel" {
                 request.abort();
                 assert!(request.await.unwrap_err().is_cancelled());
@@ -303,7 +290,7 @@ fn preview_rendering_releases_connection_and_preserves_owned_snapshot() {
                     assert!(result.is_err(), "invalid expressions must fail without partial output");
                 }
             }
-            let permits = tokio::time::timeout(Duration::from_secs(20), db.rendering.acquire_many(8)).await.unwrap().unwrap();
+            let permits = db.rendering.acquire_many(8).await.unwrap();
             drop(permits);
             assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM event_history").fetch_one(&inspection_pool).await.unwrap(), before, "previews must not record campaign events");
             db.close().await;

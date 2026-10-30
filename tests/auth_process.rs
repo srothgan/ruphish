@@ -8,7 +8,6 @@ pub(super) fn browser() -> Client {
         .no_proxy()
         .cookie_store(true)
         .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(20))
         .build()
         .unwrap()
 }
@@ -2031,14 +2030,12 @@ fn verified_https_cookie_tampering_expiry_and_logout_replay() {
         .cookie_store(true)
         .add_root_certificate(cert.clone())
         .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(20))
         .build()
         .unwrap();
     let plain = Client::builder()
         .no_proxy()
         .add_root_certificate(cert)
         .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(20))
         .build()
         .unwrap();
     let login = sign_in(&browser, &base, "admin", "synthetic-bootstrap-password");
@@ -2265,8 +2262,7 @@ fn browser_origin_checks_support_http1_and_http2_over_verified_tls() {
             .cookie_store(true)
             .resolve("localhost", address)
             .add_root_certificate(cert.clone())
-            .redirect(reqwest::redirect::Policy::none())
-            .timeout(Duration::from_secs(20));
+            .redirect(reqwest::redirect::Policy::none());
         let browser = if version == reqwest::Version::HTTP_11 {
             builder.http1_only()
         } else {

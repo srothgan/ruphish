@@ -16,15 +16,7 @@ fn logs(directory: &Path) -> Vec<PathBuf> {
 }
 
 fn wait_output(process: &mut Process, needle: &str) -> String {
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        let output = process.output();
-        if output.contains(needle) {
-            return output;
-        }
-        assert!(Instant::now() < deadline, "Missing {needle}: {output}");
-        std::thread::sleep(Duration::from_millis(10));
-    }
+    process.wait_output(needle)
 }
 
 #[test]

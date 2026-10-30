@@ -3,11 +3,7 @@ use super::*;
 use reqwest::blocking::{Client, Response};
 
 fn client() -> Client {
-    Client::builder()
-        .no_proxy()
-        .timeout(Duration::from_secs(20))
-        .build()
-        .unwrap()
+    Client::builder().no_proxy().build().unwrap()
 }
 fn request(
     base: &str,

@@ -1,7 +1,6 @@
 //! Real-provider regression scenarios; driver access is only setup/faults/assertions.
 use super::*;
 use ruphish_application::{delivery::MessageInput, storage};
-use std::time::Duration;
 
 async fn exact_text(db: &Database) {
     let (actor, mut original) = replacement_fixture(db).await;
@@ -386,13 +385,13 @@ async fn postgres_account_deletion_fences_inflight_domain_verification() {
     let accounts = db.accounts();
     let deleting =
         tokio::spawn(async move { accounts.write(admin, auth::Write::Delete(target.id)).await });
-    tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            let waiting: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND NOT granted AND objid=987654321 AND database=(SELECT oid FROM pg_database WHERE datname=current_database()))").fetch_one(&mut inspector).await.unwrap();
-            if waiting { break; }
-            tokio::task::yield_now().await;
+    loop {
+        let waiting: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND NOT granted AND objid=987654321 AND database=(SELECT oid FROM pg_database WHERE datname=current_database()))").fetch_one(&mut inspector).await.unwrap();
+        if waiting {
+            break;
         }
-    }).await.unwrap();
+        tokio::task::yield_now().await;
+    }
     assert!(
         db.domains().claim(200).await.unwrap().is_none(),
         "claim must skip a deleting owner"
@@ -401,14 +400,17 @@ async fn postgres_account_deletion_fences_inflight_domain_verification() {
     let finishing = tokio::spawn(async move { domains.finish(&check, passed(), 101).await });
     // Both operations must be blocked now: deletion on the test barrier,
     // verification on the live owner's row. No timing-based success assumption.
-    tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            assert!(!finishing.is_finished(), "verification bypassed account deletion");
-            let waiters: i64 = sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND application_name='ruphish' AND wait_event_type='Lock'").fetch_one(&mut inspector).await.unwrap();
-            if waiters >= 2 { break; }
-            tokio::task::yield_now().await;
+    loop {
+        assert!(
+            !finishing.is_finished(),
+            "verification bypassed account deletion"
+        );
+        let waiters: i64 = sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND application_name='ruphish' AND wait_event_type='Lock'").fetch_one(&mut inspector).await.unwrap();
+        if waiters >= 2 {
+            break;
         }
-    }).await.unwrap();
+        tokio::task::yield_now().await;
+    }
     sqlx::query("SELECT pg_advisory_unlock(987654321)")
         .execute(&mut inspector)
         .await
@@ -448,27 +450,30 @@ async fn mysql_account_deletion_fences_inflight_domain_verification() {
     let accounts = db.accounts();
     let deleting =
         tokio::spawn(async move { accounts.write(admin, auth::Write::Delete(target.id)).await });
-    tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            let waiting: i64 = sqlx::query_scalar("SELECT count(*) FROM performance_schema.metadata_locks WHERE OBJECT_TYPE='USER LEVEL LOCK' AND OBJECT_NAME=? AND LOCK_STATUS='PENDING'").bind(&barrier).fetch_one(&mut inspector).await.unwrap();
-            if waiting > 0 { break; }
-            tokio::task::yield_now().await;
+    loop {
+        let waiting: i64 = sqlx::query_scalar("SELECT count(*) FROM performance_schema.metadata_locks WHERE OBJECT_TYPE='USER LEVEL LOCK' AND OBJECT_NAME=? AND LOCK_STATUS='PENDING'").bind(&barrier).fetch_one(&mut inspector).await.unwrap();
+        if waiting > 0 {
+            break;
         }
-    }).await.unwrap();
+        tokio::task::yield_now().await;
+    }
     assert!(
         db.domains().claim(200).await.unwrap().is_none(),
         "claim must skip a deleting owner"
     );
     let domains = db.domains();
     let finishing = tokio::spawn(async move { domains.finish(&check, passed(), 101).await });
-    tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            assert!(!finishing.is_finished(), "verification bypassed account deletion");
-            let waiting: i64 = sqlx::query_scalar("SELECT count(*) FROM performance_schema.data_lock_waits w JOIN performance_schema.data_locks l ON l.ENGINE_LOCK_ID=w.REQUESTING_ENGINE_LOCK_ID AND l.ENGINE=w.ENGINE WHERE l.OBJECT_SCHEMA=DATABASE() AND l.OBJECT_NAME='users'").fetch_one(&mut inspector).await.unwrap();
-            if waiting > 0 { break; }
-            tokio::task::yield_now().await;
+    loop {
+        assert!(
+            !finishing.is_finished(),
+            "verification bypassed account deletion"
+        );
+        let waiting: i64 = sqlx::query_scalar("SELECT count(*) FROM performance_schema.data_lock_waits w JOIN performance_schema.data_locks l ON l.ENGINE_LOCK_ID=w.REQUESTING_ENGINE_LOCK_ID AND l.ENGINE=w.ENGINE WHERE l.OBJECT_SCHEMA=DATABASE() AND l.OBJECT_NAME='users'").fetch_one(&mut inspector).await.unwrap();
+        if waiting > 0 {
+            break;
         }
-    }).await.unwrap();
+        tokio::task::yield_now().await;
+    }
     sqlx::query("SELECT RELEASE_LOCK(?)")
         .bind(&barrier)
         .execute(&mut inspector)

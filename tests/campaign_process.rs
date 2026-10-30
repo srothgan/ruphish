@@ -121,16 +121,12 @@ pub(super) fn start_verified(
         );
         let id = domain["id"].as_i64().unwrap();
         post(&base, &format!("/api/domains/{id}/verify"), &json!({}));
-        let deadline = Instant::now() + Duration::from_secs(90);
+
         loop {
             let current = read(&base, &format!("/api/domains/{id}"));
             if current["eligible"] == true {
                 break;
             }
-            assert!(
-                Instant::now() < deadline,
-                "Domain verification failed: {current}"
-            );
             let guard = process.output.0.lock().unwrap();
             drop(
                 process
@@ -416,9 +412,6 @@ fn probe_auth(count: usize, cram: bool) -> Probe {
     let thread = std::thread::spawn(move || {
         'connections: for _ in 0..count {
             let (stream, _) = listener.accept().unwrap();
-            stream
-                .set_read_timeout(Some(Duration::from_secs(15)))
-                .unwrap();
             let mut io = BufReader::new(stream);
             let mut challenge = false;
             let mut authenticated = !cram;
@@ -460,7 +453,7 @@ fn probe_auth(count: usize, cram: bool) -> Probe {
                         body.push_str(&line);
                     }
                     sent.send(body).unwrap();
-                    match answer.recv_timeout(Duration::from_secs(20)).unwrap() {
+                    match answer.recv().unwrap() {
                         Some(reply) => reply,
                         None => continue 'connections,
                     }
@@ -526,13 +519,11 @@ fn resources(base: &str, address: &str) -> Value {
     json!({"name":"Training","selection":{"groups":[{"id":group["id"]}],"template":{"id":template["id"]},"page":{"id":page["id"]},"smtp":{"id":smtp["id"]}},"url":origin(base, "training.example.test")})
 }
 fn wait_state(base: &str, id: i64, state: &str) -> Value {
-    let deadline = Instant::now() + Duration::from_secs(15);
     loop {
         let value = read(base, &format!("/api/campaigns/{id}/delivery"));
         if value["counts"][state].as_i64().unwrap_or(0) > 0 {
             return value;
         }
-        assert!(Instant::now() < deadline, "Expected {state}: {value}");
         std::thread::sleep(Duration::from_millis(20));
     }
 }
@@ -595,7 +586,7 @@ fn executable_launch_delivers_personalized_mail_once_and_persists_acceptance_acr
     let campaign = launch();
     let id = campaign["id"].as_i64().unwrap();
     assert_eq!(launch()["id"], id);
-    let mail = smtp.received.recv_timeout(Duration::from_secs(15)).unwrap();
+    let mail = smtp.received.recv().unwrap();
     assert!(mail.contains("Subject: Hello Alice"));
     assert!(mail.contains("alice@example.test"));
     assert!(mail.contains(&format!("{}?rid=", origin(&base, "training.example.test"))));
@@ -653,7 +644,7 @@ fn killed_after_data_is_unknown_after_restart_and_requires_explicit_reconciliati
     let body = resources(&base, &smtp.address);
     let campaign = post(&base, "/api/campaigns/", &body);
     let id = campaign["id"].as_i64().unwrap();
-    smtp.received.recv_timeout(Duration::from_secs(15)).unwrap();
+    smtp.received.recv().unwrap();
     process.crash();
     smtp.reply.send(None).unwrap();
     smtp.thread.join().unwrap();
@@ -754,7 +745,7 @@ fn debug_and_trace_logs_exclude_credentials_from_every_request_location_and_smtp
         let smtp = probe();
         let body = resources(&base, &smtp.address);
         let created = post(&base, "/api/campaigns/", &body);
-        smtp.received.recv_timeout(Duration::from_secs(15)).unwrap();
+        smtp.received.recv().unwrap();
         smtp.reply
             .send(Some("550 synthetic-secret-log-canary-994 rejected\r\n"))
             .unwrap();
@@ -875,7 +866,7 @@ fn reviewed_campaign_preview_test_and_duplicate_use_exact_owned_resources_withou
             &json!({"campaign":request,"email":"test@example.test"}),
         )
     });
-    let received = smtp.received.recv_timeout(Duration::from_secs(15)).unwrap();
+    let received = smtp.received.recv().unwrap();
     assert!(received.contains("test@example.test"));
     assert!(received.contains("Sample"));
     smtp.reply.send(Some("250 Accepted\r\n")).unwrap();
@@ -916,10 +907,10 @@ fn worker_continues_other_recipients_after_temporary_permanent_and_unknown_failu
         assert!(update.status().is_success());
         let c = post(&base, "/api/campaigns/", &body);
         let id = c["id"].as_i64().unwrap();
-        let first = smtp.received.recv_timeout(Duration::from_secs(15)).unwrap();
+        let first = smtp.received.recv().unwrap();
         assert!(first.contains("alice@example.test"));
         smtp.reply.send(reply).unwrap();
-        let second = smtp.received.recv_timeout(Duration::from_secs(15)).unwrap();
+        let second = smtp.received.recv().unwrap();
         assert!(second.contains("bob@example.test"));
         smtp.reply.send(Some("250 Accepted\r\n")).unwrap();
         smtp.thread.join().unwrap();

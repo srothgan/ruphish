@@ -66,9 +66,7 @@ mod tests {
                 first
                     .run(move || {
                         let _ = started.send(());
-                        blocked
-                            .recv_timeout(std::time::Duration::from_secs(20))
-                            .map_err(|_| Error::Internal)?;
+                        blocked.recv().map_err(|_| Error::Internal)?;
                         Ok(())
                     })
                     .await

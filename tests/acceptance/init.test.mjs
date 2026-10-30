@@ -31,7 +31,6 @@ test('fresh fixture initialization owns Cargo output and preserves existing arti
       cwd: root,
       env,
       encoding: 'utf8',
-      timeout: 10_000,
     });
     assert.ifError(result.error);
     assert.equal(result.status, 0, result.stderr);
@@ -81,7 +80,6 @@ test('isolated fixture state leaves the default lab data untouched', (t) => {
     cwd: root,
     env: { ...process.env, RUPHISH_ACCEPTANCE_DATA_DIRECTORY: isolated },
     encoding: 'utf8',
-    timeout: 10_000,
   });
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stderr);

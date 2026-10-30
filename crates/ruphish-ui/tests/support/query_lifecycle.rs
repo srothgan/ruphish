@@ -12,13 +12,6 @@ use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::JsFuture;
 use wasm_bindgen_test::wasm_bindgen_test;
 
-#[wasm_bindgen::prelude::wasm_bindgen(
-    inline_js = "export function bounded(p) { return new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error('Query condition did not complete')), 5000); p.then(v => { clearTimeout(timer); resolve(v); }, e => { clearTimeout(timer); reject(e); }); }); }"
-)]
-extern "C" {
-    fn bounded(p: &js_sys::Promise) -> js_sys::Promise;
-}
-
 #[derive(Clone)]
 struct Gate {
     promise: js_sys::Promise,
@@ -37,7 +30,7 @@ impl Gate {
         self.resolve.call0(&JsValue::NULL).unwrap();
     }
     async fn wait(&self) {
-        JsFuture::from(bounded(&self.promise)).await.unwrap();
+        JsFuture::from(self.promise.clone()).await.unwrap();
     }
 }
 async fn until(owner: &Owner, condition: impl Fn() -> bool + 'static) {

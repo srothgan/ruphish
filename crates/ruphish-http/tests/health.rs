@@ -173,23 +173,29 @@ async fn health_bounds_concurrent_probes_and_rechecks_shutdown_after_io() {
     first.await.unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn health_deadline_and_request_cancellation_release_probe_capacity() {
     let (db, service, router) = fixture();
     service.started();
     db.mode.store(2, Ordering::SeqCst);
-    tokio::time::timeout(
-        std::time::Duration::from_secs(3),
+    let blocked_router = router.clone();
+    let blocked = tokio::spawn(async move {
         probe(
-            &router,
+            &blocked_router,
             "/health/ready",
             StatusCode::SERVICE_UNAVAILABLE,
             r#"{"status":"not_ready"}"#,
-        ),
-    )
-    .await
-    .unwrap();
+        )
+        .await;
+    });
     db.entered.acquire().await.unwrap().forget();
+    tokio::time::advance(std::time::Duration::from_millis(999)).await;
+    assert!(
+        !blocked.is_finished(),
+        "probe must retain its full configured deadline"
+    );
+    tokio::time::advance(std::time::Duration::from_millis(1)).await;
+    blocked.await.unwrap();
     let request = tokio::spawn({
         let service = service.clone();
         async move { service.ready().await }

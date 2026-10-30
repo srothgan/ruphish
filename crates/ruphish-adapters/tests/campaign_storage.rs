@@ -14,6 +14,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 use support::DatabaseFixture;
+#[path = "../../../tests/support/connection.rs"]
+mod connection;
 #[path = "../../../tests/support/domain_network.rs"]
 mod domain_network;
 

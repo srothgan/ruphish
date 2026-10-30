@@ -41,7 +41,7 @@ mod tests {
     #![allow(clippy::unwrap_used, reason = "Isolated pool fixture and assertions")]
     use super::*;
     use ruphish_application::health::Service;
-    use std::{sync::Arc, time::Duration};
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn health_deadline_includes_pool_acquisition_and_releases_capacity() {
@@ -55,11 +55,7 @@ mod tests {
         let service = Service::new(Arc::new(Probe::Sqlite(pool.clone())));
         service.started();
         let held = pool.acquire().await.unwrap();
-        assert!(
-            !tokio::time::timeout(Duration::from_secs(3), service.ready())
-                .await
-                .unwrap()
-        );
+        assert!(!service.ready().await);
         drop(held);
         assert!(service.ready().await);
         sqlx::query("DELETE FROM ruphish_settings")

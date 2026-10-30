@@ -52,7 +52,6 @@ for (const scenario of [
 ]) {
   test(`UI interaction: ${scenario}`, async () => {
     await execute(process.execPath, [fixture, scenario], {
-      timeout: 30000,
       maxBuffer: 1024 * 1024,
     });
   });

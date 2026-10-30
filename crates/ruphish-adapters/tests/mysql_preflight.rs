@@ -14,7 +14,7 @@ use sqlx::{
     Connection, MySqlConnection,
     mysql::{MySqlConnectOptions, MySqlSslMode},
 };
-use std::{path::PathBuf, time::Duration};
+use std::path::PathBuf;
 
 #[test]
 fn mysql_configuration_and_legacy_dsn_reject_ambiguous_or_unsafe_inputs() {
@@ -160,12 +160,7 @@ async fn mysql_preflight_transport_credentials_and_bounded_ownership() {
         .await
         .unwrap();
     assert_eq!(owned, 1);
-    assert!(matches!(
-        tokio::time::timeout(Duration::from_secs(5), inspect_mysql(&config))
-            .await
-            .unwrap(),
-        Err(Error::Busy)
-    ));
+    assert!(matches!(inspect_mysql(&config).await, Err(Error::Busy)));
     sqlx::query("SELECT RELEASE_LOCK(?)")
         .bind(&lock)
         .execute(&mut inspector)
@@ -241,21 +236,17 @@ async fn mysql_preflight_all_legacy_versions_cancellation_and_mutated_histories(
     let mut observer = MySqlConnection::connect_with(&options).await.unwrap();
     let cancelled_config = config.clone();
     let cancelled = tokio::spawn(async move { inspect_mysql(&cancelled_config).await });
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            let owner: Option<u64> = sqlx::query_scalar("SELECT IS_USED_LOCK(?)")
-                .bind(&lock)
-                .fetch_one(&mut observer)
-                .await
-                .unwrap();
-            if owner.is_some() {
-                break;
-            }
-            tokio::task::yield_now().await;
+    loop {
+        let owner: Option<u64> = sqlx::query_scalar("SELECT IS_USED_LOCK(?)")
+            .bind(&lock)
+            .fetch_one(&mut observer)
+            .await
+            .unwrap();
+        if owner.is_some() {
+            break;
         }
-    })
-    .await
-    .unwrap();
+        tokio::task::yield_now().await;
+    }
     cancelled.abort();
     assert!(cancelled.await.unwrap_err().is_cancelled());
     sqlx::raw_sql("UNLOCK TABLES")

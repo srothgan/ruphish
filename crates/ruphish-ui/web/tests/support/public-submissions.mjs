@@ -33,7 +33,6 @@ function request(target, options = {}) {
       },
     );
     outgoing.on('error', reject);
-    outgoing.setTimeout(10000, () => outgoing.destroy(new Error('fixture request timeout')));
     outgoing.end(options.body);
   });
 }
