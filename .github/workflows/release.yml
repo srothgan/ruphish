@@ -53,15 +53,9 @@ jobs:
     with:
       full: true
 
-  demo:
-    needs: metadata
-    uses: ./.github/workflows/demo.yml
-    with:
-      full: true
-
   assets:
     name: Build optimized UI once
-    needs: [metadata, source, demo]
+    needs: [metadata, source]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -291,7 +285,7 @@ jobs:
 
   gate:
     name: Release gate
-    needs: [metadata, source, demo, assets, native, image, bundle]
+    needs: [metadata, source, assets, native, image, bundle]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -301,7 +295,7 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           const results = JSON.parse(process.env.RESULTS);
-          for (const name of ['metadata', 'source', 'demo', 'assets', 'native', 'image', 'bundle']) {
+          for (const name of ['metadata', 'source', 'assets', 'native', 'image', 'bundle']) {
             if (results[name]?.result !== 'success') throw new Error(name + ': not successful');
           }
           NODE
