@@ -23,15 +23,15 @@ function temporary(t) {
   return root;
 }
 
-test('only numbered dev/rc versions and final versions are publishable', () => {
-  for (const version of ['0.1.0-dev.1', '0.1.0-rc.12', '0.1.0', '12.20.3']) {
+test('only numbered development versions and final versions are publishable', () => {
+  for (const version of ['0.1.0-dev.1', '0.1.0-dev.12', '0.1.0', '12.20.3']) {
     assert.equal(parseVersion(version).version, version);
   }
   for (const version of [
     'v0.1.0',
     '0.1.0-dev',
     '0.1.0-dev.0',
-    '0.1.0-rc.01',
+    '0.1.0-dev.01',
     '0.1.0-beta.1',
     '01.1.0',
     '0.1.0+build',
@@ -41,21 +41,32 @@ test('only numbered dev/rc versions and final versions are publishable', () => {
     assert.throws(() => parseVersion(version), /Unsupported/);
   }
   assert(compareVersions('0.1.0-dev.10', '0.1.0-dev.2') > 0);
-  assert(compareVersions('0.1.0-rc.1', '0.1.0-dev.99') > 0);
-  assert(compareVersions('0.1.0', '0.1.0-rc.99') > 0);
+  assert(compareVersions('0.1.0', '0.1.0-dev.99') > 0);
   assert(compareVersions('0.10.0', '0.9.9') > 0);
 });
 
 test('prerelease notes stay short and point to the tagged changelog', () => {
   const dev = releaseNotes('0.1.0-dev.1', '## Unreleased\nDraft changes.', 'example/ruphish');
   assert.match(dev, /Development preview 1 for Ruphish 0\.1\.0/);
-  assert.match(dev, /blob\/v0\.1\.0-dev\.1\/CHANGELOG.md/);
+  assert(
+    dev.includes(
+      '**Changelog:** [Planned changes for 0.1.0](https://github.com/example/ruphish/blob/v0.1.0-dev.1/CHANGELOG.md)',
+    ),
+  );
+  assert(
+    dev.includes(
+      '**Docker:** [Container image and pull command](https://github.com/example/ruphish/pkgs/container/ruphish)',
+    ),
+  );
+  assert(dev.includes('```sh\ndocker pull ghcr.io/example/ruphish:0.1.0-dev.1\n```'));
+  assert(dev.includes('**Native binaries:**'));
+  assert(dev.includes('**Verification:**'));
   assert.match(dev, /not guaranteed/);
   assert(!dev.includes('Changes since'));
   assert(!dev.includes('Draft changes.'));
-  const rc = releaseNotes('0.1.0-rc.2', '', 'example/ruphish', '0.1.0-rc.1');
-  assert.match(rc, /Release candidate 2/);
-  assert.match(rc, /compare\/v0.1.0-rc.1\.\.\.v0.1.0-rc.2/);
+  const next = releaseNotes('0.1.0-dev.2', '', 'example/ruphish', '0.1.0-dev.1');
+  assert.match(next, /Development preview 2/);
+  assert.match(next, /compare\/v0.1.0-dev.1\.\.\.v0.1.0-dev.2/);
   assert.throws(() => releaseNotes('0.1.0', '', 'example/ruphish', '0.2.0'));
 });
 
@@ -319,21 +330,19 @@ function publication(version = '0.1.0-dev.1') {
   };
 }
 
-test('dev and RC publish all artifacts before release visibility and never advance latest', async () => {
-  for (const version of ['0.1.0-dev.1', '0.1.0-rc.1']) {
-    const p = publication(version);
-    await p.execute();
-    assert.deepEqual(p.state.events, [
-      'draft',
-      'upload:release-manifest.json',
-      'upload:package.zip',
-      'image',
-      'public-image',
-      'publish',
-    ]);
-    assert.equal(p.state.release.prerelease, true);
-    assert.equal(p.state.latestRelease, false);
-  }
+test('development releases publish all artifacts before release visibility and never advance latest', async () => {
+  const p = publication('0.1.0-dev.1');
+  await p.execute();
+  assert.deepEqual(p.state.events, [
+    'draft',
+    'upload:release-manifest.json',
+    'upload:package.zip',
+    'image',
+    'public-image',
+    'publish',
+  ]);
+  assert.equal(p.state.release.prerelease, true);
+  assert.equal(p.state.latestRelease, false);
 });
 
 test('final releases advance latest after publication without moving it backward', async () => {

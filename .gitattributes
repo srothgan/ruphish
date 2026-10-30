@@ -13,3 +13,6 @@ crates/ruphish-adapters/migrations/** text eol=lf
 # Container entrypoints must retain POSIX line endings on Windows checkouts.
 tests/acceptance/*.sh text eol=lf
 docker/*.sh text eol=lf
+# Website installers must work when piped from HTTP on either host family.
+website/public/install.sh text eol=lf
+website/public/install.ps1 text eol=lf

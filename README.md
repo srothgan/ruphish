@@ -45,9 +45,35 @@ The HTTP interface separates `/api/` for public automation, `/auth/` for browser
 
 ## Installation
 
-The intended installation options are a release binary and a Docker image. SQLite is the default database; MySQL and PostgreSQL are also configurable. See [installation](https://ruphish.com/docs/getting-started/installation/) for setup and [database administration](https://ruphish.com/docs/administration/databases/) for provider requirements.
+Native installers download a release binary with the administration interface included. By default, they select the latest full release.
 
-> TODO before publication: Publish the release binaries and Docker image, then complete and verify their installation instructions. These distribution options are not available yet.
+> The website installer URLs below are pending deployment and verification. Published archives are available from [GitHub Releases](https://github.com/srothgan/ruphish/releases).
+
+Linux or macOS:
+
+```sh
+curl -fsSL https://ruphish.com/install.sh | sh
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://ruphish.com/install.ps1 | iex
+```
+
+To include development previews alongside full releases, use:
+
+```sh
+curl -fsSL https://ruphish.com/install.sh | sh -s -- --include-previews
+```
+
+```powershell
+& ([scriptblock]::Create((irm https://ruphish.com/install.ps1))) -IncludePreviews
+```
+
+Until a full release is published, use the preview option; the default reports that no full release is available. Previews are intended for disposable installations, and upgrades are not guaranteed.
+
+The installer prints the installed executable's path and does not start the server automatically. See the [installation guide](https://ruphish.com/docs/getting-started/installation/) for supported platforms, first startup, Docker, updates, and removal. SQLite is the default database; see [database administration](https://ruphish.com/docs/administration/databases/) for MySQL and PostgreSQL requirements.
 
 For development, follow [contributing](CONTRIBUTING.md) for setup, architecture, and validation.
 
