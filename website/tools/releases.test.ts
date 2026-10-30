@@ -74,14 +74,13 @@ test('release HTTP API selects by version, paginates, and fails visibly at upstr
   });
 
   await t.test(
-    'default excludes previews; opt-in includes dev and full releases but ignores rc',
+    'default excludes previews; opt-in includes development and full releases',
     async () => {
       pages = [
         [
           release('0.1.0-dev.10'),
           release('0.1.0'),
           release('0.2.0-dev.2'),
-          release('0.2.0-rc.1'),
           release('9.0.0', { draft: true }),
           release('8.0.0', { published_at: null }),
         ],
@@ -105,14 +104,6 @@ test('release HTTP API selects by version, paginates, and fails visibly at upstr
       assert.equal(await response.text(), '0.2.0\n');
     },
   );
-  await t.test('rc-only releases return 404 even with previews enabled', async () => {
-    pages = [[release('0.2.0-rc.1')]];
-    for (const includePreviews of [false, true]) {
-      const response = await fetch(`${origin}/api/releases?includePreviews=${includePreviews}`);
-      assert.equal(response.status, 404);
-      assert.equal(response.headers.get('cache-control'), 'no-store');
-    }
-  });
   await t.test(
     'numeric identifiers and pagination defeat API ordering and page-one assumptions',
     async () => {

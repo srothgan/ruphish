@@ -1,6 +1,6 @@
 # Changelog
 
-Development previews and release candidates have short notes on GitHub Releases. This changelog records user-facing changes for final releases.
+Development previews have short notes on GitHub Releases. This changelog records user-facing changes for final releases.
 
 ## Unreleased
 

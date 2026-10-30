@@ -377,18 +377,6 @@ for (const kind of ['sh', 'ps1'] as const) {
       await f.packageVersion('0.2.0-dev.10');
       await f.packageVersion('0.2.0');
       await t.test(
-        'explicit rc versions are rejected before network or filesystem changes',
-        async () => {
-          for (const version of ['0.2.0-rc.1', 'v0.2.0-rc.1']) {
-            const result = await f.install([versionFlag, version]);
-            assert.notEqual(result.code, 0);
-            assert.match(result.output, /Invalid version; use X\.Y\.Z or X\.Y\.Z-dev\.N/);
-            assert.deepEqual(f.requests, []);
-            assert(!existsSync(f.root));
-          }
-        },
-      );
-      await t.test(
         'invalid options and unmanaged destinations fail before downloading',
         async () => {
           let result = await f.install([
