@@ -21,7 +21,7 @@ if [ "${1:-}" = '--mysql' ] || [ "${1:-}" = '--postgres' ]; then
         -keyout ca.key -out ca.pem -subj '/CN=Ruphish database fixture CA' \
         -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=critical,keyCertSign,cRLSign'
     openssl req -newkey rsa:2048 -nodes -keyout server.key -out server.csr -subj '/CN=localhost'
-    printf '%s\n' 'subjectAltName=DNS:localhost,IP:127.0.0.1' \
+    printf '%s\n' "subjectAltName=DNS:localhost,DNS:$provider,IP:127.0.0.1" \
         'basicConstraints=critical,CA:FALSE' 'keyUsage=critical,digitalSignature,keyEncipherment' \
         'extendedKeyUsage=serverAuth' > server.ext
     openssl x509 -req -in server.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
@@ -64,7 +64,19 @@ for file in server.key ruphish.db ruphish.db-wal ruphish.db-shm ruphish.db-journ
         chown 10001:10001 "/lab/data/$file"
     fi
 done
-cargo build -p ruphish --locked
-cp /target/debug/ruphish /artifact/ruphish
+if [ "${1:-}" = '--certificates-only' ]; then
+    echo 'Fixture certificates prepared; supplied image and executable kept.'
+    exit 0
+fi
+if [ "${1:-}" = '--release' ]; then
+    cargo build -p ruphish --release --features embedded-assets --locked
+    cp /target/release/ruphish /artifact/ruphish
+elif [ "$#" = 0 ]; then
+    cargo build -p ruphish --features embedded-assets --locked
+    cp /target/debug/ruphish /artifact/ruphish
+else
+    echo 'Expected --release, --certificates-only, --mysql, --postgres or no argument.' >&2
+    exit 1
+fi
 chmod 755 /artifact/ruphish
 echo 'Linux executable prepared in target/docker for the runtime image. No system CA store was changed.'

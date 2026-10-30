@@ -2,10 +2,12 @@
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import { randomBytes, X509Certificate, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
-const data = fileURLToPath(new URL('./data/', import.meta.url));
+const data = process.env.RUPHISH_ACCEPTANCE_DATA_DIRECTORY
+  ? resolve(process.env.RUPHISH_ACCEPTANCE_DATA_DIRECTORY)
+  : fileURLToPath(new URL('./data/', import.meta.url));
 const hosts = ['good.ruphish.test', 'bad.ruphish.test'];
 const wrong = `ruphish-verification=${'0'.repeat(64)}`;
 const base = 'http://127.0.0.1:3334';

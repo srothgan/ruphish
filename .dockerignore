@@ -3,11 +3,13 @@
 !Dockerfile
 !.dockerignore
 !LICENSE
+!THIRD-PARTY-NOTICES.md
 !docker/
 !docker/healthcheck.sh
+!docker/config.json
 !target/
 !target/docker/
 !target/docker/ruphish
 !dist/
 !dist/admin/
-!dist/admin/**
+!dist/admin/THIRD-PARTY-NOTICES.txt

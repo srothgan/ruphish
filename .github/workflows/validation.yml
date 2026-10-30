@@ -307,13 +307,28 @@ jobs:
           node tests/acceptance/lab.mjs init
           docker compose -f tests/acceptance/compose.yaml --profile setup run --rm prepare
           docker compose -f tests/acceptance/compose.yaml build app
+          node --test tests/acceptance/image.test.mjs
           docker compose -f tests/acceptance/compose.yaml up -d --wait dns inbox app
           node tests/acceptance/lab.mjs demo
           node tests/acceptance/lab.mjs seed
           node --test tests/acceptance/public.test.mjs
+      - name: Image environment configuration with MySQL
+        run: |
+          docker compose -f tests/acceptance/compose.yaml run --rm prepare --mysql
+          docker compose -f tests/acceptance/compose.yaml --profile database up -d --wait mysql
+          node --test --test-name-pattern='^mysql ' tests/acceptance/database-image.test.mjs
+          docker compose -f tests/acceptance/compose.yaml stop mysql
+          docker compose -f tests/acceptance/compose.yaml rm -f mysql
+      - name: Image environment configuration with PostgreSQL
+        run: |
+          docker compose -f tests/acceptance/compose.yaml run --rm prepare --postgres
+          docker compose -f tests/acceptance/compose.yaml --profile database up -d --wait postgres
+          node --test --test-name-pattern='^postgres ' tests/acceptance/database-image.test.mjs
+          docker compose -f tests/acceptance/compose.yaml stop postgres
+          docker compose -f tests/acceptance/compose.yaml rm -f postgres
       - name: Stop fixture without deleting persistent application data
         if: always()
-        run: docker compose -f tests/acceptance/compose.yaml stop app dns inbox
+        run: docker compose -f tests/acceptance/compose.yaml stop app dns inbox mysql postgres
 
   gate:
     name: Validation gate

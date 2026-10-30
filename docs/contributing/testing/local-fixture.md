@@ -17,13 +17,37 @@ Requirements: Docker with Linux containers and Compose v2, Node with native Fetc
 node tests/acceptance/lab.mjs init
 docker compose -f tests/acceptance/compose.yaml --profile setup run --rm prepare
 docker compose -f tests/acceptance/compose.yaml build app
+node --test tests/acceptance/image.test.mjs
 docker compose -f tests/acceptance/compose.yaml up -d --wait dns inbox app
 node tests/acceptance/lab.mjs demo
 node tests/acceptance/lab.mjs seed
 node --test tests/acceptance/public.test.mjs
 ```
 
-`prepare` compiles the Linux executable in the Rust builder container using Cargo.lock, exports it to `target/docker/ruphish`, and generates or reuses the local CA/server certificate. The Dockerfile packages that executable and `dist/admin/` as `ruphish:local`; the running app does not mount the source checkout. Building needs network access for toolchains, crates and runtime packages; acceptance scenarios use local services only. `demo` uses normal login/password-change APIs and actual DNS/TLS verification: `https://good.ruphish.test:8443` must pass and `https://bad.ruphish.test:8443` must fail with a TXT mismatch. `seed` preserves existing named resources and creates a new browser campaign each time. The protocol tests check unauthenticated health on both listeners, rejected probes, received SMTP content, public events, duplicate submissions, malformed bodies, completion, absence of canary values from API responses/logs/live SQLite files, and persistence across container replacement. They do not execute the browser collector.
+`prepare` compiles the Linux executable with `embedded-assets` in the Rust builder container using Cargo.lock, exports it to `target/docker/ruphish`, and generates or reuses the local CA/server certificate. The Dockerfile packages that executable as `ruphish:local`; the running app needs neither a source mount nor loose UI files. Building needs network access for toolchains, crates and runtime packages; acceptance scenarios use local services only. `demo` uses normal login/password-change APIs and actual DNS/TLS verification: `https://good.ruphish.test:8443` must pass and `https://bad.ruphish.test:8443` must fail with a TXT mismatch. `seed` preserves existing named resources and creates a new browser campaign each time. The protocol tests check unauthenticated health on both listeners, rejected probes, received SMTP content, public events, duplicate submissions, malformed bodies, completion, absence of canary values from API responses/logs/live SQLite files, and persistence across container replacement. They do not execute the browser collector.
+
+For optimized artifact verification, build the UI with `trunk build --release --locked` and invoke `prepare --release` instead of `prepare`. Both use the same artifact path and runtime image. If a verified executable or image is already supplied, `prepare --certificates-only` prepares the fixture without rebuilding or replacing that artifact.
+
+`image.test.mjs` checks the built image's default configuration, exact executable hash, version, notices, embedded assets and compression, non-root operation on a read-only root filesystem, and persistence across replacement. It uses a temporary named volume and no network access or published ports, then removes its own containers and volume.
+
+To verify database selection through environment variables, prepare and start one canonical provider at a time. These tests create disposable databases/accounts, connect with hostname-verified TLS, check persisted accounts after container replacement, and clean up their resources. They do not alter the application's default SQLite installation:
+
+```sh
+docker compose -f tests/acceptance/compose.yaml run --rm prepare --mysql
+docker compose -f tests/acceptance/compose.yaml --profile database up -d --wait mysql
+node --test --test-name-pattern='^mysql ' tests/acceptance/database-image.test.mjs
+docker compose -f tests/acceptance/compose.yaml stop mysql
+docker compose -f tests/acceptance/compose.yaml rm -f mysql
+docker compose -f tests/acceptance/compose.yaml run --rm prepare --postgres
+docker compose -f tests/acceptance/compose.yaml --profile database up -d --wait postgres
+node --test --test-name-pattern='^postgres ' tests/acceptance/database-image.test.mjs
+docker compose -f tests/acceptance/compose.yaml stop postgres
+docker compose -f tests/acceptance/compose.yaml rm -f postgres
+```
+
+Provider certificates for these tests must include the Compose service hostname (`mysql` or `postgres`) in addition to `localhost`. Use fresh isolated fixture state for older local certificates that lack these names; preparation preserves existing certificates.
+
+To verify with disposable fixture state while preserving the existing lab, set `RUPHISH_ACCEPTANCE_DATA_DIRECTORY` to an absolute directory before running `init` and keep it set for all Node and Compose commands. This changes only the state mount; the canonical services, network and ports remain the same. Stop any existing fixture first and run only one instance at a time. Omit the variable to continue using `tests/acceptance/data/`.
 
 `init` creates `target/docker/` as the host user before any Docker command. This keeps the parent Cargo output directory writable by native tests on Linux; Compose refuses to create a missing artifact bind source as root. If the directory was removed after initialization, recreate it as the host user with `mkdir -p target/docker` (PowerShell: `New-Item -ItemType Directory -Force target/docker`) before running `prepare` again.
 
@@ -38,9 +62,11 @@ Log in as `admin`; retrieve the fixture password with `node tests/acceptance/lab
 
 ## Local image definition
 
-The root [Dockerfile](../../../Dockerfile) packages prebuilt artifacts on a pinned Debian Bookworm slim base compatible with the Linux builder. The runtime includes CA certificates, curl and libgcc, runs as UID/GID `10001:10001`, and starts Ruphish directly as PID 1. It contains no Rust or Node toolchain. The [.dockerignore](../../../.dockerignore) allows only the executable, completed UI, license and probe script into the build context. These are development artifacts: the large unoptimized executable/WASM and separate UI files are not the self-contained production distribution planned for release.
+The root [Dockerfile](../../../Dockerfile) packages a prebuilt executable on a pinned Debian Bookworm slim base compatible with the Linux builder. The runtime includes CA certificates, curl and libgcc, runs as UID/GID `10001:10001`, and starts Ruphish directly as PID 1. It contains no Rust or Node toolchain. The [.dockerignore](../../../.dockerignore) allows only the executable, image configuration, licenses/notices and probe script into the build context. The UI is embedded in the executable; the default preparation command uses development optimization, while `prepare --release` produces the optimized server.
 
-The image expects `--config /etc/ruphish/config.json` by default; the fixture overrides this to `/lab/data/config.json`. Database selection still comes from the ordinary [database configuration](../../administration/databases/index.md). The fixture supplies SQLite and its existing certificates, credentials and database through the data mount. Preparation preserves host ownership of fixture inputs, grants the app group write access to the data directory, and assigns the server key and existing database/log files to the app user. A general deployment must mount its own readable configuration/certificates and writable state paths; fixture settings are not production defaults.
+The image sets `XDG_CONFIG_HOME=/etc` and includes a default `/etc/ruphish/config.json`, so additional CLI flags retain container defaults. The default listeners are HTTP on `0.0.0.0:3333` and `0.0.0.0:8081` inside the container, SQLite lives at `/var/lib/ruphish/ruphish.db`, and logs go to stderr. Mount a named volume at `/var/lib/ruphish` to preserve data. Publish the administration port on host loopback unless intentionally configuring remote access with trusted HTTPS. Mount a replacement configuration read-only at `/etc/ruphish/config.json`, or pass `--config` for another path. Native binary defaults remain unchanged.
+
+The fixture explicitly selects `/lab/data/config.json` and supplies SQLite, certificates, credentials and data through its state mount. Database selection still comes from the ordinary [database configuration](../../administration/databases/index.md). Preparation preserves host ownership of fixture inputs, grants the app group write access to the data directory, and assigns the server key and existing database/log files to the app user. A deployment that enables direct TLS must supply a readable certificate chain and private key at its configured paths; a reverse proxy can instead terminate HTTPS. Fixture certificates and credentials are never included in the image.
 
 The image's [health probe](../../administration/health.md) requires exactly HTTP `200` from `http://127.0.0.1:3333/health/ready`. It checks every 30 seconds, allows a 60-second startup grace period and becomes unhealthy after three consecutive failures. Curl has a two-second deadline inside Docker's three-second command timeout. Set `RUPHISH_HEALTH_URL` to match an alternative listener/port/scheme and `RUPHISH_HEALTH_CA` to a mounted CA file for private HTTPS; the URL's hostname must match the certificate. These variables configure the probe only. The script bypasses proxy environment variables, rejects redirects and validates TLS. Docker health status alone does not restart a process.
 

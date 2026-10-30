@@ -7,7 +7,7 @@ sidebar:
 
 <!-- Release documentation decision: Present Docker as the primary recommended deployment option. Publish native binaries as a secondary option for operators who manage their own hosting, service setup, and TLS certificates. Binary release scope covers building, packaging, and verification; it does not include service integration or installers. Update the installation guidance when distribution artifacts are published. -->
 
-The intended installation options are a release binary and a Docker image. Both will provide the server and administration interface.
+Docker is the primary recommended deployment option. Native release binaries are a secondary option for operators who manage their own hosting, services, and TLS certificates. Both provide the server and administration interface.
 
 ## Release binary
 
@@ -15,7 +15,35 @@ The intended installation options are a release binary and a Docker image. Both 
 
 ## Docker image
 
-> TODO before publication: Publish the Docker image and document its registry, version tags, listener ports, persistent storage, configuration, and first startup. Verify startup, restart, and upgrades using the published image. The distribution image is not available yet; the local acceptance fixture is a separate development tool.
+> TODO before publication: Publish the Docker image, replace the local image reference with its versioned registry reference, and verify startup, restart, and supported upgrades using the published image. The local image can be built now; registry distribution is not available yet. The acceptance fixture is a separate development tool.
+
+The current image includes its administration UI and a default configuration at `/etc/ruphish/config.json`. It runs as UID/GID `10001:10001`, listens on HTTP ports `3333` (administration) and `8081` (public) inside the container, and writes application logs to stderr. Mount a persistent named volume at `/var/lib/ruphish` for the default SQLite database. Container replacement must reuse that volume; data written only into a container is lost when it is removed.
+
+Mount a custom configuration read-only at `/etc/ruphish/config.json`, or select another file with `--config`. Additional flags such as `--disable-mailer` retain the image's configuration defaults. Bind the published administration port to host loopback for local access. Remote access needs trusted HTTPS through a reverse proxy or the application's TLS settings; mount the certificate chain and private key read-only at their configured paths and make the key readable by UID/GID `10001:10001`. See [listeners and TLS](../administration/listeners-and-tls.md) and [health probes](../administration/health.md) when changing listener ports or enabling TLS. The health-probe environment variables configure only the probe, not application listeners.
+
+Local build and verification commands remain in the [acceptance fixture guide](../contributing/testing/local-fixture.md); they do not publish an image.
+
+Once `ruphish:local` has been built, the repository's [compose.yaml](../../compose.yaml) starts a single application with a named SQLite volume and loopback-only published ports:
+
+```sh
+docker compose up -d --wait
+docker compose logs ruphish
+```
+
+The initial password appears in container startup output unless supplied explicitly. Edit `environment` in the Compose file to override settings such as `ADMIN_SERVER_USE_TLS`, `LOGGING_LEVEL`, and `DB_NAME`; see the complete [environment reference](../administration/configuration.md#environment-overrides-and-docker-compose). Set Compose's `ADMIN_PORT` or `PHISH_PORT` variable to an unused host port if `3333` or `8081` is occupied or reserved. These two variables affect host port mappings only, not application listeners or the health probe. Run `docker compose down` to remove containers while retaining the named volume; do not add `--volumes` when you want to preserve data.
+
+To connect the application to an existing PostgreSQL service, replace `DB_NAME` and add these environment entries:
+
+```yaml
+DB_NAME: "postgres"
+POSTGRES_HOST: "postgres.example.internal"
+POSTGRES_PORT: "5432"
+POSTGRES_DATABASE: "ruphish"
+POSTGRES_USERNAME: "ruphish"
+POSTGRES_PASSWORD: "${DATABASE_PASSWORD:?Set DATABASE_PASSWORD}"
+```
+
+For MySQL, use `DB_NAME: "mysql"`, the `MYSQL_` equivalents, and port `3306`. Both providers verify TLS by default; mount your CA and set `POSTGRES_CA_PATH` or `MYSQL_CA_PATH` when using a private CA. Provision the database and account as described in [database administration](../administration/databases/index.md). This selects a database; it does not transfer existing SQLite data. Never configure both providers in the same application environment.
 
 ## Build from source
 
@@ -57,7 +85,7 @@ cargo run -p ruphish --locked
 
 On first startup, Ruphish creates `config.json` in the [OS configuration directory](../administration/configuration.md#default-locations-and-explicit-configuration), selects SQLite, and creates the required data and log directories. Later starts read that file without rewriting it. Startup prints the selected paths. Edit the file and restart to change listeners, logging, or the database provider.
 
-The generated settings bind administration to `https://127.0.0.1:3333` and the public listener to `http://127.0.0.1:8081`. SQLite, generated certificates and logs use absolute paths in the OS application directories, so restarting from a different working directory preserves the same installation. Development builds still load administration assets from `dist/admin` under the working directory until release asset embedding is implemented.
+The generated settings bind administration to `https://127.0.0.1:3333` and the public listener to `http://127.0.0.1:8081`. SQLite, generated certificates and logs use absolute paths in the OS application directories, so restarting from a different working directory preserves the same installation. Builds without the `embedded-assets` feature load administration assets from `dist/admin` under the working directory.
 
 For an existing local configuration or an explicitly managed installation, pass its path:
 

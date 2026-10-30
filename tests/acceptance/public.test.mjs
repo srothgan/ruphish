@@ -6,10 +6,13 @@ import { readFile, readdir } from 'node:fs/promises';
 import { request } from 'node:https';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { resolve, sep } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
-const data = new URL('./data/', import.meta.url);
+const data = process.env.RUPHISH_ACCEPTANCE_DATA_DIRECTORY
+  ? pathToFileURL(resolve(process.env.RUPHISH_ACCEPTANCE_DATA_DIRECTORY) + sep)
+  : new URL('./data/', import.meta.url);
 const env = Object.fromEntries(
   (await readFile(new URL('bootstrap.env', data), 'utf8'))
     .trim()

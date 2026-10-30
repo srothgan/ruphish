@@ -7,6 +7,12 @@ sidebar:
 
 Provision an InnoDB/UTF-8 database and a dedicated service account. Grant database-scoped `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `ALTER`, `DROP`, `INDEX`, `CREATE VIEW`, and `SHOW VIEW` for runtime operations and automatic migrations. The release baseline includes `event_history` and `ruphish_domain_policy` views and requires both view privileges. Server-wide privileges, triggers, and database/account creation permissions are not required.
 
+Create the database with the release baseline's binary collation:
+
+```sql
+CREATE DATABASE ruphish CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin;
+```
+
 Replace the SQLite fields with this configuration fragment:
 
 ```json

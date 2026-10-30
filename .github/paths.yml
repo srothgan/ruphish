@@ -22,6 +22,7 @@ product:
   - 'tests/**'
   - 'migrations/**'
   - 'Dockerfile'
+  - 'compose.yaml'
   - '.dockerignore'
   - 'docker/**'
 
@@ -64,9 +65,14 @@ persistence:
 
 public:
   - *build_inputs
+  - 'crates/ruphish/src/config*.rs'
+  - 'crates/ruphish/src/installation.rs'
   - 'Dockerfile'
+  - 'compose.yaml'
   - '.dockerignore'
   - 'docker/**'
+  - 'LICENSE'
+  - 'THIRD-PARTY-NOTICES.md'
   - 'tests/acceptance/**'
 
 dependencies:
