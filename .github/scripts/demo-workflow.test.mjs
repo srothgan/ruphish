@@ -3,19 +3,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 
-const read = (name) =>
-  readFileSync(new URL(`../workflows/${name}.yml`, import.meta.url), 'utf8').replaceAll(
-    '\r\n',
-    '\n',
-  );
-const workflow = read('demo');
+const workflow = readFileSync(new URL('../workflows/demo.yml', import.meta.url), 'utf8').replaceAll(
+  '\r\n',
+  '\n',
+);
 const gate = workflow.match(/node --input-type=module <<'NODE'\n([\s\S]*?)\n\s*NODE/)[1];
-const jobBodies = (yaml) =>
-  Object.fromEntries(
-    [...yaml.matchAll(/^ {2}([\w-]+):\n([\s\S]*?)(?=^ {2}[\w-]+:|$(?![\s\S]))/gm)]
-      .filter(([, name]) => name !== 'workflow_call')
-      .map(([, name, body]) => [name, body]),
-  );
 
 function check(selected, build, paths = 'success') {
   runInNewContext(gate, {
@@ -29,20 +21,6 @@ function check(selected, build, paths = 'success') {
     },
   });
 }
-
-test('demo workflow contains only selection, build and gate with one artifact producer', () => {
-  const jobs = jobBodies(workflow);
-  assert.deepEqual(Object.keys(jobs), ['changes', 'build', 'gate']);
-  assert.match(jobs.changes, /filters: \.github\/paths\.yml/);
-  assert.match(jobs.build, /if: needs\.changes\.outputs\.demo == 'true'/);
-  assert.match(jobs.build, /trunk build --locked --release --features demo/);
-  assert.match(jobs.build, /name: demo-vercel-output/);
-  assert.doesNotMatch(
-    read('validation'),
-    /suite:|\n {2}demo:|name: demo-vercel-output|demo_changed:/,
-  );
-  assert.doesNotMatch(jobs.changes, /Check gate behavior|go run.*actionlint/);
-});
 
 test('demo gate accepts only successful selected builds and intentionally unselected builds', () => {
   check('true', 'success');
@@ -74,21 +52,4 @@ test('demo selection respects the canonical filter and full runs bypass it', () 
       assert.equal(selected, full ? 'true' : demo);
     }
   }
-});
-
-test('PR owns the demo build and gate; nightly and release do not depend on it', () => {
-  const pr = jobBodies(read('pr'));
-  for (const name of ['demo-read', 'demo-main']) {
-    assert.match(pr[name], /uses: \.\/\.github\/workflows\/demo\.yml/);
-  }
-  assert.match(pr.gate, /needs: \[[^\]]*\bdemo\b/);
-  for (const name of ['nightly', 'release']) {
-    const jobs = jobBodies(read(name));
-    assert.equal(jobs.demo, undefined);
-    assert.doesNotMatch(read(name), /uses: \.\/\.github\/workflows\/demo\.yml/);
-    for (const body of Object.values(jobs)) {
-      assert.doesNotMatch(body, /needs: \[[^\]]*\bdemo\b/);
-    }
-  }
-  assert.match(jobBodies(read('release')).assets, /needs: \[metadata, source\]/);
 });

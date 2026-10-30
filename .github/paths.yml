@@ -1,5 +1,6 @@
 # Broad ownership groups. Each selected group runs a fixed suite in validation.yml.
 # Shared build inputs affect every product consumer; repository housekeeping does not.
+# Script tests run in the always-selected quality job without selecting build suites.
 product:
   - &build_inputs
     - '**/Cargo.toml'
@@ -14,7 +15,8 @@ product:
     - '.github/workflows/**'
     - '.github/actions/**'
     - '.github/paths.yml'
-    - '.github/scripts/**'
+    - '.github/scripts/release.mjs'
+    - '.github/scripts/release-publish.mjs'
   - 'crates/**'
   - 'demo/**'
   - 'assets/website-demo/**'
@@ -45,7 +47,8 @@ demo:
   - 'demo/**'
   - '.github/workflows/**'
   - '.github/actions/**'
-  - '.github/scripts/**'
+  - '.github/scripts/release.mjs'
+  - '.github/scripts/release-publish.mjs'
   - '.github/paths.yml'
 
 persistence:

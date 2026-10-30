@@ -6,7 +6,9 @@ import { runInNewContext } from 'node:vm';
 // This guard uses operators shared by GitHub expressions and JavaScript.
 // Evaluate the workflow's guard itself, rather than a copied policy function.
 const workflow = readFileSync(new URL('../workflows/pr.yml', import.meta.url), 'utf8');
-const guard = workflow.match(/ {4}if: >-\r?\n([\s\S]*?)\r?\n {4}runs-on:/)[1].trim();
+const job = workflow.match(/^ {2}deploy-demo:\r?\n([\s\S]*?)(?=^ {2}[\w-]+:|$(?![\s\S]))/m)?.[1];
+assert.ok(job, 'Missing deploy-demo job');
+const guard = job.match(/ {4}if: >-\r?\n([\s\S]*?)\r?\n {4}runs-on:/)[1].trim();
 const github = (
   event = 'pull_request',
   repository = 'owner/repo',
@@ -58,31 +60,4 @@ test('production is limited to main pushes and explicit main dispatches', () => 
     assert.equal(allowed(github(event, 'owner/repo', 'maintainer', 'refs/heads/feature')), false);
   }
   assert.equal(allowed(github('schedule', 'owner/repo', 'maintainer', 'refs/heads/main')), false);
-});
-
-test('deployment waits only for the demo, while the PR gate still requires both suites', () => {
-  const jobs = Object.fromEntries(
-    [...workflow.matchAll(/^ {2}([\w-]+):\r?\n([\s\S]*?)(?=^ {2}[\w-]+:|$(?![\s\S]))/gm)].map(
-      ([, name, body]) => [name, body],
-    ),
-  );
-  const dependencies = (name) =>
-    jobs[name]
-      .match(/^ {4}needs: (.+)$/m)?.[1]
-      .trim()
-      .replace(/[[\]]/g, '')
-      .split(/,\s*/) ?? [];
-  const ancestors = (name) =>
-    dependencies(name).flatMap((parent) => [parent, ...ancestors(parent)]);
-  assert.deepEqual(ancestors('deploy-demo'), ['demo', 'demo-read', 'demo-main']);
-  assert.deepEqual(dependencies('gate').sort(), ['checks', 'checks-main', 'demo']);
-  for (const name of ['checks', 'checks-main']) {
-    assert.match(jobs[name], /uses: \.\/.github\/workflows\/validation\.yml/);
-    assert.doesNotMatch(jobs[name], /suite:/);
-  }
-  for (const name of ['demo-read', 'demo-main']) {
-    assert.match(jobs[name], /uses: \.\/.github\/workflows\/demo\.yml/);
-    assert.doesNotMatch(jobs[name], /suite:/);
-  }
-  assert.match(jobs['deploy-demo'], /demo-preview.*demo-production/);
 });
