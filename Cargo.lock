@@ -4608,7 +4608,7 @@ dependencies = [
 
 [[package]]
 name = "ruphish"
-version = "0.1.0-dev"
+version = "0.1.0-dev.1"
 dependencies = [
  "axum",
  "axum-server",
@@ -4647,7 +4647,7 @@ dependencies = [
 
 [[package]]
 name = "ruphish-adapters"
-version = "0.1.0-dev"
+version = "0.1.0-dev.1"
 dependencies = [
  "ammonia",
  "argon2",
@@ -4697,7 +4697,7 @@ dependencies = [
 
 [[package]]
 name = "ruphish-application"
-version = "0.1.0-dev"
+version = "0.1.0-dev.1"
 dependencies = [
  "async-trait",
  "ruphish-domain",
@@ -4707,7 +4707,7 @@ dependencies = [
 
 [[package]]
 name = "ruphish-contracts"
-version = "0.1.0-dev"
+version = "0.1.0-dev.1"
 dependencies = [
  "ruphish-domain",
  "serde",
@@ -4716,7 +4716,7 @@ dependencies = [
 
 [[package]]
 name = "ruphish-domain"
-version = "0.1.0-dev"
+version = "0.1.0-dev.1"
 dependencies = [
  "jiff",
  "language-tags",
@@ -4727,7 +4727,7 @@ dependencies = [
 
 [[package]]
 name = "ruphish-http"
-version = "0.1.0-dev"
+version = "0.1.0-dev.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -4757,7 +4757,7 @@ dependencies = [
 
 [[package]]
 name = "ruphish-ui"
-version = "0.1.0-dev"
+version = "0.1.0-dev.1"
 dependencies = [
  "any_spawner",
  "base64 0.23.1",

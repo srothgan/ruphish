@@ -1,43 +1,73 @@
-name: Release checks
-
-# TODO: Add single-binary and Docker image shipping in a separate feature step.
-# Embed the required runtime assets, verify the shipped binary and image, and add
-# checksums, signing and explicitly controlled publication after validation passes.
+name: Release
 
 on:
-  pull_request:
-    branches: [release]
+  push:
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-checks-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   NO_COLOR: 'true'
 
 jobs:
+  metadata:
+    name: Validate release identity and notes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      commit: ${{ steps.release.outputs.commit }}
+      version: ${{ steps.release.outputs.version }}
+      publish: ${{ steps.release.outputs.publish }}
+      image: ${{ steps.release.outputs.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '26.8.1'
+          package-manager-cache: false
+      - id: release
+        run: node .github/scripts/release.mjs metadata
+      - name: Reject already published versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/release-publish.mjs preflight
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release-metadata
+          path: target/release-metadata/
+          if-no-files-found: error
+          retention-days: 30
+
   source:
+    needs: metadata
     uses: ./.github/workflows/validation.yml
     with:
       full: true
 
   demo:
+    needs: metadata
     uses: ./.github/workflows/demo.yml
     with:
       full: true
 
   assets:
-    name: Optimized browser distribution
-    needs: [source, demo]
+    name: Build optimized UI once
+    needs: [metadata, source, demo]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ needs.metadata.outputs.commit }}
           persist-credentials: false
       - uses: ./.github/actions/toolchain
         with:
@@ -45,47 +75,223 @@ jobs:
           cache-group: release-browser
       - run: npm ci --prefix crates/ruphish-ui/web
       - run: trunk build --release --locked
+      - run: node --test crates/ruphish-ui/web/tests/ui-interactions.artifact.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-admin
           path: dist/admin/
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
 
   native:
-    name: Release profile on ${{ matrix.runner }}
-    needs: assets
+    name: Package and verify ${{ matrix.target }}
+    needs: [metadata, assets]
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-24.04, windows-2025, macos-15]
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            container: rust:1.99.1-bookworm
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            container: rust:1.99.1-bookworm
+          - runner: windows-2025
+            target: x86_64-pc-windows-msvc
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+          - runner: macos-15
+            target: aarch64-apple-darwin
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
-    # Use the native shell: Git Bash makes Windows children ignore Ctrl+C.
+    container: ${{ matrix.container }}
+    timeout-minutes: 120
+    env:
+      TARGET: ${{ matrix.target }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ needs.metadata.outputs.commit }}
           persist-credentials: false
       - uses: ./.github/actions/toolchain
         with:
-          cache-group: release-native
+          cache-group: release-${{ matrix.target }}
+      - name: Keep disposable fixtures on job storage
+        run: >-
+          node -e "for (const name of ['TMPDIR', 'TMP', 'TEMP']) require('node:fs').appendFileSync(process.env.GITHUB_ENV, name + '=' + process.env.RUNNER_TEMP + '\n')"
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: release-admin
           path: dist/admin
-      - name: Install collector test dependencies
-        run: npm ci --prefix crates/ruphish-ui/web
-      - name: Optimized native and executable behavior
-        # Keep disposable fixtures on job storage, not Windows' user-profile disk.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: release-metadata
+          path: target/release-metadata
+      - run: npm ci --prefix crates/ruphish-ui/web
+      - run: rustup target add ${{ matrix.target }}
+      - name: Optimized native and executable tests
+        run: cargo test --release --workspace --exclude ruphish-ui --target ${{ matrix.target }} --features ruphish/embedded-assets --locked -- --nocapture
+      - name: Build standalone executable
+        run: cargo build -p ruphish --release --target ${{ matrix.target }} --features embedded-assets --locked
+      - name: Package and extract exact archive
+        shell: bash
+        run: |
+          executable="target/$TARGET/release/ruphish"
+          if [[ "$TARGET" == *windows* ]]; then executable="$executable.exe"; fi
+          node .github/scripts/release.mjs package "$TARGET" "$executable"
+      - name: Verify extracted executable outside checkout
+        run: cargo test -p ruphish --release --target ${{ matrix.target }} --features embedded-assets --test startup_process standalone_binary::copied_binary_serves_verified_embedded_ui_and_preserves_state_after_restart --locked -- --ignored --exact --nocapture
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: native-${{ matrix.target }}
+          path: target/release-packages/ruphish-${{ needs.metadata.outputs.version }}-${{ matrix.target }}.*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+  image:
+    name: Verify Linux ${{ matrix.arch }} image
+    needs: [metadata, native]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            target: aarch64-unknown-linux-gnu
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      RUPHISH_APP_IMAGE: ruphish:release-check
+      VERSION: ${{ needs.metadata.outputs.version }}
+      REVISION: ${{ needs.metadata.outputs.commit }}
+      TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '26.8.1'
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: native-${{ matrix.target }}
+          path: target/native-archive
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: release-admin
+          path: dist/admin
+      - name: Build OCI archive from the verified native package
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo
+          node tests/acceptance/lab.mjs init
+          tar -xzf "target/native-archive/ruphish-$VERSION-$TARGET.tar.gz" -C target/native-archive
+          cp "target/native-archive/ruphish-$VERSION-$TARGET/ruphish" target/docker/ruphish
+          docker buildx create --name release --driver docker-container --use
+          docker buildx build --platform linux/${{ matrix.arch }} --provenance=false --sbom=false --build-arg VERSION="$VERSION" --build-arg REVISION="$REVISION" --output type=oci,dest=target/image.tar .
+          skopeo copy oci-archive:target/image.tar docker-daemon:ruphish:release-check
+      - name: Verify exact image and canonical public fixture
+        run: |
+          node --test tests/acceptance/image.test.mjs
+          docker compose -f tests/acceptance/compose.yaml run --rm prepare --certificates-only
+          docker compose -f tests/acceptance/compose.yaml up -d --wait dns inbox app
+          node tests/acceptance/lab.mjs demo
+          node tests/acceptance/lab.mjs seed
+          node --test tests/acceptance/public.test.mjs
+      - name: Verify MySQL configuration and persistence
+        run: |
+          docker compose -f tests/acceptance/compose.yaml run --rm prepare --mysql
+          docker compose -f tests/acceptance/compose.yaml --profile database up -d --wait mysql
+          node --test --test-name-pattern='^mysql ' tests/acceptance/database-image.test.mjs
+          docker compose -f tests/acceptance/compose.yaml stop mysql
+      - name: Verify PostgreSQL configuration and persistence
+        run: |
+          docker compose -f tests/acceptance/compose.yaml run --rm prepare --postgres
+          docker compose -f tests/acceptance/compose.yaml --profile database up -d --wait postgres
+          node --test --test-name-pattern='^postgres ' tests/acceptance/database-image.test.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: image-${{ matrix.arch }}
+          path: target/image.tar
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+      - name: Stop fixture
+        if: always()
+        run: docker compose -f tests/acceptance/compose.yaml stop app dns inbox mysql postgres
+
+  bundle:
+    name: Seal verified release artifacts
+    needs: [metadata, native, image]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    outputs:
+      digest: ${{ steps.assemble.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '26.8.1'
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: release-metadata
+          path: target/release-metadata
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: native-*
+          path: target/release-inputs
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: image-*
+          path: target/release-inputs
+      - id: assemble
+        run: node .github/scripts/release.mjs assemble
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        if: needs.metadata.outputs.publish == 'true'
+        id: native-provenance
+        with:
+          subject-path: |
+            target/release-bundle/assets/*.zip
+            target/release-bundle/assets/*.tar.gz
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        if: needs.metadata.outputs.publish == 'true'
+        id: image-provenance
+        with:
+          subject-name: ${{ needs.metadata.outputs.image }}
+          subject-digest: ${{ steps.assemble.outputs.digest }}
+      - name: Retain downloadable provenance
+        if: needs.metadata.outputs.publish == 'true'
         env:
-          TMPDIR: ${{ runner.temp }}
-          TMP: ${{ runner.temp }}
-          TEMP: ${{ runner.temp }}
-        run: cargo test --release --workspace --exclude ruphish-ui --locked -- --nocapture
+          NATIVE_PROVENANCE: ${{ steps.native-provenance.outputs.bundle-path }}
+          IMAGE_PROVENANCE: ${{ steps.image-provenance.outputs.bundle-path }}
+        run: |
+          cp "$NATIVE_PROVENANCE" target/release-bundle/assets/native-provenance.jsonl
+          cp "$IMAGE_PROVENANCE" target/release-bundle/assets/image-provenance.jsonl
+      - run: node .github/scripts/release-publish.mjs seal
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: verified-release-bundle
+          path: target/release-bundle/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
 
   gate:
     name: Release gate
-    needs: [source, demo, assets, native]
+    needs: [metadata, source, demo, assets, native, image, bundle]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -94,7 +300,39 @@ jobs:
           RESULTS: ${{ toJSON(needs) }}
         run: |
           node --input-type=module <<'NODE'
-          for (const [name, job] of Object.entries(JSON.parse(process.env.RESULTS))) {
-            if (job.result !== 'success') throw new Error(name + ': ' + job.result);
+          const results = JSON.parse(process.env.RESULTS);
+          for (const name of ['metadata', 'source', 'demo', 'assets', 'native', 'image', 'bundle']) {
+            if (results[name]?.result !== 'success') throw new Error(name + ': not successful');
           }
           NODE
+
+  publish:
+    name: Publish verified GitHub and GHCR release
+    needs: [metadata, gate]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.metadata.outputs.publish == 'true' && needs.gate.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    concurrency:
+      group: release-publication
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '26.8.1'
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: verified-release-bundle
+          path: target/release-bundle
+      - run: sudo apt-get update && sudo apt-get install -y skopeo
+      - name: Resume matching draft or publish new version without rebuilding
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/release-publish.mjs publish

@@ -87,5 +87,5 @@ test('PR, nightly and release reuse the same demo workflow and keep gate coverag
       assert.match(jobs.gate, /needs: \[[^\]]*\bdemo\b/);
     }
   }
-  assert.match(jobBodies(read('release')).assets, /needs: \[source, demo\]/);
+  assert.match(jobBodies(read('release')).assets, /needs: \[metadata, source, demo\]/);
 });
