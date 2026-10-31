@@ -739,7 +739,7 @@ fn integration_presence_sql(mailbox: bool, webhook: bool, enabled: bool) -> Stri
         sql.push_str(&format!("INSERT INTO ruphish_mailboxes(id,owner_id,name,enabled,host,port,username,password,tls,folder) VALUES(99,1,'Existing mailbox',{enabled},'127.0.0.1',993,'service','preserved-mailbox-secret',TRUE,'INBOX');"));
     }
     if webhook {
-        sql.push_str(&format!("INSERT INTO webhooks(id,name,url,secret,is_active) VALUES(99,'Existing endpoint','http://127.0.0.1:1/events','preserved-service-secret',{enabled}); INSERT INTO ruphish_webhook_state(webhook_id,revision) VALUES(99,1);"));
+        sql.push_str(&format!("INSERT INTO webhooks(id,name,url,secret,is_active) VALUES(99,'Existing endpoint','http://127.0.0.1:1/events','preserved-service-secret',{enabled}); INSERT INTO ruphish_webhook_state(webhook_id,revision,owner_id) VALUES(99,1,1);"));
     }
     sql
 }

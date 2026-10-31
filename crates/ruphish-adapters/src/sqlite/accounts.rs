@@ -256,8 +256,16 @@ impl Repository for Accounts {
                     false,
                     remaining_admins(&mut tx).await?,
                 )?;
+                // Fence owned endpoint deletion against claims and configuration writes.
+                let webhooks: Vec<i64> = sqlx::query_scalar("SELECT w.id FROM webhooks w JOIN ruphish_webhook_state s ON s.webhook_id=w.id WHERE s.owner_id=? ORDER BY w.id")
+                    .bind(id).fetch_all(&mut *tx).await.map_err(storage)?;
+                for webhook in webhooks {
+                    super::integrations::remove_webhook(&mut tx, webhook)
+                        .await
+                        .map_err(storage)?;
+                }
                 // All owned records, including legacy queue state, are removed in this transaction.
-                // Shared target rows and system-level webhooks have no exclusive account ownership.
+                // Shared target rows have no exclusive account ownership.
                 for statement in [
                     "DELETE FROM ruphish_delivery_attempt WHERE result_id IN (SELECT id FROM results WHERE user_id=?)",
                     "DELETE FROM ruphish_event_receipts WHERE result_id IN (SELECT id FROM results WHERE user_id=?)",

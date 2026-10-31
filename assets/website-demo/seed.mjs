@@ -289,7 +289,12 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
         w.url,
         randomBytes(32).toString('hex'),
       );
-      run('INSERT INTO ruphish_webhook_state(webhook_id,revision) VALUES(?,?)', w.id, w.revision);
+      run(
+        'INSERT INTO ruphish_webhook_state(webhook_id,revision,owner_id) VALUES(?,?,?)',
+        w.id,
+        w.revision,
+        owner,
+      );
       const job = insert(
         "INSERT INTO ruphish_webhook_jobs(webhook_id,revision,event_id,state,attempt,code) VALUES(?,?,?,'done',1,?)",
         w.id,

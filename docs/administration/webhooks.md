@@ -5,9 +5,11 @@ sidebar:
   order: 7
 ---
 
-Administrators manage **Resources → Webhooks**. Enabled endpoints receive newly committed campaign events across resource owners, so choose a receiver appropriate for that scope.
+Once an administrator enables webhooks, regular users can manage their own endpoints at **Resources → Webhooks**. Enabled endpoints receive newly committed events from all campaigns, regardless of creator, so choose a receiver appropriate for that installation-wide scope.
 
-Enable webhooks in **Settings** first if the feature is off.
+If the feature is off, ask an administrator to enable webhooks in **Settings**. Individual endpoints do not require administrator approval. Only the creator can read the configuration and delivery history, edit, validate, or delete an endpoint; administrators can use the existing explicit impersonation workflow.
+
+Ownership controls configuration access, not event delivery. Locking the creator account does not suspend an existing endpoint. Disable the endpoint or the global feature to stop delivery; deleting the creator account removes its endpoints and retained delivery work.
 
 1. Create a named HTTP(S) endpoint and signing secret. Use HTTPS for an actual receiving service.
 2. Save it and choose **Validate connection**.
@@ -22,4 +24,4 @@ History shows attempt number, event identity, HTTP status if available, and a fi
 
 Saving a configuration cancels queued work for its previous version. Deleting an endpoint cancels retained jobs, but cannot recall a request already authorized or sent. Use history to distinguish configuration changes from receiver failures before replaying anything outside Ruphish.
 
-Installation administrators can disable this feature in [company settings](settings.md). Disabled features disappear from navigation, while direct page visits explain the disabled state. Configurations and history are retained; network actions return `409` with `FEATURE_DISABLED`.
+Installation administrators can disable this feature in [company settings](settings.md). Disabled features disappear from navigation, while direct page visits explain the disabled state. Configurations and history are retained; creation, configuration saves, and network actions return `409` with `FEATURE_DISABLED`. Authorized API clients can still read or delete retained endpoints.

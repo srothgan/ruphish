@@ -724,14 +724,14 @@ fn mailbox_certificate_policy_covers_tls_modes_and_restart() {
 }
 
 #[test]
-fn reporting_api_rejects_cross_owner_admin_only_stale_and_malformed_requests() {
+fn reporting_api_preserves_scope_secrets_and_rejects_stale_and_malformed_requests() {
     let directory = workspace();
     let mut process = Process::start(directory.path(), "admin");
     let base = format!("http://{}", process.ready()["admin"].as_str().unwrap());
     let client = client();
     database(
         directory.path(),
-        "UPDATE users SET password_change_required=0; UPDATE ruphish_settings SET reporting_mailboxes_enabled=1; INSERT INTO users(id,username,api_key,role_id,password_change_required,account_locked) VALUES(2,'other','other-key',2,0,0); INSERT INTO ruphish_auth_state VALUES(2,0); INSERT INTO campaigns(id,user_id,name,url,status) VALUES(91,1,'Owner report','https://training.test','Completed'); INSERT INTO results(id,campaign_id,user_id,r_id,email,status,reported) VALUES(91,91,1,'abc123','person@example.test','Email Sent',1);",
+        "UPDATE users SET password_change_required=0; UPDATE ruphish_settings SET reporting_mailboxes_enabled=1,webhooks_enabled=1; INSERT INTO users(id,username,api_key,role_id,password_change_required,account_locked) VALUES(2,'other','other-key',2,0,0); INSERT INTO ruphish_auth_state VALUES(2,0); INSERT INTO campaigns(id,user_id,name,url,status) VALUES(91,1,'Owner report','https://training.test','Completed'); INSERT INTO results(id,campaign_id,user_id,r_id,email,status,reported) VALUES(91,91,1,'abc123','person@example.test','Email Sent',1);",
     );
     for path in ["/api/campaigns/91/results", "/api/campaigns/91/export"] {
         assert_eq!(
@@ -755,7 +755,7 @@ fn reporting_api_rejects_cross_owner_admin_only_stale_and_malformed_requests() {
             .send()
             .unwrap()
             .status(),
-        403
+        200
     );
     let hook = json!({"name":"Receiver","url":"http://127.0.0.1:1/events","secret":"HOOK-SECRET-CANARY","is_active":false});
     let saved = request(

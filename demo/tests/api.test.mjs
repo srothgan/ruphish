@@ -999,7 +999,7 @@ test('no network fallback, including external operations, errors and binary down
   for (const path of [
     '/api/util/test_connection',
     '/api/util/send_test_email',
-    '/api/webhooks/1/test',
+    '/api/webhooks/1/validate',
     '/api/reporting-mailboxes/1/check',
     '/api/domains/1/verify',
   ]) {
@@ -1009,6 +1009,7 @@ test('no network fallback, including external operations, errors and binary down
       path,
     );
   }
+  assert.equal((await f.request('/api/webhooks/1/test', 'POST')).status, 404);
   assert.equal((await f.request('/api/unknown')).status, 404);
   assert.equal((await f.request('/api/groups/', 'POST', {})).status, 400);
   const pending = startRequestWith(

@@ -7,6 +7,8 @@ sidebar:
 
 Reporting mailboxes match reported messages to campaign recipients. Multiple mailbox resources replace the single-setting model used by older integrations.
 
+Once an administrator enables reporting mailboxes, regular users with `modify_objects` can create and manage their own configurations without per-mailbox approval. Reading requires `view_objects` and configuration ownership. The creator restriction applies to configuration access, not campaign report matching. While the feature is disabled, creation, configuration saves, and validation/check/resume actions return `409` with `FEATURE_DISABLED`; authorized reads and deletion remain available.
+
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET, POST | `/api/reporting-mailboxes/` | List or create owned mailboxes |

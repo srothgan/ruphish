@@ -5,7 +5,9 @@ sidebar:
   order: 17
 ---
 
-Webhooks deliver committed campaign events to administrator-configured endpoints. They can span resource owners, so authorize receivers for that installation-wide scope.
+Webhook configurations belong to their creator: callers with `view_objects` can read their own configurations and history, and callers with `modify_objects` can create, edit, delete, and validate their own endpoints. Ownership is assigned from the authenticated caller; it cannot be supplied or changed through the API. Other callers receive `404`, including administrators outside explicit impersonation. No `modify_system` permission or per-endpoint approval is required. Enabled endpoints receive committed events from all campaigns regardless of creator, so authorize receivers for that installation-wide scope.
+
+Only administrators can change the global feature switch. While webhooks are disabled, creation, configuration saves, and validation return `409` with `FEATURE_DISABLED`; authorized reads and deletion remain available. Disabling also stops event delivery; see [company settings](../administration/settings.md).
 
 | Method | Path | Purpose |
 | --- | --- | --- |

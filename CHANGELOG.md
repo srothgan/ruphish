@@ -6,6 +6,7 @@ Development previews have short notes on GitHub Releases. This changelog records
 
 Initial release targeting feature parity with Gophish, with a native Rust server and a new Rust/WASM administration interface.
 
+- Let regular users manage their own webhooks and reporting mailboxes under administrator feature switches; reject configuration saves while a feature is disabled.
 - Initialize reporting mailboxes from active campaigns' actual sends, match reports across campaign creators, and ignore new reports after campaign completion while preserving polling progress.
 - Record coarse browser, OS, and device categories on clicks and submissions, with per-event recipient details and consistent exports/webhooks; exclude raw headers and network identities.
 - Manage recipient groups, email templates, landing pages, reusable static learning pages, attachments, and sending profiles.

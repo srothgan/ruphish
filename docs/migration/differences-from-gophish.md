@@ -28,9 +28,11 @@ Familiar wire names are not always current UI labels: `smtp` means sending profi
 
 ## A broader administration interface
 
-The Rust/WASM UI adds persistent campaign drafts, a preparation/review step, delivery-attempt history and reconciliation, verified domains, observed-event analysis, recipient timelines, and CSV/XLSX exports. Multiple reporting mailboxes and webhook history make integrations visible as managed resources. Start with the [user guide](../user-guide/index.md) rather than looking for an exact copy of the old screen layout.
+The Rust/WASM UI adds persistent campaign drafts, a preparation/review step, delivery-attempt history and reconciliation, verified domains, observed-event analysis, recipient timelines, and CSV/XLSX exports. Multiple reporting mailboxes and webhook history make integrations visible as managed resources. Administrators control global integration availability; once enabled, regular users can manage their own mailbox and webhook configurations without per-integration approval. Mailbox report matching and webhook delivery span campaign creators, while campaign editing remains creator-scoped. Start with the [user guide](../user-guide/index.md) rather than looking for an exact copy of the old screen layout.
 
 The interface supports English and German. Account settings independently control interface language, date/time formatting locale, and IANA time zone. Preferences follow the account across devices. Changing presentation does not change stored UTC instants or move an existing campaign schedule. See [account settings](../user-guide/account.md).
+
+Gophish webhooks do not record a creator. Conversion assigns them to the existing account with the lowest user ID whose role grants `modify_system`; this is migration ownership, not a reconstructed creator identity. URLs, signing secrets, and individual activation states are preserved. Conversion rejects a source containing webhooks but no such administrator. New webhook ownership is always taken from the authenticated creator.
 
 ## API additions and separation
 

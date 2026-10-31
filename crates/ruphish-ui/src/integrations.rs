@@ -1,4 +1,4 @@
-//! Webhook administration and reporting mailbox resources share presentation primitives.
+//! Webhook and reporting mailbox resources share presentation primitives.
 use crate::{
     campaigns::text, client::Api, feedback::Message, management_queries::ManagementQueries,
     resources::ResourceAccess, shared::components::*, time_display::instant,
@@ -190,9 +190,7 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
                 title=Signal::derive(move || kind.title().to_owned())
                 subtitle=Signal::derive(move || {
                     (if kind.webhook() {
-                        leptos_i18n::t_string!(
-                            i18n, ui.administrator_managed_event_notifications_enabled_endpoints_receive_events_acros
-                        )
+                        leptos_i18n::t_string!(i18n, ui.webhook_event_scope)
                     } else {
                         leptos_i18n::t_string!(
                             i18n, ui.owner_scoped_imap_resources_that_correlate_reported_campaign_messages_without_re

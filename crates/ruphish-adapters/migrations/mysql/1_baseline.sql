@@ -355,6 +355,8 @@ CREATE TABLE `ruphish_domain_checks` (
 CREATE TABLE `ruphish_webhook_state` (
   `webhook_id` BIGINT NOT NULL,
   `revision` BIGINT NOT NULL DEFAULT 1,
+  `owner_id` BIGINT NOT NULL,
+  KEY `ruphish_webhook_state_owner` (`owner_id`),
   PRIMARY KEY (`webhook_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 

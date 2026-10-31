@@ -583,17 +583,36 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         active: true,
         revision,
     };
-    assert!(
-        integrations
-            .save_webhook(normal.identity, None, hook_edit(None))
-            .await
-            .is_err(),
-        "only administrators configure webhooks"
-    );
     let hook = integrations
-        .save_webhook(actor, None, hook_edit(None))
+        .save_webhook(normal.identity, None, hook_edit(None))
         .await
         .unwrap();
+    assert!(hook.has_secret);
+    assert_eq!(
+        integrations.webhooks(normal.identity).await.unwrap().len(),
+        1
+    );
+    assert!(integrations.webhooks(actor).await.unwrap().is_empty());
+    assert!(matches!(
+        integrations.webhook(actor, hook.id).await,
+        Err(Error::NotFound("Webhook"))
+    ));
+    assert!(matches!(
+        integrations
+            .save_webhook(actor, Some(hook.id), hook_edit(Some(hook.revision)))
+            .await,
+        Err(Error::NotFound("Webhook"))
+    ));
+    assert!(matches!(
+        integrations.validate_webhook(actor, hook.id).await,
+        Err(Error::NotFound("Webhook"))
+    ));
+    for revision in [None, Some(hook.revision), Some(hook.revision + 1)] {
+        assert!(matches!(
+            integrations.delete_webhook(actor, hook.id, revision).await,
+            Err(Error::NotFound("Webhook"))
+        ));
+    }
     let mail_edit = |revision| MailboxEdit {
         name: "Reporting".into(),
         enabled: true,
@@ -692,6 +711,127 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         a.as_ref().err().or(b.as_ref().err()),
         Some(Error::Changed)
     ));
+    // Global switches fence configuration and external actions for every role.
+    let settings = db.settings().get(actor).await.unwrap();
+    assert!(db.settings().get(normal.identity).await.is_err());
+    assert!(
+        db.settings()
+            .save(
+                normal.identity,
+                settings.revision,
+                settings.policy.clone(),
+                1
+            )
+            .await
+            .is_err()
+    );
+    let mut disabled = settings.policy.clone();
+    disabled.webhooks_enabled = false;
+    disabled.reporting_mailboxes_enabled = false;
+    let disabled = db
+        .settings()
+        .save(actor, settings.revision, disabled, 1)
+        .await
+        .unwrap();
+    let current_mailbox = integrations.mailbox(actor, mailbox.id).await.unwrap();
+    for caller in [actor, normal.identity] {
+        assert!(matches!(
+            integrations
+                .save_webhook(caller, None, hook_edit(None))
+                .await,
+            Err(Error::FeatureDisabled("webhooks"))
+        ));
+        assert!(matches!(
+            integrations
+                .save_webhook(caller, Some(hook.id), hook_edit(Some(hook.revision)))
+                .await,
+            Err(Error::FeatureDisabled("webhooks"))
+        ));
+        assert!(matches!(
+            integrations.validate_webhook(caller, hook.id).await,
+            Err(Error::FeatureDisabled("webhooks"))
+        ));
+        assert!(matches!(
+            integrations
+                .save_mailbox(caller, None, mail_edit(None))
+                .await,
+            Err(Error::FeatureDisabled("reporting_mailboxes"))
+        ));
+    }
+    assert!(matches!(
+        integrations
+            .save_mailbox(
+                actor,
+                Some(mailbox.id),
+                mail_edit(Some(current_mailbox.revision))
+            )
+            .await,
+        Err(Error::FeatureDisabled("reporting_mailboxes"))
+    ));
+    for result in [
+        integrations.validate_mailbox(actor, mailbox.id).await,
+        integrations.check_mailbox(actor, mailbox.id).await,
+        integrations
+            .resume_mailbox(actor, mailbox.id, current_mailbox.revision)
+            .await,
+    ] {
+        assert!(matches!(
+            result,
+            Err(Error::FeatureDisabled("reporting_mailboxes"))
+        ));
+    }
+    integrations.tick().await.unwrap();
+    assert_eq!(
+        integrations
+            .webhook(normal.identity, hook.id)
+            .await
+            .unwrap()
+            .revision,
+        hook.revision
+    );
+    assert_eq!(
+        integrations
+            .webhook(normal.identity, hook.id)
+            .await
+            .unwrap()
+            .history
+            .len(),
+        0
+    );
+    assert_eq!(
+        integrations
+            .mailbox(actor, mailbox.id)
+            .await
+            .unwrap()
+            .revision,
+        current_mailbox.revision
+    );
+    assert_eq!(
+        integrations
+            .mailbox(actor, mailbox.id)
+            .await
+            .unwrap()
+            .history
+            .len(),
+        0
+    );
+    db.settings()
+        .save(actor, disabled.revision, settings.policy, 2)
+        .await
+        .unwrap();
+    let owned = integrations
+        .save_mailbox(normal.identity, None, mail_edit(None))
+        .await
+        .unwrap();
+    assert!(owned.has_password);
+    assert!(matches!(
+        integrations.mailbox(actor, owned.id).await,
+        Err(Error::NotFound(_))
+    ));
+    integrations
+        .delete_mailbox(normal.identity, owned.id, Some(owned.revision))
+        .await
+        .unwrap();
     integrations.poll_mailboxes().await.unwrap();
     let mailbox = integrations.mailbox(actor, mailbox.id).await.unwrap();
     assert!(!mailbox.running);
@@ -1219,26 +1359,43 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     assert_eq!(window.counts.delivered, 1);
     assert_eq!(window.previous.unwrap().counts.delivered, 0);
     integrations.deliver_webhooks().await.unwrap();
-    let hook = integrations.webhook(actor, hook.id).await.unwrap();
-    assert!(!hook.history.is_empty());
+    let hook = integrations
+        .webhook(normal.identity, hook.id)
+        .await
+        .unwrap();
+    assert!(
+        !hook.history.is_empty(),
+        "creator ownership must not filter events from other campaign owners"
+    );
     assert!(hook.history.iter().all(|a| a.finished.is_some()));
     let (a, b) = tokio::join!(
-        integrations.save_webhook(actor, Some(hook.id), hook_edit(Some(hook.revision))),
-        integrations.save_webhook(actor, Some(hook.id), hook_edit(Some(hook.revision)))
+        integrations.save_webhook(
+            normal.identity,
+            Some(hook.id),
+            hook_edit(Some(hook.revision))
+        ),
+        integrations.save_webhook(
+            normal.identity,
+            Some(hook.id),
+            hook_edit(Some(hook.revision))
+        )
     );
     assert_eq!(usize::from(a.is_ok()) + usize::from(b.is_ok()), 1);
     assert!(matches!(
         a.as_ref().err().or(b.as_ref().err()),
         Some(Error::Changed)
     ));
-    let hook = integrations.webhook(actor, hook.id).await.unwrap();
+    let hook = integrations
+        .webhook(normal.identity, hook.id)
+        .await
+        .unwrap();
     assert!(matches!(
         integrations
-            .delete_webhook(actor, hook.id, Some(hook.revision + 1))
+            .delete_webhook(normal.identity, hook.id, Some(hook.revision + 1))
             .await,
         Err(Error::Changed)
     ));
-    assert!(integrations.webhook(actor, hook.id).await.is_ok());
+    assert!(integrations.webhook(normal.identity, hook.id).await.is_ok());
     assert!(matches!(
         integrations
             .delete_mailbox(actor, mailbox.id, Some(mailbox.revision + 1))
@@ -1247,10 +1404,15 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     ));
     assert!(integrations.mailbox(actor, mailbox.id).await.is_ok());
     integrations
-        .delete_webhook(actor, hook.id, Some(hook.revision))
+        .delete_webhook(normal.identity, hook.id, Some(hook.revision))
         .await
         .unwrap();
-    assert!(integrations.webhook(actor, hook.id).await.is_err());
+    assert!(
+        integrations
+            .webhook(normal.identity, hook.id)
+            .await
+            .is_err()
+    );
     integrations
         .delete_mailbox(actor, mailbox.id, Some(mailbox.revision))
         .await
@@ -1258,7 +1420,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     assert!(integrations.mailbox(actor, mailbox.id).await.is_err());
     assert!(matches!(
         integrations
-            .delete_webhook(actor, hook.id, Some(hook.revision))
+            .delete_webhook(normal.identity, hook.id, Some(hook.revision))
             .await,
         Err(Error::NotFound("Webhook"))
     ));
@@ -1816,6 +1978,9 @@ async fn mysql_upgrades_every_legacy_version_preserving_identity_and_recoverable
                 .await
                 .unwrap();
         }
+        if version >= 20191104103306 {
+            sqlx::raw_sql("INSERT INTO webhooks(id,name,url,secret,is_active) VALUES(71,'Legacy hook','https://receiver.example.test/hook','preserved-hook-secret',1)").execute(&mut inspector).await.unwrap();
+        }
         sqlx::raw_sql("INSERT INTO templates(id,user_id,name,subject,text,html,modified_date) VALUES(9,17,'Legacy email','Hello','Plain text','<h1>Hello</h1>','2020-01-01 00:00:00'); INSERT INTO pages(id,user_id,name,html,modified_date) VALUES(10,17,'Legacy page','<h1>Welcome</h1>','2020-01-01 00:00:00'); INSERT INTO `groups`(id,user_id,name,modified_date) VALUES(21,17,'Shared group','2020-01-01 00:00:00'),(22,17,'Shared group','2020-01-01 00:00:00'); INSERT INTO targets(id,first_name,last_name,email,position) VALUES(31,'Elise','','elise@example.test','Engineer'); INSERT INTO group_targets VALUES(21,31),(22,31); INSERT INTO campaigns(id,user_id,name,created_date,completed_date,template_id,page_id,status,url) VALUES(13,17,'Legacy campaign','2020-01-01 00:00:00',NULL,9,10,'In progress','https://training.example.test'); INSERT INTO results(id,campaign_id,user_id,r_id,email,first_name,last_name,status,ip,latitude,longitude) VALUES(41,13,17,'legacy-rid','elise@example.test','Elise','','Email Opened','192.0.2.99',51.5,8.5); INSERT INTO events(id,campaign_id,email,time,message) VALUES(51,13,'elise@example.test','2020-01-01 00:00:00','Email Opened')").execute(&mut inspector).await.unwrap();
         let imported_origin = [
             "https://training.example.test",
@@ -1864,6 +2029,17 @@ async fn mysql_upgrades_every_legacy_version_preserving_identity_and_recoverable
             track_opens,
             "migrated {version} defaults to enabled without authored tracker markup"
         );
+        if version >= 20191104103306 {
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT owner_id FROM ruphish_webhook_state WHERE webhook_id=71"
+                )
+                .fetch_one(&mut inspector)
+                .await
+                .unwrap(),
+                17
+            );
+        }
         let client_count: i64 =
             sqlx::query_scalar("SELECT count(*) FROM events WHERE client IS NOT NULL")
                 .fetch_one(&mut inspector)
@@ -3131,3 +3307,6 @@ mod mailbox_reporting;
 #[path = "../../../tests/support/tls.rs"]
 #[allow(dead_code, reason = "Shared TLS fixture also serves executable tests")]
 mod tls_fixture;
+
+#[path = "support/webhook_ownership.rs"]
+mod webhook_ownership;

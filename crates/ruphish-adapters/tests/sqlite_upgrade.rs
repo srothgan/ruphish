@@ -15,6 +15,55 @@ async fn open(path: &Path) -> Result<SqliteConnection, sqlx::Error> {
 }
 
 #[tokio::test]
+async fn legacy_webhooks_choose_an_administrator_and_reject_missing_ownership() {
+    let directory = tempfile::tempdir().unwrap();
+    for missing_admin in [false, true] {
+        let source = directory.path().join(format!("source-{missing_admin}.db"));
+        let destination = directory.path().join(format!("output-{missing_admin}.db"));
+        fs::copy(
+            fixtures().join("compatibility/20220321133237.sqlite3"),
+            &source,
+        )
+        .unwrap();
+        let mut connection = open(&source).await.unwrap();
+        sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id) VALUES(5,'lower-normal','hash','normal-key',2),(31,'second-admin','hash','admin-key',1); DELETE FROM webhooks; INSERT INTO webhooks(id,name,url,secret,is_active) VALUES(71,'Imported','https://receiver.example.test/hook','preserved-secret',1);").execute(&mut connection).await.unwrap();
+        if missing_admin {
+            sqlx::raw_sql("DELETE FROM role_permissions WHERE permission_id=(SELECT id FROM permissions WHERE slug='modify_system')").execute(&mut connection).await.unwrap();
+        }
+        connection.close().await.unwrap();
+        let original = fs::read(&source).unwrap();
+        let outcome = migrations::upgrade_copy(&source, &destination).await;
+        assert_eq!(fs::read(&source).unwrap(), original);
+        if missing_admin {
+            assert!(outcome.is_err());
+            assert!(!destination.exists());
+        } else {
+            outcome.unwrap();
+            let mut connection = open(&destination).await.unwrap();
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT owner_id FROM ruphish_webhook_state WHERE webhook_id=71"
+                )
+                .fetch_one(&mut connection)
+                .await
+                .unwrap(),
+                17
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, String>(
+                    "SELECT secret FROM webhooks WHERE id=71 AND is_active=1"
+                )
+                .fetch_one(&mut connection)
+                .await
+                .unwrap(),
+                "preserved-secret"
+            );
+            connection.close().await.unwrap();
+        }
+    }
+}
+
+#[tokio::test]
 async fn all_populated_goose_versions_upgrade_without_losing_records_or_the_source() {
     let versions: Vec<i64> = serde_json::from_str(
         &fs::read_to_string(fixtures().join("compatibility/versions.json")).unwrap(),

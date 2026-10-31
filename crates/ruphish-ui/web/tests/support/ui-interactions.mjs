@@ -12,6 +12,8 @@ const path =
   {
     'form-import': '/groups?import=1',
     'form-webhook': '/webhooks/new',
+    'integration-readonly-webhook': '/webhooks/new',
+    'integration-readonly-mailbox': '/reporting-mailboxes/new',
     'form-mailbox': '/reporting-mailboxes/new',
     'form-filters': returnOrigin,
     'form-group': '/groups/new',
@@ -89,7 +91,7 @@ globalThis.Request = class extends NativeRequest {
 win.Request = globalThis.Request;
 win.Response = globalThis.Response;
 Object.assign(preferences, { language: 'de', format_locale: 'de-DE', time_zone: 'Europe/Berlin' });
-if (scenario.startsWith('form-')) {
+if (scenario.startsWith('form-') || scenario.startsWith('integration-')) {
   preferences.language = 'en';
 }
 const now = 1793016000;
@@ -232,6 +234,16 @@ globalThis.fetch = async (request, options) => {
     const response = await api.execute(request, options);
     const value = await response.json();
     value.features = { ...value.features, ...featureOverrides };
+    if (
+      ['form-webhook', 'form-mailbox'].includes(scenario) ||
+      scenario.startsWith('integration-')
+    ) {
+      value.user.role = { slug: 'user', name: 'User', description: 'Regular user' };
+      value.user.permissions = scenario.startsWith('integration-readonly')
+        ? ['view_objects']
+        : ['view_objects', 'modify_objects'];
+      value.actor = null;
+    }
     if (sessionExpired) {
       value.user = null;
     }
@@ -346,6 +358,15 @@ if (scenario === 'domain-unsupported') {
   process.exit(0);
 }
 
+if (scenario.startsWith('integration-readonly')) {
+  await until(() => document.querySelector('form button[type="submit"]'));
+  assert.ok(document.querySelector('form button[type="submit"]').disabled);
+  assert.ok(document.querySelector('a[href="/webhooks"]'));
+  assert.ok(document.querySelector('a[href="/reporting-mailboxes"]'));
+  assert.equal(document.querySelector('a[href="/settings"]'), null);
+  process.exit(0);
+}
+
 if (scenario.startsWith('form-')) {
   const selector =
     scenario === 'form-import'
@@ -456,11 +477,15 @@ if (scenario.startsWith('form-')) {
     }
   }
   if (['form-webhook', 'form-mailbox'].includes(scenario)) {
+    const resourcePath = scenario === 'form-webhook' ? '/webhooks' : '/reporting-mailboxes';
+    assert.ok(document.querySelector(`a[href="${resourcePath}"]`));
+    assert.equal(document.querySelector('a[href="/settings"]'), null);
     featureOverrides[
       scenario === 'form-webhook' ? 'webhooks_enabled' : 'reporting_mailboxes_enabled'
     ] = false;
     await refreshSession();
     assert.equal(input.isConnected, false, 'actual feature disablement removes its form');
+    assert.equal(document.querySelector(`a[href="${resourcePath}"]`), null);
     assert.ok(
       document.body.textContent.includes('Diese Funktion wurde von der Administration deaktiviert'),
     );

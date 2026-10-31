@@ -2,7 +2,7 @@
 use crate::mysql::InsertId;
 use crate::outbound::Policy;
 use ruphish_application::{auth::Identity, integrations::*, resources::Error};
-use sqlx::{MySqlConnection, MySqlPool, Row, mysql::MySqlRow};
+use sqlx::{MySqlPool, Row, mysql::MySqlRow};
 
 #[derive(Clone)]
 /// Integration configuration and bounded external operations.
@@ -29,18 +29,6 @@ pub(super) fn text(r: &MySqlRow, key: &str) -> Result<String, Error> {
     Ok(r.try_get::<Option<String>, _>(key)
         .map_err(db)?
         .unwrap_or_default())
-}
-async fn authorize(
-    c: &mut MySqlConnection,
-    who: Identity,
-    write: bool,
-    admin: bool,
-) -> Result<(), Error> {
-    let account = super::resources::authorize(c, who, write).await?;
-    if admin {
-        account.require("modify_system")?;
-    }
-    Ok(())
 }
 fn webhook_row(r: MySqlRow) -> Result<Webhook, Error> {
     Ok(Webhook {
@@ -85,15 +73,17 @@ impl Repository for Integrations {
         let mut tx = crate::mysql::locks::snapshot(&self.pool)
             .await
             .map_err(db)?;
-        authorize(&mut tx, who, false, true).await?;
+        super::resources::authorize(&mut tx, who, false).await?;
         sqlx::query(
             r#"
                 SELECT w.*,s.revision
                 FROM webhooks w
                 JOIN ruphish_webhook_state s ON s.webhook_id=w.id
+                WHERE s.owner_id=?
                 ORDER BY w.name,w.id
             "#,
         )
+        .bind(who.id)
         .fetch_all(&mut *tx)
         .await
         .map_err(db)?
@@ -105,17 +95,18 @@ impl Repository for Integrations {
         let mut tx = crate::mysql::locks::snapshot(&self.pool)
             .await
             .map_err(db)?;
-        authorize(&mut tx, who, false, true).await?;
+        super::resources::authorize(&mut tx, who, false).await?;
         let mut value = webhook_row(
             sqlx::query(
                 r#"
                 SELECT w.*,s.revision
                 FROM webhooks w
                 JOIN ruphish_webhook_state s ON s.webhook_id=w.id
-                WHERE w.id=?
+                WHERE w.id=? AND s.owner_id=?
             "#,
             )
             .bind(id)
+            .bind(who.id)
             .fetch_optional(&mut *tx)
             .await
             .map_err(db)?
@@ -157,17 +148,19 @@ impl Repository for Integrations {
     ) -> Result<Webhook, Error> {
         e.validation().finish().map_err(Error::Validation)?;
         let mut tx = crate::mysql::locks::write(&self.pool).await.map_err(db)?;
-        authorize(&mut tx, who, true, true).await?;
+        super::resources::authorize(&mut tx, who, true).await?;
+        super::settings::require_integration(&mut tx, false).await?;
         let id = if let Some(id) = id {
             let r = sqlx::query(
                 r#"
                 SELECT secret,revision
                 FROM webhooks w
                 JOIN ruphish_webhook_state s ON s.webhook_id=w.id
-                WHERE w.id=? FOR UPDATE
+                WHERE w.id=? AND s.owner_id=? FOR UPDATE
             "#,
             )
             .bind(id)
+            .bind(who.id)
             .fetch_optional(&mut *tx)
             .await
             .map_err(db)?
@@ -218,11 +211,14 @@ impl Repository for Integrations {
                 .map_err(db)?
                 .insert_id()
                 .map_err(db)?;
-            sqlx::query("INSERT INTO ruphish_webhook_state VALUES(?,1)")
-                .bind(id)
-                .execute(&mut *tx)
-                .await
-                .map_err(db)?;
+            sqlx::query(
+                "INSERT INTO ruphish_webhook_state(webhook_id,revision,owner_id) VALUES(?,1,?)",
+            )
+            .bind(id)
+            .bind(who.id)
+            .execute(&mut *tx)
+            .await
+            .map_err(db)?;
             id
         };
         tx.commit()
@@ -237,71 +233,30 @@ impl Repository for Integrations {
         revision: Option<i64>,
     ) -> Result<(), Error> {
         let mut tx = crate::mysql::locks::write(&self.pool).await.map_err(db)?;
-        authorize(&mut tx, who, true, true).await?;
+        super::resources::authorize(&mut tx, who, true).await?;
         sqlx::query("SELECT id FROM webhooks WHERE id=? FOR UPDATE")
             .bind(id)
             .fetch_optional(&mut *tx)
             .await
             .map_err(db)?;
-        let revision = match revision {
-            Some(revision) => revision,
-            None => sqlx::query_scalar::<_, i64>("SELECT s.revision FROM webhooks w JOIN ruphish_webhook_state s ON s.webhook_id=w.id WHERE w.id=?")
-                .bind(id).fetch_optional(&mut *tx).await.map_err(db)?.ok_or(Error::NotFound("Webhook"))?,
-        };
-        if sqlx::query("DELETE FROM ruphish_webhook_state WHERE webhook_id=? AND revision=?")
-            .bind(id)
-            .bind(revision)
-            .execute(&mut *tx)
-            .await
-            .map_err(db)?
-            .rows_affected()
-            != 1
-        {
-            let exists: bool =
-                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM webhooks WHERE id=?)")
-                    .bind(id)
-                    .fetch_one(&mut *tx)
-                    .await
-                    .map_err(db)?;
-            return Err(if exists {
-                Error::Changed
-            } else {
-                Error::NotFound("Webhook")
-            });
+        let current: i64 = sqlx::query_scalar("SELECT s.revision FROM webhooks w JOIN ruphish_webhook_state s ON s.webhook_id=w.id WHERE w.id=? AND s.owner_id=? FOR UPDATE")
+            .bind(id).bind(who.id).fetch_optional(&mut *tx).await.map_err(db)?
+            .ok_or(Error::NotFound("Webhook"))?;
+        if revision.is_some_and(|expected| expected != current) {
+            return Err(Error::Changed);
         }
-        sqlx::query(
-            r#"
-                DELETE
-                FROM ruphish_webhook_attempts
-                WHERE job_id IN (SELECT id
-                FROM ruphish_webhook_jobs
-                WHERE webhook_id=?)
-            "#,
-        )
-        .bind(id)
-        .execute(&mut *tx)
-        .await
-        .map_err(db)?;
-        sqlx::query("DELETE FROM ruphish_webhook_jobs WHERE webhook_id=?")
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .map_err(db)?;
-        sqlx::query("DELETE FROM webhooks WHERE id=?")
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .map_err(db)?;
+        remove_webhook(&mut tx, id).await.map_err(db)?;
         tx.commit()
             .await
             .map_err(|e| Error::Storage(crate::mysql::commit_error(e)))
     }
     async fn validate_webhook(&self, who: Identity, id: i64) -> Result<(), Error> {
         let mut tx = crate::mysql::locks::write(&self.pool).await.map_err(db)?;
-        authorize(&mut tx, who, true, true).await?;
+        super::resources::authorize(&mut tx, who, true).await?;
         super::settings::require_integration(&mut tx, false).await?;
-        let r = sqlx::query("SELECT url,secret FROM webhooks WHERE id=?")
+        let r = sqlx::query("SELECT w.url,w.secret FROM webhooks w JOIN ruphish_webhook_state s ON s.webhook_id=w.id WHERE w.id=? AND s.owner_id=?")
             .bind(id)
+            .bind(who.id)
             .fetch_optional(&mut *tx)
             .await
             .map_err(db)?
@@ -318,7 +273,7 @@ impl Repository for Integrations {
         let mut tx = crate::mysql::locks::snapshot(&self.pool)
             .await
             .map_err(db)?;
-        authorize(&mut tx, who, false, false).await?;
+        super::resources::authorize(&mut tx, who, false).await?;
         sqlx::query("SELECT * FROM ruphish_mailboxes WHERE owner_id=? ORDER BY name,id")
             .bind(who.id)
             .fetch_all(&mut *tx)
@@ -332,7 +287,7 @@ impl Repository for Integrations {
         let mut tx = crate::mysql::locks::snapshot(&self.pool)
             .await
             .map_err(db)?;
-        authorize(&mut tx, who, false, false).await?;
+        super::resources::authorize(&mut tx, who, false).await?;
         let mut value = mailbox_row(
             sqlx::query("SELECT * FROM ruphish_mailboxes WHERE id=? AND owner_id=?")
                 .bind(id)
@@ -370,7 +325,8 @@ impl Repository for Integrations {
     ) -> Result<Mailbox, Error> {
         e.validation().finish().map_err(Error::Validation)?;
         let mut tx = crate::mysql::locks::write(&self.pool).await.map_err(db)?;
-        authorize(&mut tx, who, true, false).await?;
+        super::resources::authorize(&mut tx, who, true).await?;
+        super::settings::require_integration(&mut tx, true).await?;
         let duplicate: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM ruphish_mailboxes WHERE owner_id=? AND name=? AND id!=?)",
         )
@@ -491,7 +447,7 @@ impl Repository for Integrations {
         revision: Option<i64>,
     ) -> Result<(), Error> {
         let mut tx = crate::mysql::locks::write(&self.pool).await.map_err(db)?;
-        authorize(&mut tx, who, true, false).await?;
+        super::resources::authorize(&mut tx, who, true).await?;
         let revision = match revision {
             Some(revision) => revision,
             None => sqlx::query_scalar::<_, i64>(
@@ -543,7 +499,7 @@ impl Repository for Integrations {
     }
     async fn validate_mailbox(&self, who: Identity, id: i64) -> Result<(), Error> {
         let mut tx = crate::mysql::locks::write(&self.pool).await.map_err(db)?;
-        authorize(&mut tx, who, true, false).await?;
+        super::resources::authorize(&mut tx, who, true).await?;
         super::settings::require_integration(&mut tx, true).await?;
         let r = sqlx::query("SELECT * FROM ruphish_mailboxes WHERE id=? AND owner_id=? FOR UPDATE")
             .bind(id)
@@ -560,7 +516,7 @@ impl Repository for Integrations {
     }
     async fn resume_mailbox(&self, who: Identity, id: i64, revision: i64) -> Result<(), Error> {
         let mut tx = crate::mysql::locks::write(&self.pool).await.map_err(db)?;
-        authorize(&mut tx, who, true, false).await?;
+        super::resources::authorize(&mut tx, who, true).await?;
         super::settings::require_integration(&mut tx, true).await?;
         let changed = sqlx::query(r#"
                 UPDATE ruphish_mailboxes
@@ -585,7 +541,7 @@ impl Repository for Integrations {
     }
     async fn check_mailbox(&self, who: Identity, id: i64) -> Result<(), Error> {
         let mut tx = crate::mysql::locks::write(&self.pool).await.map_err(db)?;
-        authorize(&mut tx, who, true, false).await?;
+        super::resources::authorize(&mut tx, who, true).await?;
         super::settings::require_integration(&mut tx, true).await?;
         let row = sqlx::query("SELECT enabled FROM ruphish_mailboxes WHERE id=? AND owner_id=?")
             .bind(id)
@@ -607,4 +563,25 @@ impl Repository for Integrations {
             .await
             .map_err(|e| Error::Storage(crate::mysql::commit_error(e)))
     }
+}
+
+/// Remove an endpoint and its work after the caller has authorized and locked it.
+pub(super) async fn remove_webhook(
+    c: &mut sqlx::MySqlConnection,
+    id: i64,
+) -> Result<(), sqlx::Error> {
+    // Delivery completion locks jobs before attempts; deletion must use that order too.
+    sqlx::query("SELECT id FROM ruphish_webhook_jobs WHERE webhook_id=? ORDER BY id FOR UPDATE")
+        .bind(id)
+        .fetch_all(&mut *c)
+        .await?;
+    for statement in [
+        "DELETE FROM ruphish_webhook_attempts WHERE job_id IN (SELECT id FROM ruphish_webhook_jobs WHERE webhook_id=?)",
+        "DELETE FROM ruphish_webhook_jobs WHERE webhook_id=?",
+        "DELETE FROM ruphish_webhook_state WHERE webhook_id=?",
+        "DELETE FROM webhooks WHERE id=?",
+    ] {
+        sqlx::query(statement).bind(id).execute(&mut *c).await?;
+    }
+    Ok(())
 }

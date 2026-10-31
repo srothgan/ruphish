@@ -302,7 +302,7 @@ pub(super) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<>
                     "M22 2 9 15 M22 2l-7 20-4-9-9-4 20-7",
                 )}
                 <Show when=move || {
-                    admin && api.features.get().webhooks_enabled
+                    api.features.get().webhooks_enabled
                 }>
                     {link(
                         path,

@@ -11,6 +11,8 @@ const fixture = fileURLToPath(new URL('./support/ui-interactions.mjs', import.me
 for (const scenario of [
   'form-import',
   'form-webhook',
+  'integration-readonly-webhook',
+  'integration-readonly-mailbox',
   'form-mailbox',
   'form-filters',
   'form-group',

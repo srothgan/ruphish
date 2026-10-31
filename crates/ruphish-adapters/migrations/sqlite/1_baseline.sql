@@ -403,7 +403,8 @@ CREATE TABLE "ruphish_webhook_jobs" (
 
 CREATE TABLE ruphish_webhook_state (
   webhook_id INTEGER PRIMARY KEY,
-  revision INTEGER NOT NULL DEFAULT 1
+  revision INTEGER NOT NULL DEFAULT 1,
+  owner_id INTEGER NOT NULL
 );
 
 CREATE TABLE smtp (
@@ -551,3 +552,5 @@ INSERT INTO role_permissions VALUES (1,2);
 INSERT INTO role_permissions VALUES (2,2);
 INSERT INTO role_permissions VALUES (1,3);
 INSERT INTO ruphish_settings VALUES (1,1,0,1,86400,21600,0,0,0,NULL);
+
+CREATE INDEX ruphish_webhook_state_owner ON ruphish_webhook_state(owner_id);

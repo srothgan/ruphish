@@ -1,7 +1,7 @@
 //! Required integration response fields; credentials are never part of these types.
 use serde::{Deserialize, Serialize};
 
-/// Administrator-visible webhook configuration.
+/// Creator-visible webhook configuration without signing secrets.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Webhook {
     /// Persistent identifier.

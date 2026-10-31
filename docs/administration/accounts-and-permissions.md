@@ -11,6 +11,8 @@ Open **Administration → Users** to create, edit, lock, or delete application a
 | --- | --- |
 | Read owned campaign resources and reports | `view_objects`, plus ownership checks |
 | Create/change owned resources and campaigns | `modify_objects`, plus operation-specific checks |
+| Read owned webhook configurations and history | `view_objects` |
+| Create/change owned webhooks and reporting mailboxes | `modify_objects`; administrator feature switches must allow creation, saves, and network actions |
 | Manage other accounts and system administration | `modify_system`, with mutation permissions where required |
 | Change your own password/display preferences | Dedicated browser-session workflow; not an arbitrary public API operation |
 | Access another account's campaigns as that account | Explicit administrator impersonation, with actor/effective identity retained |

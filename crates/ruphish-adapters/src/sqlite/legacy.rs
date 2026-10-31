@@ -96,6 +96,13 @@ pub(super) async fn convert(c: &mut SqliteConnection, version: i64) -> Result<()
             return Err(unsupported());
         }
     }
+    if version >= 20191104103306 {
+        let orphaned: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM webhooks) AND NOT EXISTS(SELECT 1 FROM users u JOIN role_permissions rp ON rp.role_id=u.role_id JOIN permissions p ON p.id=rp.permission_id WHERE p.slug='modify_system')")
+            .fetch_one(&mut *c).await?;
+        if orphaned {
+            return Err(UpgradeError::Unrecognized("Legacy webhooks require an existing administrator to assign configuration ownership".into()));
+        }
+    }
     let tables:Vec<String>=sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name<>'goose_db_version' ORDER BY name").fetch_all(&mut *c).await?;
     let mut source = BTreeMap::new();
     for table in &tables {
@@ -194,7 +201,7 @@ INSERT INTO ruphish_campaign_policy(campaign_id,redirect_url) SELECT c.id,coales
 INSERT INTO ruphish_legacy_queue_issues SELECT m.id,'Unresolved or ambiguous legacy queue association' FROM mail_logs m WHERE (SELECT count(*) FROM results r JOIN campaigns c ON c.id=r.campaign_id JOIN users u ON u.id=c.user_id WHERE r.r_id=m.r_id AND r.user_id=m.user_id AND r.campaign_id=m.campaign_id AND c.user_id=m.user_id)!=1 OR (SELECT count(*) FROM results all_results WHERE all_results.r_id=m.r_id)!=1 OR (SELECT count(*) FROM mail_logs d WHERE d.r_id=m.r_id)!=1 OR coalesce(m.send_attempt,0) NOT BETWEEN 0 AND 8 OR unixepoch(m.send_date) IS NULL;
 INSERT INTO ruphish_delivery(result_id,campaign_id,state,due,retries,code) SELECT r.id,m.campaign_id,CASE WHEN c.status='Completed' THEN 'cancelled' WHEN coalesce(m.processing,0)!=0 THEN 'unknown' WHEN p.campaign_id IS NULL THEN 'blocked' ELSE 'ready' END,unixepoch(m.send_date),coalesce(m.send_attempt,0),CASE WHEN coalesce(m.processing,0)!=0 THEN 'legacy_delivery_outcome_unknown' WHEN p.campaign_id IS NULL THEN 'campaign_page_missing' ELSE '' END FROM mail_logs m JOIN results r ON r.r_id=m.r_id AND r.campaign_id=m.campaign_id AND r.user_id=m.user_id JOIN campaigns c ON c.id=m.campaign_id LEFT JOIN ruphish_campaign_policy p ON p.campaign_id=c.id WHERE m.id NOT IN (SELECT mail_log_id FROM ruphish_legacy_queue_issues);
 DELETE FROM mail_logs WHERE id NOT IN (SELECT mail_log_id FROM ruphish_legacy_queue_issues);
-INSERT INTO ruphish_webhook_state SELECT id,1 FROM webhooks;
+INSERT INTO ruphish_webhook_state(webhook_id,revision,owner_id) SELECT id,1,(SELECT min(u.id) FROM users u JOIN role_permissions rp ON rp.role_id=u.role_id JOIN permissions p ON p.id=rp.permission_id WHERE p.slug='modify_system') FROM webhooks;
 INSERT INTO ruphish_mailboxes(owner_id,name,enabled,host,port,username,password,tls,folder,restrict_domain,delete_reported,frequency,modified_date,last_login,ignore_cert_errors)
  SELECT user_id,'Imported reporting mailbox ' || rowid,CASE WHEN port BETWEEN 1 AND 65535 AND length(host)>0 AND length(username)>0 AND length(password)>0 THEN COALESCE(enabled,0) ELSE 0 END,COALESCE(host,''),CASE WHEN port BETWEEN 1 AND 65535 THEN port ELSE 993 END,COALESCE(username,''),COALESCE(password,''),COALESCE(tls,1),COALESCE(NULLIF(folder,''),'INBOX'),COALESCE(restrict_domain,''),COALESCE(delete_reported_campaign_email,0),CASE WHEN imap_freq>=30 AND imap_freq<=31540000 THEN imap_freq ELSE 60 END,COALESCE(NULLIF(modified_date,''),'0001-01-01T00:00:00Z'),COALESCE(NULLIF(last_login,''),'0001-01-01T00:00:00Z'),COALESCE(ignore_cert_errors,0)<>0 FROM imap;
 DELETE FROM imap;

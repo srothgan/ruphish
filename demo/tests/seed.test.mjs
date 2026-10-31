@@ -261,6 +261,10 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
       assert.equal(stored.modified_date, recipient.modified_date);
       assert.equal(count('groups'), 6);
       assert.equal(count('webhooks'), 3);
+      assert.equal(
+        db.prepare('SELECT count(*) AS n FROM ruphish_webhook_state WHERE owner_id=1').get().n,
+        3,
+      );
       assert.equal(count('ruphish_mailboxes'), 2);
       assert.equal(count('ruphish_campaign_drafts'), 2);
       assert.equal(db.prepare('SELECT count(*) AS n FROM webhooks WHERE is_active<>0').get().n, 0);

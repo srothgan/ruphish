@@ -7,6 +7,8 @@ sidebar:
 
 Reporting a suspicious message is a useful outcome. Ruphish can monitor a dedicated IMAP folder and correlate forwarded campaign messages with their original recipient.
 
+Administrators enable reporting mailboxes in **Settings**. Once enabled, regular users can create and manage their own mailbox configurations without individual approval. Disabling the feature blocks creation, configuration saves, and network actions while retaining credentials and progress; authorized API reads and deletion remain available.
+
 ## Configure and validate
 
 If reporting mailboxes are disabled in company settings, an administrator must enable the feature first. Open **Resources → Reporting mailboxes**. Enter a name, host, port, service username/password, folder, and polling interval. Implicit TLS is the default; disabling it requires STARTTLS, not plaintext authentication. Standard username/password IMAP is supported; OAuth onboarding is not provided.

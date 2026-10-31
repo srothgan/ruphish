@@ -1,4 +1,4 @@
-//! Administrator webhooks and owner-scoped reporting mailbox resources.
+//! Creator-owned webhooks and reporting mailbox resources.
 use crate::{
     auth::{AuthState, Context, Rejection, failure},
     resources::{error, response},

@@ -993,7 +993,7 @@ export function createDemoApi({
         if (
           method === 'POST' &&
           ((family === 'domains' && operation === 'verify') ||
-            (family === 'webhooks' && operation === 'test') ||
+            (family === 'webhooks' && operation === 'validate') ||
             (family === 'reporting-mailboxes' &&
               ['validate', 'check', 'resume'].includes(operation)))
         ) {

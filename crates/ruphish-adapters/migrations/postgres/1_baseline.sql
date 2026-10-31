@@ -353,6 +353,7 @@ CREATE TABLE ruphish_domain_checks (
 CREATE TABLE ruphish_webhook_state (
   webhook_id BIGINT NOT NULL,
   revision BIGINT NOT NULL DEFAULT 1,
+  owner_id BIGINT NOT NULL,
   PRIMARY KEY (webhook_id)
 );
 
@@ -549,3 +550,5 @@ CREATE VIEW ruphish_domain_policy AS
  FROM ruphish_domains d CROSS JOIN ruphish_settings s WHERE s.id=1;
 
 CREATE VIEW event_history AS SELECT id,campaign_id,email,time,CASE kind WHEN 'campaign_created' THEN 'Campaign Created' WHEN 'email_sent' THEN 'Email Sent' WHEN 'email_error' THEN 'Error Sending Email' WHEN 'email_opened' THEN 'Email Opened' WHEN 'link_clicked' THEN 'Clicked Link' WHEN 'form_submitted' THEN 'Submitted Data' WHEN 'email_reported' THEN 'Email Reported' WHEN 'delivery_reconciled' THEN 'Delivery reconciled' ELSE kind END::text AS message,metadata AS details,recipient_id,source,edited,revision,client FROM events;
+
+CREATE INDEX ruphish_webhook_state_owner ON ruphish_webhook_state(owner_id);

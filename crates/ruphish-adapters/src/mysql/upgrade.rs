@@ -52,6 +52,9 @@ pub(super) async fn validate_source(c: &mut MySqlConnection, version: i64) -> Re
         )
         .await?;
     }
+    if version >= 20191104103306 {
+        ensure_zero(c, "SELECT count(*) FROM webhooks WHERE NOT EXISTS(SELECT 1 FROM users u JOIN role_permissions rp ON rp.role_id=u.role_id JOIN permissions p ON p.id=rp.permission_id WHERE p.slug='modify_system')".into()).await?;
+    }
     Ok(())
 }
 
@@ -207,7 +210,7 @@ async fn columns(
 
 async fn initialize_work(c: &mut MySqlConnection) -> Result<(), Error> {
     statement(c, "INSERT INTO rp_stage_ruphish_campaign_policy(campaign_id,redirect_url) SELECT c.id,COALESCE(p.redirect_url,'') FROM rp_stage_campaigns c JOIN rp_stage_pages p ON p.id=c.page_id AND p.user_id=c.user_id;
-INSERT INTO rp_stage_ruphish_webhook_state SELECT id,1 FROM rp_stage_webhooks;
+INSERT INTO rp_stage_ruphish_webhook_state(webhook_id,revision,owner_id) SELECT id,1,(SELECT min(u.id) FROM rp_stage_users u JOIN rp_stage_role_permissions rp ON rp.role_id=u.role_id JOIN rp_stage_permissions p ON p.id=rp.permission_id WHERE p.slug='modify_system') FROM rp_stage_webhooks;
 INSERT INTO rp_stage_ruphish_legacy_queue_issues SELECT m.id,'Unresolved or ambiguous legacy queue association' FROM rp_stage_mail_logs m WHERE (SELECT count(*) FROM rp_stage_results r JOIN rp_stage_campaigns c ON c.id=r.campaign_id JOIN rp_stage_users u ON u.id=c.user_id WHERE r.r_id=m.r_id AND r.user_id=m.user_id AND r.campaign_id=m.campaign_id AND c.user_id=m.user_id)<>1 OR (SELECT count(*) FROM rp_stage_results r WHERE r.r_id=m.r_id)<>1 OR (SELECT count(*) FROM rp_stage_mail_logs d WHERE d.r_id=m.r_id)<>1 OR COALESCE(m.send_attempt,0) NOT BETWEEN 0 AND 8 OR m.send_date<'1970-01-01';
 INSERT INTO rp_stage_ruphish_delivery(result_id,campaign_id,state,due,retries,code) SELECT r.id,m.campaign_id,CASE WHEN c.status='Completed' THEN 'cancelled' WHEN COALESCE(m.processing,0)<>0 THEN 'unknown' WHEN p.campaign_id IS NULL THEN 'blocked' ELSE 'ready' END,TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',STR_TO_DATE(LEFT(m.send_date,19),'%Y-%m-%dT%H:%i:%s')),COALESCE(m.send_attempt,0),CASE WHEN COALESCE(m.processing,0)<>0 THEN 'legacy_delivery_outcome_unknown' WHEN p.campaign_id IS NULL THEN 'campaign_page_missing' ELSE '' END FROM rp_stage_mail_logs m JOIN rp_stage_results r ON r.r_id=m.r_id AND r.campaign_id=m.campaign_id AND r.user_id=m.user_id JOIN rp_stage_campaigns c ON c.id=m.campaign_id LEFT JOIN rp_stage_ruphish_campaign_policy p ON p.campaign_id=c.id WHERE m.id NOT IN (SELECT mail_log_id FROM rp_stage_ruphish_legacy_queue_issues);
 DELETE FROM rp_stage_mail_logs WHERE id NOT IN (SELECT mail_log_id FROM rp_stage_ruphish_legacy_queue_issues);
