@@ -43,7 +43,7 @@ npx astro build
 node --test tools/installers.artifact.ts
 ```
 
-The Vercel configuration rebuilds for changes under `website/` or `docs/`; root `assets/` changes do not rebuild or update the website until the image is copied manually. Production canonical URLs and the sitemap use `SITE_URL` when set, otherwise `VERCEL_PROJECT_PRODUCTION_URL`.
+The Vercel configuration rebuilds for changes under `website/` or `docs/`; root `assets/` changes do not rebuild or update the website until the image is copied manually. Production canonical URLs and the sitemap use `SITE_URL` when set, otherwise `VERCEL_PROJECT_PRODUCTION_URL`. A permanent redirect adds the trailing slash that `trailingSlash: 'always'` expects to page paths; `/api/` routes and paths with a file extension are excluded so installer requests and static files are served directly. The local `astro dev` server shows its own trailing-slash error instead of `404.astro` for paths without the slash.
 
 ## Native installers and release discovery
 

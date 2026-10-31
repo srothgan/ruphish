@@ -1,0 +1,11 @@
+---
+import { tagStyle } from '../blog';
+interface Props { tags: string[]; }
+const { tags } = Astro.props;
+const style = await tagStyle();
+---
+{tags.length > 0 && (
+  <ul class="tag-list" aria-label="Tags">
+    {tags.map((tag) => <li class:list={['badge', style(tag)]}>{tag}</li>)}
+  </ul>
+)}

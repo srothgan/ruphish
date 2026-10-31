@@ -1,0 +1,24 @@
+---
+import Site from '../../layouts/Site.astro';
+import TagList from '../../components/TagList.astro';
+import { publishedPosts, formatDate } from '../../blog';
+
+const posts = await publishedPosts();
+---
+<Site title="Ruphish blog" description="Notes on phishing simulation, security awareness exercises, and the development of Ruphish, the open-source successor to Gophish.">
+  <section class="blog shell" aria-labelledby="blog-title">
+    <header><h1 id="blog-title">Blog</h1><p class="lead">Notes on phishing simulation and the development of Ruphish.</p></header>
+    <ol class="post-list">
+      {posts.map((post) => (
+        <li>
+          <article>
+            <h2><a href={`/blog/${post.id}/`}>{post.data.title}</a></h2>
+            <p class="post-meta"><time datetime={post.data.date.toISOString()}>{formatDate(post.data.date)}</time></p>
+            <TagList tags={post.data.tags} />
+            <p>{post.data.description}</p>
+          </article>
+        </li>
+      ))}
+    </ol>
+  </section>
+</Site>
