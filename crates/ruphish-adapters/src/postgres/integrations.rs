@@ -422,6 +422,7 @@ impl Repository for Integrations {
                 SET ignore_cert_errors=$16,name=$1,enabled=$2,host=$3,port=$4,username=$5,password=$6,tls=$7,folder=$8,
                     restrict_domain=$9,delete_reported=$10,frequency=$11,revision=revision+1,
                     lease=0,next_check=0,failures=0,code='',modified_date=to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+                    initial_since=CASE WHEN $12 THEN NULL ELSE initial_since END,
                     initialized=CASE WHEN $12 THEN FALSE ELSE initialized END,
                     uidvalidity=CASE WHEN $13 THEN 0 ELSE uidvalidity END,
                     last_uid=CASE WHEN $14 THEN 0 ELSE last_uid END
@@ -459,9 +460,15 @@ impl Repository for Integrations {
             let password = e
                 .password
                 .ok_or_else(|| invalid("mailbox_password_required"))?;
+            let initial_since: Option<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(
+                crate::integration_work::initial_mailbox_boundary_sql("postgres"),
+            ))
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(db)?;
             sqlx::query(r#"
-                INSERT INTO ruphish_mailboxes(owner_id,name,enabled,host,port,username,password,tls,folder,restrict_domain,delete_reported,frequency,ignore_cert_errors)
-                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id"#)
+                INSERT INTO ruphish_mailboxes(owner_id,name,enabled,host,port,username,password,tls,folder,restrict_domain,delete_reported,frequency,ignore_cert_errors,initial_since)
+                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id"#)
 .bind(who.id)
 .bind(&e.name)
 .bind(e.enabled)
@@ -475,6 +482,7 @@ impl Repository for Integrations {
 .bind(e.delete_reported)
 .bind(i64::from(e.frequency))
 .bind(e.ignore_cert_errors)
+.bind(initial_since.map(|stamp| format!("{stamp}Z")))
 .fetch_one(&mut *tx)
 .await
 .map_err(db)?
@@ -572,7 +580,7 @@ impl Repository for Integrations {
         super::settings::require_integration(&mut tx, true).await?;
         let changed = sqlx::query(r#"
                 UPDATE ruphish_mailboxes
-                SET initialized=FALSE,uidvalidity=0,last_uid=0,next_check=0,lease=0,revision=revision+1,code=''
+                SET initial_since=NULL,initialized=FALSE,uidvalidity=0,last_uid=0,next_check=0,lease=0,revision=revision+1,code=''
                 WHERE id=$1
                 AND owner_id=$2
                 AND revision=$3

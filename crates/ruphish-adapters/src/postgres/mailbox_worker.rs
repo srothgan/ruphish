@@ -23,6 +23,7 @@ pub(super) fn config(r: &PgRow) -> Result<Config, Error> {
         validity: r.try_get("uidvalidity").map_err(db)?,
         last: r.try_get::<i64, _>("last_uid").map_err(db)? as u32,
         initialized: r.try_get("initialized").map_err(db)?,
+        initial_since: r.try_get("initial_since").map_err(db)?,
     })
 }
 #[async_trait::async_trait]
@@ -167,24 +168,28 @@ impl MailboxQueue for Integrations {
         &self,
         c: &Config,
         validity: i64,
-        next: u32,
+        first: u32,
     ) -> Result<(), &'static str> {
         if !c.initialized {
-            sqlx::query(
+            let changed = sqlx::query(
                 r#"
                 UPDATE ruphish_mailboxes
-                SET initialized=TRUE,uidvalidity=$1,last_uid=$2
+                SET initialized=TRUE,initial_since=NULL,uidvalidity=$1,last_uid=$2
                 WHERE id=$3
-                AND revision=$4
+                AND revision=$4 AND initialized=FALSE
             "#,
             )
             .bind(validity)
-            .bind(i64::from(next.saturating_sub(1)))
+            .bind(i64::from(first.saturating_sub(1)))
             .bind(c.id)
             .bind(c.revision)
             .execute(&self.pool)
             .await
-            .map_err(|_| "mailbox_storage_failed")?;
+            .map_err(|_| "mailbox_storage_failed")?
+            .rows_affected();
+            if changed != 1 {
+                return Err("configuration_changed");
+            }
             return Ok(());
         }
         Ok(())
@@ -255,19 +260,19 @@ impl MailboxQueue for Integrations {
         if !valid {
             return Err("configuration_changed");
         }
-        let existing: bool = sqlx::query_scalar(
+        let existing: Option<String> = sqlx::query_scalar(
             r#"
-                SELECT EXISTS(SELECT 1
+                SELECT state
                 FROM ruphish_mailbox_messages
                 WHERE mailbox_id=$1
                 AND uidvalidity=$2
-                AND uid=$3)
+                AND uid=$3
             "#,
         )
         .bind(c.id)
         .bind(validity)
         .bind(i64::from(uid))
-        .fetch_one(&mut *tx)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(|_| "mailbox_storage_failed")?;
         let mut result = None;
@@ -284,11 +289,9 @@ impl MailboxQueue for Integrations {
                 JOIN campaigns c ON c.id=r.campaign_id
                 AND c.user_id=r.user_id
                 WHERE r.r_id=$1
-                AND r.user_id=$2
             "#,
             )
             .bind(rid)
-            .bind(c.owner)
             .fetch_all(&mut *tx)
             .await
             .map_err(|_| "mailbox_storage_failed")?;
@@ -308,7 +311,26 @@ impl MailboxQueue for Integrations {
                 }
             }
         }
-        if !existing {
+        if existing.is_none() {
+            if let Some((_, campaign, _)) = &result
+                && !super::locks::campaign(&mut tx, *campaign, false)
+                    .await
+                    .map_err(|_| "mailbox_storage_failed")?
+            {
+                result = None;
+                code = "mailbox_unmatched";
+            }
+            if let Some((_, campaign, _)) = &result {
+                let status: String = sqlx::query_scalar("SELECT status FROM campaigns WHERE id=$1")
+                    .bind(campaign)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(|_| "mailbox_storage_failed")?;
+                if status == ruphish_domain::campaign::CampaignStatus::Completed.as_str() {
+                    result = None;
+                    code = "mailbox_campaign_closed";
+                }
+            }
             if let Some((result, campaign, email)) = &result {
                 sqlx::query("SELECT id FROM results WHERE id=$1 FOR UPDATE")
                     .bind(result)
@@ -364,7 +386,7 @@ impl MailboxQueue for Integrations {
         .execute(&mut *tx)
         .await
         .map_err(|_| "mailbox_storage_failed")?;
-        if !existing {
+        if existing.is_none() {
             sqlx::query(
                 "UPDATE ruphish_mailbox_runs SET matched=matched+$1,rejected=rejected+$2 WHERE id=$3",
             )
@@ -376,7 +398,9 @@ impl MailboxQueue for Integrations {
             .map_err(|_| "mailbox_storage_failed")?;
         }
         tx.commit().await.map_err(|_| "mailbox_storage_failed")?;
-        Ok(result.is_some())
+        Ok(existing
+            .as_deref()
+            .map_or(result.is_some(), |state| state == "matched"))
     }
     async fn mailbox_current(&self, c: &Config) -> Result<(), &'static str> {
         let current: bool = sqlx::query_scalar(

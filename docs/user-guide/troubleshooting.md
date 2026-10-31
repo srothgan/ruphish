@@ -17,7 +17,7 @@ sidebar:
 | Delivery is waiting | Check launch time, domain readiness, and whether this instance runs the mailer. Inspect the next due attempt instead of relaunching. |
 | A send outcome is unknown | Inspect receiving-server evidence and use [reconciliation](campaigns/delivery.md); do not assume a retry is duplicate-free. |
 | Counts differ across views | Compare cohort, event/time/recipient filters, raw events, unique counts, and [progression rules](results/metrics.md). |
-| A forwarded report is not counted | Check whether it arrived after the first checkpoint and contains one matching campaign identity/origin; inspect mailbox history. |
+| A forwarded report is not counted | Check the [initial scan boundary](reporting-mailboxes.md#send-a-report), campaign completion state, and whether the message contains one matching recipient identity/origin; inspect mailbox history. |
 
 For listener, certificate, startup, and database problems, use [administration troubleshooting](../administration/troubleshooting.md). Include the visible diagnostic code and redacted context when asking an installation operator for help; avoid sharing keys or participant values.
 

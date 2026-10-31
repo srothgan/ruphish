@@ -3117,3 +3117,17 @@ mod query_work;
 
 #[path = "support/client_observations.rs"]
 mod client_observations;
+
+#[path = "../../../tests/support/connection.rs"]
+mod connection;
+#[path = "../../../tests/support/mailbox.rs"]
+#[allow(
+    dead_code,
+    reason = "Executable fixtures consume the peer certificate; provider tests use explicit test-only verification bypass"
+)]
+mod mailbox;
+#[path = "support/mailbox_reporting.rs"]
+mod mailbox_reporting;
+#[path = "../../../tests/support/tls.rs"]
+#[allow(dead_code, reason = "Shared TLS fixture also serves executable tests")]
+mod tls_fixture;

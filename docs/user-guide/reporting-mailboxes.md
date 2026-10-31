@@ -17,17 +17,23 @@ Certificate and hostname validation are enabled by default. An installation oper
 
 ## Send a report
 
-The first successful poll establishes a checkpoint and watches new arrivals; existing mail is left untouched. Forward a campaign message inline or as a `message/rfc822` attachment after that checkpoint.
+Forward a campaign message inline or as a `message/rfc822` attachment. When a mailbox is created, Ruphish selects the earliest actual email-send observation among all non-completed campaigns in the installation as its initial scan boundary. The first successful poll uses that boundary to include existing reports. If no such send exists, it starts with new arrivals instead; there is no initial-scan setting.
 
-A report must contain one distinct recipient-ID/origin pair from a campaign owned by the mailbox's account. Repeated references to the same pair are allowed. Multiple different campaign links make correlation ambiguous. Completed campaigns can still receive mailbox reports.
+IMAP searches use calendar dates, so initial discovery includes the preceding UTC date to account for mailbox time zones. It may inspect older messages in that window. Arrivals during discovery remain eligible for subsequent polling. After initialization, a durable UID checkpoint controls progress; campaign starts and completions do not recalculate it.
+
+A report must contain one distinct recipient-ID/origin pair from a campaign in this installation, regardless of who created the campaign or mailbox. Repeated references to the same pair are allowed. Multiple different campaign links make correlation ambiguous. Mailbox configuration remains creator-managed; matching another user's campaign grants no campaign editing permission.
+
+Reports for completed campaigns are ignored with the operational reason `mailbox_campaign_closed`. They do not add events, change recipient results, or enqueue webhooks. The scanner advances its checkpoint and continues processing later messages.
 
 An optional From-domain restriction is only a filter; it does not authenticate the reporter.
 
 ## Polling and recovery
 
+Polling continues even when no campaign is active. Ordinary configuration edits and enable/disable changes preserve progress. Changing the host, port, username, or folder explicitly resets the mailbox identity and starts with new arrivals.
+
 Intervals start at 30 seconds. Failed polls back off up to one hour. The detail view shows the active check, last result, next check, and recent history.
 
-Reports are committed before the message is marked seen. If acknowledgement fails, restart/retry does not create another report event for the same processed UID. Unmatched messages remain in the mailbox without blocking later arrivals. Bodies over 2 MiB and messages exceeding parsing/correlation budgets are skipped or rejected with a diagnostic.
+Reports are committed before the message is marked seen. If acknowledgement fails, restart/retry does not create another report event for the same processed UID. A report committed before campaign completion keeps its pending acknowledgement afterward. Unmatched messages remain in the mailbox without blocking later arrivals. Bodies over 2 MiB and messages exceeding parsing/correlation budgets are skipped or rejected with a diagnostic.
 
 If the server changes UIDVALIDITY, processing stops. **Resume with new arrivals** establishes a new checkpoint and leaves existing messages untouched; campaign history remains.
 

@@ -29,9 +29,11 @@ Send the expected revision on edits and use `If-Match` when deleting to protect 
 
 ## Matching and acknowledgement
 
-The first successful poll checkpoints existing messages. New forwarded content must contain an unambiguous matching campaign origin and recipient identifier owned by the mailbox's account. A sender-domain filter narrows candidates but is not sender authentication.
+At creation, the initial scan boundary is the earliest actual email-send observation across all non-completed campaigns, independently of their creators. The first successful poll translates it into a durable UID checkpoint; without an eligible send, it checkpoints existing messages and starts with new arrivals. The boundary is internal, not a configurable API field. Ordinary edits, restarts, and campaign lifecycle changes preserve progress. See the [initial discovery and timezone behavior](../user-guide/reporting-mailboxes.md#send-a-report).
 
-Matched outcomes commit before mailbox acknowledgement. Retrying acknowledgement must not create another report event. Deletion, when enabled, requires UID-scoped behavior rather than a broad mailbox expunge. Read [reporting mailboxes](../user-guide/reporting-mailboxes.md) before enabling it.
+Forwarded content must contain an unambiguous matching campaign origin and recipient identifier in this installation. The mailbox creator does not restrict eligible campaign owners. A sender-domain filter narrows candidates but is not sender authentication. Reports for completed campaigns produce the bounded operational reason `mailbox_campaign_closed` and advance the checkpoint without changing campaign results or queuing webhooks.
+
+Matched outcomes commit before mailbox acknowledgement. Retrying acknowledgement must not create another report event, including when the campaign has since completed. Deletion, when enabled, requires UID-scoped behavior rather than a broad mailbox expunge. Read [reporting mailboxes](../user-guide/reporting-mailboxes.md) before enabling it.
 
 The singleton `/api/imap/` and `/api/imap/validate` routes have been removed. Use the reporting-mailbox resources above with numeric `port` and `frequency`, explicit mailbox IDs and revision-checked edits. Create or update a mailbox before validating its saved configuration.
 

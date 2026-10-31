@@ -410,7 +410,7 @@ fn verified_imap_reports_survive_ack_failure_restart_and_uid_reset_without_messa
     let client = client();
     database(
         directory.path(),
-        "UPDATE users SET password_change_required=0; UPDATE ruphish_settings SET reporting_mailboxes_enabled=1; INSERT INTO campaigns(id,user_id,name,url,status) VALUES(91,1,'Reporting test','https://training.test/','Completed'); INSERT INTO results(id,campaign_id,user_id,r_id,email,status,reported) VALUES(91,91,1,'abc123','person@example.test','Email Sent',0);",
+        "UPDATE users SET password_change_required=0; UPDATE ruphish_settings SET reporting_mailboxes_enabled=1; INSERT INTO campaigns(id,user_id,name,url,status) VALUES(91,1,'Reporting test','https://training.test/','In progress'); INSERT INTO results(id,campaign_id,user_id,r_id,email,status,reported) VALUES(91,91,1,'abc123','person@example.test','Email Sent',0);",
     );
     let draft = json!({"name":"Reports","enabled":true,"host":"127.0.0.1","port":peer.address.port(),"username":"service","password":"MAILBOX-SECRET-CANARY","tls":true,"folder":"INBOX","frequency":60});
     let created = request(
@@ -489,6 +489,10 @@ fn verified_imap_reports_survive_ack_failure_restart_and_uid_reset_without_messa
     assert_eq!(analysis["events"][0]["source"], "mailbox");
     assert_eq!(analysis["unique"]["opened"], 0);
     assert_eq!(analysis["unique"]["clicked"], 0);
+    database(
+        directory.path(),
+        "UPDATE campaigns SET status='Completed' WHERE id=91",
+    );
     process.stop();
     peer.state.lock().unwrap().reject_ack = false;
     process = Process::start(directory.path(), "admin");

@@ -223,6 +223,7 @@
   ["column", "ruphish_mailboxes", "host", 6, "varchar(255)", "NO", null, "", "", "utf8mb4_0900_bin"],
   ["column", "ruphish_mailboxes", "id", 1, "bigint", "NO", null, "auto_increment", "", null],
   ["column", "ruphish_mailboxes", "ignore_cert_errors", 26, "tinyint(1)", "NO", "0", "", "", null],
+  ["column", "ruphish_mailboxes", "initial_since", 27, "varchar(40)", "YES", null, "", "", "utf8mb4_0900_bin"],
   ["column", "ruphish_mailboxes", "initialized", 17, "bigint", "NO", "0", "", "", null],
   ["column", "ruphish_mailboxes", "last_check", 20, "bigint", "NO", "0", "", "", null],
   ["column", "ruphish_mailboxes", "last_login", 23, "varchar(40)", "NO", "0001-01-01T00:00:00Z", "", "", "utf8mb4_0900_bin"],

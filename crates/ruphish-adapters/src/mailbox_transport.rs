@@ -303,24 +303,66 @@ pub(crate) async fn search(
     first: u32,
     last: u32,
 ) -> Result<Vec<u32>, &'static str> {
-    let mut result = std::collections::BTreeSet::new();
-    checked_command(
+    search_command(
         session,
+        first,
+        last,
         format!("UID SEARCH UID {first}:{last}"),
-        |response| {
-            if let Response::MailboxData(MailboxDatum::Search(ids)) = response {
-                for id in ids {
-                    if (first..=last).contains(id) {
-                        result.insert(*id);
-                    }
-                    if result.len() > 25 {
-                        result.pop_last();
-                    }
+    )
+    .await
+}
+
+/// IMAP SINCE compares calendar dates without time zones. Include the preceding
+/// UTC date so even an extreme INTERNALDATE offset cannot hide an eligible arrival.
+/// The SELECT UIDNEXT snapshot bounds discovery; later arrivals remain above the cursor.
+pub(crate) async fn initial_uid(
+    session: &mut Session,
+    since: &str,
+    next: u32,
+) -> Result<u32, &'static str> {
+    let stamp =
+        ruphish_application::datetime::parse_stored(since).map_err(|_| "mailbox_storage_failed")?;
+    let date = ruphish_application::datetime::from_seconds(stamp.as_second().saturating_sub(86400))
+        .map_err(|_| "mailbox_storage_failed")?
+        .to_zoned(
+            ruphish_application::datetime::named_zone("UTC")
+                .map_err(|_| "mailbox_storage_failed")?,
+        )
+        .strftime("%d-%b-%Y")
+        .to_string();
+    let last = next - 1;
+    Ok(search_command(
+        session,
+        1,
+        last,
+        format!("UID SEARCH UID 1:{last} SINCE {date}"),
+    )
+    .await?
+    .into_iter()
+    .next()
+    .unwrap_or(next))
+}
+
+async fn search_command(
+    session: &mut Session,
+    first: u32,
+    last: u32,
+    command: String,
+) -> Result<Vec<u32>, &'static str> {
+    let mut result = std::collections::BTreeSet::new();
+    checked_command(session, command, |response| {
+        if let Response::MailboxData(MailboxDatum::Search(ids)) = response {
+            for id in ids {
+                if (first..=last).contains(id) {
+                    result.insert(*id);
+                }
+                if result.len() > 25 {
+                    result.pop_last();
                 }
             }
-            Ok(())
-        },
-    )
+        }
+        Ok(())
+    })
     .await?;
     Ok(result.into_iter().collect())
 }

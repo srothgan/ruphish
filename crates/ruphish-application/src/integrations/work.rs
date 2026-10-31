@@ -64,6 +64,8 @@ pub struct MailboxConfig {
     pub last: u32,
     /// Whether initial mailbox discovery completed.
     pub initialized: bool,
+    /// One-time creation boundary; absent for new-arrival initialization and explicit resets.
+    pub initial_since: Option<String>,
 }
 
 /// Provider-neutral MailboxClaim data; sensitive records deliberately omit Debug.
@@ -111,12 +113,12 @@ pub trait MailboxQueue: Send + Sync {
     ) -> Result<(), Error>;
     /// Record a successful login independently of the mailbox metadata response.
     async fn mailbox_login(&self, config: &MailboxConfig) -> Result<(), &'static str>;
-    /// Initialize its UID checkpoint after valid metadata is received.
+    /// Initialize the checkpoint immediately before the first UID eligible for processing.
     async fn initialize_mailbox(
         &self,
         config: &MailboxConfig,
         validity: i64,
-        next: u32,
+        first: u32,
     ) -> Result<(), &'static str>;
     /// List committed reports still awaiting external acknowledgement.
     async fn pending_acknowledgements(

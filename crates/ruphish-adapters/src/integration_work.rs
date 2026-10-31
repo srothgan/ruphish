@@ -5,6 +5,14 @@ fn now() -> i64 {
     ruphish_application::datetime::now().as_second()
 }
 
+/// Only actual send observations establish the creation-time backlog boundary.
+pub(crate) fn initial_mailbox_boundary_sql(provider: &str) -> String {
+    let stamp = crate::campaign_sort::timestamp_key("e.time", provider);
+    format!(
+        "SELECT min({stamp}) FROM events e JOIN campaigns c ON c.id=e.campaign_id WHERE c.status!='Completed' AND e.kind='email_sent' AND e.source='application'"
+    )
+}
+
 pub(crate) fn webhook_payload(
     campaign: i64,
     email: String,
@@ -103,7 +111,14 @@ async fn poll_mailbox(
     let validity = i64::from(mailbox.uid_validity.ok_or("mailbox_uidvalidity_missing")?);
     let next = mailbox.uid_next.ok_or("mailbox_uidnext_missing")?;
     if !c.initialized {
-        store.initialize_mailbox(c, validity, next).await?;
+        let first = match &c.initial_since {
+            Some(since) if next > 1 => {
+                mailbox_transport::initial_uid(&mut session, since, next).await?
+            }
+            _ => next,
+        };
+        store.mailbox_current(c).await?;
+        store.initialize_mailbox(c, validity, first).await?;
         let _ = session.logout().await;
         return Ok(());
     }

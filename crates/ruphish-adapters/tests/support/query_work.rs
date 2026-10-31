@@ -22,14 +22,14 @@ mod postgres_inventory;
 mod sqlite_inventory;
 
 // These connections inspect real engines; no query or transaction is mocked.
-enum Inspector {
+pub(super) enum Inspector {
     Sqlite(sqlx::SqliteConnection),
     Mysql(sqlx::MySqlConnection),
     Postgres(sqlx::PgConnection),
 }
 
 impl Inspector {
-    async fn execute(&mut self, sql: &str) {
+    pub(super) async fn execute(&mut self, sql: &str) {
         match self {
             Self::Sqlite(c) => {
                 sqlx::raw_sql(sqlx::AssertSqlSafe(sql.to_owned()))
@@ -52,7 +52,7 @@ impl Inspector {
         }
     }
 
-    async fn scalar(&mut self, sql: &str) -> i64 {
+    pub(super) async fn scalar(&mut self, sql: &str) -> i64 {
         let sql = sqlx::AssertSqlSafe(sql.to_owned());
         match self {
             Self::Sqlite(c) => sqlx::query_scalar(sql).fetch_one(c).await.unwrap(),

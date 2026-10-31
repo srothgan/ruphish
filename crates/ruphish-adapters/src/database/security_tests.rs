@@ -162,10 +162,10 @@ async fn stale_mailbox_claims_cannot_initialize_replacements_even_for_the_same_o
             .await
             .unwrap();
         assert_ne!(replacement.id, original.id);
-        worker
-            .initialize_mailbox(&claim.config, 123, 500)
-            .await
-            .unwrap();
+        assert_eq!(
+            worker.initialize_mailbox(&claim.config, 123, 500).await,
+            Err("configuration_changed")
+        );
         worker.mailbox_login(&claim.config).await.unwrap();
         worker
             .finish_mailbox(&claim, "passed", 1_800_000_100, 1_800_000_001)
