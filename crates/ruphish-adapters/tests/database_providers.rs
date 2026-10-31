@@ -181,6 +181,9 @@ async fn postgres_event_edits_preserve_history_and_reopen() {
     postgres_cleanup(&mut admin, &config).await;
 }
 
+#[path = "support/open_tracking.rs"]
+mod open_tracking;
+
 #[path = "support/campaign_drafts.rs"]
 mod campaign_drafts;
 #[path = "support/company_settings.rs"]
@@ -877,6 +880,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         idempotency: Some(("launch-once".into(), "request-fingerprint".into())),
         ..campaign::Create::default()
     };
+    open_tracking::exercise(db, actor, input.clone(), now).await;
     learning_pages::exercise(db, actor, normal.identity, input.clone(), now).await;
     campaign_drafts::exercise(db, actor, normal.identity, input.clone(), now, fault).await;
     let campaigns = db.campaigns();
@@ -1827,6 +1831,16 @@ async fn mysql_upgrades_every_legacy_version_preserving_identity_and_recoverable
         let db = database::open(Config::MySql(config.clone()), Policy::default())
             .await
             .unwrap_or_else(|e| panic!("upgrade version {version}: {e}"));
+        let track_opens: bool = sqlx::query_scalar(
+            "SELECT track_opens FROM ruphish_campaign_policy WHERE campaign_id=13",
+        )
+        .fetch_one(&mut inspector)
+        .await
+        .unwrap();
+        assert!(
+            track_opens,
+            "migrated {version} defaults to enabled without authored tracker markup"
+        );
         assert!(db.bootstrap(None, None).await.unwrap().is_none());
 
         let user = db.accounts().by_name("legacy-admin").await.unwrap();

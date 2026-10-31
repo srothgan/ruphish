@@ -163,14 +163,21 @@ fn without_tracker_at_depth(
     .map_err(|_| invalid("Email tracking image could not be processed"))
 }
 
-/// Attach exactly one managed image at the end of the rendered body. Plain text
-/// messages have an empty HTML alternative and must remain plain text.
-pub(crate) fn tracked(source: &str, tracking_url: &str) -> Result<String, Error> {
+/// Remove authored trackers and, when enabled, attach one managed image at the
+/// end of the rendered body. An empty HTML alternative remains plain text.
+pub(crate) fn tracked(
+    source: &str,
+    tracking_url: &str,
+    track_opens: bool,
+) -> Result<String, Error> {
     let html = document(source)?;
     if html.is_empty() {
         return Ok(html);
     }
     let html = without_tracker(&html, tracking_url)?;
+    if !track_opens {
+        return Ok(html);
+    }
     let escaped = tracking_url
         .replace('&', "&amp;")
         .replace('"', "&quot;")

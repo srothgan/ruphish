@@ -106,3 +106,7 @@ Use a unique 16 to 64 character alphanumeric/hyphen `request_id`. An addition st
 Edits and deletions require the reviewed row version. An actual edit increments `revision` and sets `edited: true`; a no-op preserves both fields. Origin remains unchanged. A stale edit returns `412`, except that an identical request matching the immediately next version is acknowledged without another write. A missing event, including a repeated delete, returns `404`. Each mutation is transactional. Administrative additions and edits do not enqueue participant-event webhooks; edits and deletions cancel outstanding webhook jobs for the affected event.
 
 Event rows retain only their current values. There is no original-value copy, audit endpoint or restore operation. The boolean `edited` is independent of origin and remains true after an actual edit, including when values are changed back later. Results and event exports expose that boolean; `revision` is only used to prevent conflicting writes.
+
+## Disabled open tracking
+
+Results include the campaign Boolean `track_opens`. Raw observation counts remain numeric; clients must use the Boolean to distinguish disabled open tracking from zero observed opens. The UI shows **Not tracked** or **-** and hides the open series when disabled. Recipient CSV/XLSX open-count cells and workbook open summaries contain **Not tracked** instead of a numeric zero. Historical event rows remain available; disabling collection does not delete observations.

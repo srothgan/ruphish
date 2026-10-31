@@ -153,7 +153,7 @@ fn incomplete_review_step_draft_reopens_rejects_review_and_launch_then_recovers(
     let directory = workspace();
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let path = "/api/campaign-drafts/incomplete-review-step-01";
-    let incomplete = json!({"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"redirect_url":""}});
+    let incomplete = json!({"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"redirect_url":null,"track_opens":false}});
     let saved = save(&base, path, Value::Null, &incomplete, 3);
     let before = counts(directory.path());
     process.stop();
@@ -180,6 +180,7 @@ fn incomplete_review_step_draft_reopens_rejects_review_and_launch_then_recovers(
     assert_eq!(counts(directory.path()), before);
 
     let mut complete = configuration_for(&base);
+    complete["policy"]["track_opens"] = json!(false);
     complete["launch_local"] = json!({"local":"","time_zone":"UTC"});
     let scheduled_incomplete = save(&base, path, saved["revision"].clone(), &complete, 2);
     let response = request(&base, "POST", "/api/campaign-drafts/prepare", &complete);
@@ -209,6 +210,7 @@ fn incomplete_review_step_draft_reopens_rejects_review_and_launch_then_recovers(
         .unwrap()
         .json()
         .unwrap();
+    assert_eq!(launched["track_opens"], false);
     let retried: Value = request(&base, "POST", &format!("{path}/launch"), &body)
         .error_for_status()
         .unwrap()

@@ -247,6 +247,7 @@ export function analysis(campaign, query, now, paginate = true) {
     id: campaign.header.id,
     name: campaign.header.name,
     status: campaign.header.status,
+    track_opens: campaign.header.policy.track_opens,
     as_of: now,
     audience: campaign.results.length,
     unique: namedCounts(unique),

@@ -100,6 +100,7 @@ pub fn policy(input: &Create, page: &Resource) -> Result<InteractionPolicy, Erro
     )
     .finish()?;
     let policy = InteractionPolicy {
+        track_opens: input.policy.track_opens,
         learning_page_id: input.policy.learning_page_id,
         redirect_url: input.policy.redirect_url.clone().unwrap_or_else(|| {
             if input.policy.learning_page_id.is_some() {

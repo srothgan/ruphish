@@ -100,6 +100,7 @@ async fn read(
         .await
         .map_err(error)?;
     let value = reads::Results {
+        track_opens: a.track_opens,
         first_observed: a.first_observed.into(),
         last_observed: a.last_observed.into(),
         id: a.id,

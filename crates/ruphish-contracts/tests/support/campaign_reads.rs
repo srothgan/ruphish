@@ -104,7 +104,7 @@ fn saved_draft_structure_is_complete_even_when_values_are_unfinished() {
     );
     let saved = json!({
         "name":"", "url":"", "selection":{"groups":[{"id":0}],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},
-        "policy":{"redirect_url":"","learning_page_id":7},
+        "policy":{"track_opens":true,"redirect_url":"","learning_page_id":7},
         "launch_local":{"local":"","time_zone":"Europe/Berlin"},
         "send_by_local":{"local":"2035-01-02T12:00","time_zone":""}
     });
@@ -117,6 +117,13 @@ fn saved_draft_structure_is_complete_even_when_values_are_unfinished() {
     // This is the editor boundary: complete reads remain usable as unfinished input.
     let reopened: Input = serde_json::from_value(serde_json::to_value(confirmed).unwrap()).unwrap();
     assert_eq!(reopened, input);
+    let mut unresolved = saved.clone();
+    unresolved["policy"] = json!({"track_opens":false,"redirect_url":null});
+    let input: Input = serde_json::from_value(unresolved.clone()).unwrap();
+    assert!(input.validate());
+    let confirmed = serde_json::to_value(draft::Configuration::from(&input)).unwrap();
+    assert_eq!(confirmed, unresolved);
+    assert!(serde_json::from_value::<draft::Configuration>(confirmed).is_ok());
     for (object, field) in [
         ("/selection", "groups"),
         ("/selection", "template"),
@@ -127,6 +134,7 @@ fn saved_draft_structure_is_complete_even_when_values_are_unfinished() {
         ("/selection/page", "id"),
         ("/selection/smtp", "id"),
         ("/policy", "redirect_url"),
+        ("/policy", "track_opens"),
         ("/launch_local", "local"),
         ("/launch_local", "time_zone"),
         ("/send_by_local", "local"),

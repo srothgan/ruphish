@@ -16,6 +16,8 @@
     "native_name": "English"
   },
   "ui": {
+    "track_email_opens": "Track email opens",
+    "not_tracked": "Not tracked",
     "skip_certificate_verification": "Skip certificate verification",
     "skip_certificate_verification_help": "For controlled test environments. The connection stays encrypted, but the mail server's identity is not verified.",
     "certificate_verification": "Certificate verification",

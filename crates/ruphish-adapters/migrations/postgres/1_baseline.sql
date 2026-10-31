@@ -237,6 +237,7 @@ CREATE TABLE ruphish_campaign_groups (
 );
 
 CREATE TABLE ruphish_campaign_policy (
+  track_opens BOOLEAN NOT NULL DEFAULT TRUE,
   campaign_id BIGINT NOT NULL,
   redirect_url TEXT COLLATE "C" NOT NULL,
   learning_page_id bigint,

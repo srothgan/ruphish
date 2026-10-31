@@ -418,7 +418,17 @@ fn detail(api: Api, id: i64) -> impl IntoView {
                                         <strong>
                                             {move || {
                                                 data.with(|v| {
-                                                    v.as_ref().map_or(0, |v| { v.unique.values()[i] })
+                                                    v.as_ref()
+                                                        .map_or_else(
+                                                            String::new,
+                                                            |v| {
+                                                                if i == 1 && !v.track_opens {
+                                                                    leptos_i18n::t_string!(i18n, ui.not_tracked).to_string()
+                                                                } else {
+                                                                    v.unique.values()[i].to_string()
+                                                                }
+                                                            },
+                                                        )
                                                 })
                                             }}
                                         </strong>
@@ -430,6 +440,9 @@ fn detail(api: Api, id: i64) -> impl IntoView {
                     </div>
                     <ActivityChart
                         data=chart
+                        track_opens=Signal::derive(move || {
+                            data.with(|v| v.as_ref().is_none_or(|v| v.track_opens))
+                        })
                         interval=Signal::derive(move || {
                             data.with(|v| v.as_ref().map_or(60, |v| v.bucket_seconds)).max(60)
                         })
@@ -496,14 +509,24 @@ fn detail(api: Api, id: i64) -> impl IntoView {
                                             .map(move |index| {
                                                 view! {
                                                     <td>
-                                                        <ActivityIndicator recorded=Signal::derive(move || {
-                                                            row.get()
-                                                                .is_some_and(|(page, position)| {
-                                                                    page.recipients
-                                                                        .get(position)
-                                                                        .is_some_and(|r| r.counts.values()[index] > 0)
-                                                                })
-                                                        }) />
+                                                        <Show
+                                                            when=move || {
+                                                                index != 1
+                                                                    || row.get().is_none_or(|(page, _)| page.track_opens)
+                                                            }
+                                                            fallback=|| {
+                                                                view! { <span title=tr!(ui.not_tracked)>"-"</span> }
+                                                            }
+                                                        >
+                                                            <ActivityIndicator recorded=Signal::derive(move || {
+                                                                row.get()
+                                                                    .is_some_and(|(page, position)| {
+                                                                        page.recipients
+                                                                            .get(position)
+                                                                            .is_some_and(|r| r.counts.values()[index] > 0)
+                                                                    })
+                                                            }) />
+                                                        </Show>
                                                         <Show when=move || {
                                                             index == 4
                                                                 && row

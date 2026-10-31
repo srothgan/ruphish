@@ -237,6 +237,7 @@ CREATE TABLE `ruphish_campaign_groups` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `ruphish_campaign_policy` (
+  track_opens BOOLEAN NOT NULL DEFAULT TRUE,
   `campaign_id` BIGINT NOT NULL,
   `redirect_url` LONGTEXT NOT NULL,
   learning_page_id bigint DEFAULT NULL,

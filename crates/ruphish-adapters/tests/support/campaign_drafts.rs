@@ -129,8 +129,11 @@ pub(super) async fn exercise(
         store.delete_draft(actor, id, 1).await,
         Err(Error::Changed)
     ));
+    input.policy.track_opens = false;
     let review = store.prepare(actor, &input, now).await.unwrap();
+    assert!(!review.policy.track_opens);
     input.policy = campaign::Overrides {
+        track_opens: review.policy.track_opens,
         redirect_url: Some(review.policy.redirect_url.clone()),
         learning_page_id: review.policy.learning_page_id,
     };
@@ -152,15 +155,45 @@ pub(super) async fn exercise(
             },
         },
         policy: Some(DraftPolicy {
-            redirect_url: review.policy.redirect_url,
+            track_opens: review.policy.track_opens,
+            redirect_url: Some(review.policy.redirect_url),
             learning_page_id: review.policy.learning_page_id,
         }),
         ..Default::default()
     };
+    let mut unresolved = configuration.clone();
+    unresolved.policy.as_mut().unwrap().redirect_url = None;
+    let pending_id = "unresolved-tracking-0001";
+    let pending = store
+        .save_draft(actor, pending_id, None, unresolved.clone(), 1, now)
+        .await
+        .unwrap();
+    assert_eq!(
+        store.draft(actor, pending_id).await.unwrap().configuration,
+        unresolved
+    );
+    assert!(matches!(
+        store
+            .launch_draft(actor, pending_id, pending.revision, input.clone(), now)
+            .await,
+        Err(Error::Invalid(_))
+    ));
+    store
+        .delete_draft(actor, pending_id, pending.revision)
+        .await
+        .unwrap();
     let saved = store
         .save_draft(actor, id, Some(2), configuration.clone(), 3, now)
         .await
         .unwrap();
+    let mut wrong_tracking = input.clone();
+    wrong_tracking.policy.track_opens = true;
+    assert!(matches!(
+        store
+            .launch_draft(actor, id, saved.revision, wrong_tracking, now)
+            .await,
+        Err(Error::Changed)
+    ));
     let mut tampered = input.clone();
     tampered.name = "Unreviewed change".into();
     assert!(matches!(
@@ -197,6 +230,7 @@ pub(super) async fn exercise(
         store.launch_draft(actor, id, saved.revision, input.clone(), now)
     );
     let launched = a.unwrap();
+    assert!(!launched.policy.as_ref().unwrap().track_opens);
     assert_eq!(launched.id, b.unwrap().id);
     assert_eq!(store.list(actor).await.unwrap().len(), 1);
     assert_eq!(launched.results.len(), 1);

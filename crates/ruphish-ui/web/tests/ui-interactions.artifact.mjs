@@ -27,6 +27,7 @@ for (const scenario of [
   'form-draft',
   'form-session',
   'results-chart',
+  'results-untracked',
   'results-refresh',
   'recipient-return',
   'recipient-error-return',

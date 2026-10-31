@@ -128,6 +128,8 @@ pub struct Bucket {
 }
 /// Consistent authorized snapshot, with bounded table pages.
 pub struct Analysis {
+    /// Whether this campaign collects email-open observations.
+    pub track_opens: bool,
     /// First observed UTC second per metric, before pagination; absent without valid evidence.
     pub first_observed: [Option<i64>; 5],
     /// Latest observed UTC second per metric, before pagination.

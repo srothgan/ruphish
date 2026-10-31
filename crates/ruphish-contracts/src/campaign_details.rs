@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 /// Campaign identity, lifecycle and preserved schedule metadata.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Metadata {
+    /// Whether this campaign collects email-open observations.
+    pub track_opens: bool,
     /// Execution identity.
     pub id: i64,
     /// Display name.

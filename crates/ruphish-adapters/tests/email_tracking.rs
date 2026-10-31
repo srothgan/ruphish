@@ -8,6 +8,7 @@ use scraper::{Html, Selector};
 
 fn message(html: &str) -> MessageInput {
     MessageInput {
+        track_opens: true,
         message_id: None,
         recipient: Recipient {
             email: "recipient@example.test".into(),
@@ -211,4 +212,23 @@ fn tracker_url_is_attribute_escaped_and_oversized_rendering_fails_closed() {
             .compose(&input)
             .is_err()
     );
+}
+
+#[test]
+fn disabled_tracking_removes_rendered_trackers_but_preserves_ordinary_images() {
+    for source in [
+        "<p>Hello {{.FirstName}}</p><img src='cid:logo'>",
+        "{{.Tracker}}<img src='{{.TrackingURL}}'><img src='cid:logo'>",
+        "<!--[if mso]>{{.Tracker}}<![endif]--><img src='cid:logo'>",
+        "{{if .FirstName}}{{.Tracker}}{{end}}<img src='cid:logo'>",
+    ] {
+        let mut input = message(source);
+        input.track_opens = false;
+        let html = composed_html(&input);
+        assert!(!html.contains("/track?"), "{html}");
+        assert!(html.contains("cid:logo"), "{html}");
+        assert_eq!(input.template.html, source);
+        input.track_opens = true;
+        assert!(composed_html(&input).contains("/track?"));
+    }
 }

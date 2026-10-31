@@ -67,7 +67,9 @@ This body is illustrative: replace the example IDs with resources owned by the c
 
 Request fields are case-sensitive. Unknown fields, duplicate fields, invalid types and trailing JSON are rejected with `400`. Top-level legacy `groups`, `template`, `page` and `smtp` inputs are no longer accepted, including alongside `selection`. The same typed campaign input is used inside test-send and draft-launch requests.
 
-The optional `policy` contains `redirect_url` and an optional owned `learning_page_id`. A learning page and a nonempty custom redirect are mutually exclusive. Every supported submission records an event and password presence; there are no capture settings. Campaign commands reject `capture_credentials` and `capture_passwords` fields. See [landing pages](landing-pages.md).
+The optional `policy` contains `track_opens` (Boolean, default `true`), `redirect_url`, and an optional owned `learning_page_id`. `track_opens: false` disables managed email pixels and public open observations while leaving clicks, submissions, and reports independent. The setting is fixed at launch, returned in confirmed policy reads, and preserved by campaign copying and test sends. `null` is not a valid tracking choice. A learning page and a nonempty custom redirect are mutually exclusive. Every supported submission records an event and password presence; there are no capture settings. Campaign commands reject `capture_credentials` and `capture_passwords` fields. See [landing pages](landing-pages.md).
+
+Saved draft policies can retain `track_opens` while `redirect_url` is explicitly `null`, representing unresolved page defaults. Such drafts remain saveable but cannot launch until the destination choice is resolved and saved. An empty redirect string is a confirmed choice of no redirect.
 
 `launch_date` and `send_by_date` accept UTC or offset timestamps. Alternatively, `launch_local` and `send_by_local` each contain `local` and `time_zone`. For each boundary, supply at most one non-null representation: combining `launch_date` with `launch_local`, or `send_by_date` with `send_by_local`, returns `400` with validation issues for both fields, even if they describe the same instant. This applies to preparation, direct creation, test sends and draft launch. Different boundaries may use different representations. If both launch fields are omitted or null, launch is immediate; if both send-by fields are omitted or null, there is no distribution window.
 
@@ -85,9 +87,9 @@ Set `policy.learning_page_id` to an owned [learning page](learning-pages.md) to 
 
 ## Read results
 
-Campaign detail includes identity, lifecycle timestamps, URL, selected resources, and available `results` and `timeline`. Absent lifecycle dates return `null`, including `send_by_date` and `completed_date`. Empty results or timeline fields may be omitted. Result `id` is the opaque recipient tracking ID. Legacy network-location fields are not a source of participant identity; do not build new tracking around them.
+Campaign detail includes `track_opens`, identity, lifecycle timestamps, URL, selected resources, and available `results` and `timeline`. Absent lifecycle dates return `null`, including `send_by_date` and `completed_date`. Empty results or timeline fields may be omitted. Result `id` is the opaque recipient tracking ID. Legacy network-location fields are not a source of participant identity; do not build new tracking around them.
 
-Legacy summary `stats` includes `total`, `sent`, `opened`, `clicked`, `submitted_data`, `email_reported`, and `error`. These use progression semantics. Use [results](analysis-and-exports.md) for observed event counts, filters, and exportable rows; do not combine the two models as if they were identical metrics.
+Legacy summaries also return `track_opens`; use it to distinguish disabled open tracking from measured zero activity. Legacy summary `stats` includes `total`, `sent`, `opened`, `clicked`, `submitted_data`, `email_reported`, and `error`. These use progression semantics. Use [results](analysis-and-exports.md) for observed event counts, filters, and exportable rows; do not combine the two models as if they were identical metrics.
 
 The directory accepts `filter=all`, `drafts`, `active`, `completed`, or `executions` and an opaque `after` cursor. It returns `items` and `next_after`, with at most 50 rows per page. Keep cursor values opaque.
 

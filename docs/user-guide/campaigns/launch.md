@@ -30,3 +30,7 @@ Submission and password-presence tracking are always enabled. Review shows the c
 Launching a saved draft creates the campaign transactionally. Retrying that same draft launch resolves to its existing campaign rather than creating another one. Refresh the saved draft to find the linked execution.
 
 This launch identity does not promise exactly-once email delivery. Read [delivery recovery](delivery.md) before acting on an uncertain SMTP outcome. The legacy API has its own [idempotency mechanism](../../api/campaigns.md).
+
+## Choose email-open tracking
+
+**Track email opens** defaults to enabled. Turn it off before launch to omit Ruphish tracking images and ignore requests to the campaign tracking endpoint. Clicks, submissions, and reports remain independent. The choice is saved with the draft, shown in review, used by campaign test sends, and fixed when launched. Disabled open metrics display **Not tracked** or **-** rather than 0%.

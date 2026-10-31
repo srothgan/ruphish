@@ -118,6 +118,7 @@ impl Queue for Campaigns {
             .await
             .map_err(storage)?;
         let message = MessageInput {
+            track_opens: row.try_get("track_opens").map_err(storage)?,
             message_id: Some(message_id),
             recipient: Recipient {
                 email: text(&row, "email")?,

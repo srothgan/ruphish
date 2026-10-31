@@ -32,7 +32,7 @@ impl Persistence for Interactions {
         let mut tx = crate::postgres::locks::snapshot(&self.pool)
             .await
             .map_err(storage)?;
-        let row=sqlx::query("SELECT r.id AS result_id,r.campaign_id,r.user_id,r.email,r.first_name,r.last_name,r.position,r.send_date,c.url,c.page_id,c.smtp_id,c.template_id,cp.redirect_url,cp.learning_page_id,lp.public_id AS learning_public_id FROM results r JOIN campaigns c ON c.id=r.campaign_id AND c.user_id=r.user_id JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=c.user_id JOIN ruphish_campaign_policy cp ON cp.campaign_id=c.id LEFT JOIN ruphish_learning_pages lp ON lp.id=cp.learning_page_id AND lp.user_id=c.user_id WHERE r.r_id=$1 AND c.status!='Completed' AND d.origin=$2 AND d.enabled=TRUE AND (SELECT serves FROM ruphish_domain_policy WHERE id=d.id)").bind(rid).bind(origin).fetch_all(&mut *tx).await.map_err(storage)?;
+        let row=sqlx::query("SELECT r.id AS result_id,r.campaign_id,r.user_id,r.email,r.first_name,r.last_name,r.position,r.send_date,c.url,c.page_id,c.smtp_id,c.template_id,cp.redirect_url,cp.learning_page_id,cp.track_opens,lp.public_id AS learning_public_id FROM results r JOIN campaigns c ON c.id=r.campaign_id AND c.user_id=r.user_id JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=c.user_id JOIN ruphish_campaign_policy cp ON cp.campaign_id=c.id LEFT JOIN ruphish_learning_pages lp ON lp.id=cp.learning_page_id AND lp.user_id=c.user_id WHERE r.r_id=$1 AND c.status!='Completed' AND d.origin=$2 AND d.enabled=TRUE AND (SELECT serves FROM ruphish_domain_policy WHERE id=d.id)").bind(rid).bind(origin).fetch_all(&mut *tx).await.map_err(storage)?;
         if row.len() != 1 {
             return Err(missing());
         }
@@ -74,6 +74,7 @@ impl Persistence for Interactions {
             .await
             .map_err(storage)?;
             let message = MessageInput {
+                track_opens: row.try_get("track_opens").map_err(storage)?,
                 message_id: None,
                 recipient: Recipient {
                     email: email.clone(),
@@ -155,6 +156,18 @@ impl Persistence for Interactions {
         let active:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM campaigns c JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id WHERE c.id=$1 AND c.status!='Completed' AND d.enabled=TRUE AND (SELECT serves FROM ruphish_domain_policy WHERE id=d.id) AND d.origin=$2)").bind(campaign_id).bind(origin).fetch_one(&mut *tx).await.map_err(storage)?;
         if !active {
             return Err(missing());
+        }
+        if matches!(action, Action::Open) {
+            let track_opens: bool = sqlx::query_scalar(
+                "SELECT track_opens FROM ruphish_campaign_policy WHERE campaign_id=$1",
+            )
+            .bind(campaign_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(storage)?;
+            if !track_opens {
+                return Ok(());
+            }
         }
         let Some(kind) = action.kind() else {
             return Ok(());

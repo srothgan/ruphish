@@ -64,9 +64,15 @@ fn interval_description(
 pub(super) fn ActivityChart(
     data: Memo<Vec<ChartInterval>>,
     interval: Signal<i64>,
+    track_opens: Signal<bool>,
 ) -> impl IntoView {
     let mode = RwSignal::new(ChartMode::default());
-    let visible = RwSignal::new([true; 4]);
+    let selected = RwSignal::new([true; 4]);
+    let visible = Signal::derive(move || {
+        let mut values = selected.get();
+        values[0] &= track_opens.get();
+        values
+    });
     let displayed = Memo::new(move |_| data.with(|rows| mode.get().project(rows)));
     view! {
         <Card class="analysis-chart" label=trs!(ui.recorded_events_over_time)>
@@ -81,7 +87,7 @@ pub(super) fn ActivityChart(
                 <div hidden=move || !visible.get().iter().any(|enabled| *enabled)>
                     <ActivityPlot data=displayed mode=mode visible=visible />
                 </div>
-                <ActivityLegend visible=visible />
+                <ActivityLegend visible=selected track_opens=track_opens />
             </Show>
         </Card>
     }
@@ -151,7 +157,7 @@ impl PlotBounds {
 fn ActivityPlot(
     data: Memo<Vec<ChartInterval>>,
     mode: RwSignal<ChartMode>,
-    visible: RwSignal<[bool; 4]>,
+    visible: Signal<[bool; 4]>,
 ) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
     let labels = activity_labels();
@@ -420,7 +426,7 @@ fn IntervalDetails(
     selected: Signal<Option<ChartInterval>>,
     mode: RwSignal<ChartMode>,
     bounds: Memo<PlotBounds>,
-    visible: RwSignal<[bool; 4]>,
+    visible: Signal<[bool; 4]>,
 ) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
     let labels = activity_labels();
@@ -467,7 +473,7 @@ fn IntervalDetails(
 }
 
 #[component]
-fn ActivityLegend(visible: RwSignal<[bool; 4]>) -> impl IntoView {
+fn ActivityLegend(visible: RwSignal<[bool; 4]>, track_opens: Signal<bool>) -> impl IntoView {
     view! {
         <div class="analysis-legend" aria-label=tr!(ui.visible_event_types)>
             {activity_labels()
@@ -475,13 +481,15 @@ fn ActivityLegend(visible: RwSignal<[bool; 4]>) -> impl IntoView {
                 .enumerate()
                 .map(move |(i, label)| {
                     view! {
-                        <ActionButton
-                            pressed=Signal::derive(move || visible.get()[i].to_string())
-                            on_click=move |_| visible.update(|values| values[i] = !values[i])
-                        >
-                            <span class=format!("analysis-swatch {}", SERIES[i])></span>
-                            {move || label.get()}
-                        </ActionButton>
+                        <Show when=move || i != 0 || track_opens.get()>
+                            <ActionButton
+                                pressed=Signal::derive(move || visible.get()[i].to_string())
+                                on_click=move |_| visible.update(|values| values[i] = !values[i])
+                            >
+                                <span class=format!("analysis-swatch {}", SERIES[i])></span>
+                                {move || label.get()}
+                            </ActionButton>
+                        </Show>
                     }
                 })
                 .collect_view()}

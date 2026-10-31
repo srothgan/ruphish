@@ -42,7 +42,13 @@ fn recipients(a: &Analysis) -> Vec<Vec<String>> {
                 .map_or("historical", |state| state.as_str())
                 .into(),
         ];
-        v.extend(r.counts.iter().map(ToString::to_string));
+        v.extend(r.counts.iter().enumerate().map(|(i, count)| {
+            if i == 1 && !a.track_opens {
+                "Not tracked".into()
+            } else {
+                count.to_string()
+            }
+        }));
         v.push(r.historical_reported.to_string());
         v.extend([
             r.first_name.clone(),
@@ -167,11 +173,19 @@ pub(crate) fn generate(
     {
         summary.push(vec![
             format!("{name} unique recipients"),
-            a.unique[index].to_string(),
+            if index == 1 && !a.track_opens {
+                "Not tracked".into()
+            } else {
+                a.unique[index].to_string()
+            },
         ]);
         summary.push(vec![
             format!("{name} total events"),
-            a.totals[index].to_string(),
+            if index == 1 && !a.track_opens {
+                "Not tracked".into()
+            } else {
+                a.totals[index].to_string()
+            },
         ]);
     }
     summary.push(vec![

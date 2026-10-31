@@ -190,6 +190,7 @@ CREATE TABLE ruphish_campaign_launch (
 );
 
 CREATE TABLE ruphish_campaign_policy (
+  track_opens INTEGER NOT NULL DEFAULT 1 CHECK(track_opens IN (0,1)),
   campaign_id INTEGER PRIMARY KEY,
   redirect_url TEXT NOT NULL,
   learning_page_id INTEGER

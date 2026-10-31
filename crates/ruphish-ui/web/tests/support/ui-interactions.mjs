@@ -28,6 +28,7 @@ const path =
     'form-draft': '/campaigns/drafts/00000000-0000-4000-8000-000000000001/edit',
     'form-session': '/groups/new',
     'results-chart': '/campaigns/2/results',
+    'results-untracked': '/campaigns/2/results',
     'results-refresh': '/campaigns/2/results',
     'recipient-return': returnOrigin,
     'recipient-error-return':
@@ -103,6 +104,10 @@ class FixtureDate extends NativeDate {
 globalThis.Date = win.Date = FixtureDate;
 const data = dataset(now);
 const campaign = data.campaigns.find((c) => c.header.id === 2);
+if (scenario === 'results-untracked') {
+  campaign.header.policy = { ...campaign.header.policy, track_opens: false };
+  assert.ok(campaign.results.some((r) => r.events.some((e) => e.kind === 'Email Opened')));
+}
 if (scenario === 'results-chart') {
   // Real synthetic API aggregation: repeats must not become new participants.
   campaign.results = campaign.results.slice(0, 2);
@@ -569,6 +574,19 @@ if (scenario.startsWith('form-')) {
       'checks never save the draft',
     );
   }
+  process.exit(0);
+}
+
+if (scenario === 'results-untracked') {
+  await until(() => settled() && document.querySelector('.recipient-outcome'));
+  assert.equal(document.querySelector('.analysis-metric strong').textContent, 'Nicht erfasst');
+  for (const row of document.querySelectorAll('.recipient-outcome')) {
+    assert.equal(row.cells[1].textContent, '-');
+    assert.equal(row.cells[1].querySelector('span').title, 'Nicht erfasst');
+  }
+  assert.equal(document.querySelector('.analysis-chart .series-opened'), null);
+  assert.equal(document.querySelectorAll('.analysis-legend button').length, 3);
+  assert.ok(document.querySelector('.analysis-chart .series-clicked'));
   process.exit(0);
 }
 

@@ -33,15 +33,26 @@ pub struct LocalTime {
     pub time_zone: String,
 }
 
-/// Post-submission destination settings.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// Open tracking and post-submission destination settings.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Policy {
-    /// Optional redirect expression.
-    pub redirect_url: String,
+    /// Whether email-open observations are enabled for this campaign.
+    pub track_opens: bool,
+    /// Redirect expression; None means page defaults are still unresolved.
+    pub redirect_url: Option<String>,
     /// Selected owned learning page; custom redirect must be empty when present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub learning_page_id: Option<i64>,
+}
+impl Default for Policy {
+    fn default() -> Self {
+        Self {
+            track_opens: true,
+            redirect_url: Some(String::new()),
+            learning_page_id: None,
+        }
+    }
 }
 
 /// Versioned, closed configuration accepted by draft persistence.
@@ -79,10 +90,13 @@ impl Configuration {
                 ])
                 .all(|reference| reference.id >= 0)
             && self.policy.as_ref().is_none_or(|policy| {
-                text(&policy.redirect_url, 8192)
+                policy
+                    .redirect_url
+                    .as_ref()
+                    .is_none_or(|value| text(value, 8192))
                     && policy
                         .learning_page_id
-                        .is_none_or(|id| id >= 0 && policy.redirect_url.is_empty())
+                        .is_none_or(|id| id >= 0 && policy.redirect_url.as_deref() == Some(""))
             })
             && [&self.launch_local, &self.send_by_local]
                 .into_iter()
@@ -113,15 +127,19 @@ impl Configuration {
             } else if crate::domains::origin(&self.url, true).is_err() {
                 report.reject("url", Code::Invalid, "Invalid campaign destination");
             }
-            match &self.policy {
+            match self
+                .policy
+                .as_ref()
+                .and_then(|policy| policy.redirect_url.as_ref().map(|url| (policy, url)))
+            {
                 None => report.reject(
                     "selection.page.id",
                     Code::Unavailable,
                     "Draft policy is incomplete",
                 ),
-                Some(policy) => report.extend(crate::campaign::policy_validation(
+                Some((policy, redirect_url)) => report.extend(crate::campaign::policy_validation(
                     policy.learning_page_id,
-                    &policy.redirect_url,
+                    redirect_url,
                 )),
             }
         }

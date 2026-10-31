@@ -95,6 +95,9 @@ pub fn validate_launch(
     let Some(policy) = &c.policy else {
         return Err(Error::Invalid("Draft policy is incomplete".into()));
     };
+    let Some(redirect_url) = &policy.redirect_url else {
+        return Err(Error::Invalid("Draft policy is incomplete".into()));
+    };
     if c.name != input.name
         || c.url != input.url
         || launch != input.launch
@@ -104,8 +107,9 @@ pub fn validate_launch(
         || c.selection.template.id != input.template.id
         || c.selection.page.id != input.page.id
         || c.selection.smtp.id != input.profile.id
+        || policy.track_opens != input.policy.track_opens
         || policy.learning_page_id != input.policy.learning_page_id
-        || Some(&policy.redirect_url) != input.policy.redirect_url.as_ref()
+        || Some(redirect_url) != input.policy.redirect_url.as_ref()
     {
         return Err(Error::Changed);
     }

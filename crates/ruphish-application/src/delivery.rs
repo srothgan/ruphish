@@ -52,6 +52,8 @@ pub struct TestRequest {
 /// Fully selected input for MIME composition and persistence.
 #[derive(Clone)]
 pub struct MessageInput {
+    /// Whether the composed HTML includes the managed open-tracking image.
+    pub track_opens: bool,
     /// Optional durable attempt Message-ID; test messages let Lettre generate one.
     pub message_id: Option<String>,
     /// Recipient and sample personalisation fields.
@@ -137,6 +139,7 @@ impl Service {
             return Err(Error::Internal);
         };
         Ok(MessageInput {
+            track_opens: prepared.policy.track_opens,
             message_id: None,
             recipient,
             template,
@@ -282,6 +285,7 @@ impl Service {
             return Err(Error::Invalid("No email address specified".into()));
         }
         let message = MessageInput {
+            track_opens: true,
             message_id: None,
             recipient: request.recipient,
             template,

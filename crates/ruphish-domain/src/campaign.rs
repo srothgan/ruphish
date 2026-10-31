@@ -57,14 +57,26 @@ impl DeliveryFailure {
 }
 /// Eight retries after the initial attempt, preserving the supported retry budget.
 pub const MAX_RETRIES: u32 = 8;
-/// The campaign owns its redirect independently of its live page reference.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// Immutable campaign tracking and destination policy, independent of live page defaults.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InteractionPolicy {
+    /// Whether email-open observations are enabled for this campaign.
+    pub track_opens: bool,
     /// Post-submission redirect template, empty for no redirect.
     pub redirect_url: String,
     /// Selected owned learning page; custom redirect must be empty when present.
     pub learning_page_id: Option<i64>,
 }
+impl Default for InteractionPolicy {
+    fn default() -> Self {
+        Self {
+            track_opens: true,
+            redirect_url: String::new(),
+            learning_page_id: None,
+        }
+    }
+}
+
 /// Compute the legacy minute-level distribution over the actual unique audience.
 pub fn send_date(launch: i64, send_by: Option<i64>, index: usize, total: usize) -> Option<i64> {
     if total == 0 || index >= total {

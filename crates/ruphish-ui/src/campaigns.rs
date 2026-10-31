@@ -750,7 +750,7 @@ pub(super) fn CreateCampaign(
         .min(3) as usize;
     let draft = RwSignal::new(Draft {
         generation,
-        value: initial.unwrap_or_else(||json!({"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"redirect_url":""}})),
+        value: initial.unwrap_or_else(||json!({"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"redirect_url":"", "track_opens":true}})),
         ..Default::default()
     });
     let resource_read = CampaignQueries::resources(true);
@@ -1210,6 +1210,18 @@ pub(super) fn CreateCampaign(
                         </p>
                         <p>{tr!(ui.all_submissions_recorded)}</p>
                         <section class="resource-section">
+                            <Checkbox
+                                label=trs!(ui.track_email_opens)
+                                checked=Signal::derive(move || {
+                                    draft
+                                        .with(|d| {
+                                            d.value["policy"]["track_opens"].as_bool().unwrap_or(true)
+                                        })
+                                })
+                                on_toggle=Callback::new(move |checked| {
+                                    draft.update(|d| d.set_track_opens(checked))
+                                })
+                            />
                             <h2>{tr!(ui.redirect_after_submission_optional)}</h2>
                             <p>{tr!(ui.campaign_redirect_defaults)}</p>
                             <Show when=move || {
@@ -1253,10 +1265,15 @@ pub(super) fn CreateCampaign(
                                         draft
                                             .update(|d| {
                                                 d.edit(|v| {
+                                                    let track_opens = v["policy"]["track_opens"]
+                                                        .as_bool()
+                                                        .unwrap_or(true);
                                                     v["policy"] = if value == "learning" {
-                                                        json!({"redirect_url":"", "learning_page_id":0})
+                                                        json!(
+                                                            {"redirect_url":"", "learning_page_id":0, "track_opens":track_opens}
+                                                        )
                                                     } else {
-                                                        json!({"redirect_url":""})
+                                                        json!({"redirect_url":"", "track_opens":track_opens})
                                                     };
                                                 })
                                             })
@@ -1542,6 +1559,15 @@ pub(super) fn CreateCampaign(
                                                 </div><div>
                                                     <dt>{tr!(ui.password_presence_only)}</dt>
                                                     <dd>{tr!(ui.yes)}</dd>
+                                                </div><div>
+                                                    <dt>{tr!(ui.track_email_opens)}</dt>
+                                                    <dd>
+                                                        {if r.policy.track_opens {
+                                                            tr!(ui.enabled).into_any()
+                                                        } else {
+                                                            tr!(ui.not_tracked).into_any()
+                                                        }}
+                                                    </dd>
                                                 </div><div>
                                                     <dt>{tr!(ui.redirect)}</dt>
                                                     <dd>
@@ -2368,11 +2394,21 @@ fn campaign_context(c: &reads::Header) -> impl IntoView + use<> {
     let c = c.clone();
     let template_sender = c.template_sender.clone().unwrap_or_default();
     let destination = c.policy.clone();
+    let track_opens = c.policy.as_ref().is_none_or(|policy| policy.track_opens);
     view! {
         <Card class="resource-read-panel campaign-context" label=trs!(ui.campaign_details)>
             <h2>{tr!(ui.campaign_details)}</h2>
             <dl class="resource-facts">
                 {resources} <div>
+                    <dt>{tr!(ui.track_email_opens)}</dt>
+                    <dd>
+                        {if track_opens {
+                            tr!(ui.enabled).into_any()
+                        } else {
+                            tr!(ui.not_tracked).into_any()
+                        }}
+                    </dd>
+                </div> <div>
                     <dt>{tr!(ui.redirect_destination)}</dt>
                     <dd>
                         {match destination.as_ref().and_then(|policy| policy.learning_page_id) {

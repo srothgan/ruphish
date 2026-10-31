@@ -16,6 +16,8 @@
     "native_name": "Deutsch"
   },
   "ui": {
+    "track_email_opens": "E-Mail-Öffnungen erfassen",
+    "not_tracked": "Nicht erfasst",
     "skip_certificate_verification": "Zertifikatsprüfung überspringen",
     "skip_certificate_verification_help": "Für kontrollierte Testumgebungen. Die Verbindung bleibt verschlüsselt, aber die Identität des Mailservers wird nicht überprüft.",
     "certificate_verification": "Zertifikatsprüfung",

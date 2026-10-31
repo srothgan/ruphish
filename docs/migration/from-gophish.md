@@ -63,3 +63,7 @@ Legacy plain-HTTP URLs, IP-address URLs, or unsupported origins are not automati
 After a successful rehearsal, schedule a write stop, take a fresh consistent backup, and repeat the verified upgrade on the final target. Ensure only one application owns the database and external work. Verify sign-in, origin routing, a controlled send, reporting, and integration state before allowing normal campaigns.
 
 Retain the rollback environment and record when new work begins. Rolling back after Ruphish has sent messages or processed reports requires reconciliation of those external effects; restoring a database cannot undo them.
+
+## Email-open tracking
+
+Migrated campaigns default to `track_opens: true`, regardless of whether the stored Gophish template contains a tracking image. Gophish has no separate Boolean for its template checkbox; the HTML is preserved. This default governs Ruphish behavior and does not prove that historical Gophish emails contained a pixel. New campaigns also default to enabled and can disable **Track email opens** before launch.

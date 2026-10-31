@@ -7,7 +7,7 @@ export { DAY };
 export const features = Object.freeze(source.features);
 export const iso = (seconds) => new Date(seconds * 1000).toISOString();
 export const draftId = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-export const policy = { redirect_url: '' };
+export const policy = { redirect_url: '', track_opens: true };
 
 export function dataset(now) {
   if (!Number.isSafeInteger(now) || now <= 0) {
@@ -44,7 +44,7 @@ export function dataset(now) {
   });
   const pages = source.pages.map((id, i) => {
     const content = starter(id, 'landing_page');
-    return resource(content.name, i, { ...content, ...policy });
+    return resource(content.name, i, { ...content, redirect_url: policy.redirect_url });
   });
   const learning = source.learning_pages.map((id, i) => {
     const content = starter(id, 'learning_page');

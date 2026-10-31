@@ -137,6 +137,7 @@
     ["ruphish_campaign_launch", "key", "character varying", "NO", 255, "NO", null, "C"],
     ["ruphish_campaign_launch", "fingerprint", "character varying", "NO", 255, "NO", null, "C"],
     ["ruphish_campaign_launch", "campaign_id", "bigint", "NO", null, "NO", null, null],
+    ["ruphish_campaign_policy", "track_opens", "boolean", "NO", null, "NO", "true", null],
     ["ruphish_campaign_policy", "campaign_id", "bigint", "NO", null, "NO", null, null],
     ["ruphish_campaign_policy", "redirect_url", "text", "NO", null, "NO", null, "C"],
     ["ruphish_campaign_policy", "learning_page_id", "bigint", "YES", null, "NO", null, null],

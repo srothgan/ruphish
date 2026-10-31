@@ -44,6 +44,16 @@ async fn all_populated_goose_versions_upgrade_without_losing_records_or_the_sour
             expected_schema,
             "schema at {version}"
         );
+        let track_opens: bool = sqlx::query_scalar(
+            "SELECT track_opens FROM ruphish_campaign_policy WHERE campaign_id=53",
+        )
+        .fetch_one(&mut connection)
+        .await
+        .unwrap();
+        assert!(
+            track_opens,
+            "migrated {version} defaults to enabled even without a tracker in the stored HTML"
+        );
         let user = sqlx::query("SELECT username,hash,api_key,role_id FROM users WHERE id=17")
             .fetch_one(&mut connection)
             .await
