@@ -11,6 +11,7 @@ Initial release targeting feature parity with Gophish, with a native Rust server
 - Choose campaign email-open tracking before launch, with disabled metrics shown as not tracked and enabled defaults for migrated campaigns.
 - Save campaign drafts, review campaigns before launch, and schedule delivery with explicit recovery for uncertain sends.
 - Review dashboards and campaign/recipient timelines, with CSV and XLSX exports.
+- Use fixed DNS, IPv4, or IPv6 campaign origins over HTTP or HTTPS; required verification remains restricted to DNS hostnames over HTTPS.
 - Verify campaign domains, process reports through multiple IMAP mailboxes, and deliver signed webhooks.
 - Use English or German interface text with independent date-format and time-zone preferences.
 - Run with SQLite, MySQL, or PostgreSQL, with migration support for recognized Gophish SQLite and MySQL histories.

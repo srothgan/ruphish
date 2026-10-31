@@ -232,10 +232,10 @@ async fn import_domains(c: &mut MySqlConnection) -> Result<(), Error> {
         let owner: i64 = row.try_get("user_id").map_err(storage_error)?;
         let mut bytes = [0; 32];
         getrandom::fill(&mut bytes).map_err(|_| Error::Unavailable)?;
-        sqlx::query("INSERT INTO rp_stage_ruphish_domains(owner_id,name,origin,hostname,challenge,challenge_expires) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE id=id")
-            .bind(owner).bind(&origin.host).bind(&origin.value).bind(&origin.host).bind(hex::encode(bytes)).bind(now+ruphish_domain::domains::CHALLENGE_LIFETIME).execute(&mut *c).await.map_err(storage_error)?;
+        sqlx::query("INSERT INTO rp_stage_ruphish_domains(owner_id,name,origin,hostname,challenge,challenge_expires,due) VALUES(?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE id=id")
+            .bind(owner).bind(&origin.host).bind(&origin.value).bind(&origin.host).bind(hex::encode(bytes)).bind(now+ruphish_domain::domains::CHALLENGE_LIFETIME).bind(if origin.verification_supported() { 0 } else { i64::MAX }).execute(&mut *c).await.map_err(storage_error)?;
         sqlx::query("INSERT INTO rp_stage_ruphish_campaign_domains SELECT ?,id FROM rp_stage_ruphish_domains WHERE owner_id=? AND origin=?")
             .bind(row.try_get::<i64,_>("id").map_err(storage_error)?).bind(owner).bind(origin.value).execute(&mut *c).await.map_err(storage_error)?;
     }
-    statement(c,"INSERT INTO rp_stage_ruphish_domain_checks(domain_id,queued_at,scheduled_at) SELECT id,0,due FROM rp_stage_ruphish_domains WHERE enabled=1".into()).await
+    statement(c,"INSERT INTO rp_stage_ruphish_domain_checks(domain_id,queued_at,scheduled_at) SELECT id,0,due FROM rp_stage_ruphish_domains WHERE enabled=1 AND due<9223372036854775807".into()).await
 }

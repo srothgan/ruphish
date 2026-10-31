@@ -119,11 +119,11 @@ async fn fixture() -> (Fixture, std::path::PathBuf) {
         let routing = destination.lock().unwrap().clone()?;
         routing
             .runtime
-            .block_on(
-                routing
-                    .repository
-                    .routing_proof(host, challenge, routing.now),
-            )
+            .block_on(routing.repository.routing_proof(
+                &format!("https://{host}"),
+                challenge,
+                routing.now,
+            ))
             .unwrap()
     });
     // Adapt only the copied fixture's transport endpoint before migration. The original

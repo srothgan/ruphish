@@ -38,7 +38,7 @@ pub(super) async fn exercise(
             assert!(matches!(
                 public
                     .interact(
-                        "training.example.test",
+                        "https://training.example.test",
                         rid,
                         interactions::Action::Open,
                         now
@@ -63,7 +63,7 @@ pub(super) async fn exercise(
         );
         public
             .interact(
-                "training.example.test",
+                "https://training.example.test",
                 rid,
                 interactions::Action::View,
                 now,
@@ -78,7 +78,7 @@ pub(super) async fn exercise(
             interactions::Action::Report,
         ] {
             public
-                .interact("training.example.test", rid, action, now)
+                .interact("https://training.example.test", rid, action, now)
                 .await
                 .unwrap();
         }

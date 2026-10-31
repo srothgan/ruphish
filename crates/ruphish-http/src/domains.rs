@@ -20,18 +20,22 @@ fn now() -> i64 {
 }
 fn encode(d: app::Domain) -> wire::Domain {
     let observed_at = now();
+    let verifiable = app::origin(&d.origin, false).is_ok_and(|o| o.verification_supported());
+    let dns_name = d.hostname.parse::<std::net::IpAddr>().is_err();
     let eligible = app::eligibility(d.enabled, d.eligible_until, observed_at).is_ok();
     wire::Domain {
         verification: wire::Verification {
             required: d.verification_required,
             status: if !d.verification_required {
                 "not_required"
+            } else if !verifiable {
+                "unsupported"
             } else {
                 app::verification_status(d.eligible_until, d.checked_at, observed_at)
             }
             .into(),
             expires_at: d.expires_at,
-            next_check_at: d.verification_required.then_some(d.next_check_at),
+            next_check_at: (d.verification_required && verifiable).then_some(d.next_check_at),
         },
         id: d.id,
         name: d.name,
@@ -39,8 +43,16 @@ fn encode(d: app::Domain) -> wire::Domain {
         hostname: d.hostname.clone(),
         enabled: d.enabled,
         revision: d.revision,
-        txt_name: format!("_ruphish-verify.{}", d.hostname),
-        txt_value: format!("ruphish-verification={}", d.challenge),
+        txt_name: if dns_name {
+            format!("_ruphish-verify.{}", d.hostname)
+        } else {
+            String::new()
+        },
+        txt_value: if dns_name {
+            format!("ruphish-verification={}", d.challenge)
+        } else {
+            String::new()
+        },
         challenge_expires: d.challenge_expires,
         checked_at: d.checked_at,
         verified_until: d.verified_until,
@@ -54,7 +66,7 @@ fn encode(d: app::Domain) -> wire::Domain {
         active_check: d.active_check.map(run),
         history: d.history.into_iter().map(run).collect(),
         checking: d.checking,
-        next_check_at: d.next_check_at,
+        next_check_at: if verifiable { d.next_check_at } else { 0 },
         campaigns: d.campaigns,
     }
 }

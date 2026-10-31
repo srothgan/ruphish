@@ -17,6 +17,7 @@ fn state(d: &Domain) -> &'static str {
     let i18n = ruphish_ui::localization::use_i18n();
 
     match d.verification.status.as_str() {
+        "unsupported" => leptos_i18n::t_string!(i18n, ui.unavailable),
         "not_required" => leptos_i18n::t_string!(i18n, ui.verification_not_required),
         "verified" => leptos_i18n::t_string!(i18n, ui.verified),
         "expired" => leptos_i18n::t_string!(i18n, ui.expired),
@@ -414,7 +415,8 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                                 on_input=move |e| name.set(event_target_value(&e))
                             />
                         </Field>
-                        <Field label=trs!(ui.public_https_origin)>
+                        <p>{tr!(ui.domain_origin_verification_policy)}</p>
+                        <Field label=trs!(ui.public_origin)>
                             <TextInput
                                 input_type="url"
                                 required=true
@@ -425,11 +427,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                                 on_input=move |e| origin.set(event_target_value(&e))
                             />
                         </Field>
-                        <p>
-                            {tr!(
-                                ui.use_the_hostname_participants_will_visit_paths_belong_to_the_campaign_a_saved_ho
-                            )}
-                        </p>
+                        <p>{tr!(ui.domain_origin_help)}</p>
                         <Checkbox
                             label=trs!(ui.enable_this_domain)
                             checked=enabled
@@ -537,8 +535,9 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
             return;
         }
         if domain.with_untracked(|d| {
-            d.as_ref()
-                .is_none_or(|d| !d.enabled || d.active_check.is_some())
+            d.as_ref().is_none_or(|d| {
+                !d.enabled || d.verification.status == "unsupported" || d.active_check.is_some()
+            })
         }) {
             return;
         }
@@ -616,7 +615,10 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                                         || domain
                                             .with(|d| {
                                                 d.as_ref()
-                                                    .is_none_or(|d| !d.enabled || d.active_check.is_some())
+                                                    .is_none_or(|d| {
+                                                        !d.enabled || d.verification.status == "unsupported"
+                                                            || d.active_check.is_some()
+                                                    })
                                             })
                                 })
                                 on_click=check
@@ -742,6 +744,15 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                                                 )
                                             }}
                                         </p>
+                                    </Card>
+                                }
+                                    .into_any();
+                            }
+                            if d.verification.status == "unsupported" {
+                                return view! {
+                                    <Card class="resource-read-panel domain-context">
+                                        <h2>{tr!(ui.domain_status)}</h2>
+                                        <p>{tr!(ui.domain_origin_verification_policy)}</p>
                                     </Card>
                                 }
                                     .into_any();

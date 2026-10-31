@@ -15,12 +15,11 @@ fn missing() -> Error {
 }
 #[async_trait::async_trait]
 impl Public for Interactions {
-    async fn learning_page(&self, authority: &str, public_id: &str) -> Result<Output, Error> {
+    async fn learning_page(&self, origin_url: &str, public_id: &str) -> Result<Output, Error> {
         if public_id.len() != 32 || !public_id.bytes().all(|c| c.is_ascii_hexdigit()) {
             return Err(missing());
         }
-        let origin = ruphish_domain::domains::origin(&format!("https://{authority}"), false)
-            .map_err(|_| missing())?;
+        let origin = ruphish_domain::domains::origin(origin_url, false).map_err(|_| missing())?;
         let source = self.store.learning_page(&origin.value, public_id).await?;
         let permit = self
             .rendering
@@ -40,7 +39,7 @@ impl Public for Interactions {
     }
     async fn interact(
         &self,
-        authority: &str,
+        origin_url: &str,
         rid: &str,
         action: Action,
         now: i64,
@@ -52,8 +51,7 @@ impl Public for Interactions {
         {
             return Err(missing());
         }
-        let origin = ruphish_domain::domains::origin(&format!("https://{authority}"), false)
-            .map_err(|_| missing())?;
+        let origin = ruphish_domain::domains::origin(origin_url, false).map_err(|_| missing())?;
         let mut snapshot = self.store.snapshot(&origin.value, rid, &action).await?;
         if matches!(action, Action::Inspect) {
             return Ok(Output::Transparency {

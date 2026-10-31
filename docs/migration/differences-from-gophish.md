@@ -17,7 +17,7 @@ The comparison baseline is Gophish 0.12.1, commit `95618469799295e2c0fec980805a2
 | Browser API layout | Browser and administrative routes without the same three-way separation | Public `/api/`, session `/auth/`, browser-specific `/internal/`, plus retained form routes | Integrate through documented public endpoints |
 | Email-open tracking | Template checkbox adds/removes authored tracker markup | Campaign-level `track_opens`, enabled by default for new and migrated campaigns; composer owns the pixel | Review the campaign setting before launch; migrated defaults do not establish historical tracking coverage |
 | Participant submissions | Optional captured form/credential values and network-derived details | Closed event/presence schema; old opaque details and locations removed from active data | Redesign pages and consumers that expect captured values |
-| Campaign origins | Campaign URL without Ruphish's ownership-verification workflow | HTTPS DNS origin with control, routing, and certificate verification | Verify an origin before launch or continued use of supported migrated links |
+| Campaign origins | Campaign URL without Ruphish's ownership-verification workflow | Fixed HTTP/HTTPS DNS or IP origin; required verification restricts eligibility to HTTPS DNS origins | Register an enabled owned origin and satisfy the installation verification policy |
 | Configuration lookup | Defaults to `./config.json` | Reads or creates the per-user OS configuration with SQLite defaults | Use `--config ./config.json` to keep an existing working-directory installation; see [locations and path rules](../administration/configuration.md#default-locations-and-explicit-configuration) |
 | Database engines | SQLite and MySQL | SQLite, MySQL, and PostgreSQL with distinct upgrade contracts | Select the provider explicitly; do not assume a cross-engine importer |
 | Delivery recovery | Legacy queue flags and retry state | Durable attempts, generation checks, and explicit unknown outcomes | Reconcile uncertain sends before choosing a resend |
@@ -46,7 +46,7 @@ An event is an observation, not proof that a particular person acted. New report
 
 ## Operations and recovery
 
-Campaign origins require DNS, routing, and TLS verification. SMTP trust and authentication checks may reject previously accepted insecure configurations. A timeout after SMTP submission can become an explicit unknown outcome requiring a decision; Ruphish does not promise exactly-once mail delivery.
+When verification is required, campaign origins require DNS ownership, routing, and TLS verification; HTTP and IP origins are eligible only with verification off. SMTP trust and authentication checks may reject previously accepted insecure configurations. A timeout after SMTP submission can become an explicit unknown outcome requiring a decision; Ruphish does not promise exactly-once mail delivery.
 
 New passwords use Argon2id while supported legacy hashes remain usable. Generated temporary administrator passwords appear in startup stderr, including container output, but not the application log file. Supplied passwords and API tokens are never echoed. Browser sessions, current-password changes, and API keys have separate lifecycles.
 

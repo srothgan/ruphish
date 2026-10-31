@@ -11,7 +11,9 @@ Administrators with `modify_system` permission manage installation-wide policy a
 
 Domain verification always starts off when settings are introduced. Reporting mailboxes start on only if mailbox configurations already exist; webhooks start on only if webhook configurations already exist. With no existing configurations, both start off. Presence determines these initial global switches, including when the existing configurations are individually disabled; each configuration retains its own enabled state. Later administrator changes to the global switches are saved and survive restart.
 
-With verification off, domains remain required, owned resources with individual enablement and HTTPS origin validation. Automatic and manual verification checks stop. The UI hides verification controls and shows verification as not required. Campaign selection and delivery no longer require verification evidence; origin matching and ownership checks still apply.
+When verification is required, only DNS hostnames over HTTPS are eligible. HTTP and IP origins are available when verification is off.
+
+With verification off, domains remain required, owned resources with individual enablement and HTTP/HTTPS origin validation. Automatic and manual verification checks stop. The UI hides verification controls and shows verification as not required. Campaign selection and delivery no longer require verification evidence; origin matching and ownership checks still apply.
 
 When verification is enabled, successful evidence normally expires after 24 hours and rechecks run approximately every six hours. **Expire verification** is a saved option that has no effect while verification is off. Turning expiry off permits successful evidence to remain valid until a failed check or domain disablement revokes it; rechecks continue. Shortening validity can immediately make domains ineligible for new delivery. Expiry alone preserves existing participant links. See [domains](../user-guide/domains.md).
 

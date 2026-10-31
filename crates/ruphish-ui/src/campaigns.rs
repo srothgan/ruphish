@@ -509,9 +509,9 @@ fn selector(
 fn domain_selector(draft: RwSignal<Draft>, resources: Signal<Value>) -> impl IntoView {
     let selected = move || {
         let value = text(&draft.get().value, "url");
-        url::Url::parse(&value)
+        ruphish_domain::domains::origin(&value, true)
             .ok()
-            .map(|u| u.origin().ascii_serialization())
+            .map(|o| o.value)
             .unwrap_or_default()
     };
     let path = move || {
@@ -533,14 +533,14 @@ fn domain_selector(draft: RwSignal<Draft>, resources: Signal<Value>) -> impl Int
         <div>
             <Select
                 validation_field="url"
-                label=trs!(ui.verified_domain)
+                label=trs!(ui.campaign_origin)
                 value=Signal::derive(selected)
                 on_change=Callback::new(move |origin: String| {
                     let path = path();
                     draft.update(|d| d.edit(|node| node["url"] = json!(format!("{origin}{path}"))));
                 })
             >
-                <option value="">{tr!(ui.choose_a_verified_domain)}</option>
+                <option value="">{tr!(ui.choose_campaign_origin)}</option>
                 {move || {
                     array(&resources.get(), "domains")
                         .into_iter()

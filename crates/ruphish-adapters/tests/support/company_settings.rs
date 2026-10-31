@@ -233,7 +233,7 @@ pub(super) async fn exercise(db: &Database) {
         domains.request_check(who, domain.id, now).await,
         Err(Error::FeatureDisabled(_))
     ));
-    assert!(domains.serves("policy.example.test").await.unwrap());
+    assert!(domains.serves("https://policy.example.test").await.unwrap());
     let launch = input(db, who, &domain.origin).await;
     let campaigns = db.campaigns();
 
@@ -256,7 +256,7 @@ pub(super) async fn exercise(db: &Database) {
         .await
         .unwrap();
     assert!(campaigns.prepare(who, &launch, now).await.is_err());
-    assert!(!domains.serves("policy.example.test").await.unwrap());
+    assert!(!domains.serves("https://policy.example.test").await.unwrap());
     domains
         .save(
             who,
@@ -275,7 +275,12 @@ pub(super) async fn exercise(db: &Database) {
     let rid = first.results[0].rid.clone();
     assert!(
         db.interactions()
-            .interact("policy.example.test", &rid, interactions::Action::Open, now)
+            .interact(
+                "https://policy.example.test",
+                &rid,
+                interactions::Action::Open,
+                now
+            )
             .await
             .is_ok()
     );
@@ -293,7 +298,7 @@ pub(super) async fn exercise(db: &Database) {
     ));
     assert!(campaigns.prepare(who, &launch, now).await.is_err());
     assert!(campaigns.claim(now).await.unwrap().is_none());
-    assert!(!domains.serves("policy.example.test").await.unwrap());
+    assert!(!domains.serves("https://policy.example.test").await.unwrap());
     domains.request_check(who, domain.id, now).await.unwrap();
     let obsolete = domains.claim(now).await.unwrap().unwrap();
     let off = settings
@@ -349,7 +354,7 @@ pub(super) async fn exercise(db: &Database) {
     assert_eq!(evidence.expires_at, Some(now + 3604));
     assert!(campaigns.prepare(who, &launch, now + 3604).await.is_err());
     assert!(
-        domains.serves("policy.example.test").await.unwrap(),
+        domains.serves("https://policy.example.test").await.unwrap(),
         "expiry alone preserves links"
     );
     policy.verification_expires = false;
@@ -376,7 +381,7 @@ pub(super) async fn exercise(db: &Database) {
         .await
         .unwrap();
     assert!(campaigns.prepare(who, &launch, now + 3607).await.is_err());
-    assert!(!domains.serves("policy.example.test").await.unwrap());
+    assert!(!domains.serves("https://policy.example.test").await.unwrap());
     policy.verification_enabled = false;
     policy.reporting_mailboxes_enabled = false;
     let disabled = settings
@@ -504,7 +509,7 @@ pub(super) async fn exercise(db: &Database) {
     assert!(
         db.interactions()
             .interact(
-                "policy.example.test",
+                "https://policy.example.test",
                 &rid,
                 interactions::Action::Open,
                 now + 3614

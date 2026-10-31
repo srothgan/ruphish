@@ -5,7 +5,7 @@ sidebar:
   order: 12
 ---
 
-Domain records register the public origin used in campaign links. When installation policy requires verification, adding a record alone does not make it eligible for launch. With verification off, an owned, enabled HTTPS origin is eligible without verification evidence.
+Domain records register the public origin used in campaign links. When installation policy requires verification, adding a record alone does not make it eligible for launch. With verification off, an owned, enabled HTTP or HTTPS origin is eligible without verification evidence.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -24,9 +24,11 @@ Domain records register the public origin used in campaign links. When installat
 }
 ```
 
-Use this only with matching DNS, routing, and trust configuration, such as the local fixture. Origins require HTTPS and a DNS hostname; IP literals and wildcard hosts are not accepted. The origin is immutable after creation. Hostname ownership cannot be bypassed by choosing another port.
+Origins accept HTTP or HTTPS with a fixed DNS hostname, dotted-decimal IPv4 address, or bracketed IPv6 address, plus an optional port from 1 to 65535. Default ports are canonicalized away. Paths, queries, fragments, user information, wildcard hosts, and recipient-dependent hosts are not accepted in a domain resource. Campaign URLs can add personalized paths and query values.
 
-The returned resource contains `id`, `name`, `origin`, `hostname`, `enabled`, `revision`, and TXT challenge fields `txt_name`, `txt_value`, and `challenge_expires`. Publish the supplied TXT value, route the origin to the participant listener, and request verification. Read the resource again to observe completion.
+When verification is required, only DNS hostnames over HTTPS are eligible. HTTP and IP origins are available when verification is off. Unsupported verification requests return `400` with `domain_verification_unsupported`; no verification work is queued. The origin is immutable after creation. Hostname ownership cannot be bypassed by choosing another port.
+
+The returned resource contains `id`, `name`, `origin`, `hostname`, `enabled`, `revision`, and TXT challenge fields `txt_name`, `txt_value`, and `challenge_expires`. IP origins return empty `txt_name` and `txt_value`; they do not have a DNS proof. For HTTPS DNS verification, publish the supplied TXT value, route the origin to the participant listener, and request verification. Read the resource again to observe completion. When verification is required for an HTTP or IP origin, `verification.status` is `unsupported`, `eligible` is `false`, and `verification.next_check_at` is `null`.
 
 `control`, `dns`, `routing`, `tls`, `code`, `status`, `eligible`, and `checking` describe separate aspects of verification. Timestamps such as `checked_at`, `verified_until`, and `next_check_at` use UTC Unix seconds when present. Detail includes recent `history` and any `active_check`; a queued check is not a successful verification.
 

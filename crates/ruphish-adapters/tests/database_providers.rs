@@ -181,6 +181,8 @@ async fn postgres_event_edits_preserve_history_and_reopen() {
     postgres_cleanup(&mut admin, &config).await;
 }
 
+#[path = "support/campaign_origins.rs"]
+mod campaign_origins;
 #[path = "support/open_tracking.rs"]
 mod open_tracking;
 
@@ -880,6 +882,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         idempotency: Some(("launch-once".into(), "request-fingerprint".into())),
         ..campaign::Create::default()
     };
+    campaign_origins::exercise(db, actor, input.clone(), now).await;
     open_tracking::exercise(db, actor, input.clone(), now).await;
     learning_pages::exercise(db, actor, normal.identity, input.clone(), now).await;
     campaign_drafts::exercise(db, actor, normal.identity, input.clone(), now, fault).await;
@@ -1018,7 +1021,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     let rid = &campaign.results[0].rid;
     public
         .interact(
-            "training.example.test",
+            "https://training.example.test",
             rid,
             interactions::Action::Open,
             now + 1,
@@ -1027,7 +1030,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         .unwrap();
     public
         .interact(
-            "training.example.test",
+            "https://training.example.test",
             rid,
             interactions::Action::View,
             now + 2,
@@ -1039,8 +1042,8 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         password_present: true,
     };
     let (a, b) = tokio::join!(
-        public.interact("training.example.test", rid, submit(), now + 3),
-        public.interact("training.example.test", rid, submit(), now + 3)
+        public.interact("https://training.example.test", rid, submit(), now + 3),
+        public.interact("https://training.example.test", rid, submit(), now + 3)
     );
     a.unwrap();
     b.unwrap();
@@ -1151,7 +1154,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         },
     ] {
         public
-            .interact("training.example.test", rid, action, now + 5)
+            .interact("https://training.example.test", rid, action, now + 5)
             .await
             .unwrap();
     }
@@ -1295,7 +1298,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     assert!(
         public
             .interact(
-                "training.example.test",
+                "https://training.example.test",
                 rid,
                 interactions::Action::Open,
                 now + 12
@@ -1806,6 +1809,18 @@ async fn mysql_upgrades_every_legacy_version_preserving_identity_and_recoverable
                 .unwrap();
         }
         sqlx::raw_sql("INSERT INTO templates(id,user_id,name,subject,text,html,modified_date) VALUES(9,17,'Legacy email','Hello','Plain text','<h1>Hello</h1>','2020-01-01 00:00:00'); INSERT INTO pages(id,user_id,name,html,modified_date) VALUES(10,17,'Legacy page','<h1>Welcome</h1>','2020-01-01 00:00:00'); INSERT INTO `groups`(id,user_id,name,modified_date) VALUES(21,17,'Shared group','2020-01-01 00:00:00'),(22,17,'Shared group','2020-01-01 00:00:00'); INSERT INTO targets(id,first_name,last_name,email,position) VALUES(31,'Elise','','elise@example.test','Engineer'); INSERT INTO group_targets VALUES(21,31),(22,31); INSERT INTO campaigns(id,user_id,name,created_date,completed_date,template_id,page_id,status,url) VALUES(13,17,'Legacy campaign','2020-01-01 00:00:00',NULL,9,10,'In progress','https://training.example.test'); INSERT INTO results(id,campaign_id,user_id,r_id,email,first_name,last_name,status,ip,latitude,longitude) VALUES(41,13,17,'legacy-rid','elise@example.test','Elise','','Email Opened','192.0.2.99',51.5,8.5); INSERT INTO events(id,campaign_id,email,time,message) VALUES(51,13,'elise@example.test','2020-01-01 00:00:00','Email Opened')").execute(&mut inspector).await.unwrap();
+        let imported_origin = [
+            "https://training.example.test",
+            "http://training.example.test:8080",
+            "https://192.0.2.20:8443",
+            "http://[2001:db8::20]:8080",
+        ][count % 4];
+        let imported_url = format!("{imported_origin}/training?source=legacy");
+        sqlx::query("UPDATE campaigns SET url=? WHERE id=13")
+            .bind(&imported_url)
+            .execute(&mut inspector)
+            .await
+            .unwrap();
         if version >= 20160131153104 {
             sqlx::query("UPDATE events SET details=?")
                 .bind("credential-value-canary")
@@ -1888,6 +1903,28 @@ async fn mysql_upgrades_every_legacy_version_preserving_identity_and_recoverable
         let domains = db.domains().list(user.identity).await.unwrap();
         assert_eq!(domains.len(), 1);
         assert_eq!(domains[0].verified_until, 0);
+        assert_eq!(domains[0].origin, imported_origin);
+        assert_eq!(campaign.url, imported_url);
+        assert!(
+            domains[0].eligible_until > 0,
+            "fresh migration policy does not require verification"
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT url FROM rp_original_campaigns WHERE id=13")
+                .fetch_one(&mut inspector)
+                .await
+                .unwrap(),
+            imported_url
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM ruphish_campaign_domains WHERE campaign_id=13"
+            )
+            .fetch_one(&mut inspector)
+            .await
+            .unwrap(),
+            1
+        );
         assert_eq!(
             sqlx::query_scalar::<_, String>("SELECT ip FROM rp_original_results WHERE id=41")
                 .fetch_one(&mut inspector)

@@ -1,13 +1,17 @@
 ---
 title: Verify a campaign domain
-description: Prove domain control and HTTPS routing before using an origin in a campaign.
+description: Register a fixed campaign origin and verify DNS ownership and HTTPS when required.
 sidebar:
   order: 10
 ---
 
-Campaign links use an owned, enabled HTTPS origin. Administrators can require verification in [company settings](../administration/settings.md); it is off on fresh installations. When required, verification checks both your DNS proof and whether requests reach this Ruphish installation over trusted HTTPS. With verification off, add and enable the domain; verification controls and checks are inactive.
+Campaign links use an owned, enabled HTTP or HTTPS origin with a fixed DNS hostname, IPv4 address, or bracketed IPv6 address and an optional port. HTTPS remains the default choice. Administrators can require verification in [company settings](../administration/settings.md); it is off on fresh installations.
 
-## Add and verify
+When verification is required, only DNS hostnames over HTTPS are eligible. HTTP and IP origins are available when verification is off.
+
+With verification off, add and enable the origin; verification controls and checks are inactive. Scheme, host, and port must match the campaign origin. Paths and query values can be personalized, but the origin cannot depend on a recipient.
+
+## Add and verify a DNS hostname over HTTPS
 
 1. Open **Resources → Domains** and create a domain with its public HTTPS origin.
 2. Publish the displayed TXT record. Use **Copy record name** and **Copy TXT value** to avoid transcription errors.
@@ -33,8 +37,8 @@ By default, when verification is required, successful evidence lasts 24 hours an
 
 ## Change or remove a domain
 
-The hostname is immutable. Create a new domain for a different host. One account can claim a hostname, including its different ports; creating a second account's duplicate does not grant access.
+The origin is immutable. Create a new domain for a different scheme, host, or port. One account can claim a hostname, including its different ports; creating a second account's duplicate does not grant access.
 
-Disabling stops future delivery/public handling, but cannot recall mail already submitted. Delete only an unreferenced domain. Imported Gophish domains are not approved automatically; old HTTP/IP/dynamic-host campaigns keep their history but require a replacement campaign with an eligible HTTPS origin for new delivery.
+Disabling stops future delivery/public handling, but cannot recall mail already submitted. Delete only an unreferenced domain. Fixed HTTP/HTTPS DNS and IP origins are extracted from Gophish campaigns without inventing verification evidence. Their eligibility follows the current installation policy. Dynamic or invalid origins retain their history but need a replacement campaign with a supported origin for new delivery.
 
 Ask the installation operator to configure [listeners, certificates, and proxy trust](../administration/listeners-and-tls.md). Built-in ACME and DNS-provider automation are not provided.

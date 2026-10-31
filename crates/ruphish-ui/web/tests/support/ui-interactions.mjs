@@ -21,6 +21,7 @@ const path =
     'form-smtp': '/smtp/new',
     'form-user': '/users/new',
     'form-domain': '/domains/new',
+    'domain-unsupported': '/domains/1',
     'form-password': '/user/password',
     'form-preferences': '/user/settings',
     'form-settings': '/settings',
@@ -103,6 +104,21 @@ class FixtureDate extends NativeDate {
 }
 globalThis.Date = win.Date = FixtureDate;
 const data = dataset(now);
+if (scenario === 'domain-unsupported') {
+  Object.assign(data.domains[0], {
+    origin: 'http://[2001:db8::20]:8080',
+    hostname: '2001:db8::20',
+    verified_until: 0,
+    eligible: false,
+    control: false,
+    dns: false,
+    routing: false,
+    tls: false,
+    txt_name: '',
+    txt_value: '',
+    verification: { required: true, status: 'unsupported', expires_at: null, next_check_at: null },
+  });
+}
 const campaign = data.campaigns.find((c) => c.header.id === 2);
 if (scenario === 'results-untracked') {
   campaign.header.policy = { ...campaign.header.policy, track_opens: false };
@@ -300,6 +316,18 @@ const settled = () =>
   regions().every((e) => e.dataset.ready === 'true' && e.getAttribute('aria-busy') === 'false');
 const resultsPath = '/campaigns/2/results';
 
+if (scenario === 'domain-unsupported') {
+  await until(() => document.body.textContent.includes('2001:db8::20'));
+  assert.ok(document.body.textContent.includes('DNS-Hostnamen'));
+  const verify = [...document.querySelectorAll('button')].find(
+    (b) => b.textContent.trim() === 'Domain verifizieren',
+  );
+  assert.ok(verify);
+  assert.ok(verify.disabled, 'unsupported origin cannot queue verification');
+  assert.ok(!document.body.textContent.includes('_ruphish-verify'));
+  process.exit(0);
+}
+
 if (scenario.startsWith('form-')) {
   const selector =
     scenario === 'form-import'
@@ -387,6 +415,13 @@ if (scenario.startsWith('form-')) {
       preferences.time_zone = 'Asia/Tokyo';
     }
     await refreshSession();
+    if (scenario === 'form-domain') {
+      const policy =
+        language === 'en'
+          ? 'When verification is required, only DNS hostnames over HTTPS are eligible.'
+          : 'Wenn die Verifizierung erforderlich ist, sind nur DNS-Hostnamen \u00fcber HTTPS zul\u00e4ssig.';
+      assert.ok(document.body.textContent.includes(policy));
+    }
     assert.equal(
       input.isConnected,
       true,
@@ -458,7 +493,7 @@ if (scenario.startsWith('form-')) {
   }
   if (scenario === 'form-domain') {
     const origin = form.querySelector('input[type="url"]');
-    origin.value = 'https://training.example.test';
+    origin.value = 'http://[2001:db8::20]:8080';
     origin.dispatchEvent(new win.Event('input', { bubbles: true }));
     failSave = true;
     form.querySelector('button[type="submit"]').click();
@@ -466,7 +501,7 @@ if (scenario.startsWith('form-')) {
       () => writes.length === 1 && document.querySelector('.form-message.error.has-content'),
     );
     assert.equal(input.value, authored, 'failed save preserves the draft');
-    assert.equal(origin.value, 'https://training.example.test');
+    assert.equal(origin.value, 'http://[2001:db8::20]:8080');
     assert.equal(writes[0].body.name, authored);
     failSave = false;
     form.querySelector('button[type="submit"]').click();

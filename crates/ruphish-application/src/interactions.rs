@@ -50,11 +50,11 @@ pub enum Output {
 /// Public application boundary without transport or submitted-value types.
 pub trait Public: Send + Sync {
     /// Serve static educational content without a recipient or interaction event.
-    async fn learning_page(&self, authority: &str, public_id: &str) -> Result<Output, Error>;
+    async fn learning_page(&self, origin_url: &str, public_id: &str) -> Result<Output, Error>;
     /// Resolve an exact origin/RID pair and apply the action transactionally.
     async fn interact(
         &self,
-        authority: &str,
+        origin_url: &str,
         rid: &str,
         action: Action,
         now: i64,

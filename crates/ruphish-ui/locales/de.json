@@ -180,8 +180,6 @@
     "draft_unavailable": "Entwurf nicht verfügbar",
     "return_to_campaigns": "Zurück zu den Kampagnen",
     "choose_a_resource": "Ressource auswählen",
-    "verified_domain": "Verifizierte Domain",
-    "choose_a_verified_domain": "Verifizierte Domain auswählen",
     "landing_path_optional": "Zielpfad (optional)",
     "manage_and_verify_domains": "Domains verwalten und verifizieren",
     "landing_page": "Landingpage",
@@ -278,9 +276,7 @@
     "back_to_domains": "Zurück zu den Domains",
     "retry_loading_domain": "Domain erneut laden",
     "name": "Name",
-    "public_https_origin": "Öffentliche HTTPS-Adresse",
     "https_training_example_com": "https://training.example.com",
-    "use_the_hostname_participants_will_visit_paths_belong_to_the_campaign_a_saved_ho": "Verwenden Sie den Hostnamen, den Teilnehmer aufrufen. Pfade gehören zur Kampagne. Ein gespeicherter Hostname kann nicht geändert werden.",
     "enable_this_domain": "Diese Domain aktivieren",
     "disabling_stops_new_deliveries_and_public_campaign_handling_for_this_domain_exis": "Die Deaktivierung stoppt neue Zustellungen und öffentliche Kampagnenaufrufe für diese Domain. Der bestehende Kampagnenverlauf bleibt erhalten.",
     "cancel_changes": "Änderungen verwerfen",
@@ -948,7 +944,11 @@
     "delivery_error_resource": "Eine benötigte Kampagnenressource ist nicht verfügbar. Prüfen Sie vor einem erneuten Versuch die Vorlage, Landingpage und das Versandprofil.",
     "participants": "Teilnehmer",
     "landing_preview_help": "Funktionsvorschau mit Beispielempfängerin Alice Example. Skripte und externe Ressourcen werden isoliert ausgeführt. Übermittlungen erzeugen keine Kampagnenereignisse. Eigener Code kann externe Dienste kontaktieren.",
-    "landing_bundle_help": "Sie können auch eine ZIP-Datei mit index.html im Stammverzeichnis sowie Bildern, Stylesheets, Schriftarten und gebündelten Skripten hochladen. Lokale Ressourcen werden in den Entwurf eingebettet; Grenzen: 8 MiB und 256 Einträge."
+    "landing_bundle_help": "Sie können auch eine ZIP-Datei mit index.html im Stammverzeichnis sowie Bildern, Stylesheets, Schriftarten und gebündelten Skripten hochladen. Lokale Ressourcen werden in den Entwurf eingebettet; Grenzen: 8 MiB und 256 Einträge.",
+    "domain_origin_verification_policy": "Wenn die Verifizierung erforderlich ist, sind nur DNS-Hostnamen über HTTPS zulässig. HTTP- und IP-Ursprünge sind bei deaktivierter Verifizierung verfügbar.",
+    "campaign_origin": "Kampagnenadresse",
+    "choose_campaign_origin": "Kampagnenadresse auswählen",
+    "domain_origin_help": "Verwenden Sie den DNS-Namen oder die IP-Adresse, die Teilnehmer aufrufen. Pfade gehören zur Kampagne; eine gespeicherte Adresse kann nicht geändert werden."
   },
   "messages": {
     "the_request_failed_arg0_try_again": "Die Anfrage ist fehlgeschlagen ({{ arg0 }}). Versuchen Sie es erneut.",

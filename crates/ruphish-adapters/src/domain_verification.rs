@@ -131,6 +131,9 @@ impl DnsHttps {
             return Err("domain_challenge_expired");
         }
         let origin = origin(&check.domain.origin, false)?;
+        if !origin.verification_supported() {
+            return Err("domain_verification_unsupported");
+        }
         let records = self
             .resolver
             .txt_lookup(format!("_ruphish-verify.{}.", origin.host))

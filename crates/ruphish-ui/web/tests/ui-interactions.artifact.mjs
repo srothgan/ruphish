@@ -20,6 +20,7 @@ for (const scenario of [
   'form-smtp',
   'form-user',
   'form-domain',
+  'domain-unsupported',
   'form-password',
   'form-preferences',
   'form-settings',

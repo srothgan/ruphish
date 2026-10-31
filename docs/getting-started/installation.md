@@ -153,7 +153,7 @@ cargo run -p ruphish --locked -- --config ./config.json
 
 For an installed binary, the equivalent command is `ruphish --config ./config.json`. That file must exist. Relative paths inside an explicitly selected configuration retain their working-directory meaning. This mode does not create a per-user installation. The [configuration reference](../administration/configuration.md) provides a copyable JSON example; downloading a separate example file is unnecessary.
 
-The public HTTP example is enough to start the application, but campaign origins require HTTPS and an enabled owned domain. Verification is additionally required when enabled in [company settings](../administration/settings.md). Use the local fixture for the tutorial, or configure [listeners and TLS](../administration/listeners-and-tls.md) for your domain.
+The public HTTP example can serve campaigns using a registered, enabled HTTP origin when verification is off. If verification is required in [company settings](../administration/settings.md), only DNS hostnames over trusted HTTPS are eligible. Use the local fixture for the tutorial, or configure [listeners and TLS](../administration/listeners-and-tls.md) for your domain.
 
 ## Sign in
 

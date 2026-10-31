@@ -230,9 +230,10 @@ fn scan(
                             .checked_sub(candidate.len())
                             .ok_or("mailbox_scan_limit")?;
                         if let Ok(url) = url::Url::parse(candidate) {
-                            if !matches!(url.scheme(), "https" | "http") {
+                            let Ok(origin) = ruphish_domain::domains::origin(candidate, true)
+                            else {
                                 continue;
-                            }
+                            };
                             for (key, value) in url.query_pairs() {
                                 if key == "rid"
                                     && !value.is_empty()
@@ -241,10 +242,7 @@ fn scan(
                                         .bytes()
                                         .all(|b| b.is_ascii_alphanumeric() || b == b'-')
                                 {
-                                    found.insert((
-                                        value.into_owned(),
-                                        url.origin().ascii_serialization(),
-                                    ));
+                                    found.insert((value.into_owned(), origin.value.clone()));
                                     if found.len() > 16 {
                                         return Err("mailbox_identifier_limit");
                                     }
@@ -418,6 +416,41 @@ async fn session_command(session: &mut Session, command: String) -> Result<(), &
 #[cfg(test)]
 mod tests {
     use super::identify;
+    #[test]
+    fn report_origins_preserve_scheme_port_and_ip_and_normalize_dns() {
+        for (link, expected) in [
+            (
+                "http://TRAINING.example.test.:80",
+                "http://training.example.test",
+            ),
+            ("https://192.0.2.20:8443", "https://192.0.2.20:8443"),
+            ("http://[2001:0db8::20]:8080", "http://[2001:db8::20]:8080"),
+        ] {
+            let message = format!(
+                "From: user@example.test\r\nContent-Type: message/rfc822\r\n\r\nSubject: original\r\nContent-Type: text/html\r\n\r\n<a href=\"{link}/training?rid=abc123\">Link</a>"
+            );
+            assert_eq!(
+                identify(message.as_bytes(), ""),
+                Ok(("abc123".into(), expected.into()))
+            );
+        }
+        for links in [
+            "http://training.example.test/?rid=abc https://training.example.test/?rid=abc",
+            "http://[::1]:8080/?rid=abc http://[::1]:8081/?rid=abc",
+        ] {
+            assert_eq!(
+                identify(format!("Subject: report\r\n\r\n{links}").as_bytes(), ""),
+                Err("mailbox_ambiguous")
+            );
+        }
+        assert_eq!(
+            identify(
+                b"Subject: report\r\n\r\nhttp://user@training.example.test/?rid=abc",
+                ""
+            ),
+            Err("mailbox_unmatched")
+        );
+    }
     #[test]
     fn overlapping_urls_consume_a_message_wide_budget_without_needing_a_rid() {
         let message = format!("Subject: report\r\n\r\n{}", "https://x/".repeat(2048));

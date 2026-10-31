@@ -33,7 +33,7 @@ The same-engine upgrade converts a recognized Gophish database in place to Ruphi
 | Captured participant details and location | Opaque legacy event details are cleared from active records; result IP/location fields are cleared/zeroed | Preserve sensitive recovery copies separately; do not expect captured form values in exports |
 | Reporting settings | Legacy IMAP settings become named mailbox resources; stored credentials are retained; invalid/incomplete connection settings can import disabled, with bounded defaults for port/folder/frequency | Review every imported mailbox and its first-poll checkpoint before enabling processing |
 | Webhooks | Existing endpoints, activity flags, and secrets receive revision state | Validate the receiver and deduplication behavior; imported historical events do not imply a historical webhook replay |
-| Campaign origins | Eligible-format HTTPS DNS origins are extracted as unverified domain records | Publish the new proof and verify routing/TLS; origin extraction does not confer trust |
+| Campaign origins | Fixed HTTP/HTTPS DNS and IP origins are extracted without verification evidence | Enable the origin and satisfy the current verification policy; origin extraction does not confer trust |
 | Files and process settings | Database migration does not transfer configuration files, certificates/private keys, static files, or service-manager settings | Copy and review them separately, using the target configuration contract |
 
 Display preferences and persistent campaign drafts are Ruphish additions. A Gophish database does not supply equivalent saved UI state. Individual resource imports are separate from whole-database migration and can create duplicate work; they are not an idempotent substitute for this procedure.
@@ -54,9 +54,9 @@ Ambiguous associations, duplicate queue identities, invalid attempt counts, or i
 
 ### Links in already-sent messages
 
-Preserved recipient tracking IDs alone are not enough. For a supported existing HTTPS link to work, retain its hostname, port, path/query and recipient identity, route it to Ruphish, and successfully verify the imported origin. The campaign must remain active, its page/policy must resolve, and the domain must remain enabled with accepted verification evidence.
+Preserved recipient tracking IDs alone are not enough. For a supported existing HTTP/HTTPS link to work, retain its scheme, hostname or IP address, port, path/query and recipient identity, and route it to Ruphish. The campaign must remain active, its page/policy must resolve, and the domain must remain enabled. When verification is required, the origin must be a DNS hostname over HTTPS with accepted verification evidence.
 
-Legacy plain-HTTP URLs, IP-address URLs, or unsupported origins are not automatically converted or authorized. Ruphish cannot rewrite a URL already inside a delivered message. Do not promise uninterrupted old-link behavior for those campaigns; record the limitation at cutover and use a verified HTTPS origin for future campaigns. Completed campaigns no longer serve normal participant interactions.
+HTTP and IP origins remain unavailable when verification is required. Dynamic hosts and invalid origins remain unsupported. Ruphish cannot rewrite a URL already inside a delivered message; check the origin and policy during cutover rather than promising uninterrupted old-link behavior. Completed campaigns no longer serve normal participant interactions.
 
 ## Cut over
 
