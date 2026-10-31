@@ -17,7 +17,7 @@ Writes contain `name`, `url`, optional `secret`, `is_active`, and optional `revi
 
 ## Event payload
 
-The JSON body retains the Gophish event shape. This is a synthetic example, not a captured response:
+The JSON body includes the event fields and optional coarse client observation. This is a synthetic example, not a captured response:
 
 ```json
 {
@@ -25,11 +25,14 @@ The JSON body retains the Gophish event shape. This is a synthetic example, not 
   "email": "alex@example.test",
   "time": "2026-10-22T10:00:00Z",
   "message": "Clicked Link",
-  "details": "{}"
+  "details": "{}",
+  "client": { "browser": "firefox", "os": "linux", "device": "desktop" }
 }
 ```
 
 `details` is a string containing sanitized event details, not a nested JSON object in the outer envelope. Do not expect arbitrary participant form data. Validation sends `{"success":true}` instead of a campaign event.
+
+Event payloads also contain nullable `client` with the same closed `browser`, `os`, and `device` categories as [result events](analysis-and-exports.md#client-observations). Click and submission requests carry these categories; historical events, opens, and reports have no collected client metadata. Raw User-Agent headers, versions, device models, and network identifiers are excluded.
 
 `X-Ruphish-Event-ID` identifies an ordinary event consistently across its retry attempts. Treat it as opaque and scope stored identities to the source installation. A receiver should persist deduplication state before acknowledging successful processing.
 

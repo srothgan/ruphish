@@ -44,7 +44,7 @@ impl Persistence for Interactions {
         };
         let email = text("email")?;
         let mut rendering = None;
-        if matches!(action, Action::View | Action::Submit { .. }) {
+        if matches!(action, Action::View { .. } | Action::Submit { .. }) {
             let resource = super::resources::load(
                 &mut tx,
                 owner,
@@ -104,7 +104,7 @@ impl Persistence for Interactions {
                 } else {
                     text("redirect_url")?
                 },
-                source: matches!(action, Action::View).then_some(page.html),
+                source: matches!(action, Action::View { .. }).then_some(page.html),
             });
         }
         let send_date = text("send_date")?;
@@ -184,9 +184,14 @@ impl Persistence for Interactions {
             .map_err(|_| Error::Internal)?,
             _ => String::new(),
         };
+        let client = action
+            .client()
+            .map(|v| serde_json::to_string(&v))
+            .transpose()
+            .map_err(|_| Error::Internal)?;
         let stamp = datetime::utc_seconds(now).map_err(|_| Error::Internal)?;
-        let inserted = sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id,source) VALUES(?,?,?,?,?,?,'public')")
-            .bind(campaign_id).bind(email).bind(&stamp).bind(kind.key()).bind(details).bind(result_id)
+        let inserted = sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id,source,client) VALUES(?,?,?,?,?,?,'public',?)")
+            .bind(campaign_id).bind(email).bind(&stamp).bind(kind.key()).bind(details).bind(result_id).bind(client)
             .execute(&mut *tx).await.map_err(storage)?;
         let event_id = inserted.last_insert_rowid();
 

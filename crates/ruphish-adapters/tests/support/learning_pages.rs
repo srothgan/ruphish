@@ -105,6 +105,7 @@ pub(super) async fn exercise(
                 "https://training.example.test",
                 rid,
                 interactions::Action::Submit {
+                    client: Default::default(),
                     event_id: "d".repeat(32),
                     password_present: true,
                 },

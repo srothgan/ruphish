@@ -285,6 +285,16 @@ async fn handle(request: Request<Body>, state: &Services) -> Response {
         )
             .into_response();
     }
+    let client = ruphish_application::interactions::ClientInfo::from_user_agent(
+        (request.headers().get_all(header::USER_AGENT).iter().count() == 1)
+            .then(|| {
+                request
+                    .headers()
+                    .get(header::USER_AGENT)
+                    .and_then(|v| v.to_str().ok())
+            })
+            .flatten(),
+    );
     let action = if method == Method::POST {
         if inspect || path.ends_with("/track") || path.ends_with("/report") {
             return empty(StatusCode::METHOD_NOT_ALLOWED);
@@ -307,6 +317,7 @@ async fn handle(request: Request<Body>, state: &Services) -> Response {
             return empty(StatusCode::BAD_REQUEST);
         };
         Action::Submit {
+            client,
             event_id: input.event_id,
             password_present: input.password_present,
         }
@@ -319,7 +330,7 @@ async fn handle(request: Request<Body>, state: &Services) -> Response {
     } else if path.ends_with("/report") {
         Action::Report
     } else {
-        Action::View
+        Action::View { client }
     };
     let mut response = match state.interactions.interact(&origin,rid,action,now).await {
         Ok(Output::Html{html,csp})=>([(header::CONTENT_TYPE,"text/html; charset=utf-8"),(header::CACHE_CONTROL,"no-store"),(header::CONTENT_SECURITY_POLICY,csp.as_str()),(header::REFERRER_POLICY,"no-referrer"),(header::X_CONTENT_TYPE_OPTIONS,"nosniff"),(header::HeaderName::from_static("x-server"),"gophish")],html).into_response(),

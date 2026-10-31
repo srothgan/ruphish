@@ -83,6 +83,7 @@ fn events(c: &app::Campaign) -> Vec<details::Event> {
     c.events
         .iter()
         .map(|e| details::Event {
+            client: e.client,
             campaign_id: c.id,
             email: e.email.clone(),
             time: date(&e.time),
@@ -636,6 +637,7 @@ async fn deliveries(
             .activity
             .iter()
             .map(|e| reads::Activity {
+                client: e.client,
                 id: e.id,
                 time: date(&e.time),
                 email: e.email.clone(),

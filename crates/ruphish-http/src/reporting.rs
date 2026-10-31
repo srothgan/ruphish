@@ -130,6 +130,7 @@ async fn read(
             .events
             .into_iter()
             .map(|e| reads::ResultEvent {
+                client: e.client,
                 edited: e.edited,
                 id: e.id,
                 recipient_id: e.recipient_id,

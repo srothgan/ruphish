@@ -120,6 +120,24 @@ if (scenario === 'domain-unsupported') {
   });
 }
 const campaign = data.campaigns.find((c) => c.header.id === 2);
+if (scenario === 'recipient-direct' || scenario === 'event-editor') {
+  const recipient = campaign.results.find((r) => r.id === 20003);
+  const sample = recipient.events.at(-1);
+  for (const [id, kind, client] of [
+    [880001, 'Clicked Link', { browser: 'firefox', os: 'linux', device: 'desktop' }],
+    [880002, 'Submitted Data', { browser: 'safari', os: 'ios', device: 'mobile' }],
+  ]) {
+    recipient.events.push({
+      ...sample,
+      id,
+      kind,
+      source: 'public',
+      password_present: null,
+      client,
+    });
+  }
+}
+
 if (scenario === 'results-untracked') {
   campaign.header.policy = { ...campaign.header.policy, track_opens: false };
   assert.ok(campaign.results.some((r) => r.events.some((e) => e.kind === 'Email Opened')));
@@ -842,6 +860,19 @@ if (scenario.startsWith('recipient-')) {
       assert.equal(url.searchParams.get('event_order'), 'asc');
     }
   }
+  if (scenario === 'recipient-direct') {
+    const observations = [...document.querySelectorAll('.recipient-observation')];
+    const click = observations.find((e) =>
+      e.querySelector('.client-observation')?.textContent.includes('Firefox'),
+    );
+    const submission = observations.find((e) =>
+      e.querySelector('.client-observation')?.textContent.includes('Safari'),
+    );
+    assert.ok(click?.textContent.includes('Linux'));
+    assert.ok(submission?.textContent.includes('iOS'));
+    assert.ok(submission?.textContent.includes('Mobilger\u00e4t'));
+    assert.equal(document.querySelectorAll('.client-observation dl').length, 2);
+  }
   const expected = ['recipient-return', 'recipient-error-return'].includes(scenario)
     ? returnOrigin
     : resultsPath;
@@ -937,6 +968,15 @@ if (scenario.startsWith('event-editor')) {
   document.querySelector('.recipient-history > .recipient-history-heading button').click();
   await until(() => document.querySelector('.event-review'));
   const review = document.querySelector('.event-review');
+  if (scenario === 'event-editor') {
+    assert.ok(review.textContent.includes('Firefox'));
+    assert.ok(review.textContent.includes('Safari'));
+    assert.equal(review.querySelectorAll('.client-observation dl').length, 2);
+    const timeline = document.querySelector('.delivery-timeline');
+    assert.ok(timeline.textContent.includes('Firefox'));
+    assert.ok(timeline.textContent.includes('Safari'));
+  }
+
   const recipient = campaign.results.find((r) => r.id === 20003);
   const initialCount = recipient.events.length;
   const change = (control, value, type = 'change') => {

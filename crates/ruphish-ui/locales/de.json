@@ -16,6 +16,14 @@
     "native_name": "Deutsch"
   },
   "ui": {
+    "client_information": "Clientinformationen",
+    "client_browser": "Browser",
+    "client_os": "Betriebssystem",
+    "client_device": "Gerät",
+    "client_desktop": "Desktop",
+    "client_mobile": "Mobilgerät",
+    "client_tablet": "Tablet",
+    "client_observation_help": "Browser, Betriebssystem und Gerät werden aus der jeweiligen Anfrage abgeleitet und können ungenau sein. Sie beschreiben die Beobachtung, keine verifizierte Person oder ein verifiziertes Gerät.",
     "track_email_opens": "E-Mail-Öffnungen erfassen",
     "not_tracked": "Nicht erfasst",
     "skip_certificate_verification": "Zertifikatsprüfung überspringen",

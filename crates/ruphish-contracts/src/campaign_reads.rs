@@ -188,6 +188,8 @@ pub struct Attempt {
 /// Sanitized campaign activity.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Activity {
+    /// Immutable coarse request categories, when observed.
+    pub client: Option<ruphish_domain::client::Info>,
     /// Event identity.
     pub id: i64,
     /// Preserved timestamp.
@@ -302,6 +304,8 @@ pub struct ResultRecipient {
 /// One effective observation; no participant-entered values.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResultEvent {
+    /// Immutable coarse request categories; absent for historical or non-client observations.
+    pub client: Option<ruphish_domain::client::Info>,
     /// Whether an operator has changed the event values since creation.
     pub edited: bool,
     /// Event identity.

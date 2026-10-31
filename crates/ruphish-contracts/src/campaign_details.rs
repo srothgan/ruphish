@@ -81,6 +81,8 @@ pub struct Recipient {
 /// Sanitized event history, retaining meaningful imported event names.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Event {
+    /// Immutable coarse request categories; absent for historical or non-client observations.
+    pub client: Option<ruphish_domain::client::Info>,
     /// Owning execution.
     pub campaign_id: i64,
     /// Administrator-supplied recipient address, empty for campaign-wide events.

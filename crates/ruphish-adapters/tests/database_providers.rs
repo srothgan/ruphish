@@ -884,6 +884,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     };
     campaign_origins::exercise(db, actor, input.clone(), now).await;
     open_tracking::exercise(db, actor, input.clone(), now).await;
+    client_observations::exercise(db, actor, input.clone(), now).await;
     learning_pages::exercise(db, actor, normal.identity, input.clone(), now).await;
     campaign_drafts::exercise(db, actor, normal.identity, input.clone(), now, fault).await;
     let campaigns = db.campaigns();
@@ -1032,12 +1033,15 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         .interact(
             "https://training.example.test",
             rid,
-            interactions::Action::View,
+            interactions::Action::View {
+                client: Default::default(),
+            },
             now + 2,
         )
         .await
         .unwrap();
     let submit = || interactions::Action::Submit {
+        client: Default::default(),
         event_id: "a".repeat(32),
         password_present: true,
     };
@@ -1143,12 +1147,16 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     assert!(excel.bytes.starts_with(b"PK"));
     for action in [
         interactions::Action::Open,
-        interactions::Action::View,
+        interactions::Action::View {
+            client: Default::default(),
+        },
         interactions::Action::Submit {
+            client: Default::default(),
             event_id: "b".repeat(32),
             password_present: false,
         },
         interactions::Action::Submit {
+            client: Default::default(),
             event_id: "c".repeat(32),
             password_present: true,
         },
@@ -1855,6 +1863,15 @@ async fn mysql_upgrades_every_legacy_version_preserving_identity_and_recoverable
         assert!(
             track_opens,
             "migrated {version} defaults to enabled without authored tracker markup"
+        );
+        let client_count: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM events WHERE client IS NOT NULL")
+                .fetch_one(&mut inspector)
+                .await
+                .unwrap();
+        assert_eq!(
+            client_count, 0,
+            "historical {version} has no collected client categories"
         );
         assert!(db.bootstrap(None, None).await.unwrap().is_none());
 
@@ -3097,3 +3114,6 @@ async fn postgres_preferences_preserve_existing_accounts_and_survive_reopen() {
 
 #[path = "support/query_work.rs"]
 mod query_work;
+
+#[path = "support/client_observations.rs"]
+mod client_observations;

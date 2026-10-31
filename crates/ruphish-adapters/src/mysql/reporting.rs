@@ -195,6 +195,11 @@ impl Snapshots for Reports {
                 serde_json::from_str(&crate::participant_privacy::details(&details))
                     .unwrap_or_default();
             events.push(Event {
+                client: crate::participant_privacy::client(
+                    r.try_get::<Option<String>, _>("client")
+                        .map_err(storage)?
+                        .as_deref(),
+                )?,
                 edited: r.try_get("edited").map_err(storage)?,
                 id: r.try_get("id").map_err(storage)?,
                 recipient_id: r.try_get("recipient_id").map_err(storage)?,

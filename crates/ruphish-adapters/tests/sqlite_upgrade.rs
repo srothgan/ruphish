@@ -54,6 +54,15 @@ async fn all_populated_goose_versions_upgrade_without_losing_records_or_the_sour
             track_opens,
             "migrated {version} defaults to enabled even without a tracker in the stored HTML"
         );
+        let collected: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM events WHERE client IS NOT NULL")
+                .fetch_one(&mut connection)
+                .await
+                .unwrap();
+        assert_eq!(
+            collected, 0,
+            "historical {version} must not invent client observations"
+        );
         let user = sqlx::query("SELECT username,hash,api_key,role_id FROM users WHERE id=17")
             .fetch_one(&mut connection)
             .await

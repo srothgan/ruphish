@@ -6,6 +6,7 @@ Development previews have short notes on GitHub Releases. This changelog records
 
 Initial release targeting feature parity with Gophish, with a native Rust server and a new Rust/WASM administration interface.
 
+- Record coarse browser, OS, and device categories on clicks and submissions, with per-event recipient details and consistent exports/webhooks; exclude raw headers and network identities.
 - Manage recipient groups, email templates, landing pages, reusable static learning pages, attachments, and sending profiles.
 - Select hosted learning pages as campaign redirect destinations without adding training-completion tracking.
 - Choose campaign email-open tracking before launch, with disabled metrics shown as not tracked and enabled defaults for migrated campaigns.

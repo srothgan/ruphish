@@ -82,6 +82,7 @@ macro_rules! repository {
                     .unwrap_or_default())
             };
             Ok(Record {
+                client: crate::participant_privacy::client(row.try_get::<Option<String>, _>("client").map_err(storage)?.as_deref())?,
                 id,
                 source: text("source")?,
                 revision: row.try_get("revision").map_err(storage)?,
@@ -106,7 +107,7 @@ macro_rules! repository {
                         return Ok(Outcome { id: record.id, event: Some(record) });
                     }
                     let id = insert(&mut tx, campaign, recipient, &fact, &change.request_id).await?;
-                    let record = Record { id, source: "operator".into(), revision: 0, edited: false, current: fact };
+                    let record = Record { client: None, id, source: "operator".into(), revision: 0, edited: false, current: fact };
                     commit(tx).await?;
                     return Ok(Outcome { id, event: Some(record) });
                 }

@@ -200,6 +200,11 @@ async fn load_aggregate(
         .map_err(storage)?
     {
         events.push(Event {
+            client: crate::participant_privacy::client(
+                e.try_get::<Option<String>, _>("client")
+                    .map_err(storage)?
+                    .as_deref(),
+            )?,
             record: None,
             recipient_id: e.try_get("recipient_id").map_err(storage)?,
             id: e.try_get("id").map_err(storage)?,
@@ -624,6 +629,11 @@ impl Repository for Campaigns {
                 .map_err(storage)?
         {
             activity.push(Event {
+                client: crate::participant_privacy::client(
+                    e.try_get::<Option<String>, _>("client")
+                        .map_err(storage)?
+                        .as_deref(),
+                )?,
                 record: None,
                 recipient_id: e.try_get("recipient_id").map_err(storage)?,
                 id: e.try_get("id").map_err(storage)?,
@@ -681,6 +691,11 @@ impl Repository for Campaigns {
             )
             .await?;
             events.push(Event {
+                client: crate::participant_privacy::client(
+                    e.try_get::<Option<String>, _>("client")
+                        .map_err(storage)?
+                        .as_deref(),
+                )?,
                 record: Some(record.clone()),
                 recipient_id: e.try_get("recipient_id").map_err(storage)?,
                 id: e.try_get("id").map_err(storage)?,

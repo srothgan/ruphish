@@ -112,6 +112,7 @@ mod tests {
             presence: Presence::default(),
         };
         let mut acknowledgement = Record {
+            client: None,
             id: 999,
             source: "public".into(),
             revision: 3,

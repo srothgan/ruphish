@@ -72,6 +72,9 @@ fn events(a: &Analysis) -> Vec<Vec<String>> {
             "Source",
             "Password present",
             "Edited",
+            "Browser",
+            "Operating system",
+            "Device",
         ]
         .into_iter()
         .map(str::to_owned)
@@ -89,6 +92,9 @@ fn events(a: &Analysis) -> Vec<Vec<String>> {
                 .map(|v| v.to_string())
                 .unwrap_or_default(),
             e.edited.to_string(),
+            e.client.map(|c| c.browser.key()).unwrap_or_default().into(),
+            e.client.map(|c| c.os.key()).unwrap_or_default().into(),
+            e.client.map(|c| c.device.key()).unwrap_or_default().into(),
         ]
     }));
     rows

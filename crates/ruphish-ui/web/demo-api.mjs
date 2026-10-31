@@ -46,6 +46,7 @@ const eventFact = (e) => ({
   },
 });
 const eventRecord = (e) => ({
+  client: e.client ?? null,
   id: e.id,
   source: e.source,
   revision: e.revision ?? 0,
@@ -267,6 +268,7 @@ export function analysis(campaign, query, now, paginate = true) {
       source: e.source,
       password_present: e.password_present ?? null,
       username_present: e.username_present ?? null,
+      client: e.client ?? null,
       edited: e.edited ?? false,
       kind: recordedKind(e.kind),
     })),
@@ -364,6 +366,7 @@ function delivery(campaign, query, owner) {
         time: e.time,
         email: e.email,
         message: e.kind,
+        client: e.client ?? null,
         details: JSON.stringify(
           e.password_present === null ? {} : { password_present: e.password_present },
         ),

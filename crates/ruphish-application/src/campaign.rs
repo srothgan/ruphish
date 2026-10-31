@@ -121,6 +121,8 @@ pub struct RecipientResult {
 }
 /// Committed campaign history, with string-encoded legacy detail JSON.
 pub struct Event {
+    /// Immutable coarse request categories; absent for historical or non-client observations.
+    pub client: Option<ruphish_domain::client::Info>,
     /// Current event row and edit state on recipient reads.
     pub record: Option<crate::event_edit::Record>,
     /// Stable recipient identity; unknown for ambiguous historical observations.

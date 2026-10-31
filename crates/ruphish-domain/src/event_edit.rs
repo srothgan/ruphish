@@ -64,6 +64,8 @@ pub enum Action {
 /// Current event row, with no retained original or audit revisions.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Record {
+    /// Immutable coarse request categories; absent for historical or non-client observations.
+    pub client: Option<crate::client::Info>,
     /// Persistent event identity.
     pub id: i64,
     /// Origin stays unchanged when an event is edited.

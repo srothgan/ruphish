@@ -111,7 +111,7 @@ impl Public for Interactions {
             .record(&snapshot, &origin.value, &action, now)
             .await?;
         match action {
-            Action::View => {
+            Action::View { .. } => {
                 let document = document.ok_or(Error::Internal)?;
                 Ok(Output::Html {
                     html: document.html,

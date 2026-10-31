@@ -919,3 +919,8 @@
   .field-presence.is-present .presence-mark, .activity-indicator.is-present { color: var(--teal-600); }
   .delivery-code { overflow-wrap: anywhere; user-select: text; }
 }
+
+.client-observation { margin-block: var(--s2); color: var(--muted); font-size: .8rem; }
+.client-observation dl { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); margin: 0; }
+.client-observation dt { font-size: .75rem; }
+.client-observation dd { margin: 0; color: var(--ink); }

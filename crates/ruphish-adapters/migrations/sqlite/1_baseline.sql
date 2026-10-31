@@ -48,7 +48,8 @@ CREATE TABLE "events" (
   source VARCHAR(255) NOT NULL DEFAULT 'application',
   edited BOOLEAN NOT NULL DEFAULT FALSE,
   revision BIGINT NOT NULL DEFAULT 0,
-  create_key VARCHAR(64)
+  create_key VARCHAR(64),
+  client TEXT
 );
 
 CREATE TABLE "group_targets" (
@@ -515,7 +516,7 @@ CREATE INDEX ruphish_webhook_attempts_unfinished ON ruphish_webhook_attempts(job
 
 CREATE INDEX ruphish_webhook_due ON ruphish_webhook_jobs(state,due,lease);
 
-CREATE VIEW event_history AS SELECT id,campaign_id,email,time,CASE kind WHEN 'campaign_created' THEN 'Campaign Created' WHEN 'email_sent' THEN 'Email Sent' WHEN 'email_error' THEN 'Error Sending Email' WHEN 'email_opened' THEN 'Email Opened' WHEN 'link_clicked' THEN 'Clicked Link' WHEN 'form_submitted' THEN 'Submitted Data' WHEN 'email_reported' THEN 'Email Reported' WHEN 'delivery_reconciled' THEN 'Delivery reconciled' ELSE kind END AS message,metadata AS details,recipient_id,source,edited,revision FROM events;
+CREATE VIEW event_history AS SELECT id,campaign_id,email,time,CASE kind WHEN 'campaign_created' THEN 'Campaign Created' WHEN 'email_sent' THEN 'Email Sent' WHEN 'email_error' THEN 'Error Sending Email' WHEN 'email_opened' THEN 'Email Opened' WHEN 'link_clicked' THEN 'Clicked Link' WHEN 'form_submitted' THEN 'Submitted Data' WHEN 'email_reported' THEN 'Email Reported' WHEN 'delivery_reconciled' THEN 'Delivery reconciled' ELSE kind END AS message,metadata AS details,recipient_id,source,edited,revision,client FROM events;
 
 CREATE VIEW ruphish_domain_policy AS
  SELECT d.id,

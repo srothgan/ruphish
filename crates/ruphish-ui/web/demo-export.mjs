@@ -122,6 +122,9 @@ const eventHeaders = [
   'Source',
   'Password present',
   'Edited',
+  'Browser',
+  'Operating system',
+  'Device',
 ];
 
 function storedDate(value) {
@@ -181,6 +184,7 @@ export function exportResponse(value, query) {
             event: eventLabel(e.kind),
             source: e.source,
             password_present: e.password_present,
+            client: e.client ?? null,
           }))
         : value.recipients.map((r) => ({
             email: r.email,
@@ -223,6 +227,9 @@ export function exportResponse(value, query) {
       e.source,
       e.password_present === null ? '' : String(e.password_present),
       e.edited ?? false,
+      e.client?.browser ?? '',
+      e.client?.os ?? '',
+      e.client?.device ?? '',
     ]),
   ];
   let bytes;

@@ -250,7 +250,7 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
         };
         for (const e of r.events) {
           run(
-            'INSERT INTO events(id,campaign_id,email,time,kind,metadata,recipient_id,source) VALUES(?,?,?,?,?,?,?,?)',
+            'INSERT INTO events(id,campaign_id,email,time,kind,metadata,recipient_id,source,client) VALUES(?,?,?,?,?,?,?,?,?)',
             e.id,
             c.id,
             r.email,
@@ -261,6 +261,7 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
             ),
             r.id,
             e.source,
+            e.client === null ? null : JSON.stringify(e.client),
           );
         }
       }

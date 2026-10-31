@@ -102,7 +102,7 @@ pub(super) async fn copy(c: &mut MySqlConnection, version: i64, offset: &str) ->
                 "(SELECT min(r.id) FROM results r WHERE r.campaign_id=events.campaign_id AND r.email=events.email HAVING count(*)=1)".into()
             } else if table == "events" && matches!(name.as_str(), "edited" | "revision") {
                 "0".into()
-            } else if table == "events" && name == "create_key" {
+            } else if table == "events" && matches!(name.as_str(), "create_key" | "client") {
                 "NULL".into()
             } else if let Some(ty) = known.get(name) {
                 if matches!(ty.as_str(), "datetime" | "timestamp") {

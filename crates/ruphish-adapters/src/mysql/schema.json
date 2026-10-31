@@ -35,6 +35,7 @@
   ["column", "email_requests", "user_id", 2, "bigint", "YES", null, "", "", null],
   ["column", "events", "campaign_id", 2, "bigint", "YES", null, "", "", null],
   ["column", "events", "create_key", 11, "varchar(64)", "YES", null, "", "", "utf8mb4_0900_bin"],
+  ["column", "events", "client", 12, "text", "YES", null, "", "", "utf8mb4_0900_bin"],
   ["column", "events", "edited", 9, "tinyint(1)", "NO", "0", "", "", null],
   ["column", "events", "email", 3, "varchar(255)", "YES", null, "", "", "utf8mb4_0900_bin"],
   ["column", "events", "id", 1, "bigint", "NO", null, "auto_increment", "", null],

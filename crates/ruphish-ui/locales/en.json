@@ -16,6 +16,14 @@
     "native_name": "English"
   },
   "ui": {
+    "client_information": "Client information",
+    "client_browser": "Browser",
+    "client_os": "Operating system",
+    "client_device": "Device",
+    "client_desktop": "Desktop",
+    "client_mobile": "Mobile",
+    "client_tablet": "Tablet",
+    "client_observation_help": "Browser, operating system and device are inferred from each request and may be inaccurate. They describe the observation, not a verified person or device.",
     "track_email_opens": "Track email opens",
     "not_tracked": "Not tracked",
     "skip_certificate_verification": "Skip certificate verification",

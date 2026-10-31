@@ -67,3 +67,7 @@ Retain the rollback environment and record when new work begins. Rolling back af
 ## Email-open tracking
 
 Migrated campaigns default to `track_opens: true`, regardless of whether the stored Gophish template contains a tracking image. Gophish has no separate Boolean for its template checkbox; the HTML is preserved. This default governs Ruphish behavior and does not prove that historical Gophish emails contained a pixel. New campaigns also default to enabled and can disable **Track email opens** before launch.
+
+## Browser and device history
+
+Migrated events have no collected browser, OS, or device categories (`client: null`). New click and submission requests collect only the coarse categories described in [participant data](../user-guide/participant-data.md#browser-and-device-observations).

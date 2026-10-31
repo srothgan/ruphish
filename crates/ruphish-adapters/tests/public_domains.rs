@@ -150,6 +150,7 @@ async fn gophish_conversion_preserves_history_and_new_retry_receipts_survive_res
             "https://training.example.test",
             "zSDu57f",
             Action::Submit {
+                client: Default::default(),
                 event_id: "a".repeat(32),
                 password_present: true,
             },
@@ -159,6 +160,7 @@ async fn gophish_conversion_preserves_history_and_new_retry_receipts_survive_res
         .unwrap();
     for key in ["b", "c"] {
         let action = Action::Submit {
+            client: Default::default(),
             event_id: key.repeat(32),
             password_present: false,
         };
@@ -186,7 +188,9 @@ async fn gophish_conversion_preserves_history_and_new_retry_receipts_survive_res
             .interact(
                 "https://training.example.test",
                 "zSDu57f",
-                Action::View,
+                Action::View {
+                    client: Default::default(),
+                },
                 now,
             )
             .await
@@ -233,6 +237,7 @@ async fn gophish_conversion_preserves_history_and_new_retry_receipts_survive_res
             "https://training.example.test",
             "zSDu57f",
             Action::Submit {
+                client: Default::default(),
                 event_id: "b".repeat(32),
                 password_present: false,
             },
@@ -385,7 +390,9 @@ async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_on
             .interact(
                 "https://training.example.test",
                 "zSDu57f",
-                Action::View,
+                Action::View {
+                    client: Default::default()
+                },
                 now
             )
             .await
@@ -405,7 +412,9 @@ async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_on
             .interact(
                 "https://other.example.test",
                 "zSDu57f",
-                Action::View,
+                Action::View {
+                    client: Default::default()
+                },
                 now + 2
             )
             .await
@@ -415,7 +424,9 @@ async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_on
         .interact(
             "https://training.example.test",
             "zSDu57f",
-            Action::View,
+            Action::View {
+                client: Default::default(),
+            },
             now + 2,
         )
         .await
@@ -436,6 +447,7 @@ async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_on
                     "https://training.example.test",
                     "zSDu57f",
                     Action::Submit {
+                        client: Default::default(),
                         event_id: id.clone(),
                         password_present: true
                     },
@@ -485,7 +497,9 @@ async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_on
             .interact(
                 "https://training.example.test",
                 "zSDu57f",
-                Action::View,
+                Action::View {
+                    client: Default::default()
+                },
                 now + 6
             )
             .await
@@ -507,6 +521,7 @@ async fn failed_event_write_rolls_back_submission_deduplication_and_result_state
             "https://training.example.test",
             "zSDu57f",
             Action::Submit {
+                client: Default::default(),
                 event_id: "b".repeat(32),
                 password_present: true,
             },
@@ -680,6 +695,7 @@ async fn event_limits_preserve_retry_idempotency_and_roll_back_unrecorded_submis
     let public = db.interactions();
     let id = "a".repeat(32);
     let submit = || Action::Submit {
+        client: Default::default(),
         event_id: id.clone(),
         password_present: true,
     };
@@ -718,6 +734,7 @@ async fn event_limits_preserve_retry_idempotency_and_roll_back_unrecorded_submis
                 "https://training.example.test",
                 "zSDu57f",
                 Action::Submit {
+                    client: Default::default(),
                     event_id: "b".repeat(32),
                     password_present: false
                 },

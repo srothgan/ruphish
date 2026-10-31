@@ -135,7 +135,14 @@ pub(super) async fn exercise(
             .await
             .unwrap();
         let view = public
-            .interact(origin, rid, interactions::Action::View, now)
+            .interact(
+                origin,
+                rid,
+                interactions::Action::View {
+                    client: Default::default(),
+                },
+                now,
+            )
             .await
             .unwrap();
         assert!(
@@ -150,6 +157,7 @@ pub(super) async fn exercise(
                 origin,
                 rid,
                 interactions::Action::Submit {
+                    client: Default::default(),
                     event_id: "b".repeat(32),
                     password_present: false,
                 },

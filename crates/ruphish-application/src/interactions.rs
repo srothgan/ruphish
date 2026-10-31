@@ -1,11 +1,15 @@
 //! Typed public interactions, with no representation for submitted field values.
 use crate::resources::Error;
+pub use ruphish_domain::client::Info as ClientInfo;
 
 /// Public request purpose, independently of delivery status.
 #[derive(Clone)]
 pub enum Action {
     /// Render and observe a landing visit.
-    View,
+    View {
+        /// Coarse categories observed for this request.
+        client: ClientInfo,
+    },
     /// Observe a tracking pixel request.
     Open,
     /// Record an independent report flag.
@@ -16,6 +20,8 @@ pub enum Action {
     Head,
     /// Record only an explicit submission identifier and presence observation.
     Submit {
+        /// Coarse categories observed for this request.
+        client: ClientInfo,
         /// Random request idempotency key.
         event_id: String,
         /// Whether a designated password control was nonempty.
@@ -111,11 +117,19 @@ pub fn check_event_capacity(count: i64, duplicate: bool) -> Result<(), Error> {
 }
 
 impl Action {
+    /// Only landing visits and submissions carry request categories.
+    pub fn client(&self) -> Option<ClientInfo> {
+        match self {
+            Self::View { client } | Self::Submit { client, .. } => Some(*client),
+            _ => None,
+        }
+    }
+
     /// Shared observation classification; persistence never infers an event from a status.
     pub fn kind(&self) -> Option<ruphish_domain::events::Kind> {
         use ruphish_domain::events::Kind;
         match self {
-            Self::View => Some(Kind::LinkClicked),
+            Self::View { .. } => Some(Kind::LinkClicked),
             Self::Open => Some(Kind::EmailOpened),
             Self::Report => Some(Kind::EmailReported),
             Self::Submit { .. } => Some(Kind::FormSubmitted),

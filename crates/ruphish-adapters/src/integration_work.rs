@@ -11,10 +11,11 @@ pub(crate) fn webhook_payload(
     time: String,
     message: String,
     details: &str,
+    client: Option<ruphish_domain::client::Info>,
 ) -> Result<Vec<u8>, Error> {
     serde_json::to_vec(
         &serde_json::json!({"campaign_id":campaign, "email":email, "time":time,
-        "message":message, "details":crate::participant_privacy::details(details)}),
+        "message":message, "client":client, "details":crate::participant_privacy::details(details)}),
     )
     .map_err(|_| Error::Internal)
 }

@@ -804,6 +804,9 @@ test('event downloads share exclusive time bounds and retain the event schema wh
     'Source',
     'Password present',
     'Edited',
+    'Browser',
+    'Operating system',
+    'Device',
   ]);
   assert.deepEqual(before.targets, []);
   assert.deepEqual(during.targets, [
@@ -1032,6 +1035,7 @@ test('one dataset has complete references and safe participant history', () => {
     assert.ok(data.domains.some((d) => d.id === c.header.domain_id));
     for (const event of c.results.flatMap((r) => r.events)) {
       assert.deepEqual(Object.keys(event).sort(), [
+        'client',
         'email',
         'id',
         'kind',
@@ -1041,6 +1045,20 @@ test('one dataset has complete references and safe participant history', () => {
         'time',
       ]);
       assert.ok(event.password_present === null || typeof event.password_present === 'boolean');
+      if (event.client !== null) {
+        assert.equal(event.source, 'public');
+        assert.ok(['Clicked Link', 'Submitted Data'].includes(event.kind));
+        assert.deepEqual(Object.keys(event.client).sort(), ['browser', 'device', 'os']);
+        assert.ok(
+          ['chrome', 'edge', 'firefox', 'safari', 'samsung_internet', 'unknown'].includes(
+            event.client.browser,
+          ),
+        );
+        assert.ok(
+          ['windows', 'macos', 'linux', 'android', 'ios', 'unknown'].includes(event.client.os),
+        );
+        assert.ok(['desktop', 'mobile', 'tablet', 'unknown'].includes(event.client.device));
+      }
     }
   }
   assert.deepEqual(dataset(now), data);
@@ -1204,4 +1222,41 @@ test('campaign participant series deduplicates across buckets, filters and pages
   assert.ok(filtered.participant_buckets.every((b) => b.counts.clicked === 1));
   assert.equal(filtered.participant_buckets[0].time, Math.floor((now - 3600) / 3600) * 3600);
   assert.deepEqual((await read('event=form_submitted')).participant_buckets, []);
+});
+
+test('client categories remain read-only across demo history, edits and exports', async () => {
+  const data = dataset(now);
+  const campaign = data.campaigns[1];
+  const recipient = campaign.results.find((r) => r.id === 20024);
+  const event = recipient.events.find((e) => e.kind === 'Clicked Link');
+  assert.deepEqual(event.client, { browser: 'edge', os: 'windows', device: 'desktop' });
+  const f = setup(new Map(), data);
+  await f.login();
+  const path = `/api/campaigns/${campaign.header.id}/recipients/${recipient.id}`;
+  const history = await f.request(`${path}/history`);
+  assert.deepEqual(history.value.events.find((e) => e.id === event.id).record.client, event.client);
+  const change = {
+    request_id: 'client-observation-edit',
+    event_id: event.id,
+    revision: 0,
+    action: 'edit',
+    value: {
+      time: event.time,
+      kind: 'form_submitted',
+      presence: { username_present: null, password_present: false },
+    },
+  };
+  const injected = structuredClone(change);
+  injected.value.client = { browser: 'chrome', os: 'windows', device: 'desktop' };
+  assert.equal((await f.request(`${path}/events`, 'POST', injected)).status, 400);
+  const edited = await f.request(`${path}/events`, 'POST', change);
+  assert.equal(edited.status, 200);
+  assert.deepEqual(edited.value.event.client, event.client);
+  const response = await f.api.execute(
+    new Request(
+      `https://demo.example.test/api/campaigns/${campaign.header.id}/export?format=csv&scope=events&recipient=${recipient.id}`,
+    ),
+  );
+  const csv = await response.text();
+  assert.ok(csv.includes('"edge","windows","desktop"'));
 });

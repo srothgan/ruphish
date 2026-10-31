@@ -65,13 +65,16 @@ pub(super) async fn exercise(
             .interact(
                 "https://training.example.test",
                 rid,
-                interactions::Action::View,
+                interactions::Action::View {
+                    client: Default::default(),
+                },
                 now,
             )
             .await
             .unwrap();
         for action in [
             interactions::Action::Submit {
+                client: Default::default(),
                 event_id: "a".repeat(32),
                 password_present: false,
             },

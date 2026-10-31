@@ -14,7 +14,16 @@ Ruphish's supported tracking contract is event-based. You supply recipient detai
 | Password presence | Boolean indicating that an eligible password control was nonempty when submitted |
 | Entered usernames, passwords, OTPs, or arbitrary field values | Not accepted as tracking data |
 | Hashes, lengths, or samples of entered values | Not supported substitutes for value capture |
-| Participant IP address, location, or user-agent | Not added to campaign event records |
+| Browser family, operating-system family, device class | Coarse categories inferred from click and submission request headers |
+| Participant IP address, location, raw User-Agent, versions, or device models | Not added to campaign event records |
+
+## Browser and device observations
+
+Recipient histories show browser, operating system, and device class beneath each click or submission. Different events can show different clients. These are unverified request observations: headers can be reduced, missing, or spoofed, and a request does not prove human activity. They remain associated with the existing campaign recipient; they are not anonymous data or a new cross-campaign identity.
+
+Only fixed categories are retained. Device class is desktop, mobile, tablet, or unknown. Unknown categories display **Unknown**; historical, manually added, and other events without collected client information display **Unavailable** where applicable. Email-open pixels and reports do not collect these categories. No browser probing, raw headers, exact versions, device models, IP/geolocation, or fingerprints are stored by this feature.
+
+Client observations are read-only and remain attached to the request when an operator edits its event. CSV/XLSX event exports and webhooks include the same categories. Historical Gophish client data is not reconstructed during migration.
 
 ## What the served page permits
 

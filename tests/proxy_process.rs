@@ -277,3 +277,197 @@ fn proxy_authority_rejects_ambiguous_or_untrusted_headers_without_tracking() {
     }
     untrusted.stop();
 }
+
+#[test]
+fn client_categories_are_coarse_per_event_and_never_capture_raw_headers() {
+    let directory = workspace();
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
+    let public = process.ready()["phish"].as_str().unwrap().to_owned();
+    let input = resources(&base, "127.0.0.1:1");
+    let campaign = post(&base, "/api/campaigns/", &input);
+    let rid = campaign["results"][0]["id"].as_str().unwrap();
+    let path = format!("/api/campaigns/{}", campaign["id"]);
+    let origin = origin(&base, "training.example.test");
+    let authority = origin.trim_start_matches("https://");
+    let transport_headers =
+        format!("X-Forwarded-Host: {authority}\r\nX-Forwarded-Proto: https\r\n");
+    let base_headers = transport_headers.as_str();
+    let cases = [
+        (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36",
+            "chrome",
+            "windows",
+            "desktop",
+        ),
+        (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0",
+            "edge",
+            "windows",
+            "desktop",
+        ),
+        (
+            "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0",
+            "firefox",
+            "linux",
+            "desktop",
+        ),
+        (
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1",
+            "safari",
+            "ios",
+            "mobile",
+        ),
+        (
+            "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) Version/18.0 Mobile/15E148 Safari/604.1",
+            "safari",
+            "ios",
+            "tablet",
+        ),
+        (
+            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/140.0.0.0 Mobile Safari/537.36",
+            "chrome",
+            "android",
+            "mobile",
+        ),
+        (
+            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36",
+            "chrome",
+            "android",
+            "tablet",
+        ),
+        ("curl/8.0", "unknown", "unknown", "unknown"),
+        (
+            "CANARY-PRIVATE-CLIENT-UNIQUE-739",
+            "unknown",
+            "unknown",
+            "unknown",
+        ),
+        ("", "unknown", "unknown", "unknown"),
+    ];
+    for (ua, browser, os, device) in cases {
+        let headers = if ua.is_empty() {
+            base_headers.to_owned()
+        } else {
+            format!("{base_headers}User-Agent: {ua} CANARY-PRIVATE-CLIENT-UNIQUE-739\r\n")
+        };
+        assert_eq!(
+            request(&public, &format!("/?rid={rid}"), &headers, None),
+            200
+        );
+        let saved = read(&base, &path);
+        let event = saved["timeline"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .rev()
+            .find(|e| e["message"] == "Clicked Link")
+            .unwrap();
+        assert_eq!(
+            event["client"],
+            json!({"browser":browser,"os":os,"device":device})
+        );
+        assert!(!saved.to_string().contains("CANARY-PRIVATE"));
+    }
+    for extra in [
+        "User-Agent: Chrome/140.0\r\nUser-Agent: Firefox/140.0\r\n".to_owned(),
+        format!("User-Agent: {}\r\n", "x".repeat(2049)),
+        "User-Agent: fakeChrome/140.0\r\n".into(),
+    ] {
+        assert_eq!(
+            request(
+                &public,
+                &format!("/?rid={rid}"),
+                &format!("{base_headers}{extra}"),
+                None
+            ),
+            200
+        );
+        let saved = read(&base, &path);
+        let event = saved["timeline"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .rev()
+            .find(|e| e["message"] == "Clicked Link")
+            .unwrap();
+        assert_eq!(
+            event["client"],
+            json!({"browser":"unknown","os":"unknown","device":"unknown"})
+        );
+    }
+    let headers = format!(
+        "{base_headers}User-Agent: Mozilla/5.0 (Windows NT 10.0) Chrome/140.0.0.0 CANARY-PRIVATE-CLIENT-UNIQUE-739\r\n"
+    );
+    for endpoint in ["/track", "/report"] {
+        assert!(matches!(
+            request(&public, &format!("{endpoint}?rid={rid}"), &headers, None),
+            200 | 204
+        ));
+    }
+    let body = r#"{"event_id":"cccccccccccccccccccccccccccccccc","password_present":true}"#;
+    assert_eq!(
+        request(&public, &format!("/?rid={rid}"), &headers, Some(body)),
+        200
+    );
+    assert_eq!(
+        request(&public, &format!("/?rid={rid}"), base_headers, Some(body)),
+        200
+    );
+    let injected = r#"{"event_id":"dddddddddddddddddddddddddddddddd","password_present":true,"client":{"browser":"firefox","os":"linux","device":"desktop"}}"#;
+    assert_eq!(
+        request(&public, &format!("/?rid={rid}"), &headers, Some(injected)),
+        400
+    );
+    let saved = read(&base, &path);
+    let events = saved["timeline"].as_array().unwrap();
+    assert!(
+        events
+            .iter()
+            .filter(|e| e["message"] == "Email Opened" || e["message"] == "Email Reported")
+            .all(|e| e["client"].is_null())
+    );
+    let submissions: Vec<_> = events
+        .iter()
+        .filter(|e| e["message"] == "Submitted Data")
+        .collect();
+    assert_eq!(submissions.len(), 1);
+    assert_eq!(
+        submissions[0]["client"],
+        json!({"browser":"chrome","os":"windows","device":"desktop"})
+    );
+    let results = read(&base, &format!("{path}/results"));
+    let observed = results["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["kind"]["value"] == "form_submitted")
+        .unwrap();
+    let recipient = &results["recipients"][0]["id"];
+    let change = json!({"request_id":"client-observation-injection", "event_id":observed["id"], "revision":0, "action":"edit", "value":{"time":observed["time"], "kind":"form_submitted", "presence":{"username_present":null,"password_present":true}, "client":{"browser":"firefox","os":"linux","device":"desktop"}}});
+    let rejection = client()
+        .post(format!("{base}{path}/recipients/{recipient}/events"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&change)
+        .send()
+        .unwrap();
+    assert_eq!(
+        rejection.status(),
+        400,
+        "client observations cannot be edited"
+    );
+    assert_eq!(read(&base, &path)["timeline"], saved["timeline"]);
+    process.stop();
+    let logs = std::fs::read_to_string(directory.join("server.log")).unwrap();
+    assert!(!logs.contains("CANARY-PRIVATE-CLIENT-UNIQUE-739"));
+    let disk = std::fs::read(directory.join("installation.sqlite3")).unwrap();
+    assert!(
+        !disk
+            .windows(b"CANARY-PRIVATE-CLIENT-UNIQUE-739".len())
+            .any(|w| w == b"CANARY-PRIVATE-CLIENT-UNIQUE-739")
+    );
+    let mut process = Process::with_options(&directory, "all", None, None, &["--disable-mailer"]);
+    let ready = process.ready();
+    let base = format!("http://{}", ready["admin"].as_str().unwrap());
+    assert_eq!(read(&base, &path)["timeline"], saved["timeline"]);
+    process.stop();
+}
