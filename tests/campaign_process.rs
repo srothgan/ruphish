@@ -358,6 +358,15 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
                 Value::Object(o) => {
                     o.remove("capture_credentials");
                     o.remove("capture_passwords");
+                    // These recorded lifecycle events have no client observations.
+                    if let Some(timeline) = o.get_mut("timeline") {
+                        for event in timeline.as_array_mut().unwrap() {
+                            event
+                                .as_object_mut()
+                                .unwrap()
+                                .insert("client".into(), Value::Null);
+                        }
+                    }
                     if o.contains_key("host") {
                         let password = o.remove("password");
                         o.insert(

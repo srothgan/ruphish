@@ -802,6 +802,15 @@ fn actual_test_delivery_composes_mime_persists_preview_and_never_records_campaig
             .send()
             .unwrap()
             .status(),
+        415
+    );
+    assert_eq!(
+        client
+            .post(format!("{public}/landing?rid={rid}"))
+            .json(&json!({"event_id":"0123456789abcdef0123456789abcdef","password_present":true}))
+            .send()
+            .unwrap()
+            .status(),
         404
     );
     process.stop();

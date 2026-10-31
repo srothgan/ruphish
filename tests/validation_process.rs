@@ -432,6 +432,8 @@ fn settings_and_integration_validation_rejects_invalid_configuration_without_mut
         &["verification_recheck_seconds"],
     );
     policy["verification_recheck_seconds"] = json!(300);
+    policy["webhooks_enabled"] = json!(true);
+    policy["reporting_mailboxes_enabled"] = json!(true);
     let settings = accepted(request(
         &base,
         "PUT",
