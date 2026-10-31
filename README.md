@@ -64,14 +64,17 @@ irm https://www.ruphish.com/install.ps1 | iex
 To include development previews alongside full releases, use:
 
 ```sh
-curl -fsSL https://www.ruphish.com/install.sh | sh -s -- --include-previews
+curl -fsSL https://www.ruphish.com/install.sh | RUPHISH_INCLUDE_PREVIEWS=1 sh
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://www.ruphish.com/install.ps1))) -IncludePreviews
+$env:RUPHISH_INCLUDE_PREVIEWS = '1'
+irm https://www.ruphish.com/install.ps1 | iex
 ```
 
 Until a full release is published, use the preview option; the default reports that no full release is available. Previews are intended for disposable installations, and upgrades are not guaranteed.
+
+The PowerShell setting lasts for the current session; clear it with `Remove-Item Env:RUPHISH_INCLUDE_PREVIEWS` to return to full-release selection. See the [installer options](https://www.ruphish.com/docs/getting-started/installation/#installer-options-and-environment) for environment settings and explicit overrides.
 
 The installer prints the installed executable's path and does not start the server automatically. See the [installation guide](https://ruphish.com/docs/getting-started/installation/) for supported platforms, first startup, Docker, updates, and removal. SQLite is the default database; see [database administration](https://ruphish.com/docs/administration/databases/) for MySQL and PostgreSQL requirements.
 

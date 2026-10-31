@@ -41,17 +41,44 @@ param(
         @'
 Usage: install.ps1 [options]
   -IncludePreviews        Include dev previews when selecting the latest version.
+                          Use -IncludePreviews:$false to override the environment.
   -Version VERSION       Install this exact published version (optional leading v).
   -InstallDir DIRECTORY  Managed directory; defaults to %LOCALAPPDATA%\Programs\Ruphish.
   -NoModifyPath          Do not change user PATH.
+                          Use -NoModifyPath:$false to override the environment.
   -AllowDowngrade        Accept a program-only downgrade, including unattended runs.
   -Uninstall             Remove managed program files; retain all application data.
   -Help                  Show this help.
+
+Environment (explicit parameters take precedence):
+  RUPHISH_INCLUDE_PREVIEWS  Include dev previews during latest-version selection.
+  RUPHISH_INSTALL_DIR      Managed program directory, also used for removal.
+  RUPHISH_NO_MODIFY_PATH   Do not change user PATH.
+Boolean values: 1/true or 0/false, case-insensitive; unset/empty uses the default.
+Exact versions and removal ignore the preview environment setting.
 '@
         return
     }
     if ($Uninstall -and ($Version -or $IncludePreviews -or $AllowDowngrade)) { throw '-Uninstall cannot be combined with version selection or -AllowDowngrade' }
     if ($Version -and $IncludePreviews) { throw 'Choose -Version or -IncludePreviews' }
+    function Get-EnvironmentBoolean([string]$Name) {
+        [string]$value = [Environment]::GetEnvironmentVariable($Name, 'Process')
+        switch ($value.ToLowerInvariant()) {
+            '1' { return $true }
+            'true' { return $true }
+            '0' { return $false }
+            'false' { return $false }
+            '' { return $false }
+            default { throw "$Name must be 1/true or 0/false" }
+        }
+    }
+    if (-not $PSBoundParameters.ContainsKey('IncludePreviews') -and -not $Version -and -not $Uninstall) {
+        $IncludePreviews = Get-EnvironmentBoolean 'RUPHISH_INCLUDE_PREVIEWS'
+    }
+    if (-not $PSBoundParameters.ContainsKey('NoModifyPath')) {
+        $NoModifyPath = Get-EnvironmentBoolean 'RUPHISH_NO_MODIFY_PATH'
+    }
+    if (-not $PSBoundParameters.ContainsKey('InstallDir')) { $InstallDir = $env:RUPHISH_INSTALL_DIR }
     if ($Version) { $Version = $Version -creplace '^v', ''; if (-not (Test-Version $Version)) { throw 'Invalid version; use X.Y.Z or X.Y.Z-dev.N' } }
     if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw 'Use install.sh on Linux or macOS' }
     if ($PSVersionTable.PSVersion -lt [version]'5.1') { throw 'Windows PowerShell 5.1 or PowerShell 7 is required' }
