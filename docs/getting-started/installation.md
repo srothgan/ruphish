@@ -14,23 +14,24 @@ The installer sources and website release-selection API are in this repository. 
 On Linux or macOS, run:
 
 ```sh
-curl -fsSL https://ruphish.com/install.sh | sh
+curl -fsSL https://www.ruphish.com/install.sh | sh
 ```
 
 In Windows PowerShell 5.1 or PowerShell 7, run:
 
 ```powershell
-irm https://ruphish.com/install.ps1 | iex
+irm https://www.ruphish.com/install.ps1 | iex
 ```
 
 The default selects the highest published full version. Before a full release exists, it reports that none is available. To include development previews alongside full releases:
 
 ```sh
-curl -fsSL https://ruphish.com/install.sh | sh -s -- --include-previews
+curl -fsSL https://www.ruphish.com/install.sh | RUPHISH_INCLUDE_PREVIEWS=1 sh
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://ruphish.com/install.ps1))) -IncludePreviews
+$env:RUPHISH_INCLUDE_PREVIEWS = '1'
+irm https://www.ruphish.com/install.ps1 | iex
 ```
 
 Previews are for disposable installations; upgrades between previews or into a final release are not guaranteed. Selection follows version precedence, so `0.1.0-dev.2` precedes `0.1.0-dev.10`, which precedes `0.1.0`. The preview option can also select a full release. Each invocation resolves a version once and downloads its archive and `SHA256SUMS` from the same exact GitHub release tag.
@@ -44,24 +45,46 @@ Program files live in `~/.local/share/ruphish-install/current/` with a command l
 Download the script first if you want to inspect it or pass several options:
 
 ```sh
-curl -fsSL https://ruphish.com/install.sh -o install.sh
+curl -fsSL https://www.ruphish.com/install.sh -o install.sh
 less install.sh
 sh install.sh --help
 sh install.sh --version 0.1.0-dev.1 --no-modify-path
 ```
 
 ```powershell
-Invoke-WebRequest https://ruphish.com/install.ps1 -OutFile install.ps1
+Invoke-WebRequest https://www.ruphish.com/install.ps1 -OutFile install.ps1
 Get-Content .\install.ps1
 & .\install.ps1 -Help
 & .\install.ps1 -Version 0.1.0-dev.1 -NoModifyPath
 ```
 
-These version examples require that exact release to have been published. `--version` / `-Version` bypasses website version discovery and can select a preview without the preview flag. `--install-dir` / `-InstallDir` selects a dedicated absolute program directory; use the same option on future updates and removal. Existing unmanaged directories and application-data locations are refused. `--no-modify-path` / `-NoModifyPath` leaves persistent PATH configuration untouched. Do not append arguments to `irm | iex`; use the script-block form above or a saved script.
+These version examples require that exact release to have been published. `--version` / `-Version` bypasses website version discovery and can select a preview without the preview flag. `--install-dir` / `-InstallDir` selects a dedicated absolute program directory; use the same directory on future updates and removal. Existing unmanaged directories and application-data locations are refused. `--no-modify-path` / `-NoModifyPath` leaves persistent PATH configuration untouched. Do not append arguments to `irm | iex`; use environment settings for the short command or download the script first to pass parameters.
+
+### Installer options and environment
+
+Both installers read these process environment settings:
+
+- `RUPHISH_INCLUDE_PREVIEWS`: include development previews alongside full releases when selecting the latest version. Defaults to false.
+- `RUPHISH_INSTALL_DIR`: the dedicated absolute program directory. Defaults to the platform-specific location above and also applies to uninstall.
+- `RUPHISH_NO_MODIFY_PATH`: leave persistent PATH/profile configuration unchanged. Defaults to false.
+
+Explicit arguments override environment settings, which override defaults. Boolean environment values accept `1`/`true` or `0`/`false`, case-insensitively; unset or empty values use the default. Other nonempty values cause an error when that environment setting is used. An explicit version or uninstall ignores the preview environment setting. Exact versions, uninstall, and downgrade approval require explicit arguments; they have no environment equivalents. The existing `NO_COLOR` setting suppresses terminal colors.
+
+Use `--include-previews` / `-IncludePreviews` to enable previews explicitly. To override an environment preference, use `--no-include-previews` / `-IncludePreviews:$false` for full releases, or `--modify-path` / `-NoModifyPath:$false` to enable persistent command-access setup. For example, after saving the script:
+
+```sh
+sh install.sh --no-include-previews
+```
+
+```powershell
+& .\install.ps1 -IncludePreviews:$false
+```
+
+In the Unix pipeline above, the environment assignment applies only to the `sh` process. In PowerShell, `$env:` assignments remain in the current session and are inherited by child processes; clear the preview preference with `Remove-Item Env:RUPHISH_INCLUDE_PREVIEWS`. The installers do not persist these settings or load `.env` files.
 
 ### Update or remove a native installation
 
-Stop Ruphish, then rerun the installer with the desired selection options. Repeating the installed version does not replace its program files. Preview opt-in applies to each invocation. Installation never changes application configuration, databases, certificates, or logs; starting the new executable may perform migrations, so follow [backup and recovery](../administration/backup-and-recovery.md) before using existing data.
+Stop Ruphish, then rerun the installer with the desired selection options. Repeating the installed version does not replace its program files. Each invocation resolves preview opt-in from its arguments and current environment. Installation never changes application configuration, databases, certificates, or logs; starting the new executable may perform migrations, so follow [backup and recovery](../administration/backup-and-recovery.md) before using existing data.
 
 A lower version triggers a prominent downgrade warning. Interactive terminals offer `Proceed? [y/N]`, with Stop as the default. Unattended runs fail unless `--allow-downgrade` / `-AllowDowngrade` is explicitly supplied. Proceeding replaces program files only: it does not reverse migrations or restore configuration. Prefer restoring a compatible backup or using separate disposable application data when returning to an older version.
 
@@ -153,7 +176,7 @@ cargo run -p ruphish --locked -- --config ./config.json
 
 For an installed binary, the equivalent command is `ruphish --config ./config.json`. That file must exist. Relative paths inside an explicitly selected configuration retain their working-directory meaning. This mode does not create a per-user installation. The [configuration reference](../administration/configuration.md) provides a copyable JSON example; downloading a separate example file is unnecessary.
 
-The public HTTP example is enough to start the application, but campaign origins require HTTPS and an enabled owned domain. Verification is additionally required when enabled in [company settings](../administration/settings.md). Use the local fixture for the tutorial, or configure [listeners and TLS](../administration/listeners-and-tls.md) for your domain.
+The public HTTP example can serve campaigns using a registered, enabled HTTP origin when verification is off. If verification is required in [company settings](../administration/settings.md), only DNS hostnames over trusted HTTPS are eligible. Use the local fixture for the tutorial, or configure [listeners and TLS](../administration/listeners-and-tls.md) for your domain.
 
 ## Sign in
 

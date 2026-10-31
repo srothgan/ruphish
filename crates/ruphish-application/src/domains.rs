@@ -15,9 +15,9 @@ pub struct Domain {
     pub id: i64,
     /// Operator-visible display name.
     pub name: String,
-    /// Canonical public HTTPS origin.
+    /// Canonical public HTTP(S) origin.
     pub origin: String,
-    /// Canonical ASCII DNS hostname.
+    /// Canonical ASCII DNS name or IP address without IPv6 brackets.
     pub hostname: String,
     /// Explicit operational enablement.
     pub enabled: bool,
@@ -57,7 +57,7 @@ pub struct Domain {
 pub struct Edit {
     /// Operator-visible display name.
     pub name: String,
-    /// Canonical public HTTPS origin.
+    /// Canonical public HTTP(S) origin.
     pub origin: String,
     /// Explicit operational enablement.
     pub enabled: bool,
@@ -117,11 +117,11 @@ pub trait Repository: Send + Sync {
     async fn finish(&self, check: &Check, observation: Observation, now: i64) -> Result<(), Error>;
     /// Public content may continue after evidence expiry, but not after a failed check or before
     /// initial verification or after explicit disabling.
-    async fn serves(&self, authority: &str) -> Result<bool, Error>;
+    async fn serves(&self, origin_url: &str) -> Result<bool, Error>;
     /// Public routing endpoint returns a bounded proof only for an active probe.
     async fn routing_proof(
         &self,
-        authority: &str,
+        origin_url: &str,
         challenge: &str,
         now: i64,
     ) -> Result<Option<String>, Error>;

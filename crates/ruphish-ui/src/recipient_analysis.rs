@@ -278,6 +278,7 @@ fn detail(api: Api, campaign: i64, recipient: i64) -> impl IntoView {
                                 }}
                             </span>
                         </div>
+                        <p>{tr!(ui.client_observation_help)}</p>
                         <EventHistory data=data />
                         <Show when=move || {
                             data.with(|v| v.as_ref().is_some_and(|v| v.events.is_empty()))
@@ -337,6 +338,15 @@ pub(crate) fn EventHistory(data: Signal<Option<Results>>) -> impl IntoView {
                                             <time>{instant(&event.time.clone().into())}</time>
                                             <div>
                                                 <strong>{label}</strong>
+                                                <ClientObservation
+                                                    client=Signal::stored(event.client)
+                                                    kind=Signal::stored(
+                                                        match event.kind {
+                                                            ruphish_domain::events::RecordedKind::Known(k) => Some(k),
+                                                            _ => None,
+                                                        },
+                                                    )
+                                                />
                                                 {matches!(
                                                     event.kind,
                                                     ruphish_domain::events::RecordedKind::Known(

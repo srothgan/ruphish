@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 /// Campaign identity, lifecycle and preserved schedule metadata.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Metadata {
+    /// Whether this campaign collects email-open observations.
+    pub track_opens: bool,
     /// Execution identity.
     pub id: i64,
     /// Display name.
@@ -79,6 +81,8 @@ pub struct Recipient {
 /// Sanitized event history, retaining meaningful imported event names.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Event {
+    /// Immutable coarse request categories; absent for historical or non-client observations.
+    pub client: Option<ruphish_domain::client::Info>,
     /// Owning execution.
     pub campaign_id: i64,
     /// Administrator-supplied recipient address, empty for campaign-wide events.

@@ -75,7 +75,7 @@ pub(super) async fn exercise(
         .len();
     for _ in 0..2 {
         let interactions::Output::Html { html, csp } = public
-            .learning_page("training.example.test", &public_id)
+            .learning_page("https://training.example.test", &public_id)
             .await
             .unwrap()
         else {
@@ -86,7 +86,7 @@ pub(super) async fn exercise(
     }
     assert!(
         public
-            .learning_page("wrong.example.test", &public_id)
+            .learning_page("https://wrong.example.test", &public_id)
             .await
             .is_err()
     );
@@ -102,9 +102,10 @@ pub(super) async fn exercise(
     for _ in 0..2 {
         let interactions::Output::Submitted { redirect } = public
             .interact(
-                "training.example.test",
+                "https://training.example.test",
                 rid,
                 interactions::Action::Submit {
+                    client: Default::default(),
                     event_id: "d".repeat(32),
                     password_present: true,
                 },
@@ -155,7 +156,7 @@ pub(super) async fn exercise(
         Err(Error::Changed)
     ));
     let interactions::Output::Html { html, .. } = public
-        .learning_page("training.example.test", &public_id)
+        .learning_page("https://training.example.test", &public_id)
         .await
         .unwrap()
     else {
@@ -169,7 +170,7 @@ pub(super) async fn exercise(
         .unwrap();
     assert!(
         public
-            .learning_page("training.example.test", &public_id)
+            .learning_page("https://training.example.test", &public_id)
             .await
             .is_err()
     );

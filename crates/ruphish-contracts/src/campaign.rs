@@ -24,17 +24,29 @@ pub struct Selections {
     /// Sending profile.
     pub smtp: ReviewedResource,
 }
-/// Optional redirect defaults.
-#[derive(Clone, Default, Serialize, Deserialize)]
+/// Open tracking and post-submission destination choices.
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[serde(default)]
 pub struct Policy {
+    /// Whether email-open observations are enabled for this campaign.
+    pub track_opens: bool,
     /// Post-submission redirect override.
     pub redirect_url: Option<String>,
     /// Selected owned learning page; custom redirect must be empty when present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub learning_page_id: Option<i64>,
 }
+impl Default for Policy {
+    fn default() -> Self {
+        Self {
+            track_opens: true,
+            redirect_url: None,
+            learning_page_id: None,
+        }
+    }
+}
+
 /// Local time entry resolved authoritatively on the server.
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -59,7 +71,7 @@ pub struct Create {
     pub launch_date: Option<Timestamp>,
     /// UTC or offset distribution end; exclusive with send_by_local.
     pub send_by_date: Option<Timestamp>,
-    /// Optional redirect defaults.
+    /// Optional open tracking and destination choices.
     pub policy: Option<Policy>,
     /// Named-zone launch input; exclusive with launch_date.
     pub launch_local: Option<LocalTime>,
@@ -103,5 +115,19 @@ impl From<&crate::campaign_workflow::Selection<crate::campaign_workflow::Reviewe
             page: selected(&value.page),
             smtp: selected(&value.smtp),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn open_tracking_defaults_on_but_false_is_preserved_and_null_is_invalid() {
+        assert!(Policy::default().track_opens);
+        assert!(serde_json::from_str::<Policy>("{}").unwrap().track_opens);
+        let policy: Policy = serde_json::from_str(r#"{"track_opens":false}"#).unwrap();
+        assert!(!policy.track_opens);
+        assert_eq!(serde_json::to_value(policy).unwrap()["track_opens"], false);
+        assert!(serde_json::from_str::<Policy>(r#"{"track_opens":null}"#).is_err());
     }
 }

@@ -22,6 +22,205 @@ mod reporting_filters;
 #[path = "support/resource_summaries.rs"]
 mod resource_summaries;
 
+#[path = "support/legacy_migration.rs"]
+mod legacy_migration;
+
+async fn sqlite_legacy_corpus(path: &std::path::Path) -> sqlx::SqliteConnection {
+    std::fs::copy(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/gophish-v0.12.1/legacy-latest.sqlite3"),
+        path,
+    )
+    .unwrap();
+    let mut inspect = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new().filename(path),
+    )
+    .await
+    .unwrap();
+    sqlx::raw_sql(legacy_migration::SEED)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET hash=?")
+        .bind(legacy_migration::hash())
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    inspect
+}
+
+#[tokio::test]
+async fn sqlite_legacy_rich_corpus_preserves_relationships_and_behavior_after_restart() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("legacy.db");
+    let inspect = sqlite_legacy_corpus(&path).await;
+    inspect.close().await.unwrap();
+    for _ in 0..2 {
+        let db = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+            .await
+            .unwrap();
+        legacy_migration::contract(&db).await;
+        let mut inspect = sqlx::SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
+        )
+        .await
+        .unwrap();
+        for &(query, expected) in legacy_migration::INSPECTIONS {
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(query)
+                    .fetch_one(&mut inspect)
+                    .await
+                    .unwrap(),
+                expected,
+                "{query}"
+            );
+        }
+        inspect.close().await.unwrap();
+        db.close().await;
+    }
+}
+
+#[tokio::test]
+#[ignore = "Requires canonical MySQL fixture"]
+async fn mysql_legacy_rich_corpus_preserves_relationships_and_behavior_after_restart() {
+    let (mut inspect, config) = fixture().await;
+    latest_legacy(&mut inspect).await;
+    sqlx::raw_sql(legacy_migration::SEED)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET hash=?")
+        .bind(legacy_migration::hash())
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    for _ in 0..2 {
+        let db = database::open(Config::MySql(config.clone()), Policy::default())
+            .await
+            .unwrap();
+        legacy_migration::contract(&db).await;
+        for &(query, expected) in legacy_migration::INSPECTIONS {
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(query)
+                    .fetch_one(&mut inspect)
+                    .await
+                    .unwrap(),
+                expected,
+                "{query}"
+            );
+        }
+        db.close().await;
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, Vec<u8>>("SELECT details FROM rp_original_events WHERE id=206")
+            .fetch_one(&mut inspect)
+            .await
+            .unwrap(),
+        b"{\"payload\":{\"password\":[\"PRIVATE-PASSWORD\"]}}"
+    );
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE `{}`",
+        config.database
+    )))
+    .execute(&mut inspect)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn sqlite_legacy_queue_faults_are_isolated_and_recoverable() {
+    for &(name, mutation, expected) in legacy_migration::QUEUE_CASES {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("legacy.db");
+        let mut inspect = sqlite_legacy_corpus(&path).await;
+        sqlx::raw_sql(mutation).execute(&mut inspect).await.unwrap();
+        inspect.close().await.unwrap();
+        for _ in 0..2 {
+            let db = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+                .await
+                .unwrap();
+            let mut inspect = sqlx::SqliteConnection::connect_with(
+                &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
+            )
+            .await
+            .unwrap();
+            let issues: Vec<i64> = sqlx::query_scalar(
+                "SELECT mail_log_id FROM ruphish_legacy_queue_issues ORDER BY mail_log_id",
+            )
+            .fetch_all(&mut inspect)
+            .await
+            .unwrap();
+            assert_eq!(issues, expected, "{name}");
+            let retained: Vec<i64> = sqlx::query_scalar("SELECT id FROM mail_logs ORDER BY id")
+                .fetch_all(&mut inspect)
+                .await
+                .unwrap();
+            assert_eq!(retained, expected, "{name}: preserve unresolved input");
+            let deliveries: Vec<i64> =
+                sqlx::query_scalar("SELECT result_id FROM ruphish_delivery ORDER BY result_id")
+                    .fetch_all(&mut inspect)
+                    .await
+                    .unwrap();
+            assert_eq!(
+                deliveries,
+                [107, 108, 109, 110],
+                "{name}: never queue the ambiguous recipient"
+            );
+            inspect.close().await.unwrap();
+            db.close().await;
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "Requires canonical MySQL fixture"]
+async fn mysql_legacy_queue_faults_are_isolated_and_recoverable() {
+    for &(name, mutation, expected) in legacy_migration::QUEUE_CASES {
+        let (mut inspect, config) = fixture().await;
+        latest_legacy(&mut inspect).await;
+        sqlx::raw_sql(legacy_migration::SEED)
+            .execute(&mut inspect)
+            .await
+            .unwrap();
+        sqlx::raw_sql(mutation).execute(&mut inspect).await.unwrap();
+        for _ in 0..2 {
+            let db = database::open(Config::MySql(config.clone()), Policy::default())
+                .await
+                .unwrap();
+            let issues: Vec<i64> = sqlx::query_scalar(
+                "SELECT mail_log_id FROM ruphish_legacy_queue_issues ORDER BY mail_log_id",
+            )
+            .fetch_all(&mut inspect)
+            .await
+            .unwrap();
+            assert_eq!(issues, expected, "{name}");
+            let retained: Vec<i64> = sqlx::query_scalar("SELECT id FROM mail_logs ORDER BY id")
+                .fetch_all(&mut inspect)
+                .await
+                .unwrap();
+            assert_eq!(retained, expected, "{name}: preserve unresolved input");
+            let deliveries: Vec<i64> =
+                sqlx::query_scalar("SELECT result_id FROM ruphish_delivery ORDER BY result_id")
+                    .fetch_all(&mut inspect)
+                    .await
+                    .unwrap();
+            assert_eq!(
+                deliveries,
+                [107, 108, 109, 110],
+                "{name}: never queue the ambiguous recipient"
+            );
+            db.close().await;
+        }
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "DROP DATABASE `{}`",
+            config.database
+        )))
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    }
+}
+
 #[tokio::test]
 async fn sqlite_resource_summaries() {
     let directory = tempfile::tempdir().unwrap();
@@ -180,6 +379,11 @@ async fn postgres_event_edits_preserve_history_and_reopen() {
     inspect.close().await.unwrap();
     postgres_cleanup(&mut admin, &config).await;
 }
+
+#[path = "support/campaign_origins.rs"]
+mod campaign_origins;
+#[path = "support/open_tracking.rs"]
+mod open_tracking;
 
 #[path = "support/campaign_drafts.rs"]
 mod campaign_drafts;
@@ -578,17 +782,36 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         active: true,
         revision,
     };
-    assert!(
-        integrations
-            .save_webhook(normal.identity, None, hook_edit(None))
-            .await
-            .is_err(),
-        "only administrators configure webhooks"
-    );
     let hook = integrations
-        .save_webhook(actor, None, hook_edit(None))
+        .save_webhook(normal.identity, None, hook_edit(None))
         .await
         .unwrap();
+    assert!(hook.has_secret);
+    assert_eq!(
+        integrations.webhooks(normal.identity).await.unwrap().len(),
+        1
+    );
+    assert!(integrations.webhooks(actor).await.unwrap().is_empty());
+    assert!(matches!(
+        integrations.webhook(actor, hook.id).await,
+        Err(Error::NotFound("Webhook"))
+    ));
+    assert!(matches!(
+        integrations
+            .save_webhook(actor, Some(hook.id), hook_edit(Some(hook.revision)))
+            .await,
+        Err(Error::NotFound("Webhook"))
+    ));
+    assert!(matches!(
+        integrations.validate_webhook(actor, hook.id).await,
+        Err(Error::NotFound("Webhook"))
+    ));
+    for revision in [None, Some(hook.revision), Some(hook.revision + 1)] {
+        assert!(matches!(
+            integrations.delete_webhook(actor, hook.id, revision).await,
+            Err(Error::NotFound("Webhook"))
+        ));
+    }
     let mail_edit = |revision| MailboxEdit {
         name: "Reporting".into(),
         enabled: true,
@@ -687,6 +910,127 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         a.as_ref().err().or(b.as_ref().err()),
         Some(Error::Changed)
     ));
+    // Global switches fence configuration and external actions for every role.
+    let settings = db.settings().get(actor).await.unwrap();
+    assert!(db.settings().get(normal.identity).await.is_err());
+    assert!(
+        db.settings()
+            .save(
+                normal.identity,
+                settings.revision,
+                settings.policy.clone(),
+                1
+            )
+            .await
+            .is_err()
+    );
+    let mut disabled = settings.policy.clone();
+    disabled.webhooks_enabled = false;
+    disabled.reporting_mailboxes_enabled = false;
+    let disabled = db
+        .settings()
+        .save(actor, settings.revision, disabled, 1)
+        .await
+        .unwrap();
+    let current_mailbox = integrations.mailbox(actor, mailbox.id).await.unwrap();
+    for caller in [actor, normal.identity] {
+        assert!(matches!(
+            integrations
+                .save_webhook(caller, None, hook_edit(None))
+                .await,
+            Err(Error::FeatureDisabled("webhooks"))
+        ));
+        assert!(matches!(
+            integrations
+                .save_webhook(caller, Some(hook.id), hook_edit(Some(hook.revision)))
+                .await,
+            Err(Error::FeatureDisabled("webhooks"))
+        ));
+        assert!(matches!(
+            integrations.validate_webhook(caller, hook.id).await,
+            Err(Error::FeatureDisabled("webhooks"))
+        ));
+        assert!(matches!(
+            integrations
+                .save_mailbox(caller, None, mail_edit(None))
+                .await,
+            Err(Error::FeatureDisabled("reporting_mailboxes"))
+        ));
+    }
+    assert!(matches!(
+        integrations
+            .save_mailbox(
+                actor,
+                Some(mailbox.id),
+                mail_edit(Some(current_mailbox.revision))
+            )
+            .await,
+        Err(Error::FeatureDisabled("reporting_mailboxes"))
+    ));
+    for result in [
+        integrations.validate_mailbox(actor, mailbox.id).await,
+        integrations.check_mailbox(actor, mailbox.id).await,
+        integrations
+            .resume_mailbox(actor, mailbox.id, current_mailbox.revision)
+            .await,
+    ] {
+        assert!(matches!(
+            result,
+            Err(Error::FeatureDisabled("reporting_mailboxes"))
+        ));
+    }
+    integrations.tick().await.unwrap();
+    assert_eq!(
+        integrations
+            .webhook(normal.identity, hook.id)
+            .await
+            .unwrap()
+            .revision,
+        hook.revision
+    );
+    assert_eq!(
+        integrations
+            .webhook(normal.identity, hook.id)
+            .await
+            .unwrap()
+            .history
+            .len(),
+        0
+    );
+    assert_eq!(
+        integrations
+            .mailbox(actor, mailbox.id)
+            .await
+            .unwrap()
+            .revision,
+        current_mailbox.revision
+    );
+    assert_eq!(
+        integrations
+            .mailbox(actor, mailbox.id)
+            .await
+            .unwrap()
+            .history
+            .len(),
+        0
+    );
+    db.settings()
+        .save(actor, disabled.revision, settings.policy, 2)
+        .await
+        .unwrap();
+    let owned = integrations
+        .save_mailbox(normal.identity, None, mail_edit(None))
+        .await
+        .unwrap();
+    assert!(owned.has_password);
+    assert!(matches!(
+        integrations.mailbox(actor, owned.id).await,
+        Err(Error::NotFound(_))
+    ));
+    integrations
+        .delete_mailbox(normal.identity, owned.id, Some(owned.revision))
+        .await
+        .unwrap();
     integrations.poll_mailboxes().await.unwrap();
     let mailbox = integrations.mailbox(actor, mailbox.id).await.unwrap();
     assert!(!mailbox.running);
@@ -877,6 +1221,9 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         idempotency: Some(("launch-once".into(), "request-fingerprint".into())),
         ..campaign::Create::default()
     };
+    campaign_origins::exercise(db, actor, input.clone(), now).await;
+    open_tracking::exercise(db, actor, input.clone(), now).await;
+    client_observations::exercise(db, actor, input.clone(), now).await;
     learning_pages::exercise(db, actor, normal.identity, input.clone(), now).await;
     campaign_drafts::exercise(db, actor, normal.identity, input.clone(), now, fault).await;
     let campaigns = db.campaigns();
@@ -1014,7 +1361,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     let rid = &campaign.results[0].rid;
     public
         .interact(
-            "training.example.test",
+            "https://training.example.test",
             rid,
             interactions::Action::Open,
             now + 1,
@@ -1023,20 +1370,23 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         .unwrap();
     public
         .interact(
-            "training.example.test",
+            "https://training.example.test",
             rid,
-            interactions::Action::View,
+            interactions::Action::View {
+                client: Default::default(),
+            },
             now + 2,
         )
         .await
         .unwrap();
     let submit = || interactions::Action::Submit {
+        client: Default::default(),
         event_id: "a".repeat(32),
         password_present: true,
     };
     let (a, b) = tokio::join!(
-        public.interact("training.example.test", rid, submit(), now + 3),
-        public.interact("training.example.test", rid, submit(), now + 3)
+        public.interact("https://training.example.test", rid, submit(), now + 3),
+        public.interact("https://training.example.test", rid, submit(), now + 3)
     );
     a.unwrap();
     b.unwrap();
@@ -1136,18 +1486,22 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     assert!(excel.bytes.starts_with(b"PK"));
     for action in [
         interactions::Action::Open,
-        interactions::Action::View,
+        interactions::Action::View {
+            client: Default::default(),
+        },
         interactions::Action::Submit {
+            client: Default::default(),
             event_id: "b".repeat(32),
             password_present: false,
         },
         interactions::Action::Submit {
+            client: Default::default(),
             event_id: "c".repeat(32),
             password_present: true,
         },
     ] {
         public
-            .interact("training.example.test", rid, action, now + 5)
+            .interact("https://training.example.test", rid, action, now + 5)
             .await
             .unwrap();
     }
@@ -1204,26 +1558,43 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     assert_eq!(window.counts.delivered, 1);
     assert_eq!(window.previous.unwrap().counts.delivered, 0);
     integrations.deliver_webhooks().await.unwrap();
-    let hook = integrations.webhook(actor, hook.id).await.unwrap();
-    assert!(!hook.history.is_empty());
+    let hook = integrations
+        .webhook(normal.identity, hook.id)
+        .await
+        .unwrap();
+    assert!(
+        !hook.history.is_empty(),
+        "creator ownership must not filter events from other campaign owners"
+    );
     assert!(hook.history.iter().all(|a| a.finished.is_some()));
     let (a, b) = tokio::join!(
-        integrations.save_webhook(actor, Some(hook.id), hook_edit(Some(hook.revision))),
-        integrations.save_webhook(actor, Some(hook.id), hook_edit(Some(hook.revision)))
+        integrations.save_webhook(
+            normal.identity,
+            Some(hook.id),
+            hook_edit(Some(hook.revision))
+        ),
+        integrations.save_webhook(
+            normal.identity,
+            Some(hook.id),
+            hook_edit(Some(hook.revision))
+        )
     );
     assert_eq!(usize::from(a.is_ok()) + usize::from(b.is_ok()), 1);
     assert!(matches!(
         a.as_ref().err().or(b.as_ref().err()),
         Some(Error::Changed)
     ));
-    let hook = integrations.webhook(actor, hook.id).await.unwrap();
+    let hook = integrations
+        .webhook(normal.identity, hook.id)
+        .await
+        .unwrap();
     assert!(matches!(
         integrations
-            .delete_webhook(actor, hook.id, Some(hook.revision + 1))
+            .delete_webhook(normal.identity, hook.id, Some(hook.revision + 1))
             .await,
         Err(Error::Changed)
     ));
-    assert!(integrations.webhook(actor, hook.id).await.is_ok());
+    assert!(integrations.webhook(normal.identity, hook.id).await.is_ok());
     assert!(matches!(
         integrations
             .delete_mailbox(actor, mailbox.id, Some(mailbox.revision + 1))
@@ -1232,10 +1603,15 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     ));
     assert!(integrations.mailbox(actor, mailbox.id).await.is_ok());
     integrations
-        .delete_webhook(actor, hook.id, Some(hook.revision))
+        .delete_webhook(normal.identity, hook.id, Some(hook.revision))
         .await
         .unwrap();
-    assert!(integrations.webhook(actor, hook.id).await.is_err());
+    assert!(
+        integrations
+            .webhook(normal.identity, hook.id)
+            .await
+            .is_err()
+    );
     integrations
         .delete_mailbox(actor, mailbox.id, Some(mailbox.revision))
         .await
@@ -1243,7 +1619,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     assert!(integrations.mailbox(actor, mailbox.id).await.is_err());
     assert!(matches!(
         integrations
-            .delete_webhook(actor, hook.id, Some(hook.revision))
+            .delete_webhook(normal.identity, hook.id, Some(hook.revision))
             .await,
         Err(Error::NotFound("Webhook"))
     ));
@@ -1291,7 +1667,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     assert!(
         public
             .interact(
-                "training.example.test",
+                "https://training.example.test",
                 rid,
                 interactions::Action::Open,
                 now + 12
@@ -1801,7 +2177,22 @@ async fn mysql_upgrades_every_legacy_version_preserving_identity_and_recoverable
                 .await
                 .unwrap();
         }
+        if version >= 20191104103306 {
+            sqlx::raw_sql("INSERT INTO webhooks(id,name,url,secret,is_active) VALUES(71,'Legacy hook','https://receiver.example.test/hook','preserved-hook-secret',1)").execute(&mut inspector).await.unwrap();
+        }
         sqlx::raw_sql("INSERT INTO templates(id,user_id,name,subject,text,html,modified_date) VALUES(9,17,'Legacy email','Hello','Plain text','<h1>Hello</h1>','2020-01-01 00:00:00'); INSERT INTO pages(id,user_id,name,html,modified_date) VALUES(10,17,'Legacy page','<h1>Welcome</h1>','2020-01-01 00:00:00'); INSERT INTO `groups`(id,user_id,name,modified_date) VALUES(21,17,'Shared group','2020-01-01 00:00:00'),(22,17,'Shared group','2020-01-01 00:00:00'); INSERT INTO targets(id,first_name,last_name,email,position) VALUES(31,'Elise','','elise@example.test','Engineer'); INSERT INTO group_targets VALUES(21,31),(22,31); INSERT INTO campaigns(id,user_id,name,created_date,completed_date,template_id,page_id,status,url) VALUES(13,17,'Legacy campaign','2020-01-01 00:00:00',NULL,9,10,'In progress','https://training.example.test'); INSERT INTO results(id,campaign_id,user_id,r_id,email,first_name,last_name,status,ip,latitude,longitude) VALUES(41,13,17,'legacy-rid','elise@example.test','Elise','','Email Opened','192.0.2.99',51.5,8.5); INSERT INTO events(id,campaign_id,email,time,message) VALUES(51,13,'elise@example.test','2020-01-01 00:00:00','Email Opened')").execute(&mut inspector).await.unwrap();
+        let imported_origin = [
+            "https://training.example.test",
+            "http://training.example.test:8080",
+            "https://192.0.2.20:8443",
+            "http://[2001:db8::20]:8080",
+        ][count % 4];
+        let imported_url = format!("{imported_origin}/training?source=legacy");
+        sqlx::query("UPDATE campaigns SET url=? WHERE id=13")
+            .bind(&imported_url)
+            .execute(&mut inspector)
+            .await
+            .unwrap();
         if version >= 20160131153104 {
             sqlx::query("UPDATE events SET details=?")
                 .bind("credential-value-canary")
@@ -1824,9 +2215,55 @@ async fn mysql_upgrades_every_legacy_version_preserving_identity_and_recoverable
                 "version {version}: never guess a pre-UTC timezone"
             );
         }
+        sqlx::raw_sql("INSERT INTO events(id,campaign_id,email,time,message) VALUES(52,13,'elise@example.test','2020-01-02 01:00:00','Clicked Link'),(53,13,'elise@example.test','2020-01-02 02:00:00','Submitted Data')").execute(&mut inspector).await.unwrap();
+        sqlx::query("UPDATE results SET status=? WHERE id=41")
+            .bind(if version < 20170104231222 {
+                "Success"
+            } else {
+                "Submitted Data"
+            })
+            .execute(&mut inspector)
+            .await
+            .unwrap();
+        if version >= 20180524203752 {
+            sqlx::query("UPDATE results SET modified_date='2020-01-02 02:00:00' WHERE id=41")
+                .execute(&mut inspector)
+                .await
+                .unwrap();
+        }
         let db = database::open(Config::MySql(config.clone()), Policy::default())
             .await
             .unwrap_or_else(|e| panic!("upgrade version {version}: {e}"));
+        let track_opens: bool = sqlx::query_scalar(
+            "SELECT track_opens FROM ruphish_campaign_policy WHERE campaign_id=13",
+        )
+        .fetch_one(&mut inspector)
+        .await
+        .unwrap();
+        assert!(
+            track_opens,
+            "migrated {version} defaults to enabled without authored tracker markup"
+        );
+        if version >= 20191104103306 {
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT owner_id FROM ruphish_webhook_state WHERE webhook_id=71"
+                )
+                .fetch_one(&mut inspector)
+                .await
+                .unwrap(),
+                17
+            );
+        }
+        let client_count: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM events WHERE client IS NOT NULL")
+                .fetch_one(&mut inspector)
+                .await
+                .unwrap();
+        assert_eq!(
+            client_count, 0,
+            "historical {version} has no collected client categories"
+        );
         assert!(db.bootstrap(None, None).await.unwrap().is_none());
 
         let user = db.accounts().by_name("legacy-admin").await.unwrap();
@@ -1860,6 +2297,19 @@ async fn mysql_upgrades_every_legacy_version_preserving_identity_and_recoverable
         let campaign = db.campaigns().get(user.identity, 13).await.unwrap();
         assert_eq!(campaign.events[0].id, 51);
         assert_eq!(campaign.results[0].rid, "legacy-rid");
+        assert_eq!(
+            campaign.results[0].status, "Submitted Data",
+            "submission takes precedence over a click at {version}"
+        );
+        assert_eq!(
+            campaign.results[0].modified_date,
+            if version < 20170828220440 {
+                "2020-01-02T00:00:00Z"
+            } else {
+                "2020-01-02T02:00:00Z"
+            },
+            "derived/preserved modification time at {version}"
+        );
         assert!(campaign.events[0].details.is_empty());
         assert!(campaign.results[0].ip.is_empty());
         assert_eq!(campaign.results[0].latitude, 0.0);
@@ -1874,6 +2324,28 @@ async fn mysql_upgrades_every_legacy_version_preserving_identity_and_recoverable
         let domains = db.domains().list(user.identity).await.unwrap();
         assert_eq!(domains.len(), 1);
         assert_eq!(domains[0].verified_until, 0);
+        assert_eq!(domains[0].origin, imported_origin);
+        assert_eq!(campaign.url, imported_url);
+        assert!(
+            domains[0].eligible_until > 0,
+            "fresh migration policy does not require verification"
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT url FROM rp_original_campaigns WHERE id=13")
+                .fetch_one(&mut inspector)
+                .await
+                .unwrap(),
+            imported_url
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM ruphish_campaign_domains WHERE campaign_id=13"
+            )
+            .fetch_one(&mut inspector)
+            .await
+            .unwrap(),
+            1
+        );
         assert_eq!(
             sqlx::query_scalar::<_, String>("SELECT ip FROM rp_original_results WHERE id=41")
                 .fetch_one(&mut inspector)
@@ -1955,10 +2427,146 @@ async fn latest_legacy(c: &mut MySqlConnection) {
 
 #[tokio::test]
 #[ignore = "Requires the canonical MySQL acceptance service and RUPHISH_MYSQL_TEST_PORT"]
+async fn mysql_legacy_deleted_identities_are_not_reused_after_conversion() {
+    let (mut inspector, config) = fixture().await;
+    latest_legacy(&mut inspector).await;
+    sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id) VALUES(17,'legacy','hash','key',1); INSERT INTO `groups`(id,user_id,name) VALUES(21,17,'Surviving'),(9000,17,'Deleted'); DELETE FROM `groups` WHERE id=9000; INSERT INTO attachments(id,name) VALUES(8000,'Deleted'); DELETE FROM attachments;")
+        .execute(&mut inspector).await.unwrap();
+    let db = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    db.close().await;
+    let db = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    for (query, retired) in [
+        ("INSERT INTO `groups`(user_id,name) VALUES(17,'New')", 9000),
+        ("INSERT INTO attachments(name) VALUES('New')", 8000),
+    ] {
+        let id = sqlx::query(query)
+            .execute(&mut inspector)
+            .await
+            .unwrap()
+            .last_insert_id();
+        assert!(
+            id > retired,
+            "reused retired identity: new id {id}, retired {retired}"
+        );
+    }
+    db.close().await;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE `{}`",
+        config.database
+    )))
+    .execute(&mut inspector)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires the canonical MySQL acceptance service and RUPHISH_MYSQL_TEST_PORT"]
+async fn mysql_legacy_deleted_owner_mailbox_is_dropped_with_original_retained() {
+    let (mut inspector, config) = fixture().await;
+    latest_legacy(&mut inspector).await;
+    // Gophish DeleteUser does not delete IMAP settings (models/user.go).
+    sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id) VALUES(17,'legacy','hash','key',1),(18,'deleted','hash','deleted-key',2); INSERT INTO imap(user_id,host,port,username,password,tls,enabled,folder,imap_freq) VALUES(18,'imap.example.test',993,'deleted-service','retained-secret',1,1,'INBOX',60); DELETE FROM users WHERE id=18;")
+        .execute(&mut inspector).await.unwrap();
+    for _ in 0..2 {
+        let db = database::open(Config::MySql(config.clone()), Policy::default())
+            .await
+            .unwrap();
+        assert!(
+            db.integrations()
+                .mailboxes(auth::Identity { id: 17, epoch: 0 })
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM ruphish_mailboxes")
+                .fetch_one(&mut inspector)
+                .await
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM imap")
+                .fetch_one(&mut inspector)
+                .await
+                .unwrap(),
+            0
+        );
+        db.close().await;
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT password FROM rp_original_imap WHERE user_id=18")
+            .fetch_one(&mut inspector)
+            .await
+            .unwrap(),
+        "retained-secret"
+    );
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE `{}`",
+        config.database
+    )))
+    .execute(&mut inspector)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires canonical MySQL fixture"]
+async fn mysql_legacy_invalid_mailbox_owners_are_skipped_without_losing_valid_data() {
+    let (mut inspect, config) = fixture().await;
+    latest_legacy(&mut inspect).await;
+    sqlx::raw_sql(legacy_migration::SEED)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET hash=?")
+        .bind(legacy_migration::hash())
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    sqlx::raw_sql("INSERT INTO imap(user_id,host,password) VALUES(NULL,'bad.example.test','null-secret'),(0,'bad.example.test','zero-secret'),(-1,'bad.example.test','negative-secret'),(999999,'bad.example.test','deleted-secret')").execute(&mut inspect).await.unwrap();
+    for _ in 0..2 {
+        let db = database::open(Config::MySql(config.clone()), Policy::default())
+            .await
+            .unwrap();
+        legacy_migration::contract(&db).await;
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM imap")
+                .fetch_one(&mut inspect)
+                .await
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM ruphish_mailboxes")
+                .fetch_one(&mut inspect)
+                .await
+                .unwrap(),
+            2
+        );
+        assert_eq!(sqlx::query_as::<_, (Option<i64>, String)>("SELECT user_id,password FROM rp_original_imap WHERE user_id IS NULL OR user_id<=0 OR user_id=999999 ORDER BY user_id").fetch_all(&mut inspect).await.unwrap(), vec![(None,"null-secret".into()),(Some(-1),"negative-secret".into()),(Some(0),"zero-secret".into()),(Some(999999),"deleted-secret".into())]);
+        db.close().await;
+    }
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE `{}`",
+        config.database
+    )))
+    .execute(&mut inspect)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires the canonical MySQL acceptance service and RUPHISH_MYSQL_TEST_PORT"]
 async fn mysql_failed_publication_resumes_without_losing_or_duplicating_legacy_data() {
     let (mut inspector, mut config) = fixture().await;
     latest_legacy(&mut inspector).await;
     sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id) VALUES(17,'legacy','hash-preserved','key-preserved',1); INSERT INTO `groups`(id,user_id,name,modified_date) VALUES(21,17,'Recovered group','2020-01-01 00:00:00')").execute(&mut inspector).await.unwrap();
+    sqlx::raw_sql("INSERT INTO `groups`(id,user_id,name) VALUES(9000,17,'Deleted'); DELETE FROM `groups` WHERE id=9000").execute(&mut inspector).await.unwrap();
     let username = format!("u_{}", &config.database[17..]);
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE USER '{username}'@'%' IDENTIFIED BY 'fixture-migration-only'; GRANT SELECT,INSERT,UPDATE,DELETE,CREATE,DROP,INDEX,CREATE VIEW,SHOW VIEW ON `{}`.* TO '{username}'@'%'",config.database))).execute(&mut inspector).await.unwrap();
     config.username = username.clone();
@@ -2015,7 +2623,14 @@ async fn mysql_failed_publication_resumes_without_losing_or_duplicating_legacy_d
         .await
         .unwrap();
     assert!(db.bootstrap(None, None).await.unwrap().is_none());
-
+    assert!(
+        sqlx::query("INSERT INTO `groups`(user_id,name) VALUES(17,'After recovery')")
+            .execute(&mut inspector)
+            .await
+            .unwrap()
+            .last_insert_id()
+            > 9000
+    );
     db.close().await;
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
         "DROP DATABASE `{}`; DROP USER '{username}'@'%'",
@@ -3046,3 +3661,23 @@ async fn postgres_preferences_preserve_existing_accounts_and_survive_reopen() {
 
 #[path = "support/query_work.rs"]
 mod query_work;
+
+#[path = "support/client_observations.rs"]
+mod client_observations;
+
+#[path = "../../../tests/support/connection.rs"]
+mod connection;
+#[path = "../../../tests/support/mailbox.rs"]
+#[allow(
+    dead_code,
+    reason = "Executable fixtures consume the peer certificate; provider tests use explicit test-only verification bypass"
+)]
+mod mailbox;
+#[path = "support/mailbox_reporting.rs"]
+mod mailbox_reporting;
+#[path = "../../../tests/support/tls.rs"]
+#[allow(dead_code, reason = "Shared TLS fixture also serves executable tests")]
+mod tls_fixture;
+
+#[path = "support/webhook_ownership.rs"]
+mod webhook_ownership;

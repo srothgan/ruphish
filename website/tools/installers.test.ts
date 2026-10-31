@@ -85,6 +85,11 @@ async function fixture(t: TestContext, kind: 'sh' | 'ps1') {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url!, 'http://fixture');
     requests.push(url.pathname + url.search);
+    if (url.pathname === `/install.${kind}`) {
+      res.setHeader('Content-Type', 'text/plain');
+      res.end(readFileSync(script));
+      return;
+    }
     if (url.pathname === '/api/releases') {
       if (versionStatus !== 200) {
         res.writeHead(versionStatus);
@@ -166,13 +171,13 @@ async function fixture(t: TestContext, kind: 'sh' | 'ps1') {
   // Private copies change ONLY production origins and the transport allowlist to loopback HTTP.
   // The shipped scripts have no origin overrides or insecure transport switches.
   const source = readFileSync(join(publicDir, `install.${kind}`), 'utf8');
-  assert(source.includes('https://ruphish.com/api/releases'));
+  assert(source.includes('https://www.ruphish.com/api/releases'));
   assert(source.includes('https://github.com/srothgan/ruphish'));
   const script = join(directory, `install.${kind}`);
   writeFileSync(
     script,
     source
-      .replaceAll('https://ruphish.com', origin)
+      .replaceAll('https://www.ruphish.com', origin)
       .replaceAll('https://github.com/srothgan/ruphish', `${origin}/repo`)
       .replaceAll("'=https'", "'=http'")
       .replace("$next.Scheme -ne 'https'", "$next.Scheme -ne 'http'"),
@@ -183,6 +188,9 @@ async function fixture(t: TestContext, kind: 'sh' | 'ps1') {
     CI: 'true',
     NO_COLOR: 'true',
     SHELL: '/bin/sh',
+    RUPHISH_INCLUDE_PREVIEWS: undefined,
+    RUPHISH_INSTALL_DIR: undefined,
+    RUPHISH_NO_MODIFY_PATH: undefined,
   };
   const target =
     kind === 'ps1'
@@ -299,6 +307,38 @@ async function fixture(t: TestContext, kind: 'sh' | 'ps1') {
         )
       : run(powershell, ['-NoProfile', '-File', script, ...base], { env });
   }
+  async function installWithEnvironment(
+    variables: NodeJS.ProcessEnv,
+    args: string[] = [],
+    piped = false,
+  ) {
+    const environment = {
+      ...env,
+      RUPHISH_INSTALL_DIR: kind === 'sh' ? posix(root) : root,
+      RUPHISH_NO_MODIFY_PATH: '1',
+      ...variables,
+    };
+    if (piped) {
+      assert.equal(args.length, 0);
+      return kind === 'sh'
+        ? run(shell, ['-c', 'curl -fsSL "$1/install.sh" | sh', 'installer-test', origin], {
+            env: environment,
+          })
+        : run(powershell, ['-NoProfile', '-Command', `irm '${origin}/install.ps1' | iex`], {
+            env: environment,
+          });
+    }
+    if (kind === 'sh') {
+      return run(shell, [posix(script), ...args], { env: environment });
+    }
+    // -Command preserves explicit false switch values on Windows PowerShell 5.1.
+    const command = `& '${script.replaceAll("'", "''")}' ${args.map((value) => (value.startsWith('-') ? value : `'${value.replaceAll("'", "''")}'`)).join(' ')}`;
+    return run(
+      powershell,
+      ['-NoProfile', '-EncodedCommand', Buffer.from(command, 'utf16le').toString('base64')],
+      { env: environment },
+    );
+  }
   async function interactive(args: string[], answer: string) {
     const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
     const command = [shell, script, '--install-dir', root, '--no-modify-path', ...args]
@@ -350,6 +390,7 @@ async function fixture(t: TestContext, kind: 'sh' | 'ps1') {
     root,
     requests,
     install,
+    installWithEnvironment,
     interactive,
     locked,
     packageVersion,
@@ -366,6 +407,169 @@ async function fixture(t: TestContext, kind: 'sh' | 'ps1') {
 }
 
 for (const kind of ['sh', 'ps1'] as const) {
+  test(
+    `${kind}: environment preferences and explicit overrides`,
+    { skip: kind === 'ps1' ? !windows : windows },
+    async (t) => {
+      const f = await fixture(t, kind);
+      const flag = (sh: string, ps: string) => (kind === 'sh' ? sh : ps);
+      await f.packageVersion('0.1.0');
+      await f.packageVersion('0.2.0-dev.10');
+      f.setSelected('0.2.0-dev.10');
+      const installed = () => readFileSync(join(f.root, 'current/.version'), 'utf8').trim();
+      await t.test('invalid booleans fail before discovery or installation', async () => {
+        for (const name of ['RUPHISH_INCLUDE_PREVIEWS', 'RUPHISH_NO_MODIFY_PATH']) {
+          const result = await f.installWithEnvironment({ [name]: 'yes' });
+          assert.notEqual(result.code, 0);
+          assert(result.output.includes(`${name} must be 1/true or 0/false`), result.output);
+          assert.deepEqual(f.requests, []);
+          assert(!existsSync(f.root));
+        }
+      });
+      await t.test(
+        'false and empty preferences keep full-release selection and avoid PATH changes',
+        async () => {
+          for (const value of ['0', 'FaLsE', '']) {
+            f.requests.length = 0;
+            const result = await f.installWithEnvironment({
+              RUPHISH_INCLUDE_PREVIEWS: value,
+              RUPHISH_NO_MODIFY_PATH: 'TrUe',
+            });
+            assert.equal(result.code, 0, result.output);
+            assert.equal(installed(), '0.1.0');
+            assert(f.requests.includes('/api/releases?format=text&includePreviews=false'));
+            assert(!existsSync(join(f.root, kind === 'sh' ? '.profile' : '.path')));
+            assert(!existsSync(join(f.home, '.profile')));
+          }
+        },
+      );
+      await t.test('explicit settings override conflicting environment preferences', async () => {
+        const ignoredDirectory = join(f.home, 'ignored program directory');
+        f.requests.length = 0;
+        const result = await f.installWithEnvironment(
+          {
+            RUPHISH_INSTALL_DIR: ignoredDirectory,
+            RUPHISH_INCLUDE_PREVIEWS: 'true',
+            RUPHISH_NO_MODIFY_PATH: 'invalid',
+          },
+          [
+            flag('--install-dir', '-InstallDir'),
+            f.root,
+            flag('--no-include-previews', '-IncludePreviews:$false'),
+            flag('--no-modify-path', '-NoModifyPath'),
+          ],
+        );
+        assert.equal(result.code, 0, result.output);
+        assert.equal(installed(), '0.1.0');
+        assert(f.requests.includes('/api/releases?format=text&includePreviews=false'));
+        assert(!existsSync(ignoredDirectory));
+      });
+      await t.test(
+        'HTTP bootstrap uses environment-only options to install a preview',
+        async () => {
+          for (const value of ['1', 'TrUe']) {
+            f.requests.length = 0;
+            const result = await f.installWithEnvironment(
+              { RUPHISH_INCLUDE_PREVIEWS: value },
+              [],
+              true,
+            );
+            assert.equal(result.code, 0, result.output);
+            assert.equal(installed(), '0.2.0-dev.10');
+            assert(f.requests.includes(`/install.${kind}`));
+            assert(f.requests.includes('/api/releases?format=text&includePreviews=true'));
+            assert(!existsSync(join(f.root, kind === 'sh' ? '.profile' : '.path')));
+          }
+        },
+      );
+      await t.test('environment selection does not bypass downgrade confirmation', async () => {
+        f.requests.length = 0;
+        const explicitPreview = await f.installWithEnvironment({ RUPHISH_INCLUDE_PREVIEWS: '0' }, [
+          flag('--include-previews', '-IncludePreviews'),
+        ]);
+        assert.equal(explicitPreview.code, 0, explicitPreview.output);
+        assert(f.requests.includes('/api/releases?format=text&includePreviews=true'));
+        const result = await f.installWithEnvironment({ RUPHISH_INCLUDE_PREVIEWS: 'false' });
+        assert.notEqual(result.code, 0);
+        assert.match(result.output, /Downgrade requires confirmation/);
+        assert.equal(installed(), '0.2.0-dev.10');
+      });
+      await t.test(
+        'explicit versions bypass discovery and ignore the preview preference',
+        async () => {
+          f.setVersionStatus(503);
+          f.requests.length = 0;
+          const result = await f.installWithEnvironment({ RUPHISH_INCLUDE_PREVIEWS: 'invalid' }, [
+            flag('--version', '-Version'),
+            '0.2.0-dev.10',
+          ]);
+          assert.equal(result.code, 0, result.output);
+          assert.equal(installed(), '0.2.0-dev.10');
+          assert.deepEqual(f.requests, []);
+          f.setVersionStatus(200);
+        },
+      );
+      await t.test(
+        'explicit PATH enablement overrides an invalid environment value before discovery',
+        async () => {
+          // Fail discovery before any real Windows user PATH mutation can occur.
+          f.setVersionStatus(503);
+          f.requests.length = 0;
+          const result = await f.installWithEnvironment({ RUPHISH_NO_MODIFY_PATH: 'invalid' }, [
+            flag('--modify-path', '-NoModifyPath:$false'),
+          ]);
+          assert.notEqual(result.code, 0);
+          assert.match(result.output, /503/);
+          assert(f.requests.includes('/api/releases?format=text&includePreviews=false'));
+          assert.doesNotMatch(result.output, /must be 1\/true/);
+          f.setVersionStatus(200);
+        },
+      );
+      await t.test(
+        'Unix PATH preferences accept false values and an explicit enable override',
+        { skip: kind !== 'sh' },
+        async () => {
+          for (const [value, args] of [
+            ['0', []],
+            ['FaLsE', []],
+            ['1', ['--modify-path']],
+          ] as [string, string[]][]) {
+            writeFileSync(join(f.home, '.profile'), '# existing user configuration\n');
+            const result = await f.installWithEnvironment(
+              { RUPHISH_INCLUDE_PREVIEWS: '1', RUPHISH_NO_MODIFY_PATH: value },
+              args,
+            );
+            assert.equal(result.code, 0, result.output);
+            assert(
+              readFileSync(join(f.home, '.profile'), 'utf8').includes(
+                '# >>> ruphish installer >>>',
+              ),
+            );
+          }
+        },
+      );
+      await t.test(
+        'uninstall honors the environment directory and ignores preview selection',
+        async () => {
+          f.requests.length = 0;
+          const result = await f.installWithEnvironment({ RUPHISH_INCLUDE_PREVIEWS: 'invalid' }, [
+            flag('--uninstall', '-Uninstall'),
+            ...(kind === 'sh' ? ['--modify-path'] : []),
+          ]);
+          assert.equal(result.code, 0, result.output);
+          assert(!existsSync(f.root));
+          assert.deepEqual(f.requests, []);
+          if (kind === 'sh') {
+            assert(
+              !readFileSync(join(f.home, '.profile'), 'utf8').includes(
+                '# >>> ruphish installer >>>',
+              ),
+            );
+          }
+        },
+      );
+    },
+  );
   test(
     `${kind}: real HTTP downloads and managed installation lifecycle`,
     { skip: kind === 'ps1' ? !windows : windows },

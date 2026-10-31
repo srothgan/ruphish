@@ -19,7 +19,7 @@ TLS uses modern TLS 1.2/1.3. Built-in ACME, automatic per-host certificates, and
 
 ## Public reverse proxy
 
-A trusted public proxy must terminate HTTPS and overwrite exactly one `X-Forwarded-Host` and `X-Forwarded-Proto: https`. Configure its peer network in `domain_verification.trusted_proxies`. Headers from untrusted peers are ignored. Preserve routing to the correct Ruphish instance so its short-lived verification proof is reachable.
+A trusted public proxy must overwrite exactly one `X-Forwarded-Host` and one `X-Forwarded-Proto` with the original public host/port and either `http` or `https`. HTTPS origins require TLS termination at the proxy. HTTP origins are usable only when domain verification is off. Configure its peer network in `domain_verification.trusted_proxies`. Headers from untrusted peers are ignored; direct requests use the listener's actual TLS mode. Scheme, host, and port are matched together, so forwarding an HTTP request cannot select an HTTPS campaign. Preserve routing to the correct Ruphish instance so its short-lived verification proof is reachable.
 
 This is public-listener trust. Administration requests do not use forwarded headers to infer peer identity or scheme. Browser origin/CSRF behavior therefore needs attention if you place the admin listener behind a proxy; do not assume that public proxy settings configure admin trust.
 

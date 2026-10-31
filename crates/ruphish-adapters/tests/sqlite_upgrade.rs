@@ -15,6 +15,55 @@ async fn open(path: &Path) -> Result<SqliteConnection, sqlx::Error> {
 }
 
 #[tokio::test]
+async fn legacy_webhooks_choose_an_administrator_and_reject_missing_ownership() {
+    let directory = tempfile::tempdir().unwrap();
+    for missing_admin in [false, true] {
+        let source = directory.path().join(format!("source-{missing_admin}.db"));
+        let destination = directory.path().join(format!("output-{missing_admin}.db"));
+        fs::copy(
+            fixtures().join("compatibility/20220321133237.sqlite3"),
+            &source,
+        )
+        .unwrap();
+        let mut connection = open(&source).await.unwrap();
+        sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id) VALUES(5,'lower-normal','hash','normal-key',2),(31,'second-admin','hash','admin-key',1); DELETE FROM webhooks; INSERT INTO webhooks(id,name,url,secret,is_active) VALUES(71,'Imported','https://receiver.example.test/hook','preserved-secret',1);").execute(&mut connection).await.unwrap();
+        if missing_admin {
+            sqlx::raw_sql("DELETE FROM role_permissions WHERE permission_id=(SELECT id FROM permissions WHERE slug='modify_system')").execute(&mut connection).await.unwrap();
+        }
+        connection.close().await.unwrap();
+        let original = fs::read(&source).unwrap();
+        let outcome = migrations::upgrade_copy(&source, &destination).await;
+        assert_eq!(fs::read(&source).unwrap(), original);
+        if missing_admin {
+            assert!(outcome.is_err());
+            assert!(!destination.exists());
+        } else {
+            outcome.unwrap();
+            let mut connection = open(&destination).await.unwrap();
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT owner_id FROM ruphish_webhook_state WHERE webhook_id=71"
+                )
+                .fetch_one(&mut connection)
+                .await
+                .unwrap(),
+                17
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, String>(
+                    "SELECT secret FROM webhooks WHERE id=71 AND is_active=1"
+                )
+                .fetch_one(&mut connection)
+                .await
+                .unwrap(),
+                "preserved-secret"
+            );
+            connection.close().await.unwrap();
+        }
+    }
+}
+
+#[tokio::test]
 async fn all_populated_goose_versions_upgrade_without_losing_records_or_the_source() {
     let versions: Vec<i64> = serde_json::from_str(
         &fs::read_to_string(fixtures().join("compatibility/versions.json")).unwrap(),
@@ -43,6 +92,25 @@ async fn all_populated_goose_versions_upgrade_without_losing_records_or_the_sour
             schema(&mut connection).await.unwrap(),
             expected_schema,
             "schema at {version}"
+        );
+        let track_opens: bool = sqlx::query_scalar(
+            "SELECT track_opens FROM ruphish_campaign_policy WHERE campaign_id=53",
+        )
+        .fetch_one(&mut connection)
+        .await
+        .unwrap();
+        assert!(
+            track_opens,
+            "migrated {version} defaults to enabled even without a tracker in the stored HTML"
+        );
+        let collected: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM events WHERE client IS NOT NULL")
+                .fetch_one(&mut connection)
+                .await
+                .unwrap();
+        assert_eq!(
+            collected, 0,
+            "historical {version} must not invent client observations"
         );
         let user = sqlx::query("SELECT username,hash,api_key,role_id FROM users WHERE id=17")
             .fetch_one(&mut connection)
@@ -313,6 +381,67 @@ async fn old_smtp_profiles_are_converted_with_their_campaign_and_owner() {
     );
 }
 
+#[tokio::test]
+async fn historical_status_precedence_dates_and_default_roles_are_preserved() {
+    let directory = tempfile::tempdir().unwrap();
+    let source = directory.path().join("old.db");
+    let destination = directory.path().join("converted.db");
+    fs::copy(
+        fixtures().join("compatibility/20160605210903.sqlite3"),
+        &source,
+    )
+    .unwrap();
+    let mut raw = open(&source).await.unwrap();
+    sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key) VALUES(18,'admin','hash','other-key'); UPDATE campaigns SET created_date='2016-06-01 12:00:00+02:00',launch_date='2016-06-01 13:00:00+02:00'; UPDATE results SET status='Success'; INSERT INTO results(id,campaign_id,user_id,r_id,email,status) VALUES(60,53,17,'click-only','click@example.test','Success'),(62,53,17,'without-event','no-event@example.test','Success'); INSERT INTO events(id,campaign_id,email,time,message) VALUES(62,53,'history@example.test','2016-06-01 13:01:00+02:00','Clicked Link'),(63,53,'history@example.test','2016-06-01 13:02:00+02:00','Submitted Data'),(64,53,'click@example.test','2016-06-01 13:03:00+02:00','Clicked Link'); DELETE FROM events WHERE id=61;")
+        .execute(&mut raw).await.unwrap();
+    raw.close().await.unwrap();
+    migrations::upgrade_copy(&source, &destination)
+        .await
+        .unwrap();
+    let mut raw = open(&destination).await.unwrap();
+    let results: Vec<(i64, String, Option<String>)> =
+        sqlx::query_as("SELECT id,status,modified_date FROM results ORDER BY id")
+            .fetch_all(&mut raw)
+            .await
+            .unwrap();
+    assert_eq!(
+        results,
+        [
+            (
+                59,
+                "Submitted Data".into(),
+                Some("2016-06-01 11:02:00+00:00".into())
+            ),
+            (
+                60,
+                "Clicked Link".into(),
+                Some("2016-06-01 11:03:00+00:00".into())
+            ),
+            (62, "Success".into(), None),
+        ]
+    );
+    assert_eq!(
+        sqlx::query_as::<_, (String, String)>(
+            "SELECT created_date,launch_date FROM campaigns WHERE id=53"
+        )
+        .fetch_one(&mut raw)
+        .await
+        .unwrap(),
+        (
+            "2016-06-01 10:00:00+00:00".into(),
+            "2016-06-01 11:00:00+00:00".into()
+        )
+    );
+    assert_eq!(
+        sqlx::query_as::<_, (i64, i64)>("SELECT id,role_id FROM users ORDER BY id")
+            .fetch_all(&mut raw)
+            .await
+            .unwrap(),
+        [(17, 2), (18, 1)]
+    );
+    raw.close().await.unwrap();
+}
+
 async fn schema(
     connection: &mut SqliteConnection,
 ) -> Result<Vec<(String, String, String)>, sqlx::Error> {
@@ -357,34 +486,97 @@ async fn conversion_preserves_deleted_identity_high_water_marks() {
 }
 
 #[tokio::test]
+async fn deleted_owner_mailbox_is_dropped_with_original_retained_in_backup() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("source.db");
+    fs::copy(
+        fixtures().join("gophish-v0.12.1/legacy-latest.sqlite3"),
+        &path,
+    )
+    .unwrap();
+    let mut raw = open(&path).await.unwrap();
+    sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id) VALUES(18,'deleted','hash','deleted-key',2); INSERT INTO imap(user_id,host,port,username,password,tls,enabled,folder,imap_freq) VALUES(18,'imap.example.test',993,'deleted-service','retained-secret',1,1,'INBOX',60); DELETE FROM users WHERE id=18;")
+        .execute(&mut raw).await.unwrap();
+    raw.close().await.unwrap();
+    for _ in 0..2 {
+        let db = ruphish_adapters::database::open(
+            ruphish_adapters::database::Config::Sqlite { path: path.clone() },
+            ruphish_adapters::outbound::Policy::default(),
+        )
+        .await
+        .unwrap();
+        let mut raw = open(&path).await.unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM ruphish_mailboxes")
+                .fetch_one(&mut raw)
+                .await
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM imap")
+                .fetch_one(&mut raw)
+                .await
+                .unwrap(),
+            0
+        );
+        raw.close().await.unwrap();
+        db.close().await;
+    }
+    let backups: Vec<_> = fs::read_dir(directory.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("ruphish-pre-upgrade-")
+        })
+        .collect();
+    assert_eq!(backups.len(), 1);
+    let mut backup = open(&backups[0]).await.unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT password FROM imap WHERE user_id=18")
+            .fetch_one(&mut backup)
+            .await
+            .unwrap(),
+        "retained-secret"
+    );
+    backup.close().await.unwrap();
+}
+
+#[tokio::test]
 async fn in_place_conversion_failure_rolls_back_and_retains_a_verified_backup() {
     let directory = tempfile::tempdir().unwrap();
     let source = directory.path().join("source.db");
     fs::copy(
-        fixtures().join("gophish-v0.12.1/legacy-latest.sqlite3"),
+        fixtures().join("compatibility/20220321133237.sqlite3"),
         &source,
     )
     .unwrap();
     let mut connection = open(&source).await.unwrap();
-    sqlx::raw_sql("INSERT INTO imap(user_id,host,port,username,password) VALUES(NULL,'mail.example.test',993,'synthetic','fixture-only');")
+    // A campaign with a usable URL but no owner fails domain conversion after copying tables.
+    sqlx::query("UPDATE campaigns SET user_id=NULL")
         .execute(&mut connection)
         .await
         .unwrap();
     let original_schema = schema(&mut connection).await.unwrap();
     connection.close().await.unwrap();
-    let result = ruphish_adapters::database::open(
-        ruphish_adapters::database::Config::Sqlite {
-            path: source.clone(),
-        },
-        ruphish_adapters::outbound::Policy::new(&[]).unwrap(),
-    )
-    .await;
-    assert!(result.is_err());
+    assert!(
+        ruphish_adapters::database::open(
+            ruphish_adapters::database::Config::Sqlite {
+                path: source.clone()
+            },
+            ruphish_adapters::outbound::Policy::default(),
+        )
+        .await
+        .is_err()
+    );
     let backups: Vec<_> = fs::read_dir(directory.path())
         .unwrap()
-        .map(|e| e.unwrap().path())
-        .filter(|p| {
-            p.file_name()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.file_name()
                 .unwrap()
                 .to_string_lossy()
                 .starts_with("ruphish-pre-upgrade-")
@@ -395,7 +587,7 @@ async fn in_place_conversion_failure_rolls_back_and_retains_a_verified_backup() 
         let mut connection = open(path).await.unwrap();
         assert_eq!(schema(&mut connection).await.unwrap(), original_schema);
         assert_eq!(
-            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM imap WHERE user_id IS NULL")
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM campaigns WHERE user_id IS NULL")
                 .fetch_one(&mut connection)
                 .await
                 .unwrap(),
@@ -409,6 +601,71 @@ async fn in_place_conversion_failure_rolls_back_and_retains_a_verified_backup() 
             "ok"
         );
         connection.close().await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn malformed_mailbox_owners_are_skipped_without_losing_valid_data() {
+    let directory = tempfile::tempdir().unwrap();
+    let source = directory.path().join("source.db");
+    let destination = directory.path().join("converted.db");
+    fs::copy(
+        fixtures().join("compatibility/20220321133237.sqlite3"),
+        &source,
+    )
+    .unwrap();
+    let mut connection = open(&source).await.unwrap();
+    sqlx::raw_sql("DELETE FROM imap; INSERT INTO imap(user_id,host,port,username,password,tls,enabled,folder,imap_freq) VALUES(17,'mail.example.test',993,'valid-service','valid-secret',1,1,'INBOX',60); INSERT INTO imap(user_id,host,password) VALUES(NULL,'bad.example.test','null-secret'),(0,'bad.example.test','zero-secret'),(-1,'bad.example.test','negative-secret'),(999999,'bad.example.test','deleted-secret'),('invalid','bad.example.test','text-secret'),(17.5,'bad.example.test','real-secret'),(X'3137','bad.example.test','blob-secret');").execute(&mut connection).await.unwrap();
+    connection.close().await.unwrap();
+    let original = fs::read(&source).unwrap();
+    migrations::upgrade_copy(&source, &destination)
+        .await
+        .unwrap();
+    assert_eq!(fs::read(&source).unwrap(), original);
+    for _ in 0..2 {
+        let db = ruphish_adapters::database::open(
+            ruphish_adapters::database::Config::Sqlite {
+                path: destination.clone(),
+            },
+            ruphish_adapters::outbound::Policy::default(),
+        )
+        .await
+        .unwrap();
+        let mut connection = open(&destination).await.unwrap();
+        assert_eq!(
+            sqlx::query_as::<_, (i64, String, i64)>(
+                "SELECT owner_id,password,enabled FROM ruphish_mailboxes"
+            )
+            .fetch_all(&mut connection)
+            .await
+            .unwrap(),
+            vec![(17, "valid-secret".into(), 1)]
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM imap")
+                .fetch_one(&mut connection)
+                .await
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT api_key FROM users WHERE id=17")
+                .fetch_one(&mut connection)
+                .await
+                .unwrap(),
+            "historical-key"
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, String>(
+                "SELECT r_id FROM results WHERE id=59 AND campaign_id=53"
+            )
+            .fetch_one(&mut connection)
+            .await
+            .unwrap(),
+            "preserved-rid"
+        );
+        connection.close().await.unwrap();
+        db.close().await;
     }
 }
 

@@ -44,7 +44,7 @@ impl Snapshots for Reports {
         f.validate()?;
         let mut tx = self.pool.begin().await.map_err(storage)?;
         super::resources::authorize(&mut tx, caller, false).await?;
-        let campaign = sqlx::query("SELECT name,status FROM campaigns WHERE id=? AND user_id=?")
+        let campaign = sqlx::query("SELECT name,status,COALESCE((SELECT track_opens FROM ruphish_campaign_policy WHERE campaign_id=campaigns.id),1) AS track_opens FROM campaigns WHERE id=? AND user_id=?")
             .bind(id)
             .bind(caller.id)
             .fetch_optional(&mut *tx)
@@ -182,6 +182,11 @@ impl Snapshots for Reports {
                 serde_json::from_str(&crate::participant_privacy::details(&details))
                     .unwrap_or_default();
             events.push(Event {
+                client: crate::participant_privacy::client(
+                    r.try_get::<Option<String>, _>("client")
+                        .map_err(storage)?
+                        .as_deref(),
+                )?,
                 edited: r.try_get("edited").map_err(storage)?,
                 id: r.try_get("id").map_err(storage)?,
                 recipient_id: r.try_get("recipient_id").map_err(storage)?,
@@ -323,6 +328,7 @@ impl Snapshots for Reports {
         let participant_buckets =
             crate::reporting::participant_buckets(participant_increments, last, width);
         let result = Analysis {
+            track_opens: campaign.try_get("track_opens").map_err(storage)?,
             participant_buckets,
             first_observed,
             last_observed,

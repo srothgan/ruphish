@@ -36,7 +36,7 @@ impl WebhookQueue for Integrations {
                 AND lease<=?
             "#).bind(clock).execute(&mut *tx).await.map_err(db)?;
         let row=sqlx::query(r#"
-                SELECT j.id AS job,j.event_id,j.attempt,w.url,w.secret,e.campaign_id,e.email,e.time,e.message,e.details
+                SELECT j.id AS job,j.event_id,j.attempt,w.url,w.secret,e.campaign_id,e.email,e.time,e.message,e.details,e.client
                 FROM ruphish_webhook_jobs j
                 JOIN webhooks w ON w.id=j.webhook_id
                 JOIN ruphish_webhook_state s ON s.webhook_id=w.id
@@ -78,6 +78,11 @@ impl WebhookQueue for Integrations {
             text(&r, "time")?,
             text(&r, "message")?,
             &text(&r, "details")?,
+            crate::participant_privacy::client(
+                r.try_get::<Option<String>, _>("client")
+                    .map_err(db)?
+                    .as_deref(),
+            )?,
         )?;
         let url = text(&r, "url")?;
         let secret = text(&r, "secret")?;

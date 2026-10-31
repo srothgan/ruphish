@@ -509,9 +509,9 @@ fn selector(
 fn domain_selector(draft: RwSignal<Draft>, resources: Signal<Value>) -> impl IntoView {
     let selected = move || {
         let value = text(&draft.get().value, "url");
-        url::Url::parse(&value)
+        ruphish_domain::domains::origin(&value, true)
             .ok()
-            .map(|u| u.origin().ascii_serialization())
+            .map(|o| o.value)
             .unwrap_or_default()
     };
     let path = move || {
@@ -533,14 +533,14 @@ fn domain_selector(draft: RwSignal<Draft>, resources: Signal<Value>) -> impl Int
         <div>
             <Select
                 validation_field="url"
-                label=trs!(ui.verified_domain)
+                label=trs!(ui.campaign_origin)
                 value=Signal::derive(selected)
                 on_change=Callback::new(move |origin: String| {
                     let path = path();
                     draft.update(|d| d.edit(|node| node["url"] = json!(format!("{origin}{path}"))));
                 })
             >
-                <option value="">{tr!(ui.choose_a_verified_domain)}</option>
+                <option value="">{tr!(ui.choose_campaign_origin)}</option>
                 {move || {
                     array(&resources.get(), "domains")
                         .into_iter()
@@ -750,7 +750,7 @@ pub(super) fn CreateCampaign(
         .min(3) as usize;
     let draft = RwSignal::new(Draft {
         generation,
-        value: initial.unwrap_or_else(||json!({"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"redirect_url":""}})),
+        value: initial.unwrap_or_else(||json!({"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"redirect_url":"", "track_opens":true}})),
         ..Default::default()
     });
     let resource_read = CampaignQueries::resources(true);
@@ -863,9 +863,14 @@ pub(super) fn CreateCampaign(
                 )
                 .await
             {
-                Ok(_) => message.status(
-                    leptos_i18n::t_string!(i18n, ui.test_accepted_by_smtp_server).to_owned(),
-                ),
+                Ok(_) => {
+                    #[cfg(not(feature = "demo"))]
+                    message.status(
+                        leptos_i18n::t_string!(i18n, ui.test_accepted_by_smtp_server).to_owned(),
+                    );
+                    #[cfg(feature = "demo")]
+                    message.local_status(leptos_i18n::t_string!(i18n, demo.test_email).to_owned());
+                }
                 Err(e) => message.error(e),
             }
             busy.set(false);
@@ -907,6 +912,8 @@ pub(super) fn CreateCampaign(
             {
                 Ok(_) => {
                     if destination.is_none() {
+                        #[cfg(feature = "demo")]
+                        api.notifications.show(DemoNotice::DraftSaved);
                         navigate(
                             &format!("/campaigns/drafts/{}", persistence.id.get_untracked()),
                             Default::default(),
@@ -1210,6 +1217,18 @@ pub(super) fn CreateCampaign(
                         </p>
                         <p>{tr!(ui.all_submissions_recorded)}</p>
                         <section class="resource-section">
+                            <Checkbox
+                                label=trs!(ui.track_email_opens)
+                                checked=Signal::derive(move || {
+                                    draft
+                                        .with(|d| {
+                                            d.value["policy"]["track_opens"].as_bool().unwrap_or(true)
+                                        })
+                                })
+                                on_toggle=Callback::new(move |checked| {
+                                    draft.update(|d| d.set_track_opens(checked))
+                                })
+                            />
                             <h2>{tr!(ui.redirect_after_submission_optional)}</h2>
                             <p>{tr!(ui.campaign_redirect_defaults)}</p>
                             <Show when=move || {
@@ -1253,10 +1272,15 @@ pub(super) fn CreateCampaign(
                                         draft
                                             .update(|d| {
                                                 d.edit(|v| {
+                                                    let track_opens = v["policy"]["track_opens"]
+                                                        .as_bool()
+                                                        .unwrap_or(true);
                                                     v["policy"] = if value == "learning" {
-                                                        json!({"redirect_url":"", "learning_page_id":0})
+                                                        json!(
+                                                            {"redirect_url":"", "learning_page_id":0, "track_opens":track_opens}
+                                                        )
                                                     } else {
-                                                        json!({"redirect_url":""})
+                                                        json!({"redirect_url":"", "track_opens":track_opens})
                                                     };
                                                 })
                                             })
@@ -1543,6 +1567,15 @@ pub(super) fn CreateCampaign(
                                                     <dt>{tr!(ui.password_presence_only)}</dt>
                                                     <dd>{tr!(ui.yes)}</dd>
                                                 </div><div>
+                                                    <dt>{tr!(ui.track_email_opens)}</dt>
+                                                    <dd>
+                                                        {if r.policy.track_opens {
+                                                            tr!(ui.enabled).into_any()
+                                                        } else {
+                                                            tr!(ui.not_tracked).into_any()
+                                                        }}
+                                                    </dd>
+                                                </div><div>
                                                     <dt>{tr!(ui.redirect)}</dt>
                                                     <dd>
                                                         {match r.policy.learning_page_id {
@@ -1569,9 +1602,16 @@ pub(super) fn CreateCampaign(
                                             </dl> <section class="resource-section">
                                                 <h3>{tr!(ui.rendered_sample)}</h3>
                                                 <p>
-                                                    {tr!(
-                                                        ui.uses_the_first_recipient_s_details_test_emails_use_sample_recipient_preview_link
-                                                    )}
+                                                    {move || {
+                                                        #[cfg(feature = "demo")]
+                                                        { leptos_i18n::t_string!(i18n, demo.email_preview_help) }
+                                                        #[cfg(not(feature = "demo"))]
+                                                        {
+                                                            leptos_i18n::t_string!(
+                                                                i18n, ui.uses_the_first_recipient_s_details_test_emails_use_sample_recipient_preview_link
+                                                            )
+                                                        }
+                                                    }}
                                                 </p>
                                                 <dl class="resource-facts">
                                                     <div>
@@ -1618,9 +1658,16 @@ pub(super) fn CreateCampaign(
                                                 .then(|| {
                                                     view! {
                                                         <p class="form-message error">
-                                                            {tr!(
-                                                                ui.the_mailer_is_disabled_this_campaign_will_remain_queued_until_an_enabled_admin_p
-                                                            )}
+                                                            {move || {
+                                                                #[cfg(feature = "demo")]
+                                                                { leptos_i18n::t_string!(i18n, demo.launch_notice) }
+                                                                #[cfg(not(feature = "demo"))]
+                                                                {
+                                                                    leptos_i18n::t_string!(
+                                                                        i18n, ui.the_mailer_is_disabled_this_campaign_will_remain_queued_until_an_enabled_admin_p
+                                                                    )
+                                                                }
+                                                            }}
                                                         </p>
                                                     }
                                                 })}
@@ -1681,10 +1728,17 @@ pub(super) fn CreateCampaign(
                         {move || {
                             if draft.with(|d| d.launch.is_some()) {
                                 leptos_i18n::t_string!(i18n, ui.retry_same_launch)
-                            } else if !draft.get().value["launch_local"].is_null() {
-                                leptos_i18n::t_string!(i18n,ui.schedule_campaign)
                             } else {
-                                leptos_i18n::t_string!(i18n, ui.launch_campaign)
+                                #[cfg(feature = "demo")]
+                                { leptos_i18n::t_string!(i18n, demo.simulate_launch) }
+                                #[cfg(not(feature = "demo"))]
+                                {
+                                    if !draft.get().value["launch_local"].is_null() {
+                                        leptos_i18n::t_string!(i18n,ui.schedule_campaign)
+                                    } else {
+                                        leptos_i18n::t_string!(i18n, ui.launch_campaign)
+                                    }
+                                }
                             }
                         }}
                     </ActionButton>
@@ -2368,11 +2422,21 @@ fn campaign_context(c: &reads::Header) -> impl IntoView + use<> {
     let c = c.clone();
     let template_sender = c.template_sender.clone().unwrap_or_default();
     let destination = c.policy.clone();
+    let track_opens = c.policy.as_ref().is_none_or(|policy| policy.track_opens);
     view! {
         <Card class="resource-read-panel campaign-context" label=trs!(ui.campaign_details)>
             <h2>{tr!(ui.campaign_details)}</h2>
             <dl class="resource-facts">
                 {resources} <div>
+                    <dt>{tr!(ui.track_email_opens)}</dt>
+                    <dd>
+                        {if track_opens {
+                            tr!(ui.enabled).into_any()
+                        } else {
+                            tr!(ui.not_tracked).into_any()
+                        }}
+                    </dd>
+                </div> <div>
                     <dt>{tr!(ui.redirect_destination)}</dt>
                     <dd>
                         {match destination.as_ref().and_then(|policy| policy.learning_page_id) {

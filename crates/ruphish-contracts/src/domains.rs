@@ -22,17 +22,17 @@ pub struct Domain {
     pub id: i64,
     /// Operator-visible display name.
     pub name: String,
-    /// Canonical public HTTPS origin.
+    /// Canonical public HTTP(S) origin.
     pub origin: String,
-    /// Canonical ASCII DNS hostname.
+    /// Canonical ASCII DNS name or IP address without IPv6 brackets.
     pub hostname: String,
     /// Explicit operational enablement.
     pub enabled: bool,
     /// Optimistic concurrency revision.
     pub revision: i64,
-    /// DNS TXT record name to publish.
+    /// DNS TXT record name to publish; empty for IP origins.
     pub txt_name: String,
-    /// Exact DNS TXT record value to publish.
+    /// Exact DNS TXT record value to publish; empty for IP origins.
     pub txt_value: String,
     /// Challenge expiry as UTC Unix seconds.
     pub challenge_expires: i64,
@@ -73,7 +73,7 @@ pub struct Domain {
 pub struct Edit {
     /// Operator-visible display name.
     pub name: String,
-    /// Canonical public HTTPS origin.
+    /// Canonical public HTTP(S) origin.
     pub origin: String,
     /// Explicit operational enablement.
     pub enabled: bool,

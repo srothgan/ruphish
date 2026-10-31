@@ -162,10 +162,10 @@ async fn stale_mailbox_claims_cannot_initialize_replacements_even_for_the_same_o
             .await
             .unwrap();
         assert_ne!(replacement.id, original.id);
-        worker
-            .initialize_mailbox(&claim.config, 123, 500)
-            .await
-            .unwrap();
+        assert_eq!(
+            worker.initialize_mailbox(&claim.config, 123, 500).await,
+            Err("configuration_changed")
+        );
         worker.mailbox_login(&claim.config).await.unwrap();
         worker
             .finish_mailbox(&claim, "passed", 1_800_000_100, 1_800_000_001)
@@ -401,4 +401,54 @@ async fn integration_identity_preserves_populated_history_across_restarts() {
         .unwrap();
     assert!(replacement.id > original.id);
     reopened.close().await;
+}
+
+#[tokio::test]
+async fn webhook_claims_keep_only_closed_client_categories_and_preserve_them_on_retry() {
+    let (_dir, db, pool) = fixture().await;
+    db.integrations()
+        .save_webhook(
+            admin(),
+            None,
+            WebhookEdit {
+                name: "client observation".into(),
+                url: "https://receiver.example.test/hook".into(),
+                secret: Some("synthetic-secret".into()),
+                active: true,
+                revision: None,
+            },
+        )
+        .await
+        .unwrap();
+    let client = r#"{"browser":"firefox","os":"linux","device":"desktop"}"#;
+    sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id,client) SELECT campaign_id,email,'2026-10-22T00:00:00Z','link_clicked',?,id,? FROM results LIMIT 1")
+        .bind(r#"{"user_agent":"SECRET-CLIENT-CANARY","ip":"192.0.2.19","password":"SECRET-CLIENT-CANARY"}"#).bind(client).execute(&pool).await.unwrap();
+    let queue = Integrations::new(pool.clone(), Policy::default());
+    let now = ruphish_application::datetime::now().as_second();
+    let claim = queue.claim_webhook(now).await.unwrap().unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&claim.body).unwrap();
+    assert_eq!(
+        body["client"],
+        serde_json::json!({"browser":"firefox","os":"linux","device":"desktop"})
+    );
+    assert_eq!(body["details"], "");
+    assert!(!String::from_utf8_lossy(&claim.body).contains("SECRET-CLIENT-CANARY"));
+    queue
+        .finish_webhook(
+            &claim,
+            WebhookCompletion {
+                state: "retry",
+                code: "http_transient",
+                status: Some(503),
+                due: now + 30,
+            },
+            now,
+        )
+        .await
+        .unwrap();
+    let retry = queue.claim_webhook(now + 31).await.unwrap().unwrap();
+    assert_eq!(retry.event, claim.event);
+    assert_eq!(retry.body, claim.body);
+    pool.close().await;
+    db.close().await;
 }

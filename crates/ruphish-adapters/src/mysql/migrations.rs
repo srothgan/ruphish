@@ -164,6 +164,7 @@ async fn resume(c: &mut MySqlConnection, _config: &MySqlConfig) -> Result<(), Er
                 .map_err(storage_error)?;
             tx.commit().await.map_err(|_| Error::UncertainCommit)?;
         }
+        preserve_sequences(c, &source, &expected).await?;
         let pairs: Vec<_> = source
             .iter()
             .map(|n| format!("`{n}` TO `{ORIGINAL}{n}`"))
@@ -203,6 +204,34 @@ async fn resume(c: &mut MySqlConnection, _config: &MySqlConfig) -> Result<(), Er
         .run_direct(None, &mut *c, false)
         .await
         .map_err(|_| Error::UnsupportedSchema)?;
+    Ok(())
+}
+
+async fn preserve_sequences(
+    c: &mut MySqlConnection,
+    source: &BTreeSet<String>,
+    destination: &BTreeSet<String>,
+) -> Result<(), Error> {
+    // Metadata statistics may otherwise cache an older allocation counter. These
+    // ALTERs must run outside the copy transaction (DDL implicitly commits), and
+    // are safe to repeat in the durable `copied` phase before atomic publication.
+    sqlx::query("SET SESSION information_schema_stats_expiry=0")
+        .execute(&mut *c)
+        .await
+        .map_err(storage_error)?;
+    let rows: Vec<(String, u64)> = sqlx::query_as(
+        "SELECT TABLE_NAME,AUTO_INCREMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND AUTO_INCREMENT IS NOT NULL",
+    ).fetch_all(&mut *c).await.map_err(storage_error)?;
+    for (table, next) in rows {
+        // Both sets contain recognized identifiers; Goose history is not copied.
+        if source.contains(&table) && destination.contains(&table) {
+            statement(
+                c,
+                format!("ALTER TABLE `{STAGE}{table}` AUTO_INCREMENT={next}"),
+            )
+            .await?;
+        }
+    }
     Ok(())
 }
 

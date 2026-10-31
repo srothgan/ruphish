@@ -63,3 +63,86 @@ pub(crate) fn ActivityIndicator(recorded: Signal<bool>) -> impl IntoView {
         </span>
     }
 }
+
+/// Request metadata belongs to the observation, never to a recipient-wide device profile.
+#[component]
+pub(crate) fn ClientObservation(
+    client: Signal<Option<ruphish_domain::client::Info>>,
+    kind: Signal<Option<ruphish_domain::events::Kind>>,
+) -> impl IntoView {
+    use ruphish_domain::{
+        client::{Browser, Device, OperatingSystem},
+        events::Kind,
+    };
+    let i18n = ruphish_ui::localization::use_i18n();
+    let unknown = move || leptos_i18n::t_string!(i18n, ui.unknown).to_string();
+    view! {
+        <Show when=move || {
+            client.get().is_some()
+                || matches!(kind.get(), Some(Kind::LinkClicked | Kind::FormSubmitted))
+        }>
+            <div class="client-observation">
+                <Show
+                    when=move || client.get().is_some()
+                    fallback=move || {
+                        view! {
+                            <small>
+                                {ruphish_ui::tr!(ui.client_information)}": "
+                                {ruphish_ui::tr!(ui.unavailable)}
+                            </small>
+                        }
+                    }
+                >
+                    <dl>
+                        <div>
+                            <dt>{ruphish_ui::tr!(ui.client_browser)}</dt>
+                            <dd>
+                                {move || match client.get().map(|c| c.browser).unwrap_or_default() {
+                                    Browser::Chrome => "Chrome".into(),
+                                    Browser::Edge => "Edge".into(),
+                                    Browser::Firefox => "Firefox".into(),
+                                    Browser::Safari => "Safari".into(),
+                                    Browser::Opera => "Opera".into(),
+                                    Browser::SamsungInternet => "Samsung Internet".into(),
+                                    Browser::InternetExplorer => "Internet Explorer".into(),
+                                    Browser::Unknown => unknown(),
+                                }}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>{ruphish_ui::tr!(ui.client_os)}</dt>
+                            <dd>
+                                {move || match client.get().map(|c| c.os).unwrap_or_default() {
+                                    OperatingSystem::Windows => "Windows".into(),
+                                    OperatingSystem::MacOs => "macOS".into(),
+                                    OperatingSystem::Linux => "Linux".into(),
+                                    OperatingSystem::Android => "Android".into(),
+                                    OperatingSystem::Ios => "iOS".into(),
+                                    OperatingSystem::ChromeOs => "ChromeOS".into(),
+                                    OperatingSystem::Unknown => unknown(),
+                                }}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>{ruphish_ui::tr!(ui.client_device)}</dt>
+                            <dd>
+                                {move || match client.get().map(|c| c.device).unwrap_or_default() {
+                                    Device::Desktop => {
+                                        leptos_i18n::t_string!(i18n, ui.client_desktop).to_string()
+                                    }
+                                    Device::Mobile => {
+                                        leptos_i18n::t_string!(i18n, ui.client_mobile).to_string()
+                                    }
+                                    Device::Tablet => {
+                                        leptos_i18n::t_string!(i18n, ui.client_tablet).to_string()
+                                    }
+                                    Device::Unknown => unknown(),
+                                }}
+                            </dd>
+                        </div>
+                    </dl>
+                </Show>
+            </div>
+        </Show>
+    }
+}

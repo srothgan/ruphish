@@ -1,8 +1,11 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import sitemap from '@astrojs/sitemap';
+import mdx from '@astrojs/mdx';
 import { unified } from '@astrojs/markdown-remark';
 import { existsSync } from 'node:fs';
 import { documentationIntegration, remarkDocLinks, sourceRoot } from './tools/docs.mjs';
+import { socialImage } from './src/site.ts';
 import { resolve } from 'node:path';
 
 const sections = [
@@ -32,6 +35,15 @@ export default defineConfig({
       description: 'Guides and reference for running phishing simulations with Ruphish.',
       logo: { src: './src/assets/ruphish-wordmark-white.svg', alt: 'Ruphish', replacesTitle: true },
       favicon: '/favicon.svg',
+      head: site
+        ? [
+            {
+              tag: 'meta',
+              attrs: { property: 'og:image', content: new URL(socialImage, site).href },
+            },
+            { tag: 'meta', attrs: { property: 'og:image:alt', content: 'Ruphish' } },
+          ]
+        : [],
       social: [
         { icon: 'github', label: 'Ruphish on GitHub', href: 'https://github.com/srothgan/ruphish' },
       ],
@@ -42,6 +54,7 @@ export default defineConfig({
         Footer: './src/components/DocsFooter.astro',
       },
       routeMiddleware: './src/docs-middleware.ts',
+      disable404Route: true,
       sidebar: [
         { label: 'Documentation', slug: 'docs' },
         ...sections
@@ -56,6 +69,8 @@ export default defineConfig({
       pagination: true,
       credits: true,
     }),
+    mdx(),
+    sitemap(),
   ],
   markdown: { processor: unified({ remarkPlugins: [remarkDocLinks] }) },
 });

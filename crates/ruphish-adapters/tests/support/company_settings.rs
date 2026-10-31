@@ -233,7 +233,7 @@ pub(super) async fn exercise(db: &Database) {
         domains.request_check(who, domain.id, now).await,
         Err(Error::FeatureDisabled(_))
     ));
-    assert!(domains.serves("policy.example.test").await.unwrap());
+    assert!(domains.serves("https://policy.example.test").await.unwrap());
     let launch = input(db, who, &domain.origin).await;
     let campaigns = db.campaigns();
 
@@ -256,7 +256,7 @@ pub(super) async fn exercise(db: &Database) {
         .await
         .unwrap();
     assert!(campaigns.prepare(who, &launch, now).await.is_err());
-    assert!(!domains.serves("policy.example.test").await.unwrap());
+    assert!(!domains.serves("https://policy.example.test").await.unwrap());
     domains
         .save(
             who,
@@ -275,7 +275,12 @@ pub(super) async fn exercise(db: &Database) {
     let rid = first.results[0].rid.clone();
     assert!(
         db.interactions()
-            .interact("policy.example.test", &rid, interactions::Action::Open, now)
+            .interact(
+                "https://policy.example.test",
+                &rid,
+                interactions::Action::Open,
+                now
+            )
             .await
             .is_ok()
     );
@@ -293,7 +298,7 @@ pub(super) async fn exercise(db: &Database) {
     ));
     assert!(campaigns.prepare(who, &launch, now).await.is_err());
     assert!(campaigns.claim(now).await.unwrap().is_none());
-    assert!(!domains.serves("policy.example.test").await.unwrap());
+    assert!(!domains.serves("https://policy.example.test").await.unwrap());
     domains.request_check(who, domain.id, now).await.unwrap();
     let obsolete = domains.claim(now).await.unwrap().unwrap();
     let off = settings
@@ -349,7 +354,7 @@ pub(super) async fn exercise(db: &Database) {
     assert_eq!(evidence.expires_at, Some(now + 3604));
     assert!(campaigns.prepare(who, &launch, now + 3604).await.is_err());
     assert!(
-        domains.serves("policy.example.test").await.unwrap(),
+        domains.serves("https://policy.example.test").await.unwrap(),
         "expiry alone preserves links"
     );
     policy.verification_expires = false;
@@ -376,7 +381,7 @@ pub(super) async fn exercise(db: &Database) {
         .await
         .unwrap();
     assert!(campaigns.prepare(who, &launch, now + 3607).await.is_err());
-    assert!(!domains.serves("policy.example.test").await.unwrap());
+    assert!(!domains.serves("https://policy.example.test").await.unwrap());
     policy.verification_enabled = false;
     policy.reporting_mailboxes_enabled = false;
     let disabled = settings
@@ -391,23 +396,32 @@ pub(super) async fn exercise(db: &Database) {
             .reporting_mailboxes_enabled
     );
     let integrations = db.integrations();
-    let hook = integrations
-        .save_webhook(
-            who,
-            None,
-            ruphish_application::integrations::WebhookEdit {
-                name: "Disabled endpoint".into(),
-                url: "http://127.0.0.1:1/never".into(),
-                secret: Some("synthetic-secret".into()),
-                active: true,
-                revision: None,
-            },
-        )
+    let edit = || ruphish_application::integrations::WebhookEdit {
+        name: "Disabled endpoint".into(),
+        url: "http://127.0.0.1:1/never".into(),
+        secret: Some("synthetic-secret".into()),
+        active: true,
+        revision: None,
+    };
+    assert!(matches!(
+        integrations.save_webhook(who, None, edit()).await,
+        Err(Error::FeatureDisabled("webhooks"))
+    ));
+    assert!(integrations.webhooks(who).await.unwrap().is_empty());
+    policy.webhooks_enabled = true;
+    let enabled = settings
+        .save(who, disabled.revision, policy.clone(), now + 3607)
+        .await
+        .unwrap();
+    let hook = integrations.save_webhook(who, None, edit()).await.unwrap();
+    policy.webhooks_enabled = false;
+    let disabled = settings
+        .save(who, enabled.revision, policy.clone(), now + 3607)
         .await
         .unwrap();
     assert!(matches!(
         integrations.validate_webhook(who, hook.id).await,
-        Err(Error::FeatureDisabled(_))
+        Err(Error::FeatureDisabled("webhooks"))
     ));
     integrations.tick().await.unwrap();
     assert!(
@@ -504,7 +518,7 @@ pub(super) async fn exercise(db: &Database) {
     assert!(
         db.interactions()
             .interact(
-                "policy.example.test",
+                "https://policy.example.test",
                 &rid,
                 interactions::Action::Open,
                 now + 3614
@@ -734,7 +748,7 @@ fn integration_presence_sql(mailbox: bool, webhook: bool, enabled: bool) -> Stri
         sql.push_str(&format!("INSERT INTO ruphish_mailboxes(id,owner_id,name,enabled,host,port,username,password,tls,folder) VALUES(99,1,'Existing mailbox',{enabled},'127.0.0.1',993,'service','preserved-mailbox-secret',TRUE,'INBOX');"));
     }
     if webhook {
-        sql.push_str(&format!("INSERT INTO webhooks(id,name,url,secret,is_active) VALUES(99,'Existing endpoint','http://127.0.0.1:1/events','preserved-service-secret',{enabled}); INSERT INTO ruphish_webhook_state(webhook_id,revision) VALUES(99,1);"));
+        sql.push_str(&format!("INSERT INTO webhooks(id,name,url,secret,is_active) VALUES(99,'Existing endpoint','http://127.0.0.1:1/events','preserved-service-secret',{enabled}); INSERT INTO ruphish_webhook_state(webhook_id,revision,owner_id) VALUES(99,1,1);"));
     }
     sql
 }

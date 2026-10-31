@@ -2,25 +2,30 @@
 
 Bugs, errors, security issues, and reliability problems are addressed continuously across all releases.
 
-Ruphish targets Gophish compatibility and a drop-in replacement, subject to [documented differences](https://ruphish.com/docs/migration/differences-from-gophish/).
+Ruphish is a successor to Gophish, covering its campaign workflows with supported data/template migration and independent API contracts. The [documented differences](docs/migration/differences-from-gophish.md) define intentional changes and deferred features.
 
 Milestones describe priorities, not release dates; scope may change with feedback.
 
 ## 0.1.0 - First release
 
-**Status: In progress until shipped.** Target feature parity with Gophish.
+**Status: In progress until shipped.** Cover Gophish campaign workflows within the documented feature and privacy boundaries.
 
 See the [changelog](CHANGELOG.md) for existing capabilities.
 
-Complete the first-release scope:
+Implemented in the development version:
 
-- **Gophish feature coverage:** Cover all Gophish features, with intentional differences documented.
+- **Email-open tracking:** Choose tracking per campaign before launch; new and migrated campaigns default to enabled. Disabled metrics show **Not tracked** or **-**.
+- **Campaign URLs:** Support fixed DNS, IPv4, and IPv6 origins over HTTP or HTTPS. Required verification limits eligibility to DNS hostnames over HTTPS.
+- **Client observations:** Show read-only browser, OS, and device categories per click/submission event, associated with the existing recipient. Exclude entered values, raw headers, IP/geolocation, and fingerprinting.
+- **Reporting mailboxes:** Initialize new mailbox scans from the earliest actual Ruphish send in any active campaign, or new arrivals if none exists. Match across campaign creators, keep polling between campaigns, and ignore reports after completion without blocking mailbox progress.
+- **Integration access:** Let regular users manage their own mailbox and webhook configurations when an administrator enables the feature. Webhook delivery spans campaign creators; campaign management remains creator-scoped.
+- **Starter and learning pages:** Bundle editable offline email/landing templates and static educational pages for post-submission redirects.
+- **Administration and monitoring:** Provide domain-verification policy, integration feature switches, and HTTP liveness/readiness probes.
+
+Remaining release work:
+
 - **Distribution:** Publish verified release binaries and a Docker image.
-- **Health endpoints:** Add HTTP liveness and readiness endpoints for deployment and service monitoring.
-- **Starter templates:** Bundle an offline catalog of editable email templates and landing pages.
-- **Learning pages:** Add simple static educational landing pages as post-submission redirect destinations.
-- **Admin settings:** Add initial configuration controls, starting with domain-verification policy.
-- **Release verification:** Complete documentation, in-app guidance, security checks, and workflow, migration, upgrade, and recovery acceptance.
+- **Release verification:** Complete security checks and workflow, migration, upgrade, recovery, and distribution acceptance. Feature-level tests and documentation checks do not establish full release acceptance.
 
 ## 0.2.0 - Administration and campaign operations
 
@@ -55,6 +60,8 @@ Complete the first-release scope:
 
 These ideas have no committed release target:
 
+- **Batch reports:** Consider multiple distinct recipient-ID/origin pairs in one reported message; the first release rejects ambiguous attribution.
+- **Embedded pages:** Consider authored iframe/frame support; the first release keeps embedded-document restrictions and provides ordinary landing pages and starter templates.
 - **Recipients and groups:** Discuss independent recipient management, memberships, and compatibility implications.
 - **SSO, MFA, and team access:** Assess single sign-on, administrator MFA, shared resources, and organization boundaries.
 - **Active campaign audiences:** Discuss adding or removing recipients during active runs, with explicit authorization and preserved audience and reporting history.

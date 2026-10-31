@@ -15,8 +15,9 @@ The comparison baseline is Gophish 0.12.1, commit `95618469799295e2c0fec980805a2
 | UI | Legacy web administration and campaign views | Leptos/WASM interface with saved drafts, delivery history/reconciliation, domains, richer analysis, and multiple mailboxes | Follow current guides and replace old screen-specific instructions |
 | Localization | No equivalent account-level language/format/zone preference workflow | English/German interface with independently persisted format and time-zone choices | Choose account preferences; keep API timestamps and names unchanged |
 | Browser API layout | Browser and administrative routes without the same three-way separation | Public `/api/`, session `/auth/`, browser-specific `/internal/`, plus retained form routes | Integrate through documented public endpoints |
+| Email-open tracking | Template checkbox adds/removes authored tracker markup | Campaign-level `track_opens`, enabled by default for new and migrated campaigns; composer owns the pixel | Review the campaign setting before launch; migrated defaults do not establish historical tracking coverage |
 | Participant submissions | Optional captured form/credential values and network-derived details | Closed event/presence schema; old opaque details and locations removed from active data | Redesign pages and consumers that expect captured values |
-| Campaign origins | Campaign URL without Ruphish's ownership-verification workflow | HTTPS DNS origin with control, routing, and certificate verification | Verify an origin before launch or continued use of supported migrated links |
+| Campaign origins | Campaign URL without Ruphish's ownership-verification workflow | Fixed HTTP/HTTPS DNS or IP origin; required verification restricts eligibility to HTTPS DNS origins | Register an enabled owned origin and satisfy the installation verification policy |
 | Configuration lookup | Defaults to `./config.json` | Reads or creates the per-user OS configuration with SQLite defaults | Use `--config ./config.json` to keep an existing working-directory installation; see [locations and path rules](../administration/configuration.md#default-locations-and-explicit-configuration) |
 | Database engines | SQLite and MySQL | SQLite, MySQL, and PostgreSQL with distinct upgrade contracts | Select the provider explicitly; do not assume a cross-engine importer |
 | Delivery recovery | Legacy queue flags and retry state | Durable attempts, generation checks, and explicit unknown outcomes | Reconcile uncertain sends before choosing a resend |
@@ -27,9 +28,11 @@ Familiar wire names are not always current UI labels: `smtp` means sending profi
 
 ## A broader administration interface
 
-The Rust/WASM UI adds persistent campaign drafts, a preparation/review step, delivery-attempt history and reconciliation, verified domains, observed-event analysis, recipient timelines, and CSV/XLSX exports. Multiple reporting mailboxes and webhook history make integrations visible as managed resources. Start with the [user guide](../user-guide/index.md) rather than looking for an exact copy of the old screen layout.
+The Rust/WASM UI adds persistent campaign drafts, a preparation/review step, delivery-attempt history and reconciliation, verified domains, observed-event analysis, recipient timelines, and CSV/XLSX exports. Multiple reporting mailboxes and webhook history make integrations visible as managed resources. Administrators control global integration availability; once enabled, regular users can manage their own mailbox and webhook configurations without per-integration approval. Mailbox report matching and webhook delivery span campaign creators, while campaign editing remains creator-scoped. Start with the [user guide](../user-guide/index.md) rather than looking for an exact copy of the old screen layout.
 
 The interface supports English and German. Account settings independently control interface language, date/time formatting locale, and IANA time zone. Preferences follow the account across devices. Changing presentation does not change stored UTC instants or move an existing campaign schedule. See [account settings](../user-guide/account.md).
+
+Webhook configuration and delivery history are creator-owned. Existing Gophish endpoints receive an owner during [conversion](from-gophish.md#webhook-ownership); review that assignment before cutover. Ownership controls configuration access while enabled delivery continues across campaign creators.
 
 ## API additions and separation
 
@@ -43,9 +46,18 @@ Accepted built-in submissions record events and password presence; entered value
 
 An event is an observation, not proof that a particular person acted. New reporting distinguishes observed event totals, unique recipients, inferred progression, and delivery state. Old summary counts and new analysis counts are not interchangeable.
 
+## First-release boundaries
+
+- **Reporting mailboxes:** New configurations choose their starting boundary from actual Ruphish sends in active campaigns across all creators. Without an eligible send, the first poll watches new arrivals. Polling continues between campaigns, and reports received after completion do not change campaign results. See [initialization and recovery](../user-guide/reporting-mailboxes.md).
+- **Multiple reported messages:** Gophish's IMAP scanner iterates over distinct recipient IDs found in one email. Ruphish currently requires one distinct recipient-ID/origin pair and rejects ambiguous messages. Forward each original separately; batch attribution is deferred.
+- **Embedded documents:** Authored iframe/frame support is deferred. Use ordinary landing-page content or the starter catalog; the application's sandboxed preview is separate from authored embedded content.
+- **Client observations:** Clicks and submissions retain read-only browser/OS/device categories on recipient events. They do not collect raw User-Agent, versions, IP/geolocation, or fingerprints, and they are not anonymous. Imported events have no reconstructed client categories. See [participant data](../user-guide/participant-data.md#browser-and-device-observations).
+- **Entered values:** Participant usernames, passwords, OTPs, and arbitrary submitted values are outside the collection model. Presence-only observations remain supported.
+- **Future analysis:** Cross-campaign comparisons and trends remain proposed for [0.3.0](../../ROADMAP.md#030---deeper-reporting-and-integrations). Existing campaign results, recipient histories, and exports are available in the first-release implementation.
+
 ## Operations and recovery
 
-Campaign origins require DNS, routing, and TLS verification. SMTP trust and authentication checks may reject previously accepted insecure configurations. A timeout after SMTP submission can become an explicit unknown outcome requiring a decision; Ruphish does not promise exactly-once mail delivery.
+When verification is required, campaign origins require DNS ownership, routing, and TLS verification; HTTP and IP origins are eligible only with verification off. SMTP trust and authentication checks may reject previously accepted insecure configurations. A timeout after SMTP submission can become an explicit unknown outcome requiring a decision; Ruphish does not promise exactly-once mail delivery.
 
 New passwords use Argon2id while supported legacy hashes remain usable. Generated temporary administrator passwords appear in startup stderr, including container output, but not the application log file. Supplied passwords and API tokens are never echoed. Browser sessions, current-password changes, and API keys have separate lifecycles.
 

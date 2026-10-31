@@ -20,6 +20,27 @@ updates:
           - minor
           - patch
 
+  # Repository-wide JavaScript formatting and lint tools.
+  - package-ecosystem: npm
+    directory: /
+    labels:
+      - "type: dependencies"
+      - "area: ci"
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      tooling-minor-patch:
+        update-types:
+          - minor
+          - patch
+
   # JavaScript dependencies used to build the administration interface.
   - package-ecosystem: npm
     directory: /crates/ruphish-ui/web

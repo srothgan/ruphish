@@ -32,7 +32,7 @@ impl Persistence for Interactions {
         let mut tx = crate::postgres::locks::snapshot(&self.pool)
             .await
             .map_err(storage)?;
-        let row=sqlx::query("SELECT r.id AS result_id,r.campaign_id,r.user_id,r.email,r.first_name,r.last_name,r.position,r.send_date,c.url,c.page_id,c.smtp_id,c.template_id,cp.redirect_url,cp.learning_page_id,lp.public_id AS learning_public_id FROM results r JOIN campaigns c ON c.id=r.campaign_id AND c.user_id=r.user_id JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=c.user_id JOIN ruphish_campaign_policy cp ON cp.campaign_id=c.id LEFT JOIN ruphish_learning_pages lp ON lp.id=cp.learning_page_id AND lp.user_id=c.user_id WHERE r.r_id=$1 AND c.status!='Completed' AND d.origin=$2 AND d.enabled=TRUE AND (SELECT serves FROM ruphish_domain_policy WHERE id=d.id)").bind(rid).bind(origin).fetch_all(&mut *tx).await.map_err(storage)?;
+        let row=sqlx::query("SELECT r.id AS result_id,r.campaign_id,r.user_id,r.email,r.first_name,r.last_name,r.position,r.send_date,c.url,c.page_id,c.smtp_id,c.template_id,cp.redirect_url,cp.learning_page_id,cp.track_opens,lp.public_id AS learning_public_id FROM results r JOIN campaigns c ON c.id=r.campaign_id AND c.user_id=r.user_id JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=c.user_id JOIN ruphish_campaign_policy cp ON cp.campaign_id=c.id LEFT JOIN ruphish_learning_pages lp ON lp.id=cp.learning_page_id AND lp.user_id=c.user_id WHERE r.r_id=$1 AND c.status!='Completed' AND d.origin=$2 AND d.enabled=TRUE AND (SELECT serves FROM ruphish_domain_policy WHERE id=d.id)").bind(rid).bind(origin).fetch_all(&mut *tx).await.map_err(storage)?;
         if row.len() != 1 {
             return Err(missing());
         }
@@ -47,7 +47,7 @@ impl Persistence for Interactions {
         };
         let email = text("email")?;
         let mut rendering = None;
-        if matches!(action, Action::View | Action::Submit { .. }) {
+        if matches!(action, Action::View { .. } | Action::Submit { .. }) {
             let resource = super::resources::load(
                 &mut tx,
                 owner,
@@ -74,6 +74,7 @@ impl Persistence for Interactions {
             .await
             .map_err(storage)?;
             let message = MessageInput {
+                track_opens: row.try_get("track_opens").map_err(storage)?,
                 message_id: None,
                 recipient: Recipient {
                     email: email.clone(),
@@ -106,7 +107,7 @@ impl Persistence for Interactions {
                 } else {
                     text("redirect_url")?
                 },
-                source: matches!(action, Action::View).then_some(page.html),
+                source: matches!(action, Action::View { .. }).then_some(page.html),
             });
         }
         let send_date = text("send_date")?;
@@ -156,6 +157,18 @@ impl Persistence for Interactions {
         if !active {
             return Err(missing());
         }
+        if matches!(action, Action::Open) {
+            let track_opens: bool = sqlx::query_scalar(
+                "SELECT track_opens FROM ruphish_campaign_policy WHERE campaign_id=$1",
+            )
+            .bind(campaign_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(storage)?;
+            if !track_opens {
+                return Ok(());
+            }
+        }
         let Some(kind) = action.kind() else {
             return Ok(());
         };
@@ -187,9 +200,14 @@ impl Persistence for Interactions {
             .map_err(|_| Error::Internal)?,
             _ => String::new(),
         };
+        let client = action
+            .client()
+            .map(|v| serde_json::to_string(&v))
+            .transpose()
+            .map_err(|_| Error::Internal)?;
         let stamp = datetime::utc_seconds(now).map_err(|_| Error::Internal)?;
-        let inserted = sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id,source) VALUES($1,$2,$3,$4,$5,$6,'public') RETURNING id")
-            .bind(campaign_id).bind(email).bind(&stamp).bind(kind.key()).bind(details).bind(result_id)
+        let inserted = sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id,source,client) VALUES($1,$2,$3,$4,$5,$6,'public',$7) RETURNING id")
+            .bind(campaign_id).bind(email).bind(&stamp).bind(kind.key()).bind(details).bind(result_id).bind(client)
             .fetch_one(&mut *tx).await.map_err(storage)?;
         let event_id = inserted.insert_id().map_err(storage)?;
         super::events::publish(&mut tx, event_id, "public")

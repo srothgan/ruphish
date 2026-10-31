@@ -60,6 +60,7 @@ jobs:
       - run: node crates/ruphish-ui/web/build-demo.mjs
       - run: node --test demo/tests/bundle.test.mjs
       - run: trunk build --locked --release --features demo crates/ruphish-ui/web/generated/index.html
+      - run: node --test --test-name-pattern=campaign-wizard crates/ruphish-ui/web/tests/ui-interactions.artifact.mjs
       - run: cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --features demo --locked -- -D warnings
       - run: node demo/vercel-output.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

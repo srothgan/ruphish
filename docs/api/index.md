@@ -13,7 +13,7 @@ Ruphish splits its HTTP interfaces into **`/api/`, `/auth/`, and `/internal/`**.
 
 | Prefix | Purpose | Intended consumer |
 | --- | --- | --- |
-| `/api/` | Public resource and workflow API, including compatible Gophish endpoints and Ruphish additions | External integrations and the admin UI |
+| `/api/` | Public resource and workflow API using documented Ruphish contracts | External integrations and the admin UI |
 | `/auth/` | Browser authentication and session lifecycle | The admin UI and its sign-in flow |
 | `/internal/` | Browser-specific account and application operations | The admin UI; not a supported external automation contract |
 

@@ -413,6 +413,19 @@ pub(super) fn table(
                                 <td>{move || instant(&row.get()["time"])}</td>
                                 <td>
                                     {move || event_title(i18n, &row.get())}
+                                    <ClientObservation
+                                        client=Signal::derive(move || {
+                                            current.get().and_then(|r| r.client)
+                                        })
+                                        kind=Signal::derive(move || {
+                                            current
+                                                .get()
+                                                .and_then(|r| match r.current.kind {
+                                                    RecordedKind::Known(k) => Some(k),
+                                                    _ => None,
+                                                })
+                                        })
+                                    />
                                     <Show when=move || {
                                         current
                                             .get()
@@ -574,6 +587,17 @@ pub(super) fn timeline(history: RwSignal<History>) -> impl IntoView {
                             <div>
                                 <strong>{label}</strong>
                                 <time>{instant(&row["time"])}</time>
+                                <ClientObservation
+                                    client=Signal::stored(record.as_ref().and_then(|r| r.client))
+                                    kind=Signal::stored(
+                                        record
+                                            .as_ref()
+                                            .and_then(|r| match r.current.kind {
+                                                RecordedKind::Known(k) => Some(k),
+                                                _ => None,
+                                            }),
+                                    )
+                                />
                                 {record
                                     .as_ref()
                                     .filter(|r| {

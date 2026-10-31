@@ -59,6 +59,24 @@ responses.review = await read(
   'POST',
   responses['/api/campaign-drafts/00000000-0000-4000-8000-000000000001'].configuration,
 );
+const draftPath = '/api/campaign-drafts/11111111-1111-4111-8111-111111111111';
+responses.created_draft = await read(draftPath, 'PUT', {
+  revision: null,
+  configuration: { name: 'Temporary draft', selection: { groups: [{ id: 1 }] } },
+  step: 1,
+});
+responses.reopened_draft = await read(draftPath);
+responses.updated_draft = await read(draftPath, 'PUT', {
+  revision: 1,
+  configuration:
+    responses['/api/campaign-drafts/00000000-0000-4000-8000-000000000001'].configuration,
+  step: 3,
+});
+await read(`${draftPath}/launch`, 'POST', {
+  revision: 2,
+  campaign: responses.updated_draft.configuration,
+});
+responses.launched_draft = await read(draftPath);
 responses.closure = await read('/api/campaigns/complete-all', 'POST', {
   token: 'demo-confirmation',
   confirmation: 'CLOSE ALL',

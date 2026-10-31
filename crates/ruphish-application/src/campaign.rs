@@ -17,14 +17,26 @@ pub struct Selection {
     /// Reviewed modification timestamp, checked again in the launch transaction.
     pub revision: Option<String>,
 }
-/// Redirect overrides resolved once per campaign.
-#[derive(Clone, Default)]
+/// Open tracking and destination choices resolved once per campaign.
+#[derive(Clone)]
 pub struct Overrides {
+    /// Whether email-open observations are enabled for this campaign.
+    pub track_opens: bool,
     /// Explicit empty string clears the default redirect.
     pub redirect_url: Option<String>,
     /// Selected owned learning page; custom redirect must be empty when present.
     pub learning_page_id: Option<i64>,
 }
+impl Default for Overrides {
+    fn default() -> Self {
+        Self {
+            track_opens: true,
+            redirect_url: None,
+            learning_page_id: None,
+        }
+    }
+}
+
 /// Normalized campaign input, with no caller-controlled ownership or result IDs.
 #[derive(Clone, Default)]
 pub struct Create {
@@ -109,6 +121,8 @@ pub struct RecipientResult {
 }
 /// Committed campaign history, with string-encoded legacy detail JSON.
 pub struct Event {
+    /// Immutable coarse request categories; absent for historical or non-client observations.
+    pub client: Option<ruphish_domain::client::Info>,
     /// Current event row and edit state on recipient reads.
     pub record: Option<crate::event_edit::Record>,
     /// Stable recipient identity; unknown for ambiguous historical observations.

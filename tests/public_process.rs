@@ -315,7 +315,12 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
             .len(),
         1
     );
-    let campaign = post(&admin, "/api/campaigns/", draft);
+    let campaign = post(&admin, "/api/campaigns/", draft.clone());
+    let mut disabled_draft = draft;
+    disabled_draft["name"] = json!("Open tracking disabled");
+    disabled_draft["policy"] = json!({"track_opens":false});
+    let disabled = post(&admin, "/api/campaigns/", disabled_draft);
+    let disabled = get(&admin, &format!("/api/campaigns/{}", disabled["id"]));
     let in_use = client()
         .delete(format!("{admin}/api/domains/{id}"))
         .bearer_auth("synthetic-bootstrap-token")
@@ -332,6 +337,28 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
         .build()
         .unwrap();
     let url = format!("{origin}/welcome?rid={rid}");
+    let disabled_rid = disabled["results"][0]["id"].as_str().unwrap();
+    for suffix in ["", "&track_opens=true", "&track_opens=false"] {
+        let pixel = browser
+            .get(format!("{origin}/track?rid={disabled_rid}{suffix}"))
+            .send()
+            .unwrap();
+        assert_eq!(pixel.status(), 200);
+        assert_eq!(
+            pixel.bytes().unwrap().as_ref(),
+            include_bytes!("fixtures/resources/preview-pixel.png")
+        );
+    }
+    let unchanged = get(&admin, &format!("/api/campaigns/{}", disabled["id"]));
+    assert_eq!(unchanged["track_opens"], false);
+    assert_eq!(unchanged["timeline"], disabled["timeline"]);
+    assert_eq!(unchanged["results"], disabled["results"]);
+    let disabled_results = get(
+        &admin,
+        &format!("/api/campaigns/{}/results", disabled["id"]),
+    );
+    assert_eq!(disabled_results["track_opens"], false);
+    assert_eq!(disabled_results["totals"]["opened"], 0);
     assert_eq!(
         browser
             .get(format!("{origin}/static/training.txt"))
@@ -766,6 +793,10 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
         Process::with_options(directory.path(), "admin", None, None, &["--disable-mailer"]);
     let base = format!("http://{}", restarted.ready()["admin"].as_str().unwrap());
     assert_eq!(get(&base, "/api/domains/")[0]["id"], id);
+    assert_eq!(
+        get(&base, &format!("/api/campaigns/{}", disabled["id"]))["track_opens"],
+        false
+    );
     let restored = get(&base, &format!("/api/domains/{id}"));
     assert_eq!(restored["history"][0]["id"], completed_check_id);
     assert_eq!(restored["status"], "verified");

@@ -147,13 +147,17 @@ impl Repository for SettingsStore {
                 .execute(&mut *tx)
                 .await
                 .map_err(storage)?;
-            let domains: Vec<(i64, i64)> =
-                sqlx::query_as("SELECT id,checked_at FROM ruphish_domains ORDER BY id")
+            let domains: Vec<(i64, i64, String)> =
+                sqlx::query_as("SELECT id,checked_at,origin FROM ruphish_domains ORDER BY id")
                     .fetch_all(&mut *tx)
                     .await
                     .map_err(storage)?;
-            for (id, checked) in domains {
-                let due = if policy.verification_enabled {
+            for (id, checked, origin_url) in domains {
+                let due = if !ruphish_domain::domains::origin(&origin_url, false)
+                    .is_ok_and(|o| o.verification_supported())
+                {
+                    i64::MAX
+                } else if policy.verification_enabled {
                     checked
                         .saturating_add(policy.refresh_delay(id))
                         .max(now + id.wrapping_mul(97).rem_euclid(301))

@@ -79,6 +79,7 @@ impl PreviewPersistence for PreviewStore {
             return Err(Error::Internal);
         };
         let message = MessageInput {
+            track_opens: false,
             message_id: None,
             recipient: Recipient {
                 email: text("email")?,

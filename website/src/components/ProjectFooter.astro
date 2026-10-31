@@ -9,7 +9,7 @@ const { compact = false } = Astro.props;
   <div class="footer-content">
     {!compact && <div class="footer-brand"><a href="/"><img src={whiteWordmark.src} alt="Ruphish home" width="137" height="45" /></a><p>Phishing simulations.<br />A clearer picture.</p></div>}
     <nav aria-label="Getting started"><h2>Start here</h2><a href={demo} class="external-link">Try the demo <ExternalLinkIcon /></a><a href="/docs/getting-started/">Getting started</a><a href="/docs/getting-started/first-campaign/">Your first campaign</a><a href="/docs/">Documentation</a></nav>
-    <nav aria-label="Project links"><h2>Project</h2><a href="/about/">About Ruphish</a><a href={repository}>Source code</a><a href={`${repository}/issues`}>Issues & ideas</a></nav>
+    <nav aria-label="Project links"><h2>Project</h2><a href="/about/">About Ruphish</a><a href="/blog/">Blog</a><a href={repository}>Source code</a><a href={`${repository}/issues`}>Issues & ideas</a></nav>
     <nav aria-label="Acknowledgments and license"><h2>Built on open source</h2><a href="https://getgophish.com/">Gophish</a><a href={`${repository}/blob/main/LICENSE`}>MIT license</a><a href="/font-licenses.txt">Font notices</a></nav>
   </div>
   <div class="footer-bottom"><span>© 2026 Simon Peter Rothgang</span><p>An independent project inspired by Gophish. Not affiliated with its maintainers.</p></div>

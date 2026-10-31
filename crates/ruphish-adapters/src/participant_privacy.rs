@@ -29,3 +29,13 @@ pub(crate) fn details(source: &str) -> String {
         .filter(|value| value != "{}")
         .unwrap_or_default()
 }
+
+/// Decode only the closed request categories, independently of editable event metadata.
+pub(crate) fn client(
+    source: Option<&str>,
+) -> Result<Option<ruphish_domain::client::Info>, ruphish_application::resources::Error> {
+    source
+        .map(serde_json::from_str)
+        .transpose()
+        .map_err(|_| ruphish_application::resources::Error::Internal)
+}

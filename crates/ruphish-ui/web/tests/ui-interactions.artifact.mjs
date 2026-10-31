@@ -11,6 +11,8 @@ const fixture = fileURLToPath(new URL('./support/ui-interactions.mjs', import.me
 for (const scenario of [
   'form-import',
   'form-webhook',
+  'integration-readonly-webhook',
+  'integration-readonly-mailbox',
   'form-mailbox',
   'form-filters',
   'form-group',
@@ -20,13 +22,16 @@ for (const scenario of [
   'form-smtp',
   'form-user',
   'form-domain',
+  'domain-unsupported',
   'form-password',
   'form-preferences',
   'form-settings',
   'form-campaign',
+  'campaign-wizard',
   'form-draft',
   'form-session',
   'results-chart',
+  'results-untracked',
   'results-refresh',
   'recipient-return',
   'recipient-error-return',
@@ -53,6 +58,7 @@ for (const scenario of [
   test(`UI interaction: ${scenario}`, async () => {
     await execute(process.execPath, [fixture, scenario], {
       maxBuffer: 1024 * 1024,
+      timeout: 60000,
     });
   });
 }

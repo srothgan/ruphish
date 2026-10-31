@@ -183,8 +183,11 @@ impl Sender for Smtp {
             builder = builder.subject(subject);
         }
         let text = render(&request.template.text, &ctx)?;
-        let html =
-            crate::email_html::tracked(&render(&request.template.html, &ctx)?, &ctx.tracking_url)?;
+        let html = crate::email_html::tracked(
+            &render(&request.template.html, &ctx)?,
+            &ctx.tracking_url,
+            request.track_opens,
+        )?;
         let mut body = MultiPart::mixed().build();
         if !text.is_empty() && !html.is_empty() {
             body = body.multipart(

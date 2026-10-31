@@ -17,6 +17,9 @@ pub struct State {
     pub seen: Vec<u32>,
     pub reject_ack: bool,
     pub logins: usize,
+    pub internal_dates: BTreeMap<u32, String>,
+    pub arrive_on_search: BTreeMap<u32, Vec<u8>>,
+    pub searches: Vec<String>,
 }
 pub struct Mailbox {
     pub address: SocketAddr,
@@ -109,11 +112,39 @@ impl Mailbox {
                         let next = state.messages.keys().next_back().copied().unwrap_or(0) + 1;
                         prefix = format!("* {} EXISTS\r\n* OK [UIDVALIDITY {}] stable\r\n* OK [UIDNEXT {next}] next\r\n",state.messages.len(),state.validity).into_bytes();
                     } else if command.starts_with("UID SEARCH ") {
+                        state.searches.push(command.to_owned());
+                        let arrivals = std::mem::take(&mut state.arrive_on_search);
+                        state.messages.extend(arrivals);
+                        let since = command.split_once(" SINCE ").map(|(_, date)| {
+                            time::Date::parse(
+                                date,
+                                &time::format_description::parse_borrowed::<2>(
+                                    "[day]-[month repr:short]-[year]",
+                                )
+                                .unwrap(),
+                            )
+                            .unwrap()
+                        });
                         prefix = format!(
                             "* SEARCH {}\r\n",
                             state
                                 .messages
                                 .keys()
+                                .filter(|uid| {
+                                    since.is_none_or(|since| {
+                                        state.internal_dates.get(uid).is_none_or(|date| {
+                                            time::Date::parse(
+                                                date,
+                                                &time::format_description::parse_borrowed::<2>(
+                                                    "[year]-[month]-[day]",
+                                                )
+                                                .unwrap(),
+                                            )
+                                            .unwrap()
+                                                >= since
+                                        })
+                                    })
+                                })
                                 .map(ToString::to_string)
                                 .collect::<Vec<_>>()
                                 .join(" ")

@@ -14,7 +14,7 @@ Use the campaign-generated URLs. Do not reconstruct them from a numeric analysis
 | Request | Purpose | Successful response |
 | --- | --- | --- |
 | GET campaign path with `?rid={tracking-id}` | Serve the restricted landing page and record a click observation | HTML, `200` |
-| GET `/track?rid={tracking-id}` or a campaign-prefixed `/track` path | Record an image-open observation | PNG, `200` |
+| GET `/track?rid={tracking-id}` or a campaign-prefixed `/track` path | Return the tracking image; record an open only when `track_opens` is enabled | PNG, `200` |
 | GET `/report?rid={tracking-id}` or a campaign-prefixed `/report` path | Record a report observation | Empty, `204` |
 | HEAD a recognized interaction path | Check availability without recording an interaction | Empty body, `200` |
 | GET with `rid` suffixed by `%2B` | Read transparency information without recording a normal interaction | JSON, `200` |
@@ -40,11 +40,11 @@ The application collector uses `Content-Type: application/json` and only these f
 
 The event ID is 32 hexadecimal characters and identifies one submission attempt across retries. Generate a new unpredictable ID for a new interaction; the fixed example is illustrative. The body limit is 512 bytes. Extra fields or invalid structure return `400`; oversized bodies return `413`; form-encoded or multipart bodies return `415`.
 
-An acknowledgement contains `success: true` and `redirect` (string or null). Reuse the same event identity after a lost acknowledgement. The campaign's policy determines whether submission and password-presence observations are recorded; no policy permits entered values or their derivatives. Read [participant data](../user-guide/participant-data.md) before changing a collector or page.
+An acknowledgement contains `success: true` and `redirect` (string or null). Reuse the same event identity after a lost acknowledgement. Every accepted submission records the event and password-presence Boolean. The email-open setting does not disable submission tracking, and no policy permits entered values or their derivatives. Read [participant data](../user-guide/participant-data.md) before changing a collector or page.
 
 ## Availability and limits
 
-Missing, disabled, unverified, wrong-host, completed, or otherwise unavailable interactions generally return `404` rather than disclosing another campaign. The public listener rejects duplicate `rid` parameters and oversized query input. Capacity or interaction limits can return `429`, an unavailable persistence operation `503`, and the request deadline `408`.
+Missing, disabled, wrong-origin, completed, or otherwise unavailable interactions generally return `404` rather than disclosing another campaign. Verification evidence is required only when the administrator enables verification; eligible HTTP/IP origins work when it is off. For an otherwise eligible campaign with `track_opens: false`, a pixel request still returns PNG with `200`, but creates no open event, recipient-result change, or webhook work. The public listener rejects duplicate `rid` parameters and oversized query input. Capacity or interaction limits can return `429`, an unavailable persistence operation `503`, and the request deadline `408`.
 
 Public requests have a ten-second application deadline and bounded concurrent admission. Errors do not authorize resending arbitrary form contents. A browser must keep native form submission blocked when the controlled collector cannot complete.
 

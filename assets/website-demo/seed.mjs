@@ -250,7 +250,7 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
         };
         for (const e of r.events) {
           run(
-            'INSERT INTO events(id,campaign_id,email,time,kind,metadata,recipient_id,source) VALUES(?,?,?,?,?,?,?,?)',
+            'INSERT INTO events(id,campaign_id,email,time,kind,metadata,recipient_id,source,client) VALUES(?,?,?,?,?,?,?,?,?)',
             e.id,
             c.id,
             r.email,
@@ -261,6 +261,7 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
             ),
             r.id,
             e.source,
+            e.client === null ? null : JSON.stringify(e.client),
           );
         }
       }
@@ -288,7 +289,12 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
         w.url,
         randomBytes(32).toString('hex'),
       );
-      run('INSERT INTO ruphish_webhook_state(webhook_id,revision) VALUES(?,?)', w.id, w.revision);
+      run(
+        'INSERT INTO ruphish_webhook_state(webhook_id,revision,owner_id) VALUES(?,?,?)',
+        w.id,
+        w.revision,
+        owner,
+      );
       const job = insert(
         "INSERT INTO ruphish_webhook_jobs(webhook_id,revision,event_id,state,attempt,code) VALUES(?,?,?,'done',1,?)",
         w.id,

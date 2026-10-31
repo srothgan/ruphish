@@ -1,11 +1,15 @@
 //! Typed public interactions, with no representation for submitted field values.
 use crate::resources::Error;
+pub use ruphish_domain::client::Info as ClientInfo;
 
 /// Public request purpose, independently of delivery status.
 #[derive(Clone)]
 pub enum Action {
     /// Render and observe a landing visit.
-    View,
+    View {
+        /// Coarse categories observed for this request.
+        client: ClientInfo,
+    },
     /// Observe a tracking pixel request.
     Open,
     /// Record an independent report flag.
@@ -16,6 +20,8 @@ pub enum Action {
     Head,
     /// Record only an explicit submission identifier and presence observation.
     Submit {
+        /// Coarse categories observed for this request.
+        client: ClientInfo,
         /// Random request idempotency key.
         event_id: String,
         /// Whether a designated password control was nonempty.
@@ -50,11 +56,11 @@ pub enum Output {
 /// Public application boundary without transport or submitted-value types.
 pub trait Public: Send + Sync {
     /// Serve static educational content without a recipient or interaction event.
-    async fn learning_page(&self, authority: &str, public_id: &str) -> Result<Output, Error>;
+    async fn learning_page(&self, origin_url: &str, public_id: &str) -> Result<Output, Error>;
     /// Resolve an exact origin/RID pair and apply the action transactionally.
     async fn interact(
         &self,
-        authority: &str,
+        origin_url: &str,
         rid: &str,
         action: Action,
         now: i64,
@@ -111,11 +117,19 @@ pub fn check_event_capacity(count: i64, duplicate: bool) -> Result<(), Error> {
 }
 
 impl Action {
+    /// Only landing visits and submissions carry request categories.
+    pub fn client(&self) -> Option<ClientInfo> {
+        match self {
+            Self::View { client } | Self::Submit { client, .. } => Some(*client),
+            _ => None,
+        }
+    }
+
     /// Shared observation classification; persistence never infers an event from a status.
     pub fn kind(&self) -> Option<ruphish_domain::events::Kind> {
         use ruphish_domain::events::Kind;
         match self {
-            Self::View => Some(Kind::LinkClicked),
+            Self::View { .. } => Some(Kind::LinkClicked),
             Self::Open => Some(Kind::EmailOpened),
             Self::Report => Some(Kind::EmailReported),
             Self::Submit { .. } => Some(Kind::FormSubmitted),

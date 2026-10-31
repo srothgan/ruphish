@@ -16,6 +16,83 @@ fn caller() -> Identity {
 }
 
 #[tokio::test]
+async fn migrated_http_and_ip_campaigns_retain_exact_origins_and_follow_verification_policy() {
+    for origin in [
+        "http://training.example.test:8080",
+        "http://192.0.2.20",
+        "https://192.0.2.20:8443",
+        "http://[2001:db8::20]:8080",
+        "https://[2001:db8::20]",
+    ] {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("legacy.db");
+        std::fs::copy(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../tests/fixtures/campaigns/queued.sqlite3"),
+            &path,
+        )
+        .unwrap();
+        let raw = sqlx::SqlitePool::connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
+        )
+        .await
+        .unwrap();
+        let url = format!("{origin}/training?source=legacy");
+        sqlx::query("UPDATE campaigns SET url=?")
+            .bind(&url)
+            .execute(&raw)
+            .await
+            .unwrap();
+        raw.close().await;
+        let db = DatabaseFixture::open(&path).await.unwrap();
+        let domains = db.domains();
+        let domain = domains.list(caller()).await.unwrap().remove(0);
+        assert_eq!(domain.origin, origin);
+        assert_eq!(domain.verified_until, 0);
+        assert!(domain.eligible_until > 0);
+        assert_eq!(db.campaigns().get(caller(), 1).await.unwrap().url, url);
+        let now = time::OffsetDateTime::now_utc().unix_timestamp();
+        assert!(
+            db.interactions()
+                .interact(origin, "zSDu57f", Action::Open, now)
+                .await
+                .is_ok()
+        );
+        enable_verification(&db, true).await;
+        assert!(!domains.serves(origin).await.unwrap());
+        assert!(domains.claim(now + 600).await.unwrap().is_none());
+        assert!(
+            db.interactions()
+                .interact(origin, "zSDu57f", Action::Open, now)
+                .await
+                .is_err()
+        );
+        assert!(db.campaigns().claim(2_100_000_000).await.unwrap().is_none());
+        assert!(
+            domains
+                .get(caller(), domain.id)
+                .await
+                .unwrap()
+                .active_check
+                .is_none()
+        );
+        db.close().await;
+        let db = DatabaseFixture::open(&path).await.unwrap();
+        assert!(!db.domains().serves(origin).await.unwrap());
+        let settings = db.settings().get(caller()).await.unwrap();
+        let mut policy = settings.policy;
+        policy.verification_enabled = false;
+        db.settings()
+            .save(caller(), settings.revision, policy, now)
+            .await
+            .unwrap();
+        assert!(db.domains().serves(origin).await.unwrap());
+        assert!(db.campaigns().claim(2_100_000_000).await.unwrap().is_some());
+        db.close().await;
+    }
+}
+
+#[tokio::test]
 async fn gophish_conversion_preserves_history_and_new_retry_receipts_survive_restart() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("observations.db");
@@ -70,9 +147,10 @@ async fn gophish_conversion_preserves_history_and_new_retry_receipts_survive_res
     let now = 1_900_000_000;
     public
         .interact(
-            "training.example.test",
+            "https://training.example.test",
             "zSDu57f",
             Action::Submit {
+                client: Default::default(),
                 event_id: "a".repeat(32),
                 password_present: true,
             },
@@ -82,21 +160,39 @@ async fn gophish_conversion_preserves_history_and_new_retry_receipts_survive_res
         .unwrap();
     for key in ["b", "c"] {
         let action = Action::Submit {
+            client: Default::default(),
             event_id: key.repeat(32),
             password_present: false,
         };
         let (first, retry) = tokio::join!(
-            public.interact("training.example.test", "zSDu57f", action.clone(), now),
-            public.interact("training.example.test", "zSDu57f", action, now)
+            public.interact(
+                "https://training.example.test",
+                "zSDu57f",
+                action.clone(),
+                now
+            ),
+            public.interact("https://training.example.test", "zSDu57f", action, now)
         );
         first.unwrap();
         retry.unwrap();
         public
-            .interact("training.example.test", "zSDu57f", Action::Open, now)
+            .interact(
+                "https://training.example.test",
+                "zSDu57f",
+                Action::Open,
+                now,
+            )
             .await
             .unwrap();
         public
-            .interact("training.example.test", "zSDu57f", Action::View, now)
+            .interact(
+                "https://training.example.test",
+                "zSDu57f",
+                Action::View {
+                    client: Default::default(),
+                },
+                now,
+            )
             .await
             .unwrap();
     }
@@ -138,9 +234,10 @@ async fn gophish_conversion_preserves_history_and_new_retry_receipts_survive_res
     assert!(db.backup_path().is_none());
     db.interactions()
         .interact(
-            "training.example.test",
+            "https://training.example.test",
             "zSDu57f",
             Action::Submit {
+                client: Default::default(),
                 event_id: "b".repeat(32),
                 password_present: false,
             },
@@ -290,7 +387,14 @@ async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_on
     let public = db.interactions();
     assert!(
         public
-            .interact("training.example.test", "zSDu57f", Action::View, now)
+            .interact(
+                "https://training.example.test",
+                "zSDu57f",
+                Action::View {
+                    client: Default::default()
+                },
+                now
+            )
             .await
             .is_err()
     );
@@ -305,12 +409,26 @@ async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_on
     sqlx::query("UPDATE pages SET html=?").bind("<style>.form { color: navy }</style><form id='form'><label for='pw'>Password</label><input id='pw' name='password' type='password' autocomplete='current-password'><button>Continue</button></form><script>fetch('https://outside.invalid')</script>").execute(&db.inspection_pool()).await.unwrap();
     assert!(
         public
-            .interact("other.example.test", "zSDu57f", Action::View, now + 2)
+            .interact(
+                "https://other.example.test",
+                "zSDu57f",
+                Action::View {
+                    client: Default::default()
+                },
+                now + 2
+            )
             .await
             .is_err()
     );
     let Output::Html { html, csp } = public
-        .interact("training.example.test", "zSDu57f", Action::View, now + 2)
+        .interact(
+            "https://training.example.test",
+            "zSDu57f",
+            Action::View {
+                client: Default::default(),
+            },
+            now + 2,
+        )
         .await
         .unwrap()
     else {
@@ -326,9 +444,10 @@ async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_on
         assert!(matches!(
             public
                 .interact(
-                    "training.example.test",
+                    "https://training.example.test",
                     "zSDu57f",
                     Action::Submit {
+                        client: Default::default(),
                         event_id: id.clone(),
                         password_present: true
                     },
@@ -340,11 +459,21 @@ async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_on
         ));
     }
     public
-        .interact("training.example.test", "zSDu57f", Action::Open, now + 4)
+        .interact(
+            "https://training.example.test",
+            "zSDu57f",
+            Action::Open,
+            now + 4,
+        )
         .await
         .unwrap();
     public
-        .interact("training.example.test", "zSDu57f", Action::Report, now + 5)
+        .interact(
+            "https://training.example.test",
+            "zSDu57f",
+            Action::Report,
+            now + 5,
+        )
         .await
         .unwrap();
     let row: (String, bool) =
@@ -365,7 +494,14 @@ async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_on
         .unwrap();
     assert!(
         public
-            .interact("training.example.test", "zSDu57f", Action::View, now + 6)
+            .interact(
+                "https://training.example.test",
+                "zSDu57f",
+                Action::View {
+                    client: Default::default()
+                },
+                now + 6
+            )
             .await
             .is_err()
     );
@@ -382,9 +518,10 @@ async fn failed_event_write_rolls_back_submission_deduplication_and_result_state
     let public = db.interactions();
     let error = public
         .interact(
-            "training.example.test",
+            "https://training.example.test",
             "zSDu57f",
             Action::Submit {
+                client: Default::default(),
                 event_id: "b".repeat(32),
                 password_present: true,
             },
@@ -558,11 +695,17 @@ async fn event_limits_preserve_retry_idempotency_and_roll_back_unrecorded_submis
     let public = db.interactions();
     let id = "a".repeat(32);
     let submit = || Action::Submit {
+        client: Default::default(),
         event_id: id.clone(),
         password_present: true,
     };
     public
-        .interact("training.example.test", "zSDu57f", submit(), now + 2)
+        .interact(
+            "https://training.example.test",
+            "zSDu57f",
+            submit(),
+            now + 2,
+        )
         .await
         .unwrap();
     let details: String = sqlx::query_scalar(
@@ -577,15 +720,21 @@ async fn event_limits_preserve_retry_idempotency_and_roll_back_unrecorded_submis
     );
     sqlx::query("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<10000) INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id) SELECT r.campaign_id,r.email,'2030-01-01T00:00:00Z','email_opened','',r.id FROM n JOIN results r ON r.r_id='zSDu57f' WHERE n.x <= 10000-(SELECT count(*) FROM events WHERE recipient_id=r.id)").execute(&db.inspection_pool()).await.unwrap();
     public
-        .interact("training.example.test", "zSDu57f", submit(), now + 3)
+        .interact(
+            "https://training.example.test",
+            "zSDu57f",
+            submit(),
+            now + 3,
+        )
         .await
         .unwrap();
     assert!(
         public
             .interact(
-                "training.example.test",
+                "https://training.example.test",
                 "zSDu57f",
                 Action::Submit {
+                    client: Default::default(),
                     event_id: "b".repeat(32),
                     password_present: false
                 },
@@ -616,11 +765,51 @@ fn canonical_domain_origins_reject_ambiguous_authorities_and_preserve_valid_idna
         origin("https://b\u{fc}cher.example", false).unwrap().host,
         "xn--bcher-kva.example"
     );
+    for (input, expected, verifiable) in [
+        (
+            "http://TRAINING.example.test.:80",
+            "http://training.example.test",
+            false,
+        ),
+        ("https://192.0.2.1:443", "https://192.0.2.1", false),
+        ("http://192.0.2.1:8080", "http://192.0.2.1:8080", false),
+        (
+            "https://[2001:0db8::1]:8443",
+            "https://[2001:db8::1]:8443",
+            false,
+        ),
+        ("http://[::1]:80", "http://[::1]", false),
+        (
+            "https://training.example.test:8443",
+            "https://training.example.test:8443",
+            true,
+        ),
+    ] {
+        let parsed = origin(input, false).unwrap();
+        assert_eq!(parsed.value, expected);
+        assert_eq!(parsed.verification_supported(), verifiable);
+        assert_eq!(
+            origin(
+                &format!("{input}/{{{{.FirstName}}}}?email={{{{.Email}}}}"),
+                true
+            )
+            .unwrap(),
+            parsed
+        );
+    }
     for invalid in [
-        "http://training.example.test",
         "https://training.example.test..",
-        "https://127.0.0.1",
-        "https://[::1]",
+        "https:///training.example.test",
+        "https://training.example.test:",
+        "https://@training.example.test",
+        "https://127.1",
+        "http://0x7f000001",
+        "http://0177.0.0.1",
+        "https://[fe80::1%25eth0]",
+        "https://[::1]:65536",
+        "ftp://training.example.test",
+        "http://training.example.test:{{.Position}}",
+        "https://training.example.test\\@evil.example.test",
         "https://user@training.example.test",
         "https://training.example.test/path",
         "https://training.example.test?x=1",
@@ -761,7 +950,7 @@ async fn expired_leases_and_rotated_challenges_cannot_publish_stale_evidence_or_
     assert!(
         store
             .routing_proof(
-                "training.example.test",
+                "https://training.example.test",
                 &verified.challenge,
                 verified.challenge_expires + 2
             )

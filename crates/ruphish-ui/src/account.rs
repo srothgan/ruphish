@@ -547,17 +547,6 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
     let integration_page = move |kind: crate::integrations::Kind, list: bool, editing: bool| {
         if required {
             password_form(api, token.get_value(), true).into_any()
-        } else if matches!(kind, crate::integrations::Kind::Webhook) && (!admin || active) {
-            view! {
-                <StatusPage
-                    title=trs!(ui.access_denied)
-                    message=trs!(ui.webhooks_require_administrator_access_outside_impersonation)
-                    status=Some(403)
-                >
-                    <ActionLink href="/">{tr!(ui.go_to_dashboard)}</ActionLink>
-                </StatusPage>
-            }
-            .into_any()
         } else {
             view! {
                 <Show

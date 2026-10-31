@@ -61,6 +61,8 @@ pub struct Resource {
 /// Confirmed presence-only tracking and redirect policy.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Policy {
+    /// Whether email-open observations are enabled.
+    pub track_opens: bool,
     /// Post-submission redirect.
     pub redirect_url: String,
     /// Selected owned learning page; custom redirect must be empty when present.
@@ -186,6 +188,8 @@ pub struct Attempt {
 /// Sanitized campaign activity.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Activity {
+    /// Immutable coarse request categories, when observed.
+    pub client: Option<ruphish_domain::client::Info>,
     /// Event identity.
     pub id: i64,
     /// Preserved timestamp.
@@ -240,6 +244,8 @@ pub struct HistoryEvent {
 /// Consistent results snapshot for one campaign, filter and page.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Results {
+    /// Whether open counts represent an enabled observation channel.
+    pub track_opens: bool,
     /// First observed UTC second per metric, before pagination; absent without valid evidence.
     pub first_observed: crate::reporting::ObservationTimes,
     /// Latest observed UTC second per metric, before pagination.
@@ -298,6 +304,8 @@ pub struct ResultRecipient {
 /// One effective observation; no participant-entered values.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResultEvent {
+    /// Immutable coarse request categories; absent for historical or non-client observations.
+    pub client: Option<ruphish_domain::client::Info>,
     /// Whether an operator has changed the event values since creation.
     pub edited: bool,
     /// Event identity.

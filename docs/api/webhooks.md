@@ -5,7 +5,9 @@ sidebar:
   order: 17
 ---
 
-Webhooks deliver committed campaign events to administrator-configured endpoints. They can span resource owners, so authorize receivers for that installation-wide scope.
+Webhook configurations belong to their creator: callers with `view_objects` can read their own configurations and history, and callers with `modify_objects` can create, edit, delete, and validate their own endpoints. Ownership is assigned from the authenticated caller; it cannot be supplied or changed through the API. Other callers receive `404`, including administrators outside explicit impersonation. No `modify_system` permission or per-endpoint approval is required. Enabled endpoints receive committed events from all campaigns regardless of creator, so authorize receivers for that installation-wide scope.
+
+Only administrators can change the global feature switch. While webhooks are disabled, creation, configuration saves, and validation return `409` with `FEATURE_DISABLED`; authorized reads and deletion remain available. Disabling also stops event delivery; see [company settings](../administration/settings.md).
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -17,7 +19,7 @@ Writes contain `name`, `url`, optional `secret`, `is_active`, and optional `revi
 
 ## Event payload
 
-The JSON body retains the Gophish event shape. This is a synthetic example, not a captured response:
+The JSON body includes the event fields and optional coarse client observation. This is a synthetic example, not a captured response:
 
 ```json
 {
@@ -25,11 +27,14 @@ The JSON body retains the Gophish event shape. This is a synthetic example, not 
   "email": "alex@example.test",
   "time": "2026-10-22T10:00:00Z",
   "message": "Clicked Link",
-  "details": "{}"
+  "details": "{}",
+  "client": { "browser": "firefox", "os": "linux", "device": "desktop" }
 }
 ```
 
 `details` is a string containing sanitized event details, not a nested JSON object in the outer envelope. Do not expect arbitrary participant form data. Validation sends `{"success":true}` instead of a campaign event.
+
+Event payloads also contain nullable `client` with the same closed `browser`, `os`, and `device` categories as [result events](analysis-and-exports.md#client-observations). Click and submission requests carry these categories; historical events, opens, and reports have no collected client metadata. Raw User-Agent headers, versions, device models, and network identifiers are excluded.
 
 `X-Ruphish-Event-ID` identifies an ordinary event consistently across its retry attempts. Treat it as opaque and scope stored identities to the source installation. A receiver should persist deduplication state before acknowledging successful processing.
 

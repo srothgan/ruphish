@@ -198,6 +198,11 @@ async fn load_aggregate(
         .map_err(storage)?
     {
         events.push(Event {
+            client: crate::participant_privacy::client(
+                e.try_get::<Option<String>, _>("client")
+                    .map_err(storage)?
+                    .as_deref(),
+            )?,
             record: None,
             recipient_id: e.try_get("recipient_id").map_err(storage)?,
             id: e.try_get("id").map_err(storage)?,
@@ -214,6 +219,7 @@ async fn load_aggregate(
         .map_err(storage)?
         .map(|p| {
             Ok::<_, Error>(InteractionPolicy {
+                track_opens: p.try_get("track_opens").map_err(storage)?,
                 redirect_url: text(&p, "redirect_url")?,
                 learning_page_id: p.try_get("learning_page_id").map_err(storage)?,
             })
@@ -253,7 +259,7 @@ async fn load_aggregate(
     })
 }
 async fn header(c: &mut PgConnection, owner: i64, id: i64) -> Result<CampaignHeader, Error> {
-    let row=sqlx::query("SELECT c.id,c.name,c.status,c.launch_date,c.send_by_date,c.url,c.template_id,c.page_id,c.smtp_id,t.name AS template_name,t.subject,t.envelope_sender,s.name AS profile_name,s.from_address,l.name AS page_name,(SELECT count(*) FROM results r WHERE r.campaign_id=c.id) AS total,p.campaign_id AS policy_id,p.redirect_url,p.learning_page_id FROM campaigns c LEFT JOIN ruphish_campaign_policy p ON p.campaign_id=c.id LEFT JOIN templates t ON t.id=c.template_id AND t.user_id=c.user_id LEFT JOIN pages l ON l.id=c.page_id AND l.user_id=c.user_id LEFT JOIN smtp s ON s.id=c.smtp_id AND s.user_id=c.user_id WHERE c.id=$1 AND c.user_id=$2").bind(id).bind(owner).fetch_optional(&mut *c).await.map_err(storage)?.ok_or(Error::NotFound("Campaign"))?;
+    let row=sqlx::query("SELECT c.id,c.name,c.status,c.launch_date,c.send_by_date,c.url,c.template_id,c.page_id,c.smtp_id,t.name AS template_name,t.subject,t.envelope_sender,s.name AS profile_name,s.from_address,l.name AS page_name,(SELECT count(*) FROM results r WHERE r.campaign_id=c.id) AS total,p.campaign_id AS policy_id,p.redirect_url,p.learning_page_id,p.track_opens FROM campaigns c LEFT JOIN ruphish_campaign_policy p ON p.campaign_id=c.id LEFT JOIN templates t ON t.id=c.template_id AND t.user_id=c.user_id LEFT JOIN pages l ON l.id=c.page_id AND l.user_id=c.user_id LEFT JOIN smtp s ON s.id=c.smtp_id AND s.user_id=c.user_id WHERE c.id=$1 AND c.user_id=$2").bind(id).bind(owner).fetch_optional(&mut *c).await.map_err(storage)?.ok_or(Error::NotFound("Campaign"))?;
     let policy_id: Option<i64> = row.try_get("policy_id").map_err(storage)?;
     let domain: Option<(i64,bool,i64)> = sqlx::query_as("SELECT d.id,d.enabled,(SELECT eligible_until FROM ruphish_domain_policy WHERE id=d.id) FROM ruphish_campaign_domains cd JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=$1 WHERE cd.campaign_id=$2").bind(owner).bind(id).fetch_optional(&mut *c).await.map_err(storage)?;
     let domain_id = domain.map(|d| d.0);
@@ -304,6 +310,7 @@ async fn header(c: &mut PgConnection, owner: i64, id: i64) -> Result<CampaignHea
         policy: policy_id
             .map(|_| {
                 Ok::<_, Error>(InteractionPolicy {
+                    track_opens: row.try_get("track_opens").map_err(storage)?,
                     redirect_url: text(&row, "redirect_url")?,
                     learning_page_id: row.try_get("learning_page_id").map_err(storage)?,
                 })
@@ -622,6 +629,11 @@ impl Repository for Campaigns {
         .map_err(storage)?
         {
             activity.push(Event {
+                client: crate::participant_privacy::client(
+                    e.try_get::<Option<String>, _>("client")
+                        .map_err(storage)?
+                        .as_deref(),
+                )?,
                 record: None,
                 recipient_id: e.try_get("recipient_id").map_err(storage)?,
                 id: e.try_get("id").map_err(storage)?,
@@ -679,6 +691,11 @@ impl Repository for Campaigns {
             )
             .await?;
             events.push(Event {
+                client: crate::participant_privacy::client(
+                    e.try_get::<Option<String>, _>("client")
+                        .map_err(storage)?
+                        .as_deref(),
+                )?,
                 record: Some(record.clone()),
                 recipient_id: e.try_get("recipient_id").map_err(storage)?,
                 id: e.try_get("id").map_err(storage)?,
@@ -825,10 +842,11 @@ impl Campaigns {
             .execute(&mut *tx)
             .await
             .map_err(storage)?;
-        sqlx::query("INSERT INTO ruphish_campaign_policy(campaign_id,redirect_url,learning_page_id) VALUES($1,$2,$3)")
+        sqlx::query("INSERT INTO ruphish_campaign_policy(campaign_id,redirect_url,learning_page_id,track_opens) VALUES($1,$2,$3,$4)")
             .bind(id)
             .bind(&p.policy.redirect_url)
             .bind(p.policy.learning_page_id)
+            .bind(p.policy.track_opens)
             .execute(&mut *tx)
             .await
             .map_err(storage)?;

@@ -55,12 +55,15 @@ pub struct LocalTime {
     pub time_zone: String,
 }
 
-/// Saved destination policy; validity for execution remains a domain rule.
+/// Saved interaction policy; validity for execution remains a domain rule.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Policy {
-    /// Explicit redirect expression, possibly empty.
-    pub redirect_url: String,
+    /// Whether email-open observations are enabled.
+    pub track_opens: bool,
+    /// Explicit null means unresolved defaults; an empty string means no redirect.
+    #[serde(deserialize_with = "crate::nullable")]
+    pub redirect_url: Option<String>,
     /// Optional owned learning-page identity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub learning_page_id: Option<i64>,
@@ -88,6 +91,7 @@ impl From<&input::Configuration> for Configuration {
                 smtp: reference(&value.selection.smtp),
             },
             policy: value.policy.as_ref().map(|policy| Policy {
+                track_opens: policy.track_opens,
                 redirect_url: policy.redirect_url.clone(),
                 learning_page_id: policy.learning_page_id,
             }),

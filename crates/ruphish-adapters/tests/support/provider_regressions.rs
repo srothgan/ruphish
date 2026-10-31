@@ -170,6 +170,7 @@ async fn busy_operations(db: &Database, actor: auth::Identity, original: &Resour
         Err(Error::Storage(storage::Error::Busy))
     ));
     let message = MessageInput {
+        track_opens: true,
         message_id: None,
         recipient: Recipient::default(),
         template: Template::default(),

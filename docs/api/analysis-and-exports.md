@@ -103,6 +103,18 @@ The IDs and time above are illustrative. Use the reviewed recipient event and an
 
 Use a unique 16 to 64 character alphanumeric/hyphen `request_id`. An addition stores that identity on the event row: retrying the same values returns the unchanged created event, while reusing the identity with different values or after the event was edited returns `412 Precondition Failed`. Deleting the row also removes its creation identity.
 
-Edits and deletions require the reviewed row version. An actual edit increments `revision` and sets `edited: true`; a no-op preserves both fields. Origin remains unchanged. A stale edit returns `412`, except that an identical request matching the immediately next version is acknowledged without another write. A missing event, including a repeated delete, returns `404`. Each mutation is transactional. Administrative additions and edits do not enqueue participant-event webhooks; edits and deletions cancel outstanding webhook jobs for the affected event.
+Edits and deletions require the reviewed row version. An actual edit increments `revision` and sets `edited: true`; a no-op preserves both fields. Origin and collected client categories remain unchanged. A stale edit returns `412`, except that an identical request matching the immediately next version is acknowledged without another write. A missing event, including a repeated delete, returns `404`. Each mutation is transactional. Administrative additions and edits do not enqueue participant-event webhooks; edits and deletions cancel outstanding webhook jobs for the affected event.
 
 Event rows retain only their current values. There is no original-value copy, audit endpoint or restore operation. The boolean `edited` is independent of origin and remains true after an actual edit, including when values are changed back later. Results and event exports expose that boolean; `revision` is only used to prevent conflicting writes.
+
+## Disabled open tracking
+
+Results include the campaign Boolean `track_opens`. Raw observation counts remain numeric; clients must use the Boolean to distinguish disabled open tracking from zero observed opens. The UI shows **Not tracked** or **-** and hides the open series when disabled. Recipient CSV/XLSX open-count cells and workbook open summaries contain **Not tracked** instead of a numeric zero. Historical event rows remain available; disabling collection does not delete observations.
+
+## Client observations
+
+Result events include nullable `client` with `browser`, `os`, and `device` fields. Recipient-history events expose the same data in `record.client`; campaign timeline and delivery-activity events expose `client` directly. It is immutable observation metadata and cannot be supplied through event-edit commands or the public submission body.
+
+Browser values are `chrome`, `edge`, `firefox`, `safari`, `opera`, `samsung_internet`, `internet_explorer`, and `unknown`. OS values are `windows`, `macos`, `linux`, `android`, `ios`, `chromeos`, and `unknown`. Device values are `desktop`, `mobile`, `tablet`, and `unknown`. A `null` client means no metadata was collected; an object containing `unknown` fields means the request could not be classified. Historical and operator-added events remain `null`.
+
+CSV and XLSX event sheets append **Browser**, **Operating system**, and **Device** columns with these stable identifiers. Cells are blank for `null`; unclassified categories contain `unknown`. See [participant data](../user-guide/participant-data.md#browser-and-device-observations) for the collection boundary and interpretation limits.

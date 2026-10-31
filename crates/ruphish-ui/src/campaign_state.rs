@@ -75,6 +75,15 @@ pub struct Draft {
     pub page_request: Option<(i64, u64)>,
 }
 impl Draft {
+    /// Changing tracking must not turn unresolved page defaults into a confirmed redirect.
+    pub fn set_track_opens(&mut self, enabled: bool) {
+        self.edit(|v| {
+            if v["policy"].is_null() {
+                v["policy"] = json!({"redirect_url":null});
+            }
+            v["policy"]["track_opens"] = json!(enabled);
+        });
+    }
     /// Select a page and replace the prior page's policy once its defaults arrive.
     pub fn select_page(&mut self, id: i64) -> Option<(i64, u64)> {
         if self.launch.is_some() {
@@ -87,11 +96,8 @@ impl Draft {
         }
         self.edit(|v| {
             v["selection"]["page"] = json!({"id":id});
-            v["policy"] = if id == 0 {
-                json!({"redirect_url":""})
-            } else {
-                Value::Null
-            };
+            let track_opens = v["policy"]["track_opens"].as_bool().unwrap_or(true);
+            v["policy"] = json!({"track_opens": track_opens, "redirect_url": if id == 0 { json!("") } else { Value::Null }});
         });
         self.page_request = (id != 0).then_some((id, self.generation));
         self.page_request
@@ -103,7 +109,7 @@ impl Draft {
         }
         self.page_request = None;
         if let Some((_, redirect_url)) = page.filter(|(id, _)| *id == request.0) {
-            self.edit(|v| v["policy"] = json!({"redirect_url":redirect_url}));
+            self.edit(|v| v["policy"]["redirect_url"] = json!(redirect_url));
         }
         true
     }
@@ -190,14 +196,14 @@ mod tests {
         }
         let mut value = json!({"total":1,"duplicate_count":0,"launch_date":123,"send_by_date":null,
             "selection":{"groups":[],"template":{"id":1,"name":"Template","revision":"v1"},"page":{"id":2,"name":"Page","revision":"v1"},"smtp":{"id":3,"name":"SMTP","revision":"v1"}},
-            "policy":{"redirect_url":""},"mailer_enabled":true,"conflict_count":0,"conflicts":[],
+            "policy":{"track_opens":true,"redirect_url":""},"mailer_enabled":true,"conflict_count":0,"conflicts":[],
             "preview":{"subject":"Subject","html":"<p>Preview</p>","text":"Preview","visible_sender":"Sender","transport_sender":"Sender"}});
         merge(&mut value, patch);
         serde_json::from_value(value).unwrap()
     }
     fn campaign_draft() -> Draft {
         Draft {
-            value: json!({"name":"Training","policy":{"redirect_url":""}}),
+            value: json!({"name":"Training","policy":{"track_opens":true,"redirect_url":""}}),
             ..Default::default()
         }
     }
@@ -226,7 +232,7 @@ mod tests {
     #[test]
     fn learning_destination_survives_landing_selection_review_and_uncertain_launch_retry() {
         let mut draft = Draft {
-            value: json!({"selection":{"page":{"id":1}},"policy":{"redirect_url":"","learning_page_id":42}}),
+            value: json!({"selection":{"page":{"id":1}},"policy":{"track_opens":true,"redirect_url":"","learning_page_id":42}}),
             ..Default::default()
         };
         assert!(draft.select_page(2).is_none());
@@ -234,7 +240,9 @@ mod tests {
         let (request, _) = draft.begin_review().unwrap();
         assert!(draft.reviewed(
             request,
-            Ok(review(json!({"policy":{"learning_page_id":42}})))
+            Ok(review(
+                json!({"policy":{"track_opens":true,"learning_page_id":42}})
+            ))
         ));
         let first = draft.launch("learning-launch".into()).unwrap();
         assert_eq!(first.1["policy"]["learning_page_id"], 42);
@@ -303,7 +311,7 @@ mod tests {
         let mut flow = ReviewFlow::default();
         let mut d = campaign_draft();
         let (request, _) = flow.update(&mut d, true, false, true, 0).unwrap();
-        d.reviewed(request, Ok(review(json!({"selection":{"template":{"id":7,"revision":"v1"}},"policy":{"redirect_url":""}}))));
+        d.reviewed(request, Ok(review(json!({"selection":{"template":{"id":7,"revision":"v1"}},"policy":{"track_opens":true,"redirect_url":""}}))));
         let original = d.launch("original".into()).unwrap();
         assert!(flow.update(&mut d, true, false, true, 0).is_none());
         assert!(flow.update(&mut d, true, true, true, 1).is_none());
@@ -313,7 +321,7 @@ mod tests {
         let (fresh, _) = flow.update(&mut d, true, false, true, 2).unwrap();
         assert!(d.launch("not-ready".into()).is_none());
         assert!(!d.reviewed(request, Ok(review(json!({"total":999})))));
-        d.reviewed(fresh, Ok(review(json!({"selection":{"template":{"id":7,"revision":"v2"}},"policy":{"redirect_url":""}}))));
+        d.reviewed(fresh, Ok(review(json!({"selection":{"template":{"id":7,"revision":"v2"}},"policy":{"track_opens":true,"redirect_url":""}}))));
         let (key, body) = d.launch("new-attempt".into()).unwrap();
         assert_eq!(key, "new-attempt");
         assert_eq!(body["selection"]["template"]["revision"], "v2");
@@ -329,11 +337,11 @@ mod tests {
         assert!(d.page_loaded(request, Some((12, "https://training.example.test/finish"))));
         assert_eq!(
             d.value["policy"],
-            json!({"redirect_url":"https://training.example.test/finish"})
+            json!({"track_opens":true,"redirect_url":"https://training.example.test/finish"})
         );
         assert!(d.policy_ready());
         d.edit(|v| v["policy"]["redirect_url"] = json!(""));
-        let explicit = json!({"redirect_url":""});
+        let explicit = json!({"track_opens":true,"redirect_url":""});
         assert_eq!(d.value["policy"], explicit);
         let (request, _) = d.begin_review().unwrap();
         assert!(d.reviewed(
@@ -343,7 +351,10 @@ mod tests {
             ))
         ));
         let (_, body) = d.launch("stable-key".into()).unwrap();
-        assert_eq!(body["policy"], json!({"redirect_url":""}));
+        assert_eq!(
+            body["policy"],
+            json!({"track_opens":true,"redirect_url":""})
+        );
         assert!(d.select_page(13).is_none());
         assert_eq!(d.launch("different-key".into()).unwrap().1, body);
     }
@@ -361,7 +372,10 @@ mod tests {
         assert!(!d.page_loaded(old, Some((1, "old"))));
         assert!(d.page_loaded(current, Some((2, ""))));
         assert_eq!(d.value["name"], "Keep this campaign name");
-        assert_eq!(d.value["policy"], json!({"redirect_url":""}));
+        assert_eq!(
+            d.value["policy"],
+            json!({"track_opens":true,"redirect_url":""})
+        );
         let retry = d.select_page(2).unwrap();
         assert!(!d.page_loaded(current, None));
         assert!(d.page_loaded(retry, None));
@@ -375,7 +389,10 @@ mod tests {
         assert!(d.select_page(0).is_none());
         assert!(!d.page_loaded(retry, Some((2, "late"))));
         assert!(d.policy_ready());
-        assert_eq!(d.value["policy"], json!({"redirect_url":""}));
+        assert_eq!(
+            d.value["policy"],
+            json!({"track_opens":true,"redirect_url":""})
+        );
     }
     #[test]
     fn editing_invalidates_review_and_discards_a_late_response() {
@@ -431,7 +448,7 @@ mod tests {
             ..Default::default()
         };
         let (request, _) = d.begin_review().unwrap();
-        d.reviewed(request,Ok(review(json!({"selection":{"template":{"id":7,"revision":"v1"}},"policy":{"redirect_url":""}}))));
+        d.reviewed(request,Ok(review(json!({"selection":{"template":{"id":7,"revision":"v1"}},"policy":{"track_opens":true,"redirect_url":""}}))));
         let first = d.launch("first-key".into());
         assert!(d.begin_review().is_none());
         d.clear_review();
@@ -441,5 +458,40 @@ mod tests {
         assert_eq!(d.value["name"], "Reviewed");
         d.rejected();
         assert!(d.launch("retry".into()).is_none());
+    }
+    #[test]
+    fn changing_page_defaults_preserves_disabled_open_tracking() {
+        let mut draft = Draft {
+            value: json!({"policy":null,"selection":{"page":{"id":1}}}),
+            ..Default::default()
+        };
+        draft.set_track_opens(false);
+        assert_eq!(
+            draft.value["policy"],
+            json!({"track_opens":false,"redirect_url":null})
+        );
+        assert!(!draft.policy_ready());
+        let request = draft.select_page(2).unwrap();
+        assert_eq!(draft.value["policy"]["track_opens"], false);
+        assert!(draft.page_loaded(request, Some((2, "https://example.test/finish"))));
+        assert_eq!(draft.value["policy"]["track_opens"], false);
+        assert_eq!(
+            draft.value["policy"]["redirect_url"],
+            "https://example.test/finish"
+        );
+        draft.select_page(0);
+        assert_eq!(draft.value["policy"]["track_opens"], false);
+        let request = draft.select_page(3).unwrap();
+        assert!(draft.page_loaded(request, None));
+        assert!(!draft.policy_ready());
+        let saved: ruphish_domain::campaign_draft::Configuration =
+            serde_json::from_value(draft.value.clone()).unwrap();
+        assert!(
+            saved.validate(),
+            "failed page defaults must remain saveable"
+        );
+        let policy = saved.policy.unwrap();
+        assert!(!policy.track_opens);
+        assert!(policy.redirect_url.is_none());
     }
 }

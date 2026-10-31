@@ -11,7 +11,7 @@ Complete a campaign when the exercise is over and you want to keep its results. 
 
 Open the campaign and use its completion action. Completion closes the exercise to new public interactions and stops future ordinary delivery work. Messages already submitted cannot be recalled. A submission already in flight may finish, and its outcome still needs accurate reconciliation.
 
-Analysis remains available. Reporting mailboxes can still record a report for a completed campaign; this differs from the public interaction boundary. Inspect the source of a later report rather than assuming the campaign was reopened.
+Analysis remains available. Completion also closes the campaign to new mailbox report events. The scanner ignores late reports and advances its checkpoint without changing campaign results or queuing report webhooks. Reports committed before completion remain recorded, and pending mailbox acknowledgements can still finish.
 
 ## Delete
 

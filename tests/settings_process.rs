@@ -303,9 +303,28 @@ fn company_policy_authorization_domains_integrations_and_closure_survive_restart
         .send()
         .unwrap();
     assert!(!rejected.status().is_success());
-    let mut changed = initial.clone();
+    let mut enabled = initial.clone();
+    enabled["policy"]["reporting_mailboxes_enabled"] = json!(true);
+    enabled["policy"]["webhooks_enabled"] = json!(true);
+    let enabled = save(&c, &base, key, &enabled);
+    let mailbox = post(
+        &c,
+        &base,
+        key,
+        "/api/reporting-mailboxes/",
+        &json!({"name":"Retained mailbox","enabled":false,"host":"127.0.0.1","port":1,"username":"service","password":"SETTINGS-SERVICE-SECRET","tls":true,"folder":"INBOX","frequency":60}),
+    );
+    let hook = post(
+        &c,
+        &base,
+        key,
+        "/api/webhooks/",
+        &json!({"name":"Retained webhook","url":"http://127.0.0.1:1/unused","secret":"HOOK-SECRET-CANARY","is_active":true}),
+    );
+    let mut changed = enabled.clone();
     changed["policy"]["verification_enabled"] = json!(true);
     changed["policy"]["reporting_mailboxes_enabled"] = json!(false);
+    changed["policy"]["webhooks_enabled"] = json!(false);
     let mut current = save(&c, &base, key, &changed);
     assert_eq!(
         request(
@@ -338,13 +357,6 @@ fn company_policy_authorization_domains_integrations_and_closure_survive_restart
             .status(),
         200
     );
-    let mailbox = post(
-        &c,
-        &base,
-        key,
-        "/api/reporting-mailboxes/",
-        &json!({"name":"Retained mailbox","enabled":true,"host":"127.0.0.1","port":1,"username":"service","password":"SETTINGS-SERVICE-SECRET","tls":true,"folder":"INBOX","frequency":60}),
-    );
     let mailbox_id = mailbox["id"].as_i64().unwrap();
     for action in ["validate", "check", "resume"] {
         let response = request(
@@ -363,13 +375,6 @@ fn company_policy_authorization_domains_integrations_and_closure_survive_restart
             response.text().unwrap()
         );
     }
-    let hook = post(
-        &c,
-        &base,
-        key,
-        "/api/webhooks/",
-        &json!({"name":"Retained webhook","url":"http://127.0.0.1:1/unused","secret":"HOOK-SECRET-CANARY","is_active":true}),
-    );
     assert_eq!(
         request(
             &c,
@@ -532,6 +537,299 @@ fn company_policy_authorization_domains_integrations_and_closure_survive_restart
 }
 
 #[test]
+fn regular_users_manage_integrations_under_admin_feature_switches() {
+    let directory = workspace();
+    let peer = mailbox::Mailbox::new();
+    std::fs::write(directory.path().join("mailbox-ca.pem"), &peer.certificate).unwrap();
+    let receiver = webhook_receiver::Receiver::new();
+    receiver
+        .status
+        .store(200, std::sync::atomic::Ordering::SeqCst);
+    let mut process = Process::start(directory.path(), "admin");
+    let base = format!("http://{}", process.ready()["admin"].as_str().unwrap());
+    auth_process::setup(&auth_process::browser(), &base);
+    let c = client();
+    let admin = "synthetic-bootstrap-token";
+    let user = post(
+        &c,
+        &base,
+        admin,
+        "/api/users/",
+        &json!({"username":"integration-user","password":"Operator-password-42!","role":"user","password_change_required":false}),
+    );
+    let key = user["api_key"].as_str().unwrap();
+    let hook = json!({"name":"Owned receiver","url":receiver.url,"secret":"HOOK-SECRET-CANARY","is_active":false});
+    let mail = json!({"name":"Owned mailbox","enabled":false,"host":"127.0.0.1","port":peer.address.port(),"username":"service","password":"MAILBOX-SECRET-CANARY","tls":true,"folder":"INBOX","frequency":60});
+    let mut policy = get(&c, &base, admin, "/api/settings");
+    for caller in [admin, key] {
+        for (path, body) in [
+            ("/api/webhooks/", &hook),
+            ("/api/reporting-mailboxes/", &mail),
+        ] {
+            let rejected = value(
+                request(&c, &base, caller, Method::POST, path, Some(body), None),
+                409,
+            );
+            assert_eq!(rejected["code"], "FEATURE_DISABLED");
+        }
+    }
+    assert_eq!(get(&c, &base, key, "/api/webhooks/"), json!([]));
+    assert_eq!(get(&c, &base, key, "/api/reporting-mailboxes/"), json!([]));
+    policy["policy"]["webhooks_enabled"] = json!(true);
+    policy["policy"]["reporting_mailboxes_enabled"] = json!(true);
+    assert_eq!(
+        request(
+            &c,
+            &base,
+            key,
+            Method::PUT,
+            "/api/settings",
+            Some(&json!({"policy":policy["policy"]})),
+            policy["revision"].as_i64()
+        )
+        .status(),
+        403
+    );
+    policy = save(&c, &base, admin, &policy);
+    let saved_hook = post(&c, &base, key, "/api/webhooks/", &hook);
+    let saved_mail = post(&c, &base, key, "/api/reporting-mailboxes/", &mail);
+    assert_eq!(saved_hook["has_secret"], true);
+    assert_eq!(saved_mail["has_password"], true);
+    assert!(saved_hook.get("secret").is_none());
+    assert!(saved_mail.get("password").is_none());
+    let hook_path = format!("/api/webhooks/{}", saved_hook["id"]);
+    let mail_path = format!("/api/reporting-mailboxes/{}", saved_mail["id"]);
+    assert_eq!(get(&c, &base, admin, "/api/webhooks/"), json!([]));
+    for method in [Method::GET, Method::PUT, Method::DELETE] {
+        for revision in [None, saved_hook["revision"].as_i64(), Some(999)] {
+            assert_eq!(
+                request(
+                    &c,
+                    &base,
+                    admin,
+                    method.clone(),
+                    &hook_path,
+                    Some(&hook),
+                    revision
+                )
+                .status(),
+                404
+            );
+        }
+    }
+    assert_eq!(
+        request(
+            &c,
+            &base,
+            admin,
+            Method::POST,
+            &format!("{hook_path}/validate"),
+            None,
+            None
+        )
+        .status(),
+        404
+    );
+    assert!(receiver.requests.try_recv().is_err());
+    for field in ["owner_id", "user_id", "creator_id"] {
+        let mut forged = hook.clone();
+        forged[field] = json!(1);
+        assert_eq!(
+            request(
+                &c,
+                &base,
+                key,
+                Method::POST,
+                "/api/webhooks/",
+                Some(&forged),
+                None
+            )
+            .status(),
+            400
+        );
+    }
+    assert_eq!(
+        get(&c, &base, key, "/api/webhooks/")
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        request(&c, &base, admin, Method::GET, &mail_path, None, None).status(),
+        404
+    );
+    let mut hook_edit = hook.clone();
+    hook_edit.as_object_mut().unwrap().remove("secret");
+    hook_edit["revision"] = saved_hook["revision"].clone();
+    hook_edit["name"] = json!("Updated owned receiver");
+    let updated_hook = value(
+        request(
+            &c,
+            &base,
+            key,
+            Method::PUT,
+            &hook_path,
+            Some(&hook_edit),
+            None,
+        ),
+        200,
+    );
+    assert_eq!(updated_hook["has_secret"], true);
+    assert_eq!(
+        request(
+            &c,
+            &base,
+            key,
+            Method::PUT,
+            &hook_path,
+            Some(&hook_edit),
+            None
+        )
+        .status(),
+        412
+    );
+    let mut mail_edit = mail.clone();
+    mail_edit.as_object_mut().unwrap().remove("password");
+    mail_edit["revision"] = saved_mail["revision"].clone();
+    let updated_mail = value(
+        request(
+            &c,
+            &base,
+            key,
+            Method::PUT,
+            &mail_path,
+            Some(&mail_edit),
+            None,
+        ),
+        200,
+    );
+    assert_eq!(updated_mail["has_password"], true);
+    value(
+        request(
+            &c,
+            &base,
+            key,
+            Method::POST,
+            &format!("{hook_path}/validate"),
+            None,
+            None,
+        ),
+        200,
+    );
+    let (event, payload) = receiver
+        .requests
+        .recv_timeout(Duration::from_secs(5))
+        .unwrap();
+    assert_eq!(event, "validation");
+    assert_eq!(
+        serde_json::from_slice::<Value>(&payload).unwrap(),
+        json!({"success":true})
+    );
+    value(
+        request(
+            &c,
+            &base,
+            key,
+            Method::POST,
+            &format!("{mail_path}/validate"),
+            None,
+            None,
+        ),
+        200,
+    );
+    let logins = peer.state.lock().unwrap().logins;
+    assert!(logins > 0);
+    policy["policy"]["webhooks_enabled"] = json!(false);
+    policy["policy"]["reporting_mailboxes_enabled"] = json!(false);
+    policy = save(&c, &base, admin, &policy);
+    hook_edit["revision"] = updated_hook["revision"].clone();
+    mail_edit["revision"] = updated_mail["revision"].clone();
+    for (path, body) in [(&hook_path, &hook_edit), (&mail_path, &mail_edit)] {
+        let rejected = value(
+            request(&c, &base, key, Method::PUT, path, Some(body), None),
+            409,
+        );
+        assert_eq!(rejected["code"], "FEATURE_DISABLED");
+    }
+    for path in [
+        format!("{hook_path}/validate"),
+        format!("{mail_path}/validate"),
+        format!("{mail_path}/check"),
+        format!("{mail_path}/resume"),
+    ] {
+        let rejected = value(
+            request(
+                &c,
+                &base,
+                key,
+                Method::POST,
+                &path,
+                Some(&json!({"revision":updated_mail["revision"]})),
+                None,
+            ),
+            409,
+        );
+        assert_eq!(rejected["code"], "FEATURE_DISABLED");
+    }
+    assert_eq!(get(&c, &base, key, &hook_path), updated_hook);
+    assert_eq!(peer.state.lock().unwrap().logins, logins);
+    assert!(receiver.requests.try_recv().is_err());
+    policy["policy"]["webhooks_enabled"] = json!(true);
+    policy["policy"]["reporting_mailboxes_enabled"] = json!(true);
+    save(&c, &base, admin, &policy);
+    // A live privilege change must reject a previously authorized caller.
+    database(
+        directory.path(),
+        "DELETE FROM role_permissions WHERE role_id=2 AND permission_id=(SELECT id FROM permissions WHERE slug='modify_objects')",
+    );
+    assert_eq!(
+        request(
+            &c,
+            &base,
+            key,
+            Method::PUT,
+            &hook_path,
+            Some(&hook_edit),
+            None
+        )
+        .status(),
+        403
+    );
+    assert_eq!(
+        request(
+            &c,
+            &base,
+            key,
+            Method::POST,
+            &format!("{hook_path}/validate"),
+            None,
+            None
+        )
+        .status(),
+        403
+    );
+    assert_eq!(
+        request(
+            &c,
+            &base,
+            key,
+            Method::DELETE,
+            &mail_path,
+            None,
+            updated_mail["revision"].as_i64()
+        )
+        .status(),
+        403
+    );
+    assert_eq!(get(&c, &base, key, &hook_path)["id"], saved_hook["id"]);
+    assert!(receiver.requests.try_recv().is_err());
+    assert_eq!(peer.state.lock().unwrap().logins, logins);
+    process.stop();
+    assert!(!process.output().contains("SECRET-CANARY"));
+}
+
+#[test]
 fn mailbox_policy_blocks_network_actions_and_reenable_uses_preserved_credentials() {
     let directory = workspace();
     let peer = mailbox::Mailbox::new();
@@ -542,15 +840,17 @@ fn mailbox_policy_blocks_network_actions_and_reenable_uses_preserved_credentials
     let c = client();
     let key = "synthetic-bootstrap-token";
     let mut policy = get(&c, &base, key, "/api/settings");
-    policy["policy"]["reporting_mailboxes_enabled"] = json!(false);
+    policy["policy"]["reporting_mailboxes_enabled"] = json!(true);
     policy = save(&c, &base, key, &policy);
     let mailbox = post(
         &c,
         &base,
         key,
         "/api/reporting-mailboxes/",
-        &json!({"name":"Preserved TLS mailbox","enabled":true,"host":"127.0.0.1","port":peer.address.port(),"username":"service","password":"MAILBOX-SECRET-CANARY","tls":true,"folder":"INBOX","frequency":60}),
+        &json!({"name":"Preserved TLS mailbox","enabled":false,"host":"127.0.0.1","port":peer.address.port(),"username":"service","password":"MAILBOX-SECRET-CANARY","tls":true,"folder":"INBOX","frequency":60}),
     );
+    policy["policy"]["reporting_mailboxes_enabled"] = json!(false);
+    policy = save(&c, &base, key, &policy);
     let path = format!("/api/reporting-mailboxes/{}/validate", mailbox["id"]);
     assert_eq!(
         request(&c, &base, key, Method::POST, &path, None, None).status(),

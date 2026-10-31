@@ -3,7 +3,7 @@ title: Email tracking composition
 description: Shared rendered-email validation and automatic open-tracking insertion.
 ---
 
-HTML email tracking belongs to the shared SMTP composer, used by campaign delivery and test sends. Operators do not need to insert or maintain a tracker in the authored HTML. Plain-text-only messages remain plain text and have no image-based open tracking.
+HTML email tracking belongs to the shared SMTP composer, used by campaign delivery and test sends. The immutable campaign policy owns `track_opens`, defaulting to `true` for new campaigns and Gophish conversions. Operators choose **Track email opens** during campaign setup; they do not need to insert or maintain a tracker in the authored HTML. Plain-text-only messages remain plain text and have no image-based open tracking.
 
 ## One validation authority
 
@@ -13,11 +13,11 @@ Stored source is preserved: validation does not rewrite Go expressions, add docu
 
 ## Insertion and compatibility
 
-After rendering and normalization, the composer removes existing image elements targeting this recipient's tracking URL, including images produced by legacy `{{.Tracker}}` and `{{.TrackingURL}}` expressions and images inside Outlook conditional comments. Attribute entities are decoded before comparison. A URL fragment does not distinguish tracking requests. The composer then appends one hidden 1×1 image as the last body element. The URL is attribute-escaped. Normal email images are not removed.
+After rendering and normalization, the composer removes existing image elements targeting this recipient's tracking URL, including images produced by legacy `{{.Tracker}}` and `{{.TrackingURL}}` expressions and images inside Outlook conditional comments. Attribute entities are decoded before comparison. A URL fragment does not distinguish tracking requests. When `track_opens` is enabled, the composer then appends one hidden 1×1 image as the last body element. The URL is attribute-escaped. Normal email images are not removed.
 
-Go-template syntax and legacy tracking fields remain available. Authored legacy tracker placement and presentation no longer control the managed image. Tracking expressed through other mechanisms, such as arbitrary CSS background URLs, is not an image-element compatibility contract. Existing source is not migrated or destructively stripped. Automatic tracking applies to HTML templates that previously omitted a tracker; there is no opt-out checkbox in this flow.
+Go-template syntax and legacy tracking fields remain available. Authored legacy tracker placement and presentation no longer control the managed image. Tracking expressed through other mechanisms, such as arbitrary CSS background URLs, is not an image-element compatibility contract. Existing source is not migrated or destructively stripped. The campaign setting applies even when HTML previously omitted a tracker. Gophish stores its checkbox choice in HTML rather than a separate column; conversion deliberately defaults the new Boolean to `true` regardless of that markup.
 
-Draft previews and campaign email reviews remove the rendered tracking image instead of requesting it or showing a broken-image indicator. The source editor can still show legacy expressions already present in imported source; new templates need none. No tracking state or catalog relationship is stored on a template. Mail clients can block image loading, so an absent open event is not proof that a message was unread.
+Draft previews and campaign email reviews remove the rendered tracking image instead of requesting it or showing a broken-image indicator. The source editor can still show legacy expressions already present in imported source; new templates need none. No tracking state or catalog relationship is stored on a template. Campaign test sends use the reviewed setting; standalone template/profile test sends retain enabled tracking. The public pixel endpoint returns its usual image for an eligible disabled campaign but atomically skips the open event, result mutation, and webhook work. Mail clients can block image loading, so an absent open event is not proof that a message was unread.
 
 ## Functional coverage
 
@@ -25,24 +25,12 @@ Draft previews and campaign email reviews remove the rendered tracking image ins
 
 Executable cases in `tests/resource_process.rs` cover creation and editing rejection without partial persistence, unchanged authored source, tracker-free preview responses, and the tracking URL in MIME actually received by loopback SMTP. They request that URL and verify the PNG response. Recipient-dependent invalid HTML is rejected before any SMTP connection or preview persistence. The queued campaign-delivery case in `tests/campaign_process.rs` verifies managed tracking from an authored fragment with no tracker, personalized MIME, idempotent launch and acceptance across restart.
 
-## Verification on 2026-10-24
+`crates/ruphish-adapters/tests/support/open_tracking.rs` runs enabled/disabled campaigns through all three real database providers, queued MIME composition, repeated public pixel requests, independent clicks/submissions/reports, and CSV/XLSX exports. Draft launch rejects a changed tracking choice after review. Failed or unresolved page defaults remain saveable without losing an explicit tracking opt-out; launch stays blocked until the destination is resolved. The HTTP campaign test covers disabled sample delivery and copy preservation; `tests/public_process.rs` checks that query parameters cannot enable tracking for an opted-out campaign and that the setting survives restart. SQLite and MySQL historical conversion tests verify the enabled default even without authored tracker markup.
 
-Windows, pinned Rust 1.99.1 and Cargo 1.99.1; development profile, one build job/test thread, two Tokio/Rayon workers. These commands exited 0:
+The built-UI `results-untracked` scenario in `crates/ruphish-ui/web/tests/ui-interactions.artifact.mjs` checks the translated summary, compact recipient cells, and hidden open chart series even when the raw snapshot contains historical open observations.
 
-- `cargo test -p ruphish-adapters --test email_tracking --test resource_formats --locked`: 17 passed. The final tracker-only run after the refresh-directive edge case passed all 5 tests.
-- `cargo test -p ruphish --test startup_process resource_process:: --locked -- --nocapture --test-threads=1`: 14 passed.
-- `cargo test -p ruphish --test startup_process --locked -- --exact resource_process::actual_test_delivery_composes_mime_persists_preview_and_never_records_campaign_events resource_process::email_create_edit_and_preview_share_validation_without_mutating_source campaign_process::executable_launch_delivers_personalized_mail_once_and_persists_acceptance_across_restart --nocapture --test-threads=1`: all 3 final executable regressions passed.
-- `cargo clippy -p ruphish-adapters --lib --test email_tracking --test resource_formats --locked -- -D warnings`: passed.
-- `cargo clippy -p ruphish --bin ruphish --test startup_process --locked -- -D warnings`: passed, including the final executable test changes.
-- `cargo fmt --all -- --check` and `git diff --check`: passed.
+## Validation
 
-Initial tests exposed an encoded-URL duplicate-removal defect; URL comparison now decodes HTML attribute entities. A plain-text test was corrected to inspect actual MIME parts because mail-parser's convenience HTML accessor synthesizes HTML for plain text. The persistence regression now compares GET snapshots, respecting the existing null-versus-empty attachments distinction between create and read responses. These corrections were rerun successfully. Clippy's test-helper unwrap diagnostic was resolved with a narrow assertion-helper exemption; production lint rules remain unchanged.
+Use the focused tests above when changing tracking behavior and follow [validation](testing/validation.md) for applicable provider, executable, WASM, and built-UI checks. Migration changes also require the relevant [database-provider histories](testing/database-providers.md). Keep per-run commands and results in review notes rather than treating an old test run as evidence for a newer revision.
 
-The first resource process run failed 13 cases at Windows shutdown and one at the corrected persistence assertion. This runner inherited Windows' ignore-Ctrl+C attribute. Clearing that attribute in the launching PowerShell process with `SetConsoleCtrlHandler(NULL, FALSE)` made the unchanged SMTP/restart test pass, and subsequent Cargo process runs passed with the same launcher correction. No application signal handling, fixture shutdown assertions or timeouts were changed. See [Microsoft's console-handler contract](https://learn.microsoft.com/windows/console/setconsolectrlhandler). The process-local correction used before those commands was:
-
-```powershell
-Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class TrackerTestConsole { [DllImport("kernel32.dll", SetLastError=true)] public static extern bool SetConsoleCtrlHandler(IntPtr handler, bool add); }'
-if (-not [TrackerTestConsole]::SetConsoleCtrlHandler([IntPtr]::Zero, $false)) { throw 'Cannot restore console Ctrl+C handling' }
-```
-
-Root specification verification (`py -3 tools/verify_specification.py`) could not execute because Python is not installed. No browser/inbox rendering or full provider matrix was run; this change has no UI assets, schema or provider-specific SQL changes.
+The [manual UI checks](testing/manual-ui.md#first-release-feature-boundaries) cover tracking choices, email rendering, disabled metrics, and participant behavior. Protocol tests and a successful build do not establish inbox rendering, browser behavior, or full release acceptance.

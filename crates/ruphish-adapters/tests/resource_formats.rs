@@ -272,6 +272,7 @@ fn inherited_email_generation_cases_decode_to_the_expected_mime_and_envelope() {
     let sender = ruphish_adapters::smtp::Smtp::new(Policy::default(), "test@test.com".into());
     for variant in ["normal", "empty-subject", "url"] {
         let message = MessageInput {
+            track_opens: true,
             message_id: None,
             recipient: Recipient {
                 email: "firstlast@example.com".into(),
@@ -369,6 +370,7 @@ fn original_template_context_preserves_pathless_urls_and_query_order() {
         resources::{Profile, Recipient, Template},
     };
     let mut message = MessageInput {
+        track_opens: true,
         message_id: None,
         recipient: Recipient {
             first_name: "Foo".into(),
@@ -708,6 +710,7 @@ fn campaign_mime_preserves_address_headers_and_inline_attachment_contracts() {
             b"Training attachment".to_vec()
         };
         let mut request = MessageInput {
+            track_opens: true,
             message_id: None,
             recipient: Recipient {
                 email: "john@example.test".into(),

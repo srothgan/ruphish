@@ -89,7 +89,8 @@
         "name": "Local privacy page"
       },
       "policy": {
-        "redirect_url": ""
+        "redirect_url": "",
+        "track_opens": true
       },
       "profile_sender": "Training <training@example.test>",
       "send_by_date": null,
@@ -137,7 +138,8 @@
     "mailer_enabled": true,
     "next_after": null,
     "policy": {
-      "redirect_url": ""
+      "redirect_url": "",
+      "track_opens": true
     }
   },
   "analysis": {
@@ -305,6 +307,7 @@
           "reported": 0
         }
       }
-    ]
+    ],
+    "track_opens": true
   }
 }

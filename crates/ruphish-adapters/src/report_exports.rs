@@ -42,7 +42,13 @@ fn recipients(a: &Analysis) -> Vec<Vec<String>> {
                 .map_or("historical", |state| state.as_str())
                 .into(),
         ];
-        v.extend(r.counts.iter().map(ToString::to_string));
+        v.extend(r.counts.iter().enumerate().map(|(i, count)| {
+            if i == 1 && !a.track_opens {
+                "Not tracked".into()
+            } else {
+                count.to_string()
+            }
+        }));
         v.push(r.historical_reported.to_string());
         v.extend([
             r.first_name.clone(),
@@ -66,6 +72,9 @@ fn events(a: &Analysis) -> Vec<Vec<String>> {
             "Source",
             "Password present",
             "Edited",
+            "Browser",
+            "Operating system",
+            "Device",
         ]
         .into_iter()
         .map(str::to_owned)
@@ -83,6 +92,9 @@ fn events(a: &Analysis) -> Vec<Vec<String>> {
                 .map(|v| v.to_string())
                 .unwrap_or_default(),
             e.edited.to_string(),
+            e.client.map(|c| c.browser.key()).unwrap_or_default().into(),
+            e.client.map(|c| c.os.key()).unwrap_or_default().into(),
+            e.client.map(|c| c.device.key()).unwrap_or_default().into(),
         ]
     }));
     rows
@@ -167,11 +179,19 @@ pub(crate) fn generate(
     {
         summary.push(vec![
             format!("{name} unique recipients"),
-            a.unique[index].to_string(),
+            if index == 1 && !a.track_opens {
+                "Not tracked".into()
+            } else {
+                a.unique[index].to_string()
+            },
         ]);
         summary.push(vec![
             format!("{name} total events"),
-            a.totals[index].to_string(),
+            if index == 1 && !a.track_opens {
+                "Not tracked".into()
+            } else {
+                a.totals[index].to_string()
+            },
         ]);
     }
     summary.push(vec![

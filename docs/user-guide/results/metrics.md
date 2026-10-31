@@ -23,6 +23,12 @@ Campaign Results summary cards, the dashboard, and the campaign execution overvi
 
 Those inferences do not add timeline events or invent timestamps. Charts and event exports use effective events and their corrected occurrence times. The event table identifies each event's origin and whether it has been edited. Password presence requires an explicit positive boolean; submission alone does not mean credentials were entered.
 
+## When email opens are not tracked
+
+If the campaign's **Track email opens** setting is off, open metrics display **Not tracked** or **-**, and open series are omitted from charts. This means measurement is disabled, not that the open rate is zero. Click, submission, and report metrics remain independent. Stored historical or operator-added open events remain available as evidence; they do not establish automatic tracking coverage. API consumers must use `track_opens` when interpreting numeric counts; recipient exports label disabled open-count cells **Not tracked**.
+
+New and migrated campaigns default to enabled. For migrated campaigns, that default does not prove that earlier Gophish messages contained a tracking image. Plain-text-only email has no image-based tracking even when the campaign setting is enabled. See [email-open tracking at launch](../campaigns/launch.md#choose-email-open-tracking).
+
 ## Dashboard scope
 
 The dashboard shows compact rates for recent campaigns. Each rate uses that campaign's recorded sent-recipient count; a zero denominator displays a dash. The same address in different campaigns counts separately.

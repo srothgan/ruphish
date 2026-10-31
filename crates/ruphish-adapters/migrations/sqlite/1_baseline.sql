@@ -48,7 +48,8 @@ CREATE TABLE "events" (
   source VARCHAR(255) NOT NULL DEFAULT 'application',
   edited BOOLEAN NOT NULL DEFAULT FALSE,
   revision BIGINT NOT NULL DEFAULT 0,
-  create_key VARCHAR(64)
+  create_key VARCHAR(64),
+  client TEXT
 );
 
 CREATE TABLE "group_targets" (
@@ -190,6 +191,7 @@ CREATE TABLE ruphish_campaign_launch (
 );
 
 CREATE TABLE ruphish_campaign_policy (
+  track_opens INTEGER NOT NULL DEFAULT 1 CHECK(track_opens IN (0,1)),
   campaign_id INTEGER PRIMARY KEY,
   redirect_url TEXT NOT NULL,
   learning_page_id INTEGER
@@ -333,6 +335,7 @@ CREATE TABLE "ruphish_mailboxes" (
   failures INTEGER NOT NULL DEFAULT 0,
   code TEXT NOT NULL DEFAULT '',
   ignore_cert_errors INTEGER NOT NULL DEFAULT 0 CHECK(ignore_cert_errors IN (0,1)),
+  initial_since VARCHAR(40),
   UNIQUE(owner_id,name)
 );
 
@@ -400,7 +403,8 @@ CREATE TABLE "ruphish_webhook_jobs" (
 
 CREATE TABLE ruphish_webhook_state (
   webhook_id INTEGER PRIMARY KEY,
-  revision INTEGER NOT NULL DEFAULT 1
+  revision INTEGER NOT NULL DEFAULT 1,
+  owner_id INTEGER NOT NULL
 );
 
 CREATE TABLE smtp (
@@ -514,7 +518,7 @@ CREATE INDEX ruphish_webhook_attempts_unfinished ON ruphish_webhook_attempts(job
 
 CREATE INDEX ruphish_webhook_due ON ruphish_webhook_jobs(state,due,lease);
 
-CREATE VIEW event_history AS SELECT id,campaign_id,email,time,CASE kind WHEN 'campaign_created' THEN 'Campaign Created' WHEN 'email_sent' THEN 'Email Sent' WHEN 'email_error' THEN 'Error Sending Email' WHEN 'email_opened' THEN 'Email Opened' WHEN 'link_clicked' THEN 'Clicked Link' WHEN 'form_submitted' THEN 'Submitted Data' WHEN 'email_reported' THEN 'Email Reported' WHEN 'delivery_reconciled' THEN 'Delivery reconciled' ELSE kind END AS message,metadata AS details,recipient_id,source,edited,revision FROM events;
+CREATE VIEW event_history AS SELECT id,campaign_id,email,time,CASE kind WHEN 'campaign_created' THEN 'Campaign Created' WHEN 'email_sent' THEN 'Email Sent' WHEN 'email_error' THEN 'Error Sending Email' WHEN 'email_opened' THEN 'Email Opened' WHEN 'link_clicked' THEN 'Clicked Link' WHEN 'form_submitted' THEN 'Submitted Data' WHEN 'email_reported' THEN 'Email Reported' WHEN 'delivery_reconciled' THEN 'Delivery reconciled' ELSE kind END AS message,metadata AS details,recipient_id,source,edited,revision,client FROM events;
 
 CREATE VIEW ruphish_domain_policy AS
  SELECT d.id,
@@ -548,3 +552,5 @@ INSERT INTO role_permissions VALUES (1,2);
 INSERT INTO role_permissions VALUES (2,2);
 INSERT INTO role_permissions VALUES (1,3);
 INSERT INTO ruphish_settings VALUES (1,1,0,1,86400,21600,0,0,0,NULL);
+
+CREATE INDEX ruphish_webhook_state_owner ON ruphish_webhook_state(owner_id);

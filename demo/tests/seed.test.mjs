@@ -129,6 +129,20 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
       (await post('/auth/login', { username: 'demo', password: 'demodemo' })).status,
       200,
     );
+    for (const recipient of [20001, 20010, 20024, 20028]) {
+      const path = `/api/campaigns/2/results?recipients=${recipient}`;
+      const live = await fetch(`http://127.0.0.1:${port}${path}`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      const simulated = await demo.execute(new Request(`https://demo.example.test${path}`));
+      assert.equal(live.status, 200);
+      assert.equal(simulated.status, 200);
+      const observations = (response) =>
+        response.events.map((e) => ({ id: e.id, client: e.client })).sort((a, b) => a.id - b.id);
+      const expected = dataset(1793016000).campaigns[1].results.find((r) => r.id === recipient);
+      assert.deepEqual(observations(await live.json()), observations(expected));
+      assert.deepEqual(observations(await simulated.json()), observations(expected));
+    }
     for (const [query, totals] of [
       ['source=public', { accepted: 0, opened: 460, clicked: 54, submitted: 10, reported: 68 }],
       ['source=application', { accepted: 617, opened: 0, clicked: 0, submitted: 0, reported: 0 }],
@@ -192,6 +206,31 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
     db = new DatabaseSync(database);
     try {
       const count = (table) => db.prepare(`SELECT count(*) AS n FROM ${table}`).get().n;
+      const events = db.prepare('SELECT id,kind,source,client FROM events ORDER BY id').all();
+      const expectedEvents = dataset(1793016000).campaigns.flatMap((c) =>
+        c.results.flatMap((r) => r.events),
+      );
+      assert.deepEqual(
+        events.map((e) => [e.id, JSON.parse(e.client)]),
+        expectedEvents.sort((a, b) => a.id - b.id).map((e) => [e.id, e.client]),
+      );
+      const clients = events.filter((e) => e.client !== null);
+      assert.ok(clients.length > 0);
+      assert.ok(
+        clients.every(
+          (e) => e.source === 'public' && ['link_clicked', 'form_submitted'].includes(e.kind),
+        ),
+      );
+      assert.deepEqual([...new Set(clients.map((e) => JSON.parse(e.client).device))].sort(), [
+        'desktop',
+        'mobile',
+        'tablet',
+        'unknown',
+      ]);
+      assert.ok(
+        events.some((e) => e.source === 'public' && e.kind === 'link_clicked' && e.client === null),
+        'older click observations retain unavailable client information',
+      );
       assert.equal(count('users'), 6);
       assert.equal(count('campaigns'), 4);
       assert.deepEqual(
@@ -222,6 +261,10 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
       assert.equal(stored.modified_date, recipient.modified_date);
       assert.equal(count('groups'), 6);
       assert.equal(count('webhooks'), 3);
+      assert.equal(
+        db.prepare('SELECT count(*) AS n FROM ruphish_webhook_state WHERE owner_id=1').get().n,
+        3,
+      );
       assert.equal(count('ruphish_mailboxes'), 2);
       assert.equal(count('ruphish_campaign_drafts'), 2);
       assert.equal(db.prepare('SELECT count(*) AS n FROM webhooks WHERE is_active<>0').get().n, 0);

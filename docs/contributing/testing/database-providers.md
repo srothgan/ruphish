@@ -65,6 +65,8 @@ Remove-Item Env:RUPHISH_MYSQL_TEST_PORT -ErrorAction SilentlyContinue
 
 The same direct Docker/Cargo commands work in CI with an isolated fixture workspace; the [validation workflow](../../../.github/workflows/validation.yml) selects the appropriate scope. On POSIX shells, obtain the published port with `docker compose ... port mysql 3306` and export `RUPHISH_MYSQL_TEST_PORT` accordingly.
 
+The [populated migration corpus](../../../tests/fixtures/migration/README.md) uses identical Gophish input data and public assertions on SQLite and MySQL, including restart, ownership, content, history, queue disposition, and integration preservation. The `sqlite_legacy_` and `mysql_legacy_` filters in `database_providers` select its populated and isolated queue-fault cases, plus the MySQL deleted-owner/deleted-ID regressions. Historical SQLite transformations remain in `sqlite_upgrade`; the MySQL all-version sweep and failed-publication test also verify historical date/status conversion and allocation-counter recovery.
+
 ### Preservation, races and schema metadata
 
 The provider suite also checks unsafe server SQL-mode defaults, exact Unicode/trailing-space round trips, rejected replacements and creations, and typed lock-timeout errors across four facade capabilities. Coordinated account-deletion tests pause deletion after hostname-claim cleanup and prove domain claiming/completion cannot recreate orphan records; another account must subsequently verify the same hostname successfully. These tests use isolated databases and synthetic data. The SQL-mode test restores the server default immediately after opening the application connections; run separate invocations of that test sequentially against a shared fixture service.

@@ -1,18 +1,32 @@
 ---
 import Site from '../layouts/Site.astro';
-import { repository, demo } from '../site';
+import { repository, demo, description } from '../site';
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Ruphish',
+  applicationCategory: 'SecurityApplication',
+  operatingSystem: 'Linux, macOS, Windows',
+  description,
+  url: Astro.site?.href,
+  sameAs: [repository],
+  license: `${repository}/blob/main/LICENSE`,
+  isAccessibleForFree: true,
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  author: { '@type': 'Person', name: 'Simon Peter Rothgang' },
+};
 ---
-<Site title="Ruphish - Phishing simulations. A clearer picture.">
+<Site title="Ruphish - Open-source phishing simulation & Gophish successor">
   <section class="hero shell" aria-labelledby="hero-title">
     <h1 id="hero-title">Phishing simulations.<br />A clearer picture.</h1>
-    <p class="hero-intro">From the first campaign to the next improvement. Prepare your exercises, follow delivery, and understand how people respond.</p>
+    <p class="hero-intro">Ruphish is an open-source phishing simulation platform and a maintained successor to Gophish. Prepare your exercises, follow delivery, and understand how people respond.</p>
     <div class="actions"><a class="button primary" href="/docs/getting-started/">Get started</a><a class="button secondary" href={repository}>View source</a></div>
     <div class="demo-action"><a class="button tertiary" href={demo}>Try the demo</a></div>
     <figure class="dashboard-showcase">
       <a href="/dashboard.png" aria-label="Open the full dashboard screenshot">
         <img src="/dashboard.png" alt="Ruphish dashboard showing campaign outcomes, changes from the previous month, and recent campaigns using synthetic data." width="3024" height="1964" loading="eager" fetchpriority="high" />
       </a>
-      <figcaption>The Ruphish dashboard. Example campaigns and synthetic data.</figcaption>
     </figure>
   </section>
   <section class="shell workflow" aria-labelledby="workflow-title">
@@ -27,4 +41,5 @@ import { repository, demo } from '../site';
     <div class="shell story-inner"><h2>A familiar idea.<br />A new chapter.</h2><div><p>Ruphish grew out of using Gophish during a master’s thesis. It carries those useful workflows forward with a Rust backend, a new administration interface, and ideas from hands-on experience and the community.</p><a class="text-link" href="/about/">Why I’m building Ruphish</a></div></div>
   </section>
   <section class="shell start-section"><div><h2>Take a look around.</h2><p>Explore sample campaigns, templates, and results in the demo. Actions are simulated: changes are not saved and no emails are sent.</p></div><a class="button tertiary" href={demo}>Try the demo</a></section>
+  <script type="application/ld+json" set:html={JSON.stringify(structuredData)} is:inline />
 </Site>

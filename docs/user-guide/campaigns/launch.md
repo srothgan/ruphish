@@ -8,7 +8,7 @@ sidebar:
 Before launching, save your group, template, landing page, sending profile, and domain. Use a [test message](../sending-profiles.md#test-connection-versus-send-test) to inspect the output in a controlled inbox.
 
 1. Create or resume a draft and select the resources.
-2. Choose an enabled owned public origin and any path beneath it. Verification is required only when enabled in [company settings](../../administration/settings.md).
+2. Choose an enabled owned public origin and any path beneath it. HTTP and HTTPS support fixed DNS names and IP addresses. When verification is required in [company settings](../../administration/settings.md), only verified DNS hostnames over HTTPS are eligible.
 3. Set an immediate or future schedule.
 4. Review the resolved audience, personalized preview, and effective tracking/redirect settings.
 5. Choose **Launch campaign** or **Schedule campaign**.
@@ -30,3 +30,7 @@ Submission and password-presence tracking are always enabled. Review shows the c
 Launching a saved draft creates the campaign transactionally. Retrying that same draft launch resolves to its existing campaign rather than creating another one. Refresh the saved draft to find the linked execution.
 
 This launch identity does not promise exactly-once email delivery. Read [delivery recovery](delivery.md) before acting on an uncertain SMTP outcome. The legacy API has its own [idempotency mechanism](../../api/campaigns.md).
+
+## Choose email-open tracking
+
+**Track email opens** defaults to enabled. Turn it off before launch to omit Ruphish tracking images and ignore requests to the campaign tracking endpoint. Clicks, submissions, and reports remain independent. The choice is saved with the draft, shown in review, used by campaign test sends, and fixed when launched. Disabled open metrics display **Not tracked** or **-** rather than 0%.

@@ -58,18 +58,13 @@ impl Persistence {
         let (saved, _) = result?;
         let parsed: ruphish_contracts::campaign_reads::Draft =
             serde_json::from_value(saved.clone()).map_err(|_| api.invalid_read())?;
-        #[cfg(not(feature = "demo"))]
         if parsed.id != self.id.get_untracked() {
             return Err(api.invalid_read());
         }
-        #[cfg(feature = "demo")]
-        self.id.set(parsed.id.clone());
         self.queries.draft_saved(&parsed.id);
         self.revision.set(saved["revision"].as_i64());
         self.saved_generation.set(state.generation);
         self.modified.set(saved["modified"].clone());
-        #[cfg(feature = "demo")]
-        api.notifications.show(DemoNotice::Saved);
         Ok(saved)
     }
 }

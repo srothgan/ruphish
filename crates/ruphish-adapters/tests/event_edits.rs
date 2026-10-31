@@ -14,7 +14,7 @@ async fn event_rows_are_mutated_deleted_and_persisted_without_audit_tables() {
     let db = support::DatabaseFixture::open(&path).await.unwrap();
     let pool = db.inspection_pool();
     sqlx::raw_sql(SEED).execute(&pool).await.unwrap();
-    sqlx::raw_sql("INSERT INTO webhooks(id,name,url,secret,is_active) VALUES(1,'Fixture','http://127.0.0.1:9/','',1); INSERT INTO ruphish_webhook_state VALUES(1,1); UPDATE ruphish_settings SET webhooks_enabled=1; INSERT INTO ruphish_webhook_jobs(webhook_id,revision,event_id) VALUES(1,1,101),(1,1,102);").execute(&pool).await.unwrap();
+    sqlx::raw_sql("INSERT INTO webhooks(id,name,url,secret,is_active) VALUES(1,'Fixture','http://127.0.0.1:9/','',1); INSERT INTO ruphish_webhook_state(webhook_id,revision,owner_id) VALUES(1,1,1); UPDATE ruphish_settings SET webhooks_enabled=1; INSERT INTO ruphish_webhook_jobs(webhook_id,revision,event_id) VALUES(1,1,101),(1,1,102);").execute(&pool).await.unwrap();
     scenarios::contract(&db).await;
     let row: (String, bool) = sqlx::query_as("SELECT kind,edited FROM events WHERE id=102")
         .fetch_one(&pool)

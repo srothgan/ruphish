@@ -83,6 +83,7 @@ fn events(c: &app::Campaign) -> Vec<details::Event> {
     c.events
         .iter()
         .map(|e| details::Event {
+            client: e.client,
             campaign_id: c.id,
             email: e.email.clone(),
             time: date(&e.time),
@@ -93,6 +94,7 @@ fn events(c: &app::Campaign) -> Vec<details::Event> {
 }
 fn metadata(c: &app::Campaign) -> details::Metadata {
     details::Metadata {
+        track_opens: c.policy.as_ref().is_none_or(|p| p.track_opens),
         id: c.id,
         name: c.name.clone(),
         status: c.status,
@@ -208,6 +210,7 @@ fn command(context: &Context, input: wire::Create) -> Result<app::Create, Reject
         launch: timestamp(input.launch_date),
         send_by: timestamp(input.send_by_date),
         policy: app::Overrides {
+            track_opens: p.track_opens,
             redirect_url: p.redirect_url,
             learning_page_id: p.learning_page_id,
         },
@@ -511,6 +514,7 @@ struct Page {
 }
 fn read_policy(p: &app::InteractionPolicy) -> reads::Policy {
     reads::Policy {
+        track_opens: p.track_opens,
         redirect_url: p.redirect_url.clone(),
         learning_page_id: p.learning_page_id,
     }
@@ -633,6 +637,7 @@ async fn deliveries(
             .activity
             .iter()
             .map(|e| reads::Activity {
+                client: e.client,
                 id: e.id,
                 time: date(&e.time),
                 email: e.email.clone(),

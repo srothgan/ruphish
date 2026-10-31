@@ -1,14 +1,23 @@
 //! Canonical campaign origins and the single domain eligibility rule.
 
-/// An HTTPS origin with an exact DNS hostname, never user information or a path.
+/// An HTTP(S) origin with a fixed DNS name or IP address, never user information or a path.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Origin {
-    /// Canonical ASCII hostname.
+    /// Canonical ASCII DNS name or IP address without IPv6 brackets.
     pub host: String,
-    /// Explicit or standard HTTPS port.
+    /// Explicit or standard scheme port.
     pub port: u16,
+    /// HTTP or HTTPS transport.
+    pub scheme: &'static str,
     /// Canonical origin without a trailing slash.
     pub value: String,
+}
+
+impl Origin {
+    /// DNS ownership and trusted HTTPS are both required by the verification policy.
+    pub fn verification_supported(&self) -> bool {
+        self.scheme == "https" && self.host.parse::<std::net::IpAddr>().is_err()
+    }
 }
 
 /// Parse an origin or extract the fixed origin of a campaign URL.
@@ -18,43 +27,79 @@ pub fn origin(input: &str, campaign: bool) -> Result<Origin, &'static str> {
     {
         return Err("domain_invalid_origin");
     }
+    let authority = input
+        .split_once("://")
+        .ok_or("domain_invalid_origin")?
+        .1
+        .split(['/', '?', '#'])
+        .next()
+        .ok_or("domain_invalid_origin")?;
+    if authority.is_empty() || authority.contains(['@', '%', '{', '}']) || authority.ends_with(':')
+    {
+        return Err("domain_invalid_origin");
+    }
     let url = url::Url::parse(input).map_err(|_| "domain_invalid_origin")?;
-    if url.scheme() != "https"
-        || !url.username().is_empty()
+    let scheme = match url.scheme() {
+        "https" => "https",
+        "http" => "http",
+        _ => return Err("domain_invalid_origin"),
+    };
+    if !url.username().is_empty()
         || url.password().is_some()
         || url.fragment().is_some()
         || (!campaign && (url.path() != "/" || url.query().is_some()))
     {
         return Err("domain_invalid_origin");
     }
-    let Some(url::Host::Domain(host)) = url.host() else {
-        return Err("domain_dns_name_required");
+    let host = match url.host().ok_or("domain_invalid_origin")? {
+        url::Host::Ipv4(ip) => {
+            let host = ip.to_string();
+            if authority.split(':').next() != Some(host.as_str()) {
+                return Err("domain_invalid_hostname");
+            }
+            host
+        }
+        url::Host::Ipv6(ip) => ip.to_string(),
+        url::Host::Domain(host) => {
+            let host = host.strip_suffix('.').unwrap_or(host).to_ascii_lowercase();
+            if host.len() > 253
+                || !host.contains('.')
+                || host.split('.').any(|label| {
+                    label.is_empty()
+                        || label.len() > 63
+                        || label.starts_with('-')
+                        || label.ends_with('-')
+                        || !label
+                            .bytes()
+                            .all(|c| c.is_ascii_alphanumeric() || c == b'-')
+                })
+            {
+                return Err("domain_invalid_hostname");
+            }
+            host
+        }
     };
-    let host = host.strip_suffix('.').unwrap_or(host).to_ascii_lowercase();
-    if host.len() > 253
-        || !host.contains('.')
-        || host.split('.').any(|label| {
-            label.is_empty()
-                || label.len() > 63
-                || label.starts_with('-')
-                || label.ends_with('-')
-                || !label
-                    .bytes()
-                    .all(|c| c.is_ascii_alphanumeric() || c == b'-')
-        })
-    {
-        return Err("domain_invalid_hostname");
-    }
     let port = url.port_or_known_default().ok_or("domain_invalid_origin")?;
     if port == 0 {
         return Err("domain_invalid_origin");
     }
-    let value = if port == 443 {
-        format!("https://{host}")
+    let authority = if host.contains(':') {
+        format!("[{host}]")
     } else {
-        format!("https://{host}:{port}")
+        host.clone()
     };
-    Ok(Origin { host, port, value })
+    let default_port = if scheme == "https" { 443 } else { 80 };
+    let value = if port == default_port {
+        format!("{scheme}://{authority}")
+    } else {
+        format!("{scheme}://{authority}:{port}")
+    };
+    Ok(Origin {
+        host,
+        port,
+        scheme,
+        value,
+    })
 }
 
 /// Operational readiness is derived from evidence, never a separately editable flag.

@@ -1,3 +1,4 @@
 export const repository = 'https://github.com/srothgan/ruphish';
 export const demo = 'https://demo.ruphish.com/';
-export const description = 'Prepare phishing simulations, follow delivery, and understand the results. Ruphish brings your security awareness exercises into focus.';
+export const socialImage = '/og.png';
+export const description = 'Ruphish is an open-source phishing simulation platform and a maintained successor to Gophish. Prepare simulations, follow delivery, and understand how people respond.';

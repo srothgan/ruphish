@@ -6,8 +6,8 @@
 ruphish_install() (
   set -eu
   umask 077
-  version='' previews=false allow_downgrade=false no_path=false uninstall=false
-  install_dir="${HOME:?HOME must be set}/.local/share/ruphish-install"
+  version='' previews='' allow_downgrade=false no_path='' uninstall=false
+  install_dir="${RUPHISH_INSTALL_DIR:-${HOME:?HOME must be set}/.local/share/ruphish-install}"
   tmp='' lock='' reclaim='' download_pid=''
   cyan='' magenta='' green='' yellow='' red='' reset='' live=false
   if [ -t 2 ] && [ "${TERM:-dumb}" != dumb ] && [ -z "${CI:-}" ]; then live=true; fi
@@ -23,21 +23,32 @@ ruphish_install() (
     cat <<'USAGE'
 Usage: install.sh [options]
   --include-previews       Include dev previews when selecting the latest version.
+  --no-include-previews    Select full releases only, overriding the environment.
   --version VERSION       Install this exact published version (optional leading v).
   --install-dir DIRECTORY  Managed program directory; defaults to ~/.local/share/ruphish-install.
   --no-modify-path         Do not change shell profiles.
+  --modify-path            Set up command access, overriding the environment.
   --allow-downgrade        Explicitly accept a program-only downgrade, including unattended runs.
   --uninstall             Remove managed program files; retain all application data.
   --help                  Show this help.
+
+Environment (explicit options take precedence):
+  RUPHISH_INCLUDE_PREVIEWS  Include dev previews during latest-version selection.
+  RUPHISH_INSTALL_DIR      Managed program directory, also used for removal.
+  RUPHISH_NO_MODIFY_PATH   Do not change shell profiles.
+Boolean values: 1/true or 0/false, case-insensitive; unset/empty uses the default.
+Exact versions and removal ignore the preview environment setting.
 USAGE
   }
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --include-previews) previews=true ;;
+      --no-include-previews) previews=false ;;
       --version|--install-dir)
         option=$1; shift; [ "$#" -gt 0 ] && [ -n "$1" ] || fail "Missing value for $option"
         case "$option" in --version) version=${1#v} ;; --install-dir) install_dir=$1 ;; esac ;;
       --no-modify-path) no_path=true ;;
+      --modify-path) no_path=false ;;
       --allow-downgrade) allow_downgrade=true ;;
       --uninstall) uninstall=true ;;
       --help|-h) usage; exit 0 ;;
@@ -45,10 +56,22 @@ USAGE
     esac
     shift
   done
-  if "$uninstall" && { [ -n "$version" ] || "$previews" || "$allow_downgrade"; }; then
+  if "$uninstall" && { [ -n "$version" ] || [ "$previews" = true ] || "$allow_downgrade"; }; then
     fail '--uninstall cannot be combined with version selection or --allow-downgrade'
   fi
-  if [ -n "$version" ] && "$previews"; then fail 'Choose --version or --include-previews'; fi
+  if [ -n "$version" ] && [ "$previews" = true ]; then fail 'Choose --version or --include-previews'; fi
+  environment_boolean() {
+    case "$2" in
+      1|[Tt][Rr][Uu][Ee]) printf 'true\n' ;;
+      ''|0|[Ff][Aa][Ll][Ss][Ee]) printf 'false\n' ;;
+      *) fail "$1 must be 1/true or 0/false" ;;
+    esac
+  }
+  if [ -z "$previews" ]; then
+    if [ -n "$version" ] || "$uninstall"; then previews=false
+    else previews=$(environment_boolean RUPHISH_INCLUDE_PREVIEWS "${RUPHISH_INCLUDE_PREVIEWS:-}"); fi
+  fi
+  if [ -z "$no_path" ]; then no_path=$(environment_boolean RUPHISH_NO_MODIFY_PATH "${RUPHISH_NO_MODIFY_PATH:-}"); fi
   valid_version() {
     case "$1" in ''|*[!0-9a-z.-]*) return 1 ;; esac
     printf '%s\n' "$1" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-dev\.[1-9][0-9]*)?$'
@@ -206,13 +229,13 @@ USAGE
     if "$live" && "$show"; then printf '\r\033[2K' >&2; fi
     if [ "$status" -ne 0 ]; then
       cat "$tmp/download-error" >&2
-      case "$url" in https://ruphish.com/api/releases*) info 'If no full release is published yet, use --include-previews. You can also select an exact published --version.' ;; esac
+      case "$url" in https://www.ruphish.com/api/releases*) info 'If no full release is published yet, use --include-previews. You can also select an exact published --version.' ;; esac
       fail "Download failed: $url. The installed program was not replaced."
     fi
   }
   if [ -z "$version" ]; then
     info 'Resolving latest published release'
-    download "https://ruphish.com/api/releases?format=text&includePreviews=$previews" "$tmp/version"
+    download "https://www.ruphish.com/api/releases?format=text&includePreviews=$previews" "$tmp/version"
     version=$(cat "$tmp/version")
     valid_version "$version" || fail 'The release selector returned an invalid version'
     if ! "$previews"; then case "$version" in *-*) fail 'The full-release selector returned a preview' ;; esac; fi

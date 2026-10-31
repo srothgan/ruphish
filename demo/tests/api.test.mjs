@@ -804,6 +804,9 @@ test('event downloads share exclusive time bounds and retain the event schema wh
     'Source',
     'Password present',
     'Edited',
+    'Browser',
+    'Operating system',
+    'Device',
   ]);
   assert.deepEqual(before.targets, []);
   assert.deepEqual(during.targets, [
@@ -954,37 +957,203 @@ test('analysis navigation lists campaign executions and opens their populated re
   }
 });
 
-test('saved draft, review, launch and reopening are coherent without persistence', async () => {
+test('drafts retain distinct inputs and steps across navigation but never enter storage or the fixture', async () => {
+  const data = dataset(now);
+  const original = structuredClone(data.drafts);
+  const f = setup(new Map(), data);
+  await f.login();
+  const id = '11111111-1111-4111-8111-111111111111';
+  const path = `/api/campaign-drafts/${id}`;
+  const configuration = { ...original[0].configuration, name: 'My temporary campaign' };
+  const create = { revision: null, configuration, step: 1 };
+  const created = await f.request(path, 'PUT', create);
+  assert.equal(created.status, 200);
+  assert.equal(created.value.id, id);
+  assert.equal(created.value.step, 1);
+  assert.equal(created.value.revision, 1);
+  assert.deepEqual(created.value.configuration, configuration);
+  assert.deepEqual((await f.request(path)).value, created.value);
+  assert.deepEqual((await f.request(path, 'PUT', create)).value, created.value, 'creation retry');
+  const secondId = '22222222-2222-4222-8222-222222222222';
+  assert.equal(
+    (
+      await f.request(`/api/campaign-drafts/${secondId}`, 'PUT', {
+        ...create,
+        configuration: { ...configuration, name: 'Independent draft' },
+        step: 0,
+      })
+    ).status,
+    200,
+  );
+  const update = {
+    revision: 1,
+    step: 2,
+    configuration: { ...configuration, name: 'Updated draft' },
+  };
+  const saved = await f.request(path, 'PUT', update);
+  assert.equal(saved.status, 200);
+  assert.equal(saved.value.revision, 2);
+  assert.deepEqual((await f.request(path)).value.configuration, update.configuration);
+  assert.equal((await f.request(path)).value.step, 2);
+  assert.deepEqual((await f.request(path, 'PUT', update)).value, saved.value, 'save retry');
+  assert.equal((await f.request(path, 'PUT', create)).status, 409, 'stale save cannot overwrite');
+  assert.equal((await f.request(path, 'PUT', { ...update, revision: 2, step: 0 })).status, 200);
+  assert.equal((await f.request(path)).value.step, 0, 'Back preserves the draft');
+  assert.equal(
+    (await f.request(`/api/campaign-drafts/${secondId}`)).value.configuration.name,
+    'Independent draft',
+  );
+  const rows = (await f.request('/api/campaigns/directory?filter=drafts')).value.items;
+  assert.equal(rows.length, 4);
+  assert.equal(rows.find((r) => r.id === id).name, 'Updated draft');
+  assert.equal(rows.find((r) => r.id === id).revision, 3);
+  assert.deepEqual(data.drafts, original);
+  assert.deepEqual([...f.storage.values()], ['1'], 'only the actor is stored');
+  const reloaded = setup(f.storage, data);
+  assert.equal((await reloaded.request(path)).status, 404);
+  assert.equal(
+    (await reloaded.request('/api/campaigns/directory?filter=drafts')).value.items.length,
+    2,
+  );
+  assert.deepEqual(
+    (await reloaded.request(`/api/campaign-drafts/${draftId(1)}`)).value,
+    original[0],
+  );
+});
+
+test('incomplete drafts can be saved and deleted; rejected writes leave the confirmed draft unchanged', async () => {
+  const f = setup();
+  await f.login();
+  const path = `/api/campaign-drafts/${draftId(1)}`;
+  const incomplete = {
+    name: '',
+    url: '',
+    selection: { groups: [], template: { id: 0 }, page: { id: 0 }, smtp: { id: 0 } },
+  };
+  const saved = await f.request(path, 'PUT', { revision: 1, step: 0, configuration: incomplete });
+  assert.equal(saved.status, 200);
+  assert.deepEqual((await f.request(path)).value.configuration, {
+    ...incomplete,
+    policy: null,
+    launch_local: null,
+    send_by_local: null,
+  });
+  for (const invalid of [
+    { step: -1 },
+    { step: 4 },
+    { step: 1.5 },
+    { configuration: [] },
+    { configuration: 'invalid' },
+    { configuration: { name: null } },
+    { configuration: { selection: { groups: 'invalid' } } },
+    { configuration: { selection: { template: { id: '1' } } } },
+    { configuration: { policy: { track_opens: 'true' } } },
+    { configuration: { launch_local: { local: 42 } } },
+    { configuration: { unknown: true } },
+    { revision: '2' },
+  ]) {
+    assert.equal(
+      (
+        await f.request(path, 'PUT', {
+          revision: 2,
+          step: 0,
+          configuration: incomplete,
+          ...invalid,
+        })
+      ).status,
+      400,
+    );
+  }
+  assert.equal(
+    (await f.request(`${path}/launch`, 'POST', { revision: 2, campaign: incomplete })).status,
+    400,
+  );
+  assert.equal((await f.request(`${path}?revision=1`, 'DELETE')).status, 409);
+  assert.deepEqual((await f.request(path)).value, saved.value);
+  assert.equal((await f.request(`${path}?revision=2`, 'DELETE')).status, 200);
+  assert.equal((await f.request(path)).status, 404);
+  assert.ok(
+    !(await f.request('/api/campaigns/directory?filter=drafts')).value.items.some(
+      (r) => r.id === draftId(1),
+    ),
+  );
+  assert.equal(
+    (await f.request(path, 'PUT', { revision: 2, step: 0, configuration: incomplete })).status,
+    404,
+    'stale save cannot resurrect a deleted draft',
+  );
+  assert.equal((await setup(f.storage).request(path)).status, 200, 'reload restores the sample');
+});
+
+test('campaign review previews each selected email without expanding its template expressions', async () => {
+  const f = setup();
+  await f.login();
+  const configuration = (await f.request(`/api/campaign-drafts/${draftId(1)}`)).value.configuration;
+  const previews = new Set();
+  for (const template of dataset(now).templates) {
+    const response = await f.request('/api/campaign-drafts/prepare', 'POST', {
+      ...configuration,
+      selection: { ...configuration.selection, template: { id: template.id } },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.value.preview.subject, template.subject);
+    assert.equal(response.value.preview.html, template.html);
+    assert.equal(response.value.preview.text, template.text);
+    assert.match(response.value.preview.html, /\{\{/);
+    previews.add(response.value.preview.html);
+  }
+  assert.equal(previews.size, dataset(now).templates.length, 'selection changes the preview');
+});
+
+test('simulated launch reconciles reopening and retries without changing sample campaigns', async () => {
   const f = setup();
   await f.login();
   const path = `/api/campaign-drafts/${draftId(1)}`;
   const original = (await f.request(path)).value;
-  const newPath = '/api/campaign-drafts/11111111-1111-4111-8111-111111111111';
-  const created = await f.request(newPath, 'PUT', {
-    revision: null,
-    step: 1,
-    configuration: original.configuration,
-  });
-  assert.equal(created.value.id, original.id);
-  assert.equal((await f.request(newPath)).status, 404);
-  assert.equal((await f.request(`/api/campaign-drafts/${created.value.id}`)).status, 200);
-  const saved = (
-    await f.request(path, 'PUT', {
-      revision: null,
-      step: 2,
-      configuration: { ...original.configuration, name: 'Discarded campaign' },
-    })
-  ).value;
-  assert.equal(saved.id, original.id);
-  assert.equal(saved.revision, 1);
+  const sample = (await f.request('/api/campaigns/3/context')).value;
   const reviewed = (await f.request('/api/campaign-drafts/prepare', 'POST', original.configuration))
     .value;
   assert.ok(reviewed.total > 0);
-  const launch = (
-    await f.request(`${path}/launch`, 'POST', { revision: 1, campaign: original.configuration })
-  ).value;
+  const request = {
+    revision: 1,
+    campaign: { ...original.configuration, selection: reviewed.selection, policy: reviewed.policy },
+  };
+  assert.equal(
+    (await f.request(`${path}/launch`, 'POST', { ...request, revision: 2 })).status,
+    409,
+  );
+  const launched = await f.request(`${path}/launch`, 'POST', request);
+  assert.equal(launched.status, 200);
+  const launch = launched.value;
+  assert.equal(launch.id, 3);
   assert.equal((await f.request(`/api/campaigns/${launch.id}/delivery`)).status, 200);
-  assert.deepEqual((await f.request(path)).value, original);
+  const reopened = (await f.request(path)).value;
+  assert.equal(reopened.campaign_id, 3);
+  assert.equal(reopened.status, 'launched');
+  assert.equal(reopened.revision, 2);
+  assert.deepEqual((await f.request(`${path}/launch`, 'POST', request)).value, launch);
+  assert.equal(
+    (
+      await f.request(`${path}/launch`, 'POST', {
+        ...request,
+        campaign: { ...request.campaign, name: 'Changed retry' },
+      })
+    ).status,
+    409,
+  );
+  assert.equal(
+    (await f.request(path, 'PUT', { revision: 2, step: 0, configuration: original.configuration }))
+      .status,
+    409,
+  );
+  assert.equal((await f.request(`${path}?revision=2`, 'DELETE')).status, 409);
+  assert.ok(
+    !(await f.request('/api/campaigns/directory?filter=drafts')).value.items.some(
+      (r) => r.id === original.id,
+    ),
+  );
+  assert.deepEqual((await f.request('/api/campaigns/3/context')).value, sample);
+  assert.deepEqual((await setup(f.storage).request(path)).value, original);
 });
 
 test('no network fallback, including external operations, errors and binary downloads', async (t) => {
@@ -996,7 +1165,7 @@ test('no network fallback, including external operations, errors and binary down
   for (const path of [
     '/api/util/test_connection',
     '/api/util/send_test_email',
-    '/api/webhooks/1/test',
+    '/api/webhooks/1/validate',
     '/api/reporting-mailboxes/1/check',
     '/api/domains/1/verify',
   ]) {
@@ -1006,6 +1175,7 @@ test('no network fallback, including external operations, errors and binary down
       path,
     );
   }
+  assert.equal((await f.request('/api/webhooks/1/test', 'POST')).status, 404);
   assert.equal((await f.request('/api/unknown')).status, 404);
   assert.equal((await f.request('/api/groups/', 'POST', {})).status, 400);
   const pending = startRequestWith(
@@ -1032,6 +1202,7 @@ test('one dataset has complete references and safe participant history', () => {
     assert.ok(data.domains.some((d) => d.id === c.header.domain_id));
     for (const event of c.results.flatMap((r) => r.events)) {
       assert.deepEqual(Object.keys(event).sort(), [
+        'client',
         'email',
         'id',
         'kind',
@@ -1041,6 +1212,20 @@ test('one dataset has complete references and safe participant history', () => {
         'time',
       ]);
       assert.ok(event.password_present === null || typeof event.password_present === 'boolean');
+      if (event.client !== null) {
+        assert.equal(event.source, 'public');
+        assert.ok(['Clicked Link', 'Submitted Data'].includes(event.kind));
+        assert.deepEqual(Object.keys(event.client).sort(), ['browser', 'device', 'os']);
+        assert.ok(
+          ['chrome', 'edge', 'firefox', 'safari', 'samsung_internet', 'unknown'].includes(
+            event.client.browser,
+          ),
+        );
+        assert.ok(
+          ['windows', 'macos', 'linux', 'android', 'ios', 'unknown'].includes(event.client.os),
+        );
+        assert.ok(['desktop', 'mobile', 'tablet', 'unknown'].includes(event.client.device));
+      }
     }
   }
   assert.deepEqual(dataset(now), data);
@@ -1204,4 +1389,41 @@ test('campaign participant series deduplicates across buckets, filters and pages
   assert.ok(filtered.participant_buckets.every((b) => b.counts.clicked === 1));
   assert.equal(filtered.participant_buckets[0].time, Math.floor((now - 3600) / 3600) * 3600);
   assert.deepEqual((await read('event=form_submitted')).participant_buckets, []);
+});
+
+test('client categories remain read-only across demo history, edits and exports', async () => {
+  const data = dataset(now);
+  const campaign = data.campaigns[1];
+  const recipient = campaign.results.find((r) => r.id === 20024);
+  const event = recipient.events.find((e) => e.kind === 'Clicked Link');
+  assert.deepEqual(event.client, { browser: 'edge', os: 'windows', device: 'desktop' });
+  const f = setup(new Map(), data);
+  await f.login();
+  const path = `/api/campaigns/${campaign.header.id}/recipients/${recipient.id}`;
+  const history = await f.request(`${path}/history`);
+  assert.deepEqual(history.value.events.find((e) => e.id === event.id).record.client, event.client);
+  const change = {
+    request_id: 'client-observation-edit',
+    event_id: event.id,
+    revision: 0,
+    action: 'edit',
+    value: {
+      time: event.time,
+      kind: 'form_submitted',
+      presence: { username_present: null, password_present: false },
+    },
+  };
+  const injected = structuredClone(change);
+  injected.value.client = { browser: 'chrome', os: 'windows', device: 'desktop' };
+  assert.equal((await f.request(`${path}/events`, 'POST', injected)).status, 400);
+  const edited = await f.request(`${path}/events`, 'POST', change);
+  assert.equal(edited.status, 200);
+  assert.deepEqual(edited.value.event.client, event.client);
+  const response = await f.api.execute(
+    new Request(
+      `https://demo.example.test/api/campaigns/${campaign.header.id}/export?format=csv&scope=events&recipient=${recipient.id}`,
+    ),
+  );
+  const csv = await response.text();
+  assert.ok(csv.includes('"edge","windows","desktop"'));
 });

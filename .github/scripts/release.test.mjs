@@ -460,7 +460,7 @@ test('release gate rejects missing, failed, cancelled and skipped dependencies',
     'utf8',
   ).replaceAll('\r\n', '\n');
   const gate = workflow.match(/node --input-type=module <<'NODE'\n([\s\S]*?)\n\s*NODE/)[1];
-  const jobs = ['metadata', 'source', 'assets', 'native', 'image', 'bundle'];
+  const jobs = ['metadata', 'source', 'security', 'assets', 'native', 'image', 'bundle'];
   const check = (results) =>
     runInNewContext(gate, { process: { env: { RESULTS: JSON.stringify(results) } } });
   const success = Object.fromEntries(jobs.map((job) => [job, { result: 'success' }]));

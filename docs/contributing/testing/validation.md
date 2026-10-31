@@ -26,7 +26,8 @@ Cost describes the work performed, not a promised duration. Compilation, tool in
 | Full provider executable workflows | Combined HTTP, delivery, cross-process ownership and recovery on each engine | Long integration scenarios. The persistence group includes these scenarios on both supported versions, including when shared helpers change |
 | Windows/macOS native acceptance | Platform-specific compilation, unit/CLI and asset-promotion behavior | The product group runs complete native acceptance on Windows x64 and macOS ARM64, including platform asset promotion; Linux runs native and executable checks together |
 | Public Docker acceptance | Controlled DNS/TLS/SMTP and privacy through the canonical fixture | Container startup and a Linux development build. Public fixture or shared build/workflow changes and full nightly/release acceptance |
-| Dependency policy | Rust advisories/licenses/sources/bans and npm advisories | Tool install and advisory download are separate. Dependency/policy changes plus nightly; cached test success does not replace fresh advisory data |
+| Dependency policy | Rust licenses, sources and bans | Dependency/policy changes plus nightly and release validation; Dependabot owns vulnerability monitoring and security update PRs |
+| Release dependency security | npm advisories and Rust advisories, yanked and unmaintained crates | Release workflow only; fresh checks must pass before optimized builds and publication |
 | Bounded audience measurement | Existing ignored launch/read/claim/compose workload at legacy audience sizes | Measurement, not a wall-clock assertion. Full nightly/release acceptance; not an agent completion check |
 | Workflow lint, gate and fixture initialization tests | YAML/Actions expressions, failure/skip handling and caller-owned Cargo artifact directories | Small compared with product builds. Every PR and after workflow edits; run `node --test .github/scripts/validation.test.mjs tests/acceptance/init.test.mjs` and inspect representative path groups when their patterns change |
 
@@ -121,8 +122,11 @@ For demo UI changes, apply the normal formatting rules, generate the demo transp
 node crates/ruphish-ui/web/build-demo.mjs
 node --test demo/tests/bundle.test.mjs
 trunk build --locked --features demo crates/ruphish-ui/web/generated/index.html
+node --test --test-name-pattern=campaign-wizard crates/ruphish-ui/web/tests/ui-interactions.artifact.mjs
 cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --features demo --locked -- -D warnings
 ```
+
+The mounted campaign-wizard scenario runs the actual demo bundle in JSDOM with network access rejected. It checks validation, automatic phase advancement, retained inputs, temporary save/list/reopen, the selected email preview, English/German simulation labels, simulated test email and launch, and reopening a launched draft. The normal distribution runs the same scenario through its Fetch transport with the synthetic API, including a rejected save and the normal launch label. API regressions cover independent drafts, deletion, stale writes, retries, reload reset and raw previews for every sample email. These checks do not replace manual visual review.
 
 When the shared transport changes, also run the existing `http.test.mjs` and default-feature `browser_requests` WASM target. The latter exercises the real Fetch path:
 
@@ -164,6 +168,17 @@ The pinned local executables are required; `--no-install` prevents downloading a
 
 The shared workflow runs these checks in its always-selected paths/quality job, so JavaScript, configuration and tooling changes cannot bypass them through product path selection. PR, nightly and release entry points all invoke that workflow. Installing dependencies does not run the formatter or linter, and no automatic formatting or lint-fix hook is installed. Existing files must satisfy these checks before a future CI run can pass; adding configuration alone does not reformat or repair them.
 
+## Windows process-test shutdown
+
+When a Windows test launcher inherits the ignore-Ctrl+C attribute, process tests can fail during graceful shutdown even though the application handles normal console signals. Restore Ctrl+C handling in the launching PowerShell process before running the same test command:
+
+```powershell
+Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class TrackerTestConsole { [DllImport("kernel32.dll", SetLastError=true)] public static extern bool SetConsoleCtrlHandler(IntPtr handler, bool add); }'
+if (-not [TrackerTestConsole]::SetConsoleCtrlHandler([IntPtr]::Zero, $false)) { throw 'Cannot restore console Ctrl+C handling' }
+```
+
+This changes only the launcher's console handling. Preserve the application's shutdown behavior and test assertions; investigate other failures independently.
+
 ## Complete source acceptance commands
 
 This catalog is for an explicitly selected full acceptance run. It is not a local completion checklist. Generate the real development distribution before process tests; Trunk invokes the JS/CSS generator itself:
@@ -182,9 +197,7 @@ cargo clippy -p ruphish-ui --lib --locked -- -D warnings
 cargo test -p ruphish-ui --test '*' --target wasm32-unknown-unknown --locked
 cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --locked -- -D warnings
 cargo clippy -p ruphish-ui --tests --target wasm32-unknown-unknown --locked -- -D warnings
-npm audit --prefix crates/ruphish-ui/web
-npm audit
-cargo deny check bans licenses sources advisories
+cargo deny check bans licenses sources
 ```
 
 When doing direct WASM checks without first building Trunk, generate imported inputs with `node crates/ruphish-ui/web/build.mjs`. Native executable tests build their executable; a separate `cargo build --workspace --exclude ruphish-ui --locked` is useful when an executable is needed outside those tests, not an additional proof after equivalent compilation. `cargo check -p ruphish-ui --target wasm32-unknown-unknown --locked` is an optional fast iteration command; omit it when the same target is already checked by Clippy.
@@ -205,7 +218,7 @@ Three entry points own schedules and branch rules. The reusable [validation work
 | --- | --- | --- | --- |
 | [pr.yml](../../../.github/workflows/pr.yml) | PR to main; push to main; manual full run | YAML path groups select fixed suites; a manual run selects all suites | PR gate on main |
 | [nightly.yml](../../../.github/workflows/nightly.yml) | Daily at 02:23 UTC; manual | Full development-profile source acceptance, all provider versions and native platforms, histories/recovery, dependency policy and bounded performance measurement | Monitoring; does not replace PR gates |
-| [release.yml](../../../.github/workflows/release.yml) | Version tag push; manual | Full source acceptance, optimized UI, native packages and container image verification | Release gate before tag-triggered publication; manual runs validate without publishing |
+| [release.yml](../../../.github/workflows/release.yml) | Version tag push; manual | Full source acceptance, dependency security audits, optimized UI, native packages and container image verification | Release gate before tag-triggered publication; manual runs validate without publishing |
 | [validation.yml](../../../.github/workflows/validation.yml) | Called by the three entry points | Normal source checks and an internal Validation gate | Internal prerequisite of the caller's gate |
 | [demo.yml](../../../.github/workflows/demo.yml) | Called by the CI entry point in pr.yml | Demo path selection, fixed demo checks/build, artifact upload and Demo gate | Required by the PR gate; independent prerequisite of demo deployment |
 
@@ -217,7 +230,9 @@ The CI workflow always starts for PRs to main and pushes to main, including docu
 | Demo | UI/domain/contracts, embedded starter content, demo data, workspace manifest/lockfile, toolchain and build/deployment inputs | Demo contracts, bundle tests, native/WASM lint, optimized build and static deployment artifact |
 | Persistence | Adapter/application/domain crates, `tests/**`, `migrations/**` and shared build inputs | Both supported MySQL and PostgreSQL versions, complete histories/schema recovery, transport checks and provider executable scenarios |
 | Public | `tests/acceptance/**`, `Dockerfile`, `.dockerignore`, `docker/**` and shared build inputs | Canonical runtime image health, shutdown/persistence and DNS/TLS/SMTP/privacy fixture |
-| Dependencies | Shared build inputs and browser npm manifests/lockfile | Cargo dependency policy and browser npm audit |
+| Dependencies | Shared build inputs | Rust license, source and banned-dependency policy |
+
+Dependabot owns ongoing vulnerability alerts and security update PRs for the repository. Its security updates are enabled in GitHub repository settings; [dependabot.yml](../../../.github/dependabot.yml) configures scheduled version updates for Cargo, root JavaScript tooling, browser dependencies, website dependencies and GitHub Actions. PR and nightly validation retain Rust license, source and banned-dependency checks without npm audits or cargo-deny advisory checks. The release workflow separately audits the root and browser npm dependencies and runs cargo-deny advisory checks, including the configured yanked and unmaintained policies. These checks must succeed before optimized release builds and publication. Dependency update PRs still run the applicable functional checks before merging.
 
 Shared build inputs include workspace/crate manifests, the Cargo lockfile, toolchain and formatter configuration, `.cargo/`, Trunk, dependency policy, line-ending policy, workflow/action implementations, `.github/paths.yml`, and the operational scripts `.github/scripts/release.mjs` and `.github/scripts/release-publish.mjs`. Changes limited to `.github/scripts/*.test.mjs` run the always-selected JavaScript formatting, lint and functional tests plus workflow lint, without selecting product, persistence, public, dependency or demo suites. Issue templates, the PR template, CODEOWNERS and Dependabot configuration do not select product acceptance. The YAML file is authoritative; add new source/build locations to the appropriate group when introducing them.
 
@@ -239,6 +254,14 @@ actionlint -shellcheck="" -pyflakes=""
 The gate tests execute the workflow's actual inline gate with successful, failed, cancelled, skipped and incomplete results. There is no automated path-selection regression suite; the former demo-only test used a different matcher from CI and was removed. When path groups change, validate representative documentation, UI, shared Rust, persistence/migration, test-helper, build-configuration, script-test, operational-script and housekeeping changes, including deleted/renamed files, directly with the pinned path-filter action. Workflow lint alone does not prove path coverage. Workflow-only changes do not require running product acceptance locally.
 
 ## Release-profile boundary
+
+The release workflow checks the release commit's dependencies before building optimized artifacts. These checks use current advisory data and also run on manual release validation; they are not part of ordinary PR or nightly acceptance:
+
+```sh
+npm audit --prefix crates/ruphish-ui/web
+npm audit
+cargo deny check advisories
+```
 
 The release workflow validates optimized code and real optimized UI assets with the existing functional/process suites. Its UI artifact is an internal test input, not a shipping package. The commands are explicit and reserved for the release workflow or an explicitly requested local release-profile task:
 

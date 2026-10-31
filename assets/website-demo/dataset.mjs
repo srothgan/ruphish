@@ -7,7 +7,21 @@ export { DAY };
 export const features = Object.freeze(source.features);
 export const iso = (seconds) => new Date(seconds * 1000).toISOString();
 export const draftId = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-export const policy = { redirect_url: '' };
+export const policy = { redirect_url: '', track_opens: true };
+
+// Synthetic request categories, including unrecognized requests and older observations.
+const clients = [
+  { browser: 'chrome', os: 'windows', device: 'desktop' },
+  { browser: 'safari', os: 'ios', device: 'mobile' },
+  { browser: 'firefox', os: 'linux', device: 'desktop' },
+  { browser: 'edge', os: 'windows', device: 'desktop' },
+  { browser: 'chrome', os: 'android', device: 'mobile' },
+  { browser: 'safari', os: 'macos', device: 'desktop' },
+  { browser: 'safari', os: 'ios', device: 'tablet' },
+  { browser: 'samsung_internet', os: 'android', device: 'tablet' },
+  { browser: 'unknown', os: 'unknown', device: 'unknown' },
+  null,
+];
 
 export function dataset(now) {
   if (!Number.isSafeInteger(now) || now <= 0) {
@@ -44,7 +58,7 @@ export function dataset(now) {
   });
   const pages = source.pages.map((id, i) => {
     const content = starter(id, 'landing_page');
-    return resource(content.name, i, { ...content, ...policy });
+    return resource(content.name, i, { ...content, redirect_url: policy.redirect_url });
   });
   const learning = source.learning_pages.map((id, i) => {
     const content = starter(id, 'learning_page');
@@ -217,6 +231,12 @@ export function dataset(now) {
                     ? 'mailbox'
                     : interactionSource,
               password_present: kind === 'Submitted Data' ? true : null,
+              // Repeat requests can use a different client; manual events have no request metadata.
+              client:
+                interactionSource === 'public' &&
+                (kind === 'Clicked Link' || kind === 'Submitted Data')
+                  ? structuredClone(clients[(n + (slot % 10)) % clients.length])
+                  : null,
             }));
       const attempts =
         state === 'ready'

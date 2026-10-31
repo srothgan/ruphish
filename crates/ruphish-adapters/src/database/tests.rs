@@ -166,9 +166,9 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
             let operation = public.clone();
             let request = tokio::spawn(async move {
                 let action = if scenario.starts_with("submit_") {
-                    Action::Submit { event_id: "a".repeat(32), password_present: true }
-                } else { Action::View };
-                operation.interact("training.example.test", "zSDu57f", action, now).await
+                    Action::Submit { client: Default::default(), event_id: "a".repeat(32), password_present: true }
+                } else { Action::View { client: Default::default() } };
+                operation.interact("https://training.example.test", "zSDu57f", action, now).await
             });
             while db.rendering.available_permits() == 8 && !request.is_finished() {
                     tokio::task::yield_now().await;

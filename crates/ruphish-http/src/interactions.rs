@@ -31,7 +31,16 @@ pub struct Services {
     /// Configured transparency contact address.
     pub contact: String,
 }
-fn authority(request: &Request<Body>, services: &Services) -> Option<String> {
+fn transport_origin(scheme: &str, authority: &str) -> Option<String> {
+    authority.parse::<axum::http::uri::Authority>().ok()?;
+    if authority.contains(',') {
+        return None;
+    }
+    ruphish_application::domains::origin(&format!("{scheme}://{authority}"), false)
+        .ok()
+        .map(|o| o.value)
+}
+fn request_origin(request: &Request<Body>, services: &Services) -> Option<String> {
     let peer = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()?
@@ -48,17 +57,26 @@ fn authority(request: &Request<Body>, services: &Services) -> Option<String> {
             .iter()
             .count()
             != 1
-            || request.headers().get("x-forwarded-proto")?.to_str().ok()? != "https"
         {
             return None;
         }
-        let host = request.headers().get("x-forwarded-host")?.to_str().ok()?;
-        if host.contains(',') || request.headers().get_all("x-forwarded-host").iter().count() != 1 {
+        let scheme = request.headers().get("x-forwarded-proto")?.to_str().ok()?;
+        if !matches!(scheme, "http" | "https") {
             return None;
         }
-        return Some(host.into());
+        let host = request.headers().get("x-forwarded-host")?.to_str().ok()?;
+        if request.headers().get_all("x-forwarded-host").iter().count() != 1 {
+            return None;
+        }
+        return transport_origin(scheme, host);
     }
-    if !services.tls {
+    let scheme = if services.tls { "https" } else { "http" };
+    if request
+        .uri()
+        .scheme_str()
+        .is_some_and(|value| value != scheme)
+        || request.headers().get_all(header::HOST).iter().count() > 1
+    {
         return None;
     }
     let uri = request.uri().authority().map(|a| a.as_str());
@@ -72,7 +90,7 @@ fn authority(request: &Request<Body>, services: &Services) -> Option<String> {
     {
         return None;
     }
-    uri.or(host).map(str::to_owned)
+    transport_origin(scheme, uri.or(host)?)
 }
 fn empty(status: StatusCode) -> Response {
     if status == StatusCode::NOT_FOUND {
@@ -148,15 +166,15 @@ async fn handle(request: Request<Body>, state: &Services) -> Response {
         )
             .into_response();
     }
-    let host = authority(&request, state);
+    let origin = request_origin(&request, state);
     if let Some(public_id) = path.strip_prefix("/learn/") {
         if !matches!(method, Method::GET | Method::HEAD) {
             return empty(StatusCode::METHOD_NOT_ALLOWED);
         }
-        let Some(host) = host else {
+        let Some(origin) = origin else {
             return empty(StatusCode::NOT_FOUND);
         };
-        return match state.interactions.learning_page(&host, public_id).await {
+        return match state.interactions.learning_page(&origin, public_id).await {
             Ok(Output::Html { html, csp }) => (
                 [
                     (header::CONTENT_TYPE, "text/html; charset=utf-8"),
@@ -180,10 +198,10 @@ async fn handle(request: Request<Body>, state: &Services) -> Response {
         };
     }
     if path.starts_with("/static/") {
-        let Some(host) = host else {
+        let Some(origin) = origin else {
             return empty(StatusCode::NOT_FOUND);
         };
-        if !state.domains.serves(&host).await.unwrap_or(false) {
+        if !state.domains.serves(&origin).await.unwrap_or(false) {
             return empty(StatusCode::NOT_FOUND);
         }
         return state.assets.response(&path, &method);
@@ -192,10 +210,10 @@ async fn handle(request: Request<Body>, state: &Services) -> Response {
         if method != Method::GET {
             return empty(StatusCode::METHOD_NOT_ALLOWED);
         }
-        let Some(host) = host else {
+        let Some(origin) = origin else {
             return empty(StatusCode::NOT_FOUND);
         };
-        return match state.domains.routing_proof(&host, challenge, now).await {
+        return match state.domains.routing_proof(&origin, challenge, now).await {
             Ok(Some(proof)) => (
                 [
                     (header::CONTENT_TYPE, "text/plain"),
@@ -253,7 +271,7 @@ async fn handle(request: Request<Body>, state: &Services) -> Response {
             Err(_) => empty(StatusCode::NOT_FOUND),
         };
     }
-    let Some(host) = host else {
+    let Some(origin) = origin else {
         return empty(StatusCode::NOT_FOUND);
     };
     if method == Method::OPTIONS {
@@ -267,6 +285,16 @@ async fn handle(request: Request<Body>, state: &Services) -> Response {
         )
             .into_response();
     }
+    let client = ruphish_application::interactions::ClientInfo::from_user_agent(
+        (request.headers().get_all(header::USER_AGENT).iter().count() == 1)
+            .then(|| {
+                request
+                    .headers()
+                    .get(header::USER_AGENT)
+                    .and_then(|v| v.to_str().ok())
+            })
+            .flatten(),
+    );
     let action = if method == Method::POST {
         if inspect || path.ends_with("/track") || path.ends_with("/report") {
             return empty(StatusCode::METHOD_NOT_ALLOWED);
@@ -289,6 +317,7 @@ async fn handle(request: Request<Body>, state: &Services) -> Response {
             return empty(StatusCode::BAD_REQUEST);
         };
         Action::Submit {
+            client,
             event_id: input.event_id,
             password_present: input.password_present,
         }
@@ -301,9 +330,9 @@ async fn handle(request: Request<Body>, state: &Services) -> Response {
     } else if path.ends_with("/report") {
         Action::Report
     } else {
-        Action::View
+        Action::View { client }
     };
-    let mut response = match state.interactions.interact(&host,rid,action,now).await {
+    let mut response = match state.interactions.interact(&origin,rid,action,now).await {
         Ok(Output::Html{html,csp})=>([(header::CONTENT_TYPE,"text/html; charset=utf-8"),(header::CACHE_CONTROL,"no-store"),(header::CONTENT_SECURITY_POLICY,csp.as_str()),(header::REFERRER_POLICY,"no-referrer"),(header::X_CONTENT_TYPE_OPTIONS,"nosniff"),(header::HeaderName::from_static("x-server"),"gophish")],html).into_response(),
         Ok(Output::Pixel)=>pixel(),
         Ok(Output::Empty) if method == Method::HEAD => (StatusCode::OK,[(header::CACHE_CONTROL,"no-store"),(header::CONTENT_TYPE,if path.ends_with("/track") {"image/png"} else {"text/html; charset=utf-8"})]).into_response(),

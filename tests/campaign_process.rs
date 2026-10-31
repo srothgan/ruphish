@@ -177,6 +177,12 @@ fn normalize(value: &mut Value) {
     match value {
         Value::Array(rows) => rows.iter_mut().for_each(normalize),
         Value::Object(object) => {
+            if let Some(track_opens) = object.remove("track_opens") {
+                assert_eq!(
+                    track_opens, true,
+                    "inherited campaigns default to enabled tracking"
+                );
+            }
             for (key, value) in object.iter_mut() {
                 if matches!(key.as_str(), "created_date" | "modified_date" | "time")
                     || (key == "completed_date" && !value.is_null())
@@ -352,6 +358,15 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
                 Value::Object(o) => {
                     o.remove("capture_credentials");
                     o.remove("capture_passwords");
+                    // These recorded lifecycle events have no client observations.
+                    if let Some(timeline) = o.get_mut("timeline") {
+                        for event in timeline.as_array_mut().unwrap() {
+                            event
+                                .as_object_mut()
+                                .unwrap()
+                                .insert("client".into(), Value::Null);
+                        }
+                    }
                     if o.contains_key("host") {
                         let password = o.remove("password");
                         o.insert(
@@ -805,7 +820,12 @@ fn reviewed_campaign_preview_test_and_duplicate_use_exact_owned_resources_withou
         directory.path(),
         "UPDATE pages SET redirect_url='https://training.example.test/finish'",
     );
+    sql(
+        directory.path(),
+        "UPDATE templates SET html='<p>Hello {{.FirstName}}</p>{{.Tracker}}'",
+    );
     let inherited = post(&base, "/api/campaigns/prepare", &input);
+    assert_eq!(inherited["policy"]["track_opens"], true);
     let page_url = format!("/api/pages/{}", inherited["selection"]["page"]["id"]);
     let defaults = read(&base, &page_url);
     assert!(defaults.get("capture_credentials").is_none());
@@ -827,9 +847,12 @@ fn reviewed_campaign_preview_test_and_duplicate_use_exact_owned_resources_withou
         assert_eq!(rejected.status(), 400);
     }
     // An explicit empty redirect clears the page default.
-    input["policy"] = json!({"redirect_url":""});
+    input["policy"] = json!({"redirect_url":"", "track_opens":false});
     let review = post(&base, "/api/campaigns/prepare", &input);
-    assert_eq!(review["policy"], json!({"redirect_url":""}));
+    assert_eq!(
+        review["policy"],
+        json!({"redirect_url":"", "track_opens":false})
+    );
     assert!(review["warnings"].is_array());
     assert_eq!(review["total"], 1);
     assert!(
@@ -869,6 +892,13 @@ fn reviewed_campaign_preview_test_and_duplicate_use_exact_owned_resources_withou
     let received = smtp.received.recv().unwrap();
     assert!(received.contains("test@example.test"));
     assert!(received.contains("Sample"));
+    let parsed = mail_parser::MessageParser::default()
+        .parse(received.as_bytes())
+        .unwrap();
+    let html = parsed.body_html(0).unwrap();
+    assert!(html.contains("Hello Sample"));
+    assert!(!html.contains("<img"));
+    assert!(!html.contains("/track?"));
     smtp.reply.send(Some("250 Accepted\r\n")).unwrap();
     smtp.thread.join().unwrap();
     assert_eq!(send.join().unwrap()["success"], true);
@@ -879,6 +909,7 @@ fn reviewed_campaign_preview_test_and_duplicate_use_exact_owned_resources_withou
             .is_empty()
     );
     let created = post(&base, "/api/campaigns/", &campaign);
+    assert_eq!(created["track_opens"], false);
     assert!(created["send_by_date"].is_null());
     assert!(created["completed_date"].is_null());
     let draft = read(&base, &format!("/api/campaigns/{}/draft", created["id"]));

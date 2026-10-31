@@ -24,3 +24,5 @@ pub mod validation;
 
 pub mod event_edit;
 pub mod landing;
+
+pub mod client;
