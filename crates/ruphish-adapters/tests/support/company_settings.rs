@@ -396,23 +396,32 @@ pub(super) async fn exercise(db: &Database) {
             .reporting_mailboxes_enabled
     );
     let integrations = db.integrations();
-    let hook = integrations
-        .save_webhook(
-            who,
-            None,
-            ruphish_application::integrations::WebhookEdit {
-                name: "Disabled endpoint".into(),
-                url: "http://127.0.0.1:1/never".into(),
-                secret: Some("synthetic-secret".into()),
-                active: true,
-                revision: None,
-            },
-        )
+    let edit = || ruphish_application::integrations::WebhookEdit {
+        name: "Disabled endpoint".into(),
+        url: "http://127.0.0.1:1/never".into(),
+        secret: Some("synthetic-secret".into()),
+        active: true,
+        revision: None,
+    };
+    assert!(matches!(
+        integrations.save_webhook(who, None, edit()).await,
+        Err(Error::FeatureDisabled("webhooks"))
+    ));
+    assert!(integrations.webhooks(who).await.unwrap().is_empty());
+    policy.webhooks_enabled = true;
+    let enabled = settings
+        .save(who, disabled.revision, policy.clone(), now + 3607)
+        .await
+        .unwrap();
+    let hook = integrations.save_webhook(who, None, edit()).await.unwrap();
+    policy.webhooks_enabled = false;
+    let disabled = settings
+        .save(who, enabled.revision, policy.clone(), now + 3607)
         .await
         .unwrap();
     assert!(matches!(
         integrations.validate_webhook(who, hook.id).await,
-        Err(Error::FeatureDisabled(_))
+        Err(Error::FeatureDisabled("webhooks"))
     ));
     integrations.tick().await.unwrap();
     assert!(
