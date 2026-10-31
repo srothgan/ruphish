@@ -37,7 +37,10 @@ export default defineConfig({
       favicon: '/favicon.svg',
       head: site
         ? [
-            { tag: 'meta', attrs: { property: 'og:image', content: new URL(socialImage, site).href } },
+            {
+              tag: 'meta',
+              attrs: { property: 'og:image', content: new URL(socialImage, site).href },
+            },
             { tag: 'meta', attrs: { property: 'og:image:alt', content: 'Ruphish' } },
           ]
         : [],
