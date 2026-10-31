@@ -56,9 +56,26 @@ jobs:
     with:
       full: true
 
+  security:
+    name: Release dependency security
+    needs: metadata
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+          persist-credentials: false
+      - uses: ./.github/actions/toolchain
+        with:
+          dependencies: 'true'
+      - run: npm audit --prefix crates/ruphish-ui/web
+      - run: npm audit
+      - run: cargo deny check advisories
+
   assets:
     name: Build optimized UI once
-    needs: [metadata, source]
+    needs: [metadata, source, security]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -285,7 +302,7 @@ jobs:
 
   gate:
     name: Release gate
-    needs: [metadata, source, assets, native, image, bundle]
+    needs: [metadata, source, security, assets, native, image, bundle]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -295,7 +312,7 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           const results = JSON.parse(process.env.RESULTS);
-          for (const name of ['metadata', 'source', 'assets', 'native', 'image', 'bundle']) {
+          for (const name of ['metadata', 'source', 'security', 'assets', 'native', 'image', 'bundle']) {
             if (results[name]?.result !== 'success') throw new Error(name + ': not successful');
           }
           NODE

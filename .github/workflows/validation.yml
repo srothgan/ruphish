@@ -243,7 +243,7 @@ jobs:
         run: node --test crates/ruphish-ui/web/tests/distribution.test.mjs
 
   dependencies:
-    name: Dependency policy
+    name: Rust dependency policy
     needs: changes
     if: needs.changes.outputs.dependencies == 'true'
     runs-on: ubuntu-24.04
@@ -255,9 +255,7 @@ jobs:
       - uses: ./.github/actions/toolchain
         with:
           dependencies: 'true'
-      - run: npm audit --prefix crates/ruphish-ui/web
-      - run: npm audit
-      - run: cargo deny check bans licenses sources advisories
+      - run: cargo deny check bans licenses sources
 
   public:
     name: Docker DNS TLS SMTP acceptance
