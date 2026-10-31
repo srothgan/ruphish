@@ -27,6 +27,7 @@ for (const scenario of [
   'form-preferences',
   'form-settings',
   'form-campaign',
+  'campaign-wizard',
   'form-draft',
   'form-session',
   'results-chart',
@@ -57,6 +58,7 @@ for (const scenario of [
   test(`UI interaction: ${scenario}`, async () => {
     await execute(process.execPath, [fixture, scenario], {
       maxBuffer: 1024 * 1024,
+      timeout: 60000,
     });
   });
 }

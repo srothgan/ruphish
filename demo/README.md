@@ -1,6 +1,8 @@
 # Public demo
 
-Static build of the real administration UI. Sign in with **demo / demodemo**. Changes and external actions are simulated; the sample data stays unchanged.
+Static build of the real administration UI. Sign in with **demo / demodemo**. Campaign drafts are kept only in memory until reload, so Continue, Back, Save, reopening and deletion work across client-side navigation. Other resource writes and external actions are simulated. **Simulate launch** (**Kampagnenstart simulieren** in German) opens a clearly identified sample campaign and never sends mail. Reloading restores the original samples; draft inputs never enter browser storage or a backend.
+
+Step 4 previews the selected email's existing HTML, subject and plain text. Template expressions remain unfilled. The existing isolated email preview keeps links inactive; no landing-page preview or backend rendering is involved.
 
 From the repository root, with the [pinned development tools](../docs/contributing/setup.md) installed:
 

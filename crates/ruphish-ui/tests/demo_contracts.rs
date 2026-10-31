@@ -86,6 +86,14 @@ fn demo_responses_decode_through_the_existing_contracts() {
         "/api/campaign-drafts/00000000-0000-4000-8000-000000000001",
     );
     decode::<campaign_workflow::Review>(&values, "review");
+    for state in [
+        "created_draft",
+        "reopened_draft",
+        "updated_draft",
+        "launched_draft",
+    ] {
+        decode::<campaign_reads::Draft>(&values, state);
+    }
     decode::<settings::Settings>(&values, "/api/settings");
     decode::<settings::ClosureResult>(&values, "closure");
     decode::<Vec<auth::UserSummary>>(&values, "/api/users/");

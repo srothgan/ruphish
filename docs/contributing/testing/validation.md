@@ -122,8 +122,11 @@ For demo UI changes, apply the normal formatting rules, generate the demo transp
 node crates/ruphish-ui/web/build-demo.mjs
 node --test demo/tests/bundle.test.mjs
 trunk build --locked --features demo crates/ruphish-ui/web/generated/index.html
+node --test --test-name-pattern=campaign-wizard crates/ruphish-ui/web/tests/ui-interactions.artifact.mjs
 cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --features demo --locked -- -D warnings
 ```
+
+The mounted campaign-wizard scenario runs the actual demo bundle in JSDOM with network access rejected. It checks validation, automatic phase advancement, retained inputs, temporary save/list/reopen, the selected email preview, English/German simulation labels, simulated test email and launch, and reopening a launched draft. The normal distribution runs the same scenario through its Fetch transport with the synthetic API, including a rejected save and the normal launch label. API regressions cover independent drafts, deletion, stale writes, retries, reload reset and raw previews for every sample email. These checks do not replace manual visual review.
 
 When the shared transport changes, also run the existing `http.test.mjs` and default-feature `browser_requests` WASM target. The latter exercises the real Fetch path:
 

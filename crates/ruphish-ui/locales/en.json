@@ -1,12 +1,18 @@
 {
   "demo": {
-    "notice": "Public demo - changes are not saved and no messages are sent.",
+    "simulate_launch": "Simulate launch",
+    "launch_notice": "Demo: No emails are sent. Simulating the launch opens a sample campaign.",
+    "email_preview_help": "Shows the selected email template without filling in variables. Preview links are inactive. No emails are sent.",
+    "notice": "Public demo - campaign drafts last until reload. Other changes are simulated. No messages are sent.",
     "website": "Ruphish website",
     "created": "Creation simulated. Nothing was saved; showing a sample resource.",
     "saved": "Changes accepted for this demo. Nothing was saved.",
+    "draft_saved": "Draft kept temporarily in this demo. Reloading clears your changes.",
+    "draft_deleted": "Draft removed from this demo. Reloading restores the original samples.",
+    "test_email": "Test email simulated. No email was sent.",
     "deleted": "Deletion simulated. The sample data is unchanged.",
     "external": "Action simulated. No external service was contacted.",
-    "launched": "Campaign launch simulated. No emails were sent.",
+    "launched": "Campaign launch simulated. No emails were sent; showing a sample campaign.",
     "status": "Demo response. Sample data remains unchanged; external actions are simulated.",
     "dismiss": "Dismiss",
     "storage_required": "Allow session storage for this demo to sign in. No password is stored."

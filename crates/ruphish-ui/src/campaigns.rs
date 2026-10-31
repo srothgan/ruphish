@@ -863,9 +863,14 @@ pub(super) fn CreateCampaign(
                 )
                 .await
             {
-                Ok(_) => message.status(
-                    leptos_i18n::t_string!(i18n, ui.test_accepted_by_smtp_server).to_owned(),
-                ),
+                Ok(_) => {
+                    #[cfg(not(feature = "demo"))]
+                    message.status(
+                        leptos_i18n::t_string!(i18n, ui.test_accepted_by_smtp_server).to_owned(),
+                    );
+                    #[cfg(feature = "demo")]
+                    message.local_status(leptos_i18n::t_string!(i18n, demo.test_email).to_owned());
+                }
                 Err(e) => message.error(e),
             }
             busy.set(false);
@@ -907,6 +912,8 @@ pub(super) fn CreateCampaign(
             {
                 Ok(_) => {
                     if destination.is_none() {
+                        #[cfg(feature = "demo")]
+                        api.notifications.show(DemoNotice::DraftSaved);
                         navigate(
                             &format!("/campaigns/drafts/{}", persistence.id.get_untracked()),
                             Default::default(),
@@ -1595,9 +1602,16 @@ pub(super) fn CreateCampaign(
                                             </dl> <section class="resource-section">
                                                 <h3>{tr!(ui.rendered_sample)}</h3>
                                                 <p>
-                                                    {tr!(
-                                                        ui.uses_the_first_recipient_s_details_test_emails_use_sample_recipient_preview_link
-                                                    )}
+                                                    {move || {
+                                                        #[cfg(feature = "demo")]
+                                                        { leptos_i18n::t_string!(i18n, demo.email_preview_help) }
+                                                        #[cfg(not(feature = "demo"))]
+                                                        {
+                                                            leptos_i18n::t_string!(
+                                                                i18n, ui.uses_the_first_recipient_s_details_test_emails_use_sample_recipient_preview_link
+                                                            )
+                                                        }
+                                                    }}
                                                 </p>
                                                 <dl class="resource-facts">
                                                     <div>
@@ -1644,9 +1658,16 @@ pub(super) fn CreateCampaign(
                                                 .then(|| {
                                                     view! {
                                                         <p class="form-message error">
-                                                            {tr!(
-                                                                ui.the_mailer_is_disabled_this_campaign_will_remain_queued_until_an_enabled_admin_p
-                                                            )}
+                                                            {move || {
+                                                                #[cfg(feature = "demo")]
+                                                                { leptos_i18n::t_string!(i18n, demo.launch_notice) }
+                                                                #[cfg(not(feature = "demo"))]
+                                                                {
+                                                                    leptos_i18n::t_string!(
+                                                                        i18n, ui.the_mailer_is_disabled_this_campaign_will_remain_queued_until_an_enabled_admin_p
+                                                                    )
+                                                                }
+                                                            }}
                                                         </p>
                                                     }
                                                 })}
@@ -1707,10 +1728,17 @@ pub(super) fn CreateCampaign(
                         {move || {
                             if draft.with(|d| d.launch.is_some()) {
                                 leptos_i18n::t_string!(i18n, ui.retry_same_launch)
-                            } else if !draft.get().value["launch_local"].is_null() {
-                                leptos_i18n::t_string!(i18n,ui.schedule_campaign)
                             } else {
-                                leptos_i18n::t_string!(i18n, ui.launch_campaign)
+                                #[cfg(feature = "demo")]
+                                { leptos_i18n::t_string!(i18n, demo.simulate_launch) }
+                                #[cfg(not(feature = "demo"))]
+                                {
+                                    if !draft.get().value["launch_local"].is_null() {
+                                        leptos_i18n::t_string!(i18n,ui.schedule_campaign)
+                                    } else {
+                                        leptos_i18n::t_string!(i18n, ui.launch_campaign)
+                                    }
+                                }
                             }
                         }}
                     </ActionButton>

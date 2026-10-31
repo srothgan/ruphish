@@ -167,7 +167,11 @@ impl Api {
         }
         #[cfg(feature = "demo")]
         self.notifications.show(if method == "DELETE" {
-            crate::shared::components::DemoNotice::Deleted
+            if path.starts_with("/api/campaign-drafts/") {
+                crate::shared::components::DemoNotice::DraftDeleted
+            } else {
+                crate::shared::components::DemoNotice::Deleted
+            }
         } else {
             crate::shared::components::DemoNotice::External
         });

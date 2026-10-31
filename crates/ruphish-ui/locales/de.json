@@ -1,12 +1,18 @@
 {
   "demo": {
-    "notice": "Öffentliche Demo - Änderungen werden nicht gespeichert und keine Nachrichten versendet.",
+    "simulate_launch": "Kampagnenstart simulieren",
+    "launch_notice": "Demo: Es werden keine E-Mails versendet. Der simulierte Kampagnenstart öffnet eine Beispielkampagne.",
+    "email_preview_help": "Zeigt die ausgewählte E-Mail-Vorlage, ohne Variablen auszufüllen. Vorschau-Links sind inaktiv. Es werden keine E-Mails versendet.",
+    "notice": "Öffentliche Demo - Kampagnenentwürfe bleiben bis zum Neuladen erhalten. Andere Änderungen werden simuliert. Es werden keine Nachrichten versendet.",
     "website": "Ruphish-Website",
     "created": "Erstellung simuliert. Nichts wurde gespeichert; ein Beispiel wird angezeigt.",
     "saved": "Änderungen für diese Demo akzeptiert. Nichts wurde gespeichert.",
+    "draft_saved": "Entwurf vorübergehend in dieser Demo behalten. Beim Neuladen gehen Ihre Änderungen verloren.",
+    "draft_deleted": "Entwurf aus dieser Demo entfernt. Beim Neuladen werden die ursprünglichen Beispiele wiederhergestellt.",
+    "test_email": "Test-E-Mail simuliert. Es wurde keine E-Mail versendet.",
     "deleted": "Löschung simuliert. Die Beispieldaten bleiben unverändert.",
     "external": "Aktion simuliert. Kein externer Dienst wurde kontaktiert.",
-    "launched": "Kampagnenstart simuliert. Keine E-Mails wurden versendet.",
+    "launched": "Kampagnenstart simuliert. Keine E-Mails wurden versendet; eine Beispielkampagne wird angezeigt.",
     "status": "Demo-Antwort. Beispieldaten bleiben unverändert; externe Aktionen werden simuliert.",
     "dismiss": "Schließen",
     "storage_required": "Erlauben Sie Sitzungsspeicher, um sich an dieser Demo anzumelden. Kein Passwort wird gespeichert."

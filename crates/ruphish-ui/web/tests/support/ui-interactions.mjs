@@ -28,6 +28,7 @@ const path =
     'form-preferences': '/user/settings',
     'form-settings': '/settings',
     'form-campaign': '/campaigns/new',
+    'campaign-wizard': '/campaigns/new',
     'form-draft': '/campaigns/drafts/00000000-0000-4000-8000-000000000001/edit',
     'form-session': '/groups/new',
     'results-chart': '/campaigns/2/results',
@@ -91,7 +92,11 @@ globalThis.Request = class extends NativeRequest {
 win.Request = globalThis.Request;
 win.Response = globalThis.Response;
 Object.assign(preferences, { language: 'de', format_locale: 'de-DE', time_zone: 'Europe/Berlin' });
-if (scenario.startsWith('form-') || scenario.startsWith('integration-')) {
+if (
+  scenario.startsWith('form-') ||
+  scenario.startsWith('integration-') ||
+  scenario === 'campaign-wizard'
+) {
   preferences.language = 'en';
 }
 const now = 1793016000;
@@ -203,7 +208,10 @@ const writes = [];
 globalThis.fetch = async (request, options) => {
   const url = new URL(request.url);
   requests.push(url.pathname + url.search);
-  if (scenario.startsWith('form-') && ['POST', 'PUT'].includes(request.method)) {
+  if (
+    (scenario.startsWith('form-') || scenario === 'campaign-wizard') &&
+    ['POST', 'PUT'].includes(request.method)
+  ) {
     writes.push({ path: url.pathname, body: await request.clone().json() });
     if (failSave) {
       return new Response(JSON.stringify({ success: false, code: 'TEST_FAILURE' }), {
@@ -330,12 +338,32 @@ globalThis.fetch = async (request, options) => {
 win.fetch = globalThis.fetch;
 const dist = new URL('../../../../../dist/admin/', import.meta.url);
 const html = readFileSync(new URL('index.html', dist), 'utf8');
+const demo = html.includes('<title>Ruphish Demo</title>');
+if (scenario === 'campaign-wizard' && demo) {
+  win.sessionStorage.setItem('ruphish-demo-session-v1', '1');
+  win.sessionStorage.setItem('ruphish-demo-time-v1', String(now));
+  globalThis.fetch = win.fetch = () => {
+    throw new Error('The demo must not contact a server');
+  };
+}
 const script = html.match(/import init, \* as bindings from '\/(.*?)'/)[1];
 const { initSync } = await import(new URL(script, dist));
 initSync({ module: readFileSync(new URL(script.replace(/\.js$/, '_bg.wasm'), dist)) });
 
 async function until(condition) {
+  const deadline = performance.now() + 15000;
   while (!condition()) {
+    if (scenario === 'campaign-wizard' && performance.now() > deadline) {
+      const current = win.document.querySelector('[aria-current="step"]')?.textContent;
+      const feedback = [
+        ...win.document.querySelectorAll('.form-message.has-content, .demo-toast.has-content'),
+      ]
+        .map((node) => node.textContent)
+        .join(' | ');
+      assert.fail(
+        `Wizard did not settle at ${win.location.pathname}, ${current}: ${condition}. ${feedback}`,
+      );
+    }
     await nextTurn();
   }
 }
@@ -345,6 +373,176 @@ const settled = () =>
   regions().length > 0 &&
   regions().every((e) => e.dataset.ready === 'true' && e.getAttribute('aria-busy') === 'false');
 const resultsPath = '/campaigns/2/results';
+
+if (scenario === 'campaign-wizard') {
+  const button = (text) =>
+    [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === text);
+  const step = () =>
+    [...document.querySelectorAll('.step-navigation button')].findIndex(
+      (b) => b.getAttribute('aria-current') === 'step',
+    );
+  const field = (text) => {
+    const label = [...document.querySelectorAll('label')].find(
+      (l) =>
+        [...l.childNodes]
+          .filter((n) => n.nodeType === win.Node.TEXT_NODE)
+          .map((n) => n.textContent)
+          .join('')
+          .trim() === text,
+    );
+    assert.ok(label, `field label: ${text}`);
+    return document.getElementById(label.htmlFor) ?? label.querySelector('input,select');
+  };
+  const set = (control, value) => {
+    assert.ok(control);
+    control.value = value;
+    control.dispatchEvent(
+      new win.Event(control.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }),
+    );
+  };
+  const advance = async (expected) => {
+    // Separate user actions so reactive disabled states and page-default requests can settle.
+    await nextTurn();
+    await until(() => button('Continue') && !button('Continue').disabled);
+    button('Continue').click();
+    await until(() => step() === expected && !button('Continue').disabled);
+  };
+  const link = (href) => {
+    const anchor = document.querySelector(`a[href="${href}"]`);
+    assert.ok(anchor, `navigation link: ${href}`);
+    anchor.click();
+  };
+  await until(() => settled() && button('Continue') && !button('Continue').disabled);
+  button('Continue').click();
+  await nextTurn();
+  assert.equal(step(), 0, 'invalid audience stays on its phase');
+  assert.ok(document.querySelector('[aria-invalid="true"]'));
+  assert.equal(win.location.pathname, '/campaigns/new');
+  set(field('Campaign name'), 'Temporary wizard campaign');
+  document.querySelector('section:not([hidden]) input[type="checkbox"]').click();
+  if (!demo) {
+    failSave = true;
+    button('Continue').click();
+    await until(
+      () =>
+        document.querySelector('.form-message.error.has-content') && !button('Continue').disabled,
+    );
+    assert.equal(step(), 0, 'a rejected save must not advance');
+    assert.equal(field('Campaign name').value, 'Temporary wizard campaign');
+    failSave = false;
+  }
+  await advance(1);
+  const editPath = win.location.pathname;
+  assert.match(editPath, /^\/campaigns\/drafts\/[a-f0-9-]+\/edit$/);
+  assert.ok(
+    !editPath.includes('00000000-0000-4000-8000-000000000001'),
+    'new draft keeps its own ID',
+  );
+  assert.equal(field('Campaign name').value, 'Temporary wizard campaign');
+  assert.ok(!document.querySelector('.demo-toast.has-content'), 'Continue needs no save toast');
+  button('Continue').click();
+  await nextTurn();
+  assert.equal(step(), 1, 'invalid content stays on its phase');
+  for (const name of ['Email template', 'Sending profile', 'Landing page']) {
+    set(field(name), '1');
+  }
+  const origin = field('Campaign origin');
+  set(origin, origin.options[1].value);
+  await advance(2);
+  button('Back').click();
+  await until(() => step() === 1 && !button('Continue').disabled);
+  assert.equal(field('Email template').value, '1');
+  document.querySelectorAll('.step-navigation button')[2].click();
+  await until(() => step() === 2 && !button('Continue').disabled);
+  button('Save changes').click();
+  const detailPath = editPath.replace(/\/edit$/, '');
+  await until(() => win.location.pathname === detailPath && settled());
+  assert.ok(document.body.textContent.includes('Temporary wizard campaign'));
+  if (demo) {
+    assert.match(document.querySelector('.demo-toast').textContent, /Draft kept temporarily/);
+    button('Dismiss').click();
+  }
+  link('/campaigns');
+  await until(
+    () =>
+      win.location.pathname === '/campaigns' && document.querySelector(`a[href="${detailPath}"]`),
+  );
+  assert.ok(document.body.textContent.includes('Temporary wizard campaign'));
+  link(detailPath);
+  await until(() => document.querySelector(`a[href="${editPath}"]`));
+  link(editPath);
+  await until(() => step() === 2 && settled());
+  assert.equal(field('Campaign name').value, 'Temporary wizard campaign');
+  assert.equal(field('Email template').value, '1');
+  await advance(3);
+  const launchLabel = demo ? 'Simulate launch' : 'Launch campaign';
+  await until(() => button(launchLabel) && !button(launchLabel).disabled);
+  assert.ok(!document.querySelector('.demo-toast.has-content'));
+  if (demo) {
+    const template = dataset(now).templates.find((row) => row.id === 1);
+    const preview = document.querySelector('iframe.saved-content-preview');
+    assert.ok(preview.srcdoc.endsWith(template.html), 'preview displays the selected email HTML');
+    assert.equal(preview.getAttribute('sandbox'), '');
+    assert.equal(preview.getAttribute('referrerpolicy'), 'no-referrer');
+    assert.ok(document.body.textContent.includes(template.subject));
+    assert.ok(document.querySelector('details pre').textContent.includes(template.text));
+    assert.ok(document.body.textContent.includes('without filling in variables'));
+    const languages = win.navigator.languages;
+    Object.defineProperty(win.navigator, 'languages', { value: ['de-DE'], configurable: true });
+    win.dispatchEvent(new win.Event('focus'));
+    await until(() => button('Kampagnenstart simulieren'));
+    assert.ok(document.body.textContent.includes('ohne Variablen auszufüllen'));
+    assert.equal(preview.isConnected, true, 'language refresh preserves the email preview');
+    Object.defineProperty(win.navigator, 'languages', { value: languages, configurable: true });
+    win.dispatchEvent(new win.Event('focus'));
+    await until(() => button(launchLabel));
+    set(field('Test recipient email'), 'nobody@example.test');
+    await nextTurn();
+    await until(() => !button('Send test email').disabled);
+    button('Send test email').click();
+    await until(() =>
+      document.body.textContent.includes('Test email simulated. No email was sent.'),
+    );
+    assert.ok(!document.body.textContent.includes('Test accepted by SMTP server'));
+  }
+  await nextTurn();
+  await until(() => !button(launchLabel).disabled);
+  button(launchLabel).click();
+  await until(() => win.location.pathname === '/campaigns/3/delivery' && settled());
+  if (demo) {
+    assert.match(document.querySelector('.demo-toast').textContent, /showing a sample campaign/);
+    assert.deepEqual(Object.keys(win.sessionStorage).sort(), [
+      'ruphish-demo-session-v1',
+      'ruphish-demo-time-v1',
+    ]);
+    assert.equal(win.localStorage.length, 0);
+  }
+  win.history.pushState(null, '', editPath);
+  win.dispatchEvent(new win.PopStateEvent('popstate'));
+  await until(() => win.location.pathname === '/campaigns/3/delivery' && settled());
+  link('/campaigns');
+  await until(() => win.location.pathname === '/campaigns' && settled());
+  link('/campaigns/new');
+  await until(() => button('Save as draft') && settled());
+  button('Save as draft').click();
+  await until(() => /^\/campaigns\/drafts\/[^/]+$/.test(win.location.pathname) && settled());
+  const incompletePath = win.location.pathname;
+  assert.notEqual(incompletePath, detailPath, 'separate creations must not replace each other');
+  if (demo) {
+    assert.match(document.querySelector('.demo-toast').textContent, /Draft kept temporarily/);
+  }
+  button('Delete').click();
+  await until(() => document.querySelector('dialog[open]'));
+  [...document.querySelectorAll('dialog button')]
+    .find((b) => b.textContent.trim() === 'Delete')
+    .click();
+  await until(() => win.location.pathname === '/campaigns' && settled());
+  assert.ok(!document.querySelector(`a[href="${incompletePath}"]`));
+  if (demo) {
+    assert.match(document.querySelector('.demo-toast').textContent, /Draft removed from this demo/);
+  }
+  process.exit(0);
+}
 
 if (scenario === 'domain-unsupported') {
   await until(() => document.body.textContent.includes('2001:db8::20'));

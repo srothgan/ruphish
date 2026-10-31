@@ -411,12 +411,84 @@ function review(data, input) {
     conflicts: [],
     preview: {
       subject: template.subject,
-      html: '<h1>Demo campaign preview</h1><p>This is a sample preview. No messages will be sent.</p>',
+      html: template.html,
       text: template.text,
       visible_sender: smtp.from_address,
       transport_sender: smtp.from_address,
     },
   };
+}
+
+// Draft writes allow omitted fields; reads require the complete saved structure.
+// Match the input defaults without substituting any sample configuration.
+function draftConfiguration(input) {
+  const record = (value, defaults) => {
+    if (value === undefined) {
+      return defaults;
+    }
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      Object.keys(value).some((key) => !Object.hasOwn(defaults, key))
+    ) {
+      throw new Error('invalid_draft_structure');
+    }
+    return { ...defaults, ...value };
+  };
+  const text = (value) => typeof value === 'string';
+  const identity = (value) => Number.isSafeInteger(value) && value >= 0;
+  const reference = (value) => {
+    const ref = record(value, { id: 0 });
+    if (!identity(ref.id)) {
+      throw new Error('invalid_draft_reference');
+    }
+    return ref;
+  };
+  const config = record(input, {
+    name: '',
+    url: '',
+    selection: {},
+    policy: null,
+    launch_local: null,
+    send_by_local: null,
+  });
+  if (!text(config.name) || !text(config.url)) {
+    throw new Error('invalid_draft_text');
+  }
+  const selected = record(config.selection, { groups: [], template: {}, page: {}, smtp: {} });
+  if (!Array.isArray(selected.groups)) {
+    throw new Error('invalid_draft_groups');
+  }
+  config.selection = {
+    groups: selected.groups.map(reference),
+    template: reference(selected.template),
+    page: reference(selected.page),
+    smtp: reference(selected.smtp),
+  };
+  if (config.policy !== null) {
+    config.policy = record(config.policy, {
+      track_opens: true,
+      redirect_url: '',
+      learning_page_id: undefined,
+    });
+    if (
+      typeof config.policy.track_opens !== 'boolean' ||
+      (config.policy.redirect_url !== null && !text(config.policy.redirect_url)) ||
+      (config.policy.learning_page_id != null && !identity(config.policy.learning_page_id))
+    ) {
+      throw new Error('invalid_draft_policy');
+    }
+  }
+  for (const key of ['launch_local', 'send_by_local']) {
+    if (config[key] !== null) {
+      config[key] = record(config[key], { local: '', time_zone: '' });
+      if (!text(config[key].local) || !text(config[key].time_zone)) {
+        throw new Error('invalid_draft_time');
+      }
+    }
+  }
+  return config;
 }
 
 export function createDemoApi({
@@ -425,6 +497,10 @@ export function createDemoApi({
   data = dataset(now),
 } = {}) {
   const key = 'ruphish-demo-session-v1';
+  // Drafts survive client-side navigation without mutating the samples. Reloading recreates this store.
+  const drafts = new Map(
+    data.drafts.map((draft) => [draft.id, { value: copy(draft), launch: null }]),
+  );
   let nextEventId =
     Math.max(
       0,
@@ -586,15 +662,18 @@ export function createDemoApi({
     }
     if (path === '/api/campaigns/directory' && method === 'GET') {
       const all = [
-        ...data.drafts.map((d) => ({
-          id: d.id,
-          kind: 'draft',
-          revision: d.revision,
-          name: d.configuration.name,
-          status: 'draft',
-          total: null,
-          launch_date: null,
-        })),
+        ...[...drafts.values()]
+          .map(({ value }) => value)
+          .filter((d) => d.campaign_id === null)
+          .map((d) => ({
+            id: d.id,
+            kind: 'draft',
+            revision: d.revision,
+            name: d.configuration.name,
+            status: 'draft',
+            total: null,
+            launch_date: null,
+          })),
         ...data.campaigns.map((c) => ({
           id: String(c.header.id),
           kind: 'campaign',
@@ -682,34 +761,103 @@ export function createDemoApi({
     }
     const draftMatch = path.match(/^\/api\/campaign-drafts\/([^/]+)(\/launch)?$/);
     if (draftMatch) {
-      const draft =
-        data.drafts.find((d) => d.id === draftMatch[1]) ??
-        (method === 'PUT' &&
-        !draftMatch[2] &&
-        /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i.test(draftMatch[1])
-          ? data.drafts[0]
-          : null);
+      const id = draftMatch[1];
+      const entry = drafts.get(id);
+      const draft = entry?.value;
+      if (draftMatch[2]) {
+        if (!draft) {
+          return failure(404);
+        }
+        if (method !== 'POST') {
+          return failure(405);
+        }
+        const launch = JSON.stringify([request.headers.get('idempotency-key'), body]);
+        if (draft.campaign_id !== null) {
+          return entry.launch === launch ? json({ id: draft.campaign_id }) : failure(409);
+        }
+        if (body.revision !== draft.revision) {
+          return failure(409);
+        }
+        try {
+          review(data, body.campaign);
+        } catch {
+          return failure(400);
+        }
+        // Reconcile retries/reopening with the same sample execution; never send mail.
+        drafts.set(id, {
+          value: {
+            ...draft,
+            campaign_id: 3,
+            status: 'launched',
+            revision: draft.revision + 1,
+            modified: iso(now),
+          },
+          launch,
+        });
+        return json({ id: 3 });
+      }
+      if (method === 'PUT') {
+        if (
+          !/^[a-zA-Z0-9-]{16,64}$/.test(id) ||
+          !body.configuration ||
+          typeof body.configuration !== 'object' ||
+          Array.isArray(body.configuration) ||
+          !Number.isInteger(body.step) ||
+          body.step < 0 ||
+          body.step > 3 ||
+          (body.revision != null && (!Number.isSafeInteger(body.revision) || body.revision < 1))
+        ) {
+          return failure(400);
+        }
+        if (!draft && body.revision != null) {
+          return failure(404);
+        }
+        let configuration;
+        try {
+          configuration = draftConfiguration(body.configuration);
+        } catch {
+          return failure(400);
+        }
+        if (draft) {
+          if (draft.campaign_id !== null) {
+            return failure(409);
+          }
+          if (body.revision !== draft.revision) {
+            // A lost acknowledgement may replay the immediately preceding save.
+            return (body.revision ?? 0) + 1 === draft.revision &&
+              body.step === draft.step &&
+              JSON.stringify(configuration) === JSON.stringify(draft.configuration)
+              ? json(draft)
+              : failure(409);
+          }
+        }
+        const saved = {
+          id,
+          revision: (draft?.revision ?? 0) + 1,
+          configuration,
+          step: body.step,
+          created: draft?.created ?? iso(now),
+          modified: iso(now),
+          campaign_id: null,
+          status: 'draft',
+        };
+        drafts.set(id, { value: saved, launch: null });
+        return json(saved);
+      }
       if (!draft) {
         return failure(404);
       }
-      if (draftMatch[2]) {
-        return method === 'POST' ? json({ id: 3 }) : failure(405);
-      }
-      if (method === 'GET') {
-        return json(draft);
-      }
       if (method === 'DELETE') {
+        if (
+          draft.campaign_id !== null ||
+          url.searchParams.get('revision') !== String(draft.revision)
+        ) {
+          return failure(409);
+        }
+        drafts.delete(id);
         return success();
       }
-      if (method === 'PUT' && body.configuration && Number.isInteger(body.step)) {
-        return json({
-          ...draft,
-          revision: Number(body.revision ?? 0) + 1,
-          step: body.step,
-          modified: iso(now),
-        });
-      }
-      return failure(400);
+      return method === 'GET' ? json(draft) : failure(405);
     }
     if (path === '/api/campaigns/test' && method === 'POST') {
       return success();

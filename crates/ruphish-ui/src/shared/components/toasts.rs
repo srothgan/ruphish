@@ -33,6 +33,8 @@ pub(crate) fn DemoBanner() -> impl IntoView {
 pub(crate) enum DemoNotice {
     Created,
     Saved,
+    DraftSaved,
+    DraftDeleted,
     Deleted,
     External,
     Launched,
@@ -60,6 +62,8 @@ pub(crate) fn DemoToastHost(notifications: DemoNotifications) -> impl IntoView {
             match value {
                 DemoNotice::Created => leptos_i18n::t_string!(i18n, demo.created),
                 DemoNotice::Saved => leptos_i18n::t_string!(i18n, demo.saved),
+                DemoNotice::DraftSaved => leptos_i18n::t_string!(i18n, demo.draft_saved),
+                DemoNotice::DraftDeleted => leptos_i18n::t_string!(i18n, demo.draft_deleted),
                 DemoNotice::Deleted => leptos_i18n::t_string!(i18n, demo.deleted),
                 DemoNotice::External => leptos_i18n::t_string!(i18n, demo.external),
                 DemoNotice::Launched => leptos_i18n::t_string!(i18n, demo.launched),
