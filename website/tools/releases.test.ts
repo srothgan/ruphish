@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import { once } from 'node:events';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
-import { releaseResponse } from '../lib/release-selection.ts';
-import { GET } from '../api/releases.ts';
+import ts from 'typescript';
 
 // Independent asset expectations: do not build fixtures using the implementation's target list.
 const platforms = [
@@ -41,7 +44,37 @@ async function listen(server: Server) {
   return `http://127.0.0.1:${address.port}`;
 }
 
-test('release HTTP API selects by version, paginates, and fails visibly at upstream boundaries', async (t) => {
+test('compiled release HTTP API loads, selects versions, and handles upstream failures', async (t) => {
+  const website = fileURLToPath(new URL('../', import.meta.url));
+  const output = mkdtempSync(join(tmpdir(), 'ruphish-release-api-'));
+  t.after(() => rmSync(output, { recursive: true, force: true }));
+  // Exercise emitted JavaScript without TypeScript source files beside it. Direct source
+  // imports miss deployment failures caused by imports that still end in .ts.
+  const config = ts.readConfigFile(join(website, 'tsconfig.json'), ts.sys.readFile);
+  assert.equal(config.error, undefined);
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, website, {
+    noEmit: false,
+    noEmitOnError: true,
+    rootDir: website,
+    outDir: output,
+  });
+  const program = ts.createProgram([join(website, 'api/releases.ts')], parsed.options);
+  const emitted = program.emit();
+  const diagnostics = [
+    ...parsed.errors,
+    ...ts.getPreEmitDiagnostics(program),
+    ...emitted.diagnostics,
+  ];
+  assert.deepEqual(
+    diagnostics.map((item) => ts.flattenDiagnosticMessageText(item.messageText, '\n')),
+    [],
+  );
+  assert.equal(emitted.emitSkipped, false);
+  writeFileSync(join(output, 'package.json'), JSON.stringify({ type: 'module' }));
+  const { GET } = await import(pathToFileURL(join(output, 'api/releases.js')).href);
+  const { releaseResponse } = await import(
+    pathToFileURL(join(output, 'lib/release-selection.js')).href
+  );
   let pages: unknown[][] = [[]];
   let upstreamStatus = 200;
   let malformed = false;
@@ -182,7 +215,7 @@ test('release HTTP API selects by version, paginates, and fails visibly at upstr
   });
   await t.test('the actual Vercel entry point returns a Web Response', async () => {
     // Invalid input needs no upstream seam and exercises the deployed export itself.
-    const response = await GET(new Request('https://ruphish.com/api/releases?format=invalid'));
+    const response = await GET(new Request('https://www.ruphish.com/api/releases?format=invalid'));
     assert.equal(response.status, 400);
   });
 });

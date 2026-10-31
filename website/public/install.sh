@@ -206,13 +206,13 @@ USAGE
     if "$live" && "$show"; then printf '\r\033[2K' >&2; fi
     if [ "$status" -ne 0 ]; then
       cat "$tmp/download-error" >&2
-      case "$url" in https://ruphish.com/api/releases*) info 'If no full release is published yet, use --include-previews. You can also select an exact published --version.' ;; esac
+      case "$url" in https://www.ruphish.com/api/releases*) info 'If no full release is published yet, use --include-previews. You can also select an exact published --version.' ;; esac
       fail "Download failed: $url. The installed program was not replaced."
     fi
   }
   if [ -z "$version" ]; then
     info 'Resolving latest published release'
-    download "https://ruphish.com/api/releases?format=text&includePreviews=$previews" "$tmp/version"
+    download "https://www.ruphish.com/api/releases?format=text&includePreviews=$previews" "$tmp/version"
     version=$(cat "$tmp/version")
     valid_version "$version" || fail 'The release selector returned an invalid version'
     if ! "$previews"; then case "$version" in *-*) fail 'The full-release selector returned a preview' ;; esac; fi

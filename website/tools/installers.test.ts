@@ -166,13 +166,13 @@ async function fixture(t: TestContext, kind: 'sh' | 'ps1') {
   // Private copies change ONLY production origins and the transport allowlist to loopback HTTP.
   // The shipped scripts have no origin overrides or insecure transport switches.
   const source = readFileSync(join(publicDir, `install.${kind}`), 'utf8');
-  assert(source.includes('https://ruphish.com/api/releases'));
+  assert(source.includes('https://www.ruphish.com/api/releases'));
   assert(source.includes('https://github.com/srothgan/ruphish'));
   const script = join(directory, `install.${kind}`);
   writeFileSync(
     script,
     source
-      .replaceAll('https://ruphish.com', origin)
+      .replaceAll('https://www.ruphish.com', origin)
       .replaceAll('https://github.com/srothgan/ruphish', `${origin}/repo`)
       .replaceAll("'=https'", "'=http'")
       .replace("$next.Scheme -ne 'https'", "$next.Scheme -ne 'http'"),

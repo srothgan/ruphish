@@ -140,7 +140,7 @@ Usage: install.ps1 [options]
                     $response.Dispose(); $response = $null
                 }
                 if (-not $response.IsSuccessStatusCode) {
-                    $detail = if ($Url.StartsWith('https://ruphish.com/api/releases')) { $response.Content.ReadAsStringAsync().GetAwaiter().GetResult() } else { '' }
+                    $detail = if ($Url.StartsWith('https://www.ruphish.com/api/releases')) { $response.Content.ReadAsStringAsync().GetAwaiter().GetResult() } else { '' }
                     throw "HTTP $([int]$response.StatusCode): $detail"
                 }
                 $total = $response.Content.Headers.ContentLength
@@ -223,7 +223,7 @@ Usage: install.ps1 [options]
         if (-not $Version) {
             Write-Step 'Resolving latest published release'
             $selection = Join-Path $temporary 'version'
-            Receive-File "https://ruphish.com/api/releases?format=text&includePreviews=$(([bool]$IncludePreviews).ToString().ToLowerInvariant())" $selection
+            Receive-File "https://www.ruphish.com/api/releases?format=text&includePreviews=$(([bool]$IncludePreviews).ToString().ToLowerInvariant())" $selection
             $Version = [IO.File]::ReadAllText($selection).TrimEnd("`r", "`n")
             if (-not (Test-Version $Version)) { throw 'The release selector returned an invalid version' }
             if (-not $IncludePreviews -and $Version.Contains('-')) { throw 'The full-release selector returned a preview' }

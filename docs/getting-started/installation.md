@@ -14,23 +14,23 @@ The installer sources and website release-selection API are in this repository. 
 On Linux or macOS, run:
 
 ```sh
-curl -fsSL https://ruphish.com/install.sh | sh
+curl -fsSL https://www.ruphish.com/install.sh | sh
 ```
 
 In Windows PowerShell 5.1 or PowerShell 7, run:
 
 ```powershell
-irm https://ruphish.com/install.ps1 | iex
+irm https://www.ruphish.com/install.ps1 | iex
 ```
 
 The default selects the highest published full version. Before a full release exists, it reports that none is available. To include development previews alongside full releases:
 
 ```sh
-curl -fsSL https://ruphish.com/install.sh | sh -s -- --include-previews
+curl -fsSL https://www.ruphish.com/install.sh | sh -s -- --include-previews
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://ruphish.com/install.ps1))) -IncludePreviews
+& ([scriptblock]::Create((irm https://www.ruphish.com/install.ps1))) -IncludePreviews
 ```
 
 Previews are for disposable installations; upgrades between previews or into a final release are not guaranteed. Selection follows version precedence, so `0.1.0-dev.2` precedes `0.1.0-dev.10`, which precedes `0.1.0`. The preview option can also select a full release. Each invocation resolves a version once and downloads its archive and `SHA256SUMS` from the same exact GitHub release tag.
@@ -44,14 +44,14 @@ Program files live in `~/.local/share/ruphish-install/current/` with a command l
 Download the script first if you want to inspect it or pass several options:
 
 ```sh
-curl -fsSL https://ruphish.com/install.sh -o install.sh
+curl -fsSL https://www.ruphish.com/install.sh -o install.sh
 less install.sh
 sh install.sh --help
 sh install.sh --version 0.1.0-dev.1 --no-modify-path
 ```
 
 ```powershell
-Invoke-WebRequest https://ruphish.com/install.ps1 -OutFile install.ps1
+Invoke-WebRequest https://www.ruphish.com/install.ps1 -OutFile install.ps1
 Get-Content .\install.ps1
 & .\install.ps1 -Help
 & .\install.ps1 -Version 0.1.0-dev.1 -NoModifyPath

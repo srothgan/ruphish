@@ -52,23 +52,23 @@ Native installers download a release binary with the administration interface in
 Linux or macOS:
 
 ```sh
-curl -fsSL https://ruphish.com/install.sh | sh
+curl -fsSL https://www.ruphish.com/install.sh | sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-irm https://ruphish.com/install.ps1 | iex
+irm https://www.ruphish.com/install.ps1 | iex
 ```
 
 To include development previews alongside full releases, use:
 
 ```sh
-curl -fsSL https://ruphish.com/install.sh | sh -s -- --include-previews
+curl -fsSL https://www.ruphish.com/install.sh | sh -s -- --include-previews
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://ruphish.com/install.ps1))) -IncludePreviews
+& ([scriptblock]::Create((irm https://www.ruphish.com/install.ps1))) -IncludePreviews
 ```
 
 Until a full release is published, use the preview option; the default reports that no full release is available. Previews are intended for disposable installations, and upgrades are not guaranteed.
