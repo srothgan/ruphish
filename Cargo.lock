@@ -4689,6 +4689,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower-sessions-core",
+ "tracing",
  "url",
  "webpki-roots",
  "windows-permissions",

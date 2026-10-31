@@ -987,6 +987,72 @@ fn failed_bootstrap_rolls_back_then_forced_process_death_allows_clean_restart() 
 }
 
 #[test]
+fn migration_skips_unowned_mailboxes_with_a_private_warning_and_recoverable_originals() {
+    use sqlx::Row;
+    let directory = workspace_without_assets();
+    std::fs::copy(
+        fixture("compatibility/20220321133237.sqlite3"),
+        directory.path().join("installation.sqlite3"),
+    )
+    .unwrap();
+    database(
+        directory.path(),
+        "DELETE FROM imap; INSERT INTO imap(user_id,host,username,password,enabled) VALUES(NULL,'private-mailbox.example.test','private-service','private-null-secret',1),(0,'private-mailbox.example.test','private-service','private-zero-secret',1),(-1,'private-mailbox.example.test','private-service','private-negative-secret',1),(999999,'private-mailbox.example.test','private-service','private-orphan-secret',1)",
+    );
+    for _ in 0..2 {
+        let mut process = Process::start(directory.path(), "phish");
+        process.ready();
+        process.stop();
+        assert_eq!(version(directory.path()), 1);
+        for query in [
+            "SELECT count(*) FROM imap",
+            "SELECT count(*) FROM ruphish_mailboxes",
+            "SELECT reporting_mailboxes_enabled FROM ruphish_settings WHERE id=1",
+        ] {
+            assert_eq!(database(directory.path(), query)[0].get::<i64, _>(0), 0);
+        }
+        assert_eq!(
+            database(directory.path(), "SELECT api_key FROM users WHERE id=17")[0]
+                .get::<String, _>(0),
+            "historical-key"
+        );
+        assert_eq!(
+            database(
+                directory.path(),
+                "SELECT r_id FROM results WHERE id=59 AND campaign_id=53"
+            )[0]
+            .get::<String, _>(0),
+            "preserved-rid"
+        );
+    }
+    let snapshots = backups(directory.path());
+    assert_eq!(snapshots.len(), 1);
+    let restored = tempfile::tempdir().unwrap();
+    std::fs::copy(&snapshots[0], restored.path().join("installation.sqlite3")).unwrap();
+    let originals = database(
+        restored.path(),
+        "SELECT password FROM imap ORDER BY password",
+    );
+    assert_eq!(
+        originals
+            .iter()
+            .map(|row| row.get::<String, _>(0))
+            .collect::<Vec<_>>(),
+        vec![
+            "private-negative-secret",
+            "private-null-secret",
+            "private-orphan-secret",
+            "private-zero-secret"
+        ]
+    );
+    let logs = std::fs::read_to_string(directory.path().join("server.log")).unwrap();
+    assert_eq!(logs.matches("Skipping legacy IMAP settings").count(), 1);
+    assert!(logs.contains("missing, invalid, or deleted owners"));
+    assert!(logs.contains("skipped_mailboxes=4"));
+    assert!(!logs.contains("private-"));
+}
+
+#[test]
 fn migration_failures_roll_back_and_retain_a_snapshot_while_invalid_databases_are_never_reinitialized()
  {
     use sqlx::Row;
@@ -994,7 +1060,7 @@ fn migration_failures_roll_back_and_retain_a_snapshot_while_invalid_databases_ar
         "UPDATE goose_db_version SET version_id=99999999999999 WHERE version_id=(SELECT max(version_id) FROM goose_db_version)",
         "ALTER TABLE templates DROP COLUMN subject",
         "CREATE TRIGGER unexpected AFTER INSERT ON events BEGIN SELECT 1; END",
-        "INSERT INTO imap(user_id,host,port,username,password) VALUES(NULL,'mail.example.test',993,'synthetic','fixture-only')",
+        "UPDATE campaigns SET user_id=NULL",
     ] {
         let directory = workspace();
         std::fs::copy(
@@ -1015,9 +1081,9 @@ fn migration_failures_roll_back_and_retain_a_snapshot_while_invalid_databases_ar
                 .get::<String, _>(0),
             "historical-key"
         );
-        if mutation.starts_with("INSERT INTO imap") {
+        if mutation.starts_with("UPDATE campaigns") {
             assert_eq!(backups(directory.path()).len(), 1);
-            database(directory.path(), "DELETE FROM imap WHERE user_id IS NULL");
+            database(directory.path(), "UPDATE campaigns SET user_id=17");
             let mut fixed = Process::start(directory.path(), "phish");
             fixed.ready();
             fixed.stop();

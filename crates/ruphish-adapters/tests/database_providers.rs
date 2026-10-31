@@ -22,6 +22,205 @@ mod reporting_filters;
 #[path = "support/resource_summaries.rs"]
 mod resource_summaries;
 
+#[path = "support/legacy_migration.rs"]
+mod legacy_migration;
+
+async fn sqlite_legacy_corpus(path: &std::path::Path) -> sqlx::SqliteConnection {
+    std::fs::copy(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/gophish-v0.12.1/legacy-latest.sqlite3"),
+        path,
+    )
+    .unwrap();
+    let mut inspect = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new().filename(path),
+    )
+    .await
+    .unwrap();
+    sqlx::raw_sql(legacy_migration::SEED)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET hash=?")
+        .bind(legacy_migration::hash())
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    inspect
+}
+
+#[tokio::test]
+async fn sqlite_legacy_rich_corpus_preserves_relationships_and_behavior_after_restart() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("legacy.db");
+    let inspect = sqlite_legacy_corpus(&path).await;
+    inspect.close().await.unwrap();
+    for _ in 0..2 {
+        let db = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+            .await
+            .unwrap();
+        legacy_migration::contract(&db).await;
+        let mut inspect = sqlx::SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
+        )
+        .await
+        .unwrap();
+        for &(query, expected) in legacy_migration::INSPECTIONS {
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(query)
+                    .fetch_one(&mut inspect)
+                    .await
+                    .unwrap(),
+                expected,
+                "{query}"
+            );
+        }
+        inspect.close().await.unwrap();
+        db.close().await;
+    }
+}
+
+#[tokio::test]
+#[ignore = "Requires canonical MySQL fixture"]
+async fn mysql_legacy_rich_corpus_preserves_relationships_and_behavior_after_restart() {
+    let (mut inspect, config) = fixture().await;
+    latest_legacy(&mut inspect).await;
+    sqlx::raw_sql(legacy_migration::SEED)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET hash=?")
+        .bind(legacy_migration::hash())
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    for _ in 0..2 {
+        let db = database::open(Config::MySql(config.clone()), Policy::default())
+            .await
+            .unwrap();
+        legacy_migration::contract(&db).await;
+        for &(query, expected) in legacy_migration::INSPECTIONS {
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(query)
+                    .fetch_one(&mut inspect)
+                    .await
+                    .unwrap(),
+                expected,
+                "{query}"
+            );
+        }
+        db.close().await;
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, Vec<u8>>("SELECT details FROM rp_original_events WHERE id=206")
+            .fetch_one(&mut inspect)
+            .await
+            .unwrap(),
+        b"{\"payload\":{\"password\":[\"PRIVATE-PASSWORD\"]}}"
+    );
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE `{}`",
+        config.database
+    )))
+    .execute(&mut inspect)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn sqlite_legacy_queue_faults_are_isolated_and_recoverable() {
+    for &(name, mutation, expected) in legacy_migration::QUEUE_CASES {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("legacy.db");
+        let mut inspect = sqlite_legacy_corpus(&path).await;
+        sqlx::raw_sql(mutation).execute(&mut inspect).await.unwrap();
+        inspect.close().await.unwrap();
+        for _ in 0..2 {
+            let db = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+                .await
+                .unwrap();
+            let mut inspect = sqlx::SqliteConnection::connect_with(
+                &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
+            )
+            .await
+            .unwrap();
+            let issues: Vec<i64> = sqlx::query_scalar(
+                "SELECT mail_log_id FROM ruphish_legacy_queue_issues ORDER BY mail_log_id",
+            )
+            .fetch_all(&mut inspect)
+            .await
+            .unwrap();
+            assert_eq!(issues, expected, "{name}");
+            let retained: Vec<i64> = sqlx::query_scalar("SELECT id FROM mail_logs ORDER BY id")
+                .fetch_all(&mut inspect)
+                .await
+                .unwrap();
+            assert_eq!(retained, expected, "{name}: preserve unresolved input");
+            let deliveries: Vec<i64> =
+                sqlx::query_scalar("SELECT result_id FROM ruphish_delivery ORDER BY result_id")
+                    .fetch_all(&mut inspect)
+                    .await
+                    .unwrap();
+            assert_eq!(
+                deliveries,
+                [107, 108, 109, 110],
+                "{name}: never queue the ambiguous recipient"
+            );
+            inspect.close().await.unwrap();
+            db.close().await;
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "Requires canonical MySQL fixture"]
+async fn mysql_legacy_queue_faults_are_isolated_and_recoverable() {
+    for &(name, mutation, expected) in legacy_migration::QUEUE_CASES {
+        let (mut inspect, config) = fixture().await;
+        latest_legacy(&mut inspect).await;
+        sqlx::raw_sql(legacy_migration::SEED)
+            .execute(&mut inspect)
+            .await
+            .unwrap();
+        sqlx::raw_sql(mutation).execute(&mut inspect).await.unwrap();
+        for _ in 0..2 {
+            let db = database::open(Config::MySql(config.clone()), Policy::default())
+                .await
+                .unwrap();
+            let issues: Vec<i64> = sqlx::query_scalar(
+                "SELECT mail_log_id FROM ruphish_legacy_queue_issues ORDER BY mail_log_id",
+            )
+            .fetch_all(&mut inspect)
+            .await
+            .unwrap();
+            assert_eq!(issues, expected, "{name}");
+            let retained: Vec<i64> = sqlx::query_scalar("SELECT id FROM mail_logs ORDER BY id")
+                .fetch_all(&mut inspect)
+                .await
+                .unwrap();
+            assert_eq!(retained, expected, "{name}: preserve unresolved input");
+            let deliveries: Vec<i64> =
+                sqlx::query_scalar("SELECT result_id FROM ruphish_delivery ORDER BY result_id")
+                    .fetch_all(&mut inspect)
+                    .await
+                    .unwrap();
+            assert_eq!(
+                deliveries,
+                [107, 108, 109, 110],
+                "{name}: never queue the ambiguous recipient"
+            );
+            db.close().await;
+        }
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "DROP DATABASE `{}`",
+            config.database
+        )))
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    }
+}
+
 #[tokio::test]
 async fn sqlite_resource_summaries() {
     let directory = tempfile::tempdir().unwrap();
@@ -2016,6 +2215,22 @@ async fn mysql_upgrades_every_legacy_version_preserving_identity_and_recoverable
                 "version {version}: never guess a pre-UTC timezone"
             );
         }
+        sqlx::raw_sql("INSERT INTO events(id,campaign_id,email,time,message) VALUES(52,13,'elise@example.test','2020-01-02 01:00:00','Clicked Link'),(53,13,'elise@example.test','2020-01-02 02:00:00','Submitted Data')").execute(&mut inspector).await.unwrap();
+        sqlx::query("UPDATE results SET status=? WHERE id=41")
+            .bind(if version < 20170104231222 {
+                "Success"
+            } else {
+                "Submitted Data"
+            })
+            .execute(&mut inspector)
+            .await
+            .unwrap();
+        if version >= 20180524203752 {
+            sqlx::query("UPDATE results SET modified_date='2020-01-02 02:00:00' WHERE id=41")
+                .execute(&mut inspector)
+                .await
+                .unwrap();
+        }
         let db = database::open(Config::MySql(config.clone()), Policy::default())
             .await
             .unwrap_or_else(|e| panic!("upgrade version {version}: {e}"));
@@ -2082,6 +2297,19 @@ async fn mysql_upgrades_every_legacy_version_preserving_identity_and_recoverable
         let campaign = db.campaigns().get(user.identity, 13).await.unwrap();
         assert_eq!(campaign.events[0].id, 51);
         assert_eq!(campaign.results[0].rid, "legacy-rid");
+        assert_eq!(
+            campaign.results[0].status, "Submitted Data",
+            "submission takes precedence over a click at {version}"
+        );
+        assert_eq!(
+            campaign.results[0].modified_date,
+            if version < 20170828220440 {
+                "2020-01-02T00:00:00Z"
+            } else {
+                "2020-01-02T02:00:00Z"
+            },
+            "derived/preserved modification time at {version}"
+        );
         assert!(campaign.events[0].details.is_empty());
         assert!(campaign.results[0].ip.is_empty());
         assert_eq!(campaign.results[0].latitude, 0.0);
@@ -2199,10 +2427,146 @@ async fn latest_legacy(c: &mut MySqlConnection) {
 
 #[tokio::test]
 #[ignore = "Requires the canonical MySQL acceptance service and RUPHISH_MYSQL_TEST_PORT"]
+async fn mysql_legacy_deleted_identities_are_not_reused_after_conversion() {
+    let (mut inspector, config) = fixture().await;
+    latest_legacy(&mut inspector).await;
+    sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id) VALUES(17,'legacy','hash','key',1); INSERT INTO `groups`(id,user_id,name) VALUES(21,17,'Surviving'),(9000,17,'Deleted'); DELETE FROM `groups` WHERE id=9000; INSERT INTO attachments(id,name) VALUES(8000,'Deleted'); DELETE FROM attachments;")
+        .execute(&mut inspector).await.unwrap();
+    let db = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    db.close().await;
+    let db = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    for (query, retired) in [
+        ("INSERT INTO `groups`(user_id,name) VALUES(17,'New')", 9000),
+        ("INSERT INTO attachments(name) VALUES('New')", 8000),
+    ] {
+        let id = sqlx::query(query)
+            .execute(&mut inspector)
+            .await
+            .unwrap()
+            .last_insert_id();
+        assert!(
+            id > retired,
+            "reused retired identity: new id {id}, retired {retired}"
+        );
+    }
+    db.close().await;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE `{}`",
+        config.database
+    )))
+    .execute(&mut inspector)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires the canonical MySQL acceptance service and RUPHISH_MYSQL_TEST_PORT"]
+async fn mysql_legacy_deleted_owner_mailbox_is_dropped_with_original_retained() {
+    let (mut inspector, config) = fixture().await;
+    latest_legacy(&mut inspector).await;
+    // Gophish DeleteUser does not delete IMAP settings (models/user.go).
+    sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id) VALUES(17,'legacy','hash','key',1),(18,'deleted','hash','deleted-key',2); INSERT INTO imap(user_id,host,port,username,password,tls,enabled,folder,imap_freq) VALUES(18,'imap.example.test',993,'deleted-service','retained-secret',1,1,'INBOX',60); DELETE FROM users WHERE id=18;")
+        .execute(&mut inspector).await.unwrap();
+    for _ in 0..2 {
+        let db = database::open(Config::MySql(config.clone()), Policy::default())
+            .await
+            .unwrap();
+        assert!(
+            db.integrations()
+                .mailboxes(auth::Identity { id: 17, epoch: 0 })
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM ruphish_mailboxes")
+                .fetch_one(&mut inspector)
+                .await
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM imap")
+                .fetch_one(&mut inspector)
+                .await
+                .unwrap(),
+            0
+        );
+        db.close().await;
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT password FROM rp_original_imap WHERE user_id=18")
+            .fetch_one(&mut inspector)
+            .await
+            .unwrap(),
+        "retained-secret"
+    );
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE `{}`",
+        config.database
+    )))
+    .execute(&mut inspector)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires canonical MySQL fixture"]
+async fn mysql_legacy_invalid_mailbox_owners_are_skipped_without_losing_valid_data() {
+    let (mut inspect, config) = fixture().await;
+    latest_legacy(&mut inspect).await;
+    sqlx::raw_sql(legacy_migration::SEED)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET hash=?")
+        .bind(legacy_migration::hash())
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    sqlx::raw_sql("INSERT INTO imap(user_id,host,password) VALUES(NULL,'bad.example.test','null-secret'),(0,'bad.example.test','zero-secret'),(-1,'bad.example.test','negative-secret'),(999999,'bad.example.test','deleted-secret')").execute(&mut inspect).await.unwrap();
+    for _ in 0..2 {
+        let db = database::open(Config::MySql(config.clone()), Policy::default())
+            .await
+            .unwrap();
+        legacy_migration::contract(&db).await;
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM imap")
+                .fetch_one(&mut inspect)
+                .await
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM ruphish_mailboxes")
+                .fetch_one(&mut inspect)
+                .await
+                .unwrap(),
+            2
+        );
+        assert_eq!(sqlx::query_as::<_, (Option<i64>, String)>("SELECT user_id,password FROM rp_original_imap WHERE user_id IS NULL OR user_id<=0 OR user_id=999999 ORDER BY user_id").fetch_all(&mut inspect).await.unwrap(), vec![(None,"null-secret".into()),(Some(-1),"negative-secret".into()),(Some(0),"zero-secret".into()),(Some(999999),"deleted-secret".into())]);
+        db.close().await;
+    }
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE `{}`",
+        config.database
+    )))
+    .execute(&mut inspect)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires the canonical MySQL acceptance service and RUPHISH_MYSQL_TEST_PORT"]
 async fn mysql_failed_publication_resumes_without_losing_or_duplicating_legacy_data() {
     let (mut inspector, mut config) = fixture().await;
     latest_legacy(&mut inspector).await;
     sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id) VALUES(17,'legacy','hash-preserved','key-preserved',1); INSERT INTO `groups`(id,user_id,name,modified_date) VALUES(21,17,'Recovered group','2020-01-01 00:00:00')").execute(&mut inspector).await.unwrap();
+    sqlx::raw_sql("INSERT INTO `groups`(id,user_id,name) VALUES(9000,17,'Deleted'); DELETE FROM `groups` WHERE id=9000").execute(&mut inspector).await.unwrap();
     let username = format!("u_{}", &config.database[17..]);
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE USER '{username}'@'%' IDENTIFIED BY 'fixture-migration-only'; GRANT SELECT,INSERT,UPDATE,DELETE,CREATE,DROP,INDEX,CREATE VIEW,SHOW VIEW ON `{}`.* TO '{username}'@'%'",config.database))).execute(&mut inspector).await.unwrap();
     config.username = username.clone();
@@ -2259,7 +2623,14 @@ async fn mysql_failed_publication_resumes_without_losing_or_duplicating_legacy_d
         .await
         .unwrap();
     assert!(db.bootstrap(None, None).await.unwrap().is_none());
-
+    assert!(
+        sqlx::query("INSERT INTO `groups`(user_id,name) VALUES(17,'After recovery')")
+            .execute(&mut inspector)
+            .await
+            .unwrap()
+            .last_insert_id()
+            > 9000
+    );
     db.close().await;
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
         "DROP DATABASE `{}`; DROP USER '{username}'@'%'",

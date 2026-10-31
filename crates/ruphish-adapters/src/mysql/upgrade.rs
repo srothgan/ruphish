@@ -35,14 +35,6 @@ pub(super) async fn validate_source(c: &mut MySqlConnection, version: i64) -> Re
         )
         .await?;
     }
-    if version >= 20200116000000 {
-        ensure_zero(
-            c,
-            "SELECT count(*) FROM imap i LEFT JOIN users u ON u.id=i.user_id WHERE u.id IS NULL"
-                .into(),
-        )
-        .await?;
-    }
     if version >= 20190105192341 {
         ensure_zero(c,"SELECT count(*) FROM role_permissions rp LEFT JOIN roles r ON r.id=rp.role_id LEFT JOIN permissions p ON p.id=rp.permission_id WHERE r.id IS NULL OR p.id IS NULL".into()).await?;
         ensure_zero(
@@ -209,13 +201,18 @@ async fn columns(
 }
 
 async fn initialize_work(c: &mut MySqlConnection) -> Result<(), Error> {
+    let skipped: i64 = sqlx::query_scalar("SELECT count(*) FROM rp_stage_imap WHERE user_id IS NULL OR user_id<=0 OR NOT EXISTS(SELECT 1 FROM rp_stage_users u WHERE u.id=rp_stage_imap.user_id)")
+        .fetch_one(&mut *c).await.map_err(storage_error)?;
+    crate::database::migrations::warn_skipped_mailboxes(skipped);
+    // Gophish DeleteUser leaves IMAP settings behind. Only the original recovery
+    // tables retain settings that cannot be assigned to a valid existing owner.
     statement(c, "INSERT INTO rp_stage_ruphish_campaign_policy(campaign_id,redirect_url) SELECT c.id,COALESCE(p.redirect_url,'') FROM rp_stage_campaigns c JOIN rp_stage_pages p ON p.id=c.page_id AND p.user_id=c.user_id;
 INSERT INTO rp_stage_ruphish_webhook_state(webhook_id,revision,owner_id) SELECT id,1,(SELECT min(u.id) FROM rp_stage_users u JOIN rp_stage_role_permissions rp ON rp.role_id=u.role_id JOIN rp_stage_permissions p ON p.id=rp.permission_id WHERE p.slug='modify_system') FROM rp_stage_webhooks;
 INSERT INTO rp_stage_ruphish_legacy_queue_issues SELECT m.id,'Unresolved or ambiguous legacy queue association' FROM rp_stage_mail_logs m WHERE (SELECT count(*) FROM rp_stage_results r JOIN rp_stage_campaigns c ON c.id=r.campaign_id JOIN rp_stage_users u ON u.id=c.user_id WHERE r.r_id=m.r_id AND r.user_id=m.user_id AND r.campaign_id=m.campaign_id AND c.user_id=m.user_id)<>1 OR (SELECT count(*) FROM rp_stage_results r WHERE r.r_id=m.r_id)<>1 OR (SELECT count(*) FROM rp_stage_mail_logs d WHERE d.r_id=m.r_id)<>1 OR COALESCE(m.send_attempt,0) NOT BETWEEN 0 AND 8 OR m.send_date<'1970-01-01';
 INSERT INTO rp_stage_ruphish_delivery(result_id,campaign_id,state,due,retries,code) SELECT r.id,m.campaign_id,CASE WHEN c.status='Completed' THEN 'cancelled' WHEN COALESCE(m.processing,0)<>0 THEN 'unknown' WHEN p.campaign_id IS NULL THEN 'blocked' ELSE 'ready' END,TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',STR_TO_DATE(LEFT(m.send_date,19),'%Y-%m-%dT%H:%i:%s')),COALESCE(m.send_attempt,0),CASE WHEN COALESCE(m.processing,0)<>0 THEN 'legacy_delivery_outcome_unknown' WHEN p.campaign_id IS NULL THEN 'campaign_page_missing' ELSE '' END FROM rp_stage_mail_logs m JOIN rp_stage_results r ON r.r_id=m.r_id AND r.campaign_id=m.campaign_id AND r.user_id=m.user_id JOIN rp_stage_campaigns c ON c.id=m.campaign_id LEFT JOIN rp_stage_ruphish_campaign_policy p ON p.campaign_id=c.id WHERE m.id NOT IN (SELECT mail_log_id FROM rp_stage_ruphish_legacy_queue_issues);
 DELETE FROM rp_stage_mail_logs WHERE id NOT IN (SELECT mail_log_id FROM rp_stage_ruphish_legacy_queue_issues);
 INSERT INTO rp_stage_ruphish_mailboxes(owner_id,name,enabled,host,port,username,password,tls,folder,restrict_domain,delete_reported,frequency,modified_date,last_login,ignore_cert_errors)
-SELECT user_id,CONCAT('Imported reporting mailbox ',ROW_NUMBER() OVER (ORDER BY user_id,host,username)),CASE WHEN port BETWEEN 1 AND 65535 AND length(host)>0 AND length(username)>0 AND length(password)>0 THEN COALESCE(enabled,0) ELSE 0 END,COALESCE(host,''),CASE WHEN port BETWEEN 1 AND 65535 THEN port ELSE 993 END,COALESCE(username,''),COALESCE(password,''),COALESCE(tls,1),COALESCE(NULLIF(folder,''),'INBOX'),COALESCE(restrict_domain,''),COALESCE(delete_reported_campaign_email,0),CASE WHEN imap_freq BETWEEN 30 AND 31540000 THEN imap_freq ELSE 60 END,COALESCE(modified_date,'0001-01-01T00:00:00Z'),COALESCE(last_login,'0001-01-01T00:00:00Z'),COALESCE(ignore_cert_errors,0)<>0 FROM rp_stage_imap;
+SELECT user_id,CONCAT('Imported reporting mailbox ',ROW_NUMBER() OVER (ORDER BY user_id,host,username)),CASE WHEN port BETWEEN 1 AND 65535 AND length(host)>0 AND length(username)>0 AND length(password)>0 THEN COALESCE(enabled,0) ELSE 0 END,COALESCE(host,''),CASE WHEN port BETWEEN 1 AND 65535 THEN port ELSE 993 END,COALESCE(username,''),COALESCE(password,''),COALESCE(tls,1),COALESCE(NULLIF(folder,''),'INBOX'),COALESCE(restrict_domain,''),COALESCE(delete_reported_campaign_email,0),CASE WHEN imap_freq BETWEEN 30 AND 31540000 THEN imap_freq ELSE 60 END,COALESCE(modified_date,'0001-01-01T00:00:00Z'),COALESCE(last_login,'0001-01-01T00:00:00Z'),COALESCE(ignore_cert_errors,0)<>0 FROM rp_stage_imap WHERE user_id>0 AND EXISTS(SELECT 1 FROM rp_stage_users u WHERE u.id=rp_stage_imap.user_id);
 DELETE FROM rp_stage_imap;
 UPDATE rp_stage_ruphish_settings SET reporting_mailboxes_enabled=EXISTS(SELECT 1 FROM rp_stage_ruphish_mailboxes),webhooks_enabled=EXISTS(SELECT 1 FROM rp_stage_webhooks) WHERE id=1;".into()).await
 }

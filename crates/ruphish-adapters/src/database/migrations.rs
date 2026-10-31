@@ -2,6 +2,15 @@
 use super::{Error, sqlite, upgrade_error};
 use std::path::Path;
 
+pub(crate) fn warn_skipped_mailboxes(count: i64) {
+    if count > 0 {
+        tracing::warn!(
+            skipped_mailboxes = count,
+            "Skipping legacy IMAP settings with missing, invalid, or deleted owners; originals remain in migration recovery data"
+        );
+    }
+}
+
 /// Read-only MySQL schema assessment, never a claim that an upgrade has run.
 #[derive(Debug, PartialEq, Eq)]
 pub struct MySqlInspection {
