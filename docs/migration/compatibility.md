@@ -18,8 +18,8 @@ The comparison reference is Gophish 0.12.1 at commit `95618469799295e2c0fec98080
 | MySQL history | Recognized Gophish histories convert directly to release v1 through staged publication and retained originals | Supported server version, schema preflight, required privileges, timestamp interpretation, and recovery |
 | PostgreSQL | A Ruphish provider for fresh installations and Ruphish migrations | It is not a Gophish database importer or a cross-engine transfer tool |
 | Campaign behavior | Durable delivery, retry state, restart recovery, and explicit uncertain outcomes | Queued, active, completed, and ambiguous legacy delivery cases |
-| Participant data | Interaction events and optional presence booleans replace legacy value capture | Rework pages and downstream reports that expected entered values or IP-derived location |
-| Integrations | Signed webhooks and IMAP reporting have explicit persistence and retry behavior | Receiver deduplication, mailbox matching, TLS trust, and credential handling |
+| Participant data | Interaction events, password-presence booleans, and coarse per-event client categories replace legacy value/location capture | Rework pages and downstream reports that expected entered values or IP-derived location |
+| Integrations | Creator-owned configuration under administrator feature switches; webhook delivery and mailbox matching span campaign creators | Migrated webhook ownership, receiver deduplication, initial mailbox boundaries, closed-campaign rejection, ambiguous forwards, TLS trust, and credential handling |
 | Existing API clients | Clients use the documented Ruphish API | Replace name-only campaign requests with [ID selections](../api/campaigns.md#prepare-and-launch) and test each integration |
 
 Compatibility fixtures and tests cover specific contracts and workflows. Contributors can use the [verification guidance](../contributing/testing/index.md) to run the relevant checks.

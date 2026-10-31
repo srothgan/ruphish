@@ -165,6 +165,17 @@ The pinned local executables are required; `--no-install` prevents downloading a
 
 The shared workflow runs these checks in its always-selected paths/quality job, so JavaScript, configuration and tooling changes cannot bypass them through product path selection. PR, nightly and release entry points all invoke that workflow. Installing dependencies does not run the formatter or linter, and no automatic formatting or lint-fix hook is installed. Existing files must satisfy these checks before a future CI run can pass; adding configuration alone does not reformat or repair them.
 
+## Windows process-test shutdown
+
+When a Windows test launcher inherits the ignore-Ctrl+C attribute, process tests can fail during graceful shutdown even though the application handles normal console signals. Restore Ctrl+C handling in the launching PowerShell process before running the same test command:
+
+```powershell
+Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class TrackerTestConsole { [DllImport("kernel32.dll", SetLastError=true)] public static extern bool SetConsoleCtrlHandler(IntPtr handler, bool add); }'
+if (-not [TrackerTestConsole]::SetConsoleCtrlHandler([IntPtr]::Zero, $false)) { throw 'Cannot restore console Ctrl+C handling' }
+```
+
+This changes only the launcher's console handling. Preserve the application's shutdown behavior and test assertions; investigate other failures independently.
+
 ## Complete source acceptance commands
 
 This catalog is for an explicitly selected full acceptance run. It is not a local completion checklist. Generate the real development distribution before process tests; Trunk invokes the JS/CSS generator itself:

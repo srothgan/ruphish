@@ -25,7 +25,7 @@ A campaign is an execution with a fixed audience and selected resources. Use [ca
 | GET | `/api/campaigns/{id}/draft` | Read inputs for duplication; does not save a draft |
 | POST | `/api/campaigns/{id}/complete` | Complete a campaign |
 | GET | `/api/campaigns/{id}/delivery` | Delivery state and attempts |
-| GET | `/api/campaigns/{id}/recipients/{result}/history` | Recipient attempts and individual events, including original/corrected values and exclusions |
+| GET | `/api/campaigns/{id}/recipients/{result}/history` | Recipient attempts and current individual events, including read-only client categories |
 | POST | `/api/campaigns/{id}/recipients/{result}/events` | [Add, edit or delete an event](analysis-and-exports.md#event-corrections) |
 | POST | `/api/campaigns/{id}/delivery/{result}` | Resolve or retry a delivery outcome |
 

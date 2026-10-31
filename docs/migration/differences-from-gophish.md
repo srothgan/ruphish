@@ -32,7 +32,7 @@ The Rust/WASM UI adds persistent campaign drafts, a preparation/review step, del
 
 The interface supports English and German. Account settings independently control interface language, date/time formatting locale, and IANA time zone. Preferences follow the account across devices. Changing presentation does not change stored UTC instants or move an existing campaign schedule. See [account settings](../user-guide/account.md).
 
-Gophish webhooks do not record a creator. Conversion assigns them to the existing account with the lowest user ID whose role grants `modify_system`; this is migration ownership, not a reconstructed creator identity. URLs, signing secrets, and individual activation states are preserved. Conversion rejects a source containing webhooks but no such administrator. New webhook ownership is always taken from the authenticated creator.
+Webhook configuration and delivery history are creator-owned. Existing Gophish endpoints receive an owner during [conversion](from-gophish.md#webhook-ownership); review that assignment before cutover. Ownership controls configuration access while enabled delivery continues across campaign creators.
 
 ## API additions and separation
 
@@ -45,6 +45,15 @@ New revision and generation checks prevent stale edits or delivery decisions fro
 Accepted built-in submissions record events and password presence; entered values are outside the supported collection model. Landing pages support authored scripts and visual assets, with managed native forms and an opaque-origin sandbox. Custom final submissions can use `window.ruphish.submit(form)`; script cancellation and arbitrary external requests are not automatically counted. Website imports retain external references, while ZIP imports embed declared local assets. Review [landing-page authoring](../user-guide/landing-pages.md) and [participant data](../user-guide/participant-data.md), including their verification limits.
 
 An event is an observation, not proof that a particular person acted. New reporting distinguishes observed event totals, unique recipients, inferred progression, and delivery state. Old summary counts and new analysis counts are not interchangeable.
+
+## First-release boundaries
+
+- **Reporting mailboxes:** New configurations choose their starting boundary from actual Ruphish sends in active campaigns across all creators. Without an eligible send, the first poll watches new arrivals. Polling continues between campaigns, and reports received after completion do not change campaign results. See [initialization and recovery](../user-guide/reporting-mailboxes.md).
+- **Multiple reported messages:** Gophish's IMAP scanner iterates over distinct recipient IDs found in one email. Ruphish currently requires one distinct recipient-ID/origin pair and rejects ambiguous messages. Forward each original separately; batch attribution is deferred.
+- **Embedded documents:** Authored iframe/frame support is deferred. Use ordinary landing-page content or the starter catalog; the application's sandboxed preview is separate from authored embedded content.
+- **Client observations:** Clicks and submissions retain read-only browser/OS/device categories on recipient events. They do not collect raw User-Agent, versions, IP/geolocation, or fingerprints, and they are not anonymous. Imported events have no reconstructed client categories. See [participant data](../user-guide/participant-data.md#browser-and-device-observations).
+- **Entered values:** Participant usernames, passwords, OTPs, and arbitrary submitted values are outside the collection model. Presence-only observations remain supported.
+- **Future analysis:** Cross-campaign comparisons and trends remain proposed for [0.3.0](../../ROADMAP.md#030---deeper-reporting-and-integrations). Existing campaign results, recipient histories, and exports are available in the first-release implementation.
 
 ## Operations and recovery
 

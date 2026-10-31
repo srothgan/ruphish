@@ -29,47 +29,8 @@ Executable cases in `tests/resource_process.rs` cover creation and editing rejec
 
 The built-UI `results-untracked` scenario in `crates/ruphish-ui/web/tests/ui-interactions.artifact.mjs` checks the translated summary, compact recipient cells, and hidden open chart series even when the raw snapshot contains historical open observations.
 
-## Verification on 2026-10-31
+## Validation
 
-Windows, pinned Rust 1.99.1, development builds, one Cargo job/test thread, and the canonical disposable database fixture. The website work is excluded from this change and its verification.
+Use the focused tests above when changing tracking behavior and follow [validation](testing/validation.md) for applicable provider, executable, WASM, and built-UI checks. Migration changes also require the relevant [database-provider histories](testing/database-providers.md). Keep per-run commands and results in review notes rather than treating an old test run as evidence for a newer revision.
 
-- `cargo test -p ruphish-domain -p ruphish-contracts -p ruphish-application -p ruphish-ui --lib --tests --features ruphish-ui/demo --locked`: 117 passed. The final UI state adjustment also passed all 11 cases with `cargo test -p ruphish-ui --lib --features demo campaign_state:: --locked`.
-- `cargo test -p ruphish-adapters --test email_tracking --test resource_formats --test sqlite_upgrade --locked`: 32 passed, including every supported SQLite legacy fixture.
-- `cargo test -p ruphish-adapters --test reporting --locked`: 9 passed.
-- `cargo test -p ruphish-adapters --test database_providers provider_contract --locked -- --include-ignored --nocapture --test-threads=1`: SQLite, MySQL 9.7.2, and PostgreSQL 18.6 passed, including the final incomplete-draft recovery regression.
-- `cargo test -p ruphish-adapters --test database_providers mysql_upgrades_every_legacy_version_preserving_identity_and_recoverable_originals --locked -- --ignored --nocapture --test-threads=1`: all 28 historical versions upgraded and reopened on MySQL 9.7.2.
-- With the documented MySQL 8.4.11/PostgreSQL 17.11 fixture images, `cargo test -p ruphish-adapters --test database_providers --locked -- mysql_provider_contract postgres_provider_contract mysql_upgrades_every_legacy_version_preserving_identity_and_recoverable_originals --ignored --nocapture --test-threads=1`: 3 passed, including all 28 MySQL histories. These floor-version runs preceded the shared incomplete-draft recovery adjustment; the final recovery case was rerun on the three default providers above.
-- `cargo test -p ruphish --test startup_process --locked -- campaign_process:: public_process:: --nocapture --test-threads=1`: 25 passed initially; one new fixture incorrectly compared a creation response with a complete read. After correcting that baseline, `cargo test -p ruphish --test startup_process --locked -- --exact public_process::verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_bypasses --nocapture --test-threads=1` passed. All 26 selected scenarios therefore passed across the focused runs.
-- After the incomplete-draft recovery fix, `cargo test -p ruphish --test startup_process campaign_process::campaign_draft_process:: --locked -- --nocapture --test-threads=1`: 7 passed. Process tests used the process-local Windows console correction documented below.
-- `cargo clippy --workspace --all-targets --features ruphish-ui/demo --locked -- -D warnings` and `cargo clippy -p ruphish-ui --all-targets --target wasm32-unknown-unknown --locked -- -D warnings`: passed.
-- `cargo test -p ruphish-ui --test '*' --target wasm32-unknown-unknown --locked`: 45 passed, including real Fetch, request cancellation, translation, form, and download scenarios.
-- `trunk build --locked`: passed; generated the current development UI distribution and manifest.
-- `node --test crates/ruphish-ui/web/tests/ui-interactions.artifact.mjs`: all 41 scenarios passed against that distribution, including disabled-tracking results with historical open observations.
-- `node --test --test-concurrency=1 demo/tests/api.test.mjs demo/tests/sorting.test.mjs demo/tests/preview.test.mjs`: 31 passed.
-- `cargo fmt --all -- --check`, Leptos formatting checks for the three changed markup files, scoped Prettier/ESLint checks for the four changed JavaScript files, and local Markdown link-target checks passed.
-
-Manual visual review and full release acceptance were not run; the checks above verify the affected feature and its consumers.
-
-The first provider regression used an invalid zero-limit report filter. The fixture was corrected and all provider cases were rerun successfully. Historical observations were retained; no tracking inference was made from imported HTML.
-
-## Historical verification on 2026-10-24
-
-Windows, pinned Rust 1.99.1 and Cargo 1.99.1; development profile, one build job/test thread, two Tokio/Rayon workers. These commands exited 0:
-
-- `cargo test -p ruphish-adapters --test email_tracking --test resource_formats --locked`: 17 passed. The final tracker-only run after the refresh-directive edge case passed all 5 tests.
-- `cargo test -p ruphish --test startup_process resource_process:: --locked -- --nocapture --test-threads=1`: 14 passed.
-- `cargo test -p ruphish --test startup_process --locked -- --exact resource_process::actual_test_delivery_composes_mime_persists_preview_and_never_records_campaign_events resource_process::email_create_edit_and_preview_share_validation_without_mutating_source campaign_process::executable_launch_delivers_personalized_mail_once_and_persists_acceptance_across_restart --nocapture --test-threads=1`: all 3 final executable regressions passed.
-- `cargo clippy -p ruphish-adapters --lib --test email_tracking --test resource_formats --locked -- -D warnings`: passed.
-- `cargo clippy -p ruphish --bin ruphish --test startup_process --locked -- -D warnings`: passed, including the final executable test changes.
-- `cargo fmt --all -- --check` and `git diff --check`: passed.
-
-Initial tests exposed an encoded-URL duplicate-removal defect; URL comparison now decodes HTML attribute entities. A plain-text test was corrected to inspect actual MIME parts because mail-parser's convenience HTML accessor synthesizes HTML for plain text. The persistence regression now compares GET snapshots, respecting the existing null-versus-empty attachments distinction between create and read responses. These corrections were rerun successfully. Clippy's test-helper unwrap diagnostic was resolved with a narrow assertion-helper exemption; production lint rules remain unchanged.
-
-The first resource process run failed 13 cases at Windows shutdown and one at the corrected persistence assertion. This runner inherited Windows' ignore-Ctrl+C attribute. Clearing that attribute in the launching PowerShell process with `SetConsoleCtrlHandler(NULL, FALSE)` made the unchanged SMTP/restart test pass, and subsequent Cargo process runs passed with the same launcher correction. No application signal handling, fixture shutdown assertions or timeouts were changed. See [Microsoft's console-handler contract](https://learn.microsoft.com/windows/console/setconsolectrlhandler). The process-local correction used before those commands was:
-
-```powershell
-Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class TrackerTestConsole { [DllImport("kernel32.dll", SetLastError=true)] public static extern bool SetConsoleCtrlHandler(IntPtr handler, bool add); }'
-if (-not [TrackerTestConsole]::SetConsoleCtrlHandler([IntPtr]::Zero, $false)) { throw 'Cannot restore console Ctrl+C handling' }
-```
-
-Root specification verification (`py -3 tools/verify_specification.py`) could not execute because Python is not installed. No browser/inbox rendering or full provider matrix was run; this change has no UI assets, schema or provider-specific SQL changes.
+The [manual UI checks](testing/manual-ui.md#first-release-feature-boundaries) cover tracking choices, email rendering, disabled metrics, and participant behavior. Protocol tests and a successful build do not establish inbox rendering, browser behavior, or full release acceptance.

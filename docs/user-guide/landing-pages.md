@@ -15,7 +15,7 @@ Open **Resources → Landing pages → Create**, enter a name, and author the HT
 
 To reuse existing content, choose **Import** from the landing-page list. Provide HTML, resource JSON, or a website URL. Website imports validate certificates and apply the installation's outbound restrictions at every redirect. They preserve base-URL semantics; the accepted legacy `include_resources` option does not inline external resources.
 
-Review the imported draft and save it explicitly. Ruphish preserves authored scripts and resources while preparing a full document with managed submission and browser isolation. It removes native form destinations, embedded frames/objects, authored HTTP-equivalent metadata (including CSP and refresh), and duplicate titles. The first head title is retained. Learning pages have a separate [static content policy](learning-pages.md).
+Review the imported draft and save it explicitly. Ruphish preserves authored scripts and resources while preparing a full document with managed submission and browser isolation. It removes native form destinations, embedded frames/objects, authored HTTP-equivalent metadata (including CSP and refresh), and duplicate titles. The first head title is retained. Authored `iframe`, `frame`, and other embedded documents are not supported in the first release. Author the content directly in the page or start from a [starter template](starter-templates.md). The sandboxed iframe used by the administration UI for preview does not grant support for embedded frames inside authored content. Learning pages have a separate [static content policy](learning-pages.md).
 
 ### Upload a page with local assets
 

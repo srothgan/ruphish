@@ -31,8 +31,8 @@ The same-engine upgrade converts a recognized Gophish database in place to Ruphi
 | Sending profiles | Existing profile settings and stored service credentials are carried through supported histories | Very old histories may not contain later credential fields; confirm authentication and TLS with a controlled send |
 | Campaigns and events | IDs, relationships, history, and supported timestamps are retained/transformed; event provenance is marked legacy | Compare lifecycle state and historical counts using the new metric definitions |
 | Captured participant details and location | Opaque legacy event details are cleared from active records; result IP/location fields are cleared/zeroed | Preserve sensitive recovery copies separately; do not expect captured form values in exports |
-| Reporting settings | Legacy IMAP settings become named mailbox resources; stored credentials are retained; invalid/incomplete connection settings can import disabled, with bounded defaults for port/folder/frequency | Review every imported mailbox and its first-poll checkpoint before enabling processing |
-| Webhooks | Existing endpoints, activity flags, and secrets receive revision state | Validate the receiver and deduplication behavior; imported historical events do not imply a historical webhook replay |
+| Reporting settings | Legacy IMAP settings become named mailbox resources; stored credentials are retained; invalid/incomplete connection settings can import disabled, with bounded defaults for port/folder/frequency | Review every imported mailbox before enabling processing; the first successful poll checkpoints existing mail and watches new arrivals |
+| Webhooks | Existing endpoints, activity flags, and secrets receive revision state and an owner; see [webhook ownership](#webhook-ownership) | Use the assigned owner or explicit impersonation to review them; imported historical events do not imply a historical webhook replay |
 | Campaign origins | Fixed HTTP/HTTPS DNS and IP origins are extracted without verification evidence | Enable the origin and satisfy the current verification policy; origin extraction does not confer trust |
 | Files and process settings | Database migration does not transfer configuration files, certificates/private keys, static files, or service-manager settings | Copy and review them separately, using the target configuration contract |
 
@@ -63,6 +63,10 @@ HTTP and IP origins remain unavailable when verification is required. Dynamic ho
 After a successful rehearsal, schedule a write stop, take a fresh consistent backup, and repeat the verified upgrade on the final target. Ensure only one application owns the database and external work. Verify sign-in, origin routing, a controlled send, reporting, and integration state before allowing normal campaigns.
 
 Retain the rollback environment and record when new work begins. Rolling back after Ruphish has sent messages or processed reports requires reconciliation of those external effects; restoring a database cannot undo them.
+
+## Webhook ownership
+
+Gophish webhooks do not record a creator. Conversion assigns them to the existing account with the lowest user ID whose role grants `modify_system`; this is migration ownership, not a reconstructed creator identity. URLs, signing secrets, and individual activation states are preserved. Conversion rejects a source containing webhooks but no such administrator. New webhook ownership is always taken from the authenticated creator. Review migrated endpoints through that account or explicit administrator impersonation; delivery still includes events from all campaign creators.
 
 ## Email-open tracking
 

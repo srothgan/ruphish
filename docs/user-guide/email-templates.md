@@ -20,7 +20,7 @@ Use `{{.FirstName}}` to personalize a greeting and `{{.URL}}` for the recipient'
 <p><a href="{{.URL}}">Open the training page</a>.</p>
 ```
 
-When **Track email opens** is enabled for the campaign, Ruphish adds one hidden tracking image when composing HTML email. Turn it off during campaign setup to omit the image and prevent open observations. The choice defaults to enabled and is fixed at launch. You do not need to insert a tracker into the template, and previews omit it. Plain-text-only messages have no image-based open tracking. Mail clients can block image requests, so a missing open event is not proof the email was unread. Legacy `{{.Tracker}}` and `{{.TrackingURL}}` expressions remain supported.
+When **Track email opens** is enabled for the campaign, Ruphish adds one hidden tracking image when composing HTML email. Turn it off during campaign setup to omit the image and prevent open observations. The choice defaults to enabled and is fixed at launch. You do not need to insert a tracker into the template, and previews omit it. Plain-text-only messages have no image-based open tracking. Mail clients can block image requests, so a missing open event is not proof the email was unread. Imported templates may still contain legacy `{{.Tracker}}` or `{{.TrackingURL}}` expressions. During sending, the composer removes images for the rendered recipient tracking URL, then inserts one managed image when tracking is enabled or none when disabled. Ordinary images are retained; you do not need a one-time template conversion.
 
 Provide a plain-text alternative when it helps recipients whose clients do not display HTML. The [template reference](template-reference.md) covers variables, conditional content, and escaping.
 
