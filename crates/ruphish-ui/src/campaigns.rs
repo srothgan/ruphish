@@ -851,6 +851,7 @@ pub(super) fn CreateCampaign(
             &review.selection
         ));
         campaign["policy"] = json!(review.policy);
+        campaign["learning_revision"] = json!(review.learning_revision);
         busy.set(true);
         tasks.spawn(async move {
             match api

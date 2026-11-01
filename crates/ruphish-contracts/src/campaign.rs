@@ -61,6 +61,9 @@ pub struct LocalTime {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Create {
+    /// Reviewed learning content revision, when a learning page is selected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub learning_revision: Option<String>,
     /// Campaign display name.
     pub name: String,
     /// Public URL template.

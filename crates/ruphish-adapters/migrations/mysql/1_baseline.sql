@@ -104,6 +104,8 @@ CREATE TABLE `campaigns` (
   `smtp_id` BIGINT,
   `launch_date` VARCHAR(40),
   `send_by_date` VARCHAR(40),
+  frozen_content LONGTEXT,
+  learning_public_id VARCHAR(64),
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -535,6 +537,8 @@ INSERT INTO roles(id,slug,name,description) VALUES (1,'admin','Admin','System ad
 INSERT INTO permissions(id,slug,name,description) VALUES (1,'view_objects','View Objects','View objects'),(2,'modify_objects','Modify Objects','Create and edit objects'),(3,'modify_system','Modify System','Manage system-wide configuration');
 INSERT INTO role_permissions VALUES (1,1),(1,2),(1,3),(2,1),(2,2);
 INSERT INTO ruphish_settings VALUES (1,1,FALSE,TRUE,86400,21600,FALSE,FALSE,0,NULL);
+
+CREATE UNIQUE INDEX campaigns_learning_public_id ON campaigns(learning_public_id);
 
 -- Views
 CREATE VIEW ruphish_domain_policy AS

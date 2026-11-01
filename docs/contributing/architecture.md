@@ -35,6 +35,8 @@ Administrative imports, content validation, previews, campaign mail review and t
 
 Campaign preparation aggregates each selected group as it is resolved and stops when a new unique recipient would exceed the campaign ceiling. The prepared audience owns the retained recipient records; group selections retain only identity, name, revision and original row count for review and launch. This preserves first-occurrence precedence and duplicate/conflict reporting without retaining every group's full content. Individual group loading still belongs to its provider.
 
+Campaign launch stores one immutable content snapshot alongside the audience and policy: authored email and attachments, sender identity/headers, landing content, and optional learning content. Queue preparation combines that content with the current SMTP transport; arming rechecks the transport revision. Campaign reads and participant rendering consume the snapshot, never fall back to mutable content. Gophish conversion captures available resources before application use, with missing resources retained explicitly. Standalone learning resources remain live; campaign learning links resolve their own frozen content on the campaign domain.
+
 ## Background work
 
 Campaign, domain-verification, webhook, and mailbox workers use persisted claims and checkpoints. Providers own atomic persistence and ownership fencing; shared orchestration performs external work outside long-lived SQL transactions. A network side effect can succeed while acknowledgement fails, so recovery must represent uncertainty instead of promising exactly-once delivery.

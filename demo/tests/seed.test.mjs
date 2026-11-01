@@ -86,6 +86,7 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
       '/api/overview',
       '/api/overview/posture?window=all',
       '/api/campaigns/directory',
+      '/api/campaigns/3',
       '/api/campaigns/3/delivery',
       '/api/campaigns/3/results',
       '/api/webhooks/',
@@ -103,6 +104,13 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
       }
       if (path === '/api/campaigns/3/delivery') {
         assert.equal(value.campaign.send_by_date, '2026-10-23T13:00:00Z');
+      }
+      if (path === '/api/campaigns/3') {
+        assert.equal(value.smtp.from_address, 'Awareness team <awareness@example.test>');
+        assert.equal(value.smtp.host, '');
+        assert.equal(value.smtp.has_password, false);
+        assert.ok(value.page.html.length > 0);
+        assert.ok(value.template.html.length > 0 || value.template.text.length > 0);
       }
       if (path.includes('posture')) {
         // Fixed historical deliveries must not age out as the server's real clock advances.

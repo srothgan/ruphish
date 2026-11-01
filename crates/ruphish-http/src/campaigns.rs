@@ -201,6 +201,7 @@ fn command(context: &Context, input: wire::Create) -> Result<app::Create, Reject
     let timestamp = |t: Option<Timestamp>| t.map(|t| t.0.as_second());
     let p = input.policy.unwrap_or_default();
     let mut result = app::Create {
+        learning_revision: input.learning_revision,
         name: input.name,
         groups: input.selection.groups.into_iter().map(select).collect(),
         template: select(input.selection.template),
@@ -331,6 +332,7 @@ async fn prepare_inner(context: Context, body: Bytes, draft: bool) -> Result<Res
     let conflict_count = p.conflict_count;
     let launch_date = p.launch;
     let policy = read_policy(&p.policy);
+    let learning_revision = p.learning.as_ref().map(|r| r.modified_date.clone());
     let warnings = if let ruphish_application::resources::Content::Page(page) = &p.page.content {
         crate::resources::warnings(
             context
@@ -350,6 +352,7 @@ async fn prepare_inner(context: Context, body: Bytes, draft: bool) -> Result<Res
     response(
         StatusCode::OK,
         &workflow::Review {
+            learning_revision,
             warnings,
             total: count,
             duplicate_count: total - count,

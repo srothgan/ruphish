@@ -39,7 +39,7 @@ pub struct Recipient {
     pub position: String,
 }
 /// Attachment data retains the legacy base64 representation.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Attachment {
     /// Display name within the owning resource scope.
     pub name: String,
@@ -49,7 +49,7 @@ pub struct Attachment {
     pub content: String,
 }
 /// An additional rendered message header.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Header {
     /// Custom header name.
     pub key: String,
@@ -57,7 +57,7 @@ pub struct Header {
     pub value: String,
 }
 /// Authored email content, including the legacy visible-From override.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Template {
     /// Email subject template; empty is supported.
     pub subject: String,
@@ -71,7 +71,7 @@ pub struct Template {
     pub attachments: Vec<Attachment>,
 }
 /// Authored landing page and capture policy; transformations do not mutate the draft.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Page {
     /// Authoritative authored HTML source.
     pub html: String,

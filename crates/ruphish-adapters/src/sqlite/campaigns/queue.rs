@@ -76,9 +76,13 @@ impl Queue for Campaigns {
         }
         let template_id: i64 = row.try_get("template_id").map_err(storage)?;
         let profile_id: i64 = row.try_get("smtp_id").map_err(storage)?;
+        let frozen = snapshot(&mut tx, row.try_get("campaign_id").map_err(storage)?).await?;
         let selected = async {
+            if frozen.template.id == 0 {
+                return Err(Error::NotFound("Template"));
+            }
             Ok::<_, Error>((
-                super::super::resources::load(&mut tx, owner, Kind::Template, template_id).await?,
+                frozen.template(),
                 super::super::resources::load(&mut tx, owner, Kind::Profile, profile_id).await?,
             ))
         }
@@ -102,6 +106,7 @@ impl Queue for Campaigns {
         let Content::Profile(profile) = profile.content else {
             return Err(Error::Internal);
         };
+        let profile = frozen.apply_sender(profile);
         let generation = row.try_get::<i64, _>("generation").map_err(storage)? + 1;
         let campaign_id = row.try_get("campaign_id").map_err(storage)?;
         let message_id = format!("{}@ruphish.local", random()?);
@@ -158,25 +163,19 @@ impl Queue for Campaigns {
         if !owner_enabled(&mut tx, owner).await? {
             return Ok(false);
         }
-        let refs = sqlx::query("SELECT template_id,smtp_id FROM campaigns WHERE id=?")
+        let refs = sqlx::query("SELECT smtp_id FROM campaigns WHERE id=?")
             .bind(claim.campaign_id)
             .fetch_one(&mut *tx)
             .await
             .map_err(storage)?;
-        let mut valid = true;
-        for (index, kind, column) in [
-            (0, Kind::Template, "template_id"),
-            (1, Kind::Profile, "smtp_id"),
-        ] {
-            let resource = super::super::resources::load(
-                &mut tx,
-                owner,
-                kind,
-                refs.try_get(column).map_err(storage)?,
-            )
-            .await?;
-            valid &= resource.modified_date == claim.revisions[index];
-        }
+        let profile = super::super::resources::load(
+            &mut tx,
+            owner,
+            Kind::Profile,
+            refs.try_get("smtp_id").map_err(storage)?,
+        )
+        .await?;
+        let valid = profile.modified_date == claim.revisions[1];
         if !valid {
             sqlx::query("UPDATE ruphish_delivery_attempt SET state='cancelled',finished=? WHERE result_id=? AND generation=? AND state='preparing'").bind(now).bind(claim.result_id).bind(claim.generation).execute(&mut *tx).await.map_err(storage)?;
             sqlx::query("UPDATE ruphish_delivery SET state='ready',generation=generation+1,lease_until=0 WHERE result_id=? AND generation=? AND state='preparing'").bind(claim.result_id).bind(claim.generation).execute(&mut *tx).await.map_err(storage)?;

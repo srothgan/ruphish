@@ -51,6 +51,52 @@ pub(super) async fn exercise(
     input.policy.redirect_url = None;
     let prepared = campaigns.prepare(actor, &input, now).await.unwrap();
     assert!(prepared.policy.redirect_url.is_empty());
+    // Saved drafts require the learning revision, just like the other reviewed resources.
+    let mut reviewed_input = input.clone();
+    reviewed_input.policy.redirect_url = Some(String::new());
+    let configuration = serde_json::from_value(serde_json::json!({
+        "name":input.name,
+        "url":input.url,
+        "selection":{
+            "groups":input.groups.iter().map(|g|serde_json::json!({"id":g.id})).collect::<Vec<_>>(),
+            "template":{"id":input.template.id},"page":{"id":input.page.id},"smtp":{"id":input.profile.id}
+        },
+        "policy":{"track_opens":true,"redirect_url":"","learning_page_id":page.id}
+    })).unwrap();
+    let draft = campaigns
+        .save_draft(
+            actor,
+            "learning-freeze-draft-0001",
+            None,
+            configuration,
+            3,
+            now,
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        campaigns
+            .launch_draft(
+                actor,
+                &draft.id,
+                draft.revision,
+                reviewed_input.clone(),
+                now
+            )
+            .await,
+        Err(Error::Invalid(_))
+    ));
+    reviewed_input.learning_revision = Some(page.modified_date.clone());
+    let launched = campaigns
+        .launch_draft(actor, &draft.id, draft.revision, reviewed_input, now)
+        .await
+        .unwrap();
+    assert_eq!(
+        launched.policy.as_ref().unwrap().learning_page_id,
+        Some(page.id)
+    );
+    campaigns.delete(actor, launched.id).await.unwrap();
+
     let campaign = campaigns.create(actor, input.clone(), now).await.unwrap();
     assert_eq!(
         campaign.policy.as_ref().unwrap().learning_page_id,
@@ -99,6 +145,7 @@ pub(super) async fn exercise(
             .len(),
         before
     );
+    let mut frozen_id = String::new();
     for _ in 0..2 {
         let interactions::Output::Submitted { redirect } = public
             .interact(
@@ -116,10 +163,13 @@ pub(super) async fn exercise(
         else {
             panic!("expected submission")
         };
-        assert_eq!(
-            redirect.as_deref(),
-            Some(format!("https://training.example.test/learn/{public_id}").as_str())
-        );
+        frozen_id = redirect
+            .unwrap()
+            .strip_prefix("https://training.example.test/learn/")
+            .unwrap()
+            .to_owned();
+        assert_ne!(frozen_id, public_id);
+        assert_eq!(frozen_id.len(), 32);
     }
     assert_eq!(
         campaigns
@@ -163,6 +213,28 @@ pub(super) async fn exercise(
         panic!("expected HTML")
     };
     assert!(html.contains("Updated explanation"));
+    let interactions::Output::Html { html, .. } = public
+        .learning_page("https://training.example.test", &frozen_id)
+        .await
+        .unwrap()
+    else {
+        panic!("frozen learning")
+    };
+    assert!(html.contains("First explanation"));
+    assert!(!html.contains("Updated explanation"));
+    assert!(
+        public
+            .learning_page("https://wrong.example.test", &frozen_id)
+            .await
+            .is_err()
+    );
+    let mut stale = input.clone();
+    stale.learning_revision = Some(page.modified_date.clone());
+    assert!(matches!(
+        campaigns.create(actor, stale, now).await,
+        Err(Error::Changed)
+    ));
+
     campaigns.complete(actor, campaign.id, now).await.unwrap();
     resources
         .delete(actor, Kind::LearningPage, page.id, None)
@@ -174,7 +246,19 @@ pub(super) async fn exercise(
             .await
             .is_err()
     );
+    assert!(
+        public
+            .learning_page("https://training.example.test", &frozen_id)
+            .await
+            .is_ok()
+    );
     campaigns.delete(actor, campaign.id).await.unwrap();
+    assert!(
+        public
+            .learning_page("https://training.example.test", &frozen_id)
+            .await
+            .is_err()
+    );
 
     // Competing launch and delete must never leave an unfinished campaign dangling.
     let racing = resources

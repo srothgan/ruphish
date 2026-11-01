@@ -125,6 +125,7 @@ pub(super) async fn copy(c: &mut MySqlConnection, version: i64, offset: &str) ->
                 match (table.as_str(), name.as_str()) {
                     ("users","role_id") => "CASE WHEN id=(SELECT id FROM (SELECT id FROM users ORDER BY (username='admin') DESC,id LIMIT 1) candidate) THEN 1 ELSE 2 END".into(),
                     ("campaigns","launch_date") => "COALESCE(DATE_FORMAT(created_date,'%Y-%m-%dT%H:%i:%sZ'),'0001-01-01T00:00:00Z')".into(),
+                    ("campaigns","frozen_content"|"learning_public_id") => "NULL".into(),
                     (_,"modified_date"|"send_date"|"send_by_date"|"last_login") => "'0001-01-01T00:00:00Z'".into(),
                     (_,"capture_credentials"|"capture_passwords"|"reported"|"password_change_required"|"account_locked"|"ignore_cert_errors") => "0".into(),
                     (_,"smtp_id") => "NULL".into(),

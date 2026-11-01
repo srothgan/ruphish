@@ -350,6 +350,17 @@ async fn old_smtp_profiles_are_converted_with_their_campaign_and_owner() {
         "sender@example.test"
     );
     assert_eq!(profile.get::<i64, _>("user_id"), 17);
+    let frozen: String = sqlx::query_scalar("SELECT frozen_content FROM campaigns WHERE id=53")
+        .fetch_one(&mut upgraded)
+        .await
+        .unwrap();
+    let frozen: serde_json::Value = serde_json::from_str(&frozen).unwrap();
+    assert_eq!(
+        frozen["sender"]["content"]["from_address"],
+        "sender@example.test"
+    );
+    assert_eq!(frozen["sender"]["revision"], "0001-01-01T00:00:00Z");
+    assert!(frozen["sender"]["content"].get("password").is_none());
     upgraded.close().await.unwrap();
     let ambiguous = directory.path().join("ambiguous.db");
     fs::copy(&source, &ambiguous).unwrap();

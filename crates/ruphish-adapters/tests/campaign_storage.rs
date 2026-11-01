@@ -729,9 +729,18 @@ async fn resource_changes_owner_lock_and_completion_fence_unsubmitted_work() {
     .execute(&db.inspection_pool())
     .await
     .unwrap();
+    sqlx::query("UPDATE smtp SET modified_date='2031-01-01T00:00:00Z' WHERE id=?")
+        .bind(input(&fixture).profile.id)
+        .execute(&db.inspection_pool())
+        .await
+        .unwrap();
     assert!(!store.arm(&claim, 1_900_000_001).await.unwrap());
     let next = store.claim(1_900_000_002).await.unwrap().unwrap();
-    assert_eq!(next.message.template.subject, "Changed");
+    assert_eq!(
+        next.message.template.subject,
+        claim.message.template.subject
+    );
+    assert_ne!(next.message.template.subject, "Changed");
     assert_ne!(claim.generation, next.generation);
     store
         .complete(caller(), campaign.id, 1_900_000_003)
@@ -1041,5 +1050,47 @@ async fn oversized_audience_rejects_before_loading_later_groups() {
     assert_eq!(prepared.recipients[0].email, "cap-1@example.test");
     assert_eq!(prepared.recipients[99_999].email, "cap-100000@example.test");
     assert_eq!(prepared.conflict_count, 0);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn damaged_campaign_snapshot_never_falls_back_to_live_resources_or_exposes_credentials() {
+    let (fixture, path) = fixture().await;
+    let db = prepared_database(&path, &fixture).await;
+    let store = db.campaigns();
+    let created = store
+        .create(caller(), input(&fixture), 1_900_000_000)
+        .await
+        .unwrap();
+    let content: String = sqlx::query_scalar("SELECT frozen_content FROM campaigns WHERE id=?")
+        .bind(created.id)
+        .fetch_one(&db.inspection_pool())
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_str(&content).unwrap();
+    let sender = json["sender"]["content"].as_object().unwrap();
+    assert_eq!(
+        sender.keys().map(String::as_str).collect::<Vec<_>>(),
+        vec!["from_address", "headers"]
+    );
+    for invalid in [None, Some("{invalid-json"), Some("{}")] {
+        sqlx::query("UPDATE campaigns SET frozen_content=? WHERE id=?")
+            .bind(invalid)
+            .bind(created.id)
+            .execute(&db.inspection_pool())
+            .await
+            .unwrap();
+        assert!(store.get(caller(), created.id).await.is_err());
+        assert!(store.claim(1_900_000_000).await.is_err());
+        assert_eq!(sqlx::query_scalar::<_,i64>("SELECT count(*) FROM ruphish_delivery_attempt WHERE result_id IN (SELECT id FROM results WHERE campaign_id=?)").bind(created.id).fetch_one(&db.inspection_pool()).await.unwrap(),0);
+    }
+    sqlx::query("UPDATE campaigns SET frozen_content=? WHERE id=?")
+        .bind(content)
+        .bind(created.id)
+        .execute(&db.inspection_pool())
+        .await
+        .unwrap();
+    assert!(store.get(caller(), created.id).await.is_ok());
+    assert!(store.claim(1_900_000_000).await.unwrap().is_some());
     db.close().await;
 }

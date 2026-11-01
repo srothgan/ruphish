@@ -17,6 +17,8 @@
     ["campaigns", "smtp_id", "bigint", "YES", null, "NO", null, null],
     ["campaigns", "launch_date", "character varying", "YES", 40, "NO", null, "C"],
     ["campaigns", "send_by_date", "character varying", "YES", 40, "NO", null, "C"],
+    ["campaigns", "frozen_content", "text", "YES", null, "NO", null, "C"],
+    ["campaigns", "learning_public_id", "character varying", "YES", 64, "NO", null, "C"],
     ["email_requests", "id", "bigint", "NO", null, "YES", null, null],
     ["email_requests", "user_id", "bigint", "YES", null, "NO", null, null],
     ["email_requests", "template_id", "bigint", "YES", null, "NO", null, null],
@@ -335,6 +337,7 @@
   "indexes": [
     ["attachments", "attachments_0", false, false, true, "CREATE INDEX attachments_0 ON ruphish.attachments USING btree (template_id)"],
     ["attachments", "attachments_pkey", true, true, true, "CREATE UNIQUE INDEX attachments_pkey ON ruphish.attachments USING btree (id)"],
+    ["campaigns", "campaigns_learning_public_id", true, false, true, "CREATE UNIQUE INDEX campaigns_learning_public_id ON ruphish.campaigns USING btree (learning_public_id)"],
     ["campaigns", "campaigns_pkey", true, true, true, "CREATE UNIQUE INDEX campaigns_pkey ON ruphish.campaigns USING btree (id)"],
     ["campaigns", "ruphish_campaign_page", false, false, true, "CREATE INDEX ruphish_campaign_page ON ruphish.campaigns USING btree (page_id, status)"],
     ["campaigns", "ruphish_campaign_profile", false, false, true, "CREATE INDEX ruphish_campaign_profile ON ruphish.campaigns USING btree (smtp_id, status)"],

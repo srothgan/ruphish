@@ -104,7 +104,9 @@ CREATE TABLE campaigns (
   smtp_id BIGINT,
   launch_date VARCHAR(40) COLLATE "C",
   send_by_date VARCHAR(40) COLLATE "C",
-  PRIMARY KEY (id)
+  PRIMARY KEY (id),
+  frozen_content TEXT COLLATE "C",
+  learning_public_id VARCHAR(64) COLLATE "C"
 );
 
 CREATE TABLE attachments (
@@ -537,6 +539,8 @@ SELECT setval(pg_get_serial_sequence('roles','id'),(SELECT max(id) FROM roles));
 SELECT setval(pg_get_serial_sequence('permissions','id'),(SELECT max(id) FROM permissions));
 
 -- Views
+CREATE UNIQUE INDEX campaigns_learning_public_id ON campaigns(learning_public_id);
+
 CREATE VIEW ruphish_domain_policy AS
  SELECT d.id,
  CASE WHEN NOT s.verification_enabled THEN 9223372036854775807

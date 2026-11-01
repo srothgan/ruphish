@@ -66,6 +66,6 @@ Both live pages and functional previews run without the administrative applicati
 
 Before launch, inspect scripts, external requests, layout, labels, keyboard access and the expected redirect using a synthetic local campaign. User-owned [browser checks](../contributing/testing/manual-ui.md) remain required; source and protocol tests alone do not establish browser sandbox enforcement.
 
-Editing a page changes its current consumers, while the launched campaign's saved redirect remains its own. Duplicate a page when you need an independent content version. A page referenced by an unfinished campaign cannot be deleted.
+Editing a page affects future campaigns. Launched and scheduled campaigns retain their saved page content and redirect policy. Duplicate a page when you need a separate reusable version. A page referenced by an unfinished campaign cannot be deleted.
 
 For a hosted explanation after submission, create a [learning page](learning-pages.md) and select it as the campaign destination. Learning pages are separate static resources and do not contain submission collectors.

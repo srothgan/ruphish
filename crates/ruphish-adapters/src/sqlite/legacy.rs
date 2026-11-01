@@ -182,10 +182,13 @@ pub(super) async fn convert(c: &mut SqliteConnection, version: i64) -> Result<()
         } else {
             "NULL"
         };
-        statement(c,format!("INSERT INTO smtp(id,user_id,interface_type,name,host,username,password,from_address,ignore_cert_errors) SELECT s.smtp_id,c.user_id,'SMTP','Migrated SMTP '||s.smtp_id,s.host,s.username,'',s.from_address,{ignore} FROM gophish_smtp s JOIN gophish_campaigns c ON c.id=s.campaign_id;")).await?;
+        statement(c,format!("INSERT INTO smtp(id,user_id,interface_type,name,host,username,password,from_address,ignore_cert_errors,modified_date) SELECT s.smtp_id,c.user_id,'SMTP','Migrated SMTP '||s.smtp_id,s.host,s.username,'',s.from_address,{ignore},'0001-01-01T00:00:00Z' FROM gophish_smtp s JOIN gophish_campaigns c ON c.id=s.campaign_id;")).await?;
     }
     initialize_work(c).await?;
     import_domains(c).await?;
+    super::campaigns::freeze_imported(c).await.map_err(|_| {
+        UpgradeError::Unrecognized("Cannot preserve imported campaign content".into())
+    })?;
     // Preserve AUTOINCREMENT high-water marks, including deleted source identities.
     for table in &tables {
         sqlx::query("UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name=?),0)) WHERE name=?")

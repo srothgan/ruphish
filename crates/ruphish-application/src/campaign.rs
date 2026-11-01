@@ -40,6 +40,8 @@ impl Default for Overrides {
 /// Normalized campaign input, with no caller-controlled ownership or result IDs.
 #[derive(Clone, Default)]
 pub struct Create {
+    /// Reviewed learning content revision, checked at launch when selected.
+    pub learning_revision: Option<String>,
     /// Human-readable campaign name; duplicates remain allowed.
     pub name: String,
     /// Ordered group selections establish duplicate precedence.
@@ -75,6 +77,8 @@ pub struct PreparedGroup {
 
 /// Resolved, reviewable resource input and unique audience.
 pub struct Prepared {
+    /// Selected learning content in the same selection transaction.
+    pub learning: Option<Resource>,
     /// Verified domain resolved in the same resource-selection transaction.
     pub domain_id: i64,
     /// Number of overlapping entries whose recipient attributes conflict.
@@ -138,7 +142,7 @@ pub struct Event {
     /// Legacy string-encoded JSON.
     pub details: String,
 }
-/// Owner-scoped campaign with current referenced resources and immutable audience.
+/// Owner-scoped campaign with frozen authored content and immutable audience.
 pub struct Campaign {
     /// Current owned source groups, if provenance was recorded at creation.
     pub groups: Vec<Resource>,
@@ -158,7 +162,7 @@ pub struct Campaign {
     pub completed: String,
     /// Public URL template.
     pub url: String,
-    /// Current referenced resources; missing legacy resources remain explicit.
+    /// Frozen authored resources; transport settings and credentials are not historical content.
     pub resources: Vec<Resource>,
     /// Recipient snapshots and public progression.
     pub results: Vec<RecipientResult>,
@@ -197,7 +201,7 @@ pub struct Claim {
     pub campaign_id: i64,
     /// Unique generation for conditional writes.
     pub generation: i64,
-    /// Resource revisions used for composition, checked before arming submission.
+    /// Content and transport revisions used for composition; live transport is rechecked before submission.
     pub revisions: [String; 2],
     /// Fully resolved coherent message input.
     pub message: MessageInput,

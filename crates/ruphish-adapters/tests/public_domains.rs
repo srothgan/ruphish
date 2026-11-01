@@ -292,6 +292,9 @@ async fn enable_verification(db: &DatabaseFixture, webhooks: bool) {
         .unwrap();
 }
 async fn fixture() -> (tempfile::TempDir, DatabaseFixture) {
+    fixture_with_page(None).await
+}
+async fn fixture_with_page(html: Option<&str>) -> (tempfile::TempDir, DatabaseFixture) {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("state.db");
     std::fs::copy(
@@ -300,6 +303,19 @@ async fn fixture() -> (tempfile::TempDir, DatabaseFixture) {
         &path,
     )
     .unwrap();
+    if let Some(html) = html {
+        let raw = sqlx::SqlitePool::connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE pages SET html=?")
+            .bind(html)
+            .execute(&raw)
+            .await
+            .unwrap();
+        raw.close().await;
+    }
     let db = DatabaseFixture::open(&path).await.unwrap();
     enable_verification(&db, false).await;
     (dir, db)
@@ -381,7 +397,7 @@ async fn legacy_domains_start_unverified_and_stale_claims_cannot_revalidate_disa
 }
 #[tokio::test]
 async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_only() {
-    let (_dir, db) = fixture().await;
+    let (_dir, db) = fixture_with_page(Some("<style>.form { color: navy }</style><form id='form'><label for='pw'>Password</label><input id='pw' name='password' type='password' autocomplete='current-password'><button>Continue</button></form><script>fetch('https://outside.invalid')</script>")).await;
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     let store = db.domains();
     let public = db.interactions();
@@ -406,7 +422,6 @@ async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_on
     .execute(&db.inspection_pool())
     .await
     .unwrap();
-    sqlx::query("UPDATE pages SET html=?").bind("<style>.form { color: navy }</style><form id='form'><label for='pw'>Password</label><input id='pw' name='password' type='password' autocomplete='current-password'><button>Continue</button></form><script>fetch('https://outside.invalid')</script>").execute(&db.inspection_pool()).await.unwrap();
     assert!(
         public
             .interact(

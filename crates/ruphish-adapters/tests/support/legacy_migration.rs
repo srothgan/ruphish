@@ -15,6 +15,14 @@ pub fn hash() -> String {
 
 // Raw checks complement the public facade, which intentionally hides legacy private values.
 pub const INSPECTIONS: &[(&str, i64)] = &[
+    (
+        "SELECT count(*) FROM campaigns WHERE frozen_content IS NULL",
+        0,
+    ),
+    (
+        "SELECT count(*) FROM campaigns WHERE frozen_content LIKE '%smtp-secret%' OR frozen_content LIKE '%imap-secret%'",
+        0,
+    ),
     ("SELECT count(*) FROM users", 4),
     ("SELECT count(*) FROM group_targets", 4),
     (

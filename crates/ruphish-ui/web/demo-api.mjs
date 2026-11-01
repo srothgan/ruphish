@@ -399,6 +399,10 @@ function review(data, input) {
   const template = data.templates.find((r) => r.id === selection.template.id);
   const smtp = data.smtp.find((r) => r.id === selection.smtp.id);
   return {
+    learning_revision:
+      input.policy?.learning_page_id == null
+        ? null
+        : select('learning-pages', { id: input.policy.learning_page_id }).revision,
     warnings: [],
     total,
     duplicate_count: targets.length - total,

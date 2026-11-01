@@ -133,6 +133,10 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
                     .join("../../tests/fixtures/campaigns/queued.sqlite3"),
                 &path,
             ).unwrap();
+            // Conversion captures the authored content before request-level rendering begins.
+            let mut source = <sqlx::SqliteConnection as sqlx::Connection>::connect_with(&sqlx::sqlite::SqliteConnectOptions::new().filename(&path)).await.unwrap();
+            sqlx::query("UPDATE pages SET html=?").bind(if scenario == "invalid_page" { "{{if}}" } else { "<h1>Hello {{.FirstName}}</h1><form><input name=\"password\" type=\"password\"></form>" }).execute(&mut source).await.unwrap();
+            sqlx::Connection::close(source).await.unwrap();
             let db = open(Config::Sqlite {path,}, Policy::default()).await.unwrap();
             let inspection_pool = match &db.backend { super::Backend::Sqlite(db) => db.pool(), _ => unreachable!() };
             let now = OffsetDateTime::now_utc().unix_timestamp();
@@ -142,10 +146,9 @@ fn rendering_releases_database_preserves_snapshot_and_fences_late_events() {
             domains.finish(&check, Observation {
                 control: true, dns: true, routing: true, tls: true, code: "verified",
             }, now).await.unwrap();
-            sqlx::raw_sql("UPDATE results SET first_name='Alice<script>injectedCanary()</script>'; UPDATE pages SET html='<h1>Hello {{.FirstName}}</h1><form><input name=\"password\" type=\"password\"></form>'; UPDATE ruphish_campaign_policy SET redirect_url='https://training.example.test/finished';")
+            sqlx::raw_sql("UPDATE results SET first_name='Alice<script>injectedCanary()</script>'; UPDATE ruphish_campaign_policy SET redirect_url='https://training.example.test/finished';")
                 .execute(&inspection_pool).await.unwrap();
             match scenario {
-                "invalid_page" => { sqlx::query("UPDATE pages SET html='{{if}}'").execute(&inspection_pool).await.unwrap(); }
                 "invalid_url" => { sqlx::query("UPDATE campaigns SET url='https://training.example.test/{{if}}'").execute(&inspection_pool).await.unwrap(); }
                 "invalid_redirect" => { sqlx::query("UPDATE ruphish_campaign_policy SET redirect_url='{{if}}'").execute(&inspection_pool).await.unwrap(); }
                 _ => {}

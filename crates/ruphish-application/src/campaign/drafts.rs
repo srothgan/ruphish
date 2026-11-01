@@ -76,6 +76,16 @@ pub fn validate_launch(
             "Review the current resources before launching".into(),
         ));
     }
+    if input.policy.learning_page_id.is_some()
+        && input
+            .learning_revision
+            .as_ref()
+            .is_none_or(String::is_empty)
+    {
+        return Err(Error::Invalid(
+            "Review the learning page before launching".into(),
+        ));
+    }
     let c = &draft.configuration;
     let resolve = |value: &Option<ruphish_domain::campaign_draft::LocalTime>| {
         value

@@ -380,8 +380,11 @@ async fn postgres_event_edits_preserve_history_and_reopen() {
     postgres_cleanup(&mut admin, &config).await;
 }
 
+#[path = "support/campaign_freezing.rs"]
+mod campaign_freezing;
 #[path = "support/campaign_origins.rs"]
 mod campaign_origins;
+
 #[path = "support/open_tracking.rs"]
 mod open_tracking;
 
@@ -1223,6 +1226,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     };
     campaign_origins::exercise(db, actor, input.clone(), now).await;
     open_tracking::exercise(db, actor, input.clone(), now).await;
+    campaign_freezing::exercise(db, actor, input.clone(), now).await;
     client_observations::exercise(db, actor, input.clone(), now).await;
     learning_pages::exercise(db, actor, normal.identity, input.clone(), now).await;
     campaign_drafts::exercise(db, actor, normal.identity, input.clone(), now, fault).await;

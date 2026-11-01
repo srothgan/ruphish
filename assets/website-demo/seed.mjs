@@ -157,8 +157,36 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
       }
     }
     for (const { header: c, created, end, results } of data.campaigns) {
+      const template = data.templates.find((r) => r.id === c.template.id);
+      const page = data.pages.find((r) => r.id === c.page.id);
+      const sender = data.smtp.find((r) => r.id === c.smtp.id);
+      const frozen = (resource, content) => ({
+        id: resource.id,
+        name: resource.name,
+        revision: resource.modified_date,
+        content,
+      });
+      const snapshot = {
+        template: frozen(template, {
+          subject: template.subject,
+          text: template.text,
+          html: template.html,
+          envelope_sender: template.envelope_sender ?? '',
+          attachments: (template.attachments ?? []).map((a) => ({
+            name: a.name,
+            mime_type: a.type,
+            content: a.content,
+          })),
+        }),
+        page: frozen(page, { html: page.html, redirect_url: page.redirect_url }),
+        sender: frozen(sender, {
+          from_address: sender.from_address,
+          headers: sender.headers ?? [],
+        }),
+        learning_html: null,
+      };
       run(
-        'INSERT INTO campaigns(id,user_id,name,created_date,completed_date,template_id,page_id,status,url,smtp_id,launch_date,send_by_date) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+        'INSERT INTO campaigns(id,user_id,name,created_date,completed_date,template_id,page_id,status,url,smtp_id,launch_date,send_by_date,frozen_content) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
         c.id,
         owner,
         c.name,
@@ -171,6 +199,7 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
         c.smtp.id,
         c.launch_date,
         c.send_by_date,
+        JSON.stringify(snapshot),
       );
       run(
         'INSERT INTO ruphish_campaign_policy(campaign_id,redirect_url) VALUES(?,?)',

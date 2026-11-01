@@ -73,6 +73,9 @@ pub struct Preview {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 /// Complete server-confirmed launch review.
 pub struct Review {
+    /// Learning-page revision included in the reviewed launch.
+    #[serde(default)]
+    pub learning_revision: Option<String>,
     /// Advisory findings on the processed landing page.
     #[serde(default)]
     pub warnings: Vec<crate::resource_details::PageWarning>,

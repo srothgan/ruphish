@@ -272,6 +272,17 @@ async fn legacy_campaign_list_rejects_large_graphs_but_directory_remains_availab
         .execute(&pool)
         .await
         .unwrap();
+    assert!(
+        campaigns.list(admin()).await.is_ok(),
+        "editing the live resource does not expand historical campaign payloads"
+    );
+    sqlx::query(
+        "UPDATE campaigns SET frozen_content=json_set(frozen_content,'$.template.content.html',?)",
+    )
+    .bind("x".repeat(8 * 1024 * 1024))
+    .execute(&pool)
+    .await
+    .unwrap();
     assert!(matches!(
         campaigns.list(admin()).await,
         Err(Error::Invalid(_))

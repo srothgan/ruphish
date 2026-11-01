@@ -82,9 +82,22 @@ async fn prepare_authorized(
     let page = selection(c, caller.id, Kind::Page, &input.page).await?;
     let profile = selection(c, caller.id, Kind::Profile, &input.profile).await?;
     let policy = ruphish_application::campaign::preparation::policy(input, &page)?;
-    if let Some(id) = policy.learning_page_id {
-        super::resources::load(c, caller.id, Kind::LearningPage, id).await?;
-    }
+    let learning = if let Some(id) = policy.learning_page_id {
+        Some(
+            selection(
+                c,
+                caller.id,
+                Kind::LearningPage,
+                &Selection {
+                    id,
+                    revision: input.learning_revision.clone(),
+                },
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
     // Validate syntax using the same renderer; recipient-dependent failures are still
     // checked before every individual submission.
     let source = input.url.clone();
@@ -95,6 +108,7 @@ async fn prepare_authorized(
     let (page, policy) =
         crate::campaign_preparation::validate_content(work, page, policy, url).await?;
     Ok(Prepared {
+        learning,
         domain_id,
         conflicts,
         conflict_count,
@@ -106,6 +120,18 @@ async fn prepare_authorized(
         policy,
         launch,
     })
+}
+pub(super) async fn snapshot(
+    c: &mut MySqlConnection,
+    id: i64,
+) -> Result<crate::campaign_snapshot::Snapshot, Error> {
+    let value: Option<String> =
+        sqlx::query_scalar("SELECT frozen_content FROM campaigns WHERE id=?")
+            .bind(id)
+            .fetch_one(&mut *c)
+            .await
+            .map_err(storage)?;
+    crate::campaign_snapshot::Snapshot::decode(value.as_deref().ok_or(Error::Internal)?)
 }
 async fn missing_resource(
     c: &mut MySqlConnection,
@@ -146,24 +172,8 @@ async fn load_aggregate(
         .await
         .map_err(storage)?
         .ok_or(Error::NotFound("Campaign"))?;
-    let mut resources = Vec::new();
-    for (kind, column) in [
-        (Kind::Template, "template_id"),
-        (Kind::Page, "page_id"),
-        (Kind::Profile, "smtp_id"),
-    ] {
-        resources.push(
-            missing_resource(
-                c,
-                owner,
-                kind,
-                row.try_get::<Option<i64>, _>(column)
-                    .map_err(storage)?
-                    .unwrap_or(0),
-            )
-            .await?,
-        );
-    }
+    let frozen = snapshot(c, id).await?;
+    let resources = vec![frozen.template(), frozen.page(), frozen.sender()];
     let mut results = Vec::new();
     for r in sqlx::query("SELECT * FROM results WHERE campaign_id=? ORDER BY id")
         .bind(id)
@@ -261,7 +271,7 @@ async fn load_aggregate(
     })
 }
 async fn header(c: &mut MySqlConnection, owner: i64, id: i64) -> Result<CampaignHeader, Error> {
-    let row=sqlx::query("SELECT c.id,c.name,c.status,c.launch_date,c.send_by_date,c.url,c.template_id,c.page_id,c.smtp_id,t.name AS template_name,t.subject,t.envelope_sender,s.name AS profile_name,s.from_address,l.name AS page_name,(SELECT count(*) FROM results r WHERE r.campaign_id=c.id) AS total,p.campaign_id AS policy_id,p.redirect_url,p.learning_page_id,p.track_opens FROM campaigns c LEFT JOIN ruphish_campaign_policy p ON p.campaign_id=c.id LEFT JOIN templates t ON t.id=c.template_id AND t.user_id=c.user_id LEFT JOIN pages l ON l.id=c.page_id AND l.user_id=c.user_id LEFT JOIN smtp s ON s.id=c.smtp_id AND s.user_id=c.user_id WHERE c.id=? AND c.user_id=?").bind(id).bind(owner).fetch_optional(&mut *c).await.map_err(storage)?.ok_or(Error::NotFound("Campaign"))?;
+    let row=sqlx::query("SELECT c.id,c.name,c.status,c.launch_date,c.send_by_date,c.url,c.template_id,c.page_id,c.smtp_id,json_unquote(json_extract(c.frozen_content,'$.template.name')) AS template_name,json_unquote(json_extract(c.frozen_content,'$.template.content.subject')) AS subject,json_unquote(json_extract(c.frozen_content,'$.template.content.envelope_sender')) AS envelope_sender,json_unquote(json_extract(c.frozen_content,'$.sender.name')) AS profile_name,json_unquote(json_extract(c.frozen_content,'$.sender.content.from_address')) AS from_address,json_unquote(json_extract(c.frozen_content,'$.page.name')) AS page_name,(SELECT count(*) FROM results r WHERE r.campaign_id=c.id) AS total,p.campaign_id AS policy_id,p.redirect_url,p.learning_page_id,p.track_opens FROM campaigns c LEFT JOIN ruphish_campaign_policy p ON p.campaign_id=c.id WHERE c.id=? AND c.user_id=?").bind(id).bind(owner).fetch_optional(&mut *c).await.map_err(storage)?.ok_or(Error::NotFound("Campaign"))?;
     let policy_id: Option<i64> = row.try_get("policy_id").map_err(storage)?;
     let domain: Option<(i64,bool,i64)> = sqlx::query_as("SELECT d.id,d.enabled,(SELECT eligible_until FROM ruphish_domain_policy WHERE id=d.id) FROM ruphish_campaign_domains cd JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=? WHERE cd.campaign_id=?").bind(owner).bind(id).fetch_optional(&mut *c).await.map_err(storage)?;
     let domain_id = domain.map(|d| d.0);
@@ -836,6 +846,20 @@ impl Campaigns {
             "Queued"
         };
         let id=sqlx::query("INSERT INTO campaigns(user_id,name,created_date,launch_date,send_by_date,completed_date,template_id,page_id,status,smtp_id,url) VALUES(?,?,?,?,?,?,?,?,?,?,?)").bind(caller.id).bind(&input.name).bind(&created).bind(&launch).bind(end).bind(ZERO).bind(p.template.id).bind(p.page.id).bind(status).bind(p.profile.id).bind(&input.url).execute(&mut *tx).await.map_err(storage)?.insert_id().map_err(storage)?;
+        let frozen = crate::campaign_snapshot::Snapshot::capture(
+            &p.template,
+            &p.page,
+            &p.profile,
+            p.learning.as_ref(),
+        )?;
+        let learning_public_id = p.learning.as_ref().map(|_| random()).transpose()?;
+        sqlx::query("UPDATE campaigns SET frozen_content=?,learning_public_id=? WHERE id=?")
+            .bind(frozen.encode()?)
+            .bind(learning_public_id)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
         sqlx::query("INSERT INTO ruphish_campaign_domains VALUES(?,?)")
             .bind(id)
             .bind(p.domain_id)
@@ -915,5 +939,47 @@ pub(super) async fn complete_transaction(
         .execute(&mut *c)
         .await
         .map_err(storage)?;
+    Ok(())
+}
+
+/// Preserve the content available at conversion; upstream did not retain launch-time copies.
+pub(super) async fn freeze_imported(c: &mut MySqlConnection) -> Result<(), Error> {
+    let rows = sqlx::query("SELECT id,user_id,template_id,page_id,smtp_id FROM campaigns WHERE frozen_content IS NULL ORDER BY id").fetch_all(&mut *c).await.map_err(storage)?;
+    for row in rows {
+        let owner = row
+            .try_get::<Option<i64>, _>("user_id")
+            .map_err(storage)?
+            .unwrap_or(0);
+        let mut resources = Vec::new();
+        for (kind, field) in [
+            (Kind::Template, "template_id"),
+            (Kind::Page, "page_id"),
+            (Kind::Profile, "smtp_id"),
+        ] {
+            resources.push(
+                missing_resource(
+                    c,
+                    owner,
+                    kind,
+                    row.try_get::<Option<i64>, _>(field)
+                        .map_err(storage)?
+                        .unwrap_or(0),
+                )
+                .await?,
+            );
+        }
+        let frozen = crate::campaign_snapshot::Snapshot::capture(
+            &resources[0],
+            &resources[1],
+            &resources[2],
+            None,
+        )?;
+        sqlx::query("UPDATE campaigns SET frozen_content=? WHERE id=? AND frozen_content IS NULL")
+            .bind(frozen.encode()?)
+            .bind(row.try_get::<i64, _>("id").map_err(storage)?)
+            .execute(&mut *c)
+            .await
+            .map_err(storage)?;
+    }
     Ok(())
 }

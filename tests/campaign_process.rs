@@ -358,6 +358,15 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
                 Value::Object(o) => {
                     o.remove("capture_credentials");
                     o.remove("capture_passwords");
+                    // Campaign SMTP projections now contain frozen identity/headers only.
+                    // Direct SMTP resource responses retain their transport fields.
+                    if let Some(smtp) = o.get_mut("smtp").and_then(Value::as_object_mut) {
+                        for field in ["host", "password", "interface_type"] {
+                            smtp.insert(field.into(), json!(""));
+                        }
+                        smtp.remove("username");
+                        smtp.insert("ignore_cert_errors".into(), json!(false));
+                    }
                     // These recorded lifecycle events have no client observations.
                     if let Some(timeline) = o.get_mut("timeline") {
                         for event in timeline.as_array_mut().unwrap() {
@@ -1423,12 +1432,12 @@ fn campaign_context_and_recipient_history_are_complete_bounded_and_owner_scoped(
     assert_eq!(metadata["template"]["name"], "Mail");
     assert_eq!(metadata["page"]["name"], "Page");
     assert_eq!(metadata["smtp"]["name"], "Local");
-    assert_eq!(metadata["subject"], "Updated subject {{.FirstName}}");
+    assert_eq!(metadata["subject"], "Hello {{.FirstName}}");
     assert_eq!(
         metadata["profile_sender"],
         "Training <training@example.test>"
     );
-    assert_eq!(metadata["template_sender"], "Notice <notice@example.test>");
+    assert_eq!(metadata["template_sender"], "");
     assert_eq!(metadata["launch_date"], "2030-05-01T09:25:00Z");
     assert_eq!(metadata["send_by_date"], "2030-05-01T10:25:00Z");
     assert_eq!(metadata["url"], origin(&base, "training.example.test"));
@@ -1561,11 +1570,15 @@ fn campaign_context_and_recipient_history_are_complete_bounded_and_owner_scoped(
         .unwrap();
     assert_eq!(foreign.status(), 404);
     let detached = read(&base, &endpoint);
-    for resource in ["template", "page", "smtp"] {
-        assert!(detached["campaign"][resource]["name"].is_null());
-    }
-    assert!(detached["campaign"]["subject"].is_null());
-    assert!(detached["campaign"]["profile_sender"].is_null());
+    // Source ownership changes cannot rewrite the original campaign's saved context.
+    assert_eq!(detached["campaign"]["template"]["name"], "Mail");
+    assert_eq!(detached["campaign"]["page"]["name"], "Page");
+    assert_eq!(detached["campaign"]["smtp"]["name"], "Local");
+    assert_eq!(detached["campaign"]["subject"], "Hello {{.FirstName}}");
+    assert_eq!(
+        detached["campaign"]["profile_sender"],
+        "Training <training@example.test>"
+    );
     sql(
         directory.path(),
         &format!("UPDATE campaigns SET template_id=NULL,page_id=NULL,smtp_id=NULL WHERE id={id}"),

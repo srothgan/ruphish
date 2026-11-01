@@ -364,6 +364,7 @@ fn learning_pages_redirect_without_tracking_survive_restart_and_reject_adversari
         "{}",
         String::from_utf8_lossy(&checked.stderr)
     );
+    let mut frozen_url = String::new();
     for _ in 0..2 {
         let response = browser
             .post(&submit)
@@ -372,7 +373,18 @@ fn learning_pages_redirect_without_tracking_survive_restart_and_reject_adversari
             .unwrap();
         assert_eq!(response.status(), 200);
         let body: Value = response.json().unwrap();
-        assert_eq!(body["redirect"], learning_url);
+        frozen_url = body["redirect"].as_str().unwrap().to_owned();
+        assert_ne!(frozen_url, learning_url);
+        assert!(frozen_url.starts_with(&format!("{origin}/learn/")));
+        assert!(
+            browser
+                .get(&frozen_url)
+                .send()
+                .unwrap()
+                .text()
+                .unwrap()
+                .contains("Learn to inspect the sender")
+        );
     }
     let before = get(&admin, &campaign_path);
     for _ in 0..2 {
@@ -411,6 +423,28 @@ fn learning_pages_redirect_without_tracking_survive_restart_and_reject_adversari
         .json()
         .unwrap();
     assert_eq!(updated["public_id"], public_id);
+    assert!(
+        browser
+            .get(&frozen_url)
+            .send()
+            .unwrap()
+            .text()
+            .unwrap()
+            .contains("Learn to inspect the sender")
+    );
+    let mut stale = draft.clone();
+    stale["learning_revision"] = json!(revision);
+    assert_eq!(
+        client()
+            .post(format!("{admin}/api/campaigns/"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&stale)
+            .send()
+            .unwrap()
+            .status(),
+        412
+    );
+
     assert!(
         browser
             .get(&learning_url)
@@ -466,6 +500,15 @@ fn learning_pages_redirect_without_tracking_survive_restart_and_reject_adversari
     let mut restarted =
         Process::with_options(directory.path(), "all", None, None, &["--disable-mailer"]);
     let admin = format!("http://{}", restarted.ready()["admin"].as_str().unwrap());
+    assert!(
+        browser
+            .get(&frozen_url)
+            .send()
+            .unwrap()
+            .text()
+            .unwrap()
+            .contains("Learn to inspect the sender")
+    );
     assert_eq!(
         get(&admin, &format!("/api/learning-pages/{page_id}"))["public_id"],
         public_id

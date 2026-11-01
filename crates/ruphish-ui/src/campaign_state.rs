@@ -170,6 +170,7 @@ impl Draft {
             &review.selection
         ));
         value["policy"] = json!(review.policy);
+        value["learning_revision"] = json!(review.learning_revision);
         self.launch = Some((key, value));
         self.launch.clone()
     }
@@ -241,11 +242,12 @@ mod tests {
         assert!(draft.reviewed(
             request,
             Ok(review(
-                json!({"policy":{"track_opens":true,"learning_page_id":42}})
+                json!({"policy":{"track_opens":true,"learning_page_id":42},"learning_revision":"reviewed-learning-v1"})
             ))
         ));
         let first = draft.launch("learning-launch".into()).unwrap();
         assert_eq!(first.1["policy"]["learning_page_id"], 42);
+        assert_eq!(first.1["learning_revision"], "reviewed-learning-v1");
         draft.edit(|value| value["policy"]["learning_page_id"] = json!(99));
         assert_eq!(draft.launch("different-key".into()).unwrap(), first);
     }

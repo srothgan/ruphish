@@ -20,7 +20,9 @@ CREATE TABLE "campaigns" (
   "url" varchar(255),
   "smtp_id" bigint,
   "launch_date" DATETIME,
-  send_by_date DATETIME
+  send_by_date DATETIME,
+  frozen_content TEXT,
+  learning_public_id VARCHAR(64)
 );
 
 CREATE TABLE "email_requests" (
@@ -517,6 +519,8 @@ CREATE INDEX ruphish_templates_owner ON templates(user_id);
 CREATE INDEX ruphish_webhook_attempts_unfinished ON ruphish_webhook_attempts(job_id) WHERE finished IS NULL;
 
 CREATE INDEX ruphish_webhook_due ON ruphish_webhook_jobs(state,due,lease);
+
+CREATE UNIQUE INDEX campaigns_learning_public_id ON campaigns(learning_public_id);
 
 CREATE VIEW event_history AS SELECT id,campaign_id,email,time,CASE kind WHEN 'campaign_created' THEN 'Campaign Created' WHEN 'email_sent' THEN 'Email Sent' WHEN 'email_error' THEN 'Error Sending Email' WHEN 'email_opened' THEN 'Email Opened' WHEN 'link_clicked' THEN 'Clicked Link' WHEN 'form_submitted' THEN 'Submitted Data' WHEN 'email_reported' THEN 'Email Reported' WHEN 'delivery_reconciled' THEN 'Delivery reconciled' ELSE kind END AS message,metadata AS details,recipient_id,source,edited,revision,client FROM events;
 

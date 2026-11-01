@@ -48,6 +48,10 @@ Run your actual templates through preview and a controlled inbox. Check HTML/pla
 
 Inspect imported scheduled/active campaign and delivery states before allowing any worker to send. Ambiguous legacy work must be reconciled explicitly; do not infer that every unsent-looking row is safe to resend. Check [delivery outcomes](../user-guide/campaigns/delivery.md) and [migration verification](verification-and-rollback.md).
 
+### Campaign content
+
+Conversion freezes the template, attachments, landing page, and sender identity/headers available in the source database. Gophish did not preserve launch-time versions, so imported content is a conversion-time record, not proof of the original message. Missing resources remain explicitly missing. SMTP connection settings and credentials stay live for operational recovery.
+
 ### Pending messages
 
 Recognized legacy queue rows map by recipient, campaign, and owner. Completed campaigns become cancelled work. Rows marked as processing become `unknown`, with diagnostic `legacy_delivery_outcome_unknown`, because migration cannot establish whether SMTP accepted them. Otherwise, a row can become ready, or blocked with `campaign_page_missing` when its required page/policy is unavailable. Due times and supported retry counts carry across.
