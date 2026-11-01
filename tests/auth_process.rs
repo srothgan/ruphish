@@ -901,14 +901,16 @@ fn browser_resource_create_read_edit_and_reload_routes_preserve_saved_data() {
         }
     }
     let send = |method, path: &str, value: &Value| {
-        admin
+        let mut request = admin
             .request(method, format!("{base}{path}"))
             .header("x-ruphish-client", "browser")
             .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
             .header("origin", &base)
-            .json(value)
-            .send()
-            .unwrap()
+            .json(value);
+        if let Some(revision) = value["revision"].as_i64() {
+            request = request.header("if-match", format!("\"{revision}\""));
+        }
+        request.send().unwrap()
     };
     let group =
         json!({"name":"Équipe","targets":[{"email":"alice@example.test","first_name":"Alice"}]});

@@ -306,14 +306,13 @@ pub(super) fn exercise(mut database_config: Value, mut fault: impl FnMut(&Path, 
     }
     uncertain_delivery(&directory, &mut process, &mut base, &mut fault);
     assert_eq!(
-        request(
-            &client,
-            &base,
-            reqwest::Method::DELETE,
-            &format!("/api/groups/{group_id}"),
-            None
-        )
-        .status(),
+        client
+            .delete(format!("{base}/api/groups/{group_id}"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .header("if-match", format!("\"{}\"", group["revision"]))
+            .send()
+            .unwrap()
+            .status(),
         200
     );
     assert_eq!(

@@ -30,13 +30,15 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
     let session = setup(&admin, &base);
     let csrf = session["csrf_token"].as_str().unwrap();
     let send = |method: Method, path: &str, value: &Value| {
-        admin
+        let mut request = admin
             .request(method, format!("{base}{path}"))
             .header("x-csrf-token", csrf)
             .header("origin", &base)
-            .json(value)
-            .send()
-            .unwrap()
+            .json(value);
+        if let Some(revision) = value["revision"].as_i64() {
+            request = request.header("if-match", format!("\"{revision}\""));
+        }
+        request.send().unwrap()
     };
     let get = |path: &str| {
         let response = admin.get(format!("{base}{path}")).send().unwrap();
@@ -394,9 +396,16 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
             );
         }
         second["html"] = json!("<html><body><p>Independent edit</p></body></html>");
+        let updated = send(Method::PUT, &format!("/api/{family}/{second_id}"), &second);
+        assert_eq!(updated.status(), 200);
+        let updated: Value = updated.json().unwrap();
         assert_eq!(
-            send(Method::PUT, &format!("/api/{family}/{second_id}"), &second).status(),
-            200
+            updated["revision"],
+            second["revision"].as_i64().unwrap() + 1
+        );
+        assert_eq!(
+            get(&format!("/api/{family}/{second_id}"))["html"],
+            second["html"]
         );
         assert_eq!(
             get(&format!("/api/{family}/{first_id}"))["html"],
@@ -419,7 +428,7 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
             send(
                 Method::DELETE,
                 &format!("/api/{family}/{second_id}"),
-                &json!({})
+                &updated
             )
             .status(),
             200
@@ -429,7 +438,7 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
             entry["resource"]["html"]
         );
     }
-    // Ordinary users can own resources, but cannot browse the company catalog.
+    // Ordinary users can manage shared copies, but cannot browse the company catalog.
     let response = send(
         Method::POST,
         "/api/users/",
@@ -483,15 +492,40 @@ fn catalog_is_admin_only_read_only_and_copies_are_normal_independent_resources()
     );
     for family in ["templates", "pages", "learning-pages"] {
         let (_, id, _) = saved.iter().find(|(f, _, _)| *f == family).unwrap();
-        for method in [Method::GET, Method::PUT, Method::DELETE] {
-            assert_eq!(
-                anonymous.request(method, format!("{base}/api/{family}/{id}"))
-                    .bearer_auth(user_key)
-                    .json(&json!({"id":id,"name":"Other owner's resource","html":"<p>Unauthorized replacement</p>","subject":"Unauthorized"}))
-                    .send().unwrap().status(),
-                404
-            );
-        }
+        let path = format!("/api/{family}/{id}");
+        let shared = anonymous
+            .get(format!("{base}{path}"))
+            .bearer_auth(user_key)
+            .send()
+            .unwrap();
+        assert_eq!(shared.status(), 200);
+        let mut shared: Value = shared.json().unwrap();
+        assert_eq!(shared, get(&path));
+        let reviewed_revision = shared["revision"].as_i64().unwrap();
+        shared["name"] = json!(format!("Shared {family} copy"));
+        let updated = anonymous
+            .put(format!("{base}{path}"))
+            .bearer_auth(user_key)
+            .header("if-match", format!("\"{reviewed_revision}\""))
+            .json(&shared)
+            .send()
+            .unwrap();
+        assert_eq!(updated.status(), 200);
+        let updated: Value = updated.json().unwrap();
+        assert_eq!(updated["revision"], reviewed_revision + 1);
+        assert_eq!(updated["edited_by"]["id"], user["id"]);
+        let stale_delete = anonymous
+            .delete(format!("{base}{path}"))
+            .bearer_auth(user_key)
+            .header("if-match", format!("\"{reviewed_revision}\""))
+            .send()
+            .unwrap();
+        assert_eq!(stale_delete.status(), 412);
+        assert_eq!(
+            stale_delete.json::<Value>().unwrap()["code"],
+            "RESOURCE_CHANGED"
+        );
+        assert_eq!(get(&path)["name"], shared["name"]);
     }
     assert_eq!(
         post(
