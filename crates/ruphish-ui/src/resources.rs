@@ -424,7 +424,7 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
                                                             id,
                                                             name: delete_name.clone(),
                                                             path: format!("/api/{}/{id}", family.route()),
-                                                            revision: None,
+                                                            revision: Some(format!("\"{}\"", v.revision)),
                                                             description: leptos_i18n::t_string!(
                                                                 i18n, ui.this_permanently_removes_the_saved_resource_resources_used_by_unfinished_campaig
                                                             ),
@@ -461,6 +461,7 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
 
 #[derive(Clone, Copy)]
 struct Editor {
+    write_error: RwSignal<Option<ruphish_ui::api_error::ApiError>>,
     validation: FormValidation,
     draft: RwSignal<ResourceDraft>,
     message: Message,
@@ -549,6 +550,7 @@ fn edit(
         draft.with(|d| ruphish_ui::form_validation::resource(d.value(), family.route()))
     });
     let editor = Editor {
+        write_error: RwSignal::new(None),
         validation,
         draft,
         import_review,
@@ -592,6 +594,7 @@ fn edit(
                     }) {
                     Ok((mut value, revision)) => {
                         load_error.set(None);
+                        editor.write_error.set(None);
                         if duplicate.is_some() {
                             value["id"] = json!(0);
                             if family == Family::Profiles {
@@ -708,6 +711,28 @@ fn edit(
                             </p>
                         }
                     })}
+                <Show when=move || {
+                    editor.draft.with(|d| d.value()["id"].as_i64().is_some_and(|id| id > 0))
+                }>
+                    <WriteRecovery
+                        error=editor.write_error
+                        saved_href=Signal::derive(move || {
+                            format!("/{}/{}", family.route(), requested.get_value())
+                        })
+                        busy=Signal::derive(move || editor.busy.get() || loading.get())
+                        on_reload=Callback::new(move |_| reload.update(|n| *n += 1))
+                    />
+                    <AttributionInfo value=Signal::derive(move || {
+                        editor
+                            .draft
+                            .with(|d| {
+                                <ruphish_contracts::attribution::Attribution as serde::Deserialize>::deserialize(
+                                        d.confirmed(),
+                                    )
+                                    .unwrap_or_default()
+                            })
+                    }) />
+                </Show>
                 {editor.import_review.map(|review| import_review_panel(review, editor.message))}
                 {editor.message.view()}
                 <ValidationSummary form=validation />
@@ -839,6 +864,7 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
             } else {
                 DemoNotice::Saved
             });
+            editor.write_error.set(None);
             editor.diagnostics.set(warnings_for(&value));
             queries.saved(family, &resource);
             editor
@@ -862,6 +888,7 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
             if editor.draft.with_untracked(|d| d.value() == &submitted) {
                 editor.validation.server(ticket, &e);
             }
+            editor.write_error.set(Some(e.clone()));
             editor.message.error(e.message);
             false
         }

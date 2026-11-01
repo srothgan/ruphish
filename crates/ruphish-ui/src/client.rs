@@ -161,9 +161,23 @@ impl Api {
         value: Option<&Value>,
         revision: Option<&str>,
     ) -> Result<(), String> {
-        let (value, _) = self.resource(method, path, token, value, revision).await?;
+        self.command_response(method, path, token, value, revision)
+            .await
+            .map_err(|error| error.message)
+    }
+    pub(crate) async fn command_response(
+        self,
+        method: &str,
+        path: &str,
+        token: &str,
+        value: Option<&Value>,
+        revision: Option<&str>,
+    ) -> Result<(), ApiError> {
+        let (value, _) = self
+            .resource_response(method, path, token, value, revision)
+            .await?;
         if value["success"] != true {
-            return Err(self.invalid_read());
+            return Err(self.invalid_read_err());
         }
         #[cfg(feature = "demo")]
         self.notifications.show(if method == "DELETE" {

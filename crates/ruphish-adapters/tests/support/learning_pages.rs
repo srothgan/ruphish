@@ -22,6 +22,8 @@ pub(super) async fn exercise(
         .save(actor, authored.clone(), None, None)
         .await
         .unwrap();
+    let mut authored = authored;
+    authored.name = "Colleague explanation".into();
     let other_page = resources.save(other, authored, None, None).await.unwrap();
     let Content::LearningPage(content) = &page.content else {
         panic!("wrong resource kind")
@@ -33,18 +35,19 @@ pub(super) async fn exercise(
         resources
             .get(other, Kind::LearningPage, page.id)
             .await
-            .is_err()
+            .unwrap()
+            == page
     );
-    assert!(
+    assert!(matches!(
         resources
-            .delete(other, Kind::LearningPage, page.id, None)
-            .await
-            .is_err()
-    );
+            .delete(other, Kind::LearningPage, page.id, Some("999999".into()))
+            .await,
+        Err(Error::Changed)
+    ));
     input.name = "Learning destination".into();
     input.idempotency = None;
     input.policy.learning_page_id = Some(other_page.id);
-    assert!(campaigns.prepare(actor, &input, now).await.is_err());
+    assert!(campaigns.prepare(actor, &input, now).await.is_ok());
     input.policy.learning_page_id = Some(page.id);
     input.policy.redirect_url = Some("https://outside.example.test".into());
     assert!(campaigns.prepare(actor, &input, now).await.is_err());
@@ -86,7 +89,7 @@ pub(super) async fn exercise(
             .await,
         Err(Error::Invalid(_))
     ));
-    reviewed_input.learning_revision = Some(page.modified_date.clone());
+    reviewed_input.learning_revision = Some(page.revision.to_string());
     let launched = campaigns
         .launch_draft(actor, &draft.id, draft.revision, reviewed_input, now)
         .await
@@ -104,7 +107,12 @@ pub(super) async fn exercise(
     );
     assert!(matches!(
         resources
-            .delete(actor, Kind::LearningPage, page.id, None)
+            .delete(
+                actor,
+                Kind::LearningPage,
+                page.id,
+                Some(page.revision.to_string())
+            )
             .await,
         Err(Error::InUse)
     ));
@@ -190,7 +198,7 @@ pub(super) async fn exercise(
             actor,
             changed.clone().into(),
             Some(page.id),
-            Some(page.modified_date.clone()),
+            Some(page.revision.to_string()),
         )
         .await
         .unwrap();
@@ -200,7 +208,7 @@ pub(super) async fn exercise(
                 actor,
                 changed.clone().into(),
                 Some(page.id),
-                Some(page.modified_date.clone())
+                Some(page.revision.to_string())
             )
             .await,
         Err(Error::Changed)
@@ -229,7 +237,7 @@ pub(super) async fn exercise(
             .is_err()
     );
     let mut stale = input.clone();
-    stale.learning_revision = Some(page.modified_date.clone());
+    stale.learning_revision = Some(page.revision.to_string());
     assert!(matches!(
         campaigns.create(actor, stale, now).await,
         Err(Error::Changed)
@@ -237,7 +245,12 @@ pub(super) async fn exercise(
 
     campaigns.complete(actor, campaign.id, now).await.unwrap();
     resources
-        .delete(actor, Kind::LearningPage, page.id, None)
+        .delete(
+            actor,
+            Kind::LearningPage,
+            page.id,
+            Some(changed.revision.to_string()),
+        )
         .await
         .unwrap();
     assert!(
@@ -279,21 +292,36 @@ pub(super) async fn exercise(
     input.policy.learning_page_id = Some(racing.id);
     let (launch, deletion) = tokio::join!(
         campaigns.create(actor, input, now),
-        resources.delete(actor, Kind::LearningPage, racing.id, None)
+        resources.delete(
+            actor,
+            Kind::LearningPage,
+            racing.id,
+            Some(racing.revision.to_string())
+        )
     );
     match launch {
         Ok(launched) => {
             assert!(matches!(deletion, Err(Error::InUse)));
             campaigns.delete(actor, launched.id).await.unwrap();
             resources
-                .delete(actor, Kind::LearningPage, racing.id, None)
+                .delete(
+                    actor,
+                    Kind::LearningPage,
+                    racing.id,
+                    Some(racing.revision.to_string()),
+                )
                 .await
                 .unwrap();
         }
         Err(_) => assert!(deletion.is_ok()),
     }
     resources
-        .delete(other, Kind::LearningPage, other_page.id, None)
+        .delete(
+            other,
+            Kind::LearningPage,
+            other_page.id,
+            Some(other_page.revision.to_string()),
+        )
         .await
         .unwrap();
 }

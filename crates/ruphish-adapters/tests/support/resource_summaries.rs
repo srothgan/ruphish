@@ -34,8 +34,8 @@ pub async fn contract(db: &Database) {
             .summaries(owner, kind, None)
             .await
             .unwrap_or_else(|error| panic!("{kind:?}: {error:?}"));
-        assert_eq!(rows.len(), 2);
-        assert_eq!(rows.iter().map(|r| r.id).collect::<Vec<_>>(), [10, 11]);
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows.iter().map(|r| r.id).collect::<Vec<_>>(), [10, 11, 20]);
         if kind == Kind::Group {
             assert_eq!((rows[0].num_targets, rows[1].num_targets), (0, 2));
             assert_eq!((rows[0].active_campaigns, rows[1].active_campaigns), (0, 0));
@@ -57,7 +57,7 @@ pub async fn contract(db: &Database) {
             assert_eq!(single[0].num_targets, row.num_targets);
             assert_eq!(single[0].active_campaigns, row.active_campaigns);
         }
-        for id in [20, 999] {
+        for id in [999] {
             assert!(
                 resources
                     .summaries(owner, kind, Some(id))
@@ -66,24 +66,25 @@ pub async fn contract(db: &Database) {
                     .is_empty()
             );
         }
-        assert!(
+        assert_eq!(
             resources
                 .summaries(auth::Identity { id: 3, epoch: 0 }, kind, None)
                 .await
                 .unwrap()
-                .is_empty()
+                .len(),
+            3
         );
         let other = resources
             .summaries(auth::Identity { id: 2, epoch: 0 }, kind, None)
             .await
             .unwrap();
-        assert_eq!(other.len(), 1);
-        assert_eq!(other[0].id, 20);
+        assert_eq!(other.len(), 3);
+        assert_eq!(other[2].id, 20);
         assert_eq!(
             if kind == Kind::Group {
-                other[0].num_targets
+                other[2].num_targets
             } else {
-                other[0].active_campaigns
+                other[2].active_campaigns
             },
             1
         );

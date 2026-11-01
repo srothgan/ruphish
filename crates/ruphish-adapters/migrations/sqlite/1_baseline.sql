@@ -1,5 +1,7 @@
 -- Ruphish release baseline. Fresh installs and direct Gophish conversions share this schema.
 
+CREATE TABLE ruphish_deleted_accounts (id BIGINT PRIMARY KEY, username VARCHAR(255) NOT NULL);
+
 CREATE TABLE "attachments" (
   "id" integer primary key autoincrement,
   "template_id" bigint,
@@ -9,6 +11,8 @@ CREATE TABLE "attachments" (
 );
 
 CREATE TABLE "campaigns" (
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   "id" integer primary key autoincrement,
   "user_id" bigint,
   "name" varchar(255) NOT NULL,
@@ -60,6 +64,9 @@ CREATE TABLE "group_targets" (
 );
 
 CREATE TABLE "groups" (
+  revision BIGINT NOT NULL DEFAULT 1,
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   "id" integer primary key autoincrement,
   "user_id" bigint,
   "name" varchar(255),
@@ -101,6 +108,9 @@ CREATE TABLE "mail_logs" (
 );
 
 CREATE TABLE "pages" (
+  revision BIGINT NOT NULL DEFAULT 1,
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   "id" integer primary key autoincrement,
   "user_id" bigint,
   "name" varchar(255),
@@ -165,6 +175,8 @@ CREATE TABLE ruphish_campaign_domains (
 );
 
 CREATE TABLE ruphish_campaign_drafts (
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   id TEXT PRIMARY KEY NOT NULL,
   owner_id INTEGER NOT NULL,
   revision INTEGER NOT NULL,
@@ -239,12 +251,9 @@ CREATE TABLE ruphish_domain_checks (
   CHECK((finished_at IS NULL AND outcome IS NULL) OR (finished_at IS NOT NULL AND outcome IS NOT NULL))
 );
 
-CREATE TABLE ruphish_domain_claims (
-  hostname TEXT PRIMARY KEY,
-  owner_id INTEGER NOT NULL
-);
-
 CREATE TABLE ruphish_domains (
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   id INTEGER PRIMARY KEY,
   owner_id INTEGER NOT NULL,
   name TEXT NOT NULL,
@@ -277,6 +286,9 @@ CREATE TABLE "ruphish_event_receipts" (
 );
 
 CREATE TABLE ruphish_learning_pages (
+  revision BIGINT NOT NULL DEFAULT 1,
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
   name TEXT NOT NULL,
@@ -311,8 +323,10 @@ CREATE TABLE "ruphish_mailbox_runs" (
 );
 
 CREATE TABLE "ruphish_mailboxes" (
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  owner_id INTEGER NOT NULL,
+  owner_id INTEGER,
   name TEXT NOT NULL,
   revision INTEGER NOT NULL DEFAULT 1,
   enabled INTEGER NOT NULL,
@@ -404,12 +418,17 @@ CREATE TABLE "ruphish_webhook_jobs" (
 );
 
 CREATE TABLE ruphish_webhook_state (
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   webhook_id INTEGER PRIMARY KEY,
   revision INTEGER NOT NULL DEFAULT 1,
-  owner_id INTEGER NOT NULL
+  owner_id INTEGER
 );
 
 CREATE TABLE smtp (
+  revision BIGINT NOT NULL DEFAULT 1,
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   id integer primary key autoincrement,
   user_id bigint,
   interface_type varchar(255),
@@ -431,6 +450,9 @@ CREATE TABLE "targets" (
 );
 
 CREATE TABLE "templates" (
+  revision BIGINT NOT NULL DEFAULT 1,
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   "id" integer primary key autoincrement,
   "user_id" bigint,
   "name" varchar(255),

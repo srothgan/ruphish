@@ -265,17 +265,27 @@ pub async fn contract(db: &Database) {
         .await,
         Err(Error::Changed)
     ));
-    assert!(matches!(
-        repo.change_event(
+    let shared = repo
+        .change_event(
             Identity { id: 2, epoch: 0 },
             10,
             11,
-            change("owner", Some(102), 1, Action::Delete, None),
-            NOW
+            change(
+                "colleague",
+                Some(102),
+                1,
+                Action::Edit,
+                Some(Kind::FormSubmitted),
+            ),
+            NOW,
         )
-        .await,
-        Err(Error::NotFound(_))
-    ));
+        .await
+        .unwrap();
+    assert_eq!(
+        shared.event.unwrap().revision,
+        1,
+        "a colleague can read and retain an unchanged correction"
+    );
     assert!(matches!(
         repo.change_event(
             OWNER,
@@ -335,7 +345,7 @@ pub async fn contract(db: &Database) {
             NOW
         ),
         repo.change_event(
-            OWNER,
+            Identity { id: 2, epoch: 0 },
             10,
             11,
             change(

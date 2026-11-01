@@ -9,6 +9,20 @@ const fixture = fileURLToPath(new URL('./support/ui-interactions.mjs', import.me
 // Runs the built application in JSDOM with the existing synthetic API, never a live server.
 // Build the development distribution with `trunk build --locked` first.
 for (const scenario of [
+  'conflict-draft',
+  'conflict-group',
+  'deleted-group',
+  'conflict-domain',
+  'conflict-webhook',
+  'conflict-mailbox',
+  'delete-conflict',
+  'delete-conflict-webhook',
+  'delete-conflict-mailbox',
+  'delete-conflict-draft',
+  'delete-conflict-draft-detail',
+  'domain-attribution',
+  'shared-attribution',
+  'unknown-attribution',
   'form-import',
   'form-webhook',
   'integration-readonly-webhook',

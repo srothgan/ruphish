@@ -209,7 +209,12 @@ pub(super) async fn exercise(
             .unwrap();
     }
     db.resources()
-        .delete(actor, Kind::LearningPage, learning.id, None)
+        .delete(
+            actor,
+            Kind::LearningPage,
+            learning.id,
+            Some(learning.revision.to_string()),
+        )
         .await
         .unwrap();
 }

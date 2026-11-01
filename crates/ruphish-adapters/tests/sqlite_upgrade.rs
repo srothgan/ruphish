@@ -15,7 +15,7 @@ async fn open(path: &Path) -> Result<SqliteConnection, sqlx::Error> {
 }
 
 #[tokio::test]
-async fn legacy_webhooks_choose_an_administrator_and_reject_missing_ownership() {
+async fn legacy_webhooks_preserve_unknown_creator_without_requiring_an_administrator() {
     let directory = tempfile::tempdir().unwrap();
     for missing_admin in [false, true] {
         let source = directory.path().join(format!("source-{missing_admin}.db"));
@@ -34,32 +34,27 @@ async fn legacy_webhooks_choose_an_administrator_and_reject_missing_ownership() 
         let original = fs::read(&source).unwrap();
         let outcome = migrations::upgrade_copy(&source, &destination).await;
         assert_eq!(fs::read(&source).unwrap(), original);
-        if missing_admin {
-            assert!(outcome.is_err());
-            assert!(!destination.exists());
-        } else {
-            outcome.unwrap();
-            let mut connection = open(&destination).await.unwrap();
-            assert_eq!(
-                sqlx::query_scalar::<_, i64>(
-                    "SELECT owner_id FROM ruphish_webhook_state WHERE webhook_id=71"
-                )
-                .fetch_one(&mut connection)
-                .await
-                .unwrap(),
-                17
-            );
-            assert_eq!(
-                sqlx::query_scalar::<_, String>(
-                    "SELECT secret FROM webhooks WHERE id=71 AND is_active=1"
-                )
-                .fetch_one(&mut connection)
-                .await
-                .unwrap(),
-                "preserved-secret"
-            );
-            connection.close().await.unwrap();
-        }
+        outcome.unwrap();
+        let mut connection = open(&destination).await.unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, Option<i64>>(
+                "SELECT owner_id FROM ruphish_webhook_state WHERE webhook_id=71"
+            )
+            .fetch_one(&mut connection)
+            .await
+            .unwrap(),
+            None
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, String>(
+                "SELECT secret FROM webhooks WHERE id=71 AND is_active=1"
+            )
+            .fetch_one(&mut connection)
+            .await
+            .unwrap(),
+            "preserved-secret"
+        );
+        connection.close().await.unwrap();
     }
 }
 
@@ -359,7 +354,8 @@ async fn old_smtp_profiles_are_converted_with_their_campaign_and_owner() {
         frozen["sender"]["content"]["from_address"],
         "sender@example.test"
     );
-    assert_eq!(frozen["sender"]["revision"], "0001-01-01T00:00:00Z");
+    assert_eq!(frozen["sender"]["revision"], 1);
+    assert_eq!(frozen["sender"]["modified_date"], "0001-01-01T00:00:00Z");
     assert!(frozen["sender"]["content"].get("password").is_none());
     upgraded.close().await.unwrap();
     let ambiguous = directory.path().join("ambiguous.db");
@@ -497,7 +493,7 @@ async fn conversion_preserves_deleted_identity_high_water_marks() {
 }
 
 #[tokio::test]
-async fn deleted_owner_mailbox_is_dropped_with_original_retained_in_backup() {
+async fn deleted_creator_mailbox_is_preserved_disabled_with_original_in_backup() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("source.db");
     fs::copy(
@@ -518,11 +514,11 @@ async fn deleted_owner_mailbox_is_dropped_with_original_retained_in_backup() {
         .unwrap();
         let mut raw = open(&path).await.unwrap();
         assert_eq!(
-            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM ruphish_mailboxes")
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM ruphish_mailboxes WHERE owner_id=18 AND enabled=0 AND password='retained-secret'")
                 .fetch_one(&mut raw)
                 .await
                 .unwrap(),
-            0
+            1
         );
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM imap")
@@ -616,7 +612,7 @@ async fn in_place_conversion_failure_rolls_back_and_retains_a_verified_backup() 
 }
 
 #[tokio::test]
-async fn malformed_mailbox_owners_are_skipped_without_losing_valid_data() {
+async fn malformed_mailbox_creators_are_preserved_disabled_without_losing_valid_data() {
     let directory = tempfile::tempdir().unwrap();
     let source = directory.path().join("source.db");
     let destination = directory.path().join("converted.db");
@@ -644,13 +640,22 @@ async fn malformed_mailbox_owners_are_skipped_without_losing_valid_data() {
         .unwrap();
         let mut connection = open(&destination).await.unwrap();
         assert_eq!(
-            sqlx::query_as::<_, (i64, String, i64)>(
-                "SELECT owner_id,password,enabled FROM ruphish_mailboxes"
+            sqlx::query_as::<_, (Option<i64>, String, i64)>(
+                "SELECT owner_id,password,enabled FROM ruphish_mailboxes ORDER BY password"
             )
             .fetch_all(&mut connection)
             .await
             .unwrap(),
-            vec![(17, "valid-secret".into(), 1)]
+            vec![
+                (None, "blob-secret".into(), 0),
+                (Some(999999), "deleted-secret".into(), 0),
+                (None, "negative-secret".into(), 0),
+                (None, "null-secret".into(), 0),
+                (None, "real-secret".into(), 0),
+                (None, "text-secret".into(), 0),
+                (Some(17), "valid-secret".into(), 1),
+                (None, "zero-secret".into(), 0)
+            ]
         );
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM imap")

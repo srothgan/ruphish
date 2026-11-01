@@ -14,11 +14,11 @@ Legacy IMAP validation can return HTTP `200` with `success: false`; inspect that
 | `400` | Invalid input, unsupported field, or invalid workflow state | Correct the request; do not retry unchanged |
 | `401` | Authentication is missing or invalid | Check the key and account state |
 | `403` | The account cannot perform the operation | Check permissions and browser CSRF requirements where applicable |
-| `404` | The resource is missing or not visible to this account | Check its ID and ownership |
+| `404` | The resource is missing | Check its ID |
 | `409` | A name, dependency, or state conflicts with the requested change | Inspect the current resource and resolve the conflict |
-| `412` | The supplied revision is stale | Reload and reconcile the edit |
+| `412` | `RESOURCE_CHANGED`: the supplied revision is stale | Preserve input; review the current record and reconcile before resubmitting |
 | `413` | The request exceeds the endpoint's body limit | Reduce or split the input where the operation permits it |
-| `428` | A required precondition is missing | Supply the required revision or `If-Match` value |
+| `428` | `REVISION_REQUIRED`: a required precondition is missing | Read the resource and supply its reviewed revision or quoted `If-Match` |
 | `429` | A bounded endpoint cannot accept more work | Back off; avoid concurrent retry loops |
 | `500` | The operation failed internally or through a dependency | Record the code and consult server logs before retrying writes |
 | `503` | The service or a bounded read/work queue is unavailable | Retry reads after a delay; establish the outcome before repeating writes |
@@ -40,3 +40,5 @@ For example, an empty group name can return HTTP `400` with:
 ```
 
 Translate known issue codes to field messages and provide a generic fallback for unknown codes. A missing report does not imply valid input: malformed JSON, authorization failures, stale revisions and some workflow failures use the existing operation-level response. Preserve their distinct recovery behavior. Do not apply a delayed report to a form the user has since changed.
+
+A conflicting save or delete does not change the resource or its edit attribution. A deleted resource returns `404 RESOURCE_NOT_FOUND`; do not turn that failed edit into an automatic create. Invalid `If-Match` syntax returns `400 REVISION_REQUIRED`. See [conditional resource writes](conventions.md#updating-a-resource) for the contract and recovery behavior.

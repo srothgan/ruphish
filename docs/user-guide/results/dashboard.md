@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-The authenticated home page shows drafts to continue, recent campaigns with compact outcome rates, the next scheduled launch, resource inventory, and operational attention items. Administrators see their own campaign data; impersonation follows the selected account.
+The authenticated home page shows drafts to continue, recent campaigns with compact outcome rates, the next scheduled launch, resource inventory, and operational attention items. Users and administrators see the installation's shared campaign data; impersonation changes the acting identity and permissions, not the campaign inventory.
 
 Choose **Create campaign** to prepare a draft. Open a recent campaign for **Results**, or use a scheduled launch or delivery attention link to open **Delivery**. The dashboard shows up to five saved drafts and up to ten campaign links needing delivery review; open Campaigns for the directory.
 

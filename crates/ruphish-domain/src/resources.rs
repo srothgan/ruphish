@@ -121,11 +121,16 @@ pub enum Content<P = String> {
 /// Resource data without a caller-controlled owner, using stored credentials by default.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Resource<P = String> {
+    /// Server-assigned creator and last-editor attribution.
+    pub attribution: crate::attribution::Attribution,
+    /// Monotonic configuration revision, independent of timestamps.
+    pub revision: i64,
+
     /// Persistent identifier, assigned by storage on creation.
     pub id: i64,
     /// Display name within the owning resource scope.
     pub name: String,
-    /// Server-assigned modification timestamp and conditional-write revision.
+    /// Server-assigned modification timestamp.
     pub modified_date: String,
     /// Resource or attachment content.
     pub content: Content<P>,
@@ -134,6 +139,8 @@ impl<P> Resource<P> {
     /// Change only the credential representation, retaining all other resource data.
     pub fn map_password<Q>(self, map: impl FnOnce(P) -> Q) -> Resource<Q> {
         Resource {
+            attribution: self.attribution,
+            revision: self.revision,
             id: self.id,
             name: self.name,
             modified_date: self.modified_date,
@@ -213,11 +220,16 @@ impl Resource<Option<String>> {
 /// List metadata deliberately excludes bodies, attachments and credentials.
 #[derive(Clone, Debug)]
 pub struct Summary {
+    /// Server-assigned creator and last-editor attribution.
+    pub attribution: crate::attribution::Attribution,
+    /// Monotonic configuration revision, independent of timestamps.
+    pub revision: i64,
+
     /// Persistent identifier, assigned by storage on creation.
     pub id: i64,
     /// Display name within the owning resource scope.
     pub name: String,
-    /// Server-assigned modification timestamp and conditional-write revision.
+    /// Server-assigned modification timestamp.
     pub modified_date: String,
     /// Number of group members without loading recipient payloads.
     pub num_targets: i64,

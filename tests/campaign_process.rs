@@ -177,6 +177,24 @@ fn normalize(value: &mut Value) {
     match value {
         Value::Array(rows) => rows.iter_mut().for_each(normalize),
         Value::Object(object) => {
+            // New attribution is asserted separately from the captured Gophish payload.
+            if let Some(creator) = object.remove("created_by") {
+                assert_eq!(creator, json!({"id":1,"username":"admin","deleted":false}));
+                assert_eq!(
+                    object.remove("edited_by"),
+                    Some(json!({"id":1,"username":"admin","deleted":false}))
+                );
+                let edited = object.remove("edited_at").unwrap();
+                assert!(
+                    ruphish_application::datetime::parse_stored(edited.as_str().unwrap()).is_ok()
+                );
+            }
+            if let Some(revision) = object.remove("revision") {
+                assert_eq!(
+                    revision, 1,
+                    "captured fixtures use initial resource revisions"
+                );
+            }
             if let Some(track_opens) = object.remove("track_opens") {
                 assert_eq!(
                     track_opens, true,
@@ -564,6 +582,7 @@ fn executable_launch_delivers_personalized_mail_once_and_persists_acceptance_acr
         client()
             .put(format!("{base}/api/smtp/1"))
             .bearer_auth("synthetic-bootstrap-token")
+            .header("If-Match", format!("\"{}\"", profile["revision"]))
             .json(&profile)
             .send()
             .unwrap()
@@ -572,7 +591,9 @@ fn executable_launch_delivers_personalized_mail_once_and_persists_acceptance_acr
     );
     // Exercise managed tracking through the real queued-delivery worker, with no
     // authored tracker and a fragment rather than a pre-wrapped HTML document.
+    let template = read(&base, "/api/templates/1");
     let response = client().put(format!("{base}/api/templates/1"))
+        .header("If-Match", format!("\"{}\"", template["revision"]))
         .bearer_auth("synthetic-bootstrap-token")
         .json(&json!({"id":1,"name":"Mail","subject":"Hello {{.FirstName}}","text":"Training link: {{.URL}}","html":"<p>Hello {{.FirstName}} <a href='{{.URL}}'>Open</a></p>"}))
         .send().unwrap();
@@ -878,7 +899,7 @@ fn reviewed_campaign_preview_test_and_duplicate_use_exact_owned_resources_withou
     campaign["selection"] = reviewed_selection(&review);
     sql(
         directory.path(),
-        "UPDATE templates SET modified_date='2032-01-01T00:00:00Z'",
+        "UPDATE templates SET revision=revision+1, modified_date='2032-01-01T00:00:00Z'",
     );
     let stale = client()
         .post(format!("{base}/api/campaigns/test"))
@@ -943,7 +964,8 @@ fn worker_continues_other_recipients_after_temporary_permanent_and_unknown_failu
         let (mut process, base) = start(&directory, &[]);
         let smtp = probe_many(2);
         let body = resources(&base, &smtp.address);
-        let update=client().put(format!("{base}/api/groups/1")).bearer_auth("synthetic-bootstrap-token").json(&json!({"id":1,"name":"Audience","targets":[{"email":"alice@example.test"},{"email":"bob@example.test"}]})).send().unwrap();
+        let group = read(&base, "/api/groups/1");
+        let update=client().put(format!("{base}/api/groups/1")).header("If-Match",format!("\"{}\"",group["revision"])).bearer_auth("synthetic-bootstrap-token").json(&json!({"id":1,"name":"Audience","targets":[{"email":"alice@example.test"},{"email":"bob@example.test"}]})).send().unwrap();
         assert!(update.status().is_success());
         let c = post(&base, "/api/campaigns/", &body);
         let id = c["id"].as_i64().unwrap();
@@ -962,7 +984,7 @@ fn worker_continues_other_recipients_after_temporary_permanent_and_unknown_failu
 }
 
 #[test]
-fn campaign_ownership_read_only_and_locked_owners_hold_at_real_http_boundaries() {
+fn campaign_sharing_read_only_and_locked_accounts_hold_at_real_http_boundaries() {
     let directory = workspace();
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let body = resources(&base, "127.0.0.1:25");
@@ -994,7 +1016,7 @@ fn campaign_ownership_read_only_and_locked_owners_hold_at_real_http_boundaries()
                 .send()
                 .unwrap()
                 .status(),
-            404
+            200
         );
     }
     let denied = client()
@@ -1003,7 +1025,7 @@ fn campaign_ownership_read_only_and_locked_owners_hold_at_real_http_boundaries()
         .json(&body)
         .send()
         .unwrap();
-    assert_eq!(denied.status(), 400);
+    assert_eq!(denied.status(), 200);
     sql(
         directory.path(),
         "INSERT INTO roles(id,slug,name,description) VALUES(99,'read-only','Read only','Synthetic'); INSERT INTO role_permissions(role_id,permission_id) SELECT 99,id FROM permissions WHERE slug='view_objects'; UPDATE users SET role_id=99 WHERE id=1;",
@@ -1273,7 +1295,7 @@ fn repeated_campaign_review_recovers_after_validation_failure_without_creating_w
 }
 
 #[test]
-fn campaign_pages_only_offer_next_when_another_owned_row_exists() {
+fn campaign_pages_include_all_creators_and_only_offer_valid_next_cursors() {
     let directory = workspace();
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let empty = read(&base, "/api/campaigns/overview");
@@ -1298,7 +1320,7 @@ fn campaign_pages_only_offer_next_when_another_owned_row_exists() {
         .iter()
         .map(|c| c["id"].as_i64().unwrap())
         .collect();
-    // A later row owned by someone else must not advertise another page.
+    // A later row created by someone else belongs to the shared collection.
     sql(
         directory.path(),
         &format!(
@@ -1321,12 +1343,12 @@ fn campaign_pages_only_offer_next_when_another_owned_row_exists() {
         &base,
         &format!("/api/campaigns/overview?limit=2&after={}", ids[1]),
     );
-    assert_eq!(last["items"].as_array().unwrap().len(), 1);
+    assert_eq!(last["items"].as_array().unwrap().len(), 2);
     assert_eq!(last["items"][0]["id"], ids[2]);
     assert!(last["next_after"].is_null());
-    for limit in [3, 50, i64::MAX] {
+    for limit in [4, 50, i64::MAX] {
         let page = read(&base, &format!("/api/campaigns/overview?limit={limit}"));
-        assert_eq!(page["items"].as_array().unwrap().len(), 3);
+        assert_eq!(page["items"].as_array().unwrap().len(), 4);
         assert!(
             page["next_after"].is_null(),
             "Exact or partial final page at limit {limit}"
@@ -1381,11 +1403,17 @@ fn campaign_pages_only_offer_next_when_another_owned_row_exists() {
         .bearer_auth("synthetic-bootstrap-token")
         .send()
         .unwrap();
-    assert_eq!(foreign.status(), 404);
+    assert_eq!(foreign.status(), 200);
     // Deletion between requests can exhaust a previously valid cursor; reloading
     // the preceding page must now report the new exact end of the collection.
     let deleted = client()
         .delete(format!("{base}/api/campaigns/{}", ids[2]))
+        .bearer_auth("synthetic-bootstrap-token")
+        .send()
+        .unwrap();
+    assert!(deleted.status().is_success());
+    let deleted = client()
+        .delete(format!("{base}/api/campaigns/{}", ids[3]))
         .bearer_auth("synthetic-bootstrap-token")
         .send()
         .unwrap();
@@ -1400,7 +1428,7 @@ fn campaign_pages_only_offer_next_when_another_owned_row_exists() {
 }
 
 #[test]
-fn campaign_context_and_recipient_history_are_complete_bounded_and_owner_scoped() {
+fn campaign_context_and_recipient_history_are_complete_bounded_and_shared() {
     let directory = workspace();
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let mut body = resources(&base, "127.0.0.1:1");
@@ -1568,7 +1596,7 @@ fn campaign_context_and_recipient_history_are_complete_bounded_and_owner_scoped(
         .bearer_auth("history-owner-key")
         .send()
         .unwrap();
-    assert_eq!(foreign.status(), 404);
+    assert_eq!(foreign.status(), 200);
     let detached = read(&base, &endpoint);
     // Source ownership changes cannot rewrite the original campaign's saved context.
     assert_eq!(detached["campaign"]["template"]["name"], "Mail");

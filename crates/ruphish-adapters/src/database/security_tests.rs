@@ -463,3 +463,66 @@ async fn webhook_claims_keep_only_closed_client_categories_and_preserve_them_on_
     pool.close().await;
     db.close().await;
 }
+
+#[tokio::test]
+async fn deleting_mailbox_creator_preserves_inflight_checkpoint_and_acknowledgements() {
+    let (_dir, db, pool) = fixture().await;
+    sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id,password_change_required,account_locked) VALUES(77,'departing','hash','departing-key',2,0,0); INSERT INTO ruphish_auth_state VALUES(77,0);").execute(&pool).await.unwrap();
+    let creator = Identity { id: 77, epoch: 0 };
+    let repo = db.integrations();
+    let saved = repo
+        .save_mailbox(creator, None, mailbox("Shared reporting"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE ruphish_mailboxes SET initialized=1,uidvalidity=41,last_uid=12 WHERE id=?")
+        .bind(saved.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO ruphish_mailbox_messages VALUES(?,41,12,'matched','passed',0)")
+        .bind(saved.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let worker = Integrations::new(pool.clone(), Policy::default());
+    let claim = worker.claim_mailbox(1_800_000_000).await.unwrap().unwrap();
+    db.accounts()
+        .write(
+            admin(),
+            ruphish_application::auth::Write::Delete(creator.id),
+        )
+        .await
+        .unwrap();
+    assert!(repo.mailbox(creator, saved.id).await.is_err());
+    worker.mailbox_current(&claim.config).await.unwrap();
+    assert_eq!(
+        worker
+            .pending_acknowledgements(&claim.config, 41)
+            .await
+            .unwrap(),
+        vec![12]
+    );
+    worker
+        .acknowledge_report(&claim.config, 41, 12)
+        .await
+        .unwrap();
+    assert!(
+        worker
+            .pending_acknowledgements(&claim.config, 41)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    worker
+        .finish_mailbox(&claim, "passed", 1_800_000_100, 1_800_000_001)
+        .await
+        .unwrap();
+    let next = worker.claim_mailbox(1_800_000_100).await.unwrap().unwrap();
+    assert_eq!((next.config.validity, next.config.last), (41, 12));
+    assert_eq!(next.config.password, "synthetic-password");
+    assert_eq!(
+        repo.mailbox(admin(), saved.id).await.unwrap().attribution,
+        saved.attribution
+    );
+    db.close().await;
+}

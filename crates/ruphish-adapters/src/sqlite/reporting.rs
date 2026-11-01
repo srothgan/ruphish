@@ -44,9 +44,8 @@ impl Snapshots for Reports {
         f.validate()?;
         let mut tx = self.pool.begin().await.map_err(storage)?;
         super::resources::authorize(&mut tx, caller, false).await?;
-        let campaign = sqlx::query("SELECT name,status,COALESCE((SELECT track_opens FROM ruphish_campaign_policy WHERE campaign_id=campaigns.id),1) AS track_opens FROM campaigns WHERE id=? AND user_id=?")
+        let campaign = sqlx::query("SELECT name,status,COALESCE((SELECT track_opens FROM ruphish_campaign_policy WHERE campaign_id=campaigns.id),1) AS track_opens FROM campaigns WHERE id=? ")
             .bind(id)
-            .bind(caller.id)
             .fetch_optional(&mut *tx)
             .await
             .map_err(storage)?

@@ -30,7 +30,7 @@ pub(super) async fn exercise(
     let profile = selected[2].clone();
     let select = |r: &Resource| campaign::Selection {
         id: r.id,
-        revision: Some(r.modified_date.clone()),
+        revision: Some(r.revision.to_string()),
     };
     input.template = select(&template);
     input.page = select(&page);
@@ -67,7 +67,7 @@ pub(super) async fn exercise(
                 actor,
                 edit.into(),
                 Some(original.id),
-                Some(original.modified_date.clone()),
+                Some(original.revision.to_string()),
             )
             .await
             .unwrap();
@@ -136,7 +136,7 @@ pub(super) async fn exercise(
         .get(actor, Kind::Profile, profile.id)
         .await
         .unwrap();
-    let revision = rotated.modified_date.clone();
+    let revision = rotated.revision.to_string();
     if let Content::Profile(p) = &mut rotated.content {
         p.password = "second-secret".into();
     }
@@ -153,7 +153,7 @@ pub(super) async fn exercise(
         .get(actor, Kind::Template, template.id)
         .await
         .unwrap();
-    let revision = edited.modified_date.clone();
+    let revision = edited.revision.to_string();
     if let Content::Template(t) = &mut edited.content {
         t.subject = "Another replacement".into();
     }
@@ -204,7 +204,7 @@ pub(super) async fn exercise(
     );
     input.launch = Some(now + 3600);
     let reviewed = contender.clone();
-    let revision = contender.modified_date.clone();
+    let revision = contender.revision.to_string();
     if let Content::Template(t) = &mut contender.content {
         t.subject = "Concurrent edit".into();
     }
@@ -225,8 +225,17 @@ pub(super) async fn exercise(
         .await
         .unwrap();
     for original in [&template, &page, &profile] {
+        let current = resources
+            .get(actor, original.kind(), original.id)
+            .await
+            .unwrap();
         resources
-            .delete(actor, original.kind(), original.id, None)
+            .delete(
+                actor,
+                original.kind(),
+                original.id,
+                Some(current.revision.to_string()),
+            )
             .await
             .unwrap();
     }

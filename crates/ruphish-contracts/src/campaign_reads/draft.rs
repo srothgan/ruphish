@@ -64,7 +64,7 @@ pub struct Policy {
     /// Explicit null means unresolved defaults; an empty string means no redirect.
     #[serde(deserialize_with = "crate::nullable")]
     pub redirect_url: Option<String>,
-    /// Optional owned learning-page identity.
+    /// Optional shared learning-page identity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub learning_page_id: Option<i64>,
 }

@@ -3,6 +3,7 @@
 //! Handlers coordinate application operations; executable composition supplies
 //! concrete adapters.
 
+mod attribution;
 pub mod auth;
 mod campaigns;
 mod domains;
@@ -15,6 +16,7 @@ mod rate;
 mod reporting;
 mod resources;
 pub mod response;
+mod revision;
 pub mod server;
 mod starter_templates;
 

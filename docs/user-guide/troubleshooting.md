@@ -7,7 +7,7 @@ sidebar:
 
 | Symptom | Diagnose, fix, and verify |
 | --- | --- |
-| A resource is missing | Confirm the signed-in account and list filter. Resources are owner-scoped; check another tab before recreating anything. |
+| A resource is missing | Confirm the signed-in account and list filter. Resources are shared across the installation; check whether a colleague renamed or deleted the resource before recreating it. |
 | Save reports a stale edit | Another write changed the resource. Preserve your unsaved values, inspect the current version, reconcile, and save again. |
 | An imported draft disappeared | Import state is held in the tab until creation. Reload/closing/logging out can clear it; import again and finish saving. |
 | CSV rows are omitted | Review mapping, encoding, address validity, and duplicate notices in [group import](groups.md). Verify the saved recipient count. |
@@ -36,3 +36,9 @@ The UI translates messages, but public API error `code` values remain stable upp
 | `legacy_delivery_outcome_unknown` | Reconcile the migrated in-flight message with receiving-server evidence |
 
 See [API errors](../api/errors.md) for HTTP statuses and client recovery behavior. Keep the original code when reporting a problem even if you translate the accompanying message.
+
+## Someone changed or deleted a resource while I was editing
+
+A revision conflict means your save was not applied. Your unfinished input stays in the editor. Choose **Review saved version in a new tab** to compare the colleague's saved changes. Copy anything you need to keep, then use **Discard my changes and reload** and confirm before editing the latest version. Repeating Save without reviewing still uses the old revision and cannot overwrite the colleague's work.
+
+If the resource was deleted, saving cannot recreate it. Copy or export useful input before leaving. A conflicting deletion also does nothing: cancel the dialog, refresh the list and review the current record before confirming another deletion. The displayed `RESOURCE_CHANGED`, `REVISION_REQUIRED` or `RESOURCE_NOT_FOUND` code helps identify the failure when reporting an issue.

@@ -21,7 +21,7 @@ async fn exact_text(db: &Database) {
                 actor,
                 edit.into(),
                 Some(original.id),
-                Some(original.modified_date.clone()),
+                Some(original.revision.to_string()),
             )
             .await
             .unwrap();
@@ -52,7 +52,7 @@ async fn exact_text(db: &Database) {
         template.subject = subject;
         template.attachments.clear();
         assert!(
-            matches!(db.resources().save(actor, edit.clone().into(), Some(original.id), Some(original.modified_date.clone())).await,
+            matches!(db.resources().save(actor, edit.clone().into(), Some(original.id), Some(original.revision.to_string())).await,
             Err(Error::Invalid(code)) if code.starts_with("storage_text_invalid:"))
         );
         assert!(
@@ -157,7 +157,7 @@ async fn busy_operations(db: &Database, actor: auth::Identity, original: &Resour
             actor,
             original.clone().into(),
             Some(original.id),
-            Some(original.modified_date.clone()),
+            Some(original.revision.to_string()),
         )
         .await;
     assert!(matches!(result, Err(Error::Storage(storage::Error::Busy))));
@@ -352,22 +352,23 @@ async fn deletion_fixture(db: &Database) -> (auth::Identity, auth::Identity, dom
     let check = db.domains().claim(100).await.unwrap().unwrap();
     (admin, target, check)
 }
-async fn verify_reuse(db: &Database, admin: auth::Identity) {
-    let domain = db
-        .domains()
-        .save(admin, None, domain_edit(), 110)
-        .await
-        .unwrap();
-    let check = db.domains().claim(110).await.unwrap().unwrap();
-    db.domains().finish(&check, passed(), 111).await.unwrap();
-    let domain = db.domains().get(admin, domain.id).await.unwrap();
+async fn verify_retained_domain(db: &Database, admin: auth::Identity, check: &domains::Check) {
+    let domain = db.domains().get(admin, check.domain.id).await.unwrap();
     assert_eq!(domain.code, "verified");
     assert!(domain.verified_until > 111);
+    assert_eq!(domain.attribution, check.domain.attribution);
+    assert!(
+        db.domains()
+            .save(admin, None, domain_edit(), 110)
+            .await
+            .is_err(),
+        "preserved origin cannot be registered twice"
+    );
 }
 
 #[tokio::test]
 #[ignore = "Requires canonical PostgreSQL fixture and RUPHISH_POSTGRES_TEST_PORT"]
-async fn postgres_account_deletion_fences_inflight_domain_verification() {
+async fn postgres_account_deletion_preserves_inflight_domain_verification() {
     let (mut admin_connection, mut config) = postgres_fixture().await;
     config.lock_timeout_seconds = 15;
     let db = database::open(Config::Postgres(config.clone()), Policy::default())
@@ -375,9 +376,9 @@ async fn postgres_account_deletion_fences_inflight_domain_verification() {
         .unwrap();
     let (admin, target, check) = deletion_fixture(&db).await;
     let mut inspector = postgres_inspect(&config).await;
-    // Pause the actual account-delete operation after claims cleanup but before
-    // domain deletion. Verification updates do not execute this DELETE trigger.
-    sqlx::raw_sql("CREATE FUNCTION pause_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(987654321); RETURN OLD; END $$; CREATE TRIGGER pause_delete BEFORE DELETE ON ruphish_domain_checks FOR EACH ROW EXECUTE FUNCTION pause_delete()")
+    // Pause deletion at the account row. Domain verification must complete
+    // independently while the account transaction is still in flight.
+    sqlx::raw_sql("CREATE FUNCTION pause_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(987654321); RETURN OLD; END $$; CREATE TRIGGER pause_delete BEFORE DELETE ON users FOR EACH ROW EXECUTE FUNCTION pause_delete()")
         .execute(&mut inspector).await.unwrap();
     sqlx::query("SELECT pg_advisory_lock(987654321)")
         .execute(&mut inspector)
@@ -386,46 +387,53 @@ async fn postgres_account_deletion_fences_inflight_domain_verification() {
     let accounts = db.accounts();
     let deleting =
         tokio::spawn(async move { accounts.write(admin, auth::Write::Delete(target.id)).await });
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
+        assert!(
+            !deleting.is_finished(),
+            "deletion ended before reaching the test barrier"
+        );
+        assert!(
+            std::time::Instant::now() < deadline,
+            "deletion did not reach the test barrier"
+        );
         let waiting: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND NOT granted AND objid=987654321 AND database=(SELECT oid FROM pg_database WHERE datname=current_database()))").fetch_one(&mut inspector).await.unwrap();
         if waiting {
             break;
         }
         tokio::task::yield_now().await;
     }
-    assert!(
-        db.domains().claim(200).await.unwrap().is_none(),
-        "claim must skip a deleting owner"
-    );
-    let domains = db.domains();
-    let finishing = tokio::spawn(async move { domains.finish(&check, passed(), 101).await });
-    // Both operations must be blocked now: deletion on the test barrier,
-    // verification on the live owner's row. No timing-based success assumption.
-    loop {
-        assert!(
-            !finishing.is_finished(),
-            "verification bypassed account deletion"
-        );
-        let waiters: i64 = sqlx::query_scalar("SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND application_name='ruphish' AND wait_event_type='Lock'").fetch_one(&mut inspector).await.unwrap();
-        if waiters >= 2 {
-            break;
-        }
-        tokio::task::yield_now().await;
-    }
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        db.domains().finish(&check, passed(), 101),
+    )
+    .await
+    .expect("domain completion must not wait for account deletion")
+    .unwrap();
+    let resources = db.resources();
+    let writing = tokio::spawn(async move {
+        resources
+            .save(
+                target,
+                resource("Revoked write", Content::Template(Template::default())),
+                None,
+                None,
+            )
+            .await
+    });
     sqlx::query("SELECT pg_advisory_unlock(987654321)")
         .execute(&mut inspector)
         .await
         .unwrap();
     deleting.await.unwrap().unwrap();
-    finishing.await.unwrap().unwrap();
-    let orphan: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM ruphish_domain_claims WHERE owner_id=$1")
-            .bind(target.id)
-            .fetch_one(&mut inspector)
+    assert!(matches!(writing.await.unwrap(), Err(Error::Policy(_))));
+    assert!(
+        db.resources()
+            .get_by_name(admin, Kind::Template, "Revoked write")
             .await
-            .unwrap();
-    assert_eq!(orphan, 0);
-    verify_reuse(&db, admin).await;
+            .is_err()
+    );
+    verify_retained_domain(&db, admin, &check).await;
     inspector.close().await.unwrap();
     db.close().await;
     postgres_cleanup(&mut admin_connection, &config).await;
@@ -433,7 +441,7 @@ async fn postgres_account_deletion_fences_inflight_domain_verification() {
 
 #[tokio::test]
 #[ignore = "Requires canonical MySQL fixture and RUPHISH_MYSQL_TEST_PORT"]
-async fn mysql_account_deletion_fences_inflight_domain_verification() {
+async fn mysql_account_deletion_preserves_inflight_domain_verification() {
     let (mut inspector, mut config) = fixture().await;
     config.lock_timeout_seconds = 15;
     let db = database::open(Config::MySql(config.clone()), Policy::default())
@@ -441,7 +449,7 @@ async fn mysql_account_deletion_fences_inflight_domain_verification() {
         .unwrap();
     let (admin, target, check) = deletion_fixture(&db).await;
     let barrier = format!("delete_{}", config.database);
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE TRIGGER pause_delete BEFORE DELETE ON ruphish_domain_checks FOR EACH ROW BEGIN IF GET_LOCK('{barrier}',15)=1 THEN DO RELEASE_LOCK('{barrier}'); END IF; END")))
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE TRIGGER pause_delete BEFORE DELETE ON users FOR EACH ROW BEGIN IF GET_LOCK('{barrier}',15)=1 THEN DO RELEASE_LOCK('{barrier}'); END IF; END")))
         .execute(&mut inspector).await.unwrap();
     sqlx::query("SELECT GET_LOCK(?,15)")
         .bind(&barrier)
@@ -451,45 +459,54 @@ async fn mysql_account_deletion_fences_inflight_domain_verification() {
     let accounts = db.accounts();
     let deleting =
         tokio::spawn(async move { accounts.write(admin, auth::Write::Delete(target.id)).await });
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
+        assert!(
+            !deleting.is_finished(),
+            "deletion ended before reaching the test barrier"
+        );
+        assert!(
+            std::time::Instant::now() < deadline,
+            "deletion did not reach the test barrier"
+        );
         let waiting: i64 = sqlx::query_scalar("SELECT count(*) FROM performance_schema.metadata_locks WHERE OBJECT_TYPE='USER LEVEL LOCK' AND OBJECT_NAME=? AND LOCK_STATUS='PENDING'").bind(&barrier).fetch_one(&mut inspector).await.unwrap();
         if waiting > 0 {
             break;
         }
         tokio::task::yield_now().await;
     }
-    assert!(
-        db.domains().claim(200).await.unwrap().is_none(),
-        "claim must skip a deleting owner"
-    );
-    let domains = db.domains();
-    let finishing = tokio::spawn(async move { domains.finish(&check, passed(), 101).await });
-    loop {
-        assert!(
-            !finishing.is_finished(),
-            "verification bypassed account deletion"
-        );
-        let waiting: i64 = sqlx::query_scalar("SELECT count(*) FROM performance_schema.data_lock_waits w JOIN performance_schema.data_locks l ON l.ENGINE_LOCK_ID=w.REQUESTING_ENGINE_LOCK_ID AND l.ENGINE=w.ENGINE WHERE l.OBJECT_SCHEMA=DATABASE() AND l.OBJECT_NAME='users'").fetch_one(&mut inspector).await.unwrap();
-        if waiting > 0 {
-            break;
-        }
-        tokio::task::yield_now().await;
-    }
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        db.domains().finish(&check, passed(), 101),
+    )
+    .await
+    .expect("domain completion must not wait for account deletion")
+    .unwrap();
+    let resources = db.resources();
+    let writing = tokio::spawn(async move {
+        resources
+            .save(
+                target,
+                resource("Revoked write", Content::Template(Template::default())),
+                None,
+                None,
+            )
+            .await
+    });
     sqlx::query("SELECT RELEASE_LOCK(?)")
         .bind(&barrier)
         .execute(&mut inspector)
         .await
         .unwrap();
     deleting.await.unwrap().unwrap();
-    finishing.await.unwrap().unwrap();
-    let orphan: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM ruphish_domain_claims WHERE owner_id=?")
-            .bind(target.id)
-            .fetch_one(&mut inspector)
+    assert!(matches!(writing.await.unwrap(), Err(Error::Policy(_))));
+    assert!(
+        db.resources()
+            .get_by_name(admin, Kind::Template, "Revoked write")
             .await
-            .unwrap();
-    assert_eq!(orphan, 0);
-    verify_reuse(&db, admin).await;
+            .is_err()
+    );
+    verify_retained_domain(&db, admin, &check).await;
     db.close().await;
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
         "DROP DATABASE `{}`",

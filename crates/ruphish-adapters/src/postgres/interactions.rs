@@ -31,14 +31,14 @@ impl Persistence for Interactions {
                 .learning_html
                 .ok_or_else(missing);
         }
-        sqlx::query_scalar("SELECT p.html FROM ruphish_learning_pages p WHERE p.public_id=$1 AND EXISTS(SELECT 1 FROM ruphish_domains d JOIN ruphish_domain_policy dp ON dp.id=d.id WHERE d.owner_id=p.user_id AND d.origin=$2 AND d.enabled=TRUE AND dp.serves)")
+        sqlx::query_scalar("SELECT p.html FROM ruphish_learning_pages p WHERE p.public_id=$1 AND EXISTS(SELECT 1 FROM ruphish_domains d JOIN ruphish_domain_policy dp ON dp.id=d.id WHERE d.origin=$2 AND d.enabled=TRUE AND dp.serves)")
             .bind(public_id).bind(origin).fetch_optional(&self.pool).await.map_err(storage)?.ok_or_else(missing)
     }
     async fn snapshot(&self, origin: &str, rid: &str, action: &Action) -> Result<Snapshot, Error> {
         let mut tx = crate::postgres::locks::snapshot(&self.pool)
             .await
             .map_err(storage)?;
-        let row=sqlx::query("SELECT r.id AS result_id,r.campaign_id,r.user_id,r.email,r.first_name,r.last_name,r.position,r.send_date,c.url,c.page_id,c.smtp_id,c.template_id,cp.redirect_url,cp.learning_page_id,cp.track_opens,c.learning_public_id FROM results r JOIN campaigns c ON c.id=r.campaign_id AND c.user_id=r.user_id JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=c.user_id JOIN ruphish_campaign_policy cp ON cp.campaign_id=c.id WHERE r.r_id=$1 AND c.status!='Completed' AND d.origin=$2 AND d.enabled=TRUE AND (SELECT serves FROM ruphish_domain_policy WHERE id=d.id)").bind(rid).bind(origin).fetch_all(&mut *tx).await.map_err(storage)?;
+        let row=sqlx::query("SELECT r.id AS result_id,r.campaign_id,r.user_id,r.email,r.first_name,r.last_name,r.position,r.send_date,c.url,c.page_id,c.smtp_id,c.template_id,cp.redirect_url,cp.learning_page_id,cp.track_opens,c.learning_public_id FROM results r JOIN campaigns c ON c.id=r.campaign_id AND c.user_id=r.user_id JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id JOIN ruphish_campaign_policy cp ON cp.campaign_id=c.id WHERE r.r_id=$1 AND c.status!='Completed' AND d.origin=$2 AND d.enabled=TRUE AND (SELECT serves FROM ruphish_domain_policy WHERE id=d.id)").bind(rid).bind(origin).fetch_all(&mut *tx).await.map_err(storage)?;
         if row.len() != 1 {
             return Err(missing());
         }

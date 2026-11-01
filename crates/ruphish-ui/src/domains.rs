@@ -282,6 +282,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
     let loaded = RwSignal::new(id.is_none());
     let busy = RwSignal::new(false);
     let message = Message::new(String::new());
+    let write_error = RwSignal::new(None::<ruphish_ui::api_error::ApiError>);
     let token = StoredValue::new(token);
     let can_edit = editable();
     let dirty = Memo::new(move |_| {
@@ -291,6 +292,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
     let reload = RwSignal::new(0u64);
     let load_error = RwSignal::new(None::<ruphish_ui::api_error::ApiError>);
     let loading = RwSignal::new(id.is_some());
+    let blocked = Signal::derive(move || busy.get() || loading.get() || !loaded.get() || !can_edit);
     if let Some(id) = id {
         Effect::new(move |_| {
             reload.get();
@@ -300,6 +302,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                 match ManagementQueries::read_domain(api, id).await {
                     Ok(d) => {
                         load_error.set(None);
+                        write_error.set(None);
                         baseline.set((d.name.clone(), d.origin.clone(), d.enabled));
                         name.set(d.name);
                         origin.set(d.origin);
@@ -322,7 +325,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
     });
     let submit = move |event: leptos::ev::SubmitEvent| {
         event.prevent_default();
-        if busy.get_untracked() || !loaded.get_untracked() || !can_edit {
+        if blocked.get_untracked() {
             return;
         }
         if !validation.check() {
@@ -366,6 +369,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                 }
                 Err(e) => {
                     busy.set(false);
+                    write_error.set(Some(e.clone()));
                     validation.server(ticket, &e);
                     message.error(e.message)
                 }
@@ -401,11 +405,16 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                 refresh=Callback::new(move |_| reload.update(|n| *n += 1))
             >
                 {message.view()}
+                <WriteRecovery
+                    error=write_error
+                    saved_href=Signal::derive(move || format!("/domains/{}", id.unwrap_or(0)))
+                    busy=Signal::derive(move || busy.get() || loading.get())
+                    on_reload=Callback::new(move |_| reload.update(|n| *n += 1))
+                />
+
                 <form id="domain-form" novalidate on:submit=submit>
                     <ValidationSummary form=validation />
-                    <FormFields disabled=Signal::derive(move || {
-                        busy.get() || !loaded.get() || !can_edit
-                    })>
+                    <FormFields disabled=blocked>
                         <Field label=trs!(ui.name)>
                             <TextInput
                                 required=true
@@ -443,7 +452,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                         <ActionButton
                             kind="button"
                             style=ButtonStyle::Ghost
-                            disabled=Signal::derive(move || busy.get())
+                            disabled=Signal::derive(move || busy.get() || loading.get())
                             on_click=move |_| {
                                 loaded.set(false);
                                 cancel(
@@ -466,9 +475,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
                                 })
                                     .to_owned()
                             })
-                            disabled=Signal::derive(move || {
-                                busy.get() || !loaded.get() || !can_edit
-                            })
+                            disabled=blocked
                         />
                     </FormFooter>
                 </form>
@@ -648,6 +655,9 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                         }
                     })}
             </PageHeader>
+            <AttributionInfo value=Signal::derive(move || {
+                domain.get().map(|d| d.attribution).unwrap_or_default()
+            }) />
             {message.view()}
             <QueryBoundary
                 fetching=read.fetching
@@ -1115,12 +1125,6 @@ fn check_explanation(code: &str) -> &'static str {
             leptos_i18n::t_string!(
                 i18n,
                 ui.check_the_hostname_s_a_and_aaaa_records_every_address_must_be_reachable_and_perm
-            )
-        }
-        "domain_claim_conflict" => {
-            leptos_i18n::t_string!(
-                i18n,
-                ui.this_hostname_is_assigned_to_another_account_use_that_account_s_domain_or_ask_it
             )
         }
         "domain_worker_timeout" => {

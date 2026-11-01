@@ -24,6 +24,7 @@ fn token() -> Result<String, Error> {
 }
 fn decode(r: PgRow) -> Result<Domain, Error> {
     Ok(Domain {
+        attribution: super::attribution::read(&r, "owner_id")?,
         verification_required: r.try_get("verification_required").map_err(storage)?,
         eligible_until: r.try_get("eligible_until").map_err(storage)?,
         expires_at: r.try_get("expires_at").map_err(storage)?,
@@ -71,17 +72,14 @@ fn decode(r: PgRow) -> Result<Domain, Error> {
     })
 }
 use super::inventory_sql::DOMAINS as SELECT;
-async fn load(c: &mut PgConnection, owner: i64, id: i64) -> Result<Domain, Error> {
+async fn load(c: &mut PgConnection, id: i64) -> Result<Domain, Error> {
     let mut result = decode(
-        sqlx::query(sqlx::AssertSqlSafe(format!(
-            "{SELECT} WHERE d.owner_id=$1 AND d.id=$2"
-        )))
-        .bind(owner)
-        .bind(id)
-        .fetch_optional(&mut *c)
-        .await
-        .map_err(storage)?
-        .ok_or(Error::NotFound("Domain"))?,
+        sqlx::query(sqlx::AssertSqlSafe(format!("{SELECT} WHERE d.id=$1")))
+            .bind(id)
+            .fetch_optional(&mut *c)
+            .await
+            .map_err(storage)?
+            .ok_or(Error::NotFound("Domain"))?,
     )?;
     result.history = sqlx::query("SELECT id,scheduled_at,started_at,finished_at,outcome,code FROM ruphish_domain_checks WHERE domain_id=$1 AND finished_at IS NOT NULL ORDER BY id DESC LIMIT 10").bind(id).fetch_all(c).await.map_err(storage)?.into_iter().map(|r| Ok(VerificationRun {id:r.try_get("id").map_err(storage)?,state:r.try_get("outcome").map_err(storage)?,scheduled_at:r.try_get("scheduled_at").map_err(storage)?,started_at:r.try_get("started_at").map_err(storage)?,finished_at:r.try_get("finished_at").map_err(storage)?,code:r.try_get("code").map_err(storage)?})).collect::<Result<_,Error>>()?;
     Ok(result)
@@ -105,24 +103,42 @@ async fn prune(c: &mut PgConnection, id: i64) -> Result<(), Error> {
 /// Fixed origin lookup used inside campaign preparation/launch transactions.
 pub(super) async fn eligible(
     c: &mut PgConnection,
-    owner: i64,
     value: &str,
     now: i64,
     lock: bool,
 ) -> Result<i64, Error> {
     let origin = origin(value, true).map_err(|code| Error::Invalid(code.into()))?;
     let statement = if lock {
-        "SELECT id,enabled,(SELECT eligible_until FROM ruphish_domain_policy WHERE id=ruphish_domains.id) AS verified_until FROM ruphish_domains WHERE owner_id=$1 AND origin=$2 FOR SHARE"
+        "SELECT id,enabled,(SELECT eligible_until FROM ruphish_domain_policy WHERE id=ruphish_domains.id) AS verified_until FROM ruphish_domains WHERE origin=$1 FOR SHARE"
     } else {
-        "SELECT id,enabled,(SELECT eligible_until FROM ruphish_domain_policy WHERE id=ruphish_domains.id) AS verified_until FROM ruphish_domains WHERE owner_id=$1 AND origin=$2"
+        "SELECT id,enabled,(SELECT eligible_until FROM ruphish_domain_policy WHERE id=ruphish_domains.id) AS verified_until FROM ruphish_domains WHERE origin=$1"
     };
-    let row = sqlx::query(statement)
-        .bind(owner)
+    let rows = sqlx::query(statement)
         .bind(origin.value)
-        .fetch_optional(&mut *c)
+        .fetch_all(&mut *c)
         .await
-        .map_err(storage)?
-        .ok_or_else(|| Error::Invalid("domain_not_verified".into()))?;
+        .map_err(storage)?;
+    let mut selected = None;
+    for row in &rows {
+        if row.try_get::<bool, _>("enabled").map_err(storage)? {
+            if selected.is_some() {
+                return Err(Error::Invalid(
+                    "Campaign origin is ambiguous; keep exactly one matching domain enabled".into(),
+                ));
+            }
+            selected = Some(row);
+        }
+    }
+    let row = selected.ok_or_else(|| {
+        Error::Invalid(
+            if rows.is_empty() {
+                "domain_not_verified"
+            } else {
+                "domain_disabled"
+            }
+            .into(),
+        )
+    })?;
     eligibility(
         row.try_get("enabled").map_err(storage)?,
         row.try_get("verified_until").map_err(storage)?,
@@ -139,16 +155,13 @@ impl Repository for Domains {
             .await
             .map_err(storage)?;
         super::resources::authorize(&mut tx, caller, false).await?;
-        let result = sqlx::query(sqlx::AssertSqlSafe(format!(
-            "{SELECT} WHERE d.owner_id=$1 ORDER BY d.id"
-        )))
-        .bind(caller.id)
-        .fetch_all(&mut *tx)
-        .await
-        .map_err(storage)?
-        .into_iter()
-        .map(decode)
-        .collect();
+        let result = sqlx::query(sqlx::AssertSqlSafe(format!("{SELECT}  ORDER BY d.id")))
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(storage)?
+            .into_iter()
+            .map(decode)
+            .collect();
         tx.commit()
             .await
             .map_err(|e| Error::Storage(crate::postgres::commit_error(e)))?;
@@ -159,7 +172,7 @@ impl Repository for Domains {
             .await
             .map_err(storage)?;
         super::resources::authorize(&mut tx, caller, false).await?;
-        let result = load(&mut tx, caller.id, id).await?;
+        let result = load(&mut tx, id).await?;
         tx.commit()
             .await
             .map_err(|e| Error::Storage(crate::postgres::commit_error(e)))?;
@@ -180,16 +193,13 @@ impl Repository for Domains {
             .map_err(storage)?;
         super::resources::authorize(&mut tx, caller, true).await?;
         let id = if let Some(id) = id {
-            sqlx::query("SELECT id FROM ruphish_domains WHERE id=$1 AND owner_id=$2 FOR UPDATE")
+            sqlx::query("SELECT id FROM ruphish_domains WHERE id=$1  FOR UPDATE")
                 .bind(id)
-                .bind(caller.id)
                 .fetch_optional(&mut *tx)
                 .await
                 .map_err(storage)?;
-            let old = load(&mut tx, caller.id, id).await?;
-            if edit.revision != Some(old.revision) {
-                return Err(Error::Changed);
-            }
+            let old = load(&mut tx, id).await?;
+            ruphish_application::resources::require_revision(old.revision, edit.revision)?;
             if canonical.value != old.origin {
                 return Err(Error::Invalid("domain_hostname_immutable".into()));
             }
@@ -203,32 +213,36 @@ impl Repository for Domains {
             sqlx::query("UPDATE ruphish_domains SET name=$1,enabled=$2,revision=revision+1,lease_until=0,generation=generation+1,routing_proof='',due=$3 WHERE id=$4").bind(edit.name).bind(edit.enabled).bind(due).bind(id).execute(&mut *tx).await.map_err(storage)?;
             id
         } else {
-            let count: i64 =
-                sqlx::query_scalar("SELECT count(*) FROM ruphish_domains WHERE owner_id=$1")
-                    .bind(caller.id)
-                    .fetch_one(&mut *tx)
-                    .await
-                    .map_err(storage)?;
+            let count: i64 = sqlx::query_scalar("SELECT count(*) FROM ruphish_domains ")
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(storage)?;
             if count >= 500 {
                 return Err(Error::Invalid("domain_limit_reached".into()));
             }
-            let duplicate: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM ruphish_domains WHERE owner_id=$1 AND origin=$2)",
-            )
-            .bind(caller.id)
-            .bind(&canonical.value)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(storage)?;
+            let duplicate: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ruphish_domains WHERE origin=$1)")
+                    .bind(&canonical.value)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(storage)?;
             if duplicate {
                 return Err(Error::Conflict("Domain"));
             }
             sqlx::query("INSERT INTO ruphish_domains(owner_id,name,origin,hostname,enabled,challenge,challenge_expires,due) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id").bind(caller.id).bind(edit.name).bind(canonical.value).bind(canonical.host).bind(edit.enabled).bind(token()?).bind(now+CHALLENGE_LIFETIME).bind(due).fetch_one(&mut *tx).await.map_err(storage)?.insert_id().map_err(storage)?
         };
+        super::attribution::edit(
+            &mut tx,
+            "ruphish_domains",
+            id,
+            caller.id,
+            &ruphish_application::datetime::utc(ruphish_application::datetime::now()),
+        )
+        .await?;
         if verifiable {
             enqueue(&mut tx, id, now).await?;
         }
-        let result = load(&mut tx, caller.id, id).await?;
+        let result = load(&mut tx, id).await?;
         tx.commit()
             .await
             .map_err(|e| Error::Storage(crate::postgres::commit_error(e)))?;
@@ -239,16 +253,13 @@ impl Repository for Domains {
             .await
             .map_err(storage)?;
         super::resources::authorize(&mut tx, caller, true).await?;
-        sqlx::query("SELECT id FROM ruphish_domains WHERE id=$1 AND owner_id=$2 FOR UPDATE")
+        sqlx::query("SELECT id FROM ruphish_domains WHERE id=$1  FOR UPDATE")
             .bind(id)
-            .bind(caller.id)
             .fetch_optional(&mut *tx)
             .await
             .map_err(storage)?;
-        let old = load(&mut tx, caller.id, id).await?;
-        if old.revision != revision {
-            return Err(Error::Changed);
-        }
+        let old = load(&mut tx, id).await?;
+        ruphish_application::resources::require_revision(old.revision, Some(revision))?;
         if old.campaigns > 0 {
             return Err(Error::InUse);
         }
@@ -262,7 +273,6 @@ impl Repository for Domains {
             .execute(&mut *tx)
             .await
             .map_err(storage)?;
-        sqlx::query("DELETE FROM ruphish_domain_claims WHERE hostname=$1 AND owner_id=$2 AND NOT EXISTS(SELECT 1 FROM ruphish_domains WHERE hostname=$3 AND owner_id=$4)").bind(&old.hostname).bind(caller.id).bind(old.hostname).bind(caller.id).execute(&mut *tx).await.map_err(storage)?;
         tx.commit()
             .await
             .map_err(|e| Error::Storage(crate::postgres::commit_error(e)))?;
@@ -274,13 +284,12 @@ impl Repository for Domains {
             .map_err(storage)?;
         super::resources::authorize(&mut tx, caller, true).await?;
         super::settings::require_verification(&mut tx).await?;
-        sqlx::query("SELECT id FROM ruphish_domains WHERE id=$1 AND owner_id=$2 FOR UPDATE")
+        sqlx::query("SELECT id FROM ruphish_domains WHERE id=$1  FOR UPDATE")
             .bind(id)
-            .bind(caller.id)
             .fetch_optional(&mut *tx)
             .await
             .map_err(storage)?;
-        let old = load(&mut tx, caller.id, id).await?;
+        let old = load(&mut tx, id).await?;
         if !origin(&old.origin, false).is_ok_and(|o| o.verification_supported()) {
             return Err(Error::Invalid("domain_verification_unsupported".into()));
         }
@@ -295,7 +304,7 @@ impl Repository for Domains {
             .execute(&mut *tx)
             .await
             .map_err(storage)?;
-            sqlx::query("UPDATE ruphish_domains SET challenge=$1,challenge_expires=$2,revision=revision+1,generation=generation+1,lease_until=0,routing_proof='' WHERE id=$3").bind(token()?).bind(now+CHALLENGE_LIFETIME).bind(id).execute(&mut *tx).await.map_err(storage)?;
+            sqlx::query("UPDATE ruphish_domains SET challenge=$1,challenge_expires=$2,generation=generation+1,lease_until=0,routing_proof='' WHERE id=$3").bind(token()?).bind(now+CHALLENGE_LIFETIME).bind(id).execute(&mut *tx).await.map_err(storage)?;
         } else if old.active_check.is_some() {
             tx.commit()
                 .await
@@ -312,7 +321,7 @@ impl Repository for Domains {
         .await
         .map_err(storage)?;
         enqueue(&mut tx, id, now).await?;
-        let result = load(&mut tx, caller.id, id).await?;
+        let result = load(&mut tx, id).await?;
         tx.commit()
             .await
             .map_err(|e| Error::Storage(crate::postgres::commit_error(e)))?;
@@ -329,18 +338,7 @@ impl Repository for Domains {
         {
             return Ok(None);
         }
-        let candidate: Option<i64> = sqlx::query_scalar("SELECT id FROM ruphish_domains WHERE enabled=TRUE AND due<=$1 AND lease_until<=$2 ORDER BY due,id LIMIT 1")
-            .bind(now).bind(now).fetch_optional(&mut *tx).await.map_err(storage)?;
-        let Some(candidate) = candidate else {
-            return Ok(None);
-        };
-        if !super::locks::domain_owner(&mut tx, candidate, true)
-            .await
-            .map_err(storage)?
-        {
-            return Ok(None);
-        }
-        let row=sqlx::query(sqlx::AssertSqlSafe(format!("{SELECT} WHERE d.enabled=TRUE AND d.due<=$1 AND d.lease_until<=$2 AND d.id=$3 FOR UPDATE OF d SKIP LOCKED"))).bind(now).bind(now).bind(candidate).fetch_optional(&mut *tx).await.map_err(storage)?;
+        let row = sqlx::query(sqlx::AssertSqlSafe(format!("{SELECT} WHERE d.enabled=TRUE AND d.due<=$1 AND d.lease_until<=$2 ORDER BY d.due,d.id LIMIT 1 FOR UPDATE OF d SKIP LOCKED"))).bind(now).bind(now).fetch_optional(&mut *tx).await.map_err(storage)?;
         let Some(row) = row else {
             tx.commit()
                 .await
@@ -382,7 +380,7 @@ impl Repository for Domains {
             routing_proof,
         }))
     }
-    async fn finish(&self, check: &Check, mut o: Observation, now: i64) -> Result<(), Error> {
+    async fn finish(&self, check: &Check, o: Observation, now: i64) -> Result<(), Error> {
         let mut tx = crate::postgres::locks::write(&self.pool)
             .await
             .map_err(storage)?;
@@ -390,40 +388,13 @@ impl Repository for Domains {
         if !policy.verification_enabled {
             return Ok(());
         }
-        if !super::locks::domain_owner(&mut tx, check.domain.id, false)
-            .await
-            .map_err(storage)?
-        {
-            return Ok(());
-        }
-        let row=sqlx::query("SELECT owner_id,failures FROM ruphish_domains WHERE id=$1 AND revision=$2 AND generation=$3 AND lease_until>$4 AND enabled=TRUE FOR UPDATE").bind(check.domain.id).bind(check.domain.revision).bind(check.generation).bind(now).fetch_optional(&mut *tx).await.map_err(storage)?;
+        let row=sqlx::query("SELECT failures FROM ruphish_domains WHERE id=$1 AND revision=$2 AND generation=$3 AND lease_until>$4 AND enabled=TRUE FOR UPDATE").bind(check.domain.id).bind(check.domain.revision).bind(check.generation).bind(now).fetch_optional(&mut *tx).await.map_err(storage)?;
         let Some(row) = row else { return Ok(()) };
-        let owner: i64 = row.try_get("owner_id").map_err(storage)?;
-        let mut success = o.control
+        let success = o.control
             && o.dns
             && o.routing
             && o.tls
             && origin(&check.domain.origin, false).is_ok_and(|o| o.verification_supported());
-        if success {
-            sqlx::query(
-                "INSERT INTO ruphish_domain_claims(hostname,owner_id) VALUES($1,$2) ON CONFLICT (hostname) DO NOTHING",
-            )
-            .bind(&check.domain.hostname)
-            .bind(owner)
-            .execute(&mut *tx)
-            .await
-            .map_err(storage)?;
-            let claimed: i64 =
-                sqlx::query_scalar("SELECT owner_id FROM ruphish_domain_claims WHERE hostname=$1")
-                    .bind(&check.domain.hostname)
-                    .fetch_one(&mut *tx)
-                    .await
-                    .map_err(storage)?;
-            if claimed != owner {
-                success = false;
-                o.code = "domain_claim_conflict";
-            }
-        }
         let failures = if success {
             0
         } else {

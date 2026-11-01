@@ -13,6 +13,12 @@ struct SessionFault {
 
 #[async_trait::async_trait]
 impl ruphish_application::auth::Repository for SessionFault {
+    async fn display_identities(
+        &self,
+        ids: &[i64],
+    ) -> Result<Vec<ruphish_application::auth::DisplayIdentity>, Error> {
+        self.repository.display_identities(ids).await
+    }
     async fn by_id(&self, id: i64) -> Result<ruphish_application::auth::Account, Error> {
         use ruphish_application::storage;
         match self.fault {
@@ -247,7 +253,7 @@ async fn imported_accounts_lookups_roles_and_password_failure_are_atomic() {
 }
 
 #[tokio::test]
-async fn deletion_rolls_back_owned_records_then_preserves_other_owners_and_shared_targets() {
+async fn deletion_rolls_back_then_preserves_shared_resources_and_revokes_personal_state() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("accounts.db");
     std::fs::copy(
@@ -323,15 +329,15 @@ async fn deletion_rolls_back_owned_records_then_preserves_other_owners_and_share
         "smtp",
         "results",
     ] {
-        assert_eq!(
+        assert!(
             sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(format!(
                 "SELECT count(*) FROM {table}"
             )))
             .fetch_one(&pool)
             .await
-            .unwrap(),
-            0,
-            "{table} cleaned up"
+            .unwrap()
+                > 0,
+            "{table} retained"
         );
     }
     assert_eq!(

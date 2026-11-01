@@ -4,9 +4,13 @@ Development previews have short notes on GitHub Releases. This changelog records
 
 ## Unreleased
 
+- Require numeric revisions for shared-resource updates and deletions; reject stale writes atomically and keep unsaved editor input with explicit conflict recovery.
+
+- Share application resources, campaign drafts, results and exports across the installation while retaining account and administrator permissions. Record read-only creator and last-editor attribution; preserve shared work when accounts are deleted.
+
 Initial release of a Gophish successor with a native Rust server, a Rust/WASM administration interface, and independent API contracts. Feature coverage follows the documented differences and privacy boundaries.
 
-- Let regular users manage their own webhooks and reporting mailboxes under administrator feature switches; reject configuration saves while a feature is disabled.
+- Let regular users manage shared webhooks and reporting mailboxes under administrator feature switches; reject configuration saves while a feature is disabled.
 - Initialize reporting mailboxes from active campaigns' actual sends, match reports across campaign creators, and ignore new reports after campaign completion while preserving polling progress.
 - Record coarse browser, OS, and device categories on clicks and submissions, with per-event recipient details and consistent exports/webhooks; exclude raw headers and network identities.
 - Manage recipient groups, email templates, landing pages, reusable static learning pages, attachments, and sending profiles.

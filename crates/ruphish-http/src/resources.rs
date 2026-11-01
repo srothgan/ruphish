@@ -1,4 +1,5 @@
 //! Legacy resource API mapping; authorization and CSRF share the account boundary.
+use crate::attribution::Lookup;
 use crate::auth::{AuthState, Context, Rejection, failure};
 use axum::{
     Router,
@@ -432,6 +433,7 @@ pub(crate) fn resource_code(error: &app::Error) -> ErrorCode {
         app::Error::NotFound(_) => ErrorCode::ResourceNotFound,
         app::Error::Conflict(_) => ErrorCode::ResourceNameTaken,
         app::Error::Changed => ErrorCode::ResourceChanged,
+        app::Error::RevisionRequired => ErrorCode::RevisionRequired,
         app::Error::InUse => ErrorCode::ResourceInUse,
         app::Error::Invalid(_) | app::Error::Validation(_) => ErrorCode::ResourceInvalid,
         app::Error::DraftSchedulePast => ErrorCode::DraftSchedulePast,
@@ -446,6 +448,7 @@ fn error_status(error: &app::Error) -> StatusCode {
         app::Error::NotFound(_) => StatusCode::NOT_FOUND,
         app::Error::Conflict(_) | app::Error::InUse => StatusCode::CONFLICT,
         app::Error::Changed => StatusCode::PRECONDITION_FAILED,
+        app::Error::RevisionRequired => StatusCode::PRECONDITION_REQUIRED,
         app::Error::FeatureDisabled(_) => StatusCode::CONFLICT,
         app::Error::Internal | app::Error::Storage(_) | app::Error::Delivery(_) => {
             StatusCode::INTERNAL_SERVER_ERROR
@@ -495,31 +498,7 @@ pub(crate) fn error(error: app::Error) -> Rejection {
     }
 }
 fn expected(context: &Context) -> Result<Option<String>, Rejection> {
-    context
-        .headers
-        .get(header::IF_MATCH)
-        .map(|h| {
-            let value = h.to_str().map_err(|_| {
-                failure(
-                    StatusCode::BAD_REQUEST,
-                    ErrorCode::RevisionRequired,
-                    "Invalid If-Match header",
-                )
-            })?;
-            value
-                .strip_prefix('"')
-                .and_then(|v| v.strip_suffix('"'))
-                .filter(|v| !v.contains('"'))
-                .map(str::to_owned)
-                .ok_or_else(|| {
-                    failure(
-                        StatusCode::BAD_REQUEST,
-                        ErrorCode::RevisionRequired,
-                        "Use the ETag returned when loading this resource",
-                    )
-                })
-        })
-        .transpose()
+    crate::revision::optional(&context.headers).map(|v| v.map(|v| v.to_string()))
 }
 pub(crate) fn response<T: serde::Serialize>(
     status: StatusCode,
@@ -539,9 +518,11 @@ pub(crate) fn response<T: serde::Serialize>(
     }
     Ok(response)
 }
-pub(crate) fn encode(r: &Resource) -> details::Resource {
+pub(crate) fn encode(r: &Resource, lookup: &Lookup) -> details::Resource {
     details::Resource {
         metadata: details::Metadata {
+            attribution: lookup.resolve(&r.attribution),
+            revision: r.revision,
             id: r.id,
             name: r.name.clone(),
             modified_date: crate::response::stored_date(&r.modified_date),
@@ -616,6 +597,8 @@ fn decode(kind: Kind, bytes: &[u8]) -> Result<app::Input, Rejection> {
         Kind::Group => {
             let v: wire::Group = serde_json::from_slice(bytes).map_err(invalid)?;
             Ok(Resource {
+                attribution: Default::default(),
+                revision: 0,
                 id: v.id,
                 name: v.name,
                 modified_date: String::new(),
@@ -635,6 +618,8 @@ fn decode(kind: Kind, bytes: &[u8]) -> Result<app::Input, Rejection> {
         Kind::Template => {
             let v: wire::EmailTemplate = serde_json::from_slice(bytes).map_err(invalid)?;
             Ok(Resource {
+                attribution: Default::default(),
+                revision: 0,
                 id: v.id,
                 name: v.name,
                 modified_date: String::new(),
@@ -659,6 +644,8 @@ fn decode(kind: Kind, bytes: &[u8]) -> Result<app::Input, Rejection> {
             let v: ruphish_contracts::resources::LearningPageInput =
                 serde_json::from_slice(bytes).map_err(invalid)?;
             Ok(Resource {
+                attribution: Default::default(),
+                revision: 0,
                 id: v.id,
                 name: v.name,
                 modified_date: String::new(),
@@ -671,6 +658,8 @@ fn decode(kind: Kind, bytes: &[u8]) -> Result<app::Input, Rejection> {
         Kind::Page => {
             let v: wire::LandingPage = serde_json::from_slice(bytes).map_err(invalid)?;
             Ok(Resource {
+                attribution: Default::default(),
+                revision: 0,
                 id: v.id,
                 name: v.name,
                 modified_date: String::new(),
@@ -683,6 +672,8 @@ fn decode(kind: Kind, bytes: &[u8]) -> Result<app::Input, Rejection> {
         Kind::Profile => {
             let v: wire::SendingProfile = serde_json::from_slice(bytes).map_err(invalid)?;
             Ok(Resource {
+                attribution: Default::default(),
+                revision: 0,
                 id: v.id,
                 name: v.name,
                 modified_date: String::new(),
@@ -732,9 +723,13 @@ async fn list(context: Context) -> Result<Response, Rejection> {
         .list(user.identity, kind(&context)?)
         .await
         .map_err(error)?;
+    let lookup = Lookup::load(&context, values.iter().map(|v| &v.attribution)).await?;
     response(
         StatusCode::OK,
-        &values.iter().map(encode).collect::<Vec<_>>(),
+        &values
+            .iter()
+            .map(|v| encode(v, &lookup))
+            .collect::<Vec<_>>(),
         None,
     )
 }
@@ -745,7 +740,8 @@ async fn read(context: Context, Path(id): Path<i64>) -> Result<Response, Rejecti
         .get(user.identity, kind(&context)?, id)
         .await
         .map_err(error)?;
-    let mut wire = encode(&value);
+    let lookup = Lookup::load(&context, [&value.attribution]).await?;
+    let mut wire = encode(&value, &lookup);
     if let details::Content::Page(page) = &mut wire.content {
         page.warnings = Some(warnings(
             context
@@ -764,7 +760,7 @@ async fn read(context: Context, Path(id): Path<i64>) -> Result<Response, Rejecti
         page.preview_html = Some(html);
         page.warnings = Some(warnings(findings));
     }
-    response(StatusCode::OK, &wire, Some(&value.modified_date))
+    response(StatusCode::OK, &wire, Some(&value.revision.to_string()))
 }
 async fn create(context: Context, body: Bytes) -> Result<Response, Rejection> {
     save(context, None, body).await
@@ -806,7 +802,8 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
         .save(user.identity, value, id, expected(&context)?)
         .await
         .map_err(error)?;
-    let mut wire = encode(&saved);
+    let lookup = Lookup::load(&context, [&saved.attribution]).await?;
+    let mut wire = encode(&saved, &lookup);
     match &mut wire.content {
         details::Content::Page(page) => page.warnings = Some(warnings(findings)),
         details::Content::LearningPage(page) => page.warnings = Some(warnings(findings)),
@@ -819,7 +816,7 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
             StatusCode::CREATED
         },
         &wire,
-        Some(&saved.modified_date),
+        Some(&saved.revision.to_string()),
     )
 }
 async fn delete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
@@ -847,8 +844,13 @@ async fn delete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejec
         None,
     )
 }
-fn group_summary_value(s: &app::Summary) -> Result<summaries_wire::GroupSummary, Rejection> {
+fn group_summary_value(
+    s: &app::Summary,
+    lookup: &Lookup,
+) -> Result<summaries_wire::GroupSummary, Rejection> {
     Ok(summaries_wire::GroupSummary {
+        attribution: lookup.resolve(&s.attribution),
+        revision: s.revision,
         id: s.id,
         name: s.name.clone(),
         modified_date: crate::response::stored_date(&s.modified_date),
@@ -858,8 +860,13 @@ fn group_summary_value(s: &app::Summary) -> Result<summaries_wire::GroupSummary,
             .map_err(|_| error(app::Error::Internal))?,
     })
 }
-fn resource_summary(s: &app::Summary) -> Result<summaries_wire::ResourceSummary, Rejection> {
+fn resource_summary(
+    s: &app::Summary,
+    lookup: &Lookup,
+) -> Result<summaries_wire::ResourceSummary, Rejection> {
     Ok(summaries_wire::ResourceSummary {
+        attribution: lookup.resolve(&s.attribution),
+        revision: s.revision,
         id: s.id,
         name: s.name.clone(),
         modified_date: crate::response::stored_date(&s.modified_date),
@@ -877,10 +884,11 @@ async fn summaries(context: Context) -> Result<Response, Rejection> {
         .summaries(user.identity, kind, None)
         .await
         .map_err(error)?;
+    let lookup = Lookup::load(&context, values.iter().map(|v| &v.attribution)).await?;
     if kind == Kind::Group {
         let groups = values
             .iter()
-            .map(group_summary_value)
+            .map(|v| group_summary_value(v, &lookup))
             .collect::<Result<Vec<_>, _>>()?;
         response(
             StatusCode::OK,
@@ -893,7 +901,7 @@ async fn summaries(context: Context) -> Result<Response, Rejection> {
     } else {
         let items = values
             .iter()
-            .map(resource_summary)
+            .map(|v| resource_summary(v, &lookup))
             .collect::<Result<Vec<_>, _>>()?;
         response(
             StatusCode::OK,
@@ -915,5 +923,6 @@ async fn group_summary(context: Context, Path(id): Path<i64>) -> Result<Response
     let value = values
         .first()
         .ok_or_else(|| error(app::Error::NotFound("Group")))?;
-    response(StatusCode::OK, &group_summary_value(value)?, None)
+    let lookup = Lookup::load(&context, [&value.attribution]).await?;
+    response(StatusCode::OK, &group_summary_value(value, &lookup)?, None)
 }

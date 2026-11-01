@@ -3,6 +3,9 @@ use crate::{auth::Identity, resources::Error};
 pub use ruphish_domain::integrations::{MailboxEdit, WebhookEdit};
 /// Safe endpoint details.
 pub struct Webhook {
+    /// Server-assigned creator and last-editor attribution.
+    pub attribution: ruphish_domain::attribution::Attribution,
+
     /// Persistent identifier.
     pub id: i64,
     /// Name.
@@ -20,6 +23,9 @@ pub struct Webhook {
 }
 /// Public mailbox view, with no service password or raw message content.
 pub struct Mailbox {
+    /// Server-assigned creator and last-editor attribution.
+    pub attribution: ruphish_domain::attribution::Attribution,
+
     /// Persistent resource identity.
     pub id: i64,
     /// Resource name.
@@ -89,7 +95,7 @@ pub struct Run {
 #[async_trait::async_trait]
 /// Live-authorized integration configuration and explicit actions.
 pub trait Repository: Send + Sync {
-    /// Creator-owned endpoint list, authorized by resource permissions.
+    /// Shared endpoint list, authorized by resource permissions.
     async fn webhooks(&self, caller: Identity) -> Result<Vec<Webhook>, Error>;
     /// Endpoint detail and attempts.
     async fn webhook(&self, caller: Identity, id: i64) -> Result<Webhook, Error>;
@@ -109,7 +115,7 @@ pub trait Repository: Send + Sync {
     ) -> Result<(), Error>;
     /// Send signed validation payload without creating a campaign event.
     async fn validate_webhook(&self, caller: Identity, id: i64) -> Result<(), Error>;
-    /// Owner-scoped reporting mailbox list.
+    /// Shared reporting mailbox list.
     async fn mailboxes(&self, caller: Identity) -> Result<Vec<Mailbox>, Error>;
     /// Mailbox detail and recent runs.
     async fn mailbox(&self, caller: Identity, id: i64) -> Result<Mailbox, Error>;

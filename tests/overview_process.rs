@@ -121,11 +121,12 @@ fn dashboard_supports_authenticated_browser_and_api_reads_restart_and_revocation
     let other: Snapshot = read(&base, "/api/overview", Some("other-key"))
         .json()
         .unwrap();
-    assert!(other.recent.is_empty());
+    assert_eq!(other.recent.len(), 1);
+    assert_eq!(other.recent[0].outcomes.opened, 2);
     let other: PostureResponse = read(&base, "/api/overview/posture", Some("other-key"))
         .json()
         .unwrap();
-    assert_eq!(other.counts.delivered, 0);
+    assert_eq!(other.counts.delivered, 2);
     let browser = reqwest::blocking::Client::builder()
         .no_proxy()
         .cookie_store(true)
@@ -221,6 +222,11 @@ fn progression_is_shared_across_summaries_without_inventing_recorded_events() {
         dir.path(),
         "UPDATE campaigns SET launch_date='0001-01-01T00:00:00Z' WHERE id=1",
     );
+    // These synthetic executions need the same immutable content shape as real launches.
+    database(
+        dir.path(),
+        r#"UPDATE campaigns SET frozen_content='{"template":{"id":1,"name":"Email","revision":1,"modified_date":"","content":{"subject":"","text":"Training","html":"","envelope_sender":"","attachments":[]}},"page":{"id":1,"name":"Page","revision":1,"modified_date":"","content":{"html":"<p>Training</p>","redirect_url":""}},"sender":{"id":1,"name":"Sender","revision":1,"modified_date":"","content":{"from_address":"training@example.test","headers":[]}},"learning_html":null}'"#,
+    );
     // Repeated observations precede the later acceptance. Neither insertion
     // order nor duplicates may change unique progression or create timestamps.
     database(
@@ -278,11 +284,11 @@ fn progression_is_shared_across_summaries_without_inventing_recorded_events() {
         };
         let p = fetch("/api/overview/posture?window=all");
         for (field, count) in [
-            ("delivered", 6),
-            ("opened", 4),
-            ("clicked", 3),
+            ("delivered", 7),
+            ("opened", 5),
+            ("clicked", 4),
             ("reported", 1),
-            ("credentials_entered", 1),
+            ("credentials_entered", 2),
         ] {
             assert_eq!(p[field], count, "{field}");
         }
@@ -359,7 +365,11 @@ fn progression_is_shared_across_summaries_without_inventing_recorded_events() {
         assert_eq!(unsent["stats"]["opened"], 1);
         assert_eq!(unsent["stats"]["clicked"], 1);
         let other = read(&base, "/api/campaigns/1/results", Some("other-key"));
-        assert_eq!(other.status(), 404);
+        assert_eq!(other.status(), 200);
+        assert_eq!(
+            other.json::<Value>().unwrap(),
+            fetch("/api/campaigns/1/results")
+        );
         let csv = read(
             &base,
             "/api/campaigns/1/export?format=csv&scope=events",

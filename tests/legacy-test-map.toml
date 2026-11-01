@@ -1,8 +1,10 @@
+# Numeric configuration revisions replace optional timestamp preconditions: provider shared_workspace and shared_resource_revisions_prevent_lost_updates_and_stale_deletes_end_to_end cover competing saves/deletes and missing/stale preconditions.
 # Existing Go scenarios; status and target_test distinguish implemented equivalents from planned work.
 # Release baseline: supported Gophish data converts directly; pre-release Ruphish histories and migrations_prefix are intentionally unsupported.
 # DEC-046: inherited MIME scenarios preserve rendered content, headers and attachments;
 # HTML receives the managed tracking image when campaign track_opens is enabled; disabled campaigns remove existing matching images and record no opens. See docs/contributing/email-tracking.md
 # and crates/ruphish-adapters/tests/email_tracking.rs for the approved output difference.
+# Shared-workspace access intentionally replaces Gophish creator isolation. See provider shared_workspace contracts and shared_resources_stamp_real_editors_and_survive_account_deletion for automatic attribution, competing edits, revocation and preserved work.
 schema_version = 1
 reference_commit = "95618469799295e2c0fec980805a2dfbb818816b"
 reference_source = "Gophish Community Edition 0.12.1"
@@ -885,11 +887,11 @@ source_test = "TestCompleteCampaignAlsoDeletesMailLogs"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "0192d8e0be83675ed19c27e1fcdd610c7e67138abcd9dee38290dcf258ed177c"
 guarantee = "Completing a campaign removes its pending mail logs."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Frozen template edits leave queued content unchanged; live transport revision changes, owner lock and completion still fence unsubmitted work. Each target_test names the executable evidence."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Frozen template edits leave queued content unchanged; live transport revision changes and completion still fence unsubmitted work; creator locking no longer stops shared campaigns. Each target_test names the executable evidence."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/tests/campaign_storage.rs"
 status = "implemented"
-target_test = "resource_changes_owner_lock_and_completion_fence_unsubmitted_work"
+target_test = "resource_changes_and_completion_fence_work_but_creator_lock_does_not"
 source_subtests = []
 
 [[tests]]
@@ -900,7 +902,7 @@ source_test = "TestCampaignGetResults"
 source_receiver = "*ModelsSuite"
 source_body_sha256 = "2a81af2cfba452748487fd8b118f58700917ac5e6a1f3b991945581b4af0d14d"
 guarantee = "Retrieve the campaign's recipient results and event history with expected associations."
-strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence. DEC-055 adapts historical campaign requests to ID selections; original result/history expectations remain independent. Campaign SMTP projections now assert frozen sender/headers without connection or authentication values; direct SMTP resource responses retain transport behavior. The shared rich Gophish corpus in crates/ruphish-adapters/tests/support/legacy_migration.rs additionally verifies migrated recipient snapshots, event attribution, privacy transformations and restart on SQLite and MySQL."
+strategy = "Translate observable persistence, MIME and protocol outcomes using real SQLite, executable HTTP and loopback SMTP tests. Durable fenced claims/retry state replace processing flags, immediate dial loops and unsafe unknown resend; new recipient IDs use cryptographic randomness; safe codes replace raw error text. Each target_test names the executable evidence. DEC-055 adapts historical campaign requests to ID selections; original result/history expectations remain independent. Campaign SMTP projections now assert frozen sender/headers without connection or authentication values; direct SMTP resource responses retain transport behavior. Captured HTTP payload tests independently assert server-assigned creator/editor references (ID, safe display name and deletion status) and valid edit timestamps before comparing the unchanged Gophish payload fields. The shared rich Gophish corpus in crates/ruphish-adapters/tests/support/legacy_migration.rs additionally verifies migrated recipient snapshots, event attribution, privacy transformations and restart on SQLite and MySQL."
 target_crate = "ruphish"
 target_path = "tests/campaign_process.rs"
 status = "implemented"
@@ -1890,7 +1892,7 @@ source_test = "TestSendReal"
 source_receiver = ""
 source_body_sha256 = "0f0253e4e9411f98fcfd5b7b470c1a20a8459127943b8668759a47b59c5eab57"
 guarantee = "Send the exact JSON payload with the expected signature and content type to a local webhook receiver."
-strategy = "Translate the existing scenario and independent expected values; use real boundary effects where the original only mocked internals. Preserve all original table cases. The real HTTP regression regular_users_manage_integrations_under_admin_feature_switches in tests/settings_process.rs additionally verifies signed validation by regular users and no network effects when disabled; database provider contracts cover creator-scoped configuration, account-deletion cleanup, migration ownership and delivery across campaign creators."
+strategy = "Translate the existing scenario and independent expected values; use real boundary effects where the original only mocked internals. Preserve all original table cases. The real HTTP regression regular_users_manage_integrations_under_admin_feature_switches in tests/settings_process.rs additionally verifies signed validation by regular users and no network effects when disabled; database provider contracts cover shared configuration, account-deletion preservation, migration attribution and delivery across campaign creators."
 target_crate = "ruphish-adapters"
 target_path = "crates/ruphish-adapters/src/webhook_delivery.rs"
 status = "implemented"

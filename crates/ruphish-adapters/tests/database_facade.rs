@@ -63,6 +63,8 @@ async fn configured_databases_stay_isolated_and_closed_capabilities_cannot_recon
         .save(
             actor.identity,
             Resource {
+                attribution: Default::default(),
+                revision: 0,
                 id: 0,
                 name: "Independent audience".into(),
                 modified_date: String::new(),

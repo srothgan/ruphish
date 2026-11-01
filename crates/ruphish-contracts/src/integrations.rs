@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 /// Creator-visible webhook configuration without signing secrets.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Webhook {
+    /// Server-assigned creator and last-editor attribution.
+    #[serde(flatten)]
+    pub attribution: crate::attribution::Attribution,
+
     /// Persistent identifier.
     pub id: i64,
     /// Operator-visible name.
@@ -20,9 +24,13 @@ pub struct Webhook {
     pub history: Vec<Run>,
 }
 
-/// Owner-visible mailbox configuration and worker status.
+/// Shared mailbox configuration and worker status.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Mailbox {
+    /// Server-assigned creator and last-editor attribution.
+    #[serde(flatten)]
+    pub attribution: crate::attribution::Attribution,
+
     /// Persistent identifier.
     pub id: i64,
     /// Operator-visible name.
@@ -110,7 +118,7 @@ mod tests {
 
     #[test]
     fn incomplete_integration_responses_cannot_become_disabled_or_empty() {
-        let complete = json!({"id":3,"name":"Events","url":"https://example.test/hook","is_active":false,"revision":2,"has_secret":false,"history":[]});
+        let complete = json!({"created_by":null,"edited_by":null,"edited_at":null,"id":3,"name":"Events","url":"https://example.test/hook","is_active":false,"revision":2,"has_secret":false,"history":[]});
         assert!(serde_json::from_value::<Webhook>(complete.clone()).is_ok());
         for field in [
             "id",

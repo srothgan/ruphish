@@ -1,4 +1,4 @@
-//! Owner-scoped, transactional changes to event rows.
+//! Shared, transactional changes to event rows.
 use crate::{auth::Identity, resources::Error};
 pub use ruphish_domain::event_edit::*;
 

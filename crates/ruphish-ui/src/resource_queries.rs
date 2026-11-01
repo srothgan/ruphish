@@ -31,6 +31,7 @@ impl ResourceQueries {
                     .into_iter()
                     .map(|row| SummaryRow {
                         id: row.id,
+                        revision: row.revision,
                         name: row.name,
                         modified_date: row.modified_date,
                         count: Some(row.num_targets),
@@ -43,6 +44,7 @@ impl ResourceQueries {
                     .into_iter()
                     .map(|row| SummaryRow {
                         id: row.id,
+                        revision: row.revision,
                         name: row.name,
                         modified_date: row.modified_date,
                         count: Some(row.active_campaigns),

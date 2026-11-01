@@ -597,6 +597,7 @@ async fn confirmed_resource_saves_survive_late_reads_and_failed_refreshes() {
             let new_release = Gate::new();
             let calls = Rc::new(Cell::new(0));
             let mut baseline = vec![SummaryRow {
+                revision: 1,
                 id: 99,
                 name: "Other".into(),
                 modified_date: None,
@@ -604,6 +605,7 @@ async fn confirmed_resource_saves_survive_late_reads_and_failed_refreshes() {
             }];
             if !creation {
                 baseline.push(SummaryRow {
+                    revision: 1,
                     id: 7,
                     name: "Old name".into(),
                     modified_date: None,
@@ -616,6 +618,7 @@ async fn confirmed_resource_saves_survive_late_reads_and_failed_refreshes() {
                 .cloned()
                 .collect::<Vec<_>>();
             refreshed.push(SummaryRow {
+                revision: 1,
                 id: 7,
                 name: "Server name".into(),
                 modified_date: Some("2026-10-29T10:00:00Z".into()),
@@ -688,8 +691,7 @@ async fn confirmed_resource_saves_survive_late_reads_and_failed_refreshes() {
             assert_eq!(calls.get(), 1);
             query.invalidate(1);
             old_started.wait().await;
-            let mut response =
-                json!({"id":7,"name":"Server name","modified_date":"2026-10-29T10:00:00Z"});
+            let mut response = json!({"revision":1,"created_by":null,"edited_by":null,"edited_at":null,"id":7,"name":"Server name","modified_date":"2026-10-29T10:00:00Z"});
             let kind = if group {
                 response["targets"] = json!([{ "email":"confirmed@example.test","first_name":"","last_name":"","position":"" }]);
                 Kind::Group

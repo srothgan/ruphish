@@ -265,18 +265,34 @@ fn learning_pages_redirect_without_tracking_survive_restart_and_reject_adversari
     );
     let second: Value = client().post(format!("{admin}/api/users/")).bearer_auth("synthetic-bootstrap-token").json(&json!({"username":"learning-other","password":"synthetic-other-owner-password","role":"user"})).send().unwrap().error_for_status().unwrap().json().unwrap();
     let second_key = second["api_key"].as_str().unwrap();
-    for method in [
-        reqwest::Method::GET,
-        reqwest::Method::PUT,
-        reqwest::Method::DELETE,
-    ] {
+    let mut shared = client()
+        .get(format!("{admin}/api/learning-pages/{page_id}"))
+        .bearer_auth(second_key)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json::<Value>()
+        .unwrap();
+    // Detail reads add a rendered preview to the saved resource projection.
+    assert_eq!(
+        shared.as_object_mut().unwrap().remove("preview_html"),
+        Some(preview["html"].clone()),
+        "shared reads render the same sanitized learning content as the preview endpoint"
+    );
+    assert_eq!(shared, page, "learning pages are shared across creators");
+    for method in [reqwest::Method::PUT, reqwest::Method::DELETE] {
         let response = client()
             .request(method, format!("{admin}/api/learning-pages/{page_id}"))
             .bearer_auth(second_key)
             .json(&page)
             .send()
             .unwrap();
-        assert!(!response.status().is_success());
+        assert_eq!(response.status(), 428);
+        assert_eq!(
+            response.json::<Value>().unwrap()["code"],
+            "REVISION_REQUIRED"
+        );
     }
     let group = post(
         &admin,
@@ -404,12 +420,13 @@ fn learning_pages_redirect_without_tracking_survive_restart_and_reject_adversari
         client()
             .delete(format!("{admin}/api/learning-pages/{page_id}"))
             .bearer_auth("synthetic-bootstrap-token")
+            .header("If-Match", format!("\"{}\"", page["revision"]))
             .send()
             .unwrap()
             .status(),
         409
     );
-    let revision = page["modified_date"].as_str().unwrap().to_owned();
+    let revision = page["revision"].to_string();
     page["html"] = json!("<h1>Updated explanation</h1>");
     let updated: Value = client()
         .put(format!("{admin}/api/learning-pages/{page_id}"))
@@ -539,6 +556,7 @@ fn learning_pages_redirect_without_tracking_survive_restart_and_reject_adversari
         client()
             .delete(format!("{admin}/api/learning-pages/{page_id}"))
             .bearer_auth("synthetic-bootstrap-token")
+            .header("If-Match", format!("\"{}\"", updated["revision"]))
             .send()
             .unwrap()
             .status(),

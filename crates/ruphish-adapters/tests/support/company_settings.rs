@@ -28,7 +28,7 @@ async fn input(db: &Database, actor: auth::Identity, origin: &str) -> campaign::
         .save(
             actor,
             resource(
-                "Audience",
+                &format!("Audience {}", actor.id),
                 Content::Group(vec![Recipient {
                     email: "participant@example.test".into(),
                     ..Default::default()
@@ -43,7 +43,7 @@ async fn input(db: &Database, actor: auth::Identity, origin: &str) -> campaign::
         .save(
             actor,
             resource(
-                "Email",
+                &format!("Email {}", actor.id),
                 Content::Template(Template {
                     text: "Training {{.URL}}".into(),
                     ..Default::default()
@@ -58,7 +58,7 @@ async fn input(db: &Database, actor: auth::Identity, origin: &str) -> campaign::
         .save(
             actor,
             resource(
-                "Page",
+                &format!("Page {}", actor.id),
                 Content::Page(Page {
                     html: "<h1>Training</h1>".into(),
                     ..Default::default()
@@ -73,7 +73,7 @@ async fn input(db: &Database, actor: auth::Identity, origin: &str) -> campaign::
         .save(
             actor,
             resource(
-                "SMTP",
+                &format!("SMTP {}", actor.id),
                 Content::Profile(Profile {
                     interface_type: "SMTP".into(),
                     host: "127.0.0.1:2525".into(),
@@ -88,7 +88,7 @@ async fn input(db: &Database, actor: auth::Identity, origin: &str) -> campaign::
         .unwrap();
     let select = |r: Resource| campaign::Selection {
         id: r.id,
-        revision: Some(r.modified_date),
+        revision: Some(r.revision.to_string()),
     };
     campaign::Create {
         name: "Settings workflow".into(),
@@ -238,8 +238,8 @@ pub(super) async fn exercise(db: &Database) {
     let campaigns = db.campaigns();
 
     assert!(
-        campaigns.prepare(other, &launch, now).await.is_err(),
-        "disabled verification never bypasses ownership"
+        campaigns.prepare(other, &launch, now).await.is_ok(),
+        "shared resources are available to a colleague"
     );
     let disabled_domain = domains
         .save(
@@ -986,7 +986,7 @@ async fn contention_setup(
     let resources = db.resources();
     let selected = |resource: &Resource| campaign::Selection {
         id: resource.id,
-        revision: Some(resource.modified_date.clone()),
+        revision: Some(resource.revision.to_string()),
     };
     let groups = resources.list(other, Kind::Group).await.unwrap();
     let templates = resources.list(other, Kind::Template).await.unwrap();
@@ -995,15 +995,41 @@ async fn contention_setup(
     let launch = campaign::Create {
         name: "Concurrent policy change".into(),
         groups: vec![selected(
-            groups.iter().find(|r| r.name == "Audience").unwrap(),
+            groups
+                .iter()
+                .find(|r| r.name == format!("Audience {}", other.id))
+                .unwrap(),
         )],
-        template: selected(templates.iter().find(|r| r.name == "Email").unwrap()),
-        page: selected(pages.iter().find(|r| r.name == "Page").unwrap()),
-        profile: selected(profiles.iter().find(|r| r.name == "SMTP").unwrap()),
+        template: selected(
+            templates
+                .iter()
+                .find(|r| r.name == format!("Email {}", other.id))
+                .unwrap(),
+        ),
+        page: selected(
+            pages
+                .iter()
+                .find(|r| r.name == format!("Page {}", other.id))
+                .unwrap(),
+        ),
+        profile: selected(
+            profiles
+                .iter()
+                .find(|r| r.name == format!("SMTP {}", other.id))
+                .unwrap(),
+        ),
         url: "https://other-policy.example.test".into(),
         ..Default::default()
     };
-    let domain = db.domains().list(other).await.unwrap()[0].id;
+    let domain = db
+        .domains()
+        .list(other)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|d| d.origin == "https://other-policy.example.test")
+        .unwrap()
+        .id;
     (admin, other, settings, launch, domain)
 }
 

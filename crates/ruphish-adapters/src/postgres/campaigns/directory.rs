@@ -26,10 +26,10 @@ impl Campaigns {
                     "{} {}",
                     r#"WITH data AS (
 SELECT 0 AS kind,id AS draft_id,CAST(0 AS BIGINT) AS campaign_id,name,'draft' AS status,NULL AS total,NULL AS launch_date,revision
-FROM ruphish_campaign_drafts WHERE owner_id=? AND campaign_id IS NULL AND ?=1
+FROM ruphish_campaign_drafts WHERE campaign_id IS NULL AND ?=1
 UNION ALL
 SELECT 1 AS kind,'' AS draft_id,c.id AS campaign_id,c.name,COALESCE(c.status,'') AS status,(SELECT COUNT(*) FROM results r WHERE r.campaign_id=c.id) AS total,c.launch_date,NULL AS revision
-FROM campaigns c WHERE c.user_id=? AND ?=1 AND (?=0 OR (?=1 AND c.status='Completed') OR (?=2 AND (c.status IS NULL OR c.status<>'Completed')))
+FROM campaigns c WHERE ?=1 AND (?=0 OR (?=1 AND c.status='Completed') OR (?=2 AND (c.status IS NULL OR c.status<>'Completed')))
 )"#,
                     crate::campaign_sort::tail(
                         crate::campaign_sort::directory(order.sort, "postgres"),
@@ -40,9 +40,7 @@ FROM campaigns c WHERE c.user_id=? AND ?=1 AND (?=0 OR (?=1 AND c.status='Comple
                 true,
             );
             sqlx::query(sqlx::AssertSqlSafe(sql))
-                .bind(caller.id)
                 .bind(i32::from(filter.drafts()))
-                .bind(caller.id)
                 .bind(i32::from(filter.executions()))
                 .bind(filter.completed())
                 .bind(filter.completed())
@@ -60,13 +58,13 @@ FROM campaigns c WHERE c.user_id=? AND ?=1 AND (?=0 OR (?=1 AND c.status='Comple
                 .map_err(storage)?
         } else {
             sqlx::query("SELECT 0 AS kind,id AS draft_id,NULL AS campaign_id,name,'draft' AS status,NULL AS total,NULL AS launch_date,revision
-FROM ruphish_campaign_drafts WHERE owner_id=$1 AND campaign_id IS NULL AND $2=1 AND $3=0 AND id>$4
+FROM ruphish_campaign_drafts WHERE campaign_id IS NULL AND $1=1 AND $2=0 AND id>$3
 UNION ALL
 SELECT 1 AS kind,'' AS draft_id,c.id AS campaign_id,c.name,COALESCE(c.status,'') AS status,(SELECT COUNT(*) FROM results r WHERE r.campaign_id=c.id) AS total,c.launch_date,NULL AS revision
-FROM campaigns c WHERE c.user_id=$5 AND $6=1 AND c.id>$7 AND ($8=0 OR ($9=1 AND c.status='Completed') OR ($10=2 AND (c.status IS NULL OR c.status<>'Completed')))
-ORDER BY kind,draft_id,campaign_id LIMIT $11")
-            .bind(caller.id).bind(i32::from(filter.drafts())).bind(after.kind).bind(&after.draft)
-            .bind(caller.id).bind(i32::from(filter.executions())).bind(after.campaign)
+FROM campaigns c WHERE $4=1 AND c.id>$5 AND ($6=0 OR ($7=1 AND c.status='Completed') OR ($8=2 AND (c.status IS NULL OR c.status<>'Completed')))
+ORDER BY kind,draft_id,campaign_id LIMIT $9")
+            .bind(i32::from(filter.drafts())).bind(after.kind).bind(&after.draft)
+            .bind(i32::from(filter.executions())).bind(after.campaign)
             .bind(filter.completed()).bind(filter.completed()).bind(filter.completed()).bind(limit + 1)
             .fetch_all(&mut *tx).await.map_err(storage)?
         };

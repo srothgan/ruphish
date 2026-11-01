@@ -2,11 +2,11 @@
 use crate::legacy::Timestamp;
 use serde::{Deserialize, Serialize};
 
-/// Owner-scoped resource identity, optionally bound to a reviewed revision.
+/// Shared resource identity, optionally bound to a reviewed revision.
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReviewedResource {
-    /// Owner-scoped persistent resource ID.
+    /// Shared persistent resource ID.
     pub id: i64,
     /// Revision shown during review, if already reviewed.
     pub revision: Option<String>,
@@ -33,7 +33,7 @@ pub struct Policy {
     pub track_opens: bool,
     /// Post-submission redirect override.
     pub redirect_url: Option<String>,
-    /// Selected owned learning page; custom redirect must be empty when present.
+    /// Selected shared learning page; custom redirect must be empty when present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub learning_page_id: Option<i64>,
 }
@@ -68,7 +68,7 @@ pub struct Create {
     pub name: String,
     /// Public URL template.
     pub url: String,
-    /// Owner-scoped resource IDs and optional reviewed revisions.
+    /// Shared resource IDs and optional reviewed revisions.
     pub selection: Selections,
     /// UTC or offset launch; exclusive with launch_local. Both absent means now.
     pub launch_date: Option<Timestamp>,

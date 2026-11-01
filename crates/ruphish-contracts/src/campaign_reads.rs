@@ -65,7 +65,7 @@ pub struct Policy {
     pub track_opens: bool,
     /// Post-submission redirect.
     pub redirect_url: String,
-    /// Selected owned learning page; custom redirect must be empty when present.
+    /// Selected shared learning page; custom redirect must be empty when present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub learning_page_id: Option<i64>,
 }
@@ -73,6 +73,9 @@ pub struct Policy {
 /// Campaign metadata shown beside delivery status.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Header {
+    /// Server-assigned creator and last-editor attribution.
+    #[serde(flatten)]
+    pub attribution: crate::attribution::Attribution,
     /// Execution identity.
     pub id: i64,
     /// Display name.
@@ -341,6 +344,10 @@ pub struct Bucket {
 /// Persisted draft snapshot; configuration may deliberately be incomplete.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Draft {
+    /// Server-assigned creator and last-editor attribution.
+    #[serde(flatten)]
+    pub attribution: crate::attribution::Attribution,
+
     /// Client-generated draft identity.
     pub id: String,
     /// Conditional-write revision.

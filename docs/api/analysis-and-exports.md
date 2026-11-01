@@ -77,7 +77,7 @@ Downloads use `Content-Disposition: attachment`, a `campaign-{id}` filename, and
 
 ## Event corrections
 
-`POST /api/campaigns/{campaign}/recipients/{recipient}/events` commits one owner-scoped change. It requires `modify_objects`; browser sessions also require the existing CSRF token and origin checks. Completed campaigns accept corrections without changing their lifecycle or delivery work. The response contains the affected `id` and `event`. For add/edit, `event` contains `id`, `current`, `source`, `revision`, and boolean `edited`; deletion returns `event: null`.
+`POST /api/campaigns/{campaign}/recipients/{recipient}/events` commits one permission-checked change. It requires `modify_objects`; browser sessions also require the existing CSRF token and origin checks. Completed campaigns accept corrections without changing their lifecycle or delivery work. The response contains the affected `id` and `event`. For add/edit, `event` contains `id`, `current`, `source`, `revision`, and boolean `edited`; deletion returns `event: null`.
 
 ```json
 {

@@ -30,8 +30,9 @@ fn decode_body<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T, Rejecti
         )
     })
 }
-fn encode(d: &Draft) -> reads::Draft {
+fn encode(d: &Draft, lookup: &Lookup) -> reads::Draft {
     reads::Draft {
+        attribution: lookup.resolve(&d.attribution),
         id: d.id.clone(),
         revision: d.revision,
         configuration: (&d.configuration).into(),
@@ -64,7 +65,8 @@ async fn save(c: Context, Path(id): Path<String>, body: Bytes) -> Result<Respons
         )
         .await
         .map_err(draft_error)?;
-    response(StatusCode::OK, &encode(&saved), None)
+    let lookup = Lookup::load(&c, [&saved.attribution]).await?;
+    response(StatusCode::OK, &encode(&saved, &lookup), None)
 }
 async fn read(c: Context, Path(id): Path<String>) -> Result<Response, Rejection> {
     let caller = c.api(None).await?;
@@ -73,7 +75,8 @@ async fn read(c: Context, Path(id): Path<String>) -> Result<Response, Rejection>
         .draft(caller.identity, &id)
         .await
         .map_err(draft_error)?;
-    response(StatusCode::OK, &encode(&saved), None)
+    let lookup = Lookup::load(&c, [&saved.attribution]).await?;
+    response(StatusCode::OK, &encode(&saved, &lookup), None)
 }
 #[derive(Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -97,10 +100,11 @@ async fn list(
     let next = more
         .then(|| rows.last().map(|row| row.id.clone()))
         .flatten();
+    let lookup = Lookup::load(&c, rows.iter().map(|v| &v.attribution)).await?;
     response(
         StatusCode::OK,
         &reads::Drafts {
-            items: rows.iter().map(encode).collect(),
+            items: rows.iter().map(|v| encode(v, &lookup)).collect(),
             next_after: next,
         },
         None,
@@ -136,7 +140,12 @@ async fn launch(c: Context, Path(id): Path<String>, body: Bytes) -> Result<Respo
         .launch_draft(caller.identity, &id, request.revision, input, now())
         .await
         .map_err(draft_error)?;
-    response(StatusCode::OK, &super::encode_campaign(&campaign)?, None)
+    let lookup = Lookup::load(&c, super::attributions(&campaign)).await?;
+    response(
+        StatusCode::OK,
+        &super::encode_campaign(&campaign, &lookup)?,
+        None,
+    )
 }
 
 async fn prepare_draft(c: Context, body: Bytes) -> Result<Response, Rejection> {

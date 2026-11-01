@@ -59,6 +59,10 @@ impl ResourceDraft {
     pub fn value(&self) -> &Value {
         &self.value
     }
+    /// Last server-confirmed resource, including read-only attribution.
+    pub fn confirmed(&self) -> &Value {
+        &self.saved
+    }
     /// Server revision used for conditional writes.
     pub fn revision(&self) -> Option<&str> {
         self.revision.as_deref()
@@ -110,7 +114,13 @@ impl ResourceDraft {
             for (key, value) in fields {
                 if !matches!(
                     key.as_str(),
-                    "id" | "modified_date" | "user_id" | "has_password"
+                    "id" | "revision"
+                        | "modified_date"
+                        | "user_id"
+                        | "has_password"
+                        | "created_by"
+                        | "edited_by"
+                        | "edited_at"
                 ) {
                     self.value[key] = value.clone();
                 }
@@ -146,8 +156,17 @@ impl ResourceDraft {
         if &self.value == submitted {
             self.value = returned.clone();
         } else {
-            for key in ["id", "modified_date"] {
-                self.value[key] = returned[key].clone();
+            for key in [
+                "id",
+                "revision",
+                "modified_date",
+                "created_by",
+                "edited_by",
+                "edited_at",
+            ] {
+                if let Some(value) = returned.get(key) {
+                    self.value[key] = value.clone();
+                }
             }
         }
         if returned.get("has_password").is_some() {
@@ -211,19 +230,28 @@ mod tests {
     }
     #[test]
     fn late_save_preserves_newer_edits_and_cancel_uses_the_server_checkpoint() {
-        let initial = json!({"id":1,"name":"A","targets":[]});
+        let initial = json!({"id":1,"name":"A","targets":[],"created_by":{"id":1,"username":"alice","deleted":false},"edited_by":{"id":1,"username":"alice","deleted":false},"edited_at":"old"});
         let mut d = ResourceDraft::new(initial, Some("old".into()));
         d.edit(|v| v["name"] = json!("Submitted"));
         let submitted = d.value().clone();
         d.edit(|v| v["name"] = json!("Newer edit"));
         d.saved(
             &submitted,
-            json!({"id":1,"name":"Submitted","targets":[],"modified_date":"new"}),
+            json!({"id":1,"name":"Submitted","targets":[],"modified_date":"new","created_by":{"id":1,"username":"alice","deleted":false},"edited_by":{"id":2,"username":"bob","deleted":false},"edited_at":"new"}),
             Some("new".into()),
         );
         assert_eq!(d.value()["name"], "Newer edit");
         assert!(d.dirty());
         assert_eq!(d.revision(), Some("new"));
+        assert_eq!(
+            d.confirmed()["edited_by"],
+            json!({"id":2,"username":"bob","deleted":false})
+        );
+        assert_eq!(d.value()["edited_by"], d.confirmed()["edited_by"]);
+        d.merge_import(&json!({"created_by":999,"edited_by":999,"edited_at":"forged"}));
+        assert_eq!(d.value()["created_by"], d.confirmed()["created_by"]);
+        assert_eq!(d.value()["edited_by"], d.confirmed()["edited_by"]);
+        assert_eq!(d.value()["edited_at"], "new");
         d.cancel();
         assert_eq!(d.value()["name"], "Submitted");
         assert!(!d.dirty());

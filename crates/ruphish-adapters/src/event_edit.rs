@@ -45,8 +45,8 @@ macro_rules! repository {
             Error,
         > {
             super::resources::authorize(c, caller, write).await?;
-            let row = query!("SELECT c.launch_date,c.created_date,c.completed_date FROM campaigns c JOIN results r ON r.campaign_id=c.id WHERE c.user_id=? AND c.id=? AND r.id=?")
-                        .bind(caller.id).bind(campaign).bind(recipient).fetch_optional(c).await.map_err(storage)?.ok_or(Error::NotFound("Recipient"))?;
+            let row = query!("SELECT c.launch_date,c.created_date,c.completed_date FROM campaigns c JOIN results r ON r.campaign_id=c.id WHERE c.id=? AND r.id=?")
+                        .bind(campaign).bind(recipient).fetch_optional(c).await.map_err(storage)?.ok_or(Error::NotFound("Recipient"))?;
             let parse = |column| -> Option<ruphish_application::datetime::Timestamp> {
                 row.try_get::<Option<String>, _>(column)
                     .ok()

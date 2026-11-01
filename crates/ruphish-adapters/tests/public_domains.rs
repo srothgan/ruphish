@@ -915,8 +915,7 @@ async fn domain_expiry_and_disabling_fence_queue_claim_and_submission_without_lo
 }
 
 #[tokio::test]
-async fn expired_leases_and_rotated_challenges_cannot_publish_stale_evidence_or_cross_owner_claims()
-{
+async fn expired_leases_and_rotated_challenges_cannot_publish_stale_evidence_on_shared_domains() {
     let (_dir, db) = fixture().await;
     let store = db.domains();
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
@@ -936,32 +935,37 @@ async fn expired_leases_and_rotated_challenges_cannot_publish_stale_evidence_or_
     assert!(eligibility(true, verified.verified_until, now + 93).is_ok());
     sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id,account_locked,password_change_required) SELECT 2,'second-domain-owner',hash,'second-domain-owner-key',role_id,0,0 FROM users WHERE id=1; INSERT INTO ruphish_auth_state(user_id,epoch) VALUES(2,0);").execute(&db.inspection_pool()).await.unwrap();
     let other = Identity { id: 2, epoch: 0 };
-    assert!(store.get(other, verified.id).await.is_err());
-    let second = store
-        .save(
-            other,
-            None,
-            Edit {
-                name: "Other owner".into(),
-                origin: verified.origin.clone(),
-                enabled: true,
-                revision: None,
-            },
-            now + 93,
-        )
-        .await
-        .unwrap();
-    let conflicting = store.claim(now + 94).await.unwrap().unwrap();
-    assert_eq!(conflicting.domain.id, second.id);
-    store.finish(&conflicting, proof(), now + 95).await.unwrap();
-    let rejected = store.get(other, second.id).await.unwrap();
-    assert_eq!(rejected.code, "domain_claim_conflict");
-    assert_eq!(rejected.verified_until, 0);
+    let shared = store.get(other, verified.id).await.unwrap();
+    assert_eq!(shared.id, verified.id);
+    assert_eq!(shared.origin, verified.origin);
+    assert_eq!(shared.attribution, verified.attribution);
+    assert_eq!(shared.verified_until, verified.verified_until);
+    assert!(
+        store
+            .save(
+                other,
+                None,
+                Edit {
+                    name: "Duplicate shared origin".into(),
+                    origin: verified.origin.clone(),
+                    enabled: true,
+                    revision: None
+                },
+                now + 93
+            )
+            .await
+            .is_err()
+    );
+    assert_eq!(store.list(other).await.unwrap().len(), 1);
     let rotated = store
         .request_check(caller(), verified.id, verified.challenge_expires + 1)
         .await
         .unwrap();
     assert_ne!(rotated.challenge, verified.challenge);
+    assert_eq!(
+        rotated.revision, verified.revision,
+        "challenge rotation is operational state, not an authored edit"
+    );
     assert!(
         store
             .routing_proof(

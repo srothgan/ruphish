@@ -2,9 +2,12 @@
 use crate::{auth::Identity, resources::Error};
 pub use ruphish_domain::domains::*;
 
-/// Owner-visible configuration and observations. No network diagnostics are retained.
+/// Shared configuration and observations. No network diagnostics are retained.
 #[derive(Clone, Debug)]
 pub struct Domain {
+    /// Server-assigned creator and last-editor attribution.
+    pub attribution: ruphish_domain::attribution::Attribution,
+
     /// Current installation policy, projected in the same database snapshot.
     pub verification_required: bool,
     /// Effective deadline for selection; never written back as an observation.
@@ -95,9 +98,9 @@ pub struct Observation {
 #[async_trait::async_trait]
 /// Authorized persistence and durable verification operations.
 pub trait Repository: Send + Sync {
-    /// List owned resources after checking the live identity.
+    /// List shared resources after checking the live identity.
     async fn list(&self, caller: Identity) -> Result<Vec<Domain>, Error>;
-    /// Load one owned resource.
+    /// Load one shared resource.
     async fn get(&self, caller: Identity, id: i64) -> Result<Domain, Error>;
     /// Create or conditionally update a resource transactionally.
     async fn save(
@@ -107,7 +110,7 @@ pub trait Repository: Send + Sync {
         edit: Edit,
         now: i64,
     ) -> Result<Domain, Error>;
-    /// Remove an unused owned resource at the expected revision.
+    /// Remove an unused shared resource at the expected revision.
     async fn delete(&self, caller: Identity, id: i64, revision: i64) -> Result<(), Error>;
     /// Coalesce verification work and rotate expired unverified challenges.
     async fn request_check(&self, caller: Identity, id: i64, now: i64) -> Result<Domain, Error>;

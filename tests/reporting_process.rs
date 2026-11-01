@@ -30,7 +30,7 @@ fn get(client: &reqwest::blocking::Client, base: &str, path: &str) -> Value {
 }
 
 #[test]
-fn event_edits_enforce_csrf_scope_closed_metadata_and_replay_after_restart() {
+fn event_edits_share_access_and_enforce_csrf_closed_metadata_and_replay_after_restart() {
     let directory = workspace();
     write_config(directory.path(), &configuration());
     let mut process = Process::start(directory.path(), "admin");
@@ -62,15 +62,6 @@ fn event_edits_enforce_csrf_scope_closed_metadata_and_replay_after_restart() {
             .status(),
         403
     );
-    assert_eq!(
-        api.post(format!("{base}{path}"))
-            .bearer_auth("other-event-key")
-            .json(&change)
-            .send()
-            .unwrap()
-            .status(),
-        404
-    );
     for invalid in [
         json!({"request_id":"invalid-participant-value","event_id":901,"revision":0,"action":"edit","value":{"kind":"form_submitted","time":"2026-06-02T00:00:00Z","presence":{"password":"forbidden-participant-value"}}}),
         json!({"request_id":"invalid-lifecycle-event","event_id":901,"revision":0,"action":"edit","value":{"kind":"email_sent","time":"2026-06-02T00:00:00Z","presence":{}}}),
@@ -101,6 +92,16 @@ fn event_edits_enforce_csrf_scope_closed_metadata_and_replay_after_restart() {
         .send()
         .unwrap();
     assert_eq!(saved.status(), 200, "{}", saved.text().unwrap());
+    // A colleague can replay the same correction; the shared event is changed once.
+    assert_eq!(
+        api.post(format!("{base}{path}"))
+            .bearer_auth("other-event-key")
+            .json(&change)
+            .send()
+            .unwrap()
+            .status(),
+        200
+    );
     let mut stale = change.clone();
     stale["request_id"] = json!("http-stale-event-revision");
     stale["value"]["time"] = json!("2026-06-04T00:00:00Z");
@@ -306,7 +307,7 @@ fn sorted_analysis_exports_and_delivery_cursors_survive_rejections_deletion_and_
             None
         )
         .status(),
-        404
+        200
     );
     assert_eq!(
         request(
@@ -326,7 +327,7 @@ fn sorted_analysis_exports_and_delivery_cursors_survive_rejections_deletion_and_
             .send()
             .unwrap()
             .status(),
-        404
+        200
     );
     let first = get(
         &client,
@@ -724,7 +725,7 @@ fn mailbox_certificate_policy_covers_tls_modes_and_restart() {
 }
 
 #[test]
-fn reporting_api_preserves_scope_secrets_and_rejects_stale_and_malformed_requests() {
+fn reporting_api_shares_access_preserves_secrets_and_rejects_stale_and_malformed_requests() {
     let directory = workspace();
     let mut process = Process::start(directory.path(), "admin");
     let base = format!("http://{}", process.ready()["admin"].as_str().unwrap());
@@ -741,7 +742,7 @@ fn reporting_api_preserves_scope_secrets_and_rejects_stale_and_malformed_request
                 .send()
                 .unwrap()
                 .status(),
-            404
+            200
         );
         assert_eq!(
             client.get(format!("{base}{path}")).send().unwrap().status(),
@@ -770,6 +771,23 @@ fn reporting_api_preserves_scope_secrets_and_rejects_stale_and_malformed_request
     assert!(saved.get("secret").is_none());
     let id = saved["id"].as_i64().unwrap();
     let hook_id = id;
+    let missing = request(
+        &client,
+        &base,
+        reqwest::Method::PUT,
+        &format!("/api/webhooks/{id}"),
+        Some(&hook),
+    );
+    assert_eq!(missing.status(), 428);
+    assert_eq!(
+        missing.json::<Value>().unwrap()["code"],
+        "REVISION_REQUIRED"
+    );
+    assert_eq!(
+        get(&client, &base, &format!("/api/webhooks/{id}")),
+        saved,
+        "missing preconditions must not be replaced with the latest revision by the handler"
+    );
     let mut changed = hook.clone();
     changed["revision"] = saved["revision"].clone();
     changed["name"] = json!("Updated receiver");
@@ -800,7 +818,7 @@ fn reporting_api_preserves_scope_secrets_and_rejects_stale_and_malformed_request
         client
             .delete(format!("{base}/api/webhooks/{id}"))
             .bearer_auth("synthetic-bootstrap-token")
-            .header("if-match", "1")
+            .header("if-match", "\"1\"")
             .send()
             .unwrap()
             .status(),
@@ -821,7 +839,7 @@ fn reporting_api_preserves_scope_secrets_and_rejects_stale_and_malformed_request
         assert_eq!(response.status(), 400);
         assert!(!response.text().unwrap().contains("INPUT-CANARY"));
     }
-    let mailbox = json!({"name":"Owner mailbox","ignore_cert_errors":true,"enabled":false,"host":"127.0.0.1","port":993,"username":"service","password":"MAILBOX-SECRET-CANARY","tls":true,"folder":"INBOX","frequency":60});
+    let mailbox = json!({"name":"Owner mailbox","ignore_cert_errors":true,"enabled":false,"host":"127.0.0.1","port":1,"username":"service","password":"MAILBOX-SECRET-CANARY","tls":true,"folder":"INBOX","frequency":60});
     let saved = request(
         &client,
         &base,
@@ -832,29 +850,49 @@ fn reporting_api_preserves_scope_secrets_and_rejects_stale_and_malformed_request
     assert_eq!(saved.status(), 201);
     let saved: Value = saved.json().unwrap();
     let id = saved["id"].as_i64().unwrap();
-    for method in [
-        reqwest::Method::GET,
-        reqwest::Method::PUT,
-        reqwest::Method::DELETE,
-    ] {
-        let response = client
-            .request(method, format!("{base}/api/reporting-mailboxes/{id}"))
+    let shared: Value = client
+        .get(format!("{base}/api/reporting-mailboxes/{id}"))
+        .bearer_auth("other-key")
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(shared, saved);
+    // Shared access still requires a current revision for configuration changes.
+    assert_eq!(
+        client
+            .put(format!("{base}/api/reporting-mailboxes/{id}"))
             .bearer_auth("other-key")
             .json(&mailbox)
             .send()
-            .unwrap();
-        assert_eq!(response.status(), 404);
-    }
+            .unwrap()
+            .status(),
+        428
+    );
+    assert_eq!(
+        client
+            .delete(format!("{base}/api/reporting-mailboxes/{id}"))
+            .bearer_auth("other-key")
+            .header("if-match", "\"2\"")
+            .send()
+            .unwrap()
+            .status(),
+        412
+    );
+    // Both callers reach the same operational checks: unreachable transport or a disabled mailbox.
     for suffix in ["validate", "check"] {
-        assert_eq!(
-            client
-                .post(format!("{base}/api/reporting-mailboxes/{id}/{suffix}"))
-                .bearer_auth("other-key")
-                .send()
-                .unwrap()
-                .status(),
-            404
-        );
+        let path = format!("/api/reporting-mailboxes/{id}/{suffix}");
+        let shared = client
+            .post(format!("{base}{path}"))
+            .bearer_auth("other-key")
+            .send()
+            .unwrap();
+        assert_eq!(shared.status(), 400);
+        let shared: Value = shared.json().unwrap();
+        let admin = request(&client, &base, reqwest::Method::POST, &path, None);
+        assert_eq!(admin.status(), 400);
+        assert_eq!(shared, admin.json::<Value>().unwrap());
+        assert!(!shared.to_string().contains("MAILBOX-SECRET-CANARY"));
     }
     for path in ["/api/imap/", "/api/imap/validate"] {
         for method in [reqwest::Method::GET, reqwest::Method::POST] {
@@ -862,10 +900,26 @@ fn reporting_api_preserves_scope_secrets_and_rejects_stale_and_malformed_request
             assert_eq!(response.status(), 404);
         }
     }
-    assert_eq!(
-        get(&client, &base, &format!("/api/reporting-mailboxes/{id}")),
-        saved
-    );
+    let after_commands = get(&client, &base, &format!("/api/reporting-mailboxes/{id}"));
+    for field in [
+        "id",
+        "name",
+        "host",
+        "port",
+        "username",
+        "enabled",
+        "has_password",
+        "revision",
+        "created_by",
+        "edited_by",
+        "edited_at",
+    ] {
+        assert_eq!(
+            after_commands[field], saved[field],
+            "command changed configuration: {field}"
+        );
+    }
+    assert!(after_commands.get("password").is_none());
     let mut invalid = mailbox.clone();
     invalid["host"] = json!("host\r\nLOGIN INJECTED-CANARY");
     invalid["password"] = json!("INPUT-CANARY");
@@ -890,33 +944,39 @@ fn reporting_api_preserves_scope_secrets_and_rejects_stale_and_malformed_request
     assert_eq!(analysis["unique"]["reported"], 0);
     let mailbox_path = format!("{base}/api/reporting-mailboxes/{id}");
     for (key, revision, status) in [
-        ("other-key", "1", 404),
+        ("other-key", "2", 412),
         ("synthetic-bootstrap-token", "2", 412),
-        ("synthetic-bootstrap-token", "1", 200),
+        ("other-key", "1", 200),
         ("synthetic-bootstrap-token", "1", 404),
     ] {
         assert_eq!(
             client
                 .delete(&mailbox_path)
                 .bearer_auth(key)
-                .header("if-match", revision)
+                .header("if-match", format!("\"{revision}\""))
                 .send()
                 .unwrap()
                 .status(),
             status
         );
     }
-    // Legacy clients can delete without fetching or supplying a revision.
+    let hook_path = format!("/api/webhooks/{hook_id}");
+    let missing = request(&client, &base, reqwest::Method::DELETE, &hook_path, None);
+    assert_eq!(missing.status(), 428);
+    assert_eq!(
+        missing.json::<Value>().unwrap()["code"],
+        "REVISION_REQUIRED"
+    );
+    let current = get(&client, &base, &hook_path);
     for status in [200, 404] {
         assert_eq!(
-            request(
-                &client,
-                &base,
-                reqwest::Method::DELETE,
-                &format!("/api/webhooks/{hook_id}"),
-                None,
-            )
-            .status(),
+            client
+                .delete(format!("{base}{hook_path}"))
+                .bearer_auth("synthetic-bootstrap-token")
+                .header("If-Match", format!("\"{}\"", current["revision"]))
+                .send()
+                .unwrap()
+                .status(),
             status
         );
     }
@@ -1215,7 +1275,7 @@ fn consolidated_campaign_reads_share_identity_scope_and_bounded_history() {
                 .send()
                 .unwrap()
                 .status(),
-            404
+            200
         );
     }
     for path in [

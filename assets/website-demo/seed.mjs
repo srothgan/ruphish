@@ -57,6 +57,26 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
         Number(user.account_locked),
       );
     }
+    const authorIds = new Map(
+      data.users.map((user) => [
+        user.id,
+        db.prepare('SELECT id FROM users WHERE username=?').get(user.username).id,
+      ]),
+    );
+    const deletedAuthor = data.authors.find((author) => author.deleted);
+    const deletedId = insert(
+      'INSERT INTO users(username,hash,api_key,role_id) VALUES(?,?,?,?)',
+      deletedAuthor.username,
+      '',
+      randomBytes(32).toString('hex'),
+      2,
+    );
+    run(
+      'INSERT INTO ruphish_deleted_accounts(id,username) SELECT id,username FROM users WHERE id=?',
+      deletedId,
+    );
+    run('DELETE FROM users WHERE id=?', deletedId);
+    authorIds.set(deletedAuthor.id, deletedId);
     for (const d of data.domains) {
       // Historical state only. Individual domains stay disabled in the recorder.
       run(
@@ -76,7 +96,6 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
         Number(d.tls),
         d.code,
       );
-      run('INSERT INTO ruphish_domain_claims(hostname,owner_id) VALUES(?,?)', d.hostname, owner);
     }
     for (const s of data.smtp) {
       run(
@@ -163,7 +182,13 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
       const frozen = (resource, content) => ({
         id: resource.id,
         name: resource.name,
-        revision: resource.modified_date,
+        revision: resource.revision,
+        modified_date: resource.modified_date,
+        attribution: {
+          created_by: authorIds.get(resource.created_by),
+          edited_by: authorIds.get(resource.edited_by),
+          edited_at: resource.edited_at,
+        },
         content,
       });
       const snapshot = {
@@ -374,6 +399,30 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
         );
       }
     }
+    for (const [table, creator, key, items] of [
+      ['groups', 'user_id', 'id', data.groups],
+      ['templates', 'user_id', 'id', data.templates],
+      ['pages', 'user_id', 'id', data.pages],
+      ['ruphish_learning_pages', 'user_id', 'id', data['learning-pages']],
+      ['smtp', 'user_id', 'id', data.smtp],
+      ['ruphish_domains', 'owner_id', 'id', data.domains],
+      ['ruphish_mailboxes', 'owner_id', 'id', data['reporting-mailboxes']],
+      ['ruphish_webhook_state', 'owner_id', 'webhook_id', data.webhooks],
+      ['ruphish_campaign_drafts', 'owner_id', 'id', data.drafts],
+      ['campaigns', 'user_id', 'id', data.campaigns.map((c) => c.header)],
+    ]) {
+      for (const item of items) {
+        run(
+          `UPDATE ${table} SET ${creator}=?,edited_by=?,edited_at=? WHERE ${key}=?`,
+          authorIds.get(item.created_by),
+          authorIds.get(item.edited_by),
+          item.edited_at,
+          item.id,
+        );
+      }
+    }
+    // Legacy recipient provenance follows its campaign creator; access is shared.
+    run('UPDATE results SET user_id=(SELECT user_id FROM campaigns WHERE id=results.campaign_id)');
     // Migrations ran before these resources existed. Apply the same installation
     // features as the browser demo; individual outbound integrations stay inactive.
     run(

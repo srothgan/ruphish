@@ -46,8 +46,14 @@ fn message(rid: &str) -> Vec<u8> {
 }
 async fn poll(db: &Database, id: i64) {
     let repo = db.integrations();
+    let revision = repo.mailbox(ADMIN, id).await.unwrap().revision;
     repo.check_mailbox(ADMIN, id).await.unwrap();
     repo.poll_mailboxes().await.unwrap();
+    assert_eq!(
+        repo.mailbox(ADMIN, id).await.unwrap().revision,
+        revision,
+        "polling does not advance configuration revisions"
+    );
 }
 fn copy_config(config: &Config) -> Config {
     match config {
@@ -100,6 +106,37 @@ async fn contract(config: Config, inspect: &mut Inspector) {
         .await
         .unwrap();
     assert_eq!(inspect.scalar("SELECT count(*) FROM ruphish_mailboxes WHERE initial_since='2026-10-10T07:00:00.000000000Z'").await, 1);
+    assert!(matches!(
+        repo.save_mailbox(COLLEAGUE, Some(saved.id), edit(peer.address.port(), None))
+            .await,
+        Err(Error::RevisionRequired)
+    ));
+    assert!(matches!(
+        repo.delete_mailbox(COLLEAGUE, saved.id, None).await,
+        Err(Error::RevisionRequired)
+    ));
+    let mut left = edit(peer.address.port(), Some(saved.revision));
+    left.name = "Reports A".into();
+    left.password = None;
+    let mut right = edit(peer.address.port(), Some(saved.revision));
+    right.name = "Reports B".into();
+    right.password = None;
+    let (a, b) = tokio::join!(
+        repo.save_mailbox(ADMIN, Some(saved.id), left),
+        repo.save_mailbox(COLLEAGUE, Some(saved.id), right)
+    );
+    assert_eq!(usize::from(a.is_ok()) + usize::from(b.is_ok()), 1);
+    assert!(matches!(
+        a.as_ref().err().or(b.as_ref().err()),
+        Some(Error::Changed)
+    ));
+    let saved = a.or(b).unwrap();
+    assert_eq!(saved.revision, 2);
+    assert!(saved.has_password);
+    assert_eq!(
+        repo.mailbox(ADMIN, saved.id).await.unwrap().name,
+        saved.name
+    );
     // An ordinary edit before first login cannot change the stored creation boundary.
     let saved = repo
         .save_mailbox(
@@ -151,16 +188,19 @@ async fn contract(config: Config, inspect: &mut Inspector) {
             .await,
         1
     );
-    assert!(
-        db.campaigns()
-            .complete(ADMIN, 102, 1_800_000_000)
-            .await
-            .is_err()
-    );
     db.campaigns()
-        .complete(COLLEAGUE, 102, 1_800_000_000)
+        .complete(ADMIN, 102, 1_800_000_000)
         .await
         .unwrap();
+    assert_eq!(
+        db.campaigns()
+            .header(COLLEAGUE, 102)
+            .await
+            .unwrap()
+            .status
+            .as_str(),
+        "Completed"
+    );
     db.close().await;
     drop(repo);
     peer.state.lock().unwrap().reject_ack = false;

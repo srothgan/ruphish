@@ -713,7 +713,7 @@ async fn persisted_retry_budget_exhausts_and_cannot_resurrect_after_restart() {
     db.close().await;
 }
 #[tokio::test]
-async fn resource_changes_owner_lock_and_completion_fence_unsubmitted_work() {
+async fn resource_changes_and_completion_fence_work_but_creator_lock_does_not() {
     let (fixture, path) = fixture().await;
     let db = prepared_database(&path, &fixture).await;
     let store = db.campaigns();
@@ -766,17 +766,9 @@ async fn resource_changes_owner_lock_and_completion_fence_unsubmitted_work() {
         .execute(&db.inspection_pool())
         .await
         .unwrap();
-    assert!(store.claim(1_900_000_011).await.unwrap().is_none());
-    assert_eq!(
-        sqlx::query_scalar::<_, String>(
-            "SELECT code FROM ruphish_delivery WHERE campaign_id=? ORDER BY result_id LIMIT 1"
-        )
-        .bind(second.id)
-        .fetch_one(&db.inspection_pool())
-        .await
-        .unwrap(),
-        "campaign_owner_unavailable"
-    );
+    let surviving = store.claim(1_900_000_011).await.unwrap().unwrap();
+    assert_eq!(surviving.campaign_id, second.id);
+    assert!(store.arm(&surviving, 1_900_000_012).await.unwrap());
     db.close().await;
 }
 #[tokio::test]

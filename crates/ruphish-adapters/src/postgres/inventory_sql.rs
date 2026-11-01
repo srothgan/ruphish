@@ -1,8 +1,8 @@
-//! Owner inventory and domain usage reads.
-pub(crate) const TEMPLATES: &str = "SELECT count(*) FROM templates WHERE user_id=$1";
-pub(crate) const PAGES: &str = "SELECT count(*) FROM pages WHERE user_id=$1";
-pub(crate) const GROUPS: &str = "SELECT count(*) FROM groups WHERE user_id=$1";
-pub(crate) const PROFILES: &str = "SELECT count(*) FROM smtp WHERE user_id=$1";
+//! Shared inventory and domain usage reads.
+pub(crate) const TEMPLATES: &str = "SELECT count(*) FROM templates";
+pub(crate) const PAGES: &str = "SELECT count(*) FROM pages";
+pub(crate) const GROUPS: &str = "SELECT count(*) FROM groups";
+pub(crate) const PROFILES: &str = "SELECT count(*) FROM smtp";
 // Keep campaign existence probes inside selected domain references; joining can
 // otherwise scan unrelated campaigns. The closed PostgreSQL ID range avoids
 // dominant-parent equality estimates under skew, as in resource summaries.

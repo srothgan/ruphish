@@ -21,7 +21,8 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
   const database = join(state, 'demo.db');
   const config = join(state, 'config.json');
   const executable = resolve(
-    'target/debug',
+    process.env.CARGO_TARGET_DIR ?? 'target',
+    'debug',
     process.platform === 'win32' ? 'ruphish.exe' : 'ruphish',
   );
   let child;
@@ -75,14 +76,20 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
     await stop();
     let db = new DatabaseSync(database);
     let apiKey;
+    let formerColleagueId;
     try {
       seed(db, 1793016000);
       apiKey = db.prepare("SELECT api_key FROM users WHERE username='demo'").get().api_key;
+      formerColleagueId = db
+        .prepare("SELECT id FROM ruphish_deleted_accounts WHERE username='Morgan Brooks'")
+        .get().id;
+      assert.equal(db.prepare('SELECT id FROM users WHERE id=?').get(formerColleagueId), undefined);
     } finally {
       db.close();
     }
     await start();
     for (const path of [
+      '/api/templates/1',
       '/api/overview',
       '/api/overview/posture?window=all',
       '/api/campaigns/directory',
@@ -99,6 +106,11 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
       });
       assert.equal(response.status, 200, path);
       const value = await response.json();
+      if (path === '/api/templates/1') {
+        assert.equal(typeof value.created_by.id, 'number');
+        assert.equal(typeof value.edited_by.id, 'number');
+        assert.ok(Number.isFinite(Date.parse(value.edited_at)));
+      }
       if (path === '/api/overview') {
         assert.equal(value.recent.length, 4);
       }
@@ -106,6 +118,11 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
         assert.equal(value.campaign.send_by_date, '2026-10-23T13:00:00Z');
       }
       if (path === '/api/campaigns/3') {
+        assert.deepEqual(value.created_by, {
+          id: formerColleagueId,
+          username: 'Morgan Brooks',
+          deleted: true,
+        });
         assert.equal(value.smtp.from_address, 'Awareness team <awareness@example.test>');
         assert.equal(value.smtp.host, '');
         assert.equal(value.smtp.has_password, false);
@@ -274,7 +291,13 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
       assert.equal(count('webhooks'), 3);
       assert.equal(
         db.prepare('SELECT count(*) AS n FROM ruphish_webhook_state WHERE owner_id=1').get().n,
-        3,
+        2,
+      );
+      assert.equal(
+        db
+          .prepare('SELECT count(*) AS n FROM ruphish_webhook_state WHERE owner_id=?')
+          .get(formerColleagueId).n,
+        1,
       );
       assert.equal(count('ruphish_mailboxes'), 2);
       assert.equal(count('ruphish_campaign_drafts'), 2);

@@ -276,6 +276,17 @@ impl FromRequestParts<AuthState> for Context {
     }
 }
 impl Context {
+    pub(crate) async fn display_identities(
+        &self,
+        ids: &[i64],
+    ) -> Result<Vec<ruphish_application::auth::DisplayIdentity>, Rejection> {
+        self.state
+            .service
+            .display_identities(ids)
+            .await
+            .map_err(auth_error)
+    }
+
     pub(crate) fn campaign_list_permit(
         &self,
     ) -> Result<tokio::sync::OwnedSemaphorePermit, Rejection> {
@@ -593,11 +604,11 @@ impl Context {
 pub struct Services {
     /// Installation policy and bulk closure.
     pub settings: Arc<dyn ruphish_application::settings::Repository>,
-    /// Webhooks and owner-scoped reporting mailboxes.
+    /// Webhooks and shared reporting mailboxes.
     pub integrations: Arc<dyn ruphish_application::integrations::Repository>,
     /// Consistent campaign analysis and exports.
     pub reporting: Arc<dyn ruphish_application::reporting::Repository>,
-    /// Owner-scoped dashboard aggregation.
+    /// Shared dashboard aggregation.
     pub overview: Arc<dyn ruphish_application::overview::Repository>,
     /// Domain configuration and verification queue.
     pub domains: Arc<dyn ruphish_application::domains::Repository>,
@@ -607,7 +618,7 @@ pub struct Services {
     pub resources: ruphish_application::resources::Service,
     /// Synchronous test-email and preview use cases.
     pub delivery: ruphish_application::delivery::Service,
-    /// Owner-scoped campaign operations and durable delivery metadata.
+    /// Shared campaign operations and durable delivery metadata.
     pub campaigns: Arc<dyn ruphish_application::campaign::Repository>,
     /// Whether this process runs campaign delivery workers.
     pub mailer_enabled: bool,

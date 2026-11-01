@@ -31,6 +31,7 @@ pub(super) fn text(r: &SqliteRow, key: &str) -> Result<String, Error> {
 }
 fn webhook_row(r: SqliteRow) -> Result<Webhook, Error> {
     Ok(Webhook {
+        attribution: super::attribution::read(&r, "owner_id")?,
         id: r.try_get("id").map_err(db)?,
         name: text(&r, "name")?,
         url: text(&r, "url")?,
@@ -42,6 +43,7 @@ fn webhook_row(r: SqliteRow) -> Result<Webhook, Error> {
 }
 fn mailbox_row(r: SqliteRow) -> Result<Mailbox, Error> {
     Ok(Mailbox {
+        attribution: super::attribution::read(&r, "owner_id")?,
         id: r.try_get("id").map_err(db)?,
         name: text(&r, "name")?,
         enabled: r.try_get("enabled").map_err(db)?,
@@ -73,14 +75,13 @@ impl Repository for Integrations {
         super::resources::authorize(&mut tx, who, false).await?;
         sqlx::query(
             r#"
-                SELECT w.*,s.revision
+                SELECT w.*,s.revision,s.owner_id,s.edited_by,s.edited_at
                 FROM webhooks w
                 JOIN ruphish_webhook_state s ON s.webhook_id=w.id
-                WHERE s.owner_id=?
+
                 ORDER BY w.name,w.id
             "#,
         )
-        .bind(who.id)
         .fetch_all(&mut *tx)
         .await
         .map_err(db)?
@@ -91,49 +92,7 @@ impl Repository for Integrations {
     async fn webhook(&self, who: Identity, id: i64) -> Result<Webhook, Error> {
         let mut tx = self.pool.begin().await.map_err(db)?;
         super::resources::authorize(&mut tx, who, false).await?;
-        let mut value = webhook_row(
-            sqlx::query(
-                r#"
-                SELECT w.*,s.revision
-                FROM webhooks w
-                JOIN ruphish_webhook_state s ON s.webhook_id=w.id
-                WHERE w.id=? AND s.owner_id=?
-            "#,
-            )
-            .bind(id)
-            .bind(who.id)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(db)?
-            .ok_or(Error::NotFound("Webhook"))?,
-        )?;
-        for r in sqlx::query(
-            r#"
-                SELECT a.*,j.event_id
-                FROM ruphish_webhook_attempts a
-                JOIN ruphish_webhook_jobs j ON j.id=a.job_id
-                WHERE j.webhook_id=?
-                ORDER BY a.id DESC LIMIT 30
-            "#,
-        )
-        .bind(id)
-        .fetch_all(&mut *tx)
-        .await
-        .map_err(db)?
-        {
-            value.history.push(Run {
-                event_id: r.try_get("event_id").map_err(db)?,
-                attempt: r.try_get("attempt").map_err(db)?,
-                id: r.try_get("id").map_err(db)?,
-                started: r.try_get("started").map_err(db)?,
-                finished: r.try_get("finished").map_err(db)?,
-                status: r.try_get("status").map_err(db)?,
-                code: text(&r, "code")?,
-                matched: 0,
-                rejected: 0,
-            });
-        }
-        Ok(value)
+        load_webhook(&mut tx, id).await
     }
     async fn save_webhook(
         &self,
@@ -151,18 +110,18 @@ impl Repository for Integrations {
                 SELECT secret,revision
                 FROM webhooks w
                 JOIN ruphish_webhook_state s ON s.webhook_id=w.id
-                WHERE w.id=? AND s.owner_id=?
+                WHERE w.id=?
             "#,
             )
             .bind(id)
-            .bind(who.id)
             .fetch_optional(&mut *tx)
             .await
             .map_err(db)?
             .ok_or(Error::NotFound("Webhook"))?;
-            if e.revision != Some(r.try_get("revision").map_err(db)?) {
-                return Err(Error::Changed);
-            }
+            ruphish_application::resources::require_revision(
+                r.try_get("revision").map_err(db)?,
+                e.revision,
+            )?;
             let secret = e.secret.unwrap_or(text(&r, "secret")?);
             if secret.is_empty() {
                 return Err(invalid("webhook_secret_required"));
@@ -215,8 +174,18 @@ impl Repository for Integrations {
             .map_err(db)?;
             id
         };
+        sqlx::query("UPDATE ruphish_webhook_state SET edited_by=?,edited_at=? WHERE webhook_id=?")
+            .bind(who.id)
+            .bind(ruphish_application::datetime::utc(
+                ruphish_application::datetime::now(),
+            ))
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(db)?;
+        let saved = load_webhook(&mut tx, id).await?;
         tx.commit().await.map_err(db)?;
-        self.webhook(who, id).await
+        Ok(saved)
     }
     async fn delete_webhook(
         &self,
@@ -226,12 +195,10 @@ impl Repository for Integrations {
     ) -> Result<(), Error> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(db)?;
         super::resources::authorize(&mut tx, who, true).await?;
-        let current: i64 = sqlx::query_scalar("SELECT s.revision FROM webhooks w JOIN ruphish_webhook_state s ON s.webhook_id=w.id WHERE w.id=? AND s.owner_id=?")
-            .bind(id).bind(who.id).fetch_optional(&mut *tx).await.map_err(db)?
+        let current: i64 = sqlx::query_scalar("SELECT s.revision FROM webhooks w JOIN ruphish_webhook_state s ON s.webhook_id=w.id WHERE w.id=? ")
+            .bind(id).fetch_optional(&mut *tx).await.map_err(db)?
             .ok_or(Error::NotFound("Webhook"))?;
-        if revision.is_some_and(|expected| expected != current) {
-            return Err(Error::Changed);
-        }
+        ruphish_application::resources::require_revision(current, revision)?;
         remove_webhook(&mut tx, id).await.map_err(db)?;
         tx.commit().await.map_err(db)
     }
@@ -239,9 +206,8 @@ impl Repository for Integrations {
         let mut tx = self.pool.begin().await.map_err(db)?;
         super::resources::authorize(&mut tx, who, true).await?;
         super::settings::require_integration(&mut tx, false).await?;
-        let r = sqlx::query("SELECT w.url,w.secret FROM webhooks w JOIN ruphish_webhook_state s ON s.webhook_id=w.id WHERE w.id=? AND s.owner_id=?")
+        let r = sqlx::query("SELECT w.url,w.secret FROM webhooks w JOIN ruphish_webhook_state s ON s.webhook_id=w.id WHERE w.id=? ")
             .bind(id)
-            .bind(who.id)
             .fetch_optional(&mut *tx)
             .await
             .map_err(db)?
@@ -255,8 +221,7 @@ impl Repository for Integrations {
     async fn mailboxes(&self, who: Identity) -> Result<Vec<Mailbox>, Error> {
         let mut tx = self.pool.begin().await.map_err(db)?;
         super::resources::authorize(&mut tx, who, false).await?;
-        sqlx::query("SELECT * FROM ruphish_mailboxes WHERE owner_id=? ORDER BY name,id")
-            .bind(who.id)
+        sqlx::query("SELECT * FROM ruphish_mailboxes  ORDER BY name,id")
             .fetch_all(&mut *tx)
             .await
             .map_err(db)?
@@ -267,34 +232,7 @@ impl Repository for Integrations {
     async fn mailbox(&self, who: Identity, id: i64) -> Result<Mailbox, Error> {
         let mut tx = self.pool.begin().await.map_err(db)?;
         super::resources::authorize(&mut tx, who, false).await?;
-        let mut value = mailbox_row(
-            sqlx::query("SELECT * FROM ruphish_mailboxes WHERE id=? AND owner_id=?")
-                .bind(id)
-                .bind(who.id)
-                .fetch_optional(&mut *tx)
-                .await
-                .map_err(db)?
-                .ok_or(Error::NotFound("Reporting mailbox"))?,
-        )?;
-        for r in sqlx::query(super::worker_sql::MAILBOX_HISTORY)
-            .bind(id)
-            .fetch_all(&mut *tx)
-            .await
-            .map_err(db)?
-        {
-            value.history.push(Run {
-                event_id: None,
-                attempt: None,
-                id: r.try_get("id").map_err(db)?,
-                started: r.try_get("started").map_err(db)?,
-                finished: r.try_get("finished").map_err(db)?,
-                status: None,
-                code: text(&r, "code")?,
-                matched: r.try_get("matched").map_err(db)?,
-                rejected: r.try_get("rejected").map_err(db)?,
-            });
-        }
-        Ok(value)
+        load_mailbox(&mut tx, id).await
     }
     async fn save_mailbox(
         &self,
@@ -307,9 +245,8 @@ impl Repository for Integrations {
         super::resources::authorize(&mut tx, who, true).await?;
         super::settings::require_integration(&mut tx, true).await?;
         let duplicate: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM ruphish_mailboxes WHERE owner_id=? AND name=? AND id!=?)",
+            "SELECT EXISTS(SELECT 1 FROM ruphish_mailboxes WHERE name=? AND id!=?)",
         )
-        .bind(who.id)
         .bind(&e.name)
         .bind(id.unwrap_or(0))
         .fetch_one(&mut *tx)
@@ -319,16 +256,16 @@ impl Repository for Integrations {
             return Err(invalid("mailbox_name_exists"));
         }
         let id = if let Some(id) = id {
-            let r = sqlx::query("SELECT * FROM ruphish_mailboxes WHERE id=? AND owner_id=?")
+            let r = sqlx::query("SELECT * FROM ruphish_mailboxes WHERE id=? ")
                 .bind(id)
-                .bind(who.id)
                 .fetch_optional(&mut *tx)
                 .await
                 .map_err(db)?
                 .ok_or(Error::NotFound("Reporting mailbox"))?;
-            if e.revision != Some(r.try_get("revision").map_err(db)?) {
-                return Err(Error::Changed);
-            }
+            ruphish_application::resources::require_revision(
+                r.try_get("revision").map_err(db)?,
+                e.revision,
+            )?;
             let changed = e.resets_checkpoint(
                 &text(&r, "host")?,
                 r.try_get("port").map_err(db)?,
@@ -413,8 +350,17 @@ impl Repository for Integrations {
 .map_err(db)?
 .last_insert_rowid()
         };
+        super::attribution::edit(
+            &mut tx,
+            "ruphish_mailboxes",
+            id,
+            who.id,
+            &ruphish_application::datetime::utc(ruphish_application::datetime::now()),
+        )
+        .await?;
+        let saved = load_mailbox(&mut tx, id).await?;
         tx.commit().await.map_err(db)?;
-        self.mailbox(who, id).await
+        Ok(saved)
     }
     async fn delete_mailbox(
         &self,
@@ -424,21 +370,17 @@ impl Repository for Integrations {
     ) -> Result<(), Error> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(db)?;
         super::resources::authorize(&mut tx, who, true).await?;
-        let revision = match revision {
-            Some(revision) => revision,
-            None => sqlx::query_scalar::<_, i64>(
-                "SELECT revision FROM ruphish_mailboxes WHERE id=? AND owner_id=?",
-            )
+        let current =
+            sqlx::query_scalar::<_, i64>("SELECT revision FROM ruphish_mailboxes WHERE id=? ")
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(db)?
+                .ok_or(Error::NotFound("Reporting mailbox"))?;
+        ruphish_application::resources::require_revision(current, revision)?;
+        let revision = current;
+        if sqlx::query("DELETE FROM ruphish_mailboxes WHERE id=?  AND revision=?")
             .bind(id)
-            .bind(who.id)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(db)?
-            .ok_or(Error::NotFound("Reporting mailbox"))?,
-        };
-        if sqlx::query("DELETE FROM ruphish_mailboxes WHERE id=? AND owner_id=? AND revision=?")
-            .bind(id)
-            .bind(who.id)
             .bind(revision)
             .execute(&mut *tx)
             .await
@@ -446,14 +388,12 @@ impl Repository for Integrations {
             .rows_affected()
             != 1
         {
-            let exists: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM ruphish_mailboxes WHERE id=? AND owner_id=?)",
-            )
-            .bind(id)
-            .bind(who.id)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(db)?;
+            let exists: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ruphish_mailboxes WHERE id=? )")
+                    .bind(id)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(db)?;
             return Err(if exists {
                 Error::Changed
             } else {
@@ -475,9 +415,8 @@ impl Repository for Integrations {
         let mut tx = self.pool.begin().await.map_err(db)?;
         super::resources::authorize(&mut tx, who, true).await?;
         super::settings::require_integration(&mut tx, true).await?;
-        let r = sqlx::query("SELECT * FROM ruphish_mailboxes WHERE id=? AND owner_id=?")
+        let r = sqlx::query("SELECT * FROM ruphish_mailboxes WHERE id=? ")
             .bind(id)
-            .bind(who.id)
             .fetch_optional(&mut *tx)
             .await
             .map_err(db)?
@@ -494,11 +433,11 @@ impl Repository for Integrations {
                 UPDATE ruphish_mailboxes
                 SET initial_since=NULL,initialized=0,uidvalidity=0,last_uid=0,next_check=0,lease=0,revision=revision+1,code=''
                 WHERE id=?
-                AND owner_id=?
+
                 AND revision=?
                 AND code='mailbox_uidvalidity_changed'
             "#)
-            .bind(id).bind(who.id).bind(revision).execute(&mut *tx).await.map_err(db)?.rows_affected();
+            .bind(id).bind(revision).execute(&mut *tx).await.map_err(db)?.rows_affected();
         if changed != 1 {
             return Err(Error::Changed);
         }
@@ -513,9 +452,8 @@ impl Repository for Integrations {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(db)?;
         super::resources::authorize(&mut tx, who, true).await?;
         super::settings::require_integration(&mut tx, true).await?;
-        let row = sqlx::query("SELECT enabled FROM ruphish_mailboxes WHERE id=? AND owner_id=?")
+        let row = sqlx::query("SELECT enabled FROM ruphish_mailboxes WHERE id=? ")
             .bind(id)
-            .bind(who.id)
             .fetch_optional(&mut *tx)
             .await
             .map_err(db)?
@@ -547,4 +485,85 @@ pub(super) async fn remove_webhook(
         sqlx::query(statement).bind(id).execute(&mut *c).await?;
     }
     Ok(())
+}
+
+async fn load_webhook(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    id: i64,
+) -> Result<Webhook, Error> {
+    let mut value = webhook_row(
+        sqlx::query(
+            r#"
+                SELECT w.*,s.revision,s.owner_id,s.edited_by,s.edited_at
+                FROM webhooks w
+                JOIN ruphish_webhook_state s ON s.webhook_id=w.id
+                WHERE w.id=?
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(db)?
+        .ok_or(Error::NotFound("Webhook"))?,
+    )?;
+    for r in sqlx::query(
+        r#"
+                SELECT a.*,j.event_id
+                FROM ruphish_webhook_attempts a
+                JOIN ruphish_webhook_jobs j ON j.id=a.job_id
+                WHERE j.webhook_id=?
+                ORDER BY a.id DESC LIMIT 30
+            "#,
+    )
+    .bind(id)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(db)?
+    {
+        value.history.push(Run {
+            event_id: r.try_get("event_id").map_err(db)?,
+            attempt: r.try_get("attempt").map_err(db)?,
+            id: r.try_get("id").map_err(db)?,
+            started: r.try_get("started").map_err(db)?,
+            finished: r.try_get("finished").map_err(db)?,
+            status: r.try_get("status").map_err(db)?,
+            code: text(&r, "code")?,
+            matched: 0,
+            rejected: 0,
+        });
+    }
+    Ok(value)
+}
+
+async fn load_mailbox(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    id: i64,
+) -> Result<Mailbox, Error> {
+    let mut value = mailbox_row(
+        sqlx::query("SELECT * FROM ruphish_mailboxes WHERE id=? ")
+            .bind(id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(db)?
+            .ok_or(Error::NotFound("Reporting mailbox"))?,
+    )?;
+    for r in sqlx::query(super::worker_sql::MAILBOX_HISTORY)
+        .bind(id)
+        .fetch_all(&mut **tx)
+        .await
+        .map_err(db)?
+    {
+        value.history.push(Run {
+            event_id: None,
+            attempt: None,
+            id: r.try_get("id").map_err(db)?,
+            started: r.try_get("started").map_err(db)?,
+            finished: r.try_get("finished").map_err(db)?,
+            status: None,
+            code: text(&r, "code")?,
+            matched: r.try_get("matched").map_err(db)?,
+            rejected: r.try_get("rejected").map_err(db)?,
+        });
+    }
+    Ok(value)
 }

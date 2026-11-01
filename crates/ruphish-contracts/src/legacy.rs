@@ -138,7 +138,7 @@ pub struct EmailTemplate {
 pub struct LandingPage {
     /// Public identifier.
     pub id: i64,
-    /// Owner-scoped display name.
+    /// Shared display name.
     pub name: String,
     /// Authored document source.
     pub html: String,

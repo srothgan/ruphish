@@ -84,6 +84,13 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
     let busy = read.fetching;
     let loaded = Signal::derive(move || presentation.data.with(Option::is_some));
     let delete_message = Message::new(String::new());
+    let delete_error = RwSignal::new(None::<ruphish_ui::api_error::ApiError>);
+    let needs_review = Signal::derive(move || {
+        delete_error.with(|e| {
+            e.as_ref()
+                .is_some_and(ruphish_ui::api_error::ApiError::needs_write_recovery)
+        })
+    });
     let can_edit = editable();
     let deleting = RwSignal::new(None::<Value>);
     let mutating = RwSignal::new(false);
@@ -92,7 +99,7 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
         let Some(target) = deleting.get_untracked() else {
             return;
         };
-        if mutating.get_untracked() {
+        if mutating.get_untracked() || needs_review.get_untracked() {
             return;
         }
         mutating.set(true);
@@ -105,7 +112,7 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
                 format!("/api/campaigns/{id}")
             };
             match api
-                .command("DELETE", &path, &token.get_value(), None, None)
+                .command_response("DELETE", &path, &token.get_value(), None, None)
                 .await
             {
                 Ok(_) => {
@@ -122,7 +129,10 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
                         }
                     });
                 }
-                Err(e) => delete_message.error(e),
+                Err(e) => {
+                    delete_message.error(e.message.clone());
+                    delete_error.set(Some(e));
+                }
             }
             mutating.set(false);
         });
@@ -255,6 +265,7 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
                                                 disabled=Signal::derive(move || mutating.get())
                                                 on_delete=Callback::new(move |()| {
                                                     delete_message.clear();
+                                                    delete_error.set(None);
                                                     deleting.set(Some(target.clone()));
                                                 })
                                             ></ResourceActions>
@@ -321,9 +332,23 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
                                     confirm_label=trs!(ui.delete)
                                     busy=Signal::derive(move || mutating.get())
                                     message=delete_message
+                                    confirm_disabled=needs_review
                                     on_confirm=confirm
                                     on_cancel=Callback::new(move |()| deleting.set(None))
-                                />
+                                >
+                                    <DeleteRecovery
+                                        error=delete_error
+                                        saved_href=Signal::derive(move || {
+                                            let target = deleting.get().unwrap_or(Value::Null);
+                                            let id = text(&target, "id");
+                                            if target["kind"] == "draft" {
+                                                format!("/campaigns/drafts/{id}")
+                                            } else {
+                                                format!("/campaigns/{id}")
+                                            }
+                                        })
+                                    />
+                                </DeleteConfirmation>
                             }
                         })
                 }}
@@ -934,6 +959,7 @@ pub(super) fn CreateCampaign(
             busy.set(false);
         });
     });
+    let recovery_navigate = StoredValue::new(navigate.clone());
     let launch = move |_| {
         if draft.with_untracked(|d| d.launch.is_none()) {
             validation_time.set(ruphish_domain::datetime::now().as_second());
@@ -990,6 +1016,9 @@ pub(super) fn CreateCampaign(
                     );
                 }
                 Err(e) => {
+                    if e.needs_write_recovery() {
+                        persistence.write_error.set(Some(e.clone()));
+                    }
                     if (400..500).contains(&e.status) {
                         draft.update(Draft::rejected);
                         retry_review.update(|generation| *generation += 1);
@@ -1043,6 +1072,60 @@ pub(super) fn CreateCampaign(
                 />
             </PageHeader>
             {message.view()}
+            <WriteRecovery
+                error=persistence.write_error
+                saved_href=Signal::derive(move || {
+                    format!("/campaigns/drafts/{}", persistence.id.get())
+                })
+                busy=busy
+                on_reload=Callback::new(move |_| {
+                    if busy.get_untracked() {
+                        return;
+                    }
+                    busy.set(true);
+                    tasks
+                        .spawn(async move {
+                            match CampaignQueries::read_draft(api, &persistence.id.get_untracked())
+                                .await
+                            {
+                                Ok(saved) => {
+                                    if let Some(id) = saved["campaign_id"].as_i64() {
+                                        draft.update(|d| d.launch = None);
+                                        persistence
+                                            .saved_generation
+                                            .set(draft.with_untracked(|d| d.generation));
+                                        recovery_navigate
+                                            .get_value()(
+                                            &format!("/campaigns/{id}/delivery"),
+                                            Default::default(),
+                                        );
+                                        busy.set(false);
+                                        return;
+                                    }
+                                    let generation = draft
+                                        .with_untracked(|d| d.generation.wrapping_add(1));
+                                    draft
+                                        .set(Draft {
+                                            value: saved["configuration"].clone(),
+                                            generation,
+                                            ..Default::default()
+                                        });
+                                    persistence.revision.set(saved["revision"].as_i64());
+                                    persistence.saved_generation.set(generation);
+                                    persistence.modified.set(saved["modified"].clone());
+                                    persistence.write_error.set(None);
+                                    step.set(saved["step"].as_u64().unwrap_or(0).min(3) as usize);
+                                    message.clear();
+                                }
+                                Err(error) => {
+                                    persistence.write_error.set(Some(error.clone()));
+                                    message.error(error.message);
+                                }
+                            }
+                            busy.set(false);
+                        });
+                })
+            />
             <ValidationSummary form=validation />
             <QueryBoundary
                 fetching=loading
@@ -2007,6 +2090,9 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
                     </ActionMenu>
                 </Show>
             </PageHeader>
+            <AttributionInfo value=Signal::derive(move || {
+                context.data.get().map(|c| c.attribution).unwrap_or_default()
+            }) />
             <div class="campaign-heading-facts" hidden=move || !confirmed.get()>
                 <span>
                     {tr!(ui.scheduled_launch)}": "

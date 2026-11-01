@@ -1,4 +1,4 @@
-//! Owner-scoped dashboard reads, independently refreshable by purpose.
+//! Shared dashboard reads, independently refreshable by purpose.
 use crate::{
     auth::{AuthState, Context, Rejection, failure},
     resources::{error, response},

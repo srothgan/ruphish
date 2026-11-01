@@ -25,7 +25,7 @@ sidebar:
 | `ignore_cert_errors` | Whether to bypass SMTP certificate verification; keep false for normal use |
 | `headers` | Array of objects containing `key` and `value`; `[]` when empty |
 
-The response adds `id` and `modified_date`. Profile reads, save responses and nested campaign projections never return the password. PUT requires a matching `id`; use `If-Match` to prevent overwriting a concurrent edit. Password retention is resolved inside the authorized save transaction, so an unconditional edit with an omitted password retains the latest saved credential. New profiles without a password start with no configured credential.
+The response adds `id`, `revision` and `modified_date`. Profile reads, save responses and nested campaign projections never return the password. PUT requires a matching `id`; use `If-Match` to prevent overwriting a concurrent edit. Password retention is resolved inside the authorized save transaction, so an accepted edit with an omitted password retains the saved credential. New profiles without a password start with no configured credential.
 
 This example targets only the canonical local fixture's mail-capture container:
 
@@ -44,4 +44,6 @@ It is not a public mail server. Use it from the [local tutorial](../getting-star
 
 Port 465 uses implicit TLS; other ports negotiate STARTTLS when offered. Authentication is restricted on unencrypted connections. For exact operational behavior and trust choices, read [sending profiles](../user-guide/sending-profiles.md).
 
-`POST /api/util/test_connection` tests supplied profile settings without saving them. Include an existing owned profile `id` to retain its password when `password` is omitted; without an ID, omitted credentials are empty. A nonzero unknown or foreign ID fails without contacting SMTP. `POST /api/util/send_test_email` sends a message with template, page, profile, URL, and recipient inputs; see [imports and previews](imports-and-previews.md). A successful SMTP submission means the server accepted responsibility, not that a person received or read the message.
+`POST /api/util/test_connection` tests supplied profile settings without saving them. Include an existing shared profile `id` to retain its password when `password` is omitted; without an ID, omitted credentials are empty. A nonzero unknown ID fails without contacting SMTP. `POST /api/util/send_test_email` sends a message with template, page, profile, URL, and recipient inputs; see [imports and previews](imports-and-previews.md). A successful SMTP submission means the server accepted responsibility, not that a person received or read the message.
+
+PUT and DELETE require the returned quoted numeric ETag in `If-Match`. Missing preconditions return `428`; stale revisions return `412` without changing saved data. See [conditional resource writes](conventions.md#updating-a-resource) for the full contract and conflict recovery.

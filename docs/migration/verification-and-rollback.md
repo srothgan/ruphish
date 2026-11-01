@@ -9,7 +9,7 @@ A successful startup is only the first check. Compare the restored installation 
 
 | Check | Evidence to retain |
 | --- | --- |
-| Accounts and ownership | Existing account can sign in; roles, locks, IDs, and owner isolation remain correct |
+| Accounts and shared access | Existing account can sign in; roles, locks, and IDs remain correct; resources and results are visible across authenticated users |
 | Resources | Group membership, content, attachments, sender settings, and modification timestamps match expected state |
 | Campaign history | Campaign/recipient relationships, lifecycle state, event times, and reporting flags are accounted for |
 | Queued work | Scheduled, retryable, blocked, and uncertain deliveries have an explicit disposition |

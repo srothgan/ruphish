@@ -1,4 +1,5 @@
-//! Creator-owned webhooks and reporting mailbox resources.
+//! Shared webhooks and reporting mailbox resources.
+use crate::attribution::Lookup;
 use crate::{
     auth::{AuthState, Context, Rejection, failure},
     resources::{error, response},
@@ -31,8 +32,9 @@ fn runs(history: Vec<app::Run>) -> Vec<wire::Run> {
         })
         .collect()
 }
-fn webhook(endpoint: app::Webhook) -> wire::Webhook {
+fn webhook(endpoint: app::Webhook, lookup: &Lookup) -> wire::Webhook {
     wire::Webhook {
+        attribution: lookup.resolve(&endpoint.attribution),
         id: endpoint.id,
         name: endpoint.name,
         url: endpoint.url,
@@ -42,8 +44,9 @@ fn webhook(endpoint: app::Webhook) -> wire::Webhook {
         history: runs(endpoint.history),
     }
 }
-fn mailbox(mailbox: app::Mailbox) -> wire::Mailbox {
+fn mailbox(mailbox: app::Mailbox, lookup: &Lookup) -> wire::Mailbox {
     wire::Mailbox {
+        attribution: lookup.resolve(&mailbox.attribution),
         id: mailbox.id,
         name: mailbox.name,
         enabled: mailbox.enabled,
@@ -92,47 +95,47 @@ pub(crate) fn routes() -> Router<AuthState> {
 }
 async fn hooks(context: Context) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
+    let rows = context
+        .integrations()
+        .webhooks(user.identity)
+        .await
+        .map_err(error)?;
+    let lookup = Lookup::load(&context, rows.iter().map(|v| &v.attribution)).await?;
     response(
         StatusCode::OK,
-        &context
-            .integrations()
-            .webhooks(user.identity)
-            .await
-            .map_err(error)?
+        &rows
             .into_iter()
-            .map(webhook)
+            .map(|v| webhook(v, &lookup))
             .collect::<Vec<_>>(),
         None,
     )
 }
 async fn mailboxes(context: Context) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
+    let rows = context
+        .integrations()
+        .mailboxes(user.identity)
+        .await
+        .map_err(error)?;
+    let lookup = Lookup::load(&context, rows.iter().map(|v| &v.attribution)).await?;
     response(
         StatusCode::OK,
-        &context
-            .integrations()
-            .mailboxes(user.identity)
-            .await
-            .map_err(error)?
+        &rows
             .into_iter()
-            .map(mailbox)
+            .map(|v| mailbox(v, &lookup))
             .collect::<Vec<_>>(),
         None,
     )
 }
 async fn read_hook(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
-    response(
-        StatusCode::OK,
-        &webhook(
-            context
-                .integrations()
-                .webhook(user.identity, id)
-                .await
-                .map_err(error)?,
-        ),
-        None,
-    )
+    let value = context
+        .integrations()
+        .webhook(user.identity, id)
+        .await
+        .map_err(error)?;
+    let lookup = Lookup::load(&context, [&value.attribution]).await?;
+    response(StatusCode::OK, &webhook(value, &lookup), None)
 }
 async fn read_mailbox(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
@@ -144,18 +147,15 @@ async fn mailbox_response(
     id: i64,
     status: StatusCode,
 ) -> Result<Response, Rejection> {
-    response(
-        status,
-        &mailbox(
-            context
-                .integrations()
-                .mailbox(identity, id)
-                .await
-                .map_err(error)?,
-        ),
-        None,
-    )
+    let value = context
+        .integrations()
+        .mailbox(identity, id)
+        .await
+        .map_err(error)?;
+    let lookup = Lookup::load(context, [&value.attribution]).await?;
+    response(status, &mailbox(value, &lookup), None)
 }
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct HookEdit {
@@ -200,22 +200,6 @@ fn decode<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T, Rejection> {
 async fn save_hook(context: Context, id: Option<i64>, body: Bytes) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
     let edit: HookEdit = decode(&body)?;
-    let revision = if edit.revision.is_none() {
-        if let Some(id) = id {
-            Some(
-                context
-                    .integrations()
-                    .webhook(user.identity, id)
-                    .await
-                    .map_err(error)?
-                    .revision,
-            )
-        } else {
-            None
-        }
-    } else {
-        edit.revision
-    };
     let endpoint = context
         .integrations()
         .save_webhook(
@@ -226,18 +210,19 @@ async fn save_hook(context: Context, id: Option<i64>, body: Bytes) -> Result<Res
                 url: edit.url,
                 secret: edit.secret,
                 active: edit.is_active,
-                revision,
+                revision: edit.revision,
             },
         )
         .await
         .map_err(error)?;
+    let lookup = Lookup::load(&context, [&endpoint.attribution]).await?;
     response(
         if id.is_some() {
             StatusCode::OK
         } else {
             StatusCode::CREATED
         },
-        &webhook(endpoint),
+        &webhook(endpoint, &lookup),
         None,
     )
 }
@@ -271,13 +256,14 @@ async fn save_mailbox(
         )
         .await
         .map_err(error)?;
+    let lookup = Lookup::load(&context, [&mailbox_value.attribution]).await?;
     response(
         if id.is_some() {
             StatusCode::OK
         } else {
             StatusCode::CREATED
         },
-        &mailbox(mailbox_value),
+        &mailbox(mailbox_value, &lookup),
         None,
     )
 }
@@ -302,22 +288,7 @@ async fn update_mailbox(
     save_mailbox(context, Some(id), body).await
 }
 fn expected_revision(headers: &HeaderMap) -> Result<Option<i64>, Rejection> {
-    headers
-        .get("if-match")
-        .map(|value| {
-            value
-                .to_str()
-                .ok()
-                .and_then(|value| value.trim_matches('"').parse().ok())
-                .ok_or_else(|| {
-                    failure(
-                        StatusCode::BAD_REQUEST,
-                        ErrorCode::RevisionRequired,
-                        "integration_invalid_revision",
-                    )
-                })
-        })
-        .transpose()
+    crate::revision::optional(headers)
 }
 fn success() -> Result<Response, Rejection> {
     response(StatusCode::OK, &json!({"success":true}), None)
@@ -357,18 +328,15 @@ async fn validate_hook(context: Context, Path(id): Path<i64>) -> Result<Response
         .validate_webhook(user.identity, id)
         .await
         .map_err(error)?;
-    response(
-        StatusCode::OK,
-        &webhook(
-            context
-                .integrations()
-                .webhook(user.identity, id)
-                .await
-                .map_err(error)?,
-        ),
-        None,
-    )
+    let endpoint = context
+        .integrations()
+        .webhook(user.identity, id)
+        .await
+        .map_err(error)?;
+    let lookup = Lookup::load(&context, [&endpoint.attribution]).await?;
+    response(StatusCode::OK, &webhook(endpoint, &lookup), None)
 }
+
 async fn validate_mailbox(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
     context

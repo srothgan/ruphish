@@ -4,25 +4,32 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Frozen<T> {
+    #[serde(default)]
+    pub attribution: ruphish_domain::attribution::Attribution,
     pub id: i64,
     pub name: String,
-    pub revision: String,
+    pub revision: i64,
+    pub modified_date: String,
     pub content: T,
 }
 impl<T> Frozen<T> {
     fn new(resource: &Resource, content: T) -> Self {
         Self {
+            attribution: resource.attribution.clone(),
             id: resource.id,
             name: resource.name.clone(),
-            revision: resource.modified_date.clone(),
+            revision: resource.revision,
+            modified_date: resource.modified_date.clone(),
             content,
         }
     }
     fn resource(&self, content: Content) -> Resource {
         Resource {
+            attribution: self.attribution.clone(),
+            revision: self.revision,
             id: self.id,
             name: self.name.clone(),
-            modified_date: self.revision.clone(),
+            modified_date: self.modified_date.clone(),
             content,
         }
     }

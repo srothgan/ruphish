@@ -2,13 +2,6 @@
 use super::*;
 use ruphish_application::delivery::MessageInput;
 
-async fn owner_enabled(c: &mut MySqlConnection, owner: i64) -> Result<bool, Error> {
-    match super::super::accounts::account(c, owner).await {
-        Ok(user) => Ok(!user.account_locked && user.require("modify_objects").is_ok()),
-        Err(ruphish_application::auth::Error::NotFound) => Ok(false),
-        Err(_) => Err(Error::Internal),
-    }
-}
 #[async_trait::async_trait]
 impl Queue for Campaigns {
     async fn release(&self, claim: &Claim, now: i64) -> Result<bool, Error> {
@@ -68,15 +61,8 @@ impl Queue for Campaigns {
         let Some(row) = candidate(&mut tx, now, Some(candidate_id)).await? else {
             return Ok(None);
         };
-        let owner: i64 = row.try_get("user_id").map_err(storage)?;
         let id: i64 = row.try_get("result_id").map_err(storage)?;
-        if !owner_enabled(&mut tx, owner).await? {
-            sqlx::query("UPDATE ruphish_delivery SET state='blocked',code='campaign_owner_unavailable' WHERE result_id=?").bind(id).execute(&mut *tx).await.map_err(storage)?;
-            tx.commit()
-                .await
-                .map_err(|e| Error::Storage(crate::mysql::commit_error(e)))?;
-            return Ok(None);
-        }
+
         let template_id: i64 = row.try_get("template_id").map_err(storage)?;
         let profile_id: i64 = row.try_get("smtp_id").map_err(storage)?;
         let frozen = snapshot(&mut tx, row.try_get("campaign_id").map_err(storage)?).await?;
@@ -86,7 +72,7 @@ impl Queue for Campaigns {
             }
             Ok::<_, Error>((
                 frozen.template(),
-                super::super::resources::load(&mut tx, owner, Kind::Profile, profile_id).await?,
+                super::super::resources::load(&mut tx, Kind::Profile, profile_id).await?,
             ))
         }
         .await;
@@ -159,21 +145,18 @@ impl Queue for Campaigns {
         {
             return Ok(false);
         }
-        let owner: Option<i64> =
-            sqlx::query_scalar("SELECT user_id FROM campaigns WHERE id=? AND status!='Completed'")
+        let active: Option<i64> =
+            sqlx::query_scalar("SELECT id FROM campaigns WHERE id=? AND status!='Completed'")
                 .bind(claim.campaign_id)
                 .fetch_optional(&mut *tx)
                 .await
                 .map_err(storage)?;
-        let Some(owner) = owner else { return Ok(false) };
-        let domain_ready:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ruphish_campaign_domains cd JOIN ruphish_domains d ON d.id=cd.domain_id WHERE cd.campaign_id=? AND d.owner_id=? AND d.enabled=1 AND (SELECT eligible_until FROM ruphish_domain_policy WHERE id=d.id)>?)").bind(claim.campaign_id).bind(owner).bind(now).fetch_one(&mut *tx).await.map_err(storage)?;
+        let Some(_) = active else { return Ok(false) };
+        let domain_ready:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ruphish_campaign_domains cd JOIN ruphish_domains d ON d.id=cd.domain_id WHERE cd.campaign_id=?  AND d.enabled=1 AND (SELECT eligible_until FROM ruphish_domain_policy WHERE id=d.id)>?)").bind(claim.campaign_id).bind(now).fetch_one(&mut *tx).await.map_err(storage)?;
         if !domain_ready {
             return Ok(false);
         }
 
-        if !owner_enabled(&mut tx, owner).await? {
-            return Ok(false);
-        }
         let refs = sqlx::query("SELECT smtp_id FROM campaigns WHERE id=?")
             .bind(claim.campaign_id)
             .fetch_one(&mut *tx)
@@ -181,7 +164,6 @@ impl Queue for Campaigns {
             .map_err(storage)?;
         let profile = super::super::resources::load(
             &mut tx,
-            owner,
             Kind::Profile,
             refs.try_get("smtp_id").map_err(storage)?,
         )

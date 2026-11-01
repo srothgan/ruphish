@@ -107,6 +107,7 @@ pub(crate) fn LoadingLabel(loading: Signal<bool>, children: Children) -> impl In
 #[component]
 pub(crate) fn ActionLink(
     children: Children,
+    #[prop(optional)] new_tab: bool,
     #[prop(into)] href: String,
     #[prop(default = ButtonStyle::Secondary)] style: ButtonStyle,
     #[prop(default = ControlSize::Medium)] size: ControlSize,
@@ -117,6 +118,8 @@ pub(crate) fn ActionLink(
         <a
             class=format!("button {} {}", style.class(), size.class())
             href=move || (!disabled.get()).then(|| href.clone())
+            target=if new_tab { Some("_blank") } else { None }
+            rel=if new_tab { Some("noopener") } else { None }
             aria-disabled=move || disabled.get().then_some("true")
             tabindex=move || disabled.get().then_some("-1")
             hidden=move || hidden.get()

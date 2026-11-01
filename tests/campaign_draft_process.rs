@@ -400,7 +400,13 @@ fn campaign_draft_missing_resource_and_past_schedule_preserve_work_until_correct
     let template_path = format!("/api/templates/{template}");
     let mut changed = read(&base, &template_path);
     changed["subject"] = json!("Changed after review");
-    request(&base, "PUT", &template_path, &changed)
+    client()
+        .put(format!("{base}{template_path}"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .header("If-Match", format!("\"{}\"", changed["revision"]))
+        .json(&changed)
+        .send()
+        .unwrap()
         .error_for_status()
         .unwrap();
     let stale = request(&base, "POST", &format!("{path}/launch"), &body);
@@ -409,14 +415,17 @@ fn campaign_draft_missing_resource_and_past_schedule_preserve_work_until_correct
         412,
         "a real resource edit invalidates the reviewed launch"
     );
-    request(
-        &base,
-        "DELETE",
-        &format!("/api/templates/{template}"),
-        &json!({}),
-    )
-    .error_for_status()
-    .unwrap();
+    client()
+        .delete(format!("{base}{template_path}"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .header(
+            "If-Match",
+            format!("\"{}\"", read(&base, &template_path)["revision"]),
+        )
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
     assert!(
         !request(&base, "POST", &format!("{path}/launch"), &body)
             .status()

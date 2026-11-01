@@ -1,4 +1,4 @@
-//! Owner-scoped resource transactions over the preserved legacy tables.
+//! Shared resource transactions over the preserved legacy tables.
 use ruphish_application::datetime;
 use ruphish_application::{auth::Identity, resources::*};
 use sqlx::{Row, SqliteConnection, SqlitePool, sqlite::SqliteRow};
@@ -70,18 +70,12 @@ fn timestamp(row: &SqliteRow) -> Result<String, Error> {
         .map(datetime::utc)
         .map_err(|_| Error::Internal)
 }
-pub(super) async fn load(
-    c: &mut SqliteConnection,
-    owner: i64,
-    kind: Kind,
-    id: i64,
-) -> Result<Resource, Error> {
+pub(super) async fn load(c: &mut SqliteConnection, kind: Kind, id: i64) -> Result<Resource, Error> {
     let row = sqlx::query(sqlx::AssertSqlSafe(format!(
-        "SELECT * FROM {} WHERE id=? AND user_id=?",
+        "SELECT * FROM {} WHERE id=? ",
         table(kind)
     )))
     .bind(id)
-    .bind(owner)
     .fetch_optional(&mut *c)
     .await
     .map_err(storage)?
@@ -163,6 +157,8 @@ pub(super) async fn load(
         name: text(&row, "name")?,
         modified_date: timestamp(&row)?,
         content,
+        attribution: super::attribution::read(&row, "user_id")?,
+        revision: row.try_get("revision").map_err(storage)?,
     })
 }
 async fn usage(c: &mut SqliteConnection, kind: Kind, id: i64) -> Result<i64, Error> {
@@ -185,10 +181,7 @@ async fn usage(c: &mut SqliteConnection, kind: Kind, id: i64) -> Result<i64, Err
     .map_err(storage)
 }
 fn condition(old: &Resource, expected: Option<&str>) -> Result<(), Error> {
-    if expected.is_some_and(|v| v != old.modified_date) {
-        return Err(Error::Changed);
-    }
-    Ok(())
+    require_revision(old.revision, parse_revision(expected)?)
 }
 async fn clear_children(c: &mut SqliteConnection, kind: Kind, id: i64) -> Result<(), Error> {
     match kind {
@@ -233,16 +226,15 @@ impl Repository for Resources {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         authorize(&mut tx, caller, false).await?;
         let ids: Vec<i64> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-            "SELECT id FROM {} WHERE user_id=? ORDER BY id",
+            "SELECT id FROM {}  ORDER BY id",
             table(kind)
         )))
-        .bind(caller.id)
         .fetch_all(&mut *tx)
         .await
         .map_err(storage)?;
         let mut result = Vec::with_capacity(ids.len());
         for id in ids {
-            result.push(load(&mut tx, caller.id, kind, id).await?);
+            result.push(load(&mut tx, kind, id).await?);
         }
         tx.commit().await.map_err(storage)?;
         Ok(result)
@@ -256,7 +248,6 @@ impl Repository for Resources {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         authorize(&mut tx, caller, false).await?;
         let rows = sqlx::query(sqlx::AssertSqlSafe(summary_query(kind)))
-            .bind(caller.id)
             .bind(id)
             .bind(id)
             .fetch_all(&mut *tx)
@@ -267,6 +258,8 @@ impl Repository for Resources {
             .map(|row| {
                 let total = row.try_get("total").map_err(storage)?;
                 Ok(Summary {
+                    attribution: super::attribution::read(row, "user_id")?,
+                    revision: row.try_get("revision").map_err(storage)?,
                     id: row.try_get("id").map_err(storage)?,
                     name: text(row, "name")?,
                     modified_date: timestamp(row)?,
@@ -281,7 +274,7 @@ impl Repository for Resources {
     async fn get(&self, caller: Identity, kind: Kind, id: i64) -> Result<Resource, Error> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         authorize(&mut tx, caller, false).await?;
-        let result = load(&mut tx, caller.id, kind, id).await?;
+        let result = load(&mut tx, kind, id).await?;
         tx.commit().await.map_err(storage)?;
         Ok(result)
     }
@@ -293,17 +286,24 @@ impl Repository for Resources {
     ) -> Result<Resource, Error> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         authorize(&mut tx, caller, false).await?;
-        let id: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-            "SELECT id FROM {} WHERE user_id=? AND name=? ORDER BY id LIMIT 1",
+        let ids: Vec<i64> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            "SELECT id FROM {} WHERE name=? ORDER BY id LIMIT 2",
             table(kind)
         )))
-        .bind(caller.id)
         .bind(name)
-        .fetch_optional(&mut *tx)
+        .fetch_all(&mut *tx)
         .await
-        .map_err(storage)?
-        .ok_or(Error::NotFound(kind.label()))?;
-        let result = load(&mut tx, caller.id, kind, id).await?;
+        .map_err(storage)?;
+        let id = match ids.as_slice() {
+            [id] => *id,
+            [] => return Err(Error::NotFound(kind.label())),
+            _ => {
+                return Err(Error::Invalid(
+                    "Resource name is ambiguous; select by ID".into(),
+                ));
+            }
+        };
+        let result = load(&mut tx, kind, id).await?;
         tx.commit().await.map_err(storage)?;
         Ok(result)
     }
@@ -322,7 +322,7 @@ impl Repository for Resources {
         authorize(&mut tx, caller, true).await?;
         let kind = value.kind();
         let old = if let Some(id) = existing {
-            let old = load(&mut tx, caller.id, kind, id).await?;
+            let old = load(&mut tx, kind, id).await?;
             condition(&old, expected.as_deref())?;
             Some(old)
         } else {
@@ -334,10 +334,9 @@ impl Repository for Resources {
         let mut value = value.resolve_password(old.as_ref());
         if old.as_ref().is_none_or(|o| o.name != value.name) {
             let duplicate: bool = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-                "SELECT EXISTS(SELECT 1 FROM {} WHERE user_id=? AND name=?)",
+                "SELECT EXISTS(SELECT 1 FROM {} WHERE name=?)",
                 table(kind)
             )))
-            .bind(caller.id)
             .bind(&value.name)
             .fetch_one(&mut *tx)
             .await
@@ -346,6 +345,7 @@ impl Repository for Resources {
                 return Err(Error::Conflict(kind.label()));
             }
         }
+        value.revision = next_revision(old.as_ref().map_or(0, |old| old.revision))?;
         value.modified_date = datetime::next_revision(
             old.as_ref().map(|old| old.modified_date.as_str()),
             datetime::now(),
@@ -353,13 +353,12 @@ impl Repository for Resources {
         .map_err(|_| Error::Internal)?;
         value.id = if let Some(id) = existing {
             sqlx::query(sqlx::AssertSqlSafe(format!(
-                "UPDATE {} SET name=?,modified_date=? WHERE id=? AND user_id=?",
+                "UPDATE {} SET revision=revision+1,name=?,modified_date=? WHERE id=? ",
                 table(kind)
             )))
             .bind(&value.name)
             .bind(&value.modified_date)
             .bind(id)
-            .bind(caller.id)
             .execute(&mut *tx)
             .await
             .map_err(storage)?;
@@ -467,6 +466,21 @@ impl Repository for Resources {
                 }
             }
         }
+        super::attribution::edit(
+            &mut tx,
+            table(kind),
+            value.id,
+            caller.id,
+            &value.modified_date,
+        )
+        .await?;
+        value.attribution = ruphish_domain::attribution::Attribution {
+            created_by: old
+                .as_ref()
+                .map_or(Some(caller.id), |r| r.attribution.created_by),
+            edited_by: Some(caller.id),
+            edited_at: Some(value.modified_date.clone()),
+        };
         tx.commit().await.map_err(storage)?;
         Ok(value)
     }
@@ -483,18 +497,17 @@ impl Repository for Resources {
             .await
             .map_err(storage)?;
         authorize(&mut tx, caller, true).await?;
-        let old = load(&mut tx, caller.id, kind, id).await?;
+        let old = load(&mut tx, kind, id).await?;
         condition(&old, expected.as_deref())?;
         if usage(&mut tx, kind, id).await? > 0 {
             return Err(Error::InUse);
         }
         clear_children(&mut tx, kind, id).await?;
         sqlx::query(sqlx::AssertSqlSafe(format!(
-            "DELETE FROM {} WHERE id=? AND user_id=?",
+            "DELETE FROM {} WHERE id=? ",
             table(kind)
         )))
         .bind(id)
-        .bind(caller.id)
         .execute(&mut *tx)
         .await
         .map_err(storage)?;

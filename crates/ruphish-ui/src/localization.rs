@@ -416,7 +416,6 @@ pub fn delivery_failure_label(context: leptos_i18n::I18nContext<Locale>, code: &
         "smtp_profile_blocked" => leptos_i18n::t_string!(context, ui.delivery_error_profile),
         "smtp_temporary_rejection" => leptos_i18n::t_string!(context, ui.delivery_error_temporary),
         "delivery_retry_exhausted" => leptos_i18n::t_string!(context, ui.delivery_error_exhausted),
-        "campaign_owner_unavailable" => leptos_i18n::t_string!(context, ui.delivery_error_owner),
         "campaign_resource_missing" => leptos_i18n::t_string!(context, ui.delivery_error_resource),
         "campaign_page_missing" => leptos_i18n::t_string!(context, ui.delivery_error_page),
         _ => leptos_i18n::t_string!(context, ui.delivery_error_fallback),
