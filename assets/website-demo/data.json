@@ -28,11 +28,11 @@
   ],
   "users": [
     { "username": "demo", "role": "admin" },
-    { "username": "alex.security", "role": "admin" },
-    { "username": "sam.training", "role": "user" },
-    { "username": "robin.operations", "role": "user" },
-    { "username": "former.operator", "role": "user", "locked": true },
-    { "username": "new.operator", "role": "user", "reset": true }
+    { "username": "Alex Rivera", "role": "admin" },
+    { "username": "Sam Lee", "role": "user" },
+    { "username": "Robin Meyer", "role": "user" },
+    { "username": "Taylor Winter", "role": "user", "locked": true },
+    { "username": "Jamie Patel", "role": "user", "reset": true }
   ],
   "webhooks": [
     { "name": "Security event stream", "path": "security", "active": true, "failed": false },
