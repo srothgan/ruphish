@@ -84,7 +84,7 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
     await start();
     for (const path of [
       '/api/overview',
-      '/api/overview/posture?window=30d',
+      '/api/overview/posture?window=all',
       '/api/campaigns/directory',
       '/api/campaigns/3/delivery',
       '/api/campaigns/3/results',
@@ -105,7 +105,10 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
         assert.equal(value.campaign.send_by_date, '2026-10-23T13:00:00Z');
       }
       if (path.includes('posture')) {
-        assert.equal(value.delivered, 937);
+        // Fixed historical deliveries must not age out as the server's real clock advances.
+        assert.equal(value.window, 'all');
+        assert.equal(value.since, null);
+        assert.equal(value.delivered, 1337); // 400 baseline + 617 benefits + 320 delivery.
       }
     }
     const memory = new Map();
