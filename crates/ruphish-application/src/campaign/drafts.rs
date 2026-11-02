@@ -142,7 +142,7 @@ pub trait Repository: Send + Sync {
         configuration: Configuration,
         step: i64,
         now: i64,
-    ) -> Result<Draft, Error>;
+    ) -> Result<crate::attribution::Saved<Draft>, Error>;
     /// Read a shared draft, including a completed launch reference for recovery.
     async fn draft(&self, caller: Identity, id: &str) -> Result<Draft, Error>;
     /// Stable bounded page of editable drafts; fetch limit+1 to establish continuation.
@@ -157,5 +157,5 @@ pub trait Repository: Send + Sync {
         revision: i64,
         input: Create,
         now: i64,
-    ) -> Result<super::Campaign, Error>;
+    ) -> Result<crate::attribution::Saved<super::Campaign>, Error>;
 }

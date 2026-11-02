@@ -390,7 +390,12 @@ pub trait Repository: drafts::Repository + crate::event_edit::Repository + Send 
     /// Resolve resources and schedule without side effects.
     async fn prepare(&self, caller: Identity, input: &Create, now: i64) -> Result<Prepared, Error>;
     /// Commit the complete campaign or replay its existing idempotent launch.
-    async fn create(&self, caller: Identity, input: Create, now: i64) -> Result<Campaign, Error>;
+    async fn create(
+        &self,
+        caller: Identity,
+        input: Create,
+        now: i64,
+    ) -> Result<crate::attribution::Saved<Campaign>, Error>;
     /// Read current campaign state within ownership.
     async fn get(&self, caller: Identity, id: i64) -> Result<Campaign, Error>;
     /// List shared campaigns in stable order.

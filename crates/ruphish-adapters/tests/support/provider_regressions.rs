@@ -30,12 +30,15 @@ async fn exact_text(db: &Database) {
             .get(actor, Kind::Template, original.id)
             .await
             .unwrap();
-        assert!(saved == read, "save response must equal persisted data");
+        assert!(
+            saved.record == read,
+            "save response must equal persisted data"
+        );
         let Content::Template(template) = &read.content else {
             panic!()
         };
         assert_eq!(template.subject, subject);
-        original = saved;
+        original = saved.record;
     }
     for subject in [
         "a".repeat(256),

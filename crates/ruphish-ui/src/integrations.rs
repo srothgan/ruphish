@@ -5,6 +5,7 @@ use crate::{
 };
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use leptos_router::hooks::{use_navigate, use_params_map};
+use ruphish_contracts::integrations::request::{MailboxWrite, WebhookWrite};
 use ruphish_domain::reporting::SortDirection;
 use ruphish_ui::table_state::Value as SortValue;
 use ruphish_ui::view_tasks::ViewTasks;
@@ -150,13 +151,14 @@ impl Record {
             Self::Mailbox(v) => v.history,
         }
     }
-    fn edit_value(&self) -> Value {
+    fn edit_value(&self) -> Result<Value, String> {
         match self {
             Self::Webhook(v) => {
-                json!({"name":v.name,"url":v.url,"is_active":v.is_active,"revision":v.revision})
+                serde_json::to_value(WebhookWrite::from(v)).map_err(|e| e.to_string())
             }
             Self::Mailbox(v) => {
-                json!({"name":v.name,"enabled":v.enabled,"host":v.host,"port":v.port,"username":v.username,"tls":v.tls,"ignore_cert_errors":v.ignore_cert_errors,"folder":v.folder,"restrict_domain":v.restrict_domain,"delete_reported":v.delete_reported,"frequency":v.frequency,"revision":v.revision})
+                serde_json::to_value(MailboxWrite::try_from(v).map_err(|e| e.to_string())?)
+                    .map_err(|e| e.to_string())
             }
         }
     }
@@ -405,9 +407,29 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
 
     let queries = expect_context::<ManagementQueries>();
     let initial = if kind.webhook() {
-        json!({"name":"","url":"","is_active":true,"revision":null})
+        json!(WebhookWrite {
+            name: String::new(),
+            url: String::new(),
+            secret: None,
+            is_active: true,
+            revision: None
+        })
     } else {
-        json!({"name":"","enabled":true,"host":"","port":993,"username":"","tls":true,"ignore_cert_errors":false,"folder":"INBOX","restrict_domain":"","delete_reported":false,"frequency":60,"revision":null})
+        json!(MailboxWrite {
+            name: String::new(),
+            enabled: true,
+            host: String::new(),
+            port: 993,
+            username: String::new(),
+            password: None,
+            tls: true,
+            ignore_cert_errors: false,
+            folder: "INBOX".into(),
+            restrict_domain: String::new(),
+            delete_reported: false,
+            frequency: 60,
+            revision: None
+        })
     };
     let draft = RwSignal::new(initial.clone());
     let baseline = RwSignal::new(initial);
@@ -434,12 +456,18 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
             loading.set(true);
 
             spawn_local(async move {
-                match ManagementQueries::read_integration(api, kind, id).await {
-                    Ok(value) => {
+                match ManagementQueries::read_integration(api, kind, id)
+                    .await
+                    .and_then(|record| {
+                        record
+                            .edit_value()
+                            .map(|value| (record.has_secret(), value))
+                            .map_err(|_| api.invalid_read_err())
+                    }) {
+                    Ok((has_secret, value)) => {
                         load_error.set(None);
                         write_error.set(None);
-                        has_saved_secret.set(value.has_secret());
-                        let value = value.edit_value();
+                        has_saved_secret.set(has_secret);
                         baseline.set(value.clone());
                         draft.set(value);
                         loaded.set(true);
@@ -474,6 +502,18 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
         if value[secret].as_str().is_none_or(str::is_empty) {
             value.as_object_mut().map(|object| object.remove(secret));
         }
+        let value = if kind.webhook() {
+            serde_json::from_value::<WebhookWrite>(value).and_then(serde_json::to_value)
+        } else {
+            serde_json::from_value::<MailboxWrite>(value).and_then(serde_json::to_value)
+        };
+        let value = match value {
+            Ok(value) => value,
+            Err(_) => {
+                message.error(api.invalid_read());
+                return;
+            }
+        };
         busy.set(true);
         tasks.spawn(async move {
             let path = id.map_or_else(

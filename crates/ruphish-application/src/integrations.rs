@@ -105,7 +105,7 @@ pub trait Repository: Send + Sync {
         caller: Identity,
         id: Option<i64>,
         edit: WebhookEdit,
-    ) -> Result<Webhook, Error>;
+    ) -> Result<crate::attribution::Saved<Webhook>, Error>;
     /// Remove endpoint and cancel jobs.
     async fn delete_webhook(
         &self,
@@ -125,7 +125,7 @@ pub trait Repository: Send + Sync {
         caller: Identity,
         id: Option<i64>,
         edit: MailboxEdit,
-    ) -> Result<Mailbox, Error>;
+    ) -> Result<crate::attribution::Saved<Mailbox>, Error>;
     /// Remove configuration, checkpoints and run history.
     async fn delete_mailbox(
         &self,
@@ -136,9 +136,18 @@ pub trait Repository: Send + Sync {
     /// Validate connection and folder without ingesting messages.
     async fn validate_mailbox(&self, caller: Identity, id: i64) -> Result<(), Error>;
     /// Explicitly resume with new arrivals after the server changes UIDVALIDITY.
-    async fn resume_mailbox(&self, caller: Identity, id: i64, revision: i64) -> Result<(), Error>;
+    async fn resume_mailbox(
+        &self,
+        caller: Identity,
+        id: i64,
+        revision: i64,
+    ) -> Result<crate::attribution::Saved<Mailbox>, Error>;
     /// Schedule an immediate check; coalesce active work.
-    async fn check_mailbox(&self, caller: Identity, id: i64) -> Result<(), Error>;
+    async fn check_mailbox(
+        &self,
+        caller: Identity,
+        id: i64,
+    ) -> Result<crate::attribution::Saved<Mailbox>, Error>;
 }
 
 /// Durable background work, independent of the selected database engine.

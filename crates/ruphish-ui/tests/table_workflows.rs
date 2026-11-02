@@ -1,6 +1,10 @@
 //! Ordering through editable drafts, bookmarks, pagination and typed table values.
 #![allow(clippy::unwrap_used, reason = "Functional fixtures and assertions")]
+#[path = "support/resource_checkpoint.rs"]
+mod resource_checkpoint;
+use resource_checkpoint::checkpoint;
 use ruphish_contracts::reporting::Filter;
+use ruphish_contracts::resource_details::Kind;
 use ruphish_domain::reporting::{RecipientSort, SortDirection};
 use ruphish_ui::{
     resource_state::ResourceDraft,
@@ -16,7 +20,7 @@ fn sorted_recipient_edits_and_removal_keep_original_targets_and_saved_revision()
         {"email":"a@example.test","first_name":"Same","last_name":"","position":""},
         {"email":"b@example.test","first_name":"","last_name":"","position":""}
     ]});
-    let mut draft = ResourceDraft::new(original.clone(), Some("revision-1".into()));
+    let mut draft = ResourceDraft::loaded(checkpoint(Kind::Group, original.clone(), "revision-1"));
     let sort = Sort {
         column: "email".into(),
         order: SortDirection::Asc,
@@ -40,11 +44,15 @@ fn sorted_recipient_edits_and_removal_keep_original_targets_and_saved_revision()
     });
     let submitted = draft.value().clone();
     let encoded = serde_json::to_vec(&submitted).unwrap();
-    let decoded: ruphish_contracts::legacy::Group = serde_json::from_slice(&encoded).unwrap();
+    let decoded: ruphish_contracts::resources::request::Group =
+        serde_json::from_slice(&encoded).unwrap();
     let targets = decoded.targets;
     assert_eq!(targets.len(), 2);
     assert_eq!(targets[1].email, "a@example.test");
-    draft.saved(&submitted, submitted.clone(), Some("revision-2".into()));
+    draft.saved(
+        &submitted,
+        checkpoint(Kind::Group, submitted.clone(), "revision-2"),
+    );
     assert!(!draft.dirty());
     assert_eq!(draft.revision(), Some("revision-2"));
     draft.edit(|value| value["targets"][0]["email"] = json!("pending@example.test"));

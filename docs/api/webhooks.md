@@ -15,7 +15,7 @@ Only administrators can change the global feature switch. While webhooks are dis
 | GET, PUT, DELETE | `/api/webhooks/{id}` | Read, edit, or delete |
 | POST | `/api/webhooks/{id}/validate` | Send a signed validation request |
 
-Writes contain `name`, `url`, optional `secret`, `is_active`, and `revision` (required for edits, omitted for creation). Send the current revision on edits and `If-Match` on deletion. Responses include identity, configuration, revision, `has_secret`, and recent `history`; they never return the secret. Omitting a secret on edit preserves it. Use HTTPS for a receiving service.
+Writes contain `name`, `url`, optional `secret`, `is_active`, and `revision` (required for edits, omitted for creation). Send the current revision on edits and `If-Match` on deletion. The path supplies the endpoint ID; write bodies reject unknown fields, including `id`, attribution and history. Responses include identity, configuration, revision, `has_secret`, and recent `history`; they never return the secret. Omitting a secret on edit preserves it. Use HTTPS for a receiving service.
 
 ## Event payload
 

@@ -292,8 +292,8 @@ fn import_draft_handoff_shares_edits_and_isolates_family_session_and_discard() {
         json!({"name":"Original","targets":[{"email":"alice@example.test"}]}),
     )
     .unwrap();
-    let mut draft = ResourceDraft::new(json!({"id":0,"name":"","targets":[]}), None);
-    draft.merge_import(&imported.fields);
+    let mut draft = ResourceDraft::new(json!({"id":0,"name":"","targets":[]}));
+    draft.merge_import(&imported.fields, "groups").unwrap();
     let id = store.insert("groups", draft, imported.review).unwrap();
     assert_eq!(id.len(), 36);
     assert!(id.chars().all(|c| c.is_ascii_hexdigit() || c == '-'));
@@ -329,7 +329,7 @@ fn import_draft_handoff_shares_edits_and_isolates_family_session_and_discard() {
     let id = store
         .insert(
             "pages",
-            ResourceDraft::new(imported.fields, None),
+            ResourceDraft::new(imported.fields),
             imported.review,
         )
         .unwrap();
@@ -350,11 +350,7 @@ fn import_draft_capacity_and_expired_session_fail_without_overwriting_retained_w
     let store = owner.with(ImportDrafts::default);
     let insert = || {
         let value = prepare_creation("pages", "html", json!({"html":"<p>retained</p>"})).unwrap();
-        store.insert(
-            "pages",
-            ResourceDraft::new(value.fields, None),
-            value.review,
-        )
+        store.insert("pages", ResourceDraft::new(value.fields), value.review)
     };
     let mut ids = std::collections::HashSet::new();
     for _ in 0..8 {

@@ -176,7 +176,7 @@ impl Repository for Domains {
         id: Option<i64>,
         edit: Edit,
         now: i64,
-    ) -> Result<Domain, Error> {
+    ) -> Result<ruphish_application::attribution::Saved<Domain>, Error> {
         let canonical = edit.validate()?;
         let verifiable = canonical.verification_supported();
         let due = if verifiable { now } else { i64::MAX };
@@ -235,6 +235,7 @@ impl Repository for Domains {
             enqueue(&mut tx, id, now).await?;
         }
         let result = load(&mut tx, id).await?;
+        let result = super::attribution::saved(&mut tx, result).await?;
         tx.commit()
             .await
             .map_err(|e| Error::Storage(crate::mysql::commit_error(e)))?;
@@ -270,7 +271,12 @@ impl Repository for Domains {
             .map_err(|e| Error::Storage(crate::mysql::commit_error(e)))?;
         Ok(())
     }
-    async fn request_check(&self, caller: Identity, id: i64, now: i64) -> Result<Domain, Error> {
+    async fn request_check(
+        &self,
+        caller: Identity,
+        id: i64,
+        now: i64,
+    ) -> Result<ruphish_application::attribution::Saved<Domain>, Error> {
         let mut tx = crate::mysql::locks::write(&self.pool)
             .await
             .map_err(storage)?;
@@ -298,6 +304,7 @@ impl Repository for Domains {
             .map_err(storage)?;
             sqlx::query("UPDATE ruphish_domains SET challenge=?,challenge_expires=?,generation=generation+1,lease_until=0,routing_proof='' WHERE id=?").bind(token()?).bind(now+CHALLENGE_LIFETIME).bind(id).execute(&mut *tx).await.map_err(storage)?;
         } else if old.active_check.is_some() {
+            let old = super::attribution::saved(&mut tx, old).await?;
             tx.commit()
                 .await
                 .map_err(|e| Error::Storage(crate::mysql::commit_error(e)))?;
@@ -314,6 +321,7 @@ impl Repository for Domains {
         .map_err(storage)?;
         enqueue(&mut tx, id, now).await?;
         let result = load(&mut tx, id).await?;
+        let result = super::attribution::saved(&mut tx, result).await?;
         tx.commit()
             .await
             .map_err(|e| Error::Storage(crate::mysql::commit_error(e)))?;

@@ -2,7 +2,7 @@
 use crate::auth::{Context, Rejection};
 use ruphish_application::attribution::Attribution as Stored;
 use ruphish_contracts::attribution::{Attribution, UserReference};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 pub(crate) struct Lookup(BTreeMap<i64, UserReference>);
 impl Lookup {
@@ -10,15 +10,12 @@ impl Lookup {
         context: &Context,
         values: impl IntoIterator<Item = &'a Stored>,
     ) -> Result<Self, Rejection> {
-        let ids = values
-            .into_iter()
-            .flat_map(|a| [a.created_by, a.edited_by])
-            .flatten()
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
+        let ids = ruphish_application::attribution::identity_ids(values);
         let users = context.display_identities(&ids).await?;
-        Ok(Self(
+        Ok(Self::from_identities(users))
+    }
+    pub(crate) fn from_identities(users: Vec<ruphish_application::auth::DisplayIdentity>) -> Self {
+        Self(
             users
                 .into_iter()
                 .map(|user| {
@@ -32,7 +29,7 @@ impl Lookup {
                     )
                 })
                 .collect(),
-        ))
+        )
     }
     pub(crate) fn resolve(&self, value: &Stored) -> Attribution {
         let user = |id| {

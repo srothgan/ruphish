@@ -13,7 +13,6 @@ use axum::{
 use ruphish_application::overview as app;
 use ruphish_contracts::errors::ErrorCode;
 use ruphish_contracts::overview as wire;
-use serde::Deserialize;
 
 pub(crate) fn routes() -> Router<AuthState> {
     Router::new()
@@ -80,14 +79,7 @@ async fn snapshot(context: Context) -> Result<Response, Rejection> {
     )
 }
 
-#[derive(Deserialize, Default)]
-#[serde(default, deny_unknown_fields)]
-struct WindowQuery {
-    window: String,
-    // Authentication consumes this existing API query parameter before validation.
-    #[serde(rename = "api_key")]
-    _api_key: Option<String>,
-}
+use ruphish_contracts::overview::request::WindowQuery;
 
 async fn posture(
     context: Context,

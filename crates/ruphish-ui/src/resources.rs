@@ -4,6 +4,7 @@ use crate::feedback::Message;
 use crate::resource_queries::ResourceQueries;
 use crate::shared::components::*;
 use leptos::{html, prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
+use ruphish_contracts::resources::request as input;
 use ruphish_domain::reporting::SortDirection;
 use ruphish_ui::table_state::{
     Value as SortValue, scalar as sort_scalar, timestamp as sort_timestamp,
@@ -12,7 +13,7 @@ use ruphish_ui::{
     import_drafts::{ImportDrafts, ImportedDraft},
     import_state::{ImportError, ImportReview},
     preview_document,
-    resource_state::ResourceDraft,
+    resource_state::{Confirmed, ResourceDraft},
 };
 use ruphish_ui::{tr, trs};
 use serde_json::{Value, json};
@@ -131,6 +132,17 @@ pub(super) enum Family {
     Profiles,
 }
 impl Family {
+    pub(super) fn detail_kind(self) -> ruphish_contracts::resource_details::Kind {
+        use ruphish_contracts::resource_details::Kind;
+        match self {
+            Self::Groups => Kind::Group,
+            Self::Templates => Kind::Template,
+            Self::Pages => Kind::Page,
+            Self::LearningPages => Kind::LearningPage,
+            Self::Profiles => Kind::Profile,
+        }
+    }
+
     fn new_label(self) -> &'static str {
         let i18n = ruphish_ui::localization::use_i18n();
         match self {
@@ -229,16 +241,17 @@ impl Family {
     }
     fn empty(self) -> Value {
         match self {
-            Self::Groups => json!({"id":0,"name":"","targets":[]}),
-            Self::Templates => {
-                json!({"id":0,"name":"","subject":"","envelope_sender":"","html":"","text":"","attachments":[]})
-            }
-            Self::LearningPages => json!({"id":0,"name":"","html":""}),
-            Self::Pages => {
-                json!({"id":0,"name":"","html":"","redirect_url":""})
-            }
+            Self::Groups => json!(input::Group::default()),
+            Self::Templates => json!(input::EmailTemplate::default()),
+            Self::LearningPages => json!(input::LearningPage::default()),
+            Self::Pages => json!(input::LandingPage::default()),
             Self::Profiles => {
-                json!({"id":0,"name":"","host":"","from_address":"","username":"","has_password":false,"ignore_cert_errors":false,"interface_type":"SMTP","headers":[]})
+                let mut fields = json!(input::SendingProfile {
+                    interface_type: "SMTP".into(),
+                    ..Default::default()
+                });
+                fields["has_password"] = json!(false);
+                fields
             }
         }
     }
@@ -545,7 +558,7 @@ fn edit(
     let import_review = imported.as_ref().map(|i| RwSignal::from(i.review.clone()));
     let draft = imported
         .map(|i| RwSignal::from(i.draft))
-        .unwrap_or_else(|| RwSignal::new(ResourceDraft::new(family.empty(), None)));
+        .unwrap_or_else(|| RwSignal::new(ResourceDraft::new(family.empty())));
     let validation = FormValidation::new(move || {
         draft.with(|d| ruphish_ui::form_validation::resource(d.value(), family.route()))
     });
@@ -588,11 +601,11 @@ fn edit(
                 match crate::resource_queries::ResourceQueries::read_detail(api, family, &target)
                     .await
                     .and_then(|(resource, revision)| {
-                        serde_json::to_value(resource)
-                            .map(|value| (value, revision))
+                        Confirmed::new(resource, revision)
+                            .map(|confirmed| (confirmed.fields_for_edit(), confirmed))
                             .map_err(|_| api.invalid_read_err())
                     }) {
-                    Ok((mut value, revision)) => {
+                    Ok((mut value, confirmed)) => {
                         load_error.set(None);
                         editor.write_error.set(None);
                         if duplicate.is_some() {
@@ -607,16 +620,17 @@ fn edit(
                                     .as_str()
                                     .unwrap_or(leptos_i18n::t_string!(i18n, ui.resource))
                             ));
-                            value.as_object_mut().map(|v| v.remove("modified_date"));
                         }
                         let loaded = if duplicate.is_some() {
-                            let mut draft = ResourceDraft::new(family.empty(), None);
+                            let mut draft = ResourceDraft::new(family.empty());
                             draft.edit(|draft| *draft = value);
                             draft
                         } else {
-                            ResourceDraft::new(value, revision)
+                            ResourceDraft::loaded(confirmed)
                         };
-                        editor.diagnostics.set(warnings_for(loaded.value()));
+                        editor
+                            .diagnostics
+                            .set(loaded.confirmed().and_then(warnings_for_record));
                         editor.draft.set(loaded);
                         editor.epoch.update(|v| *v += 1);
                     }
@@ -726,9 +740,8 @@ fn edit(
                         editor
                             .draft
                             .with(|d| {
-                                <ruphish_contracts::attribution::Attribution as serde::Deserialize>::deserialize(
-                                        d.confirmed(),
-                                    )
+                                d.confirmed()
+                                    .map(|r| r.metadata.attribution.clone())
                                     .unwrap_or_default()
                             })
                     }) />
@@ -833,6 +846,19 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
     editor.message.clear();
     let current = editor.draft.get_untracked();
     let submitted = current.value().clone();
+    let request = match ruphish_contracts::resources::request::decode(
+        family.detail_kind(),
+        submitted.clone(),
+    )
+    .and_then(serde_json::to_value)
+    {
+        Ok(value) => value,
+        Err(_) => {
+            editor.busy.set(false);
+            editor.message.error(api.invalid_read_err().message);
+            return false;
+        }
+    };
     let id = submitted["id"].as_i64().unwrap_or(0);
     let path = if id == 0 {
         format!("/api/{}/", family.route())
@@ -844,20 +870,18 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
             if id == 0 { "POST" } else { "PUT" },
             &path,
             &token,
-            Some(&submitted),
+            Some(&request),
             current.revision(),
         )
         .await
         .and_then(|(value, revision)| {
             let resource =
                 ResourceQueries::decode_detail(api, family, value, (id != 0).then_some(id))?;
-            // Editing owns an incomplete JSON document, separate from confirmed read records.
-            let value = serde_json::to_value(&resource).map_err(|_| api.invalid_read_err())?;
-            Ok((value, revision, resource))
+            Confirmed::new(resource, revision).map_err(|_| api.invalid_read_err())
         });
     editor.busy.set(false);
     match result {
-        Ok((value, revision, resource)) => {
+        Ok(confirmed) => {
             #[cfg(feature = "demo")]
             api.notifications.show(if id == 0 {
                 DemoNotice::Created
@@ -865,11 +889,11 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
                 DemoNotice::Saved
             });
             editor.write_error.set(None);
-            editor.diagnostics.set(warnings_for(&value));
-            queries.saved(family, &resource);
             editor
-                .draft
-                .update(|d| d.saved(&submitted, value, revision));
+                .diagnostics
+                .set(warnings_for_record(confirmed.record()));
+            queries.saved(family, confirmed.record());
+            editor.draft.update(|d| d.saved(&submitted, confirmed));
             editor.epoch.update(|v| *v += 1);
             editor.message.status(
                 if editor.draft.with_untracked(ResourceDraft::dirty) {
@@ -1057,7 +1081,15 @@ fn content_workspace(
         let revision = editor.html_revision.get_value();
         let epoch = editor.epoch.get_untracked();
         spawn_local(async move {
-            let body = json!({"html":source,"recipient":{"email":"alice@example.test","first_name":"Alice","last_name":"Example","position":"Analyst"}});
+            let body = json!(input::PreviewRequest {
+                html: source.clone(),
+                recipient: input::Recipient {
+                    email: "alice@example.test".into(),
+                    first_name: "Alice".into(),
+                    last_name: "Example".into(),
+                    position: "Analyst".into()
+                }
+            });
             let result = api
                 .resource(
                     "POST",
@@ -1397,7 +1429,9 @@ fn page_check_button(
                 let revision = editor.html_revision.get_value();
                 let epoch = editor.epoch.get_untracked();
                 spawn_local(async move {
-                    let body = json!({"html":source});
+                    let body = json!(
+                        input::PreviewRequest { html: source.clone(), recipient: Default::default() }
+                    );
                     let result = api
                         .resource(
                             "POST",
@@ -1707,7 +1741,9 @@ fn ImportPanel(api: Api, token: String, family: Family, open: RwSignal<bool>) ->
                 let result = match wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await {
                     Ok(buffer) => {
                         let bytes = js_sys::Uint8Array::new(&buffer).to_vec();
-                        let payload = json!({"content":base64::engine::general_purpose::STANDARD.encode(bytes)});
+                        let payload = json!(input::PageBundleRequest {
+                            content: base64::engine::general_purpose::STANDARD.encode(bytes)
+                        });
                         api.resource(
                             "POST",
                             "/api/import/page-bundle",
@@ -1773,13 +1809,22 @@ fn ImportPanel(api: Api, token: String, family: Family, open: RwSignal<bool>) ->
                 let (path, payload) = match kind.as_str() {
                     "csv" => (
                         "/api/import/group/review",
-                        json!({"content":source,"columns":columns}),
+                        json!(input::CsvRequest {
+                            content: source,
+                            columns: Some(columns)
+                        }),
                     ),
                     "email" => (
                         "/api/import/email",
-                        json!({"content":source,"convert_links":convert}),
+                        json!(input::EmailRequest {
+                            content: source,
+                            convert_links: convert
+                        }),
                     ),
-                    _ => ("/api/import/site", json!({"url":source})),
+                    _ => (
+                        "/api/import/site",
+                        json!(input::SiteRequest { url: source }),
+                    ),
                 };
                 api.resource("POST", path, &token.get_value(), Some(&payload), None)
                     .await
@@ -1791,11 +1836,17 @@ fn ImportPanel(api: Api, token: String, family: Family, open: RwSignal<bool>) ->
             });
             match result {
                 Ok(imported) => {
-                    let mut draft = ResourceDraft::new(family.empty(), None);
-                    draft.merge_import(&imported.fields);
-                    let result = drafts
-                        .ok_or(ImportError::DraftUnavailable)
-                        .and_then(|store| store.insert(family.route(), draft, imported.review));
+                    let mut draft = ResourceDraft::new(family.empty());
+                    let result = draft
+                        .merge_import(&imported.fields, family.route())
+                        .map_err(ImportError::RequestFailed)
+                        .and_then(|()| {
+                            drafts
+                                .ok_or(ImportError::DraftUnavailable)
+                                .and_then(|store| {
+                                    store.insert(family.route(), draft, imported.review)
+                                })
+                        });
                     match result {
                         Ok(id) => {
                             content.set(String::new());
@@ -2122,22 +2173,50 @@ fn test_panel(
                 busy.set(false);
                 return;
             }
-            let smtp = if connection {
-                editor.draft.get_untracked().value().clone()
+            let (path, payload) = if connection {
+                let value = editor.draft.get_untracked().value().clone();
+                let profile = match serde_json::from_value::<input::SendingProfile>(value) {
+                    Ok(profile) => profile,
+                    Err(_) => {
+                        message.error(api.invalid_read());
+                        busy.set(false);
+                        return;
+                    }
+                };
+                ("/api/util/test_connection", json!(profile))
             } else {
                 let id = if family == Family::Profiles {
                     editor.draft.with_untracked(|d| d.value()["id"].as_i64())
                 } else {
                     profile_id
                 };
-                json!({"source":"saved","id":id})
-            };
-            let (path, payload) = if connection {
-                ("/api/util/test_connection", smtp)
-            } else {
+                let Some(id) = id else {
+                    message.error(api.invalid_read());
+                    busy.set(false);
+                    return;
+                };
                 (
                     "/api/util/send_test_email",
-                    json!({"smtp":smtp,"template":{"name":if family==Family::Templates{editor.text("name")}else{String::new()}},"page":{"name":page_name},"url":url.get_untracked(),"email":recipient.get_untracked(),"first_name":first.get_untracked(),"last_name":last.get_untracked(),"position":position.get_untracked()}),
+                    json!(input::TestRequest {
+                        smtp: ruphish_contracts::resources::TestProfile::Saved { id },
+                        template: input::EmailTemplate {
+                            name: if family == Family::Templates {
+                                editor.text("name")
+                            } else {
+                                String::new()
+                            },
+                            ..Default::default()
+                        },
+                        page: input::LandingPage {
+                            name: page_name.unwrap_or_default(),
+                            ..Default::default()
+                        },
+                        url: url.get_untracked(),
+                        email: recipient.get_untracked(),
+                        first_name: first.get_untracked(),
+                        last_name: last.get_untracked(),
+                        position: position.get_untracked(),
+                    }),
                 )
             };
             match api
@@ -2325,16 +2404,18 @@ fn test_panel(
     }
 }
 
-fn warnings_for(
-    value: &Value,
+fn warnings_for_record(
+    record: &ruphish_contracts::resource_details::Resource,
 ) -> Option<(
     String,
     Vec<ruphish_contracts::resource_details::PageWarning>,
 )> {
-    Some((
-        value["html"].as_str()?.into(),
-        serde_json::from_value(value["warnings"].clone()).ok()?,
-    ))
+    use ruphish_contracts::resource_details::Content;
+    match &record.content {
+        Content::Page(page) => Some((page.html.clone(), page.warnings.clone()?)),
+        Content::LearningPage(page) => Some((page.html.clone(), page.warnings.clone()?)),
+        _ => None,
+    }
 }
 
 pub(super) fn page_warnings(

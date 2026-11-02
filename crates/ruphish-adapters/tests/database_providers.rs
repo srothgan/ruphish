@@ -505,7 +505,8 @@ async fn profile_credentials(
             actor,
             original
                 .clone()
-                .map_password(|_| Some("first-secret".into())),
+                .map_password(|_| Some("first-secret".to_owned()))
+                .into(),
             Some(id),
             Some(original.revision.to_string()),
         )
@@ -516,7 +517,8 @@ async fn profile_credentials(
             actor,
             first
                 .clone()
-                .map_password(|_| Some("replacement-secret".into())),
+                .map_password(|_| Some("replacement-secret".to_owned()))
+                .into(),
             Some(id),
             Some(first.revision.to_string()),
         )
@@ -526,7 +528,7 @@ async fn profile_credentials(
         resources
             .save(
                 actor,
-                first.clone().map_password(|_| None),
+                first.clone().map_password(|_| None::<String>).into(),
                 Some(id),
                 Some(first.revision.to_string())
             )
@@ -537,7 +539,7 @@ async fn profile_credentials(
     let retained = resources
         .save(
             actor,
-            replacement.clone().map_password(|_| None),
+            replacement.clone().map_password(|_| None::<String>).into(),
             Some(id),
             Some(replacement.revision.to_string()),
         )
@@ -549,7 +551,8 @@ async fn profile_credentials(
             other,
             retained
                 .clone()
-                .map_password(|_| Some("foreign-secret".into())),
+                .map_password(|_| Some("foreign-secret".to_owned()))
+                .into(),
             Some(id),
             Some(retained.revision.to_string()),
         )
@@ -562,7 +565,7 @@ async fn profile_credentials(
     let cleared = resources
         .save(
             actor,
-            retained.map_password(|_| Some(String::new())),
+            retained.record.map_password(|_| Some(String::new())).into(),
             Some(id),
             Some(unchanged.revision.to_string()),
         )
@@ -571,7 +574,7 @@ async fn profile_credentials(
     assert!(matches!(&cleared.content, Content::Profile(p) if p.password.is_empty()));
     let persisted = resources.get(actor, Kind::Profile, id).await.unwrap();
     assert!(
-        persisted == cleared,
+        persisted == cleared.record,
         "clearing must persist, not only change the save response"
     );
     persisted
@@ -984,10 +987,14 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     ));
     for result in [
         integrations.validate_mailbox(actor, mailbox.id).await,
-        integrations.check_mailbox(actor, mailbox.id).await,
+        integrations
+            .check_mailbox(actor, mailbox.id)
+            .await
+            .map(|_| ()),
         integrations
             .resume_mailbox(actor, mailbox.id, current_mailbox.revision)
-            .await,
+            .await
+            .map(|_| ()),
     ] {
         assert!(matches!(
             result,
@@ -1174,7 +1181,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         )
         .await
         .unwrap();
-    let profile = profile_credentials(&resources, actor, normal.identity, profile).await;
+    let profile = profile_credentials(&resources, actor, normal.identity, profile.record).await;
     let mut change = group.clone();
     change.name = "Engineering updated".into();
     let (a, b) = tokio::join!(
@@ -2062,7 +2069,7 @@ async fn replacement_fixture(db: &Database) -> (auth::Identity, Resource) {
         )
         .await
         .unwrap();
-    (user.identity, original)
+    (user.identity, original.record)
 }
 
 async fn assert_failed_replacement_is_atomic(
@@ -3321,7 +3328,7 @@ async fn postgres_exact_revisions_and_invalid_text_preserve_original() {
             .get(actor, Kind::Template, saved.id)
             .await
             .unwrap()
-            == saved
+            == saved.record
     );
     inspect.close().await.unwrap();
     db.close().await;

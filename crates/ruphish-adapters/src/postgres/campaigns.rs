@@ -368,7 +368,12 @@ impl Repository for Campaigns {
             .map_err(|e| Error::Storage(crate::postgres::commit_error(e)))?;
         Ok(value)
     }
-    async fn create(&self, caller: Identity, input: Create, now: i64) -> Result<Campaign, Error> {
+    async fn create(
+        &self,
+        caller: Identity,
+        input: Create,
+        now: i64,
+    ) -> Result<ruphish_application::attribution::Saved<Campaign>, Error> {
         self.create_inner(caller, input, now, None).await
     }
     async fn get(&self, caller: Identity, id: i64) -> Result<Campaign, Error> {
@@ -773,7 +778,7 @@ impl Campaigns {
         mut input: Create,
         now: i64,
         draft: Option<(&str, i64)>,
-    ) -> Result<Campaign, Error> {
+    ) -> Result<ruphish_application::attribution::Saved<Campaign>, Error> {
         let mut tx = crate::postgres::locks::write(&self.pool)
             .await
             .map_err(storage)?;
@@ -784,7 +789,8 @@ impl Campaigns {
         if let Some((id, revision)) = draft {
             let saved = drafts::launching(&mut tx, id).await?;
             if let Some(campaign_id) = saved.campaign_id {
-                return load(&mut tx, campaign_id).await;
+                let record = load(&mut tx, campaign_id).await?;
+                return super::attribution::saved(&mut tx, record).await;
             }
             ruphish_application::campaign::drafts::validate_launch(&saved, revision, &input, now)?;
         }
@@ -794,7 +800,8 @@ impl Campaigns {
             }
             if let Some(row)=sqlx::query("SELECT fingerprint,campaign_id FROM ruphish_campaign_launch WHERE owner_id=$1 AND key=$2").bind(caller.id).bind(key).fetch_optional(&mut *tx).await.map_err(storage)? {
                 if text(&row,"fingerprint")?!=*fingerprint {return Err(Error::Conflict("Launch key"));}
-                return load(&mut tx,row.try_get("campaign_id").map_err(storage)?).await;
+                let record = load(&mut tx, row.try_get("campaign_id").map_err(storage)?).await?;
+                return super::attribution::saved(&mut tx, record).await;
             }
         }
         let p = prepare_authorized(&self.content_work, &mut tx, &input, now, true).await?;
@@ -887,6 +894,7 @@ impl Campaigns {
                 .map_err(storage)?;
         }
         let campaign = load(&mut tx, id).await?;
+        let campaign = super::attribution::saved(&mut tx, campaign).await?;
         tx.commit()
             .await
             .map_err(|e| Error::Storage(crate::postgres::commit_error(e)))?;

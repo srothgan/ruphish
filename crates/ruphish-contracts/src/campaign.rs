@@ -1,5 +1,6 @@
 //! Typed campaign commands shared by browser and programmable clients.
-use crate::legacy::Timestamp;
+pub mod request;
+use crate::common::Timestamp;
 use serde::{Deserialize, Serialize};
 
 /// Shared resource identity, optionally bound to a reviewed revision.
@@ -83,7 +84,7 @@ pub struct Create {
 }
 
 /// Launch an unchanged saved draft using the same campaign input as preparation.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LaunchDraft {
     /// Saved draft revision reviewed by the caller.
@@ -93,7 +94,7 @@ pub struct LaunchDraft {
 }
 
 /// Send a reviewed campaign sample to one administrator-selected recipient.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Test {
     /// Reviewed campaign command.

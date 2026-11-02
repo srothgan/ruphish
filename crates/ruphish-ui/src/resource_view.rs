@@ -247,7 +247,7 @@ fn body(value: Resource) -> AnyView {
                     <ul>
                         {attachments
                             .into_iter()
-                            .map(|a| view! { <li>{a.name}" · "{a.mime}</li> })
+                            .map(|a| view! { <li>{a.name}" · "{a.mime_type}</li> })
                             .collect_view()}
                     </ul>
                 </section>

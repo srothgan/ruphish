@@ -313,7 +313,7 @@ impl Repository for Resources {
         value: Input,
         existing: Option<i64>,
         expected: Option<String>,
-    ) -> Result<Resource, Error> {
+    ) -> Result<ruphish_application::attribution::Saved<Resource>, Error> {
         let mut tx = self
             .pool
             .begin_with("BEGIN IMMEDIATE")
@@ -331,7 +331,14 @@ impl Repository for Resources {
             }
             None
         };
-        let mut value = value.resolve_password(old.as_ref());
+        let mut value = Resource {
+            name: value.name.clone(),
+            content: value.resolve_content(old.as_ref()),
+            id: existing.unwrap_or_default(),
+            revision: 0,
+            modified_date: String::new(),
+            attribution: Default::default(),
+        };
         if old.as_ref().is_none_or(|o| o.name != value.name) {
             let duplicate: bool = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
                 "SELECT EXISTS(SELECT 1 FROM {} WHERE name=?)",
@@ -377,15 +384,12 @@ impl Repository for Resources {
             .map_err(storage)?
             .last_insert_rowid()
         };
-        if let Content::LearningPage(page) = &mut value.content {
-            page.public_id = match old.as_ref().map(|resource| &resource.content) {
-                Some(Content::LearningPage(previous)) => previous.public_id.clone(),
-                _ => {
-                    let mut bytes = [0; 16];
-                    getrandom::fill(&mut bytes).map_err(|_| Error::Internal)?;
-                    hex::encode(bytes)
-                }
-            };
+        if old.is_none()
+            && let Content::LearningPage(page) = &mut value.content
+        {
+            let mut bytes = [0; 16];
+            getrandom::fill(&mut bytes).map_err(|_| Error::Internal)?;
+            page.public_id = hex::encode(bytes);
         }
         let id = value.id;
         match &value.content {
@@ -481,6 +485,7 @@ impl Repository for Resources {
             edited_by: Some(caller.id),
             edited_at: Some(value.modified_date.clone()),
         };
+        let value = super::attribution::saved(&mut tx, value).await?;
         tx.commit().await.map_err(storage)?;
         Ok(value)
     }

@@ -3,9 +3,6 @@ use crate::auth::{AccountError, Identity};
 pub use ruphish_domain::resources::*;
 use std::sync::Arc;
 
-/// Resource write intent: absent password keeps the saved credential; an empty value clears it.
-pub type Input = Resource<Option<String>>;
-
 /// Safe public resource failure.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -134,7 +131,7 @@ pub trait Repository: Send + Sync {
         resource: Input,
         existing: Option<i64>,
         expected: Option<String>,
-    ) -> Result<Resource, Error>;
+    ) -> Result<crate::attribution::Saved<Resource>, Error>;
     /// Delete only after authorization, revision and live-usage checks.
     async fn delete(
         &self,
@@ -336,7 +333,7 @@ impl Service {
         value: Input,
         id: Option<i64>,
         expected: Option<String>,
-    ) -> Result<(Resource, Vec<PageWarning>), Error> {
+    ) -> Result<(crate::attribution::Saved<Resource>, Vec<PageWarning>), Error> {
         let (value, warnings) = self.validate(value).await?;
         let saved = self.repository.save(caller, value, id, expected).await?;
         Ok((saved, warnings))

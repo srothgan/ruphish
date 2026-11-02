@@ -92,10 +92,10 @@ async fn input(db: &Database, actor: auth::Identity, origin: &str) -> campaign::
     };
     campaign::Create {
         name: "Settings workflow".into(),
-        groups: vec![select(group)],
-        template: select(template),
-        page: select(page),
-        profile: select(profile),
+        groups: vec![select(group.record)],
+        template: select(template.record),
+        page: select(page.record),
+        profile: select(profile.record),
         url: origin.into(),
         ..Default::default()
     }

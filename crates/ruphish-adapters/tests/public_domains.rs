@@ -1001,13 +1001,13 @@ async fn verification_history_is_coalesced_atomic_bounded_and_latest_failure_rev
     let id = store.list(caller()).await.unwrap()[0].id;
     let initial = store.request_check(caller(), id, now).await.unwrap();
     assert_eq!(initial.active_check.as_ref().unwrap().state, "queued");
-    let active = initial.active_check.unwrap().id;
+    let active = initial.active_check.as_ref().unwrap().id;
     let (a, b) = tokio::join!(
         store.request_check(caller(), id, now),
         store.request_check(caller(), id, now)
     );
-    assert_eq!(a.unwrap().active_check.unwrap().id, active);
-    assert_eq!(b.unwrap().active_check.unwrap().id, active);
+    assert_eq!(a.unwrap().active_check.as_ref().unwrap().id, active);
+    assert_eq!(b.unwrap().active_check.as_ref().unwrap().id, active);
     let check = store.claim(now).await.unwrap().unwrap();
     assert_eq!(
         store
@@ -1039,7 +1039,7 @@ async fn verification_history_is_coalesced_atomic_bounded_and_latest_failure_rev
         "expired"
     );
     let queued = store.request_check(caller(), id, now + 2).await.unwrap();
-    assert_eq!(queued.active_check.unwrap().scheduled_at, now + 31);
+    assert_eq!(queued.active_check.as_ref().unwrap().scheduled_at, now + 31);
     assert!(store.claim(now + 30).await.unwrap().is_none());
     let failed = store.claim(now + 31).await.unwrap().unwrap();
     // A failed history write must roll back the domain observation too.
@@ -1123,7 +1123,7 @@ async fn queued_and_running_checks_survive_reopen_and_expired_workers_cannot_pub
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     let id = store.list(caller()).await.unwrap()[0].id;
     let before = store.request_check(caller(), id, now).await.unwrap();
-    let queued_id = before.active_check.unwrap().id;
+    let queued_id = before.active_check.as_ref().unwrap().id;
     db.close().await;
     let db = DatabaseFixture::open(&dir.path().join("state.db"))
         .await
@@ -1155,7 +1155,7 @@ async fn queued_and_running_checks_survive_reopen_and_expired_workers_cannot_pub
     assert_eq!(restored.state, "running");
     let new = store.claim(now + 91).await.unwrap().unwrap();
     let recovered = store.get(caller(), before.id).await.unwrap();
-    assert_ne!(recovered.active_check.unwrap().id, queued_id);
+    assert_ne!(recovered.active_check.as_ref().unwrap().id, queued_id);
     assert_eq!(recovered.history[0].state, "timed_out");
     assert_eq!(recovered.history[0].code, "domain_worker_timeout");
     store.finish(&old, proof(), now + 92).await.unwrap();

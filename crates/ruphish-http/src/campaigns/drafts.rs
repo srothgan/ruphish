@@ -1,7 +1,6 @@
 //! Additive draft API. The legacy campaign API continues to represent executions.
 use super::*;
-use app::drafts::{Configuration, Draft};
-use serde::Deserialize;
+use app::drafts::Draft;
 
 pub(super) fn routes() -> Router<AuthState> {
     Router::new()
@@ -43,13 +42,7 @@ fn encode(d: &Draft, lookup: &Lookup) -> reads::Draft {
         status: app::drafts::Status::from_campaign_id(d.campaign_id),
     }
 }
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Edit {
-    revision: Option<i64>,
-    configuration: Configuration,
-    step: i64,
-}
+use ruphish_contracts::campaign::request::DraftWrite as Edit;
 async fn save(c: Context, Path(id): Path<String>, body: Bytes) -> Result<Response, Rejection> {
     let caller = c.api(None).await?;
     let edit: Edit = decode_body(&body)?;
@@ -65,7 +58,8 @@ async fn save(c: Context, Path(id): Path<String>, body: Bytes) -> Result<Respons
         )
         .await
         .map_err(draft_error)?;
-    let lookup = Lookup::load(&c, [&saved.attribution]).await?;
+    let lookup = Lookup::from_identities(saved.identities);
+    let saved = saved.record;
     response(StatusCode::OK, &encode(&saved, &lookup), None)
 }
 async fn read(c: Context, Path(id): Path<String>) -> Result<Response, Rejection> {
@@ -78,11 +72,7 @@ async fn read(c: Context, Path(id): Path<String>) -> Result<Response, Rejection>
     let lookup = Lookup::load(&c, [&saved.attribution]).await?;
     response(StatusCode::OK, &encode(&saved, &lookup), None)
 }
-#[derive(Default, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-struct Page {
-    after: String,
-}
+use ruphish_contracts::campaign::request::DraftPage as Page;
 async fn list(
     c: Context,
     page: Result<Query<Page>, axum::extract::rejection::QueryRejection>,
@@ -110,11 +100,7 @@ async fn list(
         None,
     )
 }
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Revision {
-    revision: i64,
-}
+use ruphish_contracts::common::Revision;
 async fn remove(
     c: Context,
     Path(id): Path<String>,
@@ -140,7 +126,8 @@ async fn launch(c: Context, Path(id): Path<String>, body: Bytes) -> Result<Respo
         .launch_draft(caller.identity, &id, request.revision, input, now())
         .await
         .map_err(draft_error)?;
-    let lookup = Lookup::load(&c, super::attributions(&campaign)).await?;
+    let lookup = Lookup::from_identities(campaign.identities);
+    let campaign = campaign.record;
     response(
         StatusCode::OK,
         &super::encode_campaign(&campaign, &lookup)?,

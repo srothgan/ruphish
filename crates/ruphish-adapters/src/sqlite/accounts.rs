@@ -105,19 +105,8 @@ impl Repository for Accounts {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        let mut tx = self.pool.begin().await.map_err(storage)?;
-        let requested = serde_json::to_string(ids).map_err(|_| Error::Internal)?;
-        let rows = sqlx::query("SELECT id,username,FALSE AS deleted FROM users WHERE id IN (SELECT value FROM json_each(?1)) UNION ALL SELECT id,username,TRUE AS deleted FROM ruphish_deleted_accounts WHERE id IN (SELECT value FROM json_each(?1)) ORDER BY id")
-            .bind(&requested).fetch_all(&mut *tx).await.map_err(storage)?;
-        rows.into_iter()
-            .map(|r| {
-                Ok(DisplayIdentity {
-                    id: r.try_get("id").map_err(storage)?,
-                    username: r.try_get("username").map_err(storage)?,
-                    deleted: r.try_get("deleted").map_err(storage)?,
-                })
-            })
-            .collect()
+        let mut connection = self.pool.acquire().await.map_err(storage)?;
+        display_identities(&mut connection, ids).await
     }
     async fn by_id(&self, id: i64) -> Result<Account, Error> {
         account(&mut *self.pool.acquire().await.map_err(storage)?, id).await
@@ -302,4 +291,25 @@ impl Repository for Accounts {
         tx.commit().await.map_err(storage)?;
         Ok(result)
     }
+}
+
+pub(super) async fn display_identities(
+    c: &mut SqliteConnection,
+    ids: &[i64],
+) -> Result<Vec<DisplayIdentity>, Error> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let requested = serde_json::to_string(ids).map_err(|_| Error::Internal)?;
+    let rows = sqlx::query("SELECT id,username,FALSE AS deleted FROM users WHERE id IN (SELECT value FROM json_each(?1)) UNION ALL SELECT id,username,TRUE AS deleted FROM ruphish_deleted_accounts WHERE id IN (SELECT value FROM json_each(?1)) ORDER BY id")
+            .bind(&requested).fetch_all(&mut *c).await.map_err(storage)?;
+    rows.into_iter()
+        .map(|r| {
+            Ok(DisplayIdentity {
+                id: r.try_get("id").map_err(storage)?,
+                username: r.try_get("username").map_err(storage)?,
+                deleted: r.try_get("deleted").map_err(storage)?,
+            })
+        })
+        .collect()
 }

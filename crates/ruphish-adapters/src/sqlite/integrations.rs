@@ -99,7 +99,7 @@ impl Repository for Integrations {
         who: Identity,
         id: Option<i64>,
         e: WebhookEdit,
-    ) -> Result<Webhook, Error> {
+    ) -> Result<ruphish_application::attribution::Saved<Webhook>, Error> {
         e.validation().finish().map_err(Error::Validation)?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(db)?;
         super::resources::authorize(&mut tx, who, true).await?;
@@ -184,6 +184,7 @@ impl Repository for Integrations {
             .await
             .map_err(db)?;
         let saved = load_webhook(&mut tx, id).await?;
+        let saved = super::attribution::saved(&mut tx, saved).await?;
         tx.commit().await.map_err(db)?;
         Ok(saved)
     }
@@ -239,7 +240,7 @@ impl Repository for Integrations {
         who: Identity,
         id: Option<i64>,
         e: MailboxEdit,
-    ) -> Result<Mailbox, Error> {
+    ) -> Result<ruphish_application::attribution::Saved<Mailbox>, Error> {
         e.validation().finish().map_err(Error::Validation)?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(db)?;
         super::resources::authorize(&mut tx, who, true).await?;
@@ -359,6 +360,7 @@ impl Repository for Integrations {
         )
         .await?;
         let saved = load_mailbox(&mut tx, id).await?;
+        let saved = super::attribution::saved(&mut tx, saved).await?;
         tx.commit().await.map_err(db)?;
         Ok(saved)
     }
@@ -425,7 +427,12 @@ impl Repository for Integrations {
         tx.commit().await.map_err(db)?;
         crate::integration_work::validate_mailbox(&self.policy, &config).await
     }
-    async fn resume_mailbox(&self, who: Identity, id: i64, revision: i64) -> Result<(), Error> {
+    async fn resume_mailbox(
+        &self,
+        who: Identity,
+        id: i64,
+        revision: i64,
+    ) -> Result<ruphish_application::attribution::Saved<Mailbox>, Error> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(db)?;
         super::resources::authorize(&mut tx, who, true).await?;
         super::settings::require_integration(&mut tx, true).await?;
@@ -446,9 +453,16 @@ impl Repository for Integrations {
             .execute(&mut *tx)
             .await
             .map_err(db)?;
-        tx.commit().await.map_err(db)
+        let record = load_mailbox(&mut tx, id).await?;
+        let saved = super::attribution::saved(&mut tx, record).await?;
+        tx.commit().await.map_err(db)?;
+        Ok(saved)
     }
-    async fn check_mailbox(&self, who: Identity, id: i64) -> Result<(), Error> {
+    async fn check_mailbox(
+        &self,
+        who: Identity,
+        id: i64,
+    ) -> Result<ruphish_application::attribution::Saved<Mailbox>, Error> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(db)?;
         super::resources::authorize(&mut tx, who, true).await?;
         super::settings::require_integration(&mut tx, true).await?;
@@ -467,7 +481,10 @@ impl Repository for Integrations {
             .execute(&mut *tx)
             .await
             .map_err(db)?;
-        tx.commit().await.map_err(db)
+        let record = load_mailbox(&mut tx, id).await?;
+        let saved = super::attribution::saved(&mut tx, record).await?;
+        tx.commit().await.map_err(db)?;
+        Ok(saved)
     }
 }
 

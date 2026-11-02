@@ -357,7 +357,7 @@ async fn creation_is_atomic_deduplicated_and_idempotent_with_stable_policy() {
         .unwrap();
     assert_eq!(campaign.results.len(), 2);
     assert_eq!(campaign.results[0].recipient.first_name, "Alice");
-    assert_eq!(campaign.policy.unwrap().redirect_url, "");
+    assert_eq!(campaign.policy.as_ref().unwrap().redirect_url, "");
     let due: Vec<i64> = sqlx::query_scalar(
         "SELECT due FROM ruphish_delivery WHERE campaign_id=? ORDER BY result_id",
     )

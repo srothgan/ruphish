@@ -20,7 +20,7 @@ use ruphish_application::{
     campaign as app,
     resources::{Error, Kind},
 };
-use ruphish_contracts::{campaign as wire, campaign_workflow as workflow, legacy::Timestamp};
+use ruphish_contracts::{campaign as wire, campaign_workflow as workflow, common::Timestamp};
 use ruphish_contracts::{campaign_details as details, resource_details as resource};
 use ruphish_contracts::{campaign_reads as reads, errors::ErrorCode};
 fn now() -> i64 {
@@ -395,7 +395,8 @@ async fn create(context: Context, body: Bytes) -> Result<Response, Rejection> {
         .create(user.identity, input, now())
         .await
         .map_err(launch_error)?;
-    let lookup = Lookup::load(&context, attributions(&campaign)).await?;
+    let lookup = Lookup::from_identities(campaign.identities);
+    let campaign = campaign.record;
     let mut value = encode_campaign(&campaign, &lookup)?;
     value.timeline.clear();
     value.groups = Some(
@@ -501,7 +502,7 @@ async fn complete(context: Context, Path(id): Path<i64>) -> Result<Response, Rej
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &ruphish_contracts::legacy::Envelope::<()> {
+        &ruphish_contracts::common::Envelope::<()> {
             success: true,
             message: "Campaign completed successfully!".into(),
             data: None,
@@ -518,7 +519,7 @@ async fn delete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejec
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &ruphish_contracts::legacy::Envelope::<()> {
+        &ruphish_contracts::common::Envelope::<()> {
             success: true,
             message: "Campaign deleted successfully!".into(),
             data: None,
@@ -526,13 +527,7 @@ async fn delete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejec
         None,
     )
 }
-#[derive(serde::Deserialize, Default)]
-#[serde(default)]
-struct Page {
-    after: i64,
-    limit: Option<i64>,
-    completed: Option<bool>,
-}
+use ruphish_contracts::campaign::request::OverviewPage as Page;
 fn read_policy(p: &app::InteractionPolicy) -> reads::Policy {
     reads::Policy {
         track_opens: p.track_opens,
@@ -592,15 +587,7 @@ async fn overview(context: Context, Query(page): Query<Page>) -> Result<Response
         None,
     )
 }
-#[derive(Default, serde::Deserialize)]
-#[serde(default)]
-struct DeliveryPage {
-    after: i64,
-    limit: Option<i64>,
-    sort: Option<ruphish_application::pagination::DeliverySort>,
-    order: Option<ruphish_application::reporting::SortDirection>,
-    cursor: String,
-}
+use ruphish_contracts::campaign::request::DeliveryPage;
 async fn deliveries(
     context: Context,
     Path(id): Path<i64>,
@@ -676,11 +663,7 @@ async fn deliveries(
     };
     response(StatusCode::OK, &value, None)
 }
-#[derive(serde::Deserialize)]
-struct HistoryPage {
-    before_attempt: Option<i64>,
-    before_event: Option<i64>,
-}
+use ruphish_contracts::campaign::request::HistoryPage;
 async fn recipient_history(
     context: Context,
     Path((campaign, result)): Path<(i64, i64)>,
@@ -741,11 +724,7 @@ fn encode_attempt(a: &app::Attempt) -> reads::Attempt {
     }
 }
 
-#[derive(serde::Deserialize)]
-struct Resolve {
-    generation: i64,
-    action: String,
-}
+use ruphish_contracts::campaign::request::Resolve;
 async fn resolve(
     context: Context,
     Path((campaign, result)): Path<(i64, i64)>,
@@ -773,7 +752,7 @@ async fn resolve(
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &ruphish_contracts::legacy::Envelope::<()> {
+        &ruphish_contracts::common::Envelope::<()> {
             success: true,
             message: "Delivery updated".into(),
             data: None,
@@ -810,7 +789,7 @@ async fn test(context: Context, body: Bytes) -> Result<Response, Rejection> {
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &ruphish_contracts::legacy::Envelope::<()> {
+        &ruphish_contracts::common::Envelope::<()> {
             success: true,
             message: "Accepted by SMTP server".into(),
             data: None,

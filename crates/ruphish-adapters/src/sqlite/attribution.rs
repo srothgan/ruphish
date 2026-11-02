@@ -29,3 +29,13 @@ pub(super) async fn edit(
     .map_err(super::resource_error)?;
     Ok(())
 }
+
+/// Capture every display dependency before a management transaction commits.
+pub(super) async fn saved<T: ruphish_application::attribution::Attributed>(
+    c: &mut SqliteConnection,
+    record: T,
+) -> Result<ruphish_application::attribution::Saved<T>, Error> {
+    let ids = ruphish_application::attribution::identity_ids(record.attributions());
+    let identities = super::accounts::display_identities(c, &ids).await?;
+    Ok(ruphish_application::attribution::Saved { record, identities })
+}

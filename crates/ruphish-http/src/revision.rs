@@ -37,3 +37,42 @@ pub(crate) fn required(headers: &HeaderMap) -> Result<i64, Rejection> {
         )
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::HeaderValue;
+
+    #[test]
+    fn validators_cannot_bypass_conditional_writes() {
+        for invalid in [
+            "*",
+            "1",
+            "\"\"",
+            "\"0\"",
+            "\"01\"",
+            "\"-1\"",
+            "\"+1\"",
+            "\"1.0\"",
+            "W/\"1\"",
+            "\"1\", \"2\"",
+            "\"9223372036854775808\"",
+            "\" 1\"",
+            "\"1 \"",
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert(header::IF_MATCH, HeaderValue::from_str(invalid).unwrap());
+            assert!(optional(&headers).is_err(), "accepted {invalid}");
+        }
+        let mut headers = HeaderMap::new();
+        assert!(matches!(optional(&headers), Ok(None)));
+        assert!(required(&headers).is_err());
+        headers.insert(header::IF_MATCH, HeaderValue::from_static("\"1\""));
+        assert!(matches!(required(&headers), Ok(1)));
+        headers.append(header::IF_MATCH, HeaderValue::from_static("\"1\""));
+        assert!(
+            optional(&headers).is_err(),
+            "even identical repeated validators are ambiguous"
+        );
+    }
+}

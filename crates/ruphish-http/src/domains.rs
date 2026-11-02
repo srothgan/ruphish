@@ -142,7 +142,8 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
         )
         .await
         .map_err(error)?;
-    let lookup = Lookup::load(&context, [&result.attribution]).await?;
+    let lookup = Lookup::from_identities(result.identities);
+    let result = result.record;
     let domain = encode(result, &lookup);
     response(
         if id.is_some() {
@@ -167,7 +168,8 @@ async fn verify(context: Context, Path(id): Path<i64>) -> Result<Response, Rejec
         .request_check(user.identity, id, now())
         .await
         .map_err(error)?;
-    let lookup = Lookup::load(&context, [&result.attribution]).await?;
+    let lookup = Lookup::from_identities(result.identities);
+    let result = result.record;
     let domain = encode(result, &lookup);
     response(StatusCode::ACCEPTED, &domain, None)
 }

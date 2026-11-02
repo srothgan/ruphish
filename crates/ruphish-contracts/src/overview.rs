@@ -1,4 +1,5 @@
 //! Dashboard response contracts. Counts contain no participant identities or submitted values.
+pub mod request;
 /// Engagement of uniquely identified campaign recipients first accepted within
 /// the selected window, observed through the server snapshot time. Repeated
 /// events count once; opens include clicks/submissions and clicks include

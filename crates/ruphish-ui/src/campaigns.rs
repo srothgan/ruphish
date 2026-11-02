@@ -877,6 +877,14 @@ pub(super) fn CreateCampaign(
         ));
         campaign["policy"] = json!(review.policy);
         campaign["learning_revision"] = json!(review.learning_revision);
+        let campaign = match serde_json::from_value::<ruphish_contracts::campaign::Create>(campaign)
+        {
+            Ok(campaign) => campaign,
+            Err(_) => {
+                message.error(api.invalid_read());
+                return;
+            }
+        };
         busy.set(true);
         tasks.spawn(async move {
             match api
@@ -884,7 +892,10 @@ pub(super) fn CreateCampaign(
                     "POST",
                     "/api/campaigns/test",
                     &token.get_value(),
-                    Some(&json!({"campaign":campaign,"email":recipient.get_untracked()})),
+                    Some(&json!(ruphish_contracts::campaign::Test {
+                        campaign,
+                        email: recipient.get_untracked()
+                    })),
                     None,
                 )
                 .await
@@ -998,7 +1009,20 @@ pub(super) fn CreateCampaign(
                 busy.set(false);
                 return;
             }
-            let request = json!({"revision":persistence.revision.get_untracked(),"campaign":body});
+            let request = match (
+                persistence.revision.get_untracked(),
+                serde_json::from_value::<ruphish_contracts::campaign::Create>(body),
+            ) {
+                (Some(revision), Ok(campaign)) => {
+                    json!(ruphish_contracts::campaign::LaunchDraft { revision, campaign })
+                }
+                _ => {
+                    draft.update(Draft::rejected);
+                    message.error(api.invalid_read());
+                    busy.set(false);
+                    return;
+                }
+            };
             let path = format!(
                 "/api/campaign-drafts/{}/launch",
                 persistence.id.get_untracked()
@@ -1946,10 +1970,7 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
                             store
                                 .insert(
                                     "campaigns",
-                                    ruphish_ui::resource_state::ResourceDraft::new(
-                                        json!(value),
-                                        None,
-                                    ),
+                                    ruphish_ui::resource_state::ResourceDraft::new(json!(value)),
                                     ruphish_ui::import_state::ImportReview {
                                         notes: vec![],
                                         rejected_rows: vec![],

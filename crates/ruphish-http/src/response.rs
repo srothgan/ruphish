@@ -5,12 +5,12 @@ use axum::{
     http::{HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use ruphish_contracts::legacy::{self, Envelope};
+use ruphish_contracts::common::{self, Envelope};
 use serde::Serialize;
 
 /// Existing JSON content type, pretty formatting, escaping, and API CORS header.
 pub fn json<T: Serialize>(status: StatusCode, value: &T) -> Response {
-    match legacy::json(value) {
+    match common::json(value) {
         Ok(bytes) => (
             status,
             [

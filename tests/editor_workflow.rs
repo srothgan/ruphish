@@ -5,22 +5,55 @@
 
 use crate::resource_state::{ResourceDraft, import_resource};
 
+fn checkpoint(
+    family: &str,
+    mut value: serde_json::Value,
+    revision: &str,
+) -> crate::resource_state::Confirmed {
+    use ruphish_contracts::resource_details::{self, Kind};
+    use serde_json::json;
+    value["revision"] = json!(1);
+    value["modified_date"] = json!("2026-10-25T12:00:00Z");
+    value["created_by"] = serde_json::Value::Null;
+    value["edited_by"] = serde_json::Value::Null;
+    value["edited_at"] = serde_json::Value::Null;
+    let kind = match family {
+        "groups" => Kind::Group,
+        "templates" => Kind::Template,
+        "pages" => Kind::Page,
+        "smtp" => {
+            value.as_object_mut().unwrap().remove("password");
+            value["has_password"] = json!(true);
+            Kind::Profile
+        }
+        _ => Kind::LearningPage,
+    };
+    crate::resource_state::Confirmed::new(
+        resource_details::decode(kind, value).unwrap(),
+        Some(revision.into()),
+    )
+    .unwrap()
+}
+
 #[test]
 fn create_and_edit_finish_only_after_a_confirmed_save_without_newer_changes() {
-    let mut draft = ResourceDraft::new(serde_json::json!({"id":0,"name":"","targets":[]}), None);
-    draft.edit(|value| *value=serde_json::json!({"id":0,"name":"Équipe","targets":[{"email":"alice@example.test"}]}));
+    let mut draft = ResourceDraft::new(serde_json::json!({"id":0,"name":"","targets":[]}));
+    draft.edit(|value| *value=serde_json::json!({"id":0,"name":"Équipe","targets":[{"email":"alice@example.test","first_name":"","last_name":"","position":""}]}));
     let submitted = draft.value().clone();
     // Validation, network and conflict failures never call saved, so the draft stays open.
     assert_eq!(draft.completed_id(), None);
     assert_eq!(draft.value()["name"], "Équipe");
     let mut returned = submitted.clone();
     returned["id"] = serde_json::json!(42);
-    draft.saved(&submitted, returned.clone(), Some("first".into()));
+    draft.saved(&submitted, checkpoint("groups", returned, "first"));
     assert_eq!(draft.completed_id(), Some(42));
     draft.edit(|value| value["name"] = serde_json::json!("Renamed"));
     let submitted = draft.value().clone();
     draft.edit(|value| value["targets"][0]["email"] = serde_json::json!("bob@example.test"));
-    draft.saved(&submitted, submitted.clone(), Some("second".into()));
+    draft.saved(
+        &submitted,
+        checkpoint("groups", submitted.clone(), "second"),
+    );
     assert_eq!(
         draft.completed_id(),
         None,
@@ -30,8 +63,7 @@ fn create_and_edit_finish_only_after_a_confirmed_save_without_newer_changes() {
     let final_submission = draft.value().clone();
     draft.saved(
         &final_submission,
-        final_submission.clone(),
-        Some("third".into()),
+        checkpoint("groups", final_submission.clone(), "third"),
     );
     assert_eq!(draft.completed_id(), Some(42));
     draft.edit(|value| value["name"] = serde_json::json!("Discard this edit"));
@@ -41,7 +73,7 @@ fn create_and_edit_finish_only_after_a_confirmed_save_without_newer_changes() {
 }
 
 fn open(bytes: &[u8]) -> ResourceDraft {
-    ResourceDraft::new(import_resource(bytes, "templates").unwrap(), None)
+    ResourceDraft::new(import_resource(bytes, "templates").unwrap())
 }
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::Value;
@@ -75,7 +107,10 @@ fn go_template_can_be_edited_exported_reopened_and_cancelled_without_losing_cont
         template["html"] = serde_json::json!(format!("<!-- edited -->{original}"))
     });
     let submitted = draft.value().clone();
-    draft.saved(&submitted, submitted.clone(), Some("saved".into()));
+    draft.saved(
+        &submitted,
+        checkpoint("templates", submitted.clone(), "saved"),
+    );
     draft.edit(|template| template["html"] = serde_json::json!("unwanted overwrite"));
     draft.cancel();
     assert_eq!(
@@ -208,8 +243,8 @@ fn imported_resources_keep_supported_fields_but_never_inherit_identity() {
                 assert!(child.get("user_id").is_none());
             }
         }
-        let mut draft = crate::resource_state::ResourceDraft::new(json!({"id":0,"name":""}), None);
-        draft.merge_import(&imported.fields);
+        let mut draft = crate::resource_state::ResourceDraft::new(json!({"id":0,"name":""}));
+        draft.merge_import(&imported.fields, family).unwrap();
         assert!(draft.dirty());
         assert_eq!(draft.completed_id(), None);
         draft.edit(|v| v["name"] = json!("Reviewed name"));
@@ -219,7 +254,7 @@ fn imported_resources_keep_supported_fields_but_never_inherit_identity() {
         assert_eq!(draft.value()["name"], "Reviewed name");
         let mut saved = submitted.clone();
         saved["id"] = json!(123);
-        draft.saved(&submitted, saved, Some("new-revision".into()));
+        draft.saved(&submitted, checkpoint(family, saved, "new-revision"));
         assert_eq!(draft.completed_id(), Some(123));
     }
 }

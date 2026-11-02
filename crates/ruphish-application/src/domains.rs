@@ -109,11 +109,16 @@ pub trait Repository: Send + Sync {
         id: Option<i64>,
         edit: Edit,
         now: i64,
-    ) -> Result<Domain, Error>;
+    ) -> Result<crate::attribution::Saved<Domain>, Error>;
     /// Remove an unused shared resource at the expected revision.
     async fn delete(&self, caller: Identity, id: i64, revision: i64) -> Result<(), Error>;
     /// Coalesce verification work and rotate expired unverified challenges.
-    async fn request_check(&self, caller: Identity, id: i64, now: i64) -> Result<Domain, Error>;
+    async fn request_check(
+        &self,
+        caller: Identity,
+        id: i64,
+        now: i64,
+    ) -> Result<crate::attribution::Saved<Domain>, Error>;
     /// Lease one due check, recovering expired work after restart.
     async fn claim(&self, now: i64) -> Result<Option<Check>, Error>;
     /// Commit observations only if the claim still owns the current revision.

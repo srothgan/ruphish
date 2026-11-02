@@ -48,7 +48,7 @@ impl Repository for Campaigns {
         configuration: Configuration,
         step: i64,
         now: i64,
-    ) -> Result<Draft, Error> {
+    ) -> Result<ruphish_application::attribution::Saved<Draft>, Error> {
         drafts::validate(id, &configuration, step)?;
         let mut tx = self
             .pool
@@ -64,7 +64,7 @@ impl Repository for Campaigns {
         if let Some(row) = existing {
             let current = decode(row)?;
             if !drafts::should_write(&current, revision, &configuration, step)? {
-                return Ok(current);
+                return super::super::attribution::saved(&mut tx, current).await;
             }
             let json = serde_json::to_string(&configuration).map_err(|_| Error::Internal)?;
             sqlx::query("UPDATE ruphish_campaign_drafts SET revision=revision+1,name=?,configuration=?,step=?,modified=? WHERE id=? ")
@@ -85,6 +85,7 @@ impl Repository for Campaigns {
             .await
             .map_err(storage)?;
         let saved = load(&mut tx, id).await?;
+        let saved = super::super::attribution::saved(&mut tx, saved).await?;
         tx.commit().await.map_err(storage)?;
         Ok(saved)
     }
@@ -125,7 +126,7 @@ impl Repository for Campaigns {
         revision: i64,
         input: Create,
         now: i64,
-    ) -> Result<Campaign, Error> {
+    ) -> Result<ruphish_application::attribution::Saved<Campaign>, Error> {
         self.create_inner(caller, input, now, Some((id, revision)))
             .await
     }

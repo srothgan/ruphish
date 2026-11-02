@@ -1,4 +1,5 @@
 //! Required integration response fields; credentials are never part of these types.
+pub mod request;
 use serde::{Deserialize, Serialize};
 
 /// Creator-visible webhook configuration without signing secrets.

@@ -45,7 +45,13 @@ impl Persistence {
                 .map_err(|_| ruphish_ui::tr!(ui.cannot_generate_a_secure_launch_key)())?;
             self.id.set(key);
         }
-        let body = json!({"revision":self.revision.get_untracked(),"configuration":state.value,"step":step});
+        let body = serde_json::to_value(ruphish_contracts::campaign::request::DraftWrite {
+            revision: self.revision.get_untracked(),
+            configuration: serde_json::from_value(state.value.clone())
+                .map_err(|_| api.invalid_read())?,
+            step: i64::try_from(step).map_err(|_| api.invalid_read())?,
+        })
+        .map_err(|_| api.invalid_read())?;
         self.saving.set(true);
         let result = api
             .resource_response(

@@ -237,15 +237,14 @@ impl Service {
                     None
                 };
                 let draft = Input {
-                    revision: 0,
-                    attribution: Default::default(),
-                    id: id.unwrap_or_default(),
                     name: String::new(),
-                    modified_date: String::new(),
                     content: Content::Profile(profile),
                 };
                 let (validated, _) = self.resources.validate(draft).await?;
-                validated.resolve_password(previous.as_ref())
+                return match validated.resolve_content(previous.as_ref()) {
+                    Content::Profile(profile) => Ok(profile),
+                    _ => Err(Error::Internal),
+                };
             }
         };
         match selected.content {

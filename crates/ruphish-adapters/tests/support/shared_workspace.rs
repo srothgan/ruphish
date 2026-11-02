@@ -14,6 +14,7 @@ async fn contract(db: &Database, inspect: &mut Inspector) {
             .await;
     }
     revision_contract(db).await;
+    contended_replacements(db).await;
     let resources = db.resources();
     let group = resources
         .save(
@@ -624,7 +625,7 @@ async fn revision_contract(db: &Database) {
             resources.delete(BOB, kind, original.id, None).await,
             Err(Error::RevisionRequired)
         ));
-        assert!(resources.get(BOB, kind, original.id).await.unwrap() == original);
+        assert!(resources.get(BOB, kind, original.id).await.unwrap() == original.record);
         let (a, b) = tokio::join!(
             resources.save(ALICE, left.into(), Some(original.id), Some("1".into())),
             resources.save(BOB, right.into(), Some(original.id), Some("1".into()))
@@ -638,7 +639,7 @@ async fn revision_contract(db: &Database) {
         let winner = a.or(b).unwrap();
         assert_eq!(winner.revision, 2);
         assert_eq!(winner.attribution.edited_by, Some(editor));
-        assert!(resources.get(ADMIN, kind, original.id).await.unwrap() == winner);
+        assert!(resources.get(ADMIN, kind, original.id).await.unwrap() == winner.record);
         let summary = resources
             .summaries(ADMIN, kind, None)
             .await
@@ -664,7 +665,7 @@ async fn revision_contract(db: &Database) {
             (Ok(saved), Err(Error::Changed)) => {
                 assert_eq!(saved.revision, 3);
                 assert_eq!(saved.name, "Revision final edit");
-                assert!(resources.get(BOB, kind, original.id).await.unwrap() == saved);
+                assert!(resources.get(BOB, kind, original.id).await.unwrap() == saved.record);
                 resources
                     .delete(BOB, kind, original.id, Some("3".into()))
                     .await
@@ -695,4 +696,210 @@ async fn revision_contract(db: &Database) {
             Err(Error::NotFound(_))
         ));
     }
+}
+
+// Eight independent callers start from the same review. Each replacement has distinct
+// nested data, so a mixed parent/child result cannot pass by checking only its revision.
+async fn contended_replacements(db: &Database) {
+    let repo = db.resources();
+    for kind in [Kind::Group, Kind::Template] {
+        let content = |writer: usize| match kind {
+            Kind::Group => Content::Group(vec![Recipient {
+                email: format!("writer-{writer}@example.test"),
+                first_name: format!("Writer {writer}"),
+                ..Default::default()
+            }]),
+            _ => Content::Template(Template {
+                subject: format!("Subject {writer}"),
+                html: format!("<p>Writer {writer}</p>"),
+                attachments: vec![ruphish_application::resources::Attachment {
+                    name: format!("writer-{writer}.txt"),
+                    mime_type: "text/plain".into(),
+                    content: "Zml4dHVyZQ==".into(),
+                }],
+                ..Default::default()
+            }),
+        };
+        let original = repo
+            .save(
+                ALICE,
+                resource("Contended replacement", content(99)),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(8));
+        let mut tasks = tokio::task::JoinSet::new();
+        for writer in 0..8 {
+            let repo = repo.clone();
+            let barrier = barrier.clone();
+            let input = resource(&format!("Winner {writer}"), content(writer));
+            let id = original.id;
+            tasks.spawn(async move {
+                barrier.wait().await;
+                (
+                    writer,
+                    repo.save(
+                        if writer % 2 == 0 { ALICE } else { BOB },
+                        input,
+                        Some(id),
+                        Some("1".into()),
+                    )
+                    .await,
+                )
+            });
+        }
+        let mut winners = vec![];
+        let mut conflicts = 0;
+        while let Some(result) = tasks.join_next().await {
+            let (writer, result) = result.unwrap();
+            match result {
+                Ok(saved) => winners.push((writer, saved)),
+                Err(Error::Changed) => conflicts += 1,
+                Err(other) => panic!("unexpected replacement failure: {other:?}"),
+            }
+        }
+        assert_eq!(conflicts, 7);
+        assert_eq!(winners.len(), 1);
+        let (writer, saved) = winners.pop().unwrap();
+        let stored = repo.get(ADMIN, kind, original.id).await.unwrap();
+        assert_eq!(stored.revision, 2);
+        assert_eq!(stored.name, format!("Winner {writer}"));
+        assert!(stored.content == content(writer));
+        assert!(stored == saved.record);
+        assert!(
+            saved
+                .identities
+                .iter()
+                .any(|i| i.id == ALICE.id && i.username == "alice" && !i.deleted)
+        );
+        let editor = if writer % 2 == 0 { ALICE.id } else { BOB.id };
+        assert!(
+            saved
+                .identities
+                .iter()
+                .any(|i| i.id == editor && !i.deleted)
+        );
+        assert_eq!(
+            saved.identities.len(),
+            if editor == ALICE.id { 1 } else { 2 }
+        );
+        // A failed missing/stale revision leaves every child row and the revision untouched.
+        for revision in [None, Some("1".into()), Some("9223372036854775807".into())] {
+            assert!(
+                repo.save(
+                    BOB,
+                    resource("Rejected", content(98)),
+                    Some(original.id),
+                    revision
+                )
+                .await
+                .is_err()
+            );
+            assert!(repo.get(ADMIN, kind, original.id).await.unwrap() == stored);
+        }
+        repo.delete(ADMIN, kind, original.id, Some("2".into()))
+            .await
+            .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn sqlite_attribution_failure_rolls_back_content_children_and_revision() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("attribution-rollback.db");
+    let db = database::open(Config::Sqlite { path: path.clone() }, Policy::default())
+        .await
+        .unwrap();
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
+    )
+    .await
+    .unwrap();
+    let display_schema: String =
+        sqlx::query_scalar("SELECT sql FROM sqlite_schema WHERE name='ruphish_deleted_accounts'")
+            .fetch_one(&mut connection)
+            .await
+            .unwrap();
+    let mut inspect = Inspector::Sqlite(connection);
+    inspect.execute("INSERT INTO users(id,username,hash,api_key,role_id,password_change_required,account_locked) VALUES(1,'admin','hash','key',1,FALSE,FALSE); INSERT INTO ruphish_auth_state VALUES(1,0);").await;
+    let repo = db.resources();
+    let group = |name: &str, email: &str| {
+        resource(
+            name,
+            Content::Group(vec![Recipient {
+                email: email.into(),
+                ..Default::default()
+            }]),
+        )
+    };
+    let original = repo
+        .save(
+            ADMIN,
+            group("Original", "original@example.test"),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    // The display-only dependency fails after parent and child writes. It must fail
+    // the transaction, not turn a committed edit into a misleading failed response.
+    inspect.execute("DROP TABLE ruphish_deleted_accounts").await;
+    assert!(matches!(
+        repo.save(
+            ADMIN,
+            group("Replacement", "replacement@example.test"),
+            Some(original.id),
+            Some("1".into())
+        )
+        .await,
+        Err(Error::Storage(
+            ruphish_application::storage::Error::Unavailable
+        ))
+    ));
+    assert!(repo.get(ADMIN, Kind::Group, original.id).await.unwrap() == original.record);
+    assert_eq!(inspect.scalar("SELECT count(*) FROM targets").await, 1);
+    assert_eq!(
+        inspect.scalar("SELECT count(*) FROM group_targets").await,
+        1
+    );
+    assert!(
+        repo.save(
+            ADMIN,
+            group("Failed creation", "new@example.test"),
+            None,
+            None
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(inspect.scalar("SELECT count(*) FROM groups").await, 1);
+    inspect.execute(&display_schema).await;
+    let retry = repo
+        .save(
+            ADMIN,
+            group("Replacement", "replacement@example.test"),
+            Some(original.id),
+            Some("1".into()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(retry.revision, 2);
+    assert_eq!(retry.identities.len(), 1);
+    assert_eq!(retry.identities[0].username, "admin");
+    drop(inspect);
+    db.close().await;
+    let reopened = database::open(Config::Sqlite { path }, Policy::default())
+        .await
+        .unwrap();
+    assert!(
+        reopened
+            .resources()
+            .get(ADMIN, Kind::Group, retry.id)
+            .await
+            .unwrap()
+            == retry.record
+    );
+    reopened.close().await;
 }

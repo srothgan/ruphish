@@ -36,7 +36,7 @@ pub(super) async fn exercise(
             .get(other, Kind::LearningPage, page.id)
             .await
             .unwrap()
-            == page
+            == page.record
     );
     assert!(matches!(
         resources

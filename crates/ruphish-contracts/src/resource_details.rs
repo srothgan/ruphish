@@ -2,20 +2,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// Preserved resource endpoint family.
-#[derive(Clone, Copy)]
-pub enum Kind {
-    /// Recipient groups.
-    Group,
-    /// Email templates.
-    Template,
-    /// Landing pages.
-    Page,
-    /// Static learning pages.
-    LearningPage,
-    /// Sending profiles.
-    Profile,
-}
+pub use ruphish_domain::resources::Kind;
 
 /// Confirmed identity and revision metadata shared by all resource families.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -89,17 +76,7 @@ pub struct Group {
     /// Ordered recipient records.
     pub targets: Vec<Recipient>,
 }
-/// Complete attachment content.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Attachment {
-    /// Filename.
-    pub name: String,
-    /// Media type.
-    #[serde(rename = "type")]
-    pub mime: String,
-    /// Base64 content.
-    pub content: String,
-}
+pub use crate::resources::fields::{Attachment, Header};
 /// Complete email template.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Template {
@@ -138,14 +115,6 @@ pub struct LearningPage {
     /// Advisory findings, when supplied.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub warnings: Option<Vec<PageWarning>>,
-}
-/// Custom email header.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Header {
-    /// Header name.
-    pub key: String,
-    /// Header value expression.
-    pub value: String,
 }
 /// Complete sending-profile fields returned to an authorized administrator.
 #[derive(Clone, Debug, Deserialize, Serialize)]

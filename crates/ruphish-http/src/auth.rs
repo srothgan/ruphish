@@ -16,7 +16,7 @@ use ruphish_application::datetime;
 use ruphish_contracts::errors::ErrorCode;
 use ruphish_contracts::{
     auth::{BrowserSession, BrowserUser, Role, User, UserEdit},
-    legacy::{Envelope, Timestamp},
+    common::{Envelope, Timestamp},
 };
 use serde::{Deserialize, Serialize};
 use std::{

@@ -10,8 +10,9 @@ use axum::{
     routing::get,
 };
 use ruphish_application::resources::{self as app, Content, Kind, Resource};
+use ruphish_contracts::common;
 use ruphish_contracts::errors::ErrorCode;
-use ruphish_contracts::legacy as wire;
+use ruphish_contracts::resources::request as wire;
 use ruphish_contracts::{resource_details as details, resources as summaries_wire};
 
 pub(crate) fn routes() -> Router<AuthState> {
@@ -125,11 +126,7 @@ async fn import_group(
     }
     response(StatusCode::OK, &recipients(&targets), None)
 }
-#[derive(serde::Deserialize)]
-struct CsvRequest {
-    content: String,
-    columns: Option<[String; 4]>,
-}
+use ruphish_contracts::resources::request::CsvRequest;
 async fn review_group(context: Context, body: Bytes) -> Result<Response, Rejection> {
     editor_identity(&context).await?;
     let request: CsvRequest = parse(&body)?;
@@ -161,12 +158,7 @@ async fn review_group(context: Context, body: Bytes) -> Result<Response, Rejecti
         None,
     )
 }
-#[derive(serde::Deserialize)]
-struct EmailRequest {
-    content: String,
-    #[serde(default)]
-    convert_links: bool,
-}
+use ruphish_contracts::resources::request::EmailRequest;
 async fn import_email(context: Context, body: Bytes) -> Result<Response, Rejection> {
     editor_identity(&context).await?;
     let request: EmailRequest = parse(&body)?;
@@ -185,15 +177,8 @@ async fn import_email(context: Context, body: Bytes) -> Result<Response, Rejecti
         None,
     )
 }
-#[derive(serde::Deserialize)]
-struct SiteRequest {
-    url: String,
-}
-#[derive(serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-struct PageBundleRequest {
-    content: String,
-}
+use ruphish_contracts::resources::request::PageBundleRequest;
+use ruphish_contracts::resources::request::SiteRequest;
 async fn import_page_bundle(context: Context, body: Bytes) -> Result<Response, Rejection> {
     editor_identity(&context).await?;
     let request: PageBundleRequest = parse(&body)?;
@@ -215,12 +200,7 @@ async fn import_site(context: Context, body: Bytes) -> Result<Response, Rejectio
     editor_identity(&context).await?;
     response(StatusCode::OK, &summaries_wire::HtmlImport { html }, None)
 }
-#[derive(serde::Deserialize)]
-struct PreviewRequest {
-    html: String,
-    #[serde(default)]
-    recipient: wire::Recipient,
-}
+use ruphish_contracts::resources::request::PreviewRequest;
 async fn preview_learning(context: Context, body: Bytes) -> Result<Response, Rejection> {
     preview_page(context, body, true).await
 }
@@ -307,24 +287,7 @@ async fn preview(context: Context, body: Bytes) -> Result<Response, Rejection> {
         None,
     )
 }
-#[derive(serde::Deserialize)]
-struct TestRequest {
-    #[serde(default)]
-    template: wire::EmailTemplate,
-    #[serde(default)]
-    page: wire::LandingPage,
-    smtp: ruphish_contracts::resources::TestProfile,
-    #[serde(default)]
-    url: String,
-    #[serde(default)]
-    email: String,
-    #[serde(default)]
-    first_name: String,
-    #[serde(default)]
-    last_name: String,
-    #[serde(default)]
-    position: String,
-}
+use ruphish_contracts::resources::request::TestRequest;
 fn draft_profile(p: wire::SendingProfile) -> ruphish_application::delivery::ProfileSelection {
     ruphish_application::delivery::ProfileSelection::Draft {
         id: (p.id != 0).then_some(p.id),
@@ -339,14 +302,7 @@ fn profile(p: wire::SendingProfile) -> app::Profile<Option<String>> {
         password: p.password,
         from_address: p.from_address,
         ignore_cert_errors: p.ignore_cert_errors,
-        headers: p
-            .headers
-            .into_iter()
-            .map(|h| app::Header {
-                key: h.key,
-                value: h.value,
-            })
-            .collect(),
+        headers: p.headers,
     }
 }
 async fn send_test(context: Context, body: Bytes) -> Result<Response, Rejection> {
@@ -386,7 +342,7 @@ async fn send_test(context: Context, body: Bytes) -> Result<Response, Rejection>
         })?;
     response(
         StatusCode::OK,
-        &wire::Envelope::<()> {
+        &common::Envelope::<()> {
             success: true,
             message: "Email Sent".into(),
             data: None,
@@ -404,7 +360,7 @@ async fn test_connection(context: Context, body: Bytes) -> Result<Response, Reje
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &wire::Envelope::<()> {
+        &common::Envelope::<()> {
             success: true,
             message: "SMTP connection verified".into(),
             data: None,
@@ -505,7 +461,7 @@ pub(crate) fn response<T: serde::Serialize>(
     value: &T,
     revision: Option<&str>,
 ) -> Result<Response, Rejection> {
-    let bytes = wire::json(value).map_err(|_| error(app::Error::Internal))?;
+    let bytes = common::json(value).map_err(|_| error(app::Error::Internal))?;
     let mut response =
         (status, [(header::CONTENT_TYPE, "application/json")], bytes).into_response();
     if let Some(revision) = revision {
@@ -541,7 +497,7 @@ pub(crate) fn encode(r: &Resource, lookup: &Lookup) -> details::Resource {
                     .iter()
                     .map(|a| details::Attachment {
                         name: a.name.clone(),
-                        mime: a.mime_type.clone(),
+                        mime_type: a.mime_type.clone(),
                         content: a.content.clone(),
                     })
                     .collect(),
@@ -562,14 +518,7 @@ pub(crate) fn encode(r: &Resource, lookup: &Lookup) -> details::Resource {
                 host: p.host.clone(),
                 from_address: p.from_address.clone(),
                 ignore_cert_errors: p.ignore_cert_errors,
-                headers: p
-                    .headers
-                    .iter()
-                    .map(|h| details::Header {
-                        key: h.key.clone(),
-                        value: h.value.clone(),
-                    })
-                    .collect(),
+                headers: p.headers.clone(),
                 username: (!p.username.is_empty()).then(|| p.username.clone()),
                 has_password: !p.password.is_empty(),
             }),
@@ -585,7 +534,7 @@ pub(crate) fn warnings(values: Vec<app::PageWarning>) -> Vec<details::PageWarnin
         })
         .collect()
 }
-fn decode(kind: Kind, bytes: &[u8]) -> Result<app::Input, Rejection> {
+fn decode(kind: Kind, bytes: &[u8]) -> Result<(i64, app::Input), Rejection> {
     let invalid = |_| {
         failure(
             StatusCode::BAD_REQUEST,
@@ -596,104 +545,89 @@ fn decode(kind: Kind, bytes: &[u8]) -> Result<app::Input, Rejection> {
     match kind {
         Kind::Group => {
             let v: wire::Group = serde_json::from_slice(bytes).map_err(invalid)?;
-            Ok(Resource {
-                attribution: Default::default(),
-                revision: 0,
-                id: v.id,
-                name: v.name,
-                modified_date: String::new(),
-                content: Content::Group(
-                    v.targets
-                        .into_iter()
-                        .map(|t| app::Recipient {
-                            email: t.email,
-                            first_name: t.first_name,
-                            last_name: t.last_name,
-                            position: t.position,
-                        })
-                        .collect(),
-                ),
-            })
+            Ok((
+                v.id,
+                app::Input {
+                    name: v.name,
+                    content: Content::Group(
+                        v.targets
+                            .into_iter()
+                            .map(|t| app::Recipient {
+                                email: t.email,
+                                first_name: t.first_name,
+                                last_name: t.last_name,
+                                position: t.position,
+                            })
+                            .collect(),
+                    ),
+                },
+            ))
         }
         Kind::Template => {
             let v: wire::EmailTemplate = serde_json::from_slice(bytes).map_err(invalid)?;
-            Ok(Resource {
-                attribution: Default::default(),
-                revision: 0,
-                id: v.id,
-                name: v.name,
-                modified_date: String::new(),
-                content: Content::Template(app::Template {
-                    subject: v.subject,
-                    text: v.text,
-                    html: v.html,
-                    envelope_sender: v.envelope_sender,
-                    attachments: v
-                        .attachments
-                        .into_iter()
-                        .map(|a| app::Attachment {
-                            name: a.name,
-                            mime_type: a.mime_type,
-                            content: a.content,
-                        })
-                        .collect(),
-                }),
-            })
+            Ok((
+                v.id,
+                app::Input {
+                    name: v.name,
+                    content: Content::Template(app::Template {
+                        subject: v.subject,
+                        text: v.text,
+                        html: v.html,
+                        envelope_sender: v.envelope_sender,
+                        attachments: v
+                            .attachments
+                            .into_iter()
+                            .map(|a| app::Attachment {
+                                name: a.name,
+                                mime_type: a.mime_type,
+                                content: a.content,
+                            })
+                            .collect(),
+                    }),
+                },
+            ))
         }
         Kind::LearningPage => {
-            let v: ruphish_contracts::resources::LearningPageInput =
+            let v: ruphish_contracts::resources::request::LearningPage =
                 serde_json::from_slice(bytes).map_err(invalid)?;
-            Ok(Resource {
-                attribution: Default::default(),
-                revision: 0,
-                id: v.id,
-                name: v.name,
-                modified_date: String::new(),
-                content: Content::LearningPage(app::LearningPage {
-                    html: v.html,
-                    public_id: String::new(),
-                }),
-            })
+            Ok((
+                v.id,
+                app::Input {
+                    name: v.name,
+                    content: Content::LearningPage(app::LearningPageInput { html: v.html }),
+                },
+            ))
         }
         Kind::Page => {
             let v: wire::LandingPage = serde_json::from_slice(bytes).map_err(invalid)?;
-            Ok(Resource {
-                attribution: Default::default(),
-                revision: 0,
-                id: v.id,
-                name: v.name,
-                modified_date: String::new(),
-                content: Content::Page(app::Page {
-                    html: v.html,
-                    redirect_url: v.redirect_url,
-                }),
-            })
+            Ok((
+                v.id,
+                app::Input {
+                    name: v.name,
+                    content: Content::Page(app::Page {
+                        html: v.html,
+                        redirect_url: v.redirect_url,
+                    }),
+                },
+            ))
         }
         Kind::Profile => {
             let v: wire::SendingProfile = serde_json::from_slice(bytes).map_err(invalid)?;
-            Ok(Resource {
-                attribution: Default::default(),
-                revision: 0,
-                id: v.id,
-                name: v.name,
-                modified_date: String::new(),
-                content: Content::Profile(app::Profile {
-                    interface_type: v.interface_type,
-                    host: v.host,
-                    username: v.username,
-                    password: v.password,
-                    from_address: v.from_address,
-                    ignore_cert_errors: v.ignore_cert_errors,
-                    headers: v
-                        .headers
-                        .into_iter()
-                        .map(|h| app::Header {
-                            key: h.key,
-                            value: h.value,
-                        })
-                        .collect(),
-                }),
-            })
+            Ok((
+                v.id,
+                app::Input {
+                    name: v.name,
+                    content: Content::Profile(app::Profile {
+                        interface_type: v.interface_type,
+                        host: v.host,
+                        username: v.username,
+                        password: v.password,
+                        from_address: v.from_address,
+                        ignore_cert_errors: v.ignore_cert_errors,
+                        headers: v.headers,
+                    }),
+                },
+            ))
         }
     }
 }
@@ -780,8 +714,8 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
             .await
             .map_err(error)?;
     }
-    let value = decode(kind, &body)?;
-    if id.is_some_and(|id| value.id != id) {
+    let (request_id, value) = decode(kind, &body)?;
+    if id.is_some_and(|id| request_id != id) {
         return Err(failure(
             if kind == Kind::Group {
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -802,7 +736,8 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
         .save(user.identity, value, id, expected(&context)?)
         .await
         .map_err(error)?;
-    let lookup = Lookup::load(&context, [&saved.attribution]).await?;
+    let lookup = Lookup::from_identities(saved.identities);
+    let saved = saved.record;
     let mut wire = encode(&saved, &lookup);
     match &mut wire.content {
         details::Content::Page(page) => page.warnings = Some(warnings(findings)),
@@ -836,7 +771,7 @@ async fn delete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejec
     };
     response(
         StatusCode::OK,
-        &wire::Envelope::<()> {
+        &common::Envelope::<()> {
             success: true,
             message: message.into(),
             data: None,

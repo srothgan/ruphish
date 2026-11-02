@@ -1,4 +1,6 @@
 //! Resource metadata responses and explicit test-delivery inputs.
+pub mod fields;
+pub mod request;
 use serde::{Deserialize, Serialize};
 
 /// Recipient-group summary response.
@@ -155,18 +157,6 @@ mod tests {
     }
 }
 
-/// Authored static learning-page input; public identity is always server owned.
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-pub struct LearningPageInput {
-    /// Existing resource ID; ignored when creating.
-    #[serde(default)]
-    pub id: i64,
-    /// Shared resource name.
-    pub name: String,
-    /// Static authored HTML.
-    pub html: String,
-}
-
 /// Explicit SMTP selection for a test message; never inferred from failed validation.
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(tag = "source", rename_all = "snake_case", deny_unknown_fields)]
@@ -179,6 +169,6 @@ pub enum TestProfile {
     /// Test supplied settings. A nonzero profile ID resolves an omitted password from that shared profile.
     Draft {
         /// Editable SMTP settings and optional replacement credential.
-        profile: crate::legacy::SendingProfile,
+        profile: crate::resources::request::SendingProfile,
     },
 }
