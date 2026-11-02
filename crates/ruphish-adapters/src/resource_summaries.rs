@@ -20,7 +20,7 @@ pub(crate) fn query(kind: Kind, table: &'static str, dialect: Dialect) -> String
         _ => total,
     };
     format!(
-        "SELECT r.revision,r.user_id,r.edited_by,r.edited_at,r.id,r.name,r.modified_date,{total} AS total FROM {table} r WHERE {selection} ORDER BY r.id"
+        "SELECT r.created_at,r.revision,r.user_id,r.edited_by,r.edited_at,r.id,r.name,r.modified_date,{total} AS total FROM {table} r WHERE {selection} ORDER BY r.id"
     )
 }
 

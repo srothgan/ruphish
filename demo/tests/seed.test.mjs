@@ -107,6 +107,7 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
       assert.equal(response.status, 200, path);
       const value = await response.json();
       if (path === '/api/templates/1') {
+        assert.equal(value.created_at, dataset(1793016000).templates[0].created_at);
         assert.equal(typeof value.created_by.id, 'number');
         assert.equal(typeof value.edited_by.id, 'number');
         assert.ok(Number.isFinite(Date.parse(value.edited_at)));

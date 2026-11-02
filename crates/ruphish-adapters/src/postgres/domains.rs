@@ -229,7 +229,7 @@ impl Repository for Domains {
             if duplicate {
                 return Err(Error::Conflict("Domain"));
             }
-            sqlx::query("INSERT INTO ruphish_domains(owner_id,name,origin,hostname,enabled,challenge,challenge_expires,due) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id").bind(caller.id).bind(edit.name).bind(canonical.value).bind(canonical.host).bind(edit.enabled).bind(token()?).bind(now+CHALLENGE_LIFETIME).bind(due).fetch_one(&mut *tx).await.map_err(storage)?.insert_id().map_err(storage)?
+            sqlx::query("INSERT INTO ruphish_domains(owner_id,name,origin,hostname,enabled,challenge,challenge_expires,due,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id").bind(caller.id).bind(edit.name).bind(canonical.value).bind(canonical.host).bind(edit.enabled).bind(token()?).bind(now+CHALLENGE_LIFETIME).bind(due).bind(ruphish_application::datetime::utc(ruphish_application::datetime::now())).fetch_one(&mut *tx).await.map_err(storage)?.insert_id().map_err(storage)?
         };
         super::attribution::edit(
             &mut tx,

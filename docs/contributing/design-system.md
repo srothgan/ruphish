@@ -126,6 +126,14 @@ Selection controls need a clear selected state, predictable keyboard behavior an
 
 Distinguish read-only values from disabled controls. Explain important restrictions near the affected action. Creation and editing must use appropriate guidance: references to a saved value belong only where a saved value exists.
 
+### Resource details and campaign review
+
+Resource details, including domains, webhooks and reporting mailboxes, campaign draft details and pre-launch review use one white content surface. Keep the record name/page title, navigation and action buttons outside it. Place every other displayed record value inside the surface; do not use subtitles for URLs, timestamps, state or attribution.
+
+Use the shared detail card, section, grid and field components. Sections have titles inside the same card. Each individual value has a small label directly above it, with no indentation. Use exactly two equal, left-aligned columns at laptop widths and one column on narrow screens. Tables, previews and long content may span both columns; table headers supply their labels. Avoid nested cards and preserve specialized preview and disclosure behavior.
+
+Record information consistently presents Created at / Created by, then Last edited at / Last edited by. Display unknown historical metadata as Unknown, unconfigured values as Not set, and unavailable referenced resources as Unavailable. Attribution reflects confirmed saves, never unsaved edits or worker activity. Keep review/test/launch actions outside the card and maintain their existing validation and recovery semantics.
+
 ### Lists, tables and empty states
 
 Use consistent search, headings, row actions and pagination across management screens. Align numeric data for comparison and give actions their own clear location. The clickable area should match the visible control.

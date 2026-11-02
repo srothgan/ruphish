@@ -173,6 +173,7 @@ export function dataset(now) {
     const header = {
       id,
       name: c.name,
+      created_at: iso(created),
       status,
       launch_date: iso(launch),
       send_by_date: iso(sendBy),
@@ -288,6 +289,7 @@ export function dataset(now) {
   authors.push({ id: 100, username: 'Morgan Brooks', deleted: true });
   const attribution = (item, i) =>
     Object.assign(item, {
+      created_at: item.created_at ?? item.created ?? item.created_date ?? iso(now - 2 * DAY),
       created_by: i % 3 === 2 ? 100 : users[0].id,
       edited_by: users[Math.min(1, users.length - 1)].id,
       edited_at: item.modified_date ?? item.modified ?? iso(now - 3600),

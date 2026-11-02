@@ -76,7 +76,7 @@ fn sparse_counts_and_explicit_empty_pages_remain_valid() {
 
 #[test]
 fn draft_null_selections_are_distinct_from_missing_read_fields() {
-    let value = json!({"created_by":null,"edited_by":null,"edited_at":null,"id":"draft-fixture-001", "revision":1,"step":0,"created":null,"modified":null,"campaign_id":null,"status":"draft", "configuration":{"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":null,"launch_local":null,"send_by_local":null}});
+    let value = json!({"created_at":null,"created_by":null,"edited_by":null,"edited_at":null,"id":"draft-fixture-001", "revision":1,"step":0,"created":null,"modified":null,"campaign_id":null,"status":"draft", "configuration":{"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":null,"launch_local":null,"send_by_local":null}});
     assert!(serde_json::from_value::<Draft>(value.clone()).is_ok());
     for key in [
         "name",

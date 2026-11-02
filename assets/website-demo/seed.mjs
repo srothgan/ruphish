@@ -185,6 +185,7 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
         revision: resource.revision,
         modified_date: resource.modified_date,
         attribution: {
+          created_at: resource.created_at,
           created_by: authorIds.get(resource.created_by),
           edited_by: authorIds.get(resource.edited_by),
           edited_at: resource.edited_at,
@@ -412,6 +413,9 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
       ['campaigns', 'user_id', 'id', data.campaigns.map((c) => c.header)],
     ]) {
       for (const item of items) {
+        if (table !== 'campaigns' && table !== 'ruphish_campaign_drafts') {
+          run(`UPDATE ${table} SET created_at=? WHERE ${key}=?`, item.created_at, item.id);
+        }
         run(
           `UPDATE ${table} SET ${creator}=?,edited_by=?,edited_at=? WHERE ${key}=?`,
           authorIds.get(item.created_by),

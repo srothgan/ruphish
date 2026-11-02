@@ -15,6 +15,7 @@ CREATE TABLE `users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `templates` (
+  created_at VARCHAR(40),
   revision BIGINT NOT NULL DEFAULT 1,
   edited_by BIGINT,
   edited_at VARCHAR(40),
@@ -58,6 +59,7 @@ CREATE TABLE `results` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `pages` (
+  created_at VARCHAR(40),
   revision BIGINT NOT NULL DEFAULT 1,
   edited_by BIGINT,
   edited_at VARCHAR(40),
@@ -71,6 +73,7 @@ CREATE TABLE `pages` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `groups` (
+  created_at VARCHAR(40),
   revision BIGINT NOT NULL DEFAULT 1,
   edited_by BIGINT,
   edited_at VARCHAR(40),
@@ -132,6 +135,7 @@ CREATE TABLE `attachments` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `smtp` (
+  created_at VARCHAR(40),
   revision BIGINT NOT NULL DEFAULT 1,
   edited_by BIGINT,
   edited_at VARCHAR(40),
@@ -317,6 +321,7 @@ CREATE TABLE `ruphish_legacy_queue_issues` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `ruphish_domains` (
+  created_at VARCHAR(40),
   edited_by BIGINT,
   edited_at VARCHAR(40),
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -367,6 +372,7 @@ CREATE TABLE `ruphish_domain_checks` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `ruphish_webhook_state` (
+  created_at VARCHAR(40),
   edited_by BIGINT,
   edited_at VARCHAR(40),
   `webhook_id` BIGINT NOT NULL,
@@ -402,6 +408,7 @@ CREATE TABLE `ruphish_webhook_attempts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `ruphish_mailboxes` (
+  created_at VARCHAR(40),
   edited_by BIGINT,
   edited_at VARCHAR(40),
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -514,6 +521,7 @@ CREATE TABLE ruphish_campaign_closures (
 ) ENGINE=InnoDB;
 
 CREATE TABLE ruphish_learning_pages (
+  created_at VARCHAR(40),
   revision BIGINT NOT NULL DEFAULT 1,
   edited_by BIGINT,
   edited_at VARCHAR(40), id bigint NOT NULL AUTO_INCREMENT PRIMARY KEY, user_id bigint NOT NULL, name varchar(255) NOT NULL, modified_date varchar(255) NOT NULL, html longtext DEFAULT NULL, public_id varchar(32) DEFAULT NULL, UNIQUE KEY ruphish_learning_pages_public_id(public_id), UNIQUE KEY ruphish_learning_pages_owner_name(user_id,name)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;

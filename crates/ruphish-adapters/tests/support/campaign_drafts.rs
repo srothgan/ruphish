@@ -33,6 +33,12 @@ pub(super) async fn exercise(
         .unwrap();
     assert_eq!(first.revision, 1);
     assert_eq!(
+        ruphish_application::datetime::parse(first.attribution.created_at.as_deref().unwrap())
+            .unwrap()
+            .as_second(),
+        now
+    );
+    assert_eq!(
         store
             .save_draft(actor, id, None, empty.clone(), 0, now)
             .await
@@ -116,6 +122,7 @@ pub(super) async fn exercise(
     let winning_editor = if a.is_ok() { actor.id } else { other.id };
     let winner = a.or(b).unwrap();
     assert_eq!(winner.attribution.created_by, Some(actor.id));
+    assert_eq!(winner.attribution.created_at, first.attribution.created_at);
     assert_eq!(winner.attribution.edited_by, Some(winning_editor));
     assert_eq!(
         store.draft(actor, id).await.unwrap().configuration,

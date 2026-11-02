@@ -21,6 +21,15 @@ const path =
     'delete-conflict-mailbox': '/reporting-mailboxes',
     'delete-conflict-draft': '/campaigns',
     'delete-conflict-draft-detail': '/campaigns/drafts/00000000-0000-4000-8000-000000000001',
+    'detail-group': '/groups/1',
+    'detail-template': '/templates/1',
+    'detail-page': '/pages/1',
+    'detail-learning': '/learning-pages/1',
+    'detail-smtp': '/smtp/1',
+    'detail-domain': '/domains/1',
+    'detail-webhook': '/webhooks/1',
+    'detail-mailbox': '/reporting-mailboxes/1',
+    'detail-draft': '/campaigns/drafts/00000000-0000-4000-8000-000000000001',
     'domain-attribution': '/domains/1',
     'shared-attribution': '/groups/1/edit',
     'unknown-attribution': '/groups/1/edit',
@@ -108,6 +117,7 @@ win.Response = globalThis.Response;
 Object.assign(preferences, { language: 'de', format_locale: 'de-DE', time_zone: 'Europe/Berlin' });
 if (
   scenario.startsWith('form-') ||
+  scenario.startsWith('detail-') ||
   scenario.startsWith('integration-') ||
   scenario === 'campaign-wizard' ||
   scenario.endsWith('-attribution') ||
@@ -132,6 +142,7 @@ const data = dataset(now);
 
 if (scenario.endsWith('-attribution')) {
   Object.assign(scenario === 'domain-attribution' ? data.domains[0] : data.groups[0], {
+    created_at: scenario === 'unknown-attribution' ? null : '2026-10-24T12:00:00Z',
     created_by: 100,
     edited_by: scenario === 'unknown-attribution' ? null : data.users[1].id,
     edited_at: scenario === 'unknown-attribution' ? null : '2026-10-25T12:00:00Z',
@@ -594,19 +605,56 @@ if (scenario.startsWith('delete-conflict')) {
   process.exit(0);
 }
 
+if (scenario.startsWith('detail-')) {
+  await until(() =>
+    document
+      .querySelector('section[aria-label="Record information"] dd')
+      ?.textContent.includes('2026'),
+  );
+  const card = document.querySelector('.detail-card');
+  assert.ok(card, 'record values have a shared white detail surface');
+  assert.equal(document.querySelectorAll('.detail-card').length, 1);
+  assert.equal(card.querySelectorAll('.card').length, 0, 'sections are not nested cards');
+  assert.equal(document.querySelector('.management-heading p'), null, 'no record-data subtitle');
+  assert.ok(!card.contains(document.querySelector('h1')), 'the title remains outside');
+  for (const grid of document.querySelectorAll('.resource-facts')) {
+    assert.ok(card.contains(grid), 'every read-only field group belongs to the record card');
+    for (const value of grid.querySelectorAll('dd')) {
+      assert.equal(value.previousElementSibling?.tagName, 'DT', 'values retain their label');
+    }
+  }
+  const record = card.querySelector('section[aria-label="Record information"]');
+  assert.deepEqual(
+    [...record.querySelectorAll('dt')].map((n) => n.textContent.trim()),
+    ['Created at', 'Created by', 'Last edited at', 'Last edited by'],
+  );
+  assert.ok(!card.querySelector('.resource-actions'), 'record actions remain outside');
+  if (scenario === 'detail-domain') {
+    assert.ok(data.domains[0].checked_at > 0, 'a past check does not guarantee retained history');
+    const history = card.querySelector('.domain-history');
+    assert.equal(history.querySelector('table'), null, 'empty history has no table headers');
+    assert.match(history.textContent, /No verification history available/);
+  }
+  process.exit(0);
+}
+
 if (scenario.endsWith('-attribution')) {
   await until(() =>
-    document.querySelector('.resource-facts')?.textContent.includes('Morgan Brooks'),
+    document
+      .querySelector('section[aria-label="Record information"]')
+      ?.textContent.includes('Morgan Brooks'),
   );
-  const metadata = document.querySelector('.resource-facts');
+  const metadata = document.querySelector('section[aria-label="Record information"]');
   assert.match(metadata.textContent, /Created by/);
   assert.match(metadata.textContent, /Morgan Brooks.*deleted/i);
   assert.equal(metadata.querySelectorAll('input,select,textarea,[contenteditable]').length, 0);
   const values = [...metadata.querySelectorAll('dd')].map((node) => node.textContent.trim());
   if (scenario === 'unknown-attribution') {
-    assert.deepEqual(values.slice(1), ['-', '-']);
+    assert.equal(values[0], 'Unknown');
+    assert.deepEqual(values.slice(2), ['Unknown', 'Unknown']);
   } else {
-    assert.equal(values[1], data.users[1].username);
+    assert.equal(values[3], data.users[1].username);
+    assert.match(values[0], /2026/);
     assert.match(values[2], /2026/);
   }
   assert.equal(
@@ -731,6 +779,15 @@ if (scenario === 'campaign-wizard') {
   await advance(3);
   const launchLabel = demo ? 'Simulate launch' : 'Launch campaign';
   await until(() => button(launchLabel) && !button(launchLabel).disabled);
+  const reviewCard = document.querySelector('.management-form.detail-card');
+  assert.ok(reviewCard);
+  assert.equal(reviewCard.querySelectorAll('.card').length, 0);
+  assert.ok(reviewCard.contains(document.querySelector('iframe.saved-content-preview')));
+  assert.ok(!reviewCard.contains(button(launchLabel)));
+  assert.ok(!reviewCard.contains(button('Send test email')));
+  assert.ok(reviewCard.querySelector('section[aria-label="Record information"]'));
+  assert.equal(document.querySelector('.management-heading p'), null);
+
   assert.ok(!document.querySelector('.demo-toast.has-content'));
   if (demo) {
     const template = dataset(now).templates.find((row) => row.id === 1);

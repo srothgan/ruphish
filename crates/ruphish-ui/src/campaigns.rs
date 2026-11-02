@@ -1057,33 +1057,20 @@ pub(super) fn CreateCampaign(
     view! {
         <ManagementPage>
             <BackLink href="/campaigns">{tr!(ui.back_to_campaigns)}</BackLink>
-            <PageHeader
-                title=Signal::derive(move || {
-                    if persistence.revision.get().is_some() {
-                        leptos_i18n::t_string!(i18n,ui.edit_campaign_draft).to_string()
+            <PageHeader title=Signal::derive(move || {
+                if step.get() == 3 {
+                    let name = draft.with(|d| text(&d.value, "name"));
+                    if name.is_empty() {
+                        leptos_i18n::t_string!(i18n, ui.untitled_campaign).to_string()
                     } else {
-                        leptos_i18n::t_string!(i18n,ui.create_campaign).to_string()
+                        name
                     }
-                })
-                subtitle=trs!(ui.review_the_audience_content_and_schedule_before_launching)
-            >
-                <span role="status">
-                    {move || {
-                        if persistence.saving.get() {
-                            leptos_i18n::t_string!(i18n,ui.draft_saving).to_string()
-                        } else if draft.with(|d| d.generation != persistence.saved_generation.get())
-                            || persistence.revision.get().is_none()
-                        {
-                            leptos_i18n::t_string!(i18n,ui.draft_unsaved).to_string()
-                        } else {
-                            format!(
-                                "{}: {}",
-                                leptos_i18n::t_string!(i18n,ui.draft_saved),
-                                instant(&persistence.modified.get()),
-                            )
-                        }
-                    }}
-                </span>
+                } else if persistence.revision.get().is_some() {
+                    leptos_i18n::t_string!(i18n,ui.edit_campaign_draft).to_string()
+                } else {
+                    leptos_i18n::t_string!(i18n,ui.create_campaign).to_string()
+                }
+            })>
                 <RefreshButton
                     fetching=Signal::derive(move || {
                         resource_read.fetching.get() || draft.with(|d| d.page_request.is_some())
@@ -1095,8 +1082,8 @@ pub(super) fn CreateCampaign(
                     })
                 />
             </PageHeader>
-            {message.view()}
             <WriteRecovery
+                actions_only=true
                 error=persistence.write_error
                 saved_href=Signal::derive(move || {
                     format!("/campaigns/drafts/{}", persistence.id.get())
@@ -1137,6 +1124,11 @@ pub(super) fn CreateCampaign(
                                     persistence.revision.set(saved["revision"].as_i64());
                                     persistence.saved_generation.set(generation);
                                     persistence.modified.set(saved["modified"].clone());
+                                    persistence
+                                        .attribution
+                                        .set(
+                                            serde_json::from_value(saved.clone()).unwrap_or_default(),
+                                        );
                                     persistence.write_error.set(None);
                                     step.set(saved["step"].as_u64().unwrap_or(0).min(3) as usize);
                                     message.clear();
@@ -1150,7 +1142,6 @@ pub(super) fn CreateCampaign(
                         });
                 })
             />
-            <ValidationSummary form=validation />
             <QueryBoundary
                 fetching=loading
                 has_data=resources_known
@@ -1158,29 +1149,6 @@ pub(super) fn CreateCampaign(
                 noun=trs!(ui.resources)
                 refresh=resource_read.refresh
             >
-                <Show when=move || {
-                    resources_known.get() && !loading.get()
-                        && ["template", "page", "smtp", "groups"]
-                            .into_iter()
-                            .any(|key| {
-                                let value = draft.get().value;
-                                let selections = if key == "groups" {
-                                    array(&value["selection"], "groups")
-                                } else {
-                                    vec![value["selection"][key].clone()]
-                                };
-                                selections
-                                    .iter()
-                                    .any(|selected| {
-                                        selected["id"].as_i64().is_some_and(|id| id > 0)
-                                            && !array(&resources.get(), key)
-                                                .iter()
-                                                .any(|r| r["id"] == selected["id"])
-                                    })
-                            })
-                }>
-                    <p class="form-message error">{tr!(ui.missing_draft_resource)}</p>
-                </Show>
                 <StepNavigation
                     label=trs!(ui.campaign_steps)
                     labels=vec![
@@ -1199,10 +1167,65 @@ pub(super) fn CreateCampaign(
                     })
                     on_select=Callback::new(move |index| save.run(Some(index)))
                 />
-                <FormFields disabled=Signal::derive(move || {
-                    busy.get() || loading.get() || !can_edit || draft.with(|d| d.launch.is_some())
-                })>
-                    <section hidden=move || step.get() != 0>
+                <FormFields
+                    class="resource-read-panel detail-card"
+                    disabled=Signal::derive(move || {
+                        busy.get() || loading.get() || !can_edit
+                            || draft.with(|d| d.launch.is_some())
+                    })
+                >
+                    {message.view()}
+                    <WriteRecoveryNotice error=persistence.write_error />
+                    <ValidationSummary form=validation />
+                    <Show when=move || {
+                        resources_known.get() && !loading.get()
+                            && ["template", "page", "smtp", "groups"]
+                                .into_iter()
+                                .any(|key| {
+                                    let value = draft.get().value;
+                                    let selections = if key == "groups" {
+                                        array(&value["selection"], "groups")
+                                    } else {
+                                        vec![value["selection"][key].clone()]
+                                    };
+                                    selections
+                                        .iter()
+                                        .any(|selected| {
+                                            selected["id"].as_i64().is_some_and(|id| id > 0)
+                                                && !array(&resources.get(), key)
+                                                    .iter()
+                                                    .any(|r| r["id"] == selected["id"])
+                                        })
+                                })
+                    }>
+                        <p class="form-message error">{tr!(ui.missing_draft_resource)}</p>
+                    </Show>
+                    <DetailSection title=trs!(ui.status)>
+                        <DetailGrid>
+                            <DetailField label=trs!(ui.draft)>
+                                <span role="status">
+                                    {move || {
+                                        if persistence.saving.get() {
+                                            leptos_i18n::t_string!(i18n,ui.draft_saving).to_string()
+                                        } else if draft
+                                            .with(|d| {
+                                                d.generation != persistence.saved_generation.get()
+                                            }) || persistence.revision.get().is_none()
+                                        {
+                                            leptos_i18n::t_string!(i18n,ui.draft_unsaved).to_string()
+                                        } else {
+                                            format!(
+                                                "{}: {}",
+                                                leptos_i18n::t_string!(i18n,ui.draft_saved),
+                                                instant(&persistence.modified.get()),
+                                            )
+                                        }
+                                    }}
+                                </span>
+                            </DetailField>
+                        </DetailGrid>
+                    </DetailSection>
+                    <section class="detail-section" hidden=move || step.get() != 0>
                         <h2>{tr!(ui.audience)}</h2>
                         {input(draft, "name", trs!(ui.campaign_name))}
                         <ValidationAnchor field="selection.groups" />
@@ -1285,7 +1308,7 @@ pub(super) fn CreateCampaign(
                             {tr!(ui.create_a_group_in_a_new_tab)}
                         </a>
                     </section>
-                    <section hidden=move || step.get() != 1>
+                    <section class="detail-section" hidden=move || step.get() != 1>
                         <h2>{tr!(ui.content_and_destination)}</h2>
                         <div class="resource-columns">
                             {selector(draft, resources, "template", trs!(ui.email_template))}
@@ -1527,6 +1550,7 @@ pub(super) fn CreateCampaign(
                         </p>
                     </section>
                     <section
+                        class="detail-section"
                         hidden=move || step.get() != 3
                         aria-busy=move || draft.with(|d| d.review_request.is_some()).to_string()
                     >
@@ -1559,12 +1583,7 @@ pub(super) fn CreateCampaign(
                                                     ui.go_back_to_correct_the_campaign_or_retry_if_the_request_failed
                                                 )}
                                             </p>
-                                            <ActionButton
-                                                kind="button"
-                                                on_click=move |_| retry_review.update(|n| *n += 1)
-                                            >
-                                                {tr!(ui.retry_validation)}
-                                            </ActionButton>
+
                                         </div>
                                     }
                                 })
@@ -1575,140 +1594,173 @@ pub(super) fn CreateCampaign(
                                 .review
                                 .map(|r| {
                                     view! {
-                                        <div class="campaign-review">
+                                        <div>
                                             {crate::resources::page_warnings(
                                                 Signal::derive(move || r.warnings.clone()),
-                                            )}
-                                            <h3>
-                                                {leptos_i18n::t!(
-                                                    i18n, messages.arg0_unique_recipients, arg0 = (r.total).to_string()
-                                                )}
-                                            </h3>
-                                            <p>
-                                                {leptos_i18n::t!(
-                                                    i18n, messages.arg0_overlapping_recipient_entries_removed, arg0 = (r.duplicate_count).to_string()
-                                                )}
-                                            </p>
-                                            {(r.conflict_count > 0)
-                                                .then(|| {
-                                                    view! {
-                                                        <details>
-                                                            <summary>
-                                                                {leptos_i18n::t!(
-                                                                    i18n, messages.arg0_conflicting_duplicate_entries_first_group_wins, arg0 = (r.conflict_count).to_string()
-                                                                )}
-                                                            </summary>
-                                                            <p>
-                                                                {tr!(
-                                                                    ui.showing_up_to_100_conflicts_review_the_retained_and_discarded_recipient_attribut
-                                                                )}
-                                                            </p>
-                                                            <ul>
-                                                                {r
-                                                                    .conflicts
-                                                                    .into_iter()
-                                                                    .map(|c| {
-                                                                        view! {
-                                                                            <li>
-                                                                                {leptos_i18n::t_string!(
-                                                                                    i18n, messages.email_retained_kept_discarded_discarded, email = c.email, kept = json!(c.kept).to_string(), discarded = json!(c.discarded).to_string()
-                                                                                )}
-                                                                            </li>
-                                                                        }
-                                                                    })
-                                                                    .collect_view()}
-                                                            </ul>
-                                                        </details>
-                                                    }
-                                                })}
-                                            <dl class="resource-facts">
-                                                {[
-                                                    ("template", r.selection.template),
-                                                    ("page", r.selection.page),
-                                                    ("smtp", r.selection.smtp),
-                                                ]
-                                                    .into_iter()
-                                                    .map(|(key, selected)| {
+                                            )} <DetailSection title=trs!(ui.audience)>
+                                                <DetailGrid>
+                                                    <DetailField label=trs!(
+                                                        ui.recipients
+                                                    )>{r.total}</DetailField>
+                                                    <DetailField label=trs!(
+                                                        ui.duplicate_recipients
+                                                    )>{r.duplicate_count}</DetailField>
+                                                    <DetailField label=trs!(
+                                                        ui.recipient_conflicts
+                                                    )>{r.conflict_count}</DetailField>
+                                                </DetailGrid>
+                                                {(r.conflict_count > 0)
+                                                    .then(|| {
                                                         view! {
-                                                            <div>
-                                                                <dt>
-                                                                    {match key {
-                                                                        "template" => {
-                                                                            leptos_i18n::t_string!(i18n, ui.email_template)
-                                                                        }
-                                                                        "page" => leptos_i18n::t_string!(i18n, ui.landing_page),
-                                                                        _ => leptos_i18n::t_string!(i18n, ui.sending_profile),
-                                                                    }}
-                                                                </dt>
-                                                                <dd>
-                                                                    <a
-                                                                        target="_blank"
-                                                                        rel="noopener"
-                                                                        href=format!(
-                                                                            "/{}/{}",
-                                                                            match key {
-                                                                                "template" => "templates",
-                                                                                "page" => "pages",
-                                                                                _ => "smtp",
-                                                                            },
-                                                                            selected.id,
-                                                                        )
-                                                                    >
-                                                                        {selected.name}
-                                                                    </a>
-                                                                </dd>
-                                                            </div>
+                                                            <details>
+                                                                <summary>
+                                                                    {leptos_i18n::t!(
+                                                                        i18n, messages.arg0_conflicting_duplicate_entries_first_group_wins, arg0 = (r.conflict_count).to_string()
+                                                                    )}
+                                                                </summary>
+                                                                <p>
+                                                                    {tr!(
+                                                                        ui.showing_up_to_100_conflicts_review_the_retained_and_discarded_recipient_attribut
+                                                                    )}
+                                                                </p>
+                                                                <ul>
+                                                                    {r
+                                                                        .conflicts
+                                                                        .into_iter()
+                                                                        .map(|c| {
+                                                                            view! {
+                                                                                <li>
+                                                                                    {leptos_i18n::t_string!(
+                                                                                        i18n, messages.email_retained_kept_discarded_discarded, email = c.email, kept = json!(c.kept).to_string(), discarded = json!(c.discarded).to_string()
+                                                                                    )}
+                                                                                </li>
+                                                                            }
+                                                                        })
+                                                                        .collect_view()}
+                                                                </ul>
+                                                            </details>
                                                         }
-                                                    })
-                                                    .collect_view()} <div>
-                                                    <dt>{tr!(ui.launch)}</dt>
-                                                    <dd class="data-value">{instant(&json!(r.launch_date))}</dd>
-                                                </div><div>
-                                                    <dt>{tr!(ui.distribution_end)}</dt>
-                                                    <dd class="data-value">
-                                                        {instant(&json!(r.send_by_date))}
-                                                    </dd>
-                                                </div><div>
-                                                    <dt>{tr!(ui.submission_tracking)}</dt>
-                                                    <dd>{tr!(ui.yes)}</dd>
-                                                </div><div>
-                                                    <dt>{tr!(ui.password_presence_only)}</dt>
-                                                    <dd>{tr!(ui.yes)}</dd>
-                                                </div><div>
-                                                    <dt>{tr!(ui.track_email_opens)}</dt>
-                                                    <dd>
-                                                        {if r.policy.track_opens {
-                                                            tr!(ui.enabled).into_any()
-                                                        } else {
-                                                            tr!(ui.not_tracked).into_any()
-                                                        }}
-                                                    </dd>
-                                                </div><div>
-                                                    <dt>{tr!(ui.redirect)}</dt>
-                                                    <dd>
-                                                        {match r.policy.learning_page_id {
-                                                            Some(id) => {
-                                                                view! {
-                                                                    <a href=format!(
-                                                                        "/learning-pages/{id}",
-                                                                    )>
-                                                                        {array(&resources.get(), "learning_page")
-                                                                            .iter()
-                                                                            .find(|row| row["id"].as_i64() == Some(id))
-                                                                            .map(|row| text(row, "name"))
-                                                                            .unwrap_or_else(|| {
-                                                                                leptos_i18n::t_string!(i18n, ui.unavailable).to_owned()
-                                                                            })}
-                                                                    </a>
-                                                                }
-                                                                    .into_any()
+                                                    })}
+                                            </DetailSection><DetailSection title=trs!(ui.details)>
+                                                <dl class="resource-facts">
+                                                    {[
+                                                        ("template", r.selection.template),
+                                                        ("page", r.selection.page),
+                                                        ("smtp", r.selection.smtp),
+                                                    ]
+                                                        .into_iter()
+                                                        .map(|(key, selected)| {
+                                                            view! {
+                                                                <div>
+                                                                    <dt>
+                                                                        {match key {
+                                                                            "template" => {
+                                                                                leptos_i18n::t_string!(i18n, ui.email_template)
+                                                                            }
+                                                                            "page" => leptos_i18n::t_string!(i18n, ui.landing_page),
+                                                                            _ => leptos_i18n::t_string!(i18n, ui.sending_profile),
+                                                                        }}
+                                                                    </dt>
+                                                                    <dd>
+                                                                        <a
+                                                                            target="_blank"
+                                                                            rel="noopener"
+                                                                            href=format!(
+                                                                                "/{}/{}",
+                                                                                match key {
+                                                                                    "template" => "templates",
+                                                                                    "page" => "pages",
+                                                                                    _ => "smtp",
+                                                                                },
+                                                                                selected.id,
+                                                                            )
+                                                                        >
+                                                                            {selected.name}
+                                                                        </a>
+                                                                    </dd>
+                                                                </div>
                                                             }
-                                                            None => r.policy.redirect_url.into_any(),
-                                                        }}
-                                                    </dd>
-                                                </div>
-                                            </dl> <section class="resource-section">
-                                                <h3>{tr!(ui.rendered_sample)}</h3>
+                                                        })
+                                                        .collect_view()}
+                                                    <DetailField label=trs!(
+                                                        ui.recipient_groups
+                                                    )>
+                                                        {r
+                                                            .selection
+                                                            .groups
+                                                            .into_iter()
+                                                            .map(|g| g.name)
+                                                            .collect::<Vec<_>>()
+                                                            .join(", ")}
+                                                    </DetailField>
+                                                    <DetailText
+                                                        label=trs!(ui.public_url)
+                                                        value=Signal::derive(move || {
+                                                            draft.with(|d| text(&d.value, "url"))
+                                                        })
+                                                    />
+                                                </dl>
+                                            </DetailSection><DetailSection title=trs!(ui.schedule)>
+                                                <dl class="resource-facts">
+                                                    <div>
+                                                        <dt>{tr!(ui.launch)}</dt>
+                                                        <dd class="data-value">{instant(&json!(r.launch_date))}</dd>
+                                                    </div>
+                                                    <div>
+                                                        <dt>{tr!(ui.distribution_end)}</dt>
+                                                        <dd class="data-value">
+                                                            {instant(&json!(r.send_by_date))}
+                                                        </dd>
+                                                    </div>
+                                                </dl>
+                                            </DetailSection>
+                                            <DetailSection title=trs!(ui.submission_tracking)>
+                                                <dl class="resource-facts">
+                                                    <div>
+                                                        <dt>{tr!(ui.submission_tracking)}</dt>
+                                                        <dd>{tr!(ui.yes)}</dd>
+                                                    </div>
+                                                    <div>
+                                                        <dt>{tr!(ui.password_presence_only)}</dt>
+                                                        <dd>{tr!(ui.yes)}</dd>
+                                                    </div>
+                                                    <div>
+                                                        <dt>{tr!(ui.track_email_opens)}</dt>
+                                                        <dd>
+                                                            {if r.policy.track_opens {
+                                                                tr!(ui.enabled).into_any()
+                                                            } else {
+                                                                tr!(ui.not_tracked).into_any()
+                                                            }}
+                                                        </dd>
+                                                    </div>
+                                                    <div>
+                                                        <dt>{tr!(ui.redirect)}</dt>
+                                                        <dd>
+                                                            {match r.policy.learning_page_id {
+                                                                Some(id) => {
+                                                                    view! {
+                                                                        <a href=format!(
+                                                                            "/learning-pages/{id}",
+                                                                        )>
+                                                                            {array(&resources.get(), "learning_page")
+                                                                                .iter()
+                                                                                .find(|row| row["id"].as_i64() == Some(id))
+                                                                                .map(|row| text(row, "name"))
+                                                                                .unwrap_or_else(|| {
+                                                                                    leptos_i18n::t_string!(i18n, ui.unavailable).to_owned()
+                                                                                })}
+                                                                        </a>
+                                                                    }
+                                                                        .into_any()
+                                                                }
+                                                                None => r.policy.redirect_url.into_any(),
+                                                            }}
+                                                        </dd>
+                                                    </div>
+                                                </dl>
+                                            </DetailSection><section class="detail-section">
+                                                <h2>{tr!(ui.rendered_sample)}</h2>
                                                 <p>
                                                     {move || {
                                                         #[cfg(feature = "demo")]
@@ -1746,21 +1798,7 @@ pub(super) fn CreateCampaign(
                                                     <summary>{tr!(ui.plain_text)}</summary>
                                                     <pre>{r.preview.text}</pre>
                                                 </details>
-                                                <Field label=trs!(ui.test_recipient_email)>
-                                                    <TextInput
-                                                        input_type="email"
-                                                        value=Signal::derive(move || recipient.get())
-                                                        on_input=move |e| recipient.set(event_target_value(&e))
-                                                    />
-                                                </Field>
-                                                <ActionButton
-                                                    disabled=Signal::derive(move || {
-                                                        busy.get() || recipient.get().is_empty()
-                                                    })
-                                                    on_click=send_test
-                                                >
-                                                    {tr!(ui.send_test_email)}
-                                                </ActionButton>
+
                                             </section>
                                             {(!r.mailer_enabled)
                                                 .then(|| {
@@ -1783,9 +1821,43 @@ pub(super) fn CreateCampaign(
                                     }
                                 })
                         }}
+                        <Show when=move || persistence.revision.get().is_some()>
+                            <AttributionInfo value=persistence.attribution />
+                        </Show>
+                        <Show when=move || draft.with(|d| d.review.is_some())>
+                            <DetailSection title=trs!(ui.send_a_test_email)>
+                                <Field label=trs!(ui.test_recipient_email)>
+                                    <TextInput
+                                        input_type="email"
+                                        value=Signal::derive(move || recipient.get())
+                                        on_input=move |e| recipient.set(event_target_value(&e))
+                                    />
+                                </Field>
+                            </DetailSection>
+                        </Show>
                     </section>
                 </FormFields>
                 <FormFooter>
+                    <Show when=move || step.get() == 3 && draft.with(|d| d.review_error.is_some())>
+                        <ActionButton
+                            kind="button"
+                            on_click=move |_| retry_review.update(|n| *n += 1)
+                        >
+                            {tr!(ui.retry_validation)}
+                        </ActionButton>
+                    </Show>
+                    <Show when=move || step.get() == 3>
+                        <ActionButton
+                            disabled=Signal::derive(move || {
+                                busy.get() || !can_edit || recipient.get().is_empty()
+                                    || draft
+                                        .with(|d| d.review.is_none() || d.review_request.is_some())
+                            })
+                            on_click=send_test
+                        >
+                            {tr!(ui.send_test_email)}
+                        </ActionButton>
+                    </Show>
                     <ActionLink href="/campaigns" style=ButtonStyle::Ghost>
                         {tr!(ui.cancel)}
                     </ActionLink>

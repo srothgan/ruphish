@@ -27,7 +27,6 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
     let content = view! {
         <ManagementPage>
             <BackLink href=format!("/{}", family.route())>{move || family.back_label()}</BackLink>
-            {message.view()}
             <ResourceDeleteDialog
                 deletion=deletion
                 api=api
@@ -51,12 +50,8 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
                             let export_name = name.clone();
                             let delete_name = name.clone();
                             view! {
-                                <PageHeader
-                                    title=name
-                                    subtitle=leptos_i18n::t_string!(
-                                        i18n, messages.last_updated_arg0, arg0 = (crate::time_display::instant(&serde_json::json!(value.metadata.modified_date))).to_string()
-                                    )
-                                >
+                                <PageHeader title=name>
+
                                     <RefreshButton fetching=read.fetching on_refresh=read.refresh />
                                     <ResourceActions
                                         edit_href=format!("/{}/{id}/edit", family.route())
@@ -89,10 +84,12 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
                                         )>{tr!(ui.export_json)}</ActionButton>
                                     </ResourceActions>
                                 </PageHeader>
-                                <AttributionInfo value=Signal::derive(move || {
-                                    attribution.clone()
-                                }) />
-                                <Card class="resource-read-panel">{body(value)}</Card>
+                                <DetailCard>
+                                    {message.view()} {body(value)}
+                                    <AttributionInfo value=Signal::derive(move || {
+                                        attribution.clone()
+                                    }) />
+                                </DetailCard>
                             }
                         })
                 }}
@@ -113,24 +110,6 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
     }
 }
 
-fn field(label: Signal<String>, value: String) -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
-
-    view! {
-        <div>
-            <dt>{move || label.get()}</dt>
-            <dd>
-                {move || {
-                    if value.is_empty() {
-                        leptos_i18n::t_string!(i18n, ui.not_set).to_owned()
-                    } else {
-                        value.clone()
-                    }
-                }}
-            </dd>
-        </div>
-    }
-}
 fn content(html: String, plain: String) -> impl IntoView + use<> {
     view! {
         <section class="resource-section">
@@ -174,12 +153,10 @@ fn body(value: Resource) -> AnyView {
             let sorting = TableSorting::new("group-recipients", "email", SortDirection::Asc);
             let rows = StoredValue::new(group.targets);
             view! {
-                <section>
-                    <h2>
-                        {leptos_i18n::t!(
-                            i18n, messages.recipients_arg0, arg0 = (rows.with_value(Vec::len)).to_string()
-                        )}
-                    </h2>
+                <DetailSection title=trs!(ui.recipients)>
+                    <DetailGrid>
+                        {detail_text(trs!(ui.recipients), rows.with_value(Vec::len).to_string())}
+                    </DetailGrid>
                     <DataTable
                         sorting=sorting
                         columns=vec!["email", "first_name", "last_name", "position"]
@@ -219,37 +196,44 @@ fn body(value: Resource) -> AnyView {
                                 .collect_view()
                         }}
                     </DataTable>
-                </section>
+                </DetailSection>
             }
             .into_any()
         }
         Content::Template(template) => {
             let attachments = template.attachments;
+            let attachment_count = attachments.len().to_string();
             view! {
-                <dl class="resource-facts">
-                    {field(trs!(ui.subject), template.subject)}
-                    {field(
-                        trs!(ui.visible_from),
-                        if template.envelope_sender.is_empty() {
-                            leptos_i18n::t_string!(i18n, ui.sending_profile_address).into()
-                        } else {
-                            template.envelope_sender
-                        },
-                    )}
-                </dl>
+                <DetailSection title=trs!(ui.details)>
+                    <DetailGrid>
+                        {detail_text(trs!(ui.subject), template.subject)}
+                        {detail_text(
+                            trs!(ui.visible_from),
+                            if template.envelope_sender.is_empty() {
+                                leptos_i18n::t_string!(i18n, ui.sending_profile_address).into()
+                            } else {
+                                template.envelope_sender
+                            },
+                        )}
+                    </DetailGrid>
+                </DetailSection>
                 {content(template.html, template.text)}
                 <section class="resource-section">
-                    <h2>
-                        {leptos_i18n::t!(
-                            i18n, messages.attachments_arg0, arg0 = (attachments.len()).to_string()
-                        )}
-                    </h2>
-                    <ul>
+                    <h2>{tr!(ui.attachments)}</h2>
+                    <DetailGrid>{detail_text(trs!(ui.attachments), attachment_count)}</DetailGrid>
+                    <DetailGrid>
                         {attachments
                             .into_iter()
-                            .map(|a| view! { <li>{a.name}" · "{a.mime_type}</li> })
+                            .map(|a| {
+                                view! {
+                                    <DetailField label=trs!(ui.name)>{a.name}</DetailField>
+                                    <DetailField label=trs!(
+                                        ui.attachment_type
+                                    )>{a.mime_type}</DetailField>
+                                }
+                            })
                             .collect_view()}
-                    </ul>
+                    </DetailGrid>
                 </section>
             }
             .into_any()
@@ -263,9 +247,9 @@ fn body(value: Resource) -> AnyView {
             <section class="resource-section">
                 <h2>{tr!(ui.submission_tracking)}</h2>
                 <p>{tr!(ui.all_submissions_recorded)}</p>
-                <dl class="resource-facts">
-                    {field(trs!(ui.redirect_after_submission), page.redirect_url)}
-                </dl>
+                <DetailGrid>
+                    {detail_text(trs!(ui.redirect_after_submission), page.redirect_url)}
+                </DetailGrid>
             </section>
             {content(page.html, String::new())}
         }
@@ -273,23 +257,28 @@ fn body(value: Resource) -> AnyView {
         Content::Profile(profile) => {
             let headers = profile.headers;
             view! {
-                <dl class="resource-facts">
-                    {field(trs!(ui.smtp_host), profile.host)}
-                    {field(trs!(ui.sender_address), profile.from_address)}
-                    {field(trs!(ui.username), profile.username.unwrap_or_default())}
-                    {field(
-                        trs!(ui.password),
-                        if !profile.has_password {
-                            leptos_i18n::t_string!(i18n, ui.not_configured).into()
-                        } else {
-                            leptos_i18n::t_string!(i18n, ui.configured).into()
-                        },
-                    )}
-                    {field(trs!(ui.ignore_certificate_errors), yes_no(profile.ignore_cert_errors))}
-                </dl>
+                <DetailSection title=trs!(ui.details)>
+                    <DetailGrid>
+                        {detail_text(trs!(ui.smtp_host), profile.host)}
+                        {detail_text(trs!(ui.sender_address), profile.from_address)}
+                        {detail_text(trs!(ui.username), profile.username.unwrap_or_default())}
+                        {detail_text(
+                            trs!(ui.password),
+                            if !profile.has_password {
+                                leptos_i18n::t_string!(i18n, ui.not_configured).into()
+                            } else {
+                                leptos_i18n::t_string!(i18n, ui.configured).into()
+                            },
+                        )}
+                        {detail_text(
+                            trs!(ui.ignore_certificate_errors),
+                            yes_no(profile.ignore_cert_errors),
+                        )}
+                    </DetailGrid>
+                </DetailSection>
                 <section class="resource-section">
                     <h2>{tr!(ui.additional_headers)}</h2>
-                    <dl class="resource-facts">
+                    <DetailGrid>
                         {headers
                             .into_iter()
                             .map(|row| {
@@ -301,7 +290,7 @@ fn body(value: Resource) -> AnyView {
                                 }
                             })
                             .collect_view()}
-                    </dl>
+                    </DetailGrid>
                 </section>
             }
             .into_any()

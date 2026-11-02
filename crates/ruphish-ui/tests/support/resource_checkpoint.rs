@@ -3,7 +3,7 @@ use ruphish_ui::resource_state::Confirmed;
 use serde_json::{Value, json};
 
 pub fn checkpoint(kind: Kind, fields: Value, revision: &str) -> Confirmed {
-    let mut response = json!({"revision":1,"created_by":null,"edited_by":null,"edited_at":null,"modified_date":"2026-10-25T12:00:00Z"});
+    let mut response = json!({"revision":1,"created_at":null,"created_by":null,"edited_by":null,"edited_at":null,"modified_date":"2026-10-25T12:00:00Z"});
     if kind == Kind::Template {
         response["subject"] = json!("");
         response["envelope_sender"] = json!("");

@@ -179,6 +179,10 @@ fn normalize(value: &mut Value) {
         Value::Object(object) => {
             // New attribution is asserted separately from the captured Gophish payload.
             if let Some(creator) = object.remove("created_by") {
+                let created = object.remove("created_at").unwrap();
+                assert!(
+                    ruphish_application::datetime::parse_stored(created.as_str().unwrap()).is_ok()
+                );
                 assert_eq!(creator, json!({"id":1,"username":"admin","deleted":false}));
                 assert_eq!(
                     object.remove("edited_by"),
