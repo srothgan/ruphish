@@ -136,6 +136,22 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                     ]
                     empty=no_campaigns
                 >
+                    <TableEmpty slot:empty_content>
+                        {no_campaigns
+                            .then(|| {
+                                view! {
+                                    <EmptyState title=trs!(ui.no_campaigns_yet)>
+                                        <p>
+                                            {tr!(
+                                                ui.prepare_your_resources_then_create_a_campaign_to_begin
+                                            )}
+                                        </p>
+                                    </EmptyState>
+                                }
+                            })}
+
+                    </TableEmpty>
+
                     {move || {
                         ruphish_ui::overview_state::recent_campaigns(
                                 &s.recent,
@@ -191,16 +207,6 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                             .collect_view()
                     }}
                 </DataTable>
-                {no_campaigns
-                    .then(|| {
-                        view! {
-                            <EmptyState title=trs!(ui.no_campaigns_yet)>
-                                <p>
-                                    {tr!(ui.prepare_your_resources_then_create_a_campaign_to_begin)}
-                                </p>
-                            </EmptyState>
-                        }
-                    })}
                 <p class="dashboard-updated">
                     {tr!(
                         ui.recent_campaign_rates_cover_all_recorded_sends_independently_of_the_period_above

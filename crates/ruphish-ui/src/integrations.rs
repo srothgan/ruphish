@@ -252,6 +252,18 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
                         trs!(ui.actions),
                     ]
                 >
+                    <TableEmpty slot:empty_content>
+                        <ListEmptyState
+                            ready=Signal::derive(move || {
+                                confirmed.get() && list.error.get().is_none()
+                            })
+                            count=Signal::derive(move || visible.with(Vec::len))
+                            search=search
+                            title=Signal::derive(move || kind.empty_title().to_owned())
+                            guidance=Signal::derive(move || kind.empty_guidance().to_owned())
+                        />
+                    </TableEmpty>
+
                     {move || {
                         sorting
                             .rows(
@@ -292,11 +304,18 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
                                             }}
                                         </td>
                                         <td>
-                                            {if row.running() {
-                                                leptos_i18n::t_string!(i18n, ui.checking).into()
-                                            } else {
-                                                row.code().to_owned()
-                                            }}
+                                            <ReadValue
+                                                value=if row.running() {
+                                                    leptos_i18n::t_string!(i18n, ui.checking).to_owned()
+                                                } else {
+                                                    row.code().to_owned()
+                                                }
+                                                fallback=if kind.webhook() {
+                                                    trs!(ui.not_applicable)
+                                                } else {
+                                                    trs!(ui.not_recorded)
+                                                }
+                                            />
                                         </td>
                                         <td>
                                             <ResourceActions
@@ -316,13 +335,7 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
                             .collect_view()
                     }}
                 </DataTable>
-                <ListEmptyState
-                    ready=Signal::derive(move || { confirmed.get() && list.error.get().is_none() })
-                    count=Signal::derive(move || visible.with(Vec::len))
-                    search=search
-                    title=Signal::derive(move || kind.empty_title().to_owned())
-                    guidance=Signal::derive(move || kind.empty_guidance().to_owned())
-                />
+
             </QueryBoundary>
         </ManagementPage>
     }
@@ -993,17 +1006,17 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                                             <div>
                                                 <dt>{tr!(ui.account)}</dt>
                                                 <dd>
-                                                    {move || {
+                                                    <ReadValue value=Signal::derive(move || {
                                                         mailbox.get().map(|v| v.username).unwrap_or_default()
-                                                    }}
+                                                    }) />
                                                 </dd>
                                             </div>
                                             <div>
                                                 <dt>{tr!(ui.folder)}</dt>
                                                 <dd>
-                                                    {move || {
+                                                    <ReadValue value=Signal::derive(move || {
                                                         mailbox.get().map(|v| v.folder).unwrap_or_default()
-                                                    }}
+                                                    }) />
                                                 </dd>
                                             </div>
                                             <div>
@@ -1041,9 +1054,12 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                                             <div>
                                                 <dt>{tr!(ui.last_outcome)}</dt>
                                                 <dd>
-                                                    {move || {
-                                                        value.get().map(|v| v.code().to_owned()).unwrap_or_default()
-                                                    }}
+                                                    <ReadValue
+                                                        value=Signal::derive(move || {
+                                                            value.get().map(|v| v.code().to_owned()).unwrap_or_default()
+                                                        })
+                                                        fallback=trs!(ui.not_recorded)
+                                                    />
                                                 </dd>
                                             </div>
                                             <div>
@@ -1104,6 +1120,9 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                                 }}
                             </h2>
                             <DataTable
+                                empty=Signal::derive(move || {
+                                    value.get().is_none_or(|v| v.history().is_empty())
+                                })
                                 sorting=history_sort
                                 columns=if kind.webhook() {
                                     vec![
@@ -1137,6 +1156,10 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                                     ]
                                 }
                             >
+                                <TableEmpty slot:empty_content>
+                                    <p>{tr!(ui.integration_history_empty)}</p>
+                                </TableEmpty>
+
                                 {move || {
                                     history_sort
                                         .rows(
@@ -1177,17 +1200,37 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                                                             instant(&json!(run.finished))
                                                         }}
                                                     </td>
-                                                    <td>{run.code}</td>
+                                                    <td>
+                                                        <ReadValue value=run.code fallback=trs!(ui.not_recorded) />
+                                                    </td>
                                                     {if kind.webhook() {
                                                         view! {
                                                             <td>
-                                                                {run.status.map(|s| s.to_string()).unwrap_or_default()}
+                                                                <ReadValue
+                                                                    value=run.status.map(|s| s.to_string()).unwrap_or_default()
+                                                                    fallback=Signal::derive(move || {
+                                                                        if run.finished.is_none() {
+                                                                            leptos_i18n::t_string!(i18n, ui.running).to_owned()
+                                                                        } else {
+                                                                            leptos_i18n::t_string!(i18n, ui.no_http_response).to_owned()
+                                                                        }
+                                                                    })
+                                                                />
                                                             </td>
                                                             <td>
-                                                                {run.event_id.map(|s| s.to_string()).unwrap_or_default()}
+                                                                <ReadValue
+                                                                    value=run
+                                                                        .event_id
+                                                                        .map(|s| s.to_string())
+                                                                        .unwrap_or_default()
+                                                                    fallback=trs!(ui.not_applicable)
+                                                                />
                                                             </td>
                                                             <td>
-                                                                {run.attempt.map(|s| s.to_string()).unwrap_or_default()}
+                                                                <ReadValue
+                                                                    value=run.attempt.map(|s| s.to_string()).unwrap_or_default()
+                                                                    fallback=trs!(ui.not_applicable)
+                                                                />
                                                             </td>
                                                         }
                                                             .into_any()

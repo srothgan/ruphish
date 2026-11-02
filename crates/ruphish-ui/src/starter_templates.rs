@@ -289,19 +289,7 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                                         label=trs!(ui.starter_search)
                                         noun=trs!(ui.starter_items)
                                     />
-                                    <ListEmptyState
-                                        ready=Signal::derive(move || catalog.data.get().is_some())
-                                        count=Signal::derive(move || visible.get().len())
-                                        search=search
-                                        guidance=Signal::derive(move || {
-                                            if index == 2 {
-                                                leptos_i18n::t_string!(i18n, ui.starter_learning_empty)
-                                                    .to_string()
-                                            } else {
-                                                leptos_i18n::t_string!(i18n, ui.starter_empty).to_string()
-                                            }
-                                        })
-                                    />
+
                                     <DataTable
                                         sorting=sorting
                                         columns=if index == 0 {
@@ -315,6 +303,22 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                                         empty=Signal::derive(move || visible.with(Vec::is_empty))
                                         headers=headers.clone()
                                     >
+                                        <TableEmpty slot:empty_content>
+                                            <ListEmptyState
+                                                ready=Signal::derive(move || catalog.data.get().is_some())
+                                                count=Signal::derive(move || visible.get().len())
+                                                search=search
+                                                guidance=Signal::derive(move || {
+                                                    if index == 2 {
+                                                        leptos_i18n::t_string!(i18n, ui.starter_learning_empty)
+                                                            .to_string()
+                                                    } else {
+                                                        leptos_i18n::t_string!(i18n, ui.starter_empty).to_string()
+                                                    }
+                                                })
+                                            />
+                                        </TableEmpty>
+
                                         <For
                                             each=move || {
                                                 sorting

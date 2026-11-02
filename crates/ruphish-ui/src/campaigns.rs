@@ -189,6 +189,28 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
                         trs!(ui.actions),
                     ]
                 >
+                    <TableEmpty slot:empty_content>
+                        <Show when=move || {
+                            loaded.get() && !busy.get() && read.error.get().is_none()
+                                && rows.get().is_empty()
+                        }>
+                            <EmptyState title=Signal::derive(move || {
+                                if filter.get() == "drafts" {
+                                    leptos_i18n::t_string!(i18n,ui.no_drafts).to_owned()
+                                } else {
+                                    leptos_i18n::t_string!(i18n,ui.no_campaigns_on_this_page)
+                                        .to_owned()
+                                }
+                            })>
+                                <p>
+                                    {tr!(
+                                        ui.create_a_campaign_to_select_an_audience_review_content_and_choose_a_schedule
+                                    )}
+                                </p>
+                            </EmptyState>
+                        </Show>
+                    </TableEmpty>
+
                     {move || {
                         rows.get()
                             .into_iter()
@@ -276,24 +298,6 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
                             .collect_view()
                     }}
                 </DataTable>
-                <Show when=move || {
-                    loaded.get() && !busy.get() && read.error.get().is_none()
-                        && rows.get().is_empty()
-                }>
-                    <EmptyState title=Signal::derive(move || {
-                        if filter.get() == "drafts" {
-                            leptos_i18n::t_string!(i18n,ui.no_drafts).to_owned()
-                        } else {
-                            leptos_i18n::t_string!(i18n,ui.no_campaigns_on_this_page).to_owned()
-                        }
-                    })>
-                        <p>
-                            {tr!(
-                                ui.create_a_campaign_to_select_an_audience_review_content_and_choose_a_schedule
-                            )}
-                        </p>
-                    </EmptyState>
-                </Show>
                 <PaginationControls
                     disabled=Signal::derive(move || busy.get() || mutating.get())
                     has_previous=Signal::derive(move || cursors.with(|c| c.len() > 1))
@@ -2268,6 +2272,9 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
                                         </Show>
                                         {delivery_progress(data)}
                                         <DataTable
+                                            empty=Signal::derive(move || {
+                                                data.with(|p| p.as_ref().is_none_or(|p| p.items.is_empty()))
+                                            })
                                             sorting=sorting
                                             columns=vec!["", "email", "state", "due", "attempt_count"]
                                             label=trs!(ui.campaign_delivery)
@@ -2279,6 +2286,10 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
                                                 trs!(ui.attempts_and_actions),
                                             ]
                                         >
+                                            <TableEmpty slot:empty_content>
+                                                <p>{tr!(ui.no_matching_recipients)}</p>
+                                            </TableEmpty>
+
                                             <For
                                                 each=move || {
                                                     data.with(|page| {

@@ -445,6 +445,18 @@ fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
                     empty=Signal::derive(move || visible.with(Vec::is_empty))
                     headers=vec![trs!(ui.user), trs!(ui.role), trs!(ui.status), trs!(ui.actions)]
                 >
+                    <TableEmpty slot:empty_content>
+                        <ListEmptyState
+                            ready=Signal::derive(move || {
+                                confirmed.get() && list.error.get().is_none()
+                            })
+                            count=Signal::derive(move || visible.with(Vec::len))
+                            search=search
+                            title=trs!(ui.no_users_found)
+                            guidance=trs!(ui.create_a_user_to_get_started)
+                        />
+                    </TableEmpty>
+
                     {move || {
                         sorting
                             .rows(
@@ -555,13 +567,7 @@ fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
                             .collect_view()
                     }}
                 </DataTable>
-                <ListEmptyState
-                    ready=Signal::derive(move || { confirmed.get() && list.error.get().is_none() })
-                    count=Signal::derive(move || visible.with(Vec::len))
-                    search=search
-                    title=trs!(ui.no_users_found)
-                    guidance=trs!(ui.create_a_user_to_get_started)
-                />
+
                 {move || {
                     deleting
                         .get()

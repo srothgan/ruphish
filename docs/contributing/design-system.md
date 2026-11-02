@@ -132,13 +132,13 @@ Resource details, including domains, webhooks and reporting mailboxes, campaign 
 
 Use the shared detail card, section, grid and field components. Sections have titles inside the same card. Each individual value has a small label directly above it, with no indentation. Use exactly two equal, left-aligned columns at laptop widths and one column on narrow screens. Tables, previews and long content may span both columns; table headers supply their labels. Avoid nested cards and preserve specialized preview and disclosure behavior.
 
-Record information consistently presents Created at / Created by, then Last edited at / Last edited by. Display unknown historical metadata as Unknown, unconfigured values as Not set, and unavailable referenced resources as Unavailable. Attribution reflects confirmed saves, never unsaved edits or worker activity. Keep review/test/launch actions outside the card and maintain their existing validation and recovery semantics.
+Record information consistently presents Created at / Created by, then Last edited at / Last edited by. Display unknown historical metadata as Unknown, unconfigured values as Not set, and unavailable referenced resources as Unavailable. Use `ReadValue` for read-only text and table cells; whitespace-only text is absent, while zero and false remain values. `DetailText` delegates to the same helper. Features choose the correct fallback: Not applicable for fields that do not belong to the operation, No HTTP response for a completed request without a response, and Running for unfinished work. Empty content and additional-header sections explain their absence rather than leaving a bare heading. Attribution reflects confirmed saves, never unsaved edits or worker activity. Keep review/test/launch actions outside the card and maintain their existing validation and recovery semantics.
 
 ### Lists, tables and empty states
 
 Use consistent search, headings, row actions and pagination across management screens. Align numeric data for comparison and give actions their own clear location. The clickable area should match the visible control.
 
-Distinguish an empty collection from a search with no matches, a pending load and a failed request. Empty states explain a useful next action. Avoid showing a table header without meaningful content beneath it. Pagination controls reflect whether another page is available.
+Distinguish an empty collection from a search with no matches, a pending load and a failed request. Empty states explain a useful next action. Avoid showing a table header without meaningful content beneath it. Every `DataTable` must receive `empty` derived from its displayed rows and a `TableEmpty` slot with contextual content. The shared table hides its table surface, including sorting controls, while empty; keep query loading/error ownership outside it. Use the existing list empty state for searched directories and concise messages inside detail cards. Pagination controls reflect whether another page is available.
 
 ### Tabs, disclosures and dialogs
 

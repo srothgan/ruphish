@@ -111,10 +111,12 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
 }
 
 fn content(html: String, plain: String) -> impl IntoView + use<> {
+    let empty = html.trim().is_empty() && plain.trim().is_empty();
     view! {
         <section class="resource-section">
             <h2>{tr!(ui.content)}</h2>
-            {(!html.is_empty())
+            {empty.then(|| view! { <p>{tr!(ui.no_content_available)}</p> })}
+            {(!html.trim().is_empty())
                 .then(|| {
                     view! {
                         <p>
@@ -135,7 +137,7 @@ fn content(html: String, plain: String) -> impl IntoView + use<> {
                         </details>
                     }
                 })}
-            {(!plain.is_empty())
+            {(!plain.trim().is_empty())
                 .then(|| {
                     view! {
                         <h3>{tr!(ui.plain_text)}</h3>
@@ -158,6 +160,7 @@ fn body(value: Resource) -> AnyView {
                         {detail_text(trs!(ui.recipients), rows.with_value(Vec::len).to_string())}
                     </DetailGrid>
                     <DataTable
+                        empty=rows.with_value(Vec::is_empty)
                         sorting=sorting
                         columns=vec!["email", "first_name", "last_name", "position"]
                         label=trs!(ui.recipients)
@@ -168,6 +171,10 @@ fn body(value: Resource) -> AnyView {
                             trs!(ui.position),
                         ]
                     >
+                        <TableEmpty slot:empty_content>
+                            <p>{tr!(ui.no_recipients_added)}</p>
+                        </TableEmpty>
+
                         {move || {
                             sorting
                                 .current
@@ -187,9 +194,15 @@ fn body(value: Resource) -> AnyView {
                                     view! {
                                         <tr>
                                             <th scope="row">{row.email}</th>
-                                            <td>{row.first_name}</td>
-                                            <td>{row.last_name}</td>
-                                            <td>{row.position}</td>
+                                            <td>
+                                                <ReadValue value=row.first_name />
+                                            </td>
+                                            <td>
+                                                <ReadValue value=row.last_name />
+                                            </td>
+                                            <td>
+                                                <ReadValue value=row.position />
+                                            </td>
                                         </tr>
                                     }
                                 })
@@ -209,7 +222,7 @@ fn body(value: Resource) -> AnyView {
                         {detail_text(trs!(ui.subject), template.subject)}
                         {detail_text(
                             trs!(ui.visible_from),
-                            if template.envelope_sender.is_empty() {
+                            if template.envelope_sender.trim().is_empty() {
                                 leptos_i18n::t_string!(i18n, ui.sending_profile_address).into()
                             } else {
                                 template.envelope_sender
@@ -226,10 +239,12 @@ fn body(value: Resource) -> AnyView {
                             .into_iter()
                             .map(|a| {
                                 view! {
-                                    <DetailField label=trs!(ui.name)>{a.name}</DetailField>
-                                    <DetailField label=trs!(
-                                        ui.attachment_type
-                                    )>{a.mime_type}</DetailField>
+                                    <DetailText label=trs!(ui.name) value=a.name />
+                                    <DetailText
+                                        label=trs!(ui.attachment_type)
+                                        value=a.mime_type
+                                        fallback=trs!(ui.unknown)
+                                    />
                                 }
                             })
                             .collect_view()}
@@ -256,6 +271,7 @@ fn body(value: Resource) -> AnyView {
         .into_any(),
         Content::Profile(profile) => {
             let headers = profile.headers;
+            let no_headers = headers.is_empty();
             view! {
                 <DetailSection title=trs!(ui.details)>
                     <DetailGrid>
@@ -278,6 +294,7 @@ fn body(value: Resource) -> AnyView {
                 </DetailSection>
                 <section class="resource-section">
                     <h2>{tr!(ui.additional_headers)}</h2>
+                    {no_headers.then(|| view! { <p>{tr!(ui.no_additional_headers)}</p> })}
                     <DetailGrid>
                         {headers
                             .into_iter()
@@ -285,7 +302,9 @@ fn body(value: Resource) -> AnyView {
                                 view! {
                                     <div>
                                         <dt>{row.key}</dt>
-                                        <dd>{row.value}</dd>
+                                        <dd>
+                                            <ReadValue value=row.value />
+                                        </dd>
                                     </div>
                                 }
                             })

@@ -163,6 +163,20 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
                         trs!(ui.actions),
                     ]
                 >
+                    <TableEmpty slot:empty_content>
+                        <ListEmptyState
+                            ready=Signal::derive(move || {
+                                confirmed.get() && list.error.get().is_none()
+                            })
+                            count=Signal::derive(move || visible.with(Vec::len))
+                            search=search
+                            title=trs!(ui.no_domains_found)
+                            guidance=trs!(
+                                ui.add_a_hostname_prove_dns_control_and_check_routing_and_https_before_using_it_in
+                            )
+                        />
+                    </TableEmpty>
+
                     {move || {
                         sorting
                             .rows(
@@ -232,15 +246,7 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
                             .collect_view()
                     }}
                 </DataTable>
-                <ListEmptyState
-                    ready=Signal::derive(move || { confirmed.get() && list.error.get().is_none() })
-                    count=Signal::derive(move || visible.with(Vec::len))
-                    search=search
-                    title=trs!(ui.no_domains_found)
-                    guidance=trs!(
-                        ui.add_a_hostname_prove_dns_control_and_check_routing_and_https_before_using_it_in
-                    )
-                />
+
             </QueryBoundary>
         </ManagementPage>
     }
@@ -804,6 +810,7 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                                         .into_any();
                                 }
                                 let has_result = d.checked_at > 0;
+                                let history_empty = d.history.is_empty();
                                 let domain_state = state(&d);
                                 let domain_tone = status_tone(&d.verification.status);
                                 let checking = d.active_check.is_some();
@@ -931,6 +938,7 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                                                 }
                                             })}
                                         <DataTable
+                                            empty=false
                                             label=trs!(ui.domain_verification)
                                             class="domain-verification"
                                             sorting=checks_sort
@@ -941,6 +949,10 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                                                 trs!(ui.requirement),
                                             ]
                                         >
+                                            <TableEmpty slot:empty_content>
+                                                <p>{tr!(ui.no_verification_history_available)}</p>
+                                            </TableEmpty>
+
                                             {move || {
                                                 let mut rows = vec![
                                                     (
@@ -1000,75 +1012,72 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                                                 ui.latest_ten_completed_checks_a_failed_or_timed_out_check_immediately_makes_the_do
                                             )}
                                         </p>
-                                        {if d.history.is_empty() {
-                                            view! { <p>{tr!(ui.no_verification_history_available)}</p> }
-                                                .into_any()
-                                        } else {
-                                            view! {
-                                                <DataTable
-                                                    sorting=history_sort
-                                                    columns=vec!["finished", "state", "duration", "code"]
-                                                    label=trs!(ui.verification_history)
-                                                    headers=vec![
-                                                        trs!(ui.finished),
-                                                        trs!(ui.outcome),
-                                                        trs!(ui.duration),
-                                                        trs!(ui.details),
-                                                    ]
-                                                >
-                                                    {move || {
-                                                        history_sort
-                                                            .rows(
-                                                                d.history.clone(),
-                                                                |row, key| match key {
-                                                                    "state" => outcome(&row.state).into(),
-                                                                    "duration" => {
-                                                                        row.started_at
-                                                                            .zip(row.finished_at)
-                                                                            .map_or(SortValue::Missing, |(a, b)| (b - a).max(0).into())
-                                                                    }
-                                                                    "code" => check_explanation(&row.code).into(),
-                                                                    _ => row.finished_at.map_or(SortValue::Missing, Into::into),
-                                                                },
-                                                                |row| row.id.into(),
-                                                            )
-                                                            .into_iter()
-                                                            .map(|r| {
-                                                                view! {
-                                                                    <tr>
-                                                                        <td class="data-value">
-                                                                            {r
-                                                                                .finished_at
-                                                                                .map(instant)
-                                                                                .unwrap_or_else(|| {
-                                                                                    leptos_i18n::t_string!(i18n, ui.not_recorded).into()
-                                                                                })}
-                                                                        </td>
-                                                                        <td>
-                                                                            <StatusBadge tone=status_tone(
-                                                                                &r.state,
-                                                                            )>{outcome(&r.state)}</StatusBadge>
-                                                                        </td>
-                                                                        <td>
-                                                                            {match (r.started_at, r.finished_at) {
-                                                                                (Some(start), Some(end)) => {
-                                                                                    leptos_i18n::t_string!(
-                                                                                        i18n, messages.count_seconds, count = (end-start).max(0)
-                                                                                    )
-                                                                                }
-                                                                                _ => leptos_i18n::t_string!(i18n, ui.not_recorded).into(),
-                                                                            }}
-                                                                        </td>
-                                                                        <td>{check_explanation(&r.code)}</td>
-                                                                    </tr>
-                                                                }
-                                                            })
-                                                            .collect_view()
-                                                    }}
-                                                </DataTable>
-                                            }
-                                                .into_any()
-                                        }}
+                                        <DataTable
+                                            empty=history_empty
+                                            sorting=history_sort
+                                            columns=vec!["finished", "state", "duration", "code"]
+                                            label=trs!(ui.verification_history)
+                                            headers=vec![
+                                                trs!(ui.finished),
+                                                trs!(ui.outcome),
+                                                trs!(ui.duration),
+                                                trs!(ui.details),
+                                            ]
+                                        >
+                                            <TableEmpty slot:empty_content>
+                                                <p>{tr!(ui.no_verification_history_available)}</p>
+                                            </TableEmpty>
+
+                                            {move || {
+                                                history_sort
+                                                    .rows(
+                                                        d.history.clone(),
+                                                        |row, key| match key {
+                                                            "state" => outcome(&row.state).into(),
+                                                            "duration" => {
+                                                                row.started_at
+                                                                    .zip(row.finished_at)
+                                                                    .map_or(SortValue::Missing, |(a, b)| (b - a).max(0).into())
+                                                            }
+                                                            "code" => check_explanation(&row.code).into(),
+                                                            _ => row.finished_at.map_or(SortValue::Missing, Into::into),
+                                                        },
+                                                        |row| row.id.into(),
+                                                    )
+                                                    .into_iter()
+                                                    .map(|r| {
+                                                        view! {
+                                                            <tr>
+                                                                <td class="data-value">
+                                                                    {r
+                                                                        .finished_at
+                                                                        .map(instant)
+                                                                        .unwrap_or_else(|| {
+                                                                            leptos_i18n::t_string!(i18n, ui.not_recorded).into()
+                                                                        })}
+                                                                </td>
+                                                                <td>
+                                                                    <StatusBadge tone=status_tone(
+                                                                        &r.state,
+                                                                    )>{outcome(&r.state)}</StatusBadge>
+                                                                </td>
+                                                                <td>
+                                                                    {match (r.started_at, r.finished_at) {
+                                                                        (Some(start), Some(end)) => {
+                                                                            leptos_i18n::t_string!(
+                                                                                i18n, messages.count_seconds, count = (end-start).max(0)
+                                                                            )
+                                                                        }
+                                                                        _ => leptos_i18n::t_string!(i18n, ui.not_recorded).into(),
+                                                                    }}
+                                                                </td>
+                                                                <td>{check_explanation(&r.code)}</td>
+                                                            </tr>
+                                                        }
+                                                    })
+                                                    .collect_view()
+                                            }}
+                                        </DataTable>
                                     </section>
                                 }
                                     .into_any()

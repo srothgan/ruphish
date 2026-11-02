@@ -307,8 +307,6 @@
   .management-table tbody th { font-weight: var(--fw-semibold); }
   .management-table .row-actions { align-items: center; flex-wrap: nowrap; gap: var(--s3); }
   .management-table button { padding: 0 var(--s2); min-height: var(--control-h-sm); font-size: var(--fs-sm); }
-  .management-table.is-empty { min-width: 0; }
-  .management-table.is-empty thead { display: none; }
   .management-empty { padding: 48px var(--s5); text-align: center; background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md); }
   .management-empty p { margin-inline: auto; color: var(--muted); }
 
