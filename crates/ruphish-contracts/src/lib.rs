@@ -3,13 +3,14 @@
 //! Wire types belong here; backend credentials, database records, and domain
 //! validation authority do not. Contracts must compile for native Rust and WASM.
 
+pub mod attribution;
 pub mod auth;
 pub mod campaign;
 pub mod campaign_details;
 pub mod campaign_reads;
 pub mod campaign_workflow;
+pub mod common;
 pub mod domains;
-pub mod legacy;
 pub mod reporting;
 
 pub mod overview;

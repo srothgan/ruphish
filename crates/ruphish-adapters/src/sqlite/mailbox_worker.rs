@@ -8,7 +8,6 @@ use sqlx::{Row, sqlite::SqliteRow};
 pub(super) fn config(r: &SqliteRow) -> Result<Config, Error> {
     Ok(Config {
         id: r.try_get("id").map_err(db)?,
-        owner: r.try_get("owner_id").map_err(db)?,
         revision: r.try_get("revision").map_err(db)?,
         host: text(r, "host")?,
         port: r.try_get::<i64, _>("port").map_err(db)? as u16,
@@ -39,11 +38,10 @@ impl MailboxQueue for Integrations {
             r#"
                 SELECT m.*
                 FROM ruphish_mailboxes m
-                JOIN users u ON u.id=m.owner_id
                 WHERE m.enabled=1 AND (SELECT reporting_mailboxes_enabled FROM ruphish_settings WHERE id=1)
                 AND m.next_check<=?
                 AND m.lease<=?
-                AND COALESCE(u.account_locked,0)=0 AND EXISTS(SELECT 1 FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=u.role_id AND p.slug='modify_objects')
+
                 ORDER BY m.next_check,m.id LIMIT 1
             "#,
         )
@@ -211,11 +209,10 @@ impl MailboxQueue for Integrations {
                 r#"
                 SELECT EXISTS(SELECT 1
                 FROM ruphish_mailboxes m
-                JOIN users u ON u.id=m.owner_id
                 WHERE m.id=?
                 AND m.revision=?
                 AND m.enabled=1 AND (SELECT reporting_mailboxes_enabled FROM ruphish_settings WHERE id=1)
-                AND COALESCE(u.account_locked,0)=0 AND EXISTS(SELECT 1 FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=u.role_id AND p.slug='modify_objects'))
+                )
             "#,
             )
             .bind(c.id)
@@ -362,11 +359,10 @@ impl MailboxQueue for Integrations {
             r#"
                 SELECT EXISTS(SELECT 1
                 FROM ruphish_mailboxes m
-                JOIN users u ON u.id=m.owner_id
                 WHERE m.id=?
                 AND m.revision=?
                 AND m.enabled=1 AND (SELECT reporting_mailboxes_enabled FROM ruphish_settings WHERE id=1)
-                AND COALESCE(u.account_locked,0)=0 AND EXISTS(SELECT 1 FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=u.role_id AND p.slug='modify_objects'))
+                )
             "#,
         )
         .bind(c.id)

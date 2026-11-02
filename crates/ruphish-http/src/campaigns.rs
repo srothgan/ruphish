@@ -1,4 +1,5 @@
 //! Legacy campaign routes with explicit mutation permissions and additive UI metadata.
+use crate::attribution::Lookup;
 mod directory;
 mod drafts;
 use crate::response::stored_date as date;
@@ -19,7 +20,7 @@ use ruphish_application::{
     campaign as app,
     resources::{Error, Kind},
 };
-use ruphish_contracts::{campaign as wire, campaign_workflow as workflow, legacy::Timestamp};
+use ruphish_contracts::{campaign as wire, campaign_workflow as workflow, common::Timestamp};
 use ruphish_contracts::{campaign_details as details, resource_details as resource};
 use ruphish_contracts::{campaign_reads as reads, errors::ErrorCode};
 fn now() -> i64 {
@@ -92,8 +93,19 @@ fn events(c: &app::Campaign) -> Vec<details::Event> {
         })
         .collect()
 }
-fn metadata(c: &app::Campaign) -> details::Metadata {
+fn attributions(
+    c: &app::Campaign,
+) -> impl Iterator<Item = &ruphish_application::attribution::Attribution> {
+    std::iter::once(&c.attribution).chain(
+        c.resources
+            .iter()
+            .chain(c.groups.iter())
+            .map(|r| &r.attribution),
+    )
+}
+fn metadata(c: &app::Campaign, lookup: &Lookup) -> details::Metadata {
     details::Metadata {
+        attribution: lookup.resolve(&c.attribution),
         track_opens: c.policy.as_ref().is_none_or(|p| p.track_opens),
         id: c.id,
         name: c.name.clone(),
@@ -104,10 +116,10 @@ fn metadata(c: &app::Campaign) -> details::Metadata {
         completed_date: date(&c.completed),
     }
 }
-fn encode_campaign(c: &app::Campaign) -> Result<details::Campaign, Rejection> {
+fn encode_campaign(c: &app::Campaign, lookup: &Lookup) -> Result<details::Campaign, Rejection> {
     let (mut template, mut page, mut smtp) = (None, None, None);
     for r in &c.resources {
-        let resource::Resource { metadata, content } = encode(r);
+        let resource::Resource { metadata, content } = encode(r, lookup);
         match content {
             resource::Content::Template(content) => {
                 template = Some(resource::Resource { metadata, content })
@@ -122,7 +134,7 @@ fn encode_campaign(c: &app::Campaign) -> Result<details::Campaign, Rejection> {
         }
     }
     Ok(details::Campaign {
-        metadata: metadata(c),
+        metadata: metadata(c, lookup),
         url: c.url.clone(),
         template: template.ok_or_else(|| error(Error::Internal))?,
         page: page.ok_or_else(|| error(Error::Internal))?,
@@ -132,11 +144,11 @@ fn encode_campaign(c: &app::Campaign) -> Result<details::Campaign, Rejection> {
         groups: None,
     })
 }
-fn encode_summary(c: &app::Campaign) -> details::Summary {
+fn encode_summary(c: &app::Campaign, lookup: &Lookup) -> details::Summary {
     let [sent, opened, clicked, submitted, reported] = c.progression();
     let failed = c.results.iter().filter(|r| r.status == "Error").count();
     details::Summary {
-        metadata: metadata(c),
+        metadata: metadata(c, lookup),
         stats: details::Counts {
             total: c.results.len(),
             sent,
@@ -201,6 +213,7 @@ fn command(context: &Context, input: wire::Create) -> Result<app::Create, Reject
     let timestamp = |t: Option<Timestamp>| t.map(|t| t.0.as_second());
     let p = input.policy.unwrap_or_default();
     let mut result = app::Create {
+        learning_revision: input.learning_revision,
         name: input.name,
         groups: input.selection.groups.into_iter().map(select).collect(),
         template: select(input.selection.template),
@@ -295,7 +308,7 @@ async fn prepare_inner(context: Context, body: Bytes, draft: bool) -> Result<Res
     let selected = |r: &ruphish_application::resources::Resource| workflow::ReviewedResource {
         id: r.id,
         name: r.name.clone(),
-        revision: r.modified_date.clone(),
+        revision: r.revision.to_string(),
     };
     let attributes =
         |r: &ruphish_application::resources::Recipient| workflow::RecipientAttributes {
@@ -311,7 +324,7 @@ async fn prepare_inner(context: Context, body: Bytes, draft: bool) -> Result<Res
             .map(|g| workflow::ReviewedResource {
                 id: g.id,
                 name: g.name.clone(),
-                revision: g.modified_date.clone(),
+                revision: g.revision.to_string(),
             })
             .collect(),
         template: selected(&p.template),
@@ -331,6 +344,7 @@ async fn prepare_inner(context: Context, body: Bytes, draft: bool) -> Result<Res
     let conflict_count = p.conflict_count;
     let launch_date = p.launch;
     let policy = read_policy(&p.policy);
+    let learning_revision = p.learning.as_ref().map(|r| r.revision.to_string());
     let warnings = if let ruphish_application::resources::Content::Page(page) = &p.page.content {
         crate::resources::warnings(
             context
@@ -350,6 +364,7 @@ async fn prepare_inner(context: Context, body: Bytes, draft: bool) -> Result<Res
     response(
         StatusCode::OK,
         &workflow::Review {
+            learning_revision,
             warnings,
             total: count,
             duplicate_count: total - count,
@@ -380,14 +395,16 @@ async fn create(context: Context, body: Bytes) -> Result<Response, Rejection> {
         .create(user.identity, input, now())
         .await
         .map_err(launch_error)?;
-    let mut value = encode_campaign(&campaign)?;
+    let lookup = Lookup::from_identities(campaign.identities);
+    let campaign = campaign.record;
+    let mut value = encode_campaign(&campaign, &lookup)?;
     value.timeline.clear();
     value.groups = Some(
         campaign
             .groups
             .iter()
             .map(|group| {
-                let resource::Resource { metadata, content } = encode(group);
+                let resource::Resource { metadata, content } = encode(group, &lookup);
                 match content {
                     resource::Content::Group(content) => {
                         Ok(resource::Resource { metadata, content })
@@ -407,11 +424,12 @@ async fn list(context: Context) -> Result<Response, Rejection> {
         .list(user.identity)
         .await
         .map_err(error)?;
+    let lookup = Lookup::load(&context, rows.iter().flat_map(attributions)).await?;
     let response = response(
         StatusCode::OK,
         &rows
             .iter()
-            .map(encode_campaign)
+            .map(|v| encode_campaign(v, &lookup))
             .collect::<Result<Vec<_>, _>>()?,
         None,
     )?;
@@ -435,7 +453,8 @@ async fn read(context: Context, Path(id): Path<i64>) -> Result<Response, Rejecti
         .get(user.identity, id)
         .await
         .map_err(error)?;
-    response(StatusCode::OK, &encode_campaign(&c)?, None)
+    let lookup = Lookup::load(&context, attributions(&c)).await?;
+    response(StatusCode::OK, &encode_campaign(&c, &lookup)?, None)
 }
 async fn context(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
@@ -444,7 +463,8 @@ async fn context(context: Context, Path(id): Path<i64>) -> Result<Response, Reje
         .header(user.identity, id)
         .await
         .map_err(error)?;
-    response(StatusCode::OK, &encode_header(&campaign), None)
+    let lookup = Lookup::load(&context, [&campaign.attribution]).await?;
+    response(StatusCode::OK, &encode_header(&campaign, &lookup), None)
 }
 async fn summary(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
@@ -453,7 +473,8 @@ async fn summary(context: Context, Path(id): Path<i64>) -> Result<Response, Reje
         .get(user.identity, id)
         .await
         .map_err(error)?;
-    response(StatusCode::OK, &encode_summary(&c), None)
+    let lookup = Lookup::load(&context, attributions(&c)).await?;
+    response(StatusCode::OK, &encode_summary(&c, &lookup), None)
 }
 async fn summaries(context: Context) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
@@ -462,11 +483,12 @@ async fn summaries(context: Context) -> Result<Response, Rejection> {
         .list(user.identity)
         .await
         .map_err(error)?;
+    let lookup = Lookup::load(&context, rows.iter().map(|v| &v.attribution)).await?;
     response(
         StatusCode::OK,
         &details::Summaries {
             total: rows.len(),
-            campaigns: rows.iter().map(encode_summary).collect(),
+            campaigns: rows.iter().map(|v| encode_summary(v, &lookup)).collect(),
         },
         None,
     )
@@ -480,7 +502,7 @@ async fn complete(context: Context, Path(id): Path<i64>) -> Result<Response, Rej
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &ruphish_contracts::legacy::Envelope::<()> {
+        &ruphish_contracts::common::Envelope::<()> {
             success: true,
             message: "Campaign completed successfully!".into(),
             data: None,
@@ -497,7 +519,7 @@ async fn delete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejec
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &ruphish_contracts::legacy::Envelope::<()> {
+        &ruphish_contracts::common::Envelope::<()> {
             success: true,
             message: "Campaign deleted successfully!".into(),
             data: None,
@@ -505,13 +527,7 @@ async fn delete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejec
         None,
     )
 }
-#[derive(serde::Deserialize, Default)]
-#[serde(default)]
-struct Page {
-    after: i64,
-    limit: Option<i64>,
-    completed: Option<bool>,
-}
+use ruphish_contracts::campaign::request::OverviewPage as Page;
 fn read_policy(p: &app::InteractionPolicy) -> reads::Policy {
     reads::Policy {
         track_opens: p.track_opens,
@@ -519,12 +535,13 @@ fn read_policy(p: &app::InteractionPolicy) -> reads::Policy {
         learning_page_id: p.learning_page_id,
     }
 }
-fn encode_header(c: &app::CampaignHeader) -> reads::Header {
+fn encode_header(c: &app::CampaignHeader, lookup: &Lookup) -> reads::Header {
     let resource = |r: &app::CampaignResource| reads::Resource {
         id: r.id,
         name: r.name.clone(),
     };
     reads::Header {
+        attribution: lookup.resolve(&c.attribution),
         id: c.id,
         name: c.name.clone(),
         status: c.status,
@@ -555,25 +572,22 @@ async fn overview(context: Context, Query(page): Query<Page>) -> Result<Response
         )
         .await
         .map_err(error)?;
+    let lookup = Lookup::load(&context, rows.items.iter().map(|v| &v.attribution)).await?;
     response(
         StatusCode::OK,
         &reads::Overview {
-            items: rows.items.iter().map(encode_header).collect(),
+            items: rows
+                .items
+                .iter()
+                .map(|v| encode_header(v, &lookup))
+                .collect(),
             next_after: rows.next_after,
             mailer_enabled: context.mailer_enabled(),
         },
         None,
     )
 }
-#[derive(Default, serde::Deserialize)]
-#[serde(default)]
-struct DeliveryPage {
-    after: i64,
-    limit: Option<i64>,
-    sort: Option<ruphish_application::pagination::DeliverySort>,
-    order: Option<ruphish_application::reporting::SortDirection>,
-    cursor: String,
-}
+use ruphish_contracts::campaign::request::DeliveryPage;
 async fn deliveries(
     context: Context,
     Path(id): Path<i64>,
@@ -610,8 +624,9 @@ async fn deliveries(
         .await
         .map_err(error)?;
     let campaign = &view.campaign;
+    let lookup = Lookup::load(&context, [&campaign.attribution]).await?;
     let value = reads::Delivery {
-        campaign: encode_header(campaign),
+        campaign: encode_header(campaign, &lookup),
         counts: view.counts.into_iter().collect(),
         items: view
             .items
@@ -648,11 +663,7 @@ async fn deliveries(
     };
     response(StatusCode::OK, &value, None)
 }
-#[derive(serde::Deserialize)]
-struct HistoryPage {
-    before_attempt: Option<i64>,
-    before_event: Option<i64>,
-}
+use ruphish_contracts::campaign::request::HistoryPage;
 async fn recipient_history(
     context: Context,
     Path((campaign, result)): Path<(i64, i64)>,
@@ -713,11 +724,7 @@ fn encode_attempt(a: &app::Attempt) -> reads::Attempt {
     }
 }
 
-#[derive(serde::Deserialize)]
-struct Resolve {
-    generation: i64,
-    action: String,
-}
+use ruphish_contracts::campaign::request::Resolve;
 async fn resolve(
     context: Context,
     Path((campaign, result)): Path<(i64, i64)>,
@@ -745,7 +752,7 @@ async fn resolve(
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &ruphish_contracts::legacy::Envelope::<()> {
+        &ruphish_contracts::common::Envelope::<()> {
             success: true,
             message: "Delivery updated".into(),
             data: None,
@@ -782,7 +789,7 @@ async fn test(context: Context, body: Bytes) -> Result<Response, Rejection> {
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &ruphish_contracts::legacy::Envelope::<()> {
+        &ruphish_contracts::common::Envelope::<()> {
             success: true,
             message: "Accepted by SMTP server".into(),
             data: None,

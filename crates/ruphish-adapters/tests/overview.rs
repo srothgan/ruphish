@@ -43,7 +43,8 @@ async fn event(
         .bind(campaign).bind(email).bind(match kind { "Email Sent"=>"email_sent", "Email Opened"=>"email_opened", "Clicked Link"=>"link_clicked", "Submitted Data"=>"form_submitted", "Email Reported"=>"email_reported", other=>other }).bind(time).bind(details).bind(campaign).bind(email).execute(pool).await.unwrap();
 }
 #[tokio::test]
-async fn acceptance_cohorts_deduplicate_isolate_owners_and_reject_untrusted_presence_values() {
+async fn acceptance_cohorts_deduplicate_include_all_creators_and_reject_untrusted_presence_values()
+{
     let (_dir, db, repo) = setup().await;
     let pool = db.inspection_pool();
     for (email, at) in [
@@ -102,8 +103,8 @@ async fn acceptance_cohorts_deduplicate_isolate_owners_and_reject_untrusted_pres
         assert_eq!(
             repo.posture(OWNER, window, NOW).await.unwrap().counts,
             Posture {
-                delivered: sent,
-                opened,
+                delivered: sent + 1,
+                opened: opened + 1,
                 clicked: sent,
                 reported: 1,
                 credentials_entered: 2
@@ -116,9 +117,11 @@ async fn acceptance_cohorts_deduplicate_isolate_owners_and_reject_untrusted_pres
             .unwrap()
             .counts,
         Posture {
-            delivered: 1,
-            opened: 1,
-            ..Default::default()
+            delivered: 6,
+            opened: 6,
+            clicked: 5,
+            reported: 1,
+            credentials_entered: 2
         }
     );
     assert_eq!(
@@ -180,13 +183,13 @@ async fn snapshot_tracks_queued_launches_expiry_current_delivery_issues_and_inve
         vec![7, 6, 5, 4, 3]
     );
     assert_eq!(s.attention.next_launch.as_ref().map(|n| n.id), Some(3));
-    assert_eq!(s.attention.delivery_problems, 3);
-    assert_eq!(s.attention.campaign_ids, vec![1]);
+    assert_eq!(s.attention.delivery_problems, 4);
+    assert_eq!(s.attention.campaign_ids, vec![1, 2]);
     assert_eq!(s.attention.unverified_enabled_domains, 3);
     assert_eq!(
         s.inventory,
         Inventory {
-            templates: 1,
+            templates: 2,
             pages: 1,
             groups: 2,
             profiles: 1,
@@ -380,18 +383,18 @@ async fn comparisons_use_disjoint_periods_and_do_not_rewrite_previous_outcomes_w
                 since: start,
                 until: boundary,
                 counts: Posture {
-                    delivered: 2,
+                    delivered: 3,
                     opened: 2,
                     clicked: 1,
-                    reported: 0,
+                    reported: 1,
                     credentials_entered: 1
                 }
             })
         );
         let all = repo.posture(OWNER, Window::All, NOW).await.unwrap();
         assert!(all.previous.is_none());
-        assert_eq!(all.counts.delivered, 5);
-        assert_eq!(all.counts.reported, 1);
+        assert_eq!(all.counts.delivered, 6);
+        assert_eq!(all.counts.reported, 2);
         let empty = repo
             .posture(OWNER, window, NOW + 800 * 86400)
             .await

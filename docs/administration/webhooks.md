@@ -5,11 +5,11 @@ sidebar:
   order: 7
 ---
 
-Once an administrator enables webhooks, regular users can manage their own endpoints at **Resources → Webhooks**. Enabled endpoints receive newly committed events from all campaigns, regardless of creator, so choose a receiver appropriate for that installation-wide scope.
+Once an administrator enables webhooks, regular users can manage shared endpoints at **Resources → Webhooks**. Enabled endpoints receive newly committed events from all campaigns, regardless of creator, so choose a receiver appropriate for that installation-wide scope.
 
-If the feature is off, ask an administrator to enable webhooks in **Settings**. Individual endpoints do not require administrator approval. Only the creator can read the configuration and delivery history, edit, validate, or delete an endpoint; administrators can use the existing explicit impersonation workflow.
+If the feature is off, ask an administrator to enable webhooks in **Settings**. Individual endpoints do not require administrator approval. Users with the relevant resource permissions can read configuration and delivery history, edit, validate or delete endpoints created by colleagues.
 
-Ownership controls configuration access, not event delivery. Locking the creator account does not suspend an existing endpoint. Disable the endpoint or the global feature to stop delivery; deleting the creator account removes its endpoints and retained delivery work.
+Locking or deleting the creator account does not suspend an existing endpoint or remove its retained delivery work. Disable the endpoint or the global feature to stop delivery.
 
 1. Create a named HTTP(S) endpoint and signing secret. Use HTTPS for an actual receiving service.
 2. Save it and choose **Validate connection**.

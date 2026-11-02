@@ -46,7 +46,7 @@ This request reads campaign details without launching or changing the campaign. 
 
 ## Prepare and launch
 
-Campaign requests select owned resources by ID. Use the same body for preparation and direct launch:
+Campaign requests select shared resources by ID. Use the same body for preparation and direct launch:
 
 ```json
 {
@@ -61,9 +61,9 @@ Campaign requests select owned resources by ID. Use the same body for preparatio
 }
 ```
 
-This body is illustrative: replace the example IDs with resources owned by the caller, and the URL must be an eligible campaign origin under the current [verification policy](settings.md). Posting it to `/api/campaigns/` schedules real sending. Use the [local fixture](../getting-started/first-campaign.md) for a contained trial.
+This body is illustrative: replace the example IDs with existing shared resources, and the URL must be an eligible campaign origin under the current [verification policy](settings.md). Posting it to `/api/campaigns/` schedules real sending. Use the [local fixture](../getting-started/first-campaign.md) for a contained trial.
 
-`selection` is required: `groups` is an array, and `template`, `page`, and `smtp` are objects with `id` and an optional revision string. Preparation returns resolved selections, `total`, `duplicate_count`, `conflict_count`, conflicting recipient details, resolved policy and schedule, `mailer_enabled`, and a rendered `preview`. Carry each selected `id` and `revision` into launch so changed content is detected. Review selections also include display names; omit those names from command inputs. Resource renaming does not change the selected identity. Missing or foreign-owned resources are rejected; there is no fallback lookup by name.
+`selection` is required: `groups` is an array, and `template`, `page`, and `smtp` are objects with `id` and an optional revision string. Preparation returns resolved selections, `total`, `duplicate_count`, `conflict_count`, conflicting recipient details, resolved policy and schedule, `mailer_enabled`, and a rendered `preview`. Carry each selected `id` and `revision` into launch so changed content is detected. When a learning page is selected, preparation also returns `learning_revision`; carry it into the top-level launch request. Saved-draft launch requires this revision. Review selections also include display names; omit those names from command inputs. Resource renaming does not change the selected identity. Missing resources are rejected; there is no fallback lookup by name.
 
 Request fields are case-sensitive. Unknown fields, duplicate fields, invalid types and trailing JSON are rejected with `400`. Top-level legacy `groups`, `template`, `page` and `smtp` inputs are no longer accepted, including alongside `selection`. The same typed campaign input is used inside test-send and draft-launch requests.
 
@@ -111,4 +111,10 @@ A resolution POST contains the current `generation` and an `action`: `confirm_ac
 
 Completion stops remaining campaign work but cannot recall accepted mail. Deletion removes history. See [completion and deletion](../user-guide/campaigns/completion-and-deletion.md) before invoking either operation.
 
-The compact context read returns the launched schedule, audience size, policy and resource references. Template subject and sender/profile information describe current shared resources. It excludes resource bodies and service credentials. Recipient history pages contain at most 100 attempts and 100 events each; use `next_attempt` and `next_event` as the exclusive `before_attempt` and `before_event` cursors. Numeric recipient identities belong to the campaign, and cross-campaign or cross-owner reads fail with `404`.
+The compact context read returns the launched schedule, audience size, policy and resource references. Template subject and sender/profile information describe the saved campaign content. It excludes resource bodies and service credentials. Recipient history pages contain at most 100 attempts and 100 events each; use `next_attempt` and `next_event` as the exclusive `before_attempt` and `before_event` cursors. Numeric recipient identities belong to the campaign, and cross-campaign or cross-owner reads fail with `404`.
+
+## Campaign content snapshots
+
+Launch and scheduling freeze approved authored content, attachments, sender identity/headers, landing content, and the selected learning content alongside the existing audience and campaign policy. Context and campaign detail responses show these saved values even after source edits or deletion. Historical SMTP projections contain the saved sender and headers, not connection settings or credentials. Copying a campaign retains source IDs for a fresh review using current resources.
+
+SMTP connection/authentication/TLS settings, domain eligibility, account authorization, and campaign lifecycle remain operational controls. See [launch behavior](../user-guide/campaigns/launch.md#what-stays-fixed-after-launch) for the boundary and imported-history limitation.

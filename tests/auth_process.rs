@@ -494,7 +494,7 @@ fn unknown_browser_pages_load_the_real_ui_without_masking_protocol_or_asset_erro
 }
 
 #[test]
-fn browser_detail_navigation_preserves_ownership_and_handles_deleted_records() {
+fn browser_detail_navigation_shares_resources_and_handles_deleted_records() {
     let directory = workspace_with_built_assets();
     let mut process = Process::start(directory.path(), "admin");
     let base = endpoint(&mut process);
@@ -512,19 +512,19 @@ fn browser_detail_navigation_preserves_ownership_and_handles_deleted_records() {
     for (family, draft) in [
         (
             "groups",
-            json!({"name":"Owner-only group","targets":[{"email":"synthetic@example.test","first_name":"Private"}]}),
+            json!({"name":"Shared group","targets":[{"email":"synthetic@example.test","first_name":"Private"}]}),
         ),
         (
             "templates",
-            json!({"name":"Owner-only template","text":"Private template body"}),
+            json!({"name":"Shared template","text":"Private template body"}),
         ),
         (
             "pages",
-            json!({"name":"Owner-only page","html":"<p>Private page body</p>"}),
+            json!({"name":"Shared page","html":"<p>Private page body</p>"}),
         ),
         (
             "smtp",
-            json!({"name":"Owner-only profile","host":"127.0.0.1:25","from_address":"sender@example.test","password":"synthetic-private-service-secret"}),
+            json!({"name":"Shared profile","host":"127.0.0.1:25","from_address":"sender@example.test","password":"synthetic-private-service-secret"}),
         ),
     ] {
         let created = admin
@@ -540,7 +540,7 @@ fn browser_detail_navigation_preserves_ownership_and_handles_deleted_records() {
         let id = record["id"].as_i64().unwrap();
         let api_path = format!("{base}/api/{family}/{id}");
         // Both valid and missing detail/edit URLs serve only the inert shell.
-        // Reading the record is independently authenticated and owner-scoped.
+        // Reading the record is independently authenticated and shared among authorized users.
         for address in [id.to_string(), "999999".into(), "not-an-id".into()] {
             for suffix in ["", "/edit"] {
                 let path = format!("/{family}/{address}{suffix}");
@@ -564,45 +564,27 @@ fn browser_detail_navigation_preserves_ownership_and_handles_deleted_records() {
         let saved: Value = legitimate.json().unwrap();
         assert_eq!(saved["name"], draft["name"]);
         let foreign = member.get(&api_path).send().unwrap();
-        assert_eq!(foreign.status(), 404);
+        assert_eq!(foreign.status(), 200);
         let foreign: Value = foreign.json().unwrap();
-        assert_eq!(foreign["code"], "RESOURCE_NOT_FOUND");
+        assert_eq!(foreign, saved);
         let missing = member
             .get(format!("{base}/api/{family}/999999"))
             .send()
             .unwrap();
         assert_eq!(missing.status(), 404);
         assert_eq!(
-            foreign,
-            missing.json::<Value>().unwrap(),
-            "missing and foreign records must not be distinguishable"
+            missing.json::<Value>().unwrap()["code"],
+            "RESOURCE_NOT_FOUND"
         );
         let member_csrf = bootstrap(&member, &base)["csrf_token"]
             .as_str()
             .unwrap()
             .to_owned();
-        let denied_delete = member
+        let mut delete = member
             .delete(&api_path)
             .header("origin", &base)
             .header("x-ruphish-client", "browser")
-            .header("x-csrf-token", &member_csrf)
-            .send()
-            .unwrap();
-        assert_eq!(denied_delete.status(), 404);
-        assert_eq!(
-            admin
-                .get(&api_path)
-                .send()
-                .unwrap()
-                .json::<Value>()
-                .unwrap(),
-            saved
-        );
-        let mut delete = admin
-            .delete(&api_path)
-            .header("origin", &base)
-            .header("x-ruphish-client", "browser")
-            .header("x-csrf-token", csrf);
+            .header("x-csrf-token", &member_csrf);
         if let Some(revision) = revision {
             delete = delete.header("if-match", revision);
         }
@@ -919,14 +901,16 @@ fn browser_resource_create_read_edit_and_reload_routes_preserve_saved_data() {
         }
     }
     let send = |method, path: &str, value: &Value| {
-        admin
+        let mut request = admin
             .request(method, format!("{base}{path}"))
             .header("x-ruphish-client", "browser")
             .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
             .header("origin", &base)
-            .json(value)
-            .send()
-            .unwrap()
+            .json(value);
+        if let Some(revision) = value["revision"].as_i64() {
+            request = request.header("if-match", format!("\"{revision}\""));
+        }
+        request.send().unwrap()
     };
     let group =
         json!({"name":"Équipe","targets":[{"email":"alice@example.test","first_name":"Alice"}]});

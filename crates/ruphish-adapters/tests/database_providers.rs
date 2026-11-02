@@ -380,8 +380,11 @@ async fn postgres_event_edits_preserve_history_and_reopen() {
     postgres_cleanup(&mut admin, &config).await;
 }
 
+#[path = "support/campaign_freezing.rs"]
+mod campaign_freezing;
 #[path = "support/campaign_origins.rs"]
 mod campaign_origins;
+
 #[path = "support/open_tracking.rs"]
 mod open_tracking;
 
@@ -480,6 +483,8 @@ mod sorting;
 
 fn resource(name: &str, content: Content) -> Input {
     Resource {
+        attribution: Default::default(),
+        revision: 0,
         id: 0,
         name: name.into(),
         modified_date: String::new(),
@@ -498,9 +503,12 @@ async fn profile_credentials(
     let first = resources
         .save(
             actor,
-            original.map_password(|_| Some("first-secret".into())),
+            original
+                .clone()
+                .map_password(|_| Some("first-secret".to_owned()))
+                .into(),
             Some(id),
-            None,
+            Some(original.revision.to_string()),
         )
         .await
         .unwrap();
@@ -509,9 +517,10 @@ async fn profile_credentials(
             actor,
             first
                 .clone()
-                .map_password(|_| Some("replacement-secret".into())),
+                .map_password(|_| Some("replacement-secret".to_owned()))
+                .into(),
             Some(id),
-            Some(first.modified_date.clone()),
+            Some(first.revision.to_string()),
         )
         .await
         .unwrap();
@@ -519,50 +528,53 @@ async fn profile_credentials(
         resources
             .save(
                 actor,
-                first.clone().map_password(|_| None),
+                first.clone().map_password(|_| None::<String>).into(),
                 Some(id),
-                Some(first.modified_date.clone())
+                Some(first.revision.to_string())
             )
             .await,
         Err(Error::Changed)
     ));
-    // An unconditional unrelated edit based on an older snapshot must retain the latest password.
+    // A reviewed unrelated edit retains the latest password when no credential is submitted.
     let retained = resources
-        .save(actor, first.map_password(|_| None), Some(id), None)
+        .save(
+            actor,
+            replacement.clone().map_password(|_| None::<String>).into(),
+            Some(id),
+            Some(replacement.revision.to_string()),
+        )
         .await
         .unwrap();
     assert!(matches!(&retained.content, Content::Profile(p) if p.password == "replacement-secret"));
-    assert!(matches!(
-        resources
-            .save(
-                other,
-                retained
-                    .clone()
-                    .map_password(|_| Some("foreign-secret".into())),
-                Some(id),
-                None
-            )
-            .await,
-        Err(Error::NotFound("SMTP"))
-    ));
+    let shared = resources
+        .save(
+            other,
+            retained
+                .clone()
+                .map_password(|_| Some("foreign-secret".to_owned()))
+                .into(),
+            Some(id),
+            Some(retained.revision.to_string()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(shared.attribution.edited_by, Some(other.id));
     let unchanged = resources.get(actor, Kind::Profile, id).await.unwrap();
-    assert!(
-        matches!(&unchanged.content, Content::Profile(p) if p.password == "replacement-secret")
-    );
+    assert!(matches!(&unchanged.content,Content::Profile(p) if p.password=="foreign-secret"));
     assert_ne!(retained.modified_date, replacement.modified_date);
     let cleared = resources
         .save(
             actor,
-            retained.map_password(|_| Some(String::new())),
+            retained.record.map_password(|_| Some(String::new())).into(),
             Some(id),
-            Some(unchanged.modified_date),
+            Some(unchanged.revision.to_string()),
         )
         .await
         .unwrap();
     assert!(matches!(&cleared.content, Content::Profile(p) if p.password.is_empty()));
     let persisted = resources.get(actor, Kind::Profile, id).await.unwrap();
     assert!(
-        persisted == cleared,
+        persisted == cleared.record,
         "clearing must persist, not only change the save response"
     );
     persisted
@@ -791,27 +803,26 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         integrations.webhooks(normal.identity).await.unwrap().len(),
         1
     );
-    assert!(integrations.webhooks(actor).await.unwrap().is_empty());
-    assert!(matches!(
-        integrations.webhook(actor, hook.id).await,
-        Err(Error::NotFound("Webhook"))
-    ));
+    assert_eq!(integrations.webhooks(actor).await.unwrap().len(), 1);
+    assert!(
+        integrations
+            .webhook(actor, hook.id)
+            .await
+            .unwrap()
+            .has_secret
+    );
+    let hook = integrations
+        .save_webhook(actor, Some(hook.id), hook_edit(Some(hook.revision)))
+        .await
+        .unwrap();
+    assert_eq!(hook.attribution.created_by, Some(normal.identity.id));
+    assert_eq!(hook.attribution.edited_by, Some(actor.id));
     assert!(matches!(
         integrations
-            .save_webhook(actor, Some(hook.id), hook_edit(Some(hook.revision)))
+            .delete_webhook(actor, hook.id, Some(hook.revision + 1))
             .await,
-        Err(Error::NotFound("Webhook"))
+        Err(Error::Changed)
     ));
-    assert!(matches!(
-        integrations.validate_webhook(actor, hook.id).await,
-        Err(Error::NotFound("Webhook"))
-    ));
-    for revision in [None, Some(hook.revision), Some(hook.revision + 1)] {
-        assert!(matches!(
-            integrations.delete_webhook(actor, hook.id, revision).await,
-            Err(Error::NotFound("Webhook"))
-        ));
-    }
     let mail_edit = |revision| MailboxEdit {
         name: "Reporting".into(),
         enabled: true,
@@ -846,7 +857,14 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         .unwrap()
         .unwrap();
     let blocked_mailbox = integrations
-        .save_mailbox(blocked.identity, None, mail_edit(None))
+        .save_mailbox(
+            blocked.identity,
+            None,
+            MailboxEdit {
+                name: "Locked creator mailbox".into(),
+                ..mail_edit(None)
+            },
+        )
         .await
         .unwrap();
     accounts
@@ -878,7 +896,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         integrations
             .mailbox(normal.identity, mailbox.id)
             .await
-            .is_err()
+            .is_ok()
     );
     assert!(
         integrations
@@ -969,10 +987,14 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     ));
     for result in [
         integrations.validate_mailbox(actor, mailbox.id).await,
-        integrations.check_mailbox(actor, mailbox.id).await,
+        integrations
+            .check_mailbox(actor, mailbox.id)
+            .await
+            .map(|_| ()),
         integrations
             .resume_mailbox(actor, mailbox.id, current_mailbox.revision)
-            .await,
+            .await
+            .map(|_| ()),
     ] {
         assert!(matches!(
             result,
@@ -1019,19 +1041,40 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         .await
         .unwrap();
     let owned = integrations
-        .save_mailbox(normal.identity, None, mail_edit(None))
+        .save_mailbox(
+            normal.identity,
+            None,
+            MailboxEdit {
+                name: "Colleague mailbox".into(),
+                ..mail_edit(None)
+            },
+        )
         .await
         .unwrap();
     assert!(owned.has_password);
-    assert!(matches!(
-        integrations.mailbox(actor, owned.id).await,
-        Err(Error::NotFound(_))
-    ));
+    assert!(
+        integrations
+            .mailbox(actor, owned.id)
+            .await
+            .unwrap()
+            .has_password
+    );
     integrations
         .delete_mailbox(normal.identity, owned.id, Some(owned.revision))
         .await
         .unwrap();
+    // Each poll processes one mailbox; a locked creator no longer removes its mailbox from work.
     integrations.poll_mailboxes().await.unwrap();
+    integrations.poll_mailboxes().await.unwrap();
+    assert_eq!(
+        integrations
+            .mailbox(actor, blocked_mailbox.id)
+            .await
+            .unwrap()
+            .history
+            .len(),
+        1
+    );
     let mailbox = integrations.mailbox(actor, mailbox.id).await.unwrap();
     assert!(!mailbox.running);
     assert!(!mailbox.ignore_cert_errors);
@@ -1049,7 +1092,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         integrations
             .mailbox(actor, blocked_mailbox.id)
             .await
-            .is_err()
+            .is_ok()
     );
     let resources = db.resources();
     let recipient = Recipient {
@@ -1061,30 +1104,36 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     let group_input = resource("Engineering", Content::Group(vec![recipient]));
     let (a, b) = tokio::join!(
         resources.save(actor, group_input.clone(), None, None),
-        resources.save(actor, group_input, None, None)
+        resources.save(normal.identity, group_input, None, None)
     );
     assert_eq!(
         usize::from(a.is_ok()) + usize::from(b.is_ok()),
         1,
-        "same-owner duplicate creates have one winner"
+        "cross-user duplicate creates have one winner"
     );
     assert!(matches!(
         a.as_ref().err().or(b.as_ref().err()),
         Some(Error::Conflict("Group"))
     ));
     let group = a.or(b).unwrap();
-    assert!(
-        matches!(
-            resources.get(normal.identity, Kind::Group, group.id).await,
-            Err(Error::NotFound("Group"))
-        ),
-        "guessed IDs cannot cross owner boundaries"
+    assert_eq!(
+        resources
+            .get(normal.identity, Kind::Group, group.id)
+            .await
+            .unwrap()
+            .id,
+        group.id
     );
     assert!(matches!(
         resources
-            .delete(normal.identity, Kind::Group, group.id, None)
+            .delete(
+                normal.identity,
+                Kind::Group,
+                group.id,
+                Some("999999".into())
+            )
             .await,
-        Err(Error::NotFound("Group"))
+        Err(Error::Changed)
     ));
     let template = resources
         .save(
@@ -1132,7 +1181,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         )
         .await
         .unwrap();
-    let profile = profile_credentials(&resources, actor, normal.identity, profile).await;
+    let profile = profile_credentials(&resources, actor, normal.identity, profile.record).await;
     let mut change = group.clone();
     change.name = "Engineering updated".into();
     let (a, b) = tokio::join!(
@@ -1140,13 +1189,13 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
             actor,
             change.clone().into(),
             Some(group.id),
-            Some(group.modified_date.clone())
+            Some(group.revision.to_string())
         ),
         resources.save(
             actor,
             change.into(),
             Some(group.id),
-            Some(group.modified_date.clone())
+            Some(group.revision.to_string())
         )
     );
     assert_eq!(
@@ -1209,7 +1258,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     assert!(domains.get(actor, domain.id).await.unwrap().verified_until > now);
     let selection = |r: &Resource| campaign::Selection {
         id: r.id,
-        revision: Some(r.modified_date.clone()),
+        revision: Some(r.revision.to_string()),
     };
     let input = campaign::Create {
         name: "Provider acceptance".into(),
@@ -1223,6 +1272,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     };
     campaign_origins::exercise(db, actor, input.clone(), now).await;
     open_tracking::exercise(db, actor, input.clone(), now).await;
+    campaign_freezing::exercise(db, actor, input.clone(), now).await;
     client_observations::exercise(db, actor, input.clone(), now).await;
     learning_pages::exercise(db, actor, normal.identity, input.clone(), now).await;
     campaign_drafts::exercise(db, actor, normal.identity, input.clone(), now, fault).await;
@@ -1233,11 +1283,11 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     assert_eq!(review.page.id, page.id);
     assert_eq!(review.profile.id, profile.id);
     assert!(
-        matches!(
-            campaigns.prepare(normal.identity, &input, now).await,
-            Err(Error::NotFound(_))
-        ),
-        "resource IDs never bypass owner-scoped selection"
+        campaigns
+            .prepare(normal.identity, &input, now)
+            .await
+            .is_ok(),
+        "colleagues can select shared resources"
     );
     let mut stale = input.clone();
     stale.template.revision = Some("unreviewed-revision".into());
@@ -1288,7 +1338,12 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
     reporting_filters::contract(db, actor, campaign.id, campaign.results[0].id).await;
     assert!(matches!(
         resources
-            .delete(actor, Kind::Template, template.id, None)
+            .delete(
+                actor,
+                Kind::Template,
+                template.id,
+                Some(template.revision.to_string())
+            )
             .await,
         Err(Error::InUse)
     ));
@@ -1632,7 +1687,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         .await
         .unwrap();
     integrations
-        .delete_webhook(actor, legacy_hook.id, None)
+        .delete_webhook(actor, legacy_hook.id, Some(legacy_hook.revision))
         .await
         .unwrap();
     let legacy_mailbox = integrations
@@ -1640,7 +1695,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         .await
         .unwrap();
     integrations
-        .delete_mailbox(actor, legacy_mailbox.id, None)
+        .delete_mailbox(actor, legacy_mailbox.id, Some(legacy_mailbox.revision))
         .await
         .unwrap();
 
@@ -2014,7 +2069,7 @@ async fn replacement_fixture(db: &Database) -> (auth::Identity, Resource) {
         )
         .await
         .unwrap();
-    (user.identity, original)
+    (user.identity, original.record)
 }
 
 async fn assert_failed_replacement_is_atomic(
@@ -2046,7 +2101,7 @@ async fn assert_failed_replacement_is_atomic(
                 actor,
                 edit.into(),
                 Some(original.id),
-                Some(original.modified_date.clone())
+                Some(original.revision.to_string())
             )
             .await
             .is_err()
@@ -2068,7 +2123,7 @@ async fn assert_failed_replacement_is_atomic(
                 actor,
                 next.into(),
                 Some(original.id),
-                Some(original.modified_date)
+                Some(original.revision.to_string())
             )
             .await
             .is_ok(),
@@ -2246,13 +2301,13 @@ async fn mysql_upgrades_every_legacy_version_preserving_identity_and_recoverable
         );
         if version >= 20191104103306 {
             assert_eq!(
-                sqlx::query_scalar::<_, i64>(
+                sqlx::query_scalar::<_, Option<i64>>(
                     "SELECT owner_id FROM ruphish_webhook_state WHERE webhook_id=71"
                 )
                 .fetch_one(&mut inspector)
                 .await
                 .unwrap(),
-                17
+                None
             );
         }
         let client_count: i64 =
@@ -2465,7 +2520,7 @@ async fn mysql_legacy_deleted_identities_are_not_reused_after_conversion() {
 
 #[tokio::test]
 #[ignore = "Requires the canonical MySQL acceptance service and RUPHISH_MYSQL_TEST_PORT"]
-async fn mysql_legacy_deleted_owner_mailbox_is_dropped_with_original_retained() {
+async fn mysql_legacy_deleted_creator_mailbox_is_preserved_disabled_with_original_retained() {
     let (mut inspector, config) = fixture().await;
     latest_legacy(&mut inspector).await;
     // Gophish DeleteUser does not delete IMAP settings (models/user.go).
@@ -2475,19 +2530,20 @@ async fn mysql_legacy_deleted_owner_mailbox_is_dropped_with_original_retained() 
         let db = database::open(Config::MySql(config.clone()), Policy::default())
             .await
             .unwrap();
-        assert!(
-            db.integrations()
-                .mailboxes(auth::Identity { id: 17, epoch: 0 })
-                .await
-                .unwrap()
-                .is_empty()
-        );
+        let mailboxes = db
+            .integrations()
+            .mailboxes(auth::Identity { id: 17, epoch: 0 })
+            .await
+            .unwrap();
+        assert_eq!(mailboxes.len(), 1);
+        assert!(!mailboxes[0].enabled);
+        assert_eq!(mailboxes[0].attribution.created_by, Some(18));
         assert_eq!(
-            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM ruphish_mailboxes")
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM ruphish_mailboxes WHERE owner_id=18 AND enabled=0 AND password='retained-secret'")
                 .fetch_one(&mut inspector)
                 .await
                 .unwrap(),
-            0
+            1
         );
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM imap")
@@ -2516,7 +2572,7 @@ async fn mysql_legacy_deleted_owner_mailbox_is_dropped_with_original_retained() 
 
 #[tokio::test]
 #[ignore = "Requires canonical MySQL fixture"]
-async fn mysql_legacy_invalid_mailbox_owners_are_skipped_without_losing_valid_data() {
+async fn mysql_legacy_invalid_mailbox_creators_are_preserved_disabled_without_losing_valid_data() {
     let (mut inspect, config) = fixture().await;
     latest_legacy(&mut inspect).await;
     sqlx::raw_sql(legacy_migration::SEED)
@@ -2533,7 +2589,13 @@ async fn mysql_legacy_invalid_mailbox_owners_are_skipped_without_losing_valid_da
         let db = database::open(Config::MySql(config.clone()), Policy::default())
             .await
             .unwrap();
-        legacy_migration::contract(&db).await;
+        let mailboxes = db
+            .integrations()
+            .mailboxes(auth::Identity { id: 17, epoch: 0 })
+            .await
+            .unwrap();
+        assert_eq!(mailboxes.len(), 6);
+        assert_eq!(sqlx::query_as::<_, (Option<i64>, String, i64)>("SELECT owner_id,password,enabled FROM ruphish_mailboxes WHERE host='bad.example.test' ORDER BY password").fetch_all(&mut inspect).await.unwrap(), vec![(Some(999999),"deleted-secret".into(),0),(None,"negative-secret".into(),0),(None,"null-secret".into(),0),(None,"zero-secret".into(),0)]);
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM imap")
                 .fetch_one(&mut inspect)
@@ -2546,7 +2608,7 @@ async fn mysql_legacy_invalid_mailbox_owners_are_skipped_without_losing_valid_da
                 .fetch_one(&mut inspect)
                 .await
                 .unwrap(),
-            2
+            6
         );
         assert_eq!(sqlx::query_as::<_, (Option<i64>, String)>("SELECT user_id,password FROM rp_original_imap WHERE user_id IS NULL OR user_id<=0 OR user_id=999999 ORDER BY user_id").fetch_all(&mut inspect).await.unwrap(), vec![(None,"null-secret".into()),(Some(-1),"negative-secret".into()),(Some(0),"zero-secret".into()),(Some(999999),"deleted-secret".into())]);
         db.close().await;
@@ -3033,7 +3095,7 @@ async fn postgres_lock_timeout_does_not_write_or_poison_connection() {
             actor,
             edit.into(),
             Some(original.id),
-            Some(original.modified_date.clone()),
+            Some(original.revision.to_string()),
         )
         .await;
     assert!(matches!(
@@ -3236,7 +3298,12 @@ async fn postgres_exact_revisions_and_invalid_text_preserve_original() {
     edit.name = "Next revision".into();
     let saved = db
         .resources()
-        .save(actor, edit.into(), Some(original.id), Some(revision.into()))
+        .save(
+            actor,
+            edit.into(),
+            Some(original.id),
+            Some(original.revision.to_string()),
+        )
         .await
         .unwrap();
     assert_eq!(saved.modified_date, "2099-01-01T00:00:00.12345679Z");
@@ -3246,7 +3313,7 @@ async fn postgres_exact_revisions_and_invalid_text_preserve_original() {
                 actor,
                 original.clone().into(),
                 Some(original.id),
-                Some(revision.into())
+                Some(original.revision.to_string())
             )
             .await,
         Err(Error::Changed)
@@ -3254,14 +3321,14 @@ async fn postgres_exact_revisions_and_invalid_text_preserve_original() {
     let mut invalid = saved.clone();
     invalid.name = "bad\0name".into();
     assert!(
-        matches!(db.resources().save(actor,invalid.into(),Some(saved.id),Some(saved.modified_date.clone())).await,Err(Error::Invalid(code)) if code.starts_with("storage_text_invalid:"))
+        matches!(db.resources().save(actor,invalid.into(),Some(saved.id),Some(saved.revision.to_string())).await,Err(Error::Invalid(code)) if code.starts_with("storage_text_invalid:"))
     );
     assert!(
         db.resources()
             .get(actor, Kind::Template, saved.id)
             .await
             .unwrap()
-            == saved
+            == saved.record
     );
     inspect.close().await.unwrap();
     db.close().await;
@@ -3335,7 +3402,7 @@ async fn postgres_lost_commit_acknowledgement_is_uncertain_and_not_replayed() {
             actor,
             edit.clone().into(),
             Some(original.id),
-            Some(original.modified_date.clone()),
+            Some(original.revision.to_string()),
         )
         .await;
     assert!(matches!(
@@ -3358,7 +3425,7 @@ async fn postgres_lost_commit_acknowledgement_is_uncertain_and_not_replayed() {
                 actor,
                 edit.into(),
                 Some(original.id),
-                Some(original.modified_date)
+                Some(original.revision.to_string())
             )
             .await,
         Err(Error::Changed)
@@ -3454,7 +3521,7 @@ async fn postgres_deadlock_rolls_back_the_losing_edit_and_recovers() {
     let resources = db.resources();
     let mut edit = original.clone();
     edit.name = "Deadlocked edit".into();
-    let expected = original.modified_date.clone();
+    let expected = original.revision.to_string();
     let id = original.id;
     let writing = tokio::spawn(async move {
         resources
@@ -3499,7 +3566,7 @@ async fn postgres_deadlock_rolls_back_the_losing_edit_and_recovers() {
                 actor,
                 edit.into(),
                 Some(original.id),
-                Some(original.modified_date)
+                Some(original.revision.to_string())
             )
             .await
             .is_ok()
@@ -3681,3 +3748,50 @@ mod tls_fixture;
 
 #[path = "support/webhook_ownership.rs"]
 mod webhook_ownership;
+
+#[path = "support/shared_workspace.rs"]
+mod shared_workspace;
+
+#[tokio::test]
+async fn sqlite_legacy_deleted_creator_preserves_shared_resources_and_queue() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("deleted-creator.db");
+    let mut inspect = sqlite_legacy_corpus(&path).await;
+    sqlx::query("DELETE FROM users WHERE id=17")
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    inspect.close().await.unwrap();
+    let db = database::open(Config::Sqlite { path }, Policy::default())
+        .await
+        .unwrap();
+    legacy_migration::deleted_creator_contract(&db).await;
+    db.close().await;
+}
+
+#[tokio::test]
+#[ignore = "Requires canonical MySQL fixture"]
+async fn mysql_legacy_deleted_creator_preserves_shared_resources_and_queue() {
+    let (mut inspect, config) = fixture().await;
+    latest_legacy(&mut inspect).await;
+    sqlx::raw_sql(legacy_migration::SEED)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM users WHERE id=17")
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    let db = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    legacy_migration::deleted_creator_contract(&db).await;
+    db.close().await;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE `{}`",
+        config.database
+    )))
+    .execute(&mut inspect)
+    .await
+    .unwrap();
+}

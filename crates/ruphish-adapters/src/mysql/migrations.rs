@@ -192,6 +192,12 @@ async fn resume(c: &mut MySqlConnection, _config: &MySqlConfig) -> Result<(), Er
             .await
             .map_err(storage_error)?;
     if !recorded {
+        super::campaigns::freeze_imported(&mut tx)
+            .await
+            .map_err(|error| match error {
+                ruphish_application::resources::Error::Storage(error) => error,
+                _ => Error::UnsupportedSchema,
+            })?;
         sqlx::query("INSERT INTO _sqlx_migrations(version,description,success,checksum,execution_time) VALUES(1,'release baseline',true,?,0)")
             .bind(migration.checksum.as_ref()).execute(&mut *tx).await.map_err(storage_error)?;
     }

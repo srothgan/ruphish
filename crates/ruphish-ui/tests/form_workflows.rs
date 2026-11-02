@@ -1,5 +1,9 @@
 //! Functional editing scenarios using the same projections and state as the WASM forms.
 #![allow(clippy::unwrap_used)]
+#[path = "support/resource_checkpoint.rs"]
+mod resource_checkpoint;
+use resource_checkpoint::checkpoint;
+use ruphish_contracts::resource_details::Kind;
 use ruphish_contracts::validation::{Code, ValidationReport};
 use ruphish_domain::validation::{Issue, Report};
 use ruphish_ui::{
@@ -18,7 +22,7 @@ fn fields(report: &Report) -> Vec<&str> {
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 #[cfg_attr(not(target_arch = "wasm32"), test)]
 fn resource_correction_server_conflict_and_late_failure_preserve_the_current_edit() {
-    let mut draft = ResourceDraft::new(json!({"id":0,"name":"","text":"","html":""}), None);
+    let mut draft = ResourceDraft::new(json!({"id":0,"name":"","text":"","html":""}));
     let mut form = FormState::default();
     let initial = form_validation::resource(draft.value(), "templates");
     assert!(
@@ -74,16 +78,19 @@ fn resource_correction_server_conflict_and_late_failure_preserve_the_current_edi
     let mut saved = submitted.clone();
     saved["id"] = json!(7);
     saved["modified_date"] = json!("2026-10-25T12:00:00Z");
-    draft.saved(&submitted, saved, Some("revision-1".into()));
+    draft.saved(&submitted, checkpoint(Kind::Template, saved, "revision-1"));
     assert_eq!(draft.value()["text"], "A newer unsaved revision");
     assert!(
         draft.completed_id().is_none(),
         "a late save must not navigate away from newer work"
     );
     let latest = draft.value().clone();
-    draft.saved(&latest, latest.clone(), Some("revision-2".into()));
+    draft.saved(
+        &latest,
+        checkpoint(Kind::Template, latest.clone(), "revision-2"),
+    );
     assert_eq!(draft.completed_id(), Some(7));
-    assert_eq!(draft.value(), &latest);
+    assert_eq!(draft.value()["text"], latest["text"]);
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]

@@ -116,6 +116,8 @@ cargo build -p ruphish --locked
 node --test demo/tests/seed.test.mjs
 ```
 
+The seed test uses a fixed historical snapshot and checks all-time delivery totals so records do not age out as the server clock advances. Rolling-window boundaries are covered in `crates/ruphish-adapters/tests/overview.rs` with explicitly supplied timestamps.
+
 For demo UI changes, apply the normal formatting rules, generate the demo transport, build the development artifact, and lint the WASM target:
 
 ```sh

@@ -6,7 +6,10 @@ use axum::{
     response::Response,
     routing::{any, get, post},
 };
-use ruphish_contracts::legacy::{Envelope, Group};
+use ruphish_contracts::{
+    common::Envelope,
+    resource_details::{Group, Metadata, Resource},
+};
 use ruphish_http::response;
 use serde_json::{Value, json};
 
@@ -30,13 +33,14 @@ async fn serve(router: Router) -> Result<(String, Server), Box<dyn std::error::E
 #[tokio::test]
 async fn typed_api_values_preserve_explicit_absence_collections_integer_and_time_precision() {
     let fixture = [
+        ("timestamp", json!("2020-01-02T03:04:05.1234Z")),
         (
             "default-group",
-            json!({"id":0,"name":"","modified_date":null,"targets":[]}),
+            json!({"id":0,"name":"","modified_date":null,"targets":[],"revision":1,"created_by":null,"edited_by":null,"edited_at":null}),
         ),
         (
             "empty-targets",
-            json!({"id":9007199254740993_i64,"name":"Ada & <Team>","modified_date":"2020-01-02T03:04:05.1234Z","targets":[]}),
+            json!({"id":9007199254740993_i64,"name":"Ada & <Team>","modified_date":"2020-01-02T03:04:05.1234Z","targets":[],"revision":1,"created_by":null,"edited_by":null,"edited_at":null}),
         ),
         (
             "escaped-envelope",
@@ -45,20 +49,23 @@ async fn typed_api_values_preserve_explicit_absence_collections_integer_and_time
     ];
     let router = Router::new()
         .route(
+            "/timestamp",
+            get(|| async { response::json(StatusCode::OK, &time_value()) }),
+        )
+        .route(
             "/default-group",
-            get(|| async { response::json(StatusCode::OK, &Group::default()) }),
+            get(|| async { response::json(StatusCode::OK, &group(0, "", None)) }),
         )
         .route(
             "/empty-targets",
             get(|| async {
                 response::json(
                     StatusCode::OK,
-                    &Group {
-                        id: 9007199254740993,
-                        name: "Ada & <Team>".into(),
-                        modified_date: Some(time_value()),
-                        targets: vec![],
-                    },
+                    &group(
+                        9007199254740993,
+                        "Ada & <Team>",
+                        Some("2020-01-02T03:04:05.1234Z".into()),
+                    ),
                 )
             }),
         )
@@ -101,8 +108,21 @@ async fn typed_api_values_preserve_explicit_absence_collections_integer_and_time
     }
 }
 
+fn group(id: i64, name: &str, modified_date: Option<String>) -> Resource<Group> {
+    Resource {
+        metadata: Metadata {
+            id,
+            name: name.into(),
+            modified_date,
+            revision: 1,
+            attribution: Default::default(),
+        },
+        content: Group { targets: vec![] },
+    }
+}
+
 #[allow(clippy::expect_used)]
-fn time_value() -> ruphish_contracts::legacy::Timestamp {
+fn time_value() -> ruphish_contracts::common::Timestamp {
     serde_json::from_str("\"2020-01-02T03:04:05.1234Z\"")
         .expect("fixed fixture timestamp must parse")
 }

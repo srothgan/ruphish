@@ -1,4 +1,5 @@
-//! Creator-owned webhooks and reporting mailbox resources.
+//! Shared webhooks and reporting mailbox resources.
+use crate::attribution::Lookup;
 use crate::{
     auth::{AuthState, Context, Rejection, failure},
     resources::{error, response},
@@ -13,7 +14,6 @@ use axum::{
 };
 use ruphish_application::integrations as app;
 use ruphish_contracts::{errors::ErrorCode, integrations as wire};
-use serde::Deserialize;
 use serde_json::json;
 fn runs(history: Vec<app::Run>) -> Vec<wire::Run> {
     history
@@ -31,8 +31,9 @@ fn runs(history: Vec<app::Run>) -> Vec<wire::Run> {
         })
         .collect()
 }
-fn webhook(endpoint: app::Webhook) -> wire::Webhook {
+fn webhook(endpoint: app::Webhook, lookup: &Lookup) -> wire::Webhook {
     wire::Webhook {
+        attribution: lookup.resolve(&endpoint.attribution),
         id: endpoint.id,
         name: endpoint.name,
         url: endpoint.url,
@@ -42,8 +43,9 @@ fn webhook(endpoint: app::Webhook) -> wire::Webhook {
         history: runs(endpoint.history),
     }
 }
-fn mailbox(mailbox: app::Mailbox) -> wire::Mailbox {
+fn mailbox(mailbox: app::Mailbox, lookup: &Lookup) -> wire::Mailbox {
     wire::Mailbox {
+        attribution: lookup.resolve(&mailbox.attribution),
         id: mailbox.id,
         name: mailbox.name,
         enabled: mailbox.enabled,
@@ -92,47 +94,47 @@ pub(crate) fn routes() -> Router<AuthState> {
 }
 async fn hooks(context: Context) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
+    let rows = context
+        .integrations()
+        .webhooks(user.identity)
+        .await
+        .map_err(error)?;
+    let lookup = Lookup::load(&context, rows.iter().map(|v| &v.attribution)).await?;
     response(
         StatusCode::OK,
-        &context
-            .integrations()
-            .webhooks(user.identity)
-            .await
-            .map_err(error)?
+        &rows
             .into_iter()
-            .map(webhook)
+            .map(|v| webhook(v, &lookup))
             .collect::<Vec<_>>(),
         None,
     )
 }
 async fn mailboxes(context: Context) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
+    let rows = context
+        .integrations()
+        .mailboxes(user.identity)
+        .await
+        .map_err(error)?;
+    let lookup = Lookup::load(&context, rows.iter().map(|v| &v.attribution)).await?;
     response(
         StatusCode::OK,
-        &context
-            .integrations()
-            .mailboxes(user.identity)
-            .await
-            .map_err(error)?
+        &rows
             .into_iter()
-            .map(mailbox)
+            .map(|v| mailbox(v, &lookup))
             .collect::<Vec<_>>(),
         None,
     )
 }
 async fn read_hook(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
-    response(
-        StatusCode::OK,
-        &webhook(
-            context
-                .integrations()
-                .webhook(user.identity, id)
-                .await
-                .map_err(error)?,
-        ),
-        None,
-    )
+    let value = context
+        .integrations()
+        .webhook(user.identity, id)
+        .await
+        .map_err(error)?;
+    let lookup = Lookup::load(&context, [&value.attribution]).await?;
+    response(StatusCode::OK, &webhook(value, &lookup), None)
 }
 async fn read_mailbox(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
@@ -144,50 +146,17 @@ async fn mailbox_response(
     id: i64,
     status: StatusCode,
 ) -> Result<Response, Rejection> {
-    response(
-        status,
-        &mailbox(
-            context
-                .integrations()
-                .mailbox(identity, id)
-                .await
-                .map_err(error)?,
-        ),
-        None,
-    )
+    let value = context
+        .integrations()
+        .mailbox(identity, id)
+        .await
+        .map_err(error)?;
+    let lookup = Lookup::load(context, [&value.attribution]).await?;
+    response(status, &mailbox(value, &lookup), None)
 }
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct HookEdit {
-    name: String,
-    url: String,
-    secret: Option<String>,
-    #[serde(default)]
-    is_active: bool,
-    revision: Option<i64>,
-    #[serde(rename = "id")]
-    _id: Option<i64>,
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct MailEdit {
-    name: String,
-    enabled: bool,
-    host: String,
-    port: u16,
-    username: String,
-    password: Option<String>,
-    tls: bool,
-    #[serde(default)]
-    ignore_cert_errors: bool,
-    folder: String,
-    #[serde(default)]
-    restrict_domain: String,
-    #[serde(default)]
-    delete_reported: bool,
-    frequency: u32,
-    revision: Option<i64>,
-}
+
+use ruphish_contracts::integrations::request::MailboxWrite as MailEdit;
+use ruphish_contracts::integrations::request::WebhookWrite as HookEdit;
 fn decode<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T, Rejection> {
     serde_json::from_slice(body).map_err(|_| {
         failure(
@@ -200,22 +169,6 @@ fn decode<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T, Rejection> {
 async fn save_hook(context: Context, id: Option<i64>, body: Bytes) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
     let edit: HookEdit = decode(&body)?;
-    let revision = if edit.revision.is_none() {
-        if let Some(id) = id {
-            Some(
-                context
-                    .integrations()
-                    .webhook(user.identity, id)
-                    .await
-                    .map_err(error)?
-                    .revision,
-            )
-        } else {
-            None
-        }
-    } else {
-        edit.revision
-    };
     let endpoint = context
         .integrations()
         .save_webhook(
@@ -226,18 +179,20 @@ async fn save_hook(context: Context, id: Option<i64>, body: Bytes) -> Result<Res
                 url: edit.url,
                 secret: edit.secret,
                 active: edit.is_active,
-                revision,
+                revision: edit.revision,
             },
         )
         .await
         .map_err(error)?;
+    let lookup = Lookup::from_identities(endpoint.identities);
+    let endpoint = endpoint.record;
     response(
         if id.is_some() {
             StatusCode::OK
         } else {
             StatusCode::CREATED
         },
-        &webhook(endpoint),
+        &webhook(endpoint, &lookup),
         None,
     )
 }
@@ -271,13 +226,15 @@ async fn save_mailbox(
         )
         .await
         .map_err(error)?;
+    let lookup = Lookup::from_identities(mailbox_value.identities);
+    let mailbox_value = mailbox_value.record;
     response(
         if id.is_some() {
             StatusCode::OK
         } else {
             StatusCode::CREATED
         },
-        &mailbox(mailbox_value),
+        &mailbox(mailbox_value, &lookup),
         None,
     )
 }
@@ -302,22 +259,7 @@ async fn update_mailbox(
     save_mailbox(context, Some(id), body).await
 }
 fn expected_revision(headers: &HeaderMap) -> Result<Option<i64>, Rejection> {
-    headers
-        .get("if-match")
-        .map(|value| {
-            value
-                .to_str()
-                .ok()
-                .and_then(|value| value.trim_matches('"').parse().ok())
-                .ok_or_else(|| {
-                    failure(
-                        StatusCode::BAD_REQUEST,
-                        ErrorCode::RevisionRequired,
-                        "integration_invalid_revision",
-                    )
-                })
-        })
-        .transpose()
+    crate::revision::optional(headers)
 }
 fn success() -> Result<Response, Rejection> {
     response(StatusCode::OK, &json!({"success":true}), None)
@@ -357,18 +299,15 @@ async fn validate_hook(context: Context, Path(id): Path<i64>) -> Result<Response
         .validate_webhook(user.identity, id)
         .await
         .map_err(error)?;
-    response(
-        StatusCode::OK,
-        &webhook(
-            context
-                .integrations()
-                .webhook(user.identity, id)
-                .await
-                .map_err(error)?,
-        ),
-        None,
-    )
+    let endpoint = context
+        .integrations()
+        .webhook(user.identity, id)
+        .await
+        .map_err(error)?;
+    let lookup = Lookup::load(&context, [&endpoint.attribution]).await?;
+    response(StatusCode::OK, &webhook(endpoint, &lookup), None)
 }
+
 async fn validate_mailbox(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
     context
@@ -378,11 +317,7 @@ async fn validate_mailbox(context: Context, Path(id): Path<i64>) -> Result<Respo
         .map_err(error)?;
     mailbox_response(&context, user.identity, id, StatusCode::OK).await
 }
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Revision {
-    revision: i64,
-}
+use ruphish_contracts::common::Revision;
 async fn resume_mailbox(
     context: Context,
     Path(id): Path<i64>,
@@ -390,19 +325,21 @@ async fn resume_mailbox(
 ) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
     let expected: Revision = decode(&body)?;
-    context
+    let saved = context
         .integrations()
         .resume_mailbox(user.identity, id, expected.revision)
         .await
         .map_err(error)?;
-    mailbox_response(&context, user.identity, id, StatusCode::OK).await
+    let lookup = Lookup::from_identities(saved.identities);
+    response(StatusCode::OK, &mailbox(saved.record, &lookup), None)
 }
 async fn check_mailbox(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
-    context
+    let saved = context
         .integrations()
         .check_mailbox(user.identity, id)
         .await
         .map_err(error)?;
-    mailbox_response(&context, user.identity, id, StatusCode::ACCEPTED).await
+    let lookup = Lookup::from_identities(saved.identities);
+    response(StatusCode::ACCEPTED, &mailbox(saved.record, &lookup), None)
 }

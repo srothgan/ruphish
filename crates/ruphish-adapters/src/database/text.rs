@@ -1,5 +1,5 @@
 //! Server-schema bounds checked before assignment can silently shorten VARCHAR.
-use ruphish_application::resources::{Content, Error, Resource};
+use ruphish_application::resources::{Content, Error, Input};
 
 /// SQL character limits count Unicode scalar values, never UTF-8 bytes.
 pub(crate) fn bounded(value: &str, limit: usize) -> Result<(), Error> {
@@ -11,7 +11,7 @@ pub(crate) fn bounded(value: &str, limit: usize) -> Result<(), Error> {
     Ok(())
 }
 
-pub(crate) fn resource<P>(value: &Resource<P>) -> Result<(), Error> {
+pub(crate) fn resource(value: &Input) -> Result<(), Error> {
     bounded(&value.name, 255)?;
     match &value.content {
         Content::Group(targets) => {

@@ -1,4 +1,4 @@
-//! Owner-scoped dashboard aggregation over the existing database. Read-only, and
+//! Shared dashboard aggregation over the existing database. Read-only, and
 //! never reads entered participant values: credentials-entered counts only the
 //! stored password-presence boolean.
 use ruphish_application::{auth::Identity, overview::*, resources::Error};
@@ -25,15 +25,13 @@ impl Repository for Overview {
             .await
             .map_err(storage)?;
         super::resources::authorize(&mut tx, caller, false).await?;
-        let owner = caller.id;
 
         // Recent campaigns, newest first, with audience size.
         let rows = sqlx::query(
             "SELECT id,name,status,launch_date,\
              (SELECT count(*) FROM results r WHERE r.campaign_id=c.id) AS total \
-             FROM campaigns c WHERE user_id=$1 ORDER BY id DESC LIMIT 5",
+             FROM campaigns c  ORDER BY id DESC LIMIT 5",
         )
-        .bind(owner)
         .fetch_all(&mut *tx)
         .await
         .map_err(storage)?;
@@ -51,55 +49,42 @@ impl Repository for Overview {
                     .map_err(storage)?
                     .unwrap_or_default(),
                 recipients: r.try_get("total").map_err(storage)?,
-                outcomes: aggregate(
-                    &mut tx,
-                    owner,
-                    None,
-                    now,
-                    Some(r.try_get("id").map_err(storage)?),
-                )
-                .await?,
+                outcomes: aggregate(&mut tx, None, now, Some(r.try_get("id").map_err(storage)?))
+                    .await?,
             });
         }
 
-        // Resource inventory. Each owner-scoped count is an explicit literal query.
+        // Resource inventory. Each installation-wide count is an explicit literal query.
         let inventory = Inventory {
             reporting_mailboxes: sqlx::query_scalar(
-                "SELECT count(*) FROM ruphish_mailboxes WHERE owner_id=$1",
+                "SELECT count(*) FROM ruphish_mailboxes ",
             )
-            .bind(owner)
             .fetch_one(&mut *tx)
             .await
             .map_err(storage)?,
             templates: sqlx::query_scalar(super::inventory_sql::TEMPLATES)
-                .bind(owner)
                 .fetch_one(&mut *tx)
                 .await
                 .map_err(storage)?,
             pages: sqlx::query_scalar(super::inventory_sql::PAGES)
-                .bind(owner)
                 .fetch_one(&mut *tx)
                 .await
                 .map_err(storage)?,
             groups: sqlx::query_scalar(super::inventory_sql::GROUPS)
-                .bind(owner)
                 .fetch_one(&mut *tx)
                 .await
                 .map_err(storage)?,
             profiles: sqlx::query_scalar(super::inventory_sql::PROFILES)
-                .bind(owner)
                 .fetch_one(&mut *tx)
                 .await
                 .map_err(storage)?,
-            domains: sqlx::query_scalar("SELECT count(*) FROM ruphish_domains WHERE owner_id=$1")
-                .bind(owner)
+            domains: sqlx::query_scalar("SELECT count(*) FROM ruphish_domains ")
                 .fetch_one(&mut *tx)
                 .await
                 .map_err(storage)?,
             domains_verified: sqlx::query_scalar(
-                "SELECT count(*) FROM ruphish_domains WHERE owner_id=$1 AND (SELECT verification_required FROM ruphish_domain_policy WHERE id=ruphish_domains.id) AND (SELECT eligible_until FROM ruphish_domain_policy WHERE id=ruphish_domains.id)>$2",
+                "SELECT count(*) FROM ruphish_domains WHERE (SELECT verification_required FROM ruphish_domain_policy WHERE id=ruphish_domains.id) AND (SELECT eligible_until FROM ruphish_domain_policy WHERE id=ruphish_domains.id)>$1",
             )
-            .bind(owner)
             .bind(now)
             .fetch_one(&mut *tx)
             .await
@@ -108,29 +93,26 @@ impl Repository for Overview {
 
         // Attention items.
         let unverified_enabled_domains: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM ruphish_domains WHERE owner_id=$1 AND enabled=TRUE AND (SELECT verification_required FROM ruphish_domain_policy WHERE id=ruphish_domains.id) AND (SELECT eligible_until FROM ruphish_domain_policy WHERE id=ruphish_domains.id)<=$2",
+            "SELECT count(*) FROM ruphish_domains WHERE enabled=TRUE AND (SELECT verification_required FROM ruphish_domain_policy WHERE id=ruphish_domains.id) AND (SELECT eligible_until FROM ruphish_domain_policy WHERE id=ruphish_domains.id)<=$1",
         )
-        .bind(owner)
         .bind(now)
         .fetch_one(&mut *tx)
         .await
         .map_err(storage)?;
         let delivery_problems: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM ruphish_delivery d JOIN campaigns c ON c.id=d.campaign_id \
-             WHERE c.user_id=$1 AND c.status!='Completed' AND d.state IN ('failed','blocked','unknown')",
+             WHERE c.status!='Completed' AND d.state IN ('failed','blocked','unknown')",
         )
-        .bind(owner)
         .fetch_one(&mut *tx)
         .await
         .map_err(storage)?;
-        let campaign_ids: Vec<i64> = sqlx::query_scalar("SELECT DISTINCT c.id FROM campaigns c JOIN ruphish_delivery d ON d.campaign_id=c.id WHERE c.user_id=$1 AND c.status!='Completed' AND d.state IN ('failed','blocked','unknown') ORDER BY c.id LIMIT 10")
-            .bind(owner).fetch_all(&mut *tx).await.map_err(storage)?;
+        let campaign_ids: Vec<i64> = sqlx::query_scalar("SELECT DISTINCT c.id FROM campaigns c JOIN ruphish_delivery d ON d.campaign_id=c.id WHERE c.status!='Completed' AND d.state IN ('failed','blocked','unknown') ORDER BY c.id LIMIT 10")
+            .fetch_all(&mut *tx).await.map_err(storage)?;
         let next_launch = sqlx::query(
             "SELECT id,name,launch_date FROM campaigns \
-             WHERE user_id=$1 AND status!='Completed' AND (CASE WHEN launch_date>='1000' THEN floor(extract(epoch FROM launch_date::timestamptz))::bigint END)>$2 \
+             WHERE status!='Completed' AND (CASE WHEN launch_date>='1000' THEN floor(extract(epoch FROM launch_date::timestamptz))::bigint END)>$1 \
              ORDER BY (CASE WHEN launch_date>='1000' THEN floor(extract(epoch FROM launch_date::timestamptz))::bigint END),id LIMIT 1",
         )
-        .bind(owner)
         .bind(now)
         .fetch_optional(&mut *tx)
         .await
@@ -169,13 +151,13 @@ impl Repository for Overview {
             .map_err(storage)?;
         super::resources::authorize(&mut tx, caller, false).await?;
         let since = window.since(now);
-        let counts = aggregate(&mut tx, caller.id, since, now, None).await?;
+        let counts = aggregate(&mut tx, since, now, None).await?;
         let previous = if let Some(until) = since {
             let start = until - (now - until);
             Some(PreviousPeriod {
                 since: start,
                 until,
-                counts: aggregate(&mut tx, caller.id, Some(start), until - 1, None).await?,
+                counts: aggregate(&mut tx, Some(start), until - 1, None).await?,
             })
         } else {
             None
@@ -192,7 +174,6 @@ impl Repository for Overview {
 /// progression from evidence without changing the recorded history.
 async fn aggregate(
     connection: &mut sqlx::PgConnection,
-    owner: i64,
     since: Option<i64>,
     now: i64,
     campaign: Option<i64>,
@@ -201,10 +182,10 @@ async fn aggregate(
     let groups = super::engagement::GROUPS;
     let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
         r#"
-        WITH parameters AS (SELECT $1::bigint AS owner, $2::bigint AS since, $3::bigint AS now_time, $4::bigint AS campaign), identities AS (
+        WITH parameters AS (SELECT $1::bigint AS since, $2::bigint AS now_time, $3::bigint AS campaign), identities AS (
             SELECT r.campaign_id,r.email,r.id
             FROM results r JOIN campaigns c ON c.id=r.campaign_id
-            WHERE c.user_id=(SELECT owner FROM parameters) AND ((SELECT campaign FROM parameters) IS NULL OR c.id=(SELECT campaign FROM parameters))
+            WHERE ((SELECT campaign FROM parameters) IS NULL OR c.id=(SELECT campaign FROM parameters))
         ), accepted AS (
             SELECT i.*,min((CASE WHEN e.time>='1000' THEN floor(extract(epoch FROM e.time::timestamptz))::bigint END)) AS first_sent
             FROM identities i JOIN event_history e ON e.campaign_id=i.campaign_id AND e.recipient_id=i.id
@@ -221,7 +202,6 @@ async fn aggregate(
         {groups}
     "#,
     )))
-    .bind(owner)
     .bind(since)
     .bind(now)
     .bind(campaign)

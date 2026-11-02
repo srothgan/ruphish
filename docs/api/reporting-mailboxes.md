@@ -7,11 +7,11 @@ sidebar:
 
 Reporting mailboxes match reported messages to campaign recipients. Multiple mailbox resources replace the single-setting model used by older integrations.
 
-Once an administrator enables reporting mailboxes, regular users with `modify_objects` can create and manage their own configurations without per-mailbox approval. Reading requires `view_objects` and configuration ownership. The creator restriction applies to configuration access, not campaign report matching. While the feature is disabled, creation, configuration saves, and validation/check/resume actions return `409` with `FEATURE_DISABLED`; authorized reads and deletion remain available.
+Once an administrator enables reporting mailboxes, regular users with `modify_objects` can create and manage shared configurations without per-mailbox approval. Reading requires `view_objects`. Configuration access and campaign report matching are shared across creators. While the feature is disabled, creation, configuration saves, and validation/check/resume actions return `409` with `FEATURE_DISABLED`; authorized reads and deletion remain available.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET, POST | `/api/reporting-mailboxes/` | List or create owned mailboxes |
+| GET, POST | `/api/reporting-mailboxes/` | List or create shared mailboxes |
 | GET, PUT, DELETE | `/api/reporting-mailboxes/{id}` | Read, edit, or delete configuration |
 | POST | `/api/reporting-mailboxes/{id}/validate` | Test configuration; return updated resource |
 | POST | `/api/reporting-mailboxes/{id}/check` | Request a poll; returns `202` with resource state |
@@ -27,7 +27,7 @@ Writes contain `name`, `enabled`, `host`, `port`, `username`, optional `password
 
 Responses add `id`, `revision`, `last_check`, `last_success`, `next_check`, `running`, `code`, and recent `history`. Run timestamps use UTC Unix seconds. History includes fixed outcome codes and matched/rejected counts; a successful connection test does not mean a report was matched.
 
-Send the expected revision on edits and use `If-Match` when deleting to protect against concurrent changes. Resume requires a JSON body containing `revision`. It deliberately establishes a new-arrival checkpoint after UIDVALIDITY changes; it is not a request to process all historical mail.
+Edits require the expected numeric `revision`; deletion requires its quoted `If-Match`. Missing preconditions return `428 REVISION_REQUIRED`, stale versions return `412 RESOURCE_CHANGED`, and deleted resources return `404 RESOURCE_NOT_FOUND`. Resume requires a JSON body containing `revision`. It deliberately establishes a new-arrival checkpoint after UIDVALIDITY changes; it is not a request to process all historical mail.
 
 ## Matching and acknowledgement
 

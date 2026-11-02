@@ -1,4 +1,4 @@
-//! Creator authorization and account lifecycle against each real provider.
+//! Shared integration configuration, concurrent writes and account lifecycle on each provider.
 use super::{query_work::Inspector, *};
 use ruphish_application::integrations::WebhookEdit;
 
@@ -19,35 +19,56 @@ async fn contract(db: &Database, inspect: &mut Inspector) {
     inspect.execute("INSERT INTO users(id,username,hash,api_key,role_id,password_change_required,account_locked) VALUES(1,'admin','hash','admin-key',1,FALSE,FALSE),(2,'operator','hash','operator-key',2,FALSE,FALSE),(3,'colleague','hash','colleague-key',2,FALSE,FALSE); INSERT INTO ruphish_auth_state VALUES(1,0),(2,0),(3,0); UPDATE ruphish_settings SET webhooks_enabled=TRUE;").await;
     let repo = db.integrations();
     let accounts = db.accounts();
-    let own = repo.save_webhook(OWNER, None, edit(None)).await.unwrap();
+    let mut own = repo.save_webhook(OWNER, None, edit(None)).await.unwrap();
     let other = repo.save_webhook(ADMIN, None, edit(None)).await.unwrap();
-    assert_eq!(repo.webhooks(OWNER).await.unwrap()[0].id, own.id);
-    assert_eq!(repo.webhooks(ADMIN).await.unwrap()[0].id, other.id);
+    assert_eq!(repo.webhooks(OWNER).await.unwrap().len(), 2);
+    assert_eq!(repo.webhooks(ADMIN).await.unwrap().len(), 2);
     for caller in [ADMIN, auth::Identity { id: 3, epoch: 0 }] {
+        assert_eq!(repo.webhook(caller, own.id).await.unwrap().id, own.id);
+        let previous = own.revision;
+        own = repo
+            .save_webhook(caller, Some(own.id), edit(Some(previous)))
+            .await
+            .unwrap();
+        assert_eq!(own.attribution.created_by, Some(OWNER.id));
+        assert_eq!(own.attribution.edited_by, Some(caller.id));
         assert!(matches!(
-            repo.webhook(caller, own.id).await,
-            Err(Error::NotFound("Webhook"))
-        ));
-        assert!(matches!(
-            repo.save_webhook(caller, Some(own.id), edit(Some(own.revision)))
+            repo.save_webhook(caller, Some(own.id), edit(Some(previous)))
                 .await,
-            Err(Error::NotFound("Webhook"))
+            Err(Error::Changed)
         ));
         assert!(matches!(
-            repo.validate_webhook(caller, own.id).await,
-            Err(Error::NotFound("Webhook"))
+            repo.delete_webhook(caller, own.id, Some(previous)).await,
+            Err(Error::Changed)
         ));
-        for revision in [None, Some(own.revision), Some(own.revision + 1)] {
-            assert!(matches!(
-                repo.delete_webhook(caller, own.id, revision).await,
-                Err(Error::NotFound("Webhook"))
-            ));
-        }
     }
-    assert_eq!(
-        repo.webhook(OWNER, own.id).await.unwrap().revision,
-        own.revision
+    assert!(matches!(
+        repo.save_webhook(ADMIN, Some(own.id), edit(None)).await,
+        Err(Error::RevisionRequired)
+    ));
+    assert!(matches!(
+        repo.delete_webhook(ADMIN, own.id, None).await,
+        Err(Error::RevisionRequired)
+    ));
+    let mut left = edit(Some(own.revision));
+    left.name = "Concurrent left".into();
+    left.secret = None;
+    let mut right = edit(Some(own.revision));
+    right.name = "Concurrent right".into();
+    right.secret = None;
+    let (a, b) = tokio::join!(
+        repo.save_webhook(OWNER, Some(own.id), left),
+        repo.save_webhook(ADMIN, Some(own.id), right)
     );
+    assert_eq!(usize::from(a.is_ok()) + usize::from(b.is_ok()), 1);
+    assert!(matches!(
+        a.as_ref().err().or(b.as_ref().err()),
+        Some(Error::Changed)
+    ));
+    let previous = own.revision;
+    own = a.or(b).unwrap();
+    assert_eq!(own.revision, previous + 1);
+    assert_eq!(repo.webhook(ADMIN, own.id).await.unwrap().name, own.name);
     assert!(repo.webhook(OWNER, own.id).await.unwrap().has_secret);
     inspect.execute("INSERT INTO campaigns(id,user_id,name,status) VALUES(41,1,'Other creator','In progress'); INSERT INTO results(id,campaign_id,user_id,r_id,email,status) VALUES(41,41,1,'other-owner','person@example.test','Email Sent'); INSERT INTO events(id,campaign_id,recipient_id,email,time,kind,source) VALUES(41,41,41,'person@example.test','2026-01-01T00:00:00Z','link_clicked','public'); DELETE FROM ruphish_webhook_jobs; INSERT INTO ruphish_webhook_jobs(webhook_id,revision,event_id) SELECT webhook_id,revision,41 FROM ruphish_webhook_state;").await;
     // Configuration ownership does not bind delivery to the creator's session or campaigns.
@@ -98,8 +119,8 @@ async fn contract(db: &Database, inspect: &mut Inspector) {
             inspect
                 .scalar(&format!("SELECT count(*) FROM {table}"))
                 .await,
-            1,
-            "deletion removes only the creator's {table}"
+            2,
+            "account deletion preserves shared {table}"
         );
     }
     assert_eq!(inspect.scalar("SELECT count(*) FROM ruphish_webhook_attempts a LEFT JOIN ruphish_webhook_jobs j ON j.id=a.job_id WHERE j.id IS NULL").await, 0);
@@ -114,7 +135,12 @@ async fn contract(db: &Database, inspect: &mut Inspector) {
     inspect
         .execute("UPDATE ruphish_settings SET webhooks_enabled=FALSE")
         .await;
-    repo.delete_webhook(ADMIN, other.id, None).await.unwrap();
+    repo.delete_webhook(ADMIN, other.id, Some(other.revision))
+        .await
+        .unwrap();
+    repo.delete_webhook(ADMIN, own.id, Some(own.revision))
+        .await
+        .unwrap();
     for table in [
         "webhooks",
         "ruphish_webhook_state",
@@ -177,35 +203,21 @@ async fn postgres_webhook_ownership() {
 
 #[tokio::test]
 #[ignore = "Requires canonical MySQL fixture"]
-async fn mysql_legacy_webhook_ownership_requires_an_administrator() {
+async fn mysql_legacy_webhook_creator_is_unknown_without_an_administrator() {
     let (mut connection, config) = fixture().await;
     latest_legacy(&mut connection).await;
     sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id) VALUES(5,'normal','hash','normal-key',2),(17,'admin','hash','admin-key',1),(31,'other-admin','hash','other-key',1); INSERT INTO webhooks(id,name,url,secret,is_active) VALUES(71,'Imported','https://receiver.example.test/hook','preserved-secret',1); DELETE FROM role_permissions WHERE permission_id=(SELECT id FROM permissions WHERE slug='modify_system');").execute(&mut connection).await.unwrap();
-    assert!(
-        database::open(Config::MySql(config.clone()), Policy::default())
-            .await
-            .is_err()
-    );
-    assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='ruphish_webhook_state'").fetch_one(&mut connection).await.unwrap(), 0);
-    assert_eq!(
-        sqlx::query_scalar::<_, String>("SELECT secret FROM webhooks WHERE id=71")
-            .fetch_one(&mut connection)
-            .await
-            .unwrap(),
-        "preserved-secret"
-    );
-    sqlx::raw_sql("INSERT INTO role_permissions(role_id,permission_id) SELECT 1,id FROM permissions WHERE slug='modify_system'").execute(&mut connection).await.unwrap();
     let db = database::open(Config::MySql(config.clone()), Policy::default())
         .await
         .unwrap();
     assert_eq!(
-        sqlx::query_scalar::<_, i64>(
+        sqlx::query_scalar::<_, Option<i64>>(
             "SELECT owner_id FROM ruphish_webhook_state WHERE webhook_id=71"
         )
         .fetch_one(&mut connection)
         .await
         .unwrap(),
-        17
+        None
     );
     assert!(
         db.integrations()
@@ -214,12 +226,13 @@ async fn mysql_legacy_webhook_ownership_requires_an_administrator() {
             .unwrap()
             .has_secret
     );
-    assert!(matches!(
+    assert!(
         db.integrations()
             .webhook(auth::Identity { id: 31, epoch: 0 }, 71)
-            .await,
-        Err(Error::NotFound("Webhook"))
-    ));
+            .await
+            .unwrap()
+            .has_secret
+    );
     db.close().await;
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
         "DROP DATABASE `{}`",

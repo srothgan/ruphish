@@ -157,7 +157,7 @@ pub fn prepare_creation(
     format: &str,
     mut value: Value,
 ) -> Result<PreparedImport, ImportError> {
-    use ruphish_contracts::legacy;
+    use ruphish_contracts::resources::request as input;
     let supported = match format {
         "json" => matches!(
             family,
@@ -231,26 +231,23 @@ pub fn prepare_creation(
     }
     // Drop identity before decoding so an irrelevant old timestamp/ID cannot block an import.
     if let Some(fields) = value.as_object_mut() {
-        for key in ["id", "user_id", "modified_date"] {
-            fields.remove(key);
-        }
+        fields.remove("id");
     }
     // Canonical serialization also drops nested recipient/header IDs and unknown fields.
     let mut fields = match family {
-        "groups" => canonical::<legacy::Group>(value)?,
-        "templates" => canonical::<legacy::EmailTemplate>(value)?,
+        "groups" => canonical::<input::Group>(value)?,
+        "templates" => canonical::<input::EmailTemplate>(value)?,
         "learning-pages" => {
             if value.get("name").is_none() {
                 value["name"] = json!("");
             }
-            canonical::<ruphish_contracts::resources::LearningPageInput>(value)?
+            canonical::<ruphish_contracts::resources::request::LearningPage>(value)?
         }
-        "pages" => canonical::<legacy::LandingPage>(value)?,
-        "smtp" => canonical::<legacy::SendingProfile>(value)?,
+        "pages" => canonical::<input::LandingPage>(value)?,
+        "smtp" => canonical::<input::SendingProfile>(value)?,
         _ => return Err(ImportError::WrongResourceType),
     };
     if let Some(object) = fields.as_object_mut() {
-        object.remove("modified_date");
         object.insert("id".into(), json!(0));
     }
     Ok(PreparedImport { fields, review })

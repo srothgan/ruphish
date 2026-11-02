@@ -15,6 +15,14 @@ pub fn hash() -> String {
 
 // Raw checks complement the public facade, which intentionally hides legacy private values.
 pub const INSPECTIONS: &[(&str, i64)] = &[
+    (
+        "SELECT count(*) FROM campaigns WHERE frozen_content IS NULL",
+        0,
+    ),
+    (
+        "SELECT count(*) FROM campaigns WHERE frozen_content LIKE '%smtp-secret%' OR frozen_content LIKE '%imap-secret%'",
+        0,
+    ),
     ("SELECT count(*) FROM users", 4),
     ("SELECT count(*) FROM group_targets", 4),
     (
@@ -38,7 +46,7 @@ pub const INSPECTIONS: &[(&str, i64)] = &[
     ("SELECT count(*) FROM imap", 0),
     ("SELECT count(*) FROM ruphish_webhook_jobs", 0),
     (
-        "SELECT count(*) FROM ruphish_webhook_state WHERE webhook_id IN (81,82) AND owner_id=17 AND revision=1",
+        "SELECT count(*) FROM ruphish_webhook_state WHERE webhook_id IN (81,82) AND owner_id IS NULL AND revision=1",
         2,
     ),
     (
@@ -122,6 +130,14 @@ pub async fn contract(db: &Database) {
     );
 
     let resources = db.resources();
+    for (kind, id) in [(Kind::Group, 21), (Kind::Template, 41), (Kind::Profile, 67)] {
+        assert_eq!(
+            resources.get(OWNER, kind, id).await.unwrap().revision,
+            1,
+            "migrated resources start at numeric version 1"
+        );
+    }
+
     assert_eq!(
         resources
             .list(OWNER, Kind::Group)
@@ -130,7 +146,7 @@ pub async fn contract(db: &Database) {
             .iter()
             .map(|g| g.id)
             .collect::<Vec<_>>(),
-        [21, 22, 24]
+        [21, 22, 23, 24]
     );
     assert_eq!(
         resources
@@ -140,12 +156,9 @@ pub async fn contract(db: &Database) {
             .iter()
             .map(|g| g.id)
             .collect::<Vec<_>>(),
-        [23]
+        [21, 22, 23, 24]
     );
-    assert!(matches!(
-        resources.get(OTHER, Kind::Group, 21).await,
-        Err(Error::NotFound(_))
-    ));
+    assert!(resources.get(OTHER, Kind::Group, 21).await.is_ok());
     let group = resources.get(OWNER, Kind::Group, 21).await.unwrap();
     assert_eq!(group.name, "Équipe 東京");
     let Content::Group(recipients) = group.content else {
@@ -296,10 +309,7 @@ pub async fn contract(db: &Database) {
         campaign.policy.unwrap().redirect_url,
         "https://learn.example.test/finish?q=1"
     );
-    assert!(matches!(
-        db.campaigns().get(OTHER, 53).await,
-        Err(Error::NotFound(_))
-    ));
+    assert!(db.campaigns().get(OTHER, 53).await.is_ok());
     assert!(
         db.campaigns()
             .get(OWNER, 54)
@@ -347,7 +357,7 @@ pub async fn contract(db: &Database) {
         assert!(deliveries.items.iter().all(|d| d.due == 1_893_456_000));
     }
     let mailboxes = db.integrations().mailboxes(OWNER).await.unwrap();
-    assert_eq!(mailboxes.len(), 1);
+    assert_eq!(mailboxes.len(), 2);
     assert!(
         mailboxes[0].enabled
             && mailboxes[0].has_password
@@ -359,13 +369,13 @@ pub async fn contract(db: &Database) {
         ("Reports", 120)
     );
     let disabled = db.integrations().mailboxes(OTHER).await.unwrap();
-    assert_eq!(disabled.len(), 1);
-    assert!(!disabled[0].enabled);
+    assert_eq!(disabled.len(), 2);
+    assert!(!disabled[1].enabled);
     assert_eq!(
         (
-            disabled[0].port,
-            disabled[0].folder.as_str(),
-            disabled[0].frequency
+            disabled[1].port,
+            disabled[1].folder.as_str(),
+            disabled[1].frequency
         ),
         (993, "INBOX", 60)
     );
@@ -377,5 +387,52 @@ pub async fn contract(db: &Database) {
             .collect::<Vec<_>>(),
         [(81, true, true), (82, false, false)]
     );
-    assert!(db.integrations().webhooks(OTHER).await.unwrap().is_empty());
+    assert_eq!(db.integrations().webhooks(OTHER).await.unwrap().len(), 2);
+}
+
+// Imported historical IDs remain attribution even without a live creator account.
+pub async fn deleted_creator_contract(db: &Database) {
+    let original = db.resources().get(OTHER, Kind::Template, 41).await.unwrap();
+    assert_eq!(original.attribution.created_by, Some(17));
+    assert_eq!(original.attribution.edited_by, None);
+    let Content::Template(content) = &original.content else {
+        panic!()
+    };
+    assert_eq!(content.attachments.len(), 2);
+    let saved = db
+        .resources()
+        .save(
+            OTHER,
+            original.clone().into(),
+            Some(41),
+            Some(original.revision.to_string()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(saved.attribution.created_by, Some(17));
+    assert_eq!(saved.attribution.edited_by, Some(18));
+    let deliveries = db.campaigns().deliveries(OTHER, 53, 0, 50).await.unwrap();
+    assert_eq!(
+        deliveries
+            .items
+            .iter()
+            .map(|d| (d.id, d.state.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(106, "ready"), (107, "unknown")]
+    );
+    let mailboxes = db.integrations().mailboxes(OTHER).await.unwrap();
+    let retained = mailboxes
+        .iter()
+        .find(|m| m.attribution.created_by == Some(17))
+        .unwrap();
+    assert!(!retained.enabled);
+    assert!(retained.has_password);
+    assert!(
+        db.integrations()
+            .webhook(OTHER, 81)
+            .await
+            .unwrap()
+            .has_secret
+    );
+    assert!(db.accounts().by_id(17).await.is_err());
 }

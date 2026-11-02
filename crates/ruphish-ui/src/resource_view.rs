@@ -44,6 +44,7 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
                 {move || {
                     data.get()
                         .map(|value| {
+                            let attribution = value.metadata.attribution.clone();
                             let id = value.metadata.id;
                             let name = value.metadata.name.clone();
                             let export = value.clone();
@@ -88,6 +89,9 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
                                         )>{tr!(ui.export_json)}</ActionButton>
                                     </ResourceActions>
                                 </PageHeader>
+                                <AttributionInfo value=Signal::derive(move || {
+                                    attribution.clone()
+                                }) />
                                 <Card class="resource-read-panel">{body(value)}</Card>
                             }
                         })
@@ -243,7 +247,7 @@ fn body(value: Resource) -> AnyView {
                     <ul>
                         {attachments
                             .into_iter()
-                            .map(|a| view! { <li>{a.name}" · "{a.mime}</li> })
+                            .map(|a| view! { <li>{a.name}" · "{a.mime_type}</li> })
                             .collect_view()}
                     </ul>
                 </section>

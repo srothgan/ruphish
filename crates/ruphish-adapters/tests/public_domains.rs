@@ -292,6 +292,9 @@ async fn enable_verification(db: &DatabaseFixture, webhooks: bool) {
         .unwrap();
 }
 async fn fixture() -> (tempfile::TempDir, DatabaseFixture) {
+    fixture_with_page(None).await
+}
+async fn fixture_with_page(html: Option<&str>) -> (tempfile::TempDir, DatabaseFixture) {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("state.db");
     std::fs::copy(
@@ -300,6 +303,19 @@ async fn fixture() -> (tempfile::TempDir, DatabaseFixture) {
         &path,
     )
     .unwrap();
+    if let Some(html) = html {
+        let raw = sqlx::SqlitePool::connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE pages SET html=?")
+            .bind(html)
+            .execute(&raw)
+            .await
+            .unwrap();
+        raw.close().await;
+    }
     let db = DatabaseFixture::open(&path).await.unwrap();
     enable_verification(&db, false).await;
     (dir, db)
@@ -381,7 +397,7 @@ async fn legacy_domains_start_unverified_and_stale_claims_cannot_revalidate_disa
 }
 #[tokio::test]
 async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_only() {
-    let (_dir, db) = fixture().await;
+    let (_dir, db) = fixture_with_page(Some("<style>.form { color: navy }</style><form id='form'><label for='pw'>Password</label><input id='pw' name='password' type='password' autocomplete='current-password'><button>Continue</button></form><script>fetch('https://outside.invalid')</script>")).await;
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     let store = db.domains();
     let public = db.interactions();
@@ -406,7 +422,6 @@ async fn interaction_workflow_is_host_bound_idempotent_monotonic_and_presence_on
     .execute(&db.inspection_pool())
     .await
     .unwrap();
-    sqlx::query("UPDATE pages SET html=?").bind("<style>.form { color: navy }</style><form id='form'><label for='pw'>Password</label><input id='pw' name='password' type='password' autocomplete='current-password'><button>Continue</button></form><script>fetch('https://outside.invalid')</script>").execute(&db.inspection_pool()).await.unwrap();
     assert!(
         public
             .interact(
@@ -900,8 +915,7 @@ async fn domain_expiry_and_disabling_fence_queue_claim_and_submission_without_lo
 }
 
 #[tokio::test]
-async fn expired_leases_and_rotated_challenges_cannot_publish_stale_evidence_or_cross_owner_claims()
-{
+async fn expired_leases_and_rotated_challenges_cannot_publish_stale_evidence_on_shared_domains() {
     let (_dir, db) = fixture().await;
     let store = db.domains();
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
@@ -921,32 +935,37 @@ async fn expired_leases_and_rotated_challenges_cannot_publish_stale_evidence_or_
     assert!(eligibility(true, verified.verified_until, now + 93).is_ok());
     sqlx::raw_sql("INSERT INTO users(id,username,hash,api_key,role_id,account_locked,password_change_required) SELECT 2,'second-domain-owner',hash,'second-domain-owner-key',role_id,0,0 FROM users WHERE id=1; INSERT INTO ruphish_auth_state(user_id,epoch) VALUES(2,0);").execute(&db.inspection_pool()).await.unwrap();
     let other = Identity { id: 2, epoch: 0 };
-    assert!(store.get(other, verified.id).await.is_err());
-    let second = store
-        .save(
-            other,
-            None,
-            Edit {
-                name: "Other owner".into(),
-                origin: verified.origin.clone(),
-                enabled: true,
-                revision: None,
-            },
-            now + 93,
-        )
-        .await
-        .unwrap();
-    let conflicting = store.claim(now + 94).await.unwrap().unwrap();
-    assert_eq!(conflicting.domain.id, second.id);
-    store.finish(&conflicting, proof(), now + 95).await.unwrap();
-    let rejected = store.get(other, second.id).await.unwrap();
-    assert_eq!(rejected.code, "domain_claim_conflict");
-    assert_eq!(rejected.verified_until, 0);
+    let shared = store.get(other, verified.id).await.unwrap();
+    assert_eq!(shared.id, verified.id);
+    assert_eq!(shared.origin, verified.origin);
+    assert_eq!(shared.attribution, verified.attribution);
+    assert_eq!(shared.verified_until, verified.verified_until);
+    assert!(
+        store
+            .save(
+                other,
+                None,
+                Edit {
+                    name: "Duplicate shared origin".into(),
+                    origin: verified.origin.clone(),
+                    enabled: true,
+                    revision: None
+                },
+                now + 93
+            )
+            .await
+            .is_err()
+    );
+    assert_eq!(store.list(other).await.unwrap().len(), 1);
     let rotated = store
         .request_check(caller(), verified.id, verified.challenge_expires + 1)
         .await
         .unwrap();
     assert_ne!(rotated.challenge, verified.challenge);
+    assert_eq!(
+        rotated.revision, verified.revision,
+        "challenge rotation is operational state, not an authored edit"
+    );
     assert!(
         store
             .routing_proof(
@@ -982,13 +1001,13 @@ async fn verification_history_is_coalesced_atomic_bounded_and_latest_failure_rev
     let id = store.list(caller()).await.unwrap()[0].id;
     let initial = store.request_check(caller(), id, now).await.unwrap();
     assert_eq!(initial.active_check.as_ref().unwrap().state, "queued");
-    let active = initial.active_check.unwrap().id;
+    let active = initial.active_check.as_ref().unwrap().id;
     let (a, b) = tokio::join!(
         store.request_check(caller(), id, now),
         store.request_check(caller(), id, now)
     );
-    assert_eq!(a.unwrap().active_check.unwrap().id, active);
-    assert_eq!(b.unwrap().active_check.unwrap().id, active);
+    assert_eq!(a.unwrap().active_check.as_ref().unwrap().id, active);
+    assert_eq!(b.unwrap().active_check.as_ref().unwrap().id, active);
     let check = store.claim(now).await.unwrap().unwrap();
     assert_eq!(
         store
@@ -1020,7 +1039,7 @@ async fn verification_history_is_coalesced_atomic_bounded_and_latest_failure_rev
         "expired"
     );
     let queued = store.request_check(caller(), id, now + 2).await.unwrap();
-    assert_eq!(queued.active_check.unwrap().scheduled_at, now + 31);
+    assert_eq!(queued.active_check.as_ref().unwrap().scheduled_at, now + 31);
     assert!(store.claim(now + 30).await.unwrap().is_none());
     let failed = store.claim(now + 31).await.unwrap().unwrap();
     // A failed history write must roll back the domain observation too.
@@ -1104,7 +1123,7 @@ async fn queued_and_running_checks_survive_reopen_and_expired_workers_cannot_pub
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     let id = store.list(caller()).await.unwrap()[0].id;
     let before = store.request_check(caller(), id, now).await.unwrap();
-    let queued_id = before.active_check.unwrap().id;
+    let queued_id = before.active_check.as_ref().unwrap().id;
     db.close().await;
     let db = DatabaseFixture::open(&dir.path().join("state.db"))
         .await
@@ -1136,7 +1155,7 @@ async fn queued_and_running_checks_survive_reopen_and_expired_workers_cannot_pub
     assert_eq!(restored.state, "running");
     let new = store.claim(now + 91).await.unwrap().unwrap();
     let recovered = store.get(caller(), before.id).await.unwrap();
-    assert_ne!(recovered.active_check.unwrap().id, queued_id);
+    assert_ne!(recovered.active_check.as_ref().unwrap().id, queued_id);
     assert_eq!(recovered.history[0].state, "timed_out");
     assert_eq!(recovered.history[0].code, "domain_worker_timeout");
     store.finish(&old, proof(), now + 92).await.unwrap();

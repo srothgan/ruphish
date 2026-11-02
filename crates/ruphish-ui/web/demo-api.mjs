@@ -28,7 +28,7 @@ const copy = (value) => structuredClone(value);
 const json = (value, status = 200) =>
   new Response(JSON.stringify(value), {
     status,
-    headers: { 'content-type': 'application/json', etag: '"1"' },
+    headers: { 'content-type': 'application/json', etag: `"${value?.revision ?? 1}"` },
   });
 const success = (data = null) => json({ success: true, message: 'Demo action simulated', data });
 const failure = (status, code = 'REQUEST_FAILED') =>
@@ -278,11 +278,37 @@ export function analysis(campaign, query, now, paginate = true) {
   };
 }
 
+function attributed(data, value) {
+  const user = (id) => {
+    if (id == null) {
+      return null;
+    }
+    const active = data.users.find((u) => u.id === id);
+    if (active) {
+      return { id, username: active.username, deleted: false };
+    }
+    const retained = data.authors.find((u) => u.id === id && u.deleted);
+    return { id, username: retained?.username ?? null, deleted: retained?.deleted ?? false };
+  };
+  return {
+    ...value,
+    created_by: user(value.created_by),
+    edited_by: user(value.edited_by),
+    edited_at: value.edited_at ?? null,
+  };
+}
+
 function summaries(data, family) {
   const rows = data[family].map((r) => ({
     id: r.id,
     name: r.name,
     modified_date: r.modified_date,
+    revision: r.revision,
+    ...attributed(data, {
+      created_by: r.created_by,
+      edited_by: r.edited_by,
+      edited_at: r.edited_at,
+    }),
     ...(family === 'groups'
       ? { num_targets: r.targets.length }
       : {
@@ -380,7 +406,7 @@ function review(data, input) {
     if (!r) {
       throw new Error('missing_selection');
     }
-    return { id: r.id, name: r.name, revision: '1' };
+    return { id: r.id, name: r.name, revision: String(r.revision) };
   };
   const selection = {
     groups: (input.selection?.groups ?? []).map((r) => select('groups', r)),
@@ -399,6 +425,10 @@ function review(data, input) {
   const template = data.templates.find((r) => r.id === selection.template.id);
   const smtp = data.smtp.find((r) => r.id === selection.smtp.id);
   return {
+    learning_revision:
+      input.policy?.learning_page_id == null
+        ? null
+        : select('learning-pages', { id: input.policy.learning_page_id }).revision,
     warnings: [],
     total,
     duplicate_count: targets.length - total,
@@ -776,7 +806,7 @@ export function createDemoApi({
           return entry.launch === launch ? json({ id: draft.campaign_id }) : failure(409);
         }
         if (body.revision !== draft.revision) {
-          return failure(409);
+          return failure(412, 'RESOURCE_CHANGED');
         }
         try {
           review(data, body.campaign);
@@ -820,21 +850,28 @@ export function createDemoApi({
         }
         if (draft) {
           if (draft.campaign_id !== null) {
-            return failure(409);
+            return failure(412, 'RESOURCE_CHANGED');
           }
           if (body.revision !== draft.revision) {
             // A lost acknowledgement may replay the immediately preceding save.
             return (body.revision ?? 0) + 1 === draft.revision &&
               body.step === draft.step &&
               JSON.stringify(configuration) === JSON.stringify(draft.configuration)
-              ? json(draft)
-              : failure(409);
+              ? json(attributed(data, draft))
+              : body.revision == null
+                ? failure(428, 'REVISION_REQUIRED')
+                : failure(412, 'RESOURCE_CHANGED');
           }
+        } else if (body.revision != null) {
+          return failure(404, 'RESOURCE_NOT_FOUND');
         }
         const saved = {
           id,
           revision: (draft?.revision ?? 0) + 1,
           configuration,
+          created_by: draft?.created_by ?? current.id,
+          edited_by: current.id,
+          edited_at: iso(now),
           step: body.step,
           created: draft?.created ?? iso(now),
           modified: iso(now),
@@ -842,7 +879,7 @@ export function createDemoApi({
           status: 'draft',
         };
         drafts.set(id, { value: saved, launch: null });
-        return json(saved);
+        return json(attributed(data, saved));
       }
       if (!draft) {
         return failure(404);
@@ -852,12 +889,12 @@ export function createDemoApi({
           draft.campaign_id !== null ||
           url.searchParams.get('revision') !== String(draft.revision)
         ) {
-          return failure(409);
+          return failure(412, 'RESOURCE_CHANGED');
         }
         drafts.delete(id);
         return success();
       }
-      return method === 'GET' ? json(draft) : failure(405);
+      return method === 'GET' ? json(attributed(data, draft)) : failure(405);
     }
     if (path === '/api/campaigns/test' && method === 'POST') {
       return success();
@@ -870,11 +907,12 @@ export function createDemoApi({
         return failure(404);
       }
       if (method === 'GET' && operation === 'context') {
-        return json(c.header);
+        return json(attributed(data, c.header));
       }
       if (method === 'GET' && operation === 'delivery') {
         try {
-          return json(delivery(c, url.searchParams, current.id));
+          const value = delivery(c, url.searchParams, current.id);
+          return json({ ...value, campaign: attributed(data, value.campaign) });
         } catch {
           return failure(400);
         }
@@ -1098,7 +1136,7 @@ export function createDemoApi({
       return json({ html: data.pages[0].html });
     }
     if (path === '/api/import/email' && method === 'POST') {
-      return json({ ...data.templates[0], id: 0 });
+      return json({ ...attributed(data, data.templates[0]), id: 0 });
     }
     if (path === '/api/import/group/review' && method === 'POST') {
       try {
@@ -1131,7 +1169,7 @@ export function createDemoApi({
         return json(summaries(data, family));
       }
       if (method === 'GET' && family === 'domains' && identity === 'validated') {
-        return json(rows.filter((r) => r.eligible));
+        return json(rows.filter((r) => r.eligible).map((r) => attributed(data, r)));
       }
       const row = identity ? rows.find((r) => r.id === Number(identity)) : null;
       if (identity && !row) {
@@ -1145,12 +1183,42 @@ export function createDemoApi({
             (family === 'reporting-mailboxes' &&
               ['validate', 'check', 'resume'].includes(operation)))
         ) {
-          return json(row);
+          return json(attributed(data, row));
         }
         return failure(404);
       }
       if (method === 'GET') {
-        return json(identity ? row : rows);
+        return json(
+          family === 'users'
+            ? identity
+              ? row
+              : rows
+            : identity
+              ? attributed(data, row)
+              : rows.map((r) => attributed(data, r)),
+        );
+      }
+      if (row && family !== 'users' && ['PUT', 'DELETE'].includes(method)) {
+        const usesHeader =
+          method === 'DELETE' ||
+          ['groups', 'templates', 'pages', 'learning-pages', 'smtp'].includes(family);
+        const token = request.headers.get('if-match');
+        const expected = usesHeader
+          ? token == null
+            ? null
+            : /^"[1-9][0-9]*"$/.test(token)
+              ? Number(token.slice(1, -1))
+              : NaN
+          : body.revision;
+        if (expected == null) {
+          return failure(428, 'REVISION_REQUIRED');
+        }
+        if (!Number.isSafeInteger(expected) || expected < 1) {
+          return failure(400, 'REVISION_REQUIRED');
+        }
+        if (expected !== row.revision) {
+          return failure(412, 'RESOURCE_CHANGED');
+        }
       }
       if (method === 'DELETE' && row) {
         return success();
@@ -1163,7 +1231,11 @@ export function createDemoApi({
           return failure(400);
         }
         // Return an existing sample identity; subsequent reads always return the original fixture.
-        return json(copy(row ?? rows[0]), method === 'POST' ? 201 : 200);
+        const value = copy(row ?? rows[0]);
+        return json(
+          family === 'users' ? value : attributed(data, value),
+          method === 'POST' ? 201 : 200,
+        );
       }
       return failure(405);
     }

@@ -165,8 +165,18 @@ pub(super) async fn exercise(
             )
             .await
             .unwrap();
+        let interactions::Output::Submitted {
+            redirect: Some(destination),
+        } = submitted
+        else {
+            panic!("learning redirect")
+        };
+        assert_ne!(destination, format!("{origin}/learn/{}", page.public_id));
+        let frozen_id = destination
+            .strip_prefix(&format!("{origin}/learn/"))
+            .unwrap();
         assert!(
-            matches!(submitted, interactions::Output::Submitted { redirect: Some(destination) } if destination == format!("{origin}/learn/{}", page.public_id))
+            matches!(public.learning_page(origin,frozen_id).await.unwrap(),interactions::Output::Html{html,..} if html.contains("Origin explanation"))
         );
         let current = settings.get(actor).await.unwrap();
         settings
@@ -174,6 +184,7 @@ pub(super) async fn exercise(
             .await
             .unwrap();
         assert!(!domains.serves(origin).await.unwrap());
+        assert!(public.learning_page(origin, frozen_id).await.is_err());
         assert!(!campaigns.arm(&claim, now).await.unwrap());
         assert!(
             public
@@ -198,7 +209,12 @@ pub(super) async fn exercise(
             .unwrap();
     }
     db.resources()
-        .delete(actor, Kind::LearningPage, learning.id, None)
+        .delete(
+            actor,
+            Kind::LearningPage,
+            learning.id,
+            Some(learning.revision.to_string()),
+        )
         .await
         .unwrap();
 }

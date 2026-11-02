@@ -2,11 +2,11 @@
 use super::{Error, sqlite, upgrade_error};
 use std::path::Path;
 
-pub(crate) fn warn_skipped_mailboxes(count: i64) {
+pub(crate) fn warn_disabled_imported_mailboxes(count: i64) {
     if count > 0 {
         tracing::warn!(
-            skipped_mailboxes = count,
-            "Skipping legacy IMAP settings with missing, invalid, or deleted owners; originals remain in migration recovery data"
+            disabled_imported_mailboxes = count,
+            "Preserving legacy IMAP settings with missing, invalid, or deleted creators as disabled shared mailboxes; review before enabling"
         );
     }
 }

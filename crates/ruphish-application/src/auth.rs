@@ -59,7 +59,7 @@ pub enum Write {
         /// Prepared hash, computed without holding a database transaction.
         hash: Option<String>,
     },
-    /// Delete an account and its owned legacy records.
+    /// Delete an account while preserving shared resources and attribution.
     Delete(i64),
     /// Change the caller's password and clear the required-reset flag.
     Password {
@@ -74,6 +74,17 @@ pub enum Write {
     Login,
 }
 
+/// Account display projection for attributed resource responses; contains no credentials.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DisplayIdentity {
+    /// Stable account ID.
+    pub id: i64,
+    /// Current username or the name retained at deletion.
+    pub username: String,
+    /// Whether this identity is a deleted-account record.
+    pub deleted: bool,
+}
+
 /// Real account storage; writes recheck identity and policy inside a transaction.
 #[async_trait::async_trait]
 pub trait Repository: Send + Sync {
@@ -85,6 +96,8 @@ pub trait Repository: Send + Sync {
     async fn by_key(&self, key: &str) -> Result<Account, Error>;
     /// Enumerate accounts after rechecking administrative permission.
     async fn list(&self, caller: Identity) -> Result<Vec<Account>, Error>;
+    /// Resolve only the requested display identities for shared-resource attribution.
+    async fn display_identities(&self, ids: &[i64]) -> Result<Vec<DisplayIdentity>, Error>;
     /// Commit a guarded write and return the resulting account if it still exists.
     async fn write(&self, caller: Identity, write: Write) -> Result<Option<Account>, Error>;
 }
@@ -108,6 +121,10 @@ pub struct Service {
 }
 
 impl Service {
+    /// Resolve display-only identities after the owning operation authorizes resource access.
+    pub async fn display_identities(&self, ids: &[i64]) -> Result<Vec<DisplayIdentity>, Error> {
+        self.repository.display_identities(ids).await
+    }
     /// Save only the authenticated caller's display overrides.
     pub async fn save_preferences(
         &self,

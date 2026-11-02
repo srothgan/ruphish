@@ -3,9 +3,6 @@ use crate::auth::{AccountError, Identity};
 pub use ruphish_domain::resources::*;
 use std::sync::Arc;
 
-/// Resource write intent: absent password keeps the saved credential; an empty value clears it.
-pub type Input = Resource<Option<String>>;
-
 /// Safe public resource failure.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -30,10 +27,10 @@ pub enum Error {
     /// Authentication or authorization failure.
     Policy(#[from] AccountError),
     #[error("{0} not found")]
-    /// Missing resource within the caller ownership scope.
+    /// Missing resource in the shared installation.
     NotFound(&'static str),
     #[error("{0} name already in use")]
-    /// An occupied owner-scoped resource name.
+    /// An occupied shared resource name.
     Conflict(&'static str),
     #[error("{0}")]
     /// Invalid input with a safe diagnostic.
@@ -44,9 +41,14 @@ pub enum Error {
     #[error("{0}")]
     /// A synchronous external delivery failure, including an ambiguous outcome.
     Delivery(String),
-    #[error("This resource changed. Reload it before saving; your draft has been kept.")]
+    #[error(
+        "This resource changed. Your request was not applied. Review the current version before trying again."
+    )]
     /// A conditional write used a stale revision.
     Changed,
+    /// The caller must provide the revision they reviewed.
+    #[error("A resource revision is required. Load the current resource before trying again.")]
+    RevisionRequired,
     #[error("This resource is used by an active or scheduled campaign")]
     /// An unfinished campaign still references this resource.
     InUse,
@@ -54,6 +56,34 @@ pub enum Error {
     /// Infrastructure failure with details withheld from clients.
     Internal,
 }
+/// Check a management revision inside the same transaction as the mutation.
+pub fn require_revision(current: i64, expected: Option<i64>) -> Result<(), Error> {
+    match expected {
+        None => Err(Error::RevisionRequired),
+        Some(value) if value == current && value > 0 => Ok(()),
+        Some(_) => Err(Error::Changed),
+    }
+}
+
+/// Decode an opaque HTTP revision token without accepting timestamps or wildcards.
+pub fn parse_revision(value: Option<&str>) -> Result<Option<i64>, Error> {
+    value
+        .map(|value| {
+            value.parse::<i64>().ok().filter(|v| *v > 0).ok_or_else(|| {
+                Error::Invalid("Use the numeric revision returned with the resource".into())
+            })
+        })
+        .transpose()
+}
+
+/// Advance configuration versions without silently wrapping a counter.
+pub fn next_revision(current: i64) -> Result<i64, Error> {
+    current
+        .checked_add(1)
+        .filter(|v| *v > 0)
+        .ok_or(Error::Internal)
+}
+
 impl Error {
     /// Preserve classification while associating a parser failure with a field.
     pub fn at(self, field: impl Into<String>) -> Self {
@@ -76,16 +106,16 @@ impl From<crate::auth::Error> for Error {
 /// Persistence authorizes the live identity inside each read/write transaction.
 #[async_trait::async_trait]
 pub trait Repository: Send + Sync {
-    /// Read the caller-owned resources in stable identifier order.
+    /// Read the shared resources in stable identifier order.
     async fn list(&self, caller: Identity, kind: Kind) -> Result<Vec<Resource>, Error>;
-    /// Read metadata without content or credentials, optionally restricted to one owned identifier.
+    /// Read metadata without content or credentials, optionally restricted to one resource identifier.
     async fn summaries(
         &self,
         caller: Identity,
         kind: Kind,
         id: Option<i64>,
     ) -> Result<Vec<Summary>, Error>;
-    /// Read one resource after checking current ownership.
+    /// Read one resource after authorizing the current identity.
     async fn get(&self, caller: Identity, kind: Kind, id: i64) -> Result<Resource, Error>;
     /// Resolve a legacy resource name and load its content in the same authorized snapshot.
     async fn get_by_name(
@@ -101,8 +131,8 @@ pub trait Repository: Send + Sync {
         resource: Input,
         existing: Option<i64>,
         expected: Option<String>,
-    ) -> Result<Resource, Error>;
-    /// Delete only after ownership, revision and live-usage checks.
+    ) -> Result<crate::attribution::Saved<Resource>, Error>;
+    /// Delete only after authorization, revision and live-usage checks.
     async fn delete(
         &self,
         caller: Identity,
@@ -270,11 +300,11 @@ impl Service {
             .run(move || tools.preview(&source, &recipient))
             .await
     }
-    /// Read the caller-owned resources in stable identifier order.
+    /// Read the shared resources in stable identifier order.
     pub async fn list(&self, caller: Identity, kind: Kind) -> Result<Vec<Resource>, Error> {
         self.repository.list(caller, kind).await
     }
-    /// Read metadata without content or credentials, optionally restricted to one owned identifier.
+    /// Read metadata without content or credentials, optionally restricted to one resource identifier.
     pub async fn summaries(
         &self,
         caller: Identity,
@@ -283,7 +313,7 @@ impl Service {
     ) -> Result<Vec<Summary>, Error> {
         self.repository.summaries(caller, kind, id).await
     }
-    /// Read one resource after checking current ownership.
+    /// Read one resource after authorizing the current identity.
     pub async fn get(&self, caller: Identity, kind: Kind, id: i64) -> Result<Resource, Error> {
         self.repository.get(caller, kind, id).await
     }
@@ -303,7 +333,7 @@ impl Service {
         value: Input,
         id: Option<i64>,
         expected: Option<String>,
-    ) -> Result<(Resource, Vec<PageWarning>), Error> {
+    ) -> Result<(crate::attribution::Saved<Resource>, Vec<PageWarning>), Error> {
         let (value, warnings) = self.validate(value).await?;
         let saved = self.repository.save(caller, value, id, expected).await?;
         Ok((saved, warnings))
@@ -327,7 +357,7 @@ impl Service {
             .run(move || validator.page_warnings(&html))
             .await
     }
-    /// Delete only after ownership, revision and live-usage checks.
+    /// Delete only after authorization, revision and live-usage checks.
     pub async fn delete(
         &self,
         caller: Identity,

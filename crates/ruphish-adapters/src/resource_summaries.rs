@@ -11,8 +11,8 @@ pub(crate) enum Dialect {
 /// One snapshot statement; identifiers come from each provider's closed kind map.
 pub(crate) fn query(kind: Kind, table: &'static str, dialect: Dialect) -> String {
     let selection = match dialect {
-        Dialect::Sqlite | Dialect::Mysql => "r.user_id=? AND (? IS NULL OR r.id=?)",
-        Dialect::Postgres => "r.user_id=$1 AND ($2::BIGINT IS NULL OR r.id=$2)",
+        Dialect::Sqlite | Dialect::Mysql => "(? IS NULL OR r.id=?)",
+        Dialect::Postgres => "($1::BIGINT IS NULL OR r.id=$1)",
     };
     let total = total(kind, dialect);
     let total = match dialect {
@@ -20,11 +20,11 @@ pub(crate) fn query(kind: Kind, table: &'static str, dialect: Dialect) -> String
         _ => total,
     };
     format!(
-        "SELECT r.id,r.name,r.modified_date,{total} AS total FROM {table} r WHERE {selection} ORDER BY r.id"
+        "SELECT r.revision,r.user_id,r.edited_by,r.edited_at,r.id,r.name,r.modified_date,{total} AS total FROM {table} r WHERE {selection} ORDER BY r.id"
     )
 }
 
-/// Ownership selects resources, not references. Missing references count as zero.
+/// Count references to each selected resource. Missing references count as zero.
 fn total(kind: Kind, dialect: Dialect) -> String {
     let reference = match kind {
         Kind::Group => "g.group_id",
@@ -85,21 +85,18 @@ mod tests {
             Kind::Profile,
             Kind::LearningPage,
         ] {
-            for (owner, id, selected) in [
-                (1, None, vec![10, 11]),
-                (1, Some(10), vec![10]),
-                (1, Some(11), vec![11]),
-                (1, Some(20), vec![]),
-                (1, Some(999), vec![]),
-                (2, None, vec![20]),
-                (3, None, vec![]),
+            for (id, selected) in [
+                (None, vec![10, 11, 20]),
+                (Some(10), vec![10]),
+                (Some(11), vec![11]),
+                (Some(20), vec![20]),
+                (Some(999), vec![]),
             ] {
                 let statement = format!(
-                    "WITH selected_resources AS (SELECT id FROM resources WHERE user_id=? AND (? IS NULL OR id=?)) SELECT r.id AS resource_id,{} AS total FROM selected_resources r ORDER BY r.id",
+                    "WITH selected_resources AS (SELECT id FROM resources WHERE (? IS NULL OR id=?)) SELECT r.id AS resource_id,{} AS total FROM selected_resources r ORDER BY r.id",
                     total(kind, Dialect::Sqlite)
                 );
                 let actual: Vec<(i64, i64)> = sqlx::query_as(sqlx::AssertSqlSafe(statement))
-                    .bind(owner)
                     .bind(id)
                     .bind(id)
                     .fetch_all(&pool)
@@ -115,7 +112,7 @@ mod tests {
                         (id, total)
                     })
                     .collect();
-                assert_eq!(actual, expected, "{kind:?}, owner {owner}, id {id:?}");
+                assert_eq!(actual, expected, "{kind:?}, id {id:?}");
             }
         }
         Ok(())

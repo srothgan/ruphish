@@ -47,6 +47,6 @@ Administrator passwords and configured SMTP/IMAP service credentials have a diff
 
 ## Access, exports, and deletion
 
-Campaign resources and reports are scoped to their application owner and permissions. An authorized administrator can explicitly impersonate an account; configured webhooks can receive events across owners. Exports contain the operator-supplied recipient identities and the documented event fields, so they still require appropriate handling even though submitted values are excluded.
+Campaign resources, recipient identities and reports are shared across the installation, subject to resource permissions. Configured webhooks receive events across campaign creators. Exports contain the operator-supplied recipient identities and the documented event fields, so they still require appropriate handling even though submitted values are excluded.
 
 Completing a campaign preserves its history. Deleting it removes the campaign and associated application records; it does not remove downloaded exports, external webhook copies, database backups, or old log files. See [completion and deletion](campaigns/completion-and-deletion.md). No configurable automatic campaign-retention policy is documented here, and application deletion is not a claim of forensic erasure from storage media.

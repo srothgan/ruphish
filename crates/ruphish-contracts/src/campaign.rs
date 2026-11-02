@@ -1,12 +1,13 @@
 //! Typed campaign commands shared by browser and programmable clients.
-use crate::legacy::Timestamp;
+pub mod request;
+use crate::common::Timestamp;
 use serde::{Deserialize, Serialize};
 
-/// Owner-scoped resource identity, optionally bound to a reviewed revision.
+/// Shared resource identity, optionally bound to a reviewed revision.
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReviewedResource {
-    /// Owner-scoped persistent resource ID.
+    /// Shared persistent resource ID.
     pub id: i64,
     /// Revision shown during review, if already reviewed.
     pub revision: Option<String>,
@@ -33,7 +34,7 @@ pub struct Policy {
     pub track_opens: bool,
     /// Post-submission redirect override.
     pub redirect_url: Option<String>,
-    /// Selected owned learning page; custom redirect must be empty when present.
+    /// Selected shared learning page; custom redirect must be empty when present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub learning_page_id: Option<i64>,
 }
@@ -61,11 +62,14 @@ pub struct LocalTime {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Create {
+    /// Reviewed learning content revision, when a learning page is selected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub learning_revision: Option<String>,
     /// Campaign display name.
     pub name: String,
     /// Public URL template.
     pub url: String,
-    /// Owner-scoped resource IDs and optional reviewed revisions.
+    /// Shared resource IDs and optional reviewed revisions.
     pub selection: Selections,
     /// UTC or offset launch; exclusive with launch_local. Both absent means now.
     pub launch_date: Option<Timestamp>,
@@ -80,7 +84,7 @@ pub struct Create {
 }
 
 /// Launch an unchanged saved draft using the same campaign input as preparation.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LaunchDraft {
     /// Saved draft revision reviewed by the caller.
@@ -90,7 +94,7 @@ pub struct LaunchDraft {
 }
 
 /// Send a reviewed campaign sample to one administrator-selected recipient.
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Test {
     /// Reviewed campaign command.

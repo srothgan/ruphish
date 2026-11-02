@@ -36,8 +36,6 @@ pub struct WebhookCompletion {
 pub struct MailboxConfig {
     /// Mailbox identity.
     pub id: i64,
-    /// Owner identity.
-    pub owner: i64,
     /// Configuration generation.
     pub revision: i64,
     /// Server hostname.
@@ -126,7 +124,7 @@ pub trait MailboxQueue: Send + Sync {
         config: &MailboxConfig,
         validity: i64,
     ) -> Result<Vec<u32>, &'static str>;
-    /// Recheck configuration and owner permission before an external acknowledgement.
+    /// Recheck configuration and global availability before an external acknowledgement.
     async fn mailbox_current(&self, config: &MailboxConfig) -> Result<(), &'static str>;
     /// Correlate identity, commit event/work and checkpoint atomically. True permits acknowledgement.
     async fn record_report(

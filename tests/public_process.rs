@@ -202,10 +202,10 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
         format!("/api/domains/{id}"),
         format!("/api/domains/{id}/verify"),
     ] {
-        let method = if path.ends_with("verify") {
-            reqwest::Method::POST
+        let (method, expected_status) = if path.ends_with("verify") {
+            (reqwest::Method::POST, 202)
         } else {
-            reqwest::Method::GET
+            (reqwest::Method::GET, 200)
         };
         assert_eq!(
             client()
@@ -214,17 +214,19 @@ fn verified_domain_to_campaign_to_private_events_survives_restart_and_rejects_by
                 .send()
                 .unwrap()
                 .status(),
-            404
+            expected_status
         );
     }
-    let empty: Value = client()
+    let shared: Value = client()
         .get(format!("{admin}/api/domains/"))
         .bearer_auth(second_key)
         .send()
         .unwrap()
         .json()
         .unwrap();
-    assert_eq!(empty, json!([]));
+    assert_eq!(shared.as_array().unwrap().len(), 1);
+    assert_eq!(shared[0]["id"], id);
+    assert_eq!(shared[0]["origin"], origin);
     let duplicate = client()
         .post(format!("{admin}/api/domains/"))
         .bearer_auth("synthetic-bootstrap-token")

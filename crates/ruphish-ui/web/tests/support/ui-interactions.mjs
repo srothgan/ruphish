@@ -10,6 +10,20 @@ const returnOrigin =
   '/campaigns/2/results?source=public&event=link_clicked&from=0&until=1999999999&sort=name&order=desc&offset=1&limit=25';
 const path =
   {
+    'conflict-draft': '/campaigns/drafts/00000000-0000-4000-8000-000000000001/edit',
+    'conflict-group': '/groups/1/edit',
+    'deleted-group': '/groups/1/edit',
+    'conflict-domain': '/domains/1/edit',
+    'conflict-webhook': '/webhooks/1/edit',
+    'conflict-mailbox': '/reporting-mailboxes/1/edit',
+    'delete-conflict': '/groups',
+    'delete-conflict-webhook': '/webhooks',
+    'delete-conflict-mailbox': '/reporting-mailboxes',
+    'delete-conflict-draft': '/campaigns',
+    'delete-conflict-draft-detail': '/campaigns/drafts/00000000-0000-4000-8000-000000000001',
+    'domain-attribution': '/domains/1',
+    'shared-attribution': '/groups/1/edit',
+    'unknown-attribution': '/groups/1/edit',
     'form-import': '/groups?import=1',
     'form-webhook': '/webhooks/new',
     'integration-readonly-webhook': '/webhooks/new',
@@ -95,7 +109,11 @@ Object.assign(preferences, { language: 'de', format_locale: 'de-DE', time_zone: 
 if (
   scenario.startsWith('form-') ||
   scenario.startsWith('integration-') ||
-  scenario === 'campaign-wizard'
+  scenario === 'campaign-wizard' ||
+  scenario.endsWith('-attribution') ||
+  scenario.startsWith('conflict-') ||
+  scenario === 'deleted-group' ||
+  scenario.startsWith('delete-conflict')
 ) {
   preferences.language = 'en';
 }
@@ -111,6 +129,15 @@ class FixtureDate extends NativeDate {
 }
 globalThis.Date = win.Date = FixtureDate;
 const data = dataset(now);
+
+if (scenario.endsWith('-attribution')) {
+  Object.assign(scenario === 'domain-attribution' ? data.domains[0] : data.groups[0], {
+    created_by: 100,
+    edited_by: scenario === 'unknown-attribution' ? null : data.users[1].id,
+    edited_at: scenario === 'unknown-attribution' ? null : '2026-10-25T12:00:00Z',
+  });
+}
+
 if (scenario === 'domain-unsupported') {
   Object.assign(data.domains[0], {
     origin: 'http://[2001:db8::20]:8080',
@@ -205,9 +232,79 @@ let releaseValidation;
 const featureOverrides = { webhooks_enabled: true, reporting_mailboxes_enabled: true };
 let failSave = false;
 const writes = [];
+const recoveryPath = {
+  'conflict-draft': '/api/campaign-drafts/00000000-0000-4000-8000-000000000001',
+  'conflict-group': '/api/groups/1',
+  'deleted-group': '/api/groups/1',
+  'conflict-domain': '/api/domains/1',
+  'conflict-webhook': '/api/webhooks/1',
+  'conflict-mailbox': '/api/reporting-mailboxes/1',
+}[scenario];
+let recoveryAttempted = false;
+let recoveryAccepted = false;
+let recoveryRevision;
+let holdRecoveryRead = false;
+let releaseRecoveryRead;
+
 globalThis.fetch = async (request, options) => {
   const url = new URL(request.url);
   requests.push(url.pathname + url.search);
+  if (recoveryPath === url.pathname) {
+    if (request.method === 'PUT') {
+      const body = await request.clone().json();
+      writes.push({ body, revision: request.headers.get('if-match') ?? String(body.revision) });
+      if (!recoveryAttempted || !recoveryAccepted) {
+        recoveryAttempted = true;
+        return new Response(
+          JSON.stringify({
+            success: false,
+            code: scenario === 'deleted-group' ? 'RESOURCE_NOT_FOUND' : 'RESOURCE_CHANGED',
+          }),
+          { status: scenario === 'deleted-group' ? 404 : 412 },
+        );
+      }
+      assert.equal(writes.at(-1).revision.replaceAll('"', ''), String(recoveryRevision + 1));
+      const response = await api.execute(new Request(request.url));
+      const saved = await response.json();
+      if (scenario === 'conflict-draft') {
+        saved.configuration = body.configuration;
+        saved.step = body.step;
+      } else {
+        saved.name = body.name;
+      }
+      saved.revision = recoveryRevision + 2;
+      return new Response(JSON.stringify(saved), { headers: { etag: `"${saved.revision}"` } });
+    }
+    if (request.method === 'GET') {
+      if (recoveryAttempted && holdRecoveryRead) {
+        await new Promise((resolve) => {
+          releaseRecoveryRead = resolve;
+        });
+      }
+      const response = await api.execute(request, options);
+      const saved = await response.json();
+      recoveryRevision ??= saved.revision;
+      if (recoveryAttempted) {
+        if (scenario === 'conflict-draft') {
+          saved.configuration.name = 'Colleague saved version';
+        } else {
+          saved.name = 'Colleague saved version';
+        }
+        saved.revision = recoveryRevision + 1;
+      }
+      return new Response(JSON.stringify(saved), { headers: { etag: `"${saved.revision}"` } });
+    }
+  }
+  if (scenario.startsWith('delete-conflict') && request.method === 'DELETE') {
+    writes.push({
+      path: url.pathname,
+      revision: request.headers.get('if-match') ?? url.searchParams.get('revision'),
+    });
+    return new Response(JSON.stringify({ success: false, code: 'RESOURCE_CHANGED' }), {
+      status: 412,
+    });
+  }
+
   if (
     (scenario.startsWith('form-') || scenario === 'campaign-wizard') &&
     ['POST', 'PUT'].includes(request.method)
@@ -353,7 +450,10 @@ initSync({ module: readFileSync(new URL(script.replace(/\.js$/, '_bg.wasm'), dis
 async function until(condition) {
   const deadline = performance.now() + 15000;
   while (!condition()) {
-    if (scenario === 'campaign-wizard' && performance.now() > deadline) {
+    if (
+      (scenario === 'campaign-wizard' || recoveryPath || scenario.startsWith('delete-conflict')) &&
+      performance.now() > deadline
+    ) {
       const current = win.document.querySelector('[aria-current="step"]')?.textContent;
       const feedback = [
         ...win.document.querySelectorAll('.form-message.has-content, .demo-toast.has-content'),
@@ -373,6 +473,160 @@ const settled = () =>
   regions().length > 0 &&
   regions().every((e) => e.dataset.ready === 'true' && e.getAttribute('aria-busy') === 'false');
 const resultsPath = '/campaigns/2/results';
+
+if (recoveryPath) {
+  const button = (name) =>
+    [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === name);
+  const saveLabel = 'Save changes';
+  const nameInput = () => document.querySelector('.admin-content input[type="text"]');
+  await until(() => nameInput() && button(saveLabel) && !button(saveLabel).disabled);
+  const setName = (name) => {
+    const input = nameInput();
+    input.value = name;
+    input.dispatchEvent(new win.Event('input', { bubbles: true }));
+  };
+  setName('My unsaved version');
+  button(saveLabel).click();
+  await until(() =>
+    document
+      .querySelector('code')
+      ?.textContent.includes(
+        scenario === 'deleted-group' ? 'RESOURCE_NOT_FOUND' : 'RESOURCE_CHANGED',
+      ),
+  );
+  assert.equal(nameInput().value, 'My unsaved version');
+  const reads = requests.filter((p) => p === recoveryPath).length;
+  if (scenario === 'deleted-group') {
+    assert.ok(document.body.textContent.includes('input is still here'));
+    assert.ok(!button('Discard my changes and reload'));
+    assert.equal(writes.length, 1);
+    process.exit(0);
+  }
+  const review = [...document.querySelectorAll('a')].find(
+    (a) => a.textContent.trim() === 'Review saved version in a new tab',
+  );
+  assert.equal(
+    review.getAttribute('href'),
+    recoveryPath.slice(4).replace('/campaign-drafts/', '/campaigns/drafts/'),
+  );
+  assert.equal(review.target, '_blank');
+  button('Discard my changes and reload').click();
+  await until(() => document.querySelector('dialog[open]'));
+  document.querySelector('dialog[open] button').click();
+  await until(() => !document.querySelector('dialog[open]'));
+  assert.equal(nameInput().value, 'My unsaved version');
+  assert.equal(
+    requests.filter((p) => p === recoveryPath).length,
+    reads,
+    'cancel does not fetch or advance the revision',
+  );
+  button(saveLabel).click();
+  await until(() => writes.length === 2 && !button(saveLabel).disabled);
+  assert.equal(
+    writes[0].revision,
+    writes[1].revision,
+    'retry never silently uses a newer revision',
+  );
+  button('Discard my changes and reload').click();
+  await until(() => document.querySelector('dialog[open]'));
+  holdRecoveryRead = true;
+  [...document.querySelectorAll('dialog[open] button')]
+    .find((b) => b.textContent.trim() === 'Discard my changes and reload')
+    .click();
+  await until(() => releaseRecoveryRead);
+  assert.ok(
+    nameInput().matches(':disabled') || nameInput().closest('[hidden]'),
+    'reload blocks new edits until the reviewed revision arrives',
+  );
+  assert.ok(button(saveLabel).disabled, 'cannot submit against the old revision during reload');
+  holdRecoveryRead = false;
+  releaseRecoveryRead();
+  await until(() => nameInput()?.value === 'Colleague saved version');
+  assert.ok(!document.body.textContent.includes('RESOURCE_CHANGED'));
+  recoveryAccepted = true;
+  setName('Reviewed and reconciled');
+  button(saveLabel).click();
+  await until(() => writes.length === 3);
+  await until(() => !button(saveLabel) || !button(saveLabel).disabled);
+  process.exit(0);
+}
+if (scenario.startsWith('delete-conflict')) {
+  const selector = scenario.endsWith('-detail') ? '.admin-content button' : 'tbody button';
+  await until(() =>
+    [...document.querySelectorAll(selector)].some((b) => b.textContent.trim() === 'Delete'),
+  );
+  const container =
+    scenario === 'delete-conflict-draft'
+      ? document.querySelector('tbody a[href^="/campaigns/drafts/"]').closest('tr')
+      : document;
+  const buttons = [
+    ...container.querySelectorAll(scenario === 'delete-conflict-draft' ? 'button' : selector),
+  ];
+  buttons.find((b) => b.textContent.trim() === 'Delete').click();
+  await until(() => document.querySelector('dialog[open]'));
+  const confirm = [...document.querySelectorAll('dialog[open] button')].find(
+    (b) => b.textContent.trim() === 'Delete',
+  );
+  confirm.click();
+  await until(
+    () => document.querySelector('dialog[open] code')?.textContent === 'RESOURCE_CHANGED',
+  );
+  assert.match(
+    writes[0].revision,
+    scenario.includes('draft') ? /^[1-9][0-9]*$/ : /^"[1-9][0-9]*"$/,
+  );
+  if (scenario.includes('draft')) {
+    assert.ok(writes[0].path.startsWith('/api/campaign-drafts/'));
+  }
+  assert.equal(confirm.disabled, true);
+  assert.ok(document.querySelector('dialog[open] a[target="_blank"]'));
+  assert.ok(document.querySelector('dialog[open]').textContent.includes('refresh this page'));
+  confirm.click();
+  await nextTurn();
+  assert.equal(writes.length, 1);
+  [...document.querySelectorAll('dialog[open] button')]
+    .find((b) => b.textContent.trim() === 'Cancel')
+    .click();
+  await until(() => !document.querySelector('dialog[open]'));
+  if (!scenario.endsWith('-detail')) {
+    assert.ok(document.querySelector('tbody tr'));
+  }
+  process.exit(0);
+}
+
+if (scenario.endsWith('-attribution')) {
+  await until(() =>
+    document.querySelector('.resource-facts')?.textContent.includes('Morgan Brooks'),
+  );
+  const metadata = document.querySelector('.resource-facts');
+  assert.match(metadata.textContent, /Created by/);
+  assert.match(metadata.textContent, /Morgan Brooks.*deleted/i);
+  assert.equal(metadata.querySelectorAll('input,select,textarea,[contenteditable]').length, 0);
+  const values = [...metadata.querySelectorAll('dd')].map((node) => node.textContent.trim());
+  if (scenario === 'unknown-attribution') {
+    assert.deepEqual(values.slice(1), ['-', '-']);
+  } else {
+    assert.equal(values[1], data.users[1].username);
+    assert.match(values[2], /2026/);
+  }
+  assert.equal(
+    requests.filter(
+      (path) => path === (scenario === 'domain-attribution' ? '/api/domains/1' : '/api/groups/1'),
+    ).length,
+    1,
+  );
+  assert.ok(!requests.some((path) => path.startsWith('/api/authors')));
+  if (scenario === 'domain-attribution') {
+    process.exit(0);
+  }
+  const before = metadata.textContent;
+  const name = document.querySelector('input');
+  name.value = 'Unsaved shared edit';
+  name.dispatchEvent(new win.Event('input', { bubbles: true }));
+  await nextTurn();
+  assert.equal(metadata.textContent, before, 'typing is not a confirmed edit');
+  process.exit(0);
+}
 
 if (scenario === 'campaign-wizard') {
   const button = (text) =>

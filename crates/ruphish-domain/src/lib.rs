@@ -26,3 +26,5 @@ pub mod event_edit;
 pub mod landing;
 
 pub mod client;
+
+pub mod attribution;

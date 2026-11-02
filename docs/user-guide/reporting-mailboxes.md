@@ -7,7 +7,7 @@ sidebar:
 
 Reporting a suspicious message is a useful outcome. Ruphish can monitor a dedicated IMAP folder and correlate forwarded campaign messages with their original recipient.
 
-Administrators enable reporting mailboxes in **Settings**. Once enabled, regular users can create and manage their own mailbox configurations without individual approval. Disabling the feature blocks creation, configuration saves, and network actions while retaining credentials and progress; authorized API reads and deletion remain available.
+Administrators enable reporting mailboxes in **Settings**. Once enabled, regular users can create and manage shared mailbox configurations without individual approval. Disabling the feature blocks creation, configuration saves, and network actions while retaining credentials and progress; authorized API reads and deletion remain available.
 
 ## Configure and validate
 
@@ -23,7 +23,7 @@ Forward a campaign message inline or as a `message/rfc822` attachment. When a ma
 
 IMAP searches use calendar dates, so initial discovery includes the preceding UTC date to account for mailbox time zones. It may inspect older messages in that window. Arrivals during discovery remain eligible for subsequent polling. After initialization, a durable UID checkpoint controls progress; campaign starts and completions do not recalculate it.
 
-A report must contain one distinct recipient-ID/origin pair from a campaign in this installation, regardless of who created the campaign or mailbox. Repeated references to the same pair are allowed. Different pairs make correlation ambiguous, including when a forwarded thread quotes another recipient's campaign message or one email attaches several campaign messages. Such a message is rejected with `mailbox_ambiguous`; no report is attributed from it. Forward each original campaign message separately, without quoted messages or attachments for other recipients. Correcting the old message does not rewind the checkpoint; send separate new forwards. Batch attribution is deferred. Mailbox configuration remains creator-managed; matching another user's campaign grants no campaign editing permission.
+A report must contain one distinct recipient-ID/origin pair from a campaign in this installation, regardless of who created the campaign or mailbox. Repeated references to the same pair are allowed. Different pairs make correlation ambiguous, including when a forwarded thread quotes another recipient's campaign message or one email attaches several campaign messages. Such a message is rejected with `mailbox_ambiguous`; no report is attributed from it. Forward each original campaign message separately, without quoted messages or attachments for other recipients. Correcting the old message does not rewind the checkpoint; send separate new forwards. Batch attribution is deferred. Mailbox configuration and campaign management are shared, subject to their existing resource permissions. Locking or deleting the mailbox creator does not stop polling or reset its checkpoint.
 
 Reports for completed campaigns are ignored with the operational reason `mailbox_campaign_closed`. They do not add events, change recipient results, or enqueue webhooks. The scanner advances its checkpoint and continues processing later messages.
 

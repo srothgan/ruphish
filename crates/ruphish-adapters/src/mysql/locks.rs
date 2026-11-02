@@ -40,7 +40,7 @@ pub(super) async fn guard(c: &mut MySqlConnection, scope: &str) -> Result<(), sq
     Ok(())
 }
 
-/// Account rows fence authorization changes and deletion against owned writes.
+/// Account rows fence authorization changes and deletion against authenticated writes.
 pub(super) async fn owner(c: &mut MySqlConnection, id: i64) -> Result<(), sqlx::Error> {
     sqlx::query("SELECT id FROM users WHERE id=? FOR UPDATE")
         .bind(id)
@@ -54,15 +54,6 @@ pub(super) async fn campaign(
     id: i64,
     exclusive: bool,
 ) -> Result<bool, sqlx::Error> {
-    let owner: Option<i64> = sqlx::query_scalar("SELECT user_id FROM campaigns WHERE id=?")
-        .bind(id)
-        .fetch_optional(&mut *c)
-        .await?;
-    let Some(owner) = owner else { return Ok(false) };
-    sqlx::query("SELECT id FROM users WHERE id=? FOR SHARE")
-        .bind(owner)
-        .fetch_optional(&mut *c)
-        .await?;
     let query = if exclusive {
         "SELECT id FROM campaigns WHERE id=? FOR UPDATE"
     } else {
@@ -70,30 +61,6 @@ pub(super) async fn campaign(
     };
     Ok(sqlx::query(query)
         .bind(id)
-        .fetch_optional(c)
-        .await?
-        .is_some())
-}
-
-/// Domain workers take owner before domain, matching account deletion. Claims
-/// skip a deleting/busy owner; completion waits and rechecks the domain afterward.
-pub(super) async fn domain_owner(
-    c: &mut MySqlConnection,
-    id: i64,
-    skip_locked: bool,
-) -> Result<bool, sqlx::Error> {
-    let owner: Option<i64> = sqlx::query_scalar("SELECT owner_id FROM ruphish_domains WHERE id=?")
-        .bind(id)
-        .fetch_optional(&mut *c)
-        .await?;
-    let Some(owner) = owner else { return Ok(false) };
-    let query = if skip_locked {
-        "SELECT id FROM users WHERE id=? FOR SHARE SKIP LOCKED"
-    } else {
-        "SELECT id FROM users WHERE id=? FOR SHARE"
-    };
-    Ok(sqlx::query(query)
-        .bind(owner)
         .fetch_optional(c)
         .await?
         .is_some())

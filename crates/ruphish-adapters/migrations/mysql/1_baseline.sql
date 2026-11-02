@@ -1,5 +1,7 @@
 -- Ruphish release baseline. Fresh installs and direct Gophish conversions share this schema.
 
+CREATE TABLE ruphish_deleted_accounts (id BIGINT PRIMARY KEY, username VARCHAR(255) NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
 CREATE TABLE `users` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
   `username` VARCHAR(255) NOT NULL,
@@ -13,6 +15,9 @@ CREATE TABLE `users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `templates` (
+  revision BIGINT NOT NULL DEFAULT 1,
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   `id` BIGINT NOT NULL AUTO_INCREMENT,
   `user_id` BIGINT,
   `name` VARCHAR(255),
@@ -53,6 +58,9 @@ CREATE TABLE `results` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `pages` (
+  revision BIGINT NOT NULL DEFAULT 1,
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   `id` BIGINT NOT NULL AUTO_INCREMENT,
   `user_id` BIGINT,
   `name` VARCHAR(255),
@@ -63,6 +71,9 @@ CREATE TABLE `pages` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `groups` (
+  revision BIGINT NOT NULL DEFAULT 1,
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   `id` BIGINT NOT NULL AUTO_INCREMENT,
   `user_id` BIGINT,
   `name` VARCHAR(255),
@@ -92,6 +103,8 @@ CREATE TABLE `events` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `campaigns` (
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   `id` BIGINT NOT NULL AUTO_INCREMENT,
   `user_id` BIGINT,
   `name` VARCHAR(255) NOT NULL,
@@ -104,6 +117,8 @@ CREATE TABLE `campaigns` (
   `smtp_id` BIGINT,
   `launch_date` VARCHAR(40),
   `send_by_date` VARCHAR(40),
+  frozen_content LONGTEXT,
+  learning_public_id VARCHAR(64),
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -117,6 +132,9 @@ CREATE TABLE `attachments` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `smtp` (
+  revision BIGINT NOT NULL DEFAULT 1,
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   `id` BIGINT NOT NULL AUTO_INCREMENT,
   `user_id` BIGINT,
   `interface_type` VARCHAR(255),
@@ -299,6 +317,8 @@ CREATE TABLE `ruphish_legacy_queue_issues` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `ruphish_domains` (
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   `id` BIGINT NOT NULL AUTO_INCREMENT,
   `owner_id` BIGINT NOT NULL,
   `name` VARCHAR(255) NOT NULL,
@@ -324,12 +344,6 @@ CREATE TABLE `ruphish_domains` (
   UNIQUE KEY domain_origin (`owner_id`,`origin`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
-CREATE TABLE `ruphish_domain_claims` (
-  `hostname` VARCHAR(255) NOT NULL,
-  `owner_id` BIGINT NOT NULL,
-  PRIMARY KEY (`hostname`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
-
 CREATE TABLE `ruphish_campaign_domains` (
   `campaign_id` BIGINT NOT NULL,
   `domain_id` BIGINT NOT NULL,
@@ -353,9 +367,11 @@ CREATE TABLE `ruphish_domain_checks` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `ruphish_webhook_state` (
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   `webhook_id` BIGINT NOT NULL,
   `revision` BIGINT NOT NULL DEFAULT 1,
-  `owner_id` BIGINT NOT NULL,
+  `owner_id` BIGINT,
   KEY `ruphish_webhook_state_owner` (`owner_id`),
   PRIMARY KEY (`webhook_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -386,8 +402,10 @@ CREATE TABLE `ruphish_webhook_attempts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `ruphish_mailboxes` (
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   `id` BIGINT NOT NULL AUTO_INCREMENT,
-  `owner_id` BIGINT NOT NULL,
+  `owner_id` BIGINT,
   `name` VARCHAR(255) NOT NULL,
   `revision` BIGINT NOT NULL DEFAULT 1,
   `enabled` BIGINT NOT NULL,
@@ -460,6 +478,8 @@ CREATE TABLE ruphish_user_preferences (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE ruphish_campaign_drafts (
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
  id VARCHAR(64) COLLATE utf8mb4_0900_bin NOT NULL PRIMARY KEY,
  owner_id BIGINT NOT NULL,
  revision BIGINT NOT NULL,
@@ -493,7 +513,10 @@ CREATE TABLE ruphish_campaign_closures (
  result LONGTEXT
 ) ENGINE=InnoDB;
 
-CREATE TABLE ruphish_learning_pages (id bigint NOT NULL AUTO_INCREMENT PRIMARY KEY, user_id bigint NOT NULL, name varchar(255) NOT NULL, modified_date varchar(255) NOT NULL, html longtext DEFAULT NULL, public_id varchar(32) DEFAULT NULL, UNIQUE KEY ruphish_learning_pages_public_id(public_id), UNIQUE KEY ruphish_learning_pages_owner_name(user_id,name)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+CREATE TABLE ruphish_learning_pages (
+  revision BIGINT NOT NULL DEFAULT 1,
+  edited_by BIGINT,
+  edited_at VARCHAR(40), id bigint NOT NULL AUTO_INCREMENT PRIMARY KEY, user_id bigint NOT NULL, name varchar(255) NOT NULL, modified_date varchar(255) NOT NULL, html longtext DEFAULT NULL, public_id varchar(32) DEFAULT NULL, UNIQUE KEY ruphish_learning_pages_public_id(public_id), UNIQUE KEY ruphish_learning_pages_owner_name(user_id,name)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 -- Indexes
 CREATE UNIQUE INDEX `users_0` ON `users` (username);
@@ -535,6 +558,8 @@ INSERT INTO roles(id,slug,name,description) VALUES (1,'admin','Admin','System ad
 INSERT INTO permissions(id,slug,name,description) VALUES (1,'view_objects','View Objects','View objects'),(2,'modify_objects','Modify Objects','Create and edit objects'),(3,'modify_system','Modify System','Manage system-wide configuration');
 INSERT INTO role_permissions VALUES (1,1),(1,2),(1,3),(2,1),(2,2);
 INSERT INTO ruphish_settings VALUES (1,1,FALSE,TRUE,86400,21600,FALSE,FALSE,0,NULL);
+
+CREATE UNIQUE INDEX campaigns_learning_public_id ON campaigns(learning_public_id);
 
 -- Views
 CREATE VIEW ruphish_domain_policy AS

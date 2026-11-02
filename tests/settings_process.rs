@@ -58,28 +58,28 @@ fn campaign(c: &Client, base: &str, key: &str, origin: &str) -> Value {
         base,
         key,
         "/api/groups/",
-        &json!({"name":"Settings audience","targets":[{"email":"person@example.test","first_name":"Test"}]}),
+        &json!({"name":format!("Settings audience {origin}"),"targets":[{"email":"person@example.test","first_name":"Test"}]}),
     );
     let template = post(
         c,
         base,
         key,
         "/api/templates/",
-        &json!({"name":"Settings email","subject":"Training","text":"{{.URL}}"}),
+        &json!({"name":format!("Settings email {origin}"),"subject":"Training","text":"{{.URL}}"}),
     );
     let page = post(
         c,
         base,
         key,
         "/api/pages/",
-        &json!({"name":"Settings page","html":"<h1>Training</h1><form><input type='password' name='password'></form>"}),
+        &json!({"name":format!("Settings page {origin}"),"html":"<h1>Training</h1><form><input type='password' name='password'></form>"}),
     );
     let smtp = post(
         c,
         base,
         key,
         "/api/smtp/",
-        &json!({"name":"Settings SMTP","interface_type":"SMTP","host":"127.0.0.1:1","from_address":"training@example.test"}),
+        &json!({"name":format!("Settings SMTP {origin}"),"interface_type":"SMTP","host":"127.0.0.1:1","from_address":"training@example.test"}),
     );
     let input = json!({"name":"Settings campaign","selection":{"groups":[{"id":group["id"]}],"template":{"id":template["id"]},"page":{"id":page["id"]},"smtp":{"id":smtp["id"]}},"url":origin});
     post(c, base, key, "/api/campaigns/", &input)
@@ -258,6 +258,19 @@ fn company_policy_authorization_domains_integrations_and_closure_survive_restart
         "/api/domains/",
         &json!({"name":"Policy origin","origin":"https://policy.example.test","enabled":true}),
     );
+    assert_eq!(
+        domain["created_by"],
+        json!({"id":1,"username":"admin","deleted":false})
+    );
+    assert_eq!(domain["edited_by"], domain["created_by"]);
+    let detail = get(
+        &c,
+        &base,
+        user_key,
+        &format!("/api/domains/{}", domain["id"]),
+    );
+    assert_eq!(detail["created_by"], domain["created_by"]);
+    assert_eq!(detail["edited_at"], domain["edited_at"]);
     assert_eq!(domain["status"], "not_verified");
     assert_eq!(domain["verification"]["status"], "not_required");
     assert_eq!(domain["eligible"], true);
@@ -599,37 +612,24 @@ fn regular_users_manage_integrations_under_admin_feature_switches() {
     assert!(saved_mail.get("password").is_none());
     let hook_path = format!("/api/webhooks/{}", saved_hook["id"]);
     let mail_path = format!("/api/reporting-mailboxes/{}", saved_mail["id"]);
-    assert_eq!(get(&c, &base, admin, "/api/webhooks/"), json!([]));
-    for method in [Method::GET, Method::PUT, Method::DELETE] {
-        for revision in [None, saved_hook["revision"].as_i64(), Some(999)] {
-            assert_eq!(
-                request(
-                    &c,
-                    &base,
-                    admin,
-                    method.clone(),
-                    &hook_path,
-                    Some(&hook),
-                    revision
-                )
-                .status(),
-                404
-            );
-        }
-    }
     assert_eq!(
-        request(
-            &c,
-            &base,
-            admin,
-            Method::POST,
-            &format!("{hook_path}/validate"),
-            None,
-            None
-        )
-        .status(),
-        404
+        get(&c, &base, admin, "/api/webhooks/")
+            .as_array()
+            .unwrap()
+            .len(),
+        1
     );
+    assert_eq!(get(&c, &base, admin, &hook_path), saved_hook);
+    assert_eq!(get(&c, &base, admin, &mail_path), saved_mail);
+    assert_eq!(saved_hook["created_by"]["id"], user["id"]);
+    assert_eq!(saved_mail["created_by"]["id"], user["id"]);
+    for path in [&hook_path, &mail_path] {
+        assert_eq!(c.get(format!("{base}{path}")).send().unwrap().status(), 401);
+        assert_eq!(
+            request(&c, &base, admin, Method::DELETE, path, None, Some(999)).status(),
+            412
+        );
+    }
     assert!(receiver.requests.try_recv().is_err());
     for field in ["owner_id", "user_id", "creator_id"] {
         let mut forged = hook.clone();
@@ -657,7 +657,7 @@ fn regular_users_manage_integrations_under_admin_feature_switches() {
     );
     assert_eq!(
         request(&c, &base, admin, Method::GET, &mail_path, None, None).status(),
-        404
+        200
     );
     let mut hook_edit = hook.clone();
     hook_edit.as_object_mut().unwrap().remove("secret");
@@ -667,7 +667,7 @@ fn regular_users_manage_integrations_under_admin_feature_switches() {
         request(
             &c,
             &base,
-            key,
+            admin,
             Method::PUT,
             &hook_path,
             Some(&hook_edit),
@@ -676,6 +676,9 @@ fn regular_users_manage_integrations_under_admin_feature_switches() {
         200,
     );
     assert_eq!(updated_hook["has_secret"], true);
+    assert_eq!(updated_hook["created_by"]["id"], user["id"]);
+    assert_eq!(updated_hook["edited_by"]["id"], 1);
+    assert!(updated_hook["edited_at"].is_string());
     assert_eq!(
         request(
             &c,
@@ -696,7 +699,7 @@ fn regular_users_manage_integrations_under_admin_feature_switches() {
         request(
             &c,
             &base,
-            key,
+            admin,
             Method::PUT,
             &mail_path,
             Some(&mail_edit),
@@ -705,6 +708,9 @@ fn regular_users_manage_integrations_under_admin_feature_switches() {
         200,
     );
     assert_eq!(updated_mail["has_password"], true);
+    assert_eq!(updated_mail["created_by"]["id"], user["id"]);
+    assert_eq!(updated_mail["edited_by"]["id"], 1);
+    assert!(updated_mail["edited_at"].is_string());
     value(
         request(
             &c,

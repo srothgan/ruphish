@@ -26,7 +26,7 @@ pub trait Transport: Send + Sync {
 
 /// Explicit profile selection, separate from validation success or failure.
 pub enum ProfileSelection {
-    /// Load the complete owned profile, including its backend-only credential.
+    /// Load the complete shared profile, including its backend-only credential.
     Saved(i64),
     /// Use unsaved settings; an existing identity permits retaining its saved credential.
     Draft {
@@ -117,7 +117,7 @@ pub trait Previews: Send + Sync {
     /// Resolve and render a stored preview without recording campaign events.
     async fn render(&self, rid: &str) -> Result<String, Error>;
 }
-/// Select owned resources, compose, persist preview state, then perform one send.
+/// Select shared resources, compose, persist preview state, then perform one send.
 #[derive(Clone)]
 pub struct Service {
     accounts: Accounts,
@@ -168,7 +168,7 @@ impl Service {
             .run(move || sender.review(&message))
             .await
     }
-    /// Explicitly send one test from owned, revision-checked campaign selections.
+    /// Explicitly send one test from shared, revision-checked campaign selections.
     pub async fn test_campaign(
         &self,
         caller: Identity,
@@ -237,13 +237,14 @@ impl Service {
                     None
                 };
                 let draft = Input {
-                    id: id.unwrap_or_default(),
                     name: String::new(),
-                    modified_date: String::new(),
                     content: Content::Profile(profile),
                 };
                 let (validated, _) = self.resources.validate(draft).await?;
-                validated.resolve_password(previous.as_ref())
+                return match validated.resolve_content(previous.as_ref()) {
+                    Content::Profile(profile) => Ok(profile),
+                    _ => Err(Error::Internal),
+                };
             }
         };
         match selected.content {
@@ -321,6 +322,6 @@ pub trait PreviewPersistence: Send + Sync {
     async fn contains(&self, rid: &str) -> Result<bool, Error>;
     /// Recheck ownership and store preview state atomically.
     async fn store(&self, caller: Identity, message: &MessageInput) -> Result<(), Error>;
-    /// Load the saved context and current owned page consistently.
+    /// Load the saved context and current shared page consistently.
     async fn snapshot(&self, rid: &str) -> Result<PreviewSnapshot, Error>;
 }

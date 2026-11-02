@@ -152,7 +152,7 @@ fn resource_validation_rejects_bypassed_clients_preserves_edits_and_survives_res
             "PUT",
             &group_path,
             Some(&invalid_group),
-            group["modified_date"].as_str(),
+            Some(&group["revision"].to_string()),
         ),
         400,
         &["targets.1.email"],
@@ -184,7 +184,7 @@ fn resource_validation_rejects_bypassed_clients_preserves_edits_and_survives_res
             "PUT",
             &path,
             Some(&edit),
-            template["modified_date"].as_str(),
+            Some(&template["revision"].to_string()),
         ),
         400,
         &["name", "html", "text"],
@@ -202,7 +202,7 @@ fn resource_validation_rejects_bypassed_clients_preserves_edits_and_survives_res
             "PUT",
             &path,
             Some(&edit),
-            template["modified_date"].as_str(),
+            Some(&template["revision"].to_string()),
         ),
         400,
         &["html"],
@@ -217,7 +217,7 @@ fn resource_validation_rejects_bypassed_clients_preserves_edits_and_survives_res
             "PUT",
             &path,
             Some(&edit),
-            template["modified_date"].as_str(),
+            Some(&template["revision"].to_string()),
         ),
         400,
         &["attachments.0"],
@@ -230,7 +230,7 @@ fn resource_validation_rejects_bypassed_clients_preserves_edits_and_survives_res
         "PUT",
         &path,
         Some(&edit),
-        template["modified_date"].as_str(),
+        Some(&template["revision"].to_string()),
     ));
     assert_eq!(saved["text"], "Corrected training");
     let stale = request(
@@ -238,7 +238,7 @@ fn resource_validation_rejects_bypassed_clients_preserves_edits_and_survives_res
         "PUT",
         &path,
         Some(&template),
-        template["modified_date"].as_str(),
+        Some(&template["revision"].to_string()),
     );
     assert_eq!(stale.status(), 412);
     assert_eq!(read(&base, &path), saved);

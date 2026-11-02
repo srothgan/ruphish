@@ -15,11 +15,17 @@ Most resource IDs are integers. Draft IDs are client-selected strings. A recipie
 
 ## Updating a resource
 
-Group, template, landing-page, and SMTP `PUT` requests replace the resource's editable fields; they are not JSON Merge Patch. Include the resource `id` matching the path. Read the current object before editing it, preserve the fields you intend to keep, and send the response's `ETag` as `If-Match`.
+Group, template, landing-page, learning-page, and SMTP `PUT` requests replace the resource's editable fields; they are not JSON Merge Patch. Include the resource `id` matching the path. Read the current object before editing it, preserve the fields you intend to keep, and send the response's `ETag` as `If-Match`.
 
-For these resource families, `If-Match` is optional for legacy compatibility. A stale value returns `412`. Domains, drafts, and integrations have their own revision requirements described on their pages. A conflict means reload and reconcile; retrying the same stale write does not resolve it.
+These resource families return a numeric `revision` in details and summaries, and a quoted revision such as `ETag: "3"` on detail reads and saves. New and migrated resources start at revision 1; every successful configuration save advances it. Both PUT and DELETE require exactly one quoted numeric `If-Match`, for example `If-Match: "3"`. Revisions identify the current configuration; they do not retain version history. Timestamps are display metadata, not concurrency tokens. Wildcards, weak validators and lists of validators are rejected.
 
-Resource names must be unique for new resources and renames within their owner and type. Existing imported duplicate names may remain editable. Prefer explicit IDs and revisions when a workflow supports them.
+Domains, webhooks and reporting mailboxes require the numeric `revision` in update bodies and a quoted `If-Match` on deletion. Drafts carry their revision in save/launch bodies and the delete query parameter. Their existing identical-save retry acknowledgement remains idempotent; it does not merge different edits.
+
+Missing preconditions return `428 REVISION_REQUIRED`; malformed `If-Match` returns `400 REVISION_REQUIRED`; a stale revision returns `412 RESOURCE_CHANGED`; a resource removed before the write returns `404 RESOURCE_NOT_FOUND`. Revision checking, replacement/deletion and edit attribution happen in one database transaction. Of two competing writes against the same version, only one can commit. Losing edits never recreate deleted resources. These requirements apply to API clients as well as the UI; unconditional legacy updates are no longer supported.
+
+Keep the user's input on a conflict. Read the latest resource separately, compare changes and obtain an explicit decision before replacing their draft or submitting against a newer revision. Never automatically retry with the latest revision. The UI offers **Review saved version in a new tab** and a confirmed **Discard my changes and reload** action. If the record was deleted, copy or export anything needed before leaving.
+
+Resource names must be unique for new resources and renames within their resource family across the installation. Existing imported duplicate names may remain editable. Prefer explicit IDs and revisions when a workflow supports them.
 
 ## Time and missing values
 

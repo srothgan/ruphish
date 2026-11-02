@@ -41,3 +41,9 @@ pub(crate) use query_boundary::*;
 
 mod observations;
 pub(crate) use observations::*;
+
+mod attribution;
+pub(crate) use attribution::*;
+
+mod write_recovery;
+pub(crate) use write_recovery::*;

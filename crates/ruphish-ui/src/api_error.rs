@@ -39,6 +39,11 @@ impl ApiError {
         }
     }
 
+    /// A write must be reconciled without discarding the local draft.
+    pub fn needs_write_recovery(&self) -> bool {
+        matches!(self.status, 404 | 412 | 428)
+    }
+
     /// The requested entity does not exist.
     pub fn is_not_found(&self) -> bool {
         self.status == 404
@@ -73,6 +78,8 @@ pub fn response(
                 401 => "AUTH_REQUIRED",
                 403 => "AUTH_FORBIDDEN",
                 404 => "RESOURCE_NOT_FOUND",
+                412 => "RESOURCE_CHANGED",
+                428 => "REVISION_REQUIRED",
                 429 => "RATE_LIMITED",
                 503 => "SERVICE_BUSY",
                 _ => "REQUEST_FAILED",

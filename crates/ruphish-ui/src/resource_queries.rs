@@ -31,6 +31,7 @@ impl ResourceQueries {
                     .into_iter()
                     .map(|row| SummaryRow {
                         id: row.id,
+                        revision: row.revision,
                         name: row.name,
                         modified_date: row.modified_date,
                         count: Some(row.num_targets),
@@ -43,6 +44,7 @@ impl ResourceQueries {
                     .into_iter()
                     .map(|row| SummaryRow {
                         id: row.id,
+                        revision: row.revision,
                         name: row.name,
                         modified_date: row.modified_date,
                         count: Some(row.active_campaigns),
@@ -79,14 +81,8 @@ impl ResourceQueries {
         value: Value,
         expected_id: Option<i64>,
     ) -> Result<Resource, ApiError> {
-        use ruphish_contracts::resource_details::{Kind, decode};
-        let kind = match family {
-            Family::Groups => Kind::Group,
-            Family::Templates => Kind::Template,
-            Family::Pages => Kind::Page,
-            Family::LearningPages => Kind::LearningPage,
-            Family::Profiles => Kind::Profile,
-        };
+        use ruphish_contracts::resource_details::decode;
+        let kind = family.detail_kind();
         let resource = decode(kind, value).map_err(|_| api.invalid_read_err())?;
         let id = resource.metadata.id;
         if id <= 0 || expected_id.is_some_and(|expected| id != expected) {

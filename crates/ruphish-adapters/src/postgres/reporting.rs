@@ -46,9 +46,8 @@ impl Snapshots for Reports {
             .await
             .map_err(storage)?;
         super::resources::authorize(&mut tx, caller, false).await?;
-        let campaign = sqlx::query("SELECT name,status,COALESCE((SELECT track_opens FROM ruphish_campaign_policy WHERE campaign_id=campaigns.id),TRUE) AS track_opens FROM campaigns WHERE id=$1 AND user_id=$2")
+        let campaign = sqlx::query("SELECT name,status,COALESCE((SELECT track_opens FROM ruphish_campaign_policy WHERE campaign_id=campaigns.id),TRUE) AS track_opens FROM campaigns WHERE id=$1 ")
             .bind(id)
-            .bind(caller.id)
             .fetch_optional(&mut *tx)
             .await
             .map_err(storage)?

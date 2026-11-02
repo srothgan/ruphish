@@ -1,4 +1,6 @@
-use super::{ActionButton, ActionLink, ButtonStyle, ControlSize, DeleteConfirmation};
+use super::{
+    ActionButton, ActionLink, ButtonStyle, ControlSize, DeleteConfirmation, DeleteRecovery,
+};
 use crate::{client::Api, feedback::Message};
 use leptos::prelude::*;
 pub(crate) use ruphish_ui::deletion_state::DeleteTarget;
@@ -54,6 +56,7 @@ pub(crate) struct ResourceDeletion {
     state: RwSignal<Deletion>,
     pub busy: Signal<bool>,
     message: Message,
+    error: RwSignal<Option<ruphish_ui::api_error::ApiError>>,
     tasks: ViewTasks,
 }
 impl ResourceDeletion {
@@ -63,12 +66,14 @@ impl ResourceDeletion {
             state,
             busy: Signal::derive(move || state.with(Deletion::busy)),
             message: Message::new(String::new()),
+            error: RwSignal::new(None),
             tasks: ViewTasks::default(),
         }
     }
     pub fn select(self, target: DeleteTarget) {
         if !self.busy.get_untracked() {
             self.message.clear();
+            self.error.set(None);
             self.state.update(|state| state.select(target));
         }
     }
@@ -85,14 +90,23 @@ pub(crate) fn ResourceDeleteDialog(
 
     let token = StoredValue::new(token);
     let target = Memo::new(move |_| deletion.state.with(|state| state.target().cloned()));
+    let needs_review = Signal::derive(move || {
+        deletion.error.with(|e| {
+            e.as_ref()
+                .is_some_and(ruphish_ui::api_error::ApiError::needs_write_recovery)
+        })
+    });
     let confirm = Callback::new(move |()| {
+        if needs_review.get_untracked() {
+            return;
+        }
         let Some(target) = deletion.state.try_update(Deletion::begin).flatten() else {
             return;
         };
         deletion.message.clear();
         deletion.tasks.spawn(async move {
             let result = api
-                .command(
+                .command_response(
                     "DELETE",
                     &target.path,
                     &token.get_value(),
@@ -110,7 +124,10 @@ pub(crate) fn ResourceDeleteDialog(
                         on_deleted.run(id);
                     }
                 }
-                Err(error) => deletion.message.error(error),
+                Err(error) => {
+                    deletion.message.error(error.message.clone());
+                    deletion.error.set(Some(error));
+                }
             }
         });
     });
@@ -119,6 +136,9 @@ pub(crate) fn ResourceDeleteDialog(
             target
                 .get()
                 .map(|target| {
+                    let review_href = StoredValue::new(
+                        target.path.strip_prefix("/api").unwrap_or(&target.path).to_owned(),
+                    );
                     view! {
                         <DeleteConfirmation
                             title=leptos_i18n::t_string!(
@@ -128,11 +148,17 @@ pub(crate) fn ResourceDeleteDialog(
                             confirm_label=trs!(ui.delete)
                             busy=deletion.busy
                             message=deletion.message
+                            confirm_disabled=needs_review
                             on_confirm=confirm
                             on_cancel=Callback::new(move |()| {
                                 deletion.state.update(Deletion::cancel);
                             })
-                        />
+                        >
+                            <DeleteRecovery
+                                error=deletion.error
+                                saved_href=Signal::derive(move || review_href.get_value())
+                            />
+                        </DeleteConfirmation>
                     }
                 })
         }}

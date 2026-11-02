@@ -19,6 +19,10 @@ A transaction can commit even when the client loses the commit acknowledgement. 
 
 Test cancellation, lock timeout, pool recovery, concurrent claims, stale generations, and process restart at the boundary where they matter. Account deletion must stay consistent with domain claims and other owned records. Related child replacement and outbox/event publication must remain atomic.
 
+Management mutations that return attributed records capture their display dependencies before commit and return `attribution::Saved<T>`. An identity lookup failure therefore rolls back parent/child changes and revision advancement. The HTTP mapper is pure after the transaction. Validation probes perform external work separately; queue/check commands must not depend on a postcommit read to produce their acknowledgement.
+
+Historical `user_id` and `owner_id` columns on shared resources store creator provenance, not access scope. Keep the translation explicit in provider mappings. Account/session ownership, caller-scoped launch idempotency and worker ownership remain distinct concepts. Historical duplicate names are retained for migration fidelity; new shared names are checked under the management write lock and ambiguous name lookups are rejected. Do not add a global unique constraint or rename every owner column without addressing imported duplicates and those distinct relationships.
+
 ## Migrations and schema checks
 
 Application migrations start at `crates/ruphish-adapters/migrations/{sqlite,mysql,postgres}/1_baseline.sql`. Each baseline defines the final release schema directly. Once released, it is immutable; append forward migrations rather than editing its checksum. All providers use SQLx application history. Git pins release SQL to LF on every platform so checksums are stable. Startup rejects unrecognized histories, modified checksums, and inconsistent schemas.

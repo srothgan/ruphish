@@ -5,7 +5,10 @@ pub use ruphish_domain::campaign_draft::{Configuration, Status};
 /// A saved draft; a campaign reference fences all subsequent edits and launches.
 #[derive(Clone)]
 pub struct Draft {
-    /// Client-generated idempotent identity, scoped by ownership on every operation.
+    /// Server-assigned creator and last-editor attribution.
+    pub attribution: ruphish_domain::attribution::Attribution,
+
+    /// Client-generated idempotent identity in the shared workspace.
     pub id: String,
     /// Conditional-write revision.
     pub revision: i64,
@@ -52,7 +55,8 @@ pub fn should_write(
     {
         return Ok(false);
     }
-    Err(Error::Changed)
+    crate::resources::require_revision(existing.revision, expected)?;
+    Ok(true)
 }
 
 /// Resolve the saved settings and reject any launch that changes the saved draft.
@@ -74,6 +78,16 @@ pub fn validate_launch(
     {
         return Err(Error::Invalid(
             "Review the current resources before launching".into(),
+        ));
+    }
+    if input.policy.learning_page_id.is_some()
+        && input
+            .learning_revision
+            .as_ref()
+            .is_none_or(String::is_empty)
+    {
+        return Err(Error::Invalid(
+            "Review the learning page before launching".into(),
         ));
     }
     let c = &draft.configuration;
@@ -128,8 +142,8 @@ pub trait Repository: Send + Sync {
         configuration: Configuration,
         step: i64,
         now: i64,
-    ) -> Result<Draft, Error>;
-    /// Read an owned draft, including a completed launch reference for recovery.
+    ) -> Result<crate::attribution::Saved<Draft>, Error>;
+    /// Read a shared draft, including a completed launch reference for recovery.
     async fn draft(&self, caller: Identity, id: &str) -> Result<Draft, Error>;
     /// Stable bounded page of editable drafts; fetch limit+1 to establish continuation.
     async fn drafts(&self, caller: Identity, after: &str, limit: i64) -> Result<Vec<Draft>, Error>;
@@ -143,5 +157,5 @@ pub trait Repository: Send + Sync {
         revision: i64,
         input: Create,
         now: i64,
-    ) -> Result<super::Campaign, Error>;
+    ) -> Result<crate::attribution::Saved<super::Campaign>, Error>;
 }

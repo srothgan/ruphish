@@ -1,4 +1,5 @@
 //! Authenticated domain resource API; campaign eligibility is server-derived.
+use crate::attribution::Lookup;
 use crate::{
     auth::{AuthState, Context, Rejection, failure},
     resources::{error, response},
@@ -7,7 +8,7 @@ use axum::{
     Router,
     body::Bytes,
     extract::{DefaultBodyLimit, Path},
-    http::{StatusCode, header},
+    http::StatusCode,
     response::Response,
     routing::{get, post},
 };
@@ -18,12 +19,13 @@ use ruphish_contracts::errors::ErrorCode;
 fn now() -> i64 {
     ruphish_application::datetime::now().as_second()
 }
-fn encode(d: app::Domain) -> wire::Domain {
+fn encode(d: app::Domain, lookup: &Lookup) -> wire::Domain {
     let observed_at = now();
     let verifiable = app::origin(&d.origin, false).is_ok_and(|o| o.verification_supported());
     let dns_name = d.hostname.parse::<std::net::IpAddr>().is_err();
     let eligible = app::eligibility(d.enabled, d.eligible_until, observed_at).is_ok();
     wire::Domain {
+        attribution: lookup.resolve(&d.attribution),
         verification: wire::Verification {
             required: d.verification_required,
             status: if !d.verification_required {
@@ -90,13 +92,11 @@ pub(crate) fn routes() -> Router<AuthState> {
 }
 async fn listing(context: Context, only_validated: bool) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
-    let items: Vec<_> = context
-        .domains()
-        .list(user.identity)
-        .await
-        .map_err(error)?
+    let rows = context.domains().list(user.identity).await.map_err(error)?;
+    let lookup = Lookup::load(&context, rows.iter().map(|v| &v.attribution)).await?;
+    let items: Vec<_> = rows
         .into_iter()
-        .map(encode)
+        .map(|v| encode(v, &lookup))
         .filter(|d| !only_validated || d.eligible)
         .collect();
     response(StatusCode::OK, &items, None)
@@ -109,13 +109,13 @@ async fn validated(context: Context) -> Result<Response, Rejection> {
 }
 async fn read(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
-    let domain = encode(
-        context
-            .domains()
-            .get(user.identity, id)
-            .await
-            .map_err(error)?,
-    );
+    let result = context
+        .domains()
+        .get(user.identity, id)
+        .await
+        .map_err(error)?;
+    let lookup = Lookup::load(&context, [&result.attribution]).await?;
+    let domain = encode(result, &lookup);
     response(StatusCode::OK, &domain, Some(&domain.revision.to_string()))
 }
 async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response, Rejection> {
@@ -142,7 +142,9 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
         )
         .await
         .map_err(error)?;
-    let domain = encode(result);
+    let lookup = Lookup::from_identities(result.identities);
+    let result = result.record;
+    let domain = encode(result, &lookup);
     response(
         if id.is_some() {
             StatusCode::OK
@@ -161,29 +163,19 @@ async fn update(context: Context, Path(id): Path<i64>, body: Bytes) -> Result<Re
 }
 async fn verify(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
-    let domain = encode(
-        context
-            .domains()
-            .request_check(user.identity, id, now())
-            .await
-            .map_err(error)?,
-    );
+    let result = context
+        .domains()
+        .request_check(user.identity, id, now())
+        .await
+        .map_err(error)?;
+    let lookup = Lookup::from_identities(result.identities);
+    let result = result.record;
+    let domain = encode(result, &lookup);
     response(StatusCode::ACCEPTED, &domain, None)
 }
 async fn delete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
     let user = context.api(None).await?;
-    let revision = context
-        .headers
-        .get(header::IF_MATCH)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.trim_matches('"').parse().ok())
-        .ok_or_else(|| {
-            failure(
-                StatusCode::PRECONDITION_REQUIRED,
-                ErrorCode::RevisionRequired,
-                "domain_revision_required",
-            )
-        })?;
+    let revision = crate::revision::required(&context.headers)?;
     context
         .domains()
         .delete(user.identity, id, revision)

@@ -39,7 +39,7 @@ pub struct Recipient {
     pub position: String,
 }
 /// Attachment data retains the legacy base64 representation.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Attachment {
     /// Display name within the owning resource scope.
     pub name: String,
@@ -49,7 +49,7 @@ pub struct Attachment {
     pub content: String,
 }
 /// An additional rendered message header.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Header {
     /// Custom header name.
     pub key: String,
@@ -57,7 +57,7 @@ pub struct Header {
     pub value: String,
 }
 /// Authored email content, including the legacy visible-From override.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Template {
     /// Email subject template; empty is supported.
     pub subject: String,
@@ -71,7 +71,7 @@ pub struct Template {
     pub attachments: Vec<Attachment>,
 }
 /// Authored landing page and capture policy; transformations do not mutate the draft.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Page {
     /// Authoritative authored HTML source.
     pub html: String,
@@ -106,7 +106,7 @@ pub struct Profile<P = String> {
 }
 /// Resource-specific content. No unrelated fields can be mixed between families.
 #[derive(Clone, PartialEq, Eq)]
-pub enum Content<P = String> {
+pub enum Content<P = String, L = LearningPage> {
     /// Recipient collection.
     Group(Vec<Recipient>),
     /// Email template and attachments.
@@ -114,73 +114,88 @@ pub enum Content<P = String> {
     /// Landing-page content and capture policy.
     Page(Page),
     /// Static educational content.
-    LearningPage(LearningPage),
+    LearningPage(L),
     /// SMTP connection and message headers.
     Profile(Profile<P>),
 }
 /// Resource data without a caller-controlled owner, using stored credentials by default.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Resource<P = String> {
+    /// Server-assigned creator and last-editor attribution.
+    pub attribution: crate::attribution::Attribution,
+    /// Monotonic configuration revision, independent of timestamps.
+    pub revision: i64,
+
     /// Persistent identifier, assigned by storage on creation.
     pub id: i64,
     /// Display name within the owning resource scope.
     pub name: String,
-    /// Server-assigned modification timestamp and conditional-write revision.
+    /// Server-assigned modification timestamp.
     pub modified_date: String,
     /// Resource or attachment content.
     pub content: Content<P>,
 }
-impl<P> Resource<P> {
-    /// Change only the credential representation, retaining all other resource data.
-    pub fn map_password<Q>(self, map: impl FnOnce(P) -> Q) -> Resource<Q> {
-        Resource {
-            id: self.id,
-            name: self.name,
-            modified_date: self.modified_date,
-            content: match self.content {
-                Content::Group(v) => Content::Group(v),
-                Content::Template(v) => Content::Template(v),
-                Content::Page(v) => Content::Page(v),
-                Content::LearningPage(v) => Content::LearningPage(v),
-                Content::Profile(p) => Content::Profile(Profile {
-                    interface_type: p.interface_type,
-                    host: p.host,
-                    username: p.username,
-                    password: map(p.password),
-                    from_address: p.from_address,
-                    ignore_cert_errors: p.ignore_cert_errors,
-                    headers: p.headers,
-                }),
-            },
-        }
-    }
-    /// Resource family, derived from content rather than separately stored state.
+/// Authored learning content, before a public identity is assigned.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LearningPageInput {
+    /// Authored static HTML.
+    pub html: String,
+}
+
+/// Writable resource content; identity, attribution and revisions are server owned.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Input {
+    /// Shared display name.
+    pub name: String,
+    /// Replacement content and optional replacement credential.
+    pub content: Content<Option<String>, LearningPageInput>,
+}
+impl<P, L> Content<P, L> {
+    /// Derive the resource family from its content.
     pub fn kind(&self) -> Kind {
-        match self.content {
-            Content::Group(_) => Kind::Group,
-            Content::Template(_) => Kind::Template,
-            Content::Page(_) => Kind::Page,
-            Content::LearningPage(_) => Kind::LearningPage,
-            Content::Profile(_) => Kind::Profile,
+        match self {
+            Self::Group(_) => Kind::Group,
+            Self::Template(_) => Kind::Template,
+            Self::Page(_) => Kind::Page,
+            Self::LearningPage(_) => Kind::LearningPage,
+            Self::Profile(_) => Kind::Profile,
         }
     }
-    /// Rules independent of parsing libraries; normalization is intentional and minimal.
-    pub fn validate(&mut self) -> Result<(), &'static str> {
-        self.validation().finish().map_err(|e| e.message())
+    /// Change only credentials and learning metadata at a representation boundary.
+    fn map<Q, M>(
+        self,
+        password: impl FnOnce(P) -> Q,
+        learning: impl FnOnce(L) -> M,
+    ) -> Content<Q, M> {
+        match self {
+            Self::Group(v) => Content::Group(v),
+            Self::Template(v) => Content::Template(v),
+            Self::Page(v) => Content::Page(v),
+            Self::LearningPage(v) => Content::LearningPage(learning(v)),
+            Self::Profile(p) => Content::Profile(Profile {
+                interface_type: p.interface_type,
+                host: p.host,
+                username: p.username,
+                password: password(p.password),
+                from_address: p.from_address,
+                ignore_cert_errors: p.ignore_cert_errors,
+                headers: p.headers,
+            }),
+        }
     }
-    /// Collect independent field failures without including authored content.
-    pub fn validation(&self) -> crate::validation::Report {
-        let fields = match &self.content {
+    /// Shared validation for authored content and saved records.
+    pub fn validation(&self, name: &str) -> crate::validation::Report {
+        let fields = match self {
             Content::Group(targets) => Fields::Group {
-                name: &self.name,
+                name,
                 count: targets.len(),
             },
             Content::Template(t) => Fields::Template {
-                name: &self.name,
+                name,
                 text: &t.text,
                 html: &t.html,
             },
-            Content::Page(_) | Content::LearningPage(_) => Fields::Page { name: &self.name },
+            Content::Page(_) | Content::LearningPage(_) => Fields::Page { name },
             Content::Profile(p) => Fields::Profile {
                 from: &p.from_address,
                 host: &p.host,
@@ -194,30 +209,82 @@ impl<P> Resource<P> {
         fields.validate()
     }
 }
-impl From<Resource> for Resource<Option<String>> {
-    fn from(value: Resource) -> Self {
-        value.map_password(Some)
+impl<P> Resource<P> {
+    /// Change only the credential representation, retaining persisted metadata.
+    pub fn map_password<Q>(self, map: impl FnOnce(P) -> Q) -> Resource<Q> {
+        Resource {
+            attribution: self.attribution,
+            revision: self.revision,
+            id: self.id,
+            name: self.name,
+            modified_date: self.modified_date,
+            content: self.content.map(map, |page| page),
+        }
+    }
+    /// Resource family, derived from content.
+    pub fn kind(&self) -> Kind {
+        self.content.kind()
+    }
+    /// Validate saved content using the same rules as input.
+    pub fn validate(&mut self) -> Result<(), &'static str> {
+        self.validation().finish().map_err(|e| e.message())
+    }
+    /// Independent field failures, excluding authored values.
+    pub fn validation(&self) -> crate::validation::Report {
+        self.content.validation(&self.name)
     }
 }
-impl Resource<Option<String>> {
-    /// Resolve omitted credentials from an authorized snapshot. Writes call this inside their transaction.
-    pub fn resolve_password(self, previous: Option<&Resource>) -> Resource {
-        self.map_password(|password| {
-            password.unwrap_or_else(|| match previous.map(|resource| &resource.content) {
-                Some(Content::Profile(profile)) => profile.password.clone(),
-                _ => String::new(),
-            })
-        })
+impl<P: Into<Option<String>>> From<Resource<P>> for Input {
+    fn from(value: Resource<P>) -> Self {
+        Self {
+            name: value.name,
+            content: value
+                .content
+                .map(Into::into, |page| LearningPageInput { html: page.html }),
+        }
+    }
+}
+impl Input {
+    /// Resource family, derived from writable content.
+    pub fn kind(&self) -> Kind {
+        self.content.kind()
+    }
+    /// Independent field failures, excluding authored values.
+    pub fn validation(&self) -> crate::validation::Report {
+        self.content.validation(&self.name)
+    }
+    /// Resolve a replacement credential only from an authorized saved record.
+    pub fn resolve_content(self, previous: Option<&Resource>) -> Content {
+        self.content.map(
+            |password| {
+                password.unwrap_or_else(|| match previous.map(|r| &r.content) {
+                    Some(Content::Profile(profile)) => profile.password.clone(),
+                    _ => String::new(),
+                })
+            },
+            |page| LearningPage {
+                html: page.html,
+                public_id: match previous.map(|r| &r.content) {
+                    Some(Content::LearningPage(previous)) => previous.public_id.clone(),
+                    _ => String::new(),
+                },
+            },
+        )
     }
 }
 /// List metadata deliberately excludes bodies, attachments and credentials.
 #[derive(Clone, Debug)]
 pub struct Summary {
+    /// Server-assigned creator and last-editor attribution.
+    pub attribution: crate::attribution::Attribution,
+    /// Monotonic configuration revision, independent of timestamps.
+    pub revision: i64,
+
     /// Persistent identifier, assigned by storage on creation.
     pub id: i64,
     /// Display name within the owning resource scope.
     pub name: String,
-    /// Server-assigned modification timestamp and conditional-write revision.
+    /// Server-assigned modification timestamp.
     pub modified_date: String,
     /// Number of group members without loading recipient payloads.
     pub num_targets: i64,

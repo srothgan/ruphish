@@ -6,6 +6,8 @@ use ruphish_contracts::resource_details::{Content, Resource};
 pub struct SummaryRow {
     /// Persistent identity.
     pub id: i64,
+    /// Confirmed configuration revision for conditional deletion.
+    pub revision: i64,
     /// Confirmed display name.
     pub name: String,
     /// Confirmed last modification, when known by the server.
@@ -25,6 +27,7 @@ pub fn saved(rows: &mut Vec<SummaryRow>, resource: &Resource) {
     let metadata = &resource.metadata;
     if let Some(row) = rows.iter_mut().find(|row| row.id == metadata.id) {
         row.name.clone_from(&metadata.name);
+        row.revision = metadata.revision;
         row.modified_date.clone_from(&metadata.modified_date);
         if count.is_some() {
             row.count = count;
@@ -32,6 +35,7 @@ pub fn saved(rows: &mut Vec<SummaryRow>, resource: &Resource) {
     } else {
         rows.push(SummaryRow {
             id: metadata.id,
+            revision: metadata.revision,
             name: metadata.name.clone(),
             modified_date: metadata.modified_date.clone(),
             count,
@@ -67,9 +71,14 @@ mod tests {
             value["id"] = json!(7);
             value["name"] = json!("Confirmed name");
             value["modified_date"] = json!(null);
+            value["revision"] = json!(1);
+            value["created_by"] = json!(null);
+            value["edited_by"] = json!(null);
+            value["edited_at"] = json!(null);
             let resource = decode(kind, value).unwrap();
             let untouched = SummaryRow {
                 id: 99,
+                revision: 1,
                 name: "Other".into(),
                 modified_date: None,
                 count: Some(2),
@@ -82,6 +91,7 @@ mod tests {
                 rows[1],
                 SummaryRow {
                     id: 7,
+                    revision: 1,
                     name: "Confirmed name".into(),
                     modified_date: None,
                     count: None
@@ -100,7 +110,7 @@ mod tests {
 
     #[test]
     fn group_saves_use_confirmed_recipients_including_empty_edits() {
-        let mut value = json!({"id":7,"name":"Group","modified_date":"2026-10-29T10:00:00Z","targets":[{"email":"one@example.test","first_name":"","last_name":"","position":""},{"email":"two@example.test","first_name":"","last_name":"","position":""}]});
+        let mut value = json!({"revision":1,"created_by":null,"edited_by":null,"edited_at":null,"id":7,"name":"Group","modified_date":"2026-10-29T10:00:00Z","targets":[{"email":"one@example.test","first_name":"","last_name":"","position":""},{"email":"two@example.test","first_name":"","last_name":"","position":""}]});
         let mut rows = vec![];
         saved(&mut rows, &decode(Kind::Group, value.clone()).unwrap());
         assert_eq!(rows[0].count, Some(2));

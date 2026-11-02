@@ -89,7 +89,7 @@ pub fn decode(status: u16, body: &str) -> Result<Value, String> {
     })
 }
 
-/// Launch retries retain the reviewed body and owner-scoped idempotency key.
+/// Launch retries retain the reviewed body and caller-scoped idempotency key.
 pub fn launch_request(
     path: &str,
     token: &str,

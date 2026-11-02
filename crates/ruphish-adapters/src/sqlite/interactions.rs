@@ -3,7 +3,7 @@ use ruphish_application::datetime;
 use ruphish_application::{
     delivery::MessageInput,
     interactions::*,
-    resources::{Content, Error, Kind, Profile, Recipient, Template},
+    resources::{Content, Error, Profile, Recipient, Template},
 };
 use sqlx::{Row, SqlitePool};
 
@@ -24,19 +24,24 @@ fn missing() -> Error {
 #[async_trait::async_trait]
 impl Persistence for Interactions {
     async fn learning_page(&self, origin: &str, public_id: &str) -> Result<String, Error> {
-        sqlx::query_scalar("SELECT p.html FROM ruphish_learning_pages p WHERE p.public_id=? AND EXISTS(SELECT 1 FROM ruphish_domains d JOIN ruphish_domain_policy dp ON dp.id=d.id WHERE d.owner_id=p.user_id AND d.origin=? AND d.enabled=1 AND dp.serves)")
+        let frozen: Option<String> = sqlx::query_scalar("SELECT c.frozen_content FROM campaigns c JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id JOIN ruphish_domain_policy dp ON dp.id=d.id WHERE c.learning_public_id=? AND d.origin=? AND d.enabled=1 AND dp.serves").bind(public_id).bind(origin).fetch_optional(&self.pool).await.map_err(storage)?;
+        if let Some(frozen) = frozen {
+            return crate::campaign_snapshot::Snapshot::decode(&frozen)?
+                .learning_html
+                .ok_or_else(missing);
+        }
+        sqlx::query_scalar("SELECT p.html FROM ruphish_learning_pages p WHERE p.public_id=? AND EXISTS(SELECT 1 FROM ruphish_domains d JOIN ruphish_domain_policy dp ON dp.id=d.id WHERE d.origin=? AND d.enabled=1 AND dp.serves)")
             .bind(public_id).bind(origin).fetch_optional(&self.pool).await.map_err(storage)?.ok_or_else(missing)
     }
     async fn snapshot(&self, origin: &str, rid: &str, action: &Action) -> Result<Snapshot, Error> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
-        let row=sqlx::query("SELECT r.id AS result_id,r.campaign_id,r.user_id,r.email,r.first_name,r.last_name,r.position,r.send_date,c.url,c.page_id,c.smtp_id,c.template_id,cp.redirect_url,cp.learning_page_id,cp.track_opens,lp.public_id AS learning_public_id FROM results r JOIN campaigns c ON c.id=r.campaign_id AND c.user_id=r.user_id JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=c.user_id JOIN ruphish_campaign_policy cp ON cp.campaign_id=c.id LEFT JOIN ruphish_learning_pages lp ON lp.id=cp.learning_page_id AND lp.user_id=c.user_id WHERE r.r_id=? AND c.status!='Completed' AND d.origin=? AND d.enabled=1 AND (SELECT serves FROM ruphish_domain_policy WHERE id=d.id)").bind(rid).bind(origin).fetch_all(&mut *tx).await.map_err(storage)?;
+        let row=sqlx::query("SELECT r.id AS result_id,r.campaign_id,r.user_id,r.email,r.first_name,r.last_name,r.position,r.send_date,c.url,c.page_id,c.smtp_id,c.template_id,cp.redirect_url,cp.learning_page_id,cp.track_opens,c.learning_public_id FROM results r JOIN campaigns c ON c.id=r.campaign_id AND c.user_id=r.user_id JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id JOIN ruphish_campaign_policy cp ON cp.campaign_id=c.id WHERE r.r_id=? AND c.status!='Completed' AND d.origin=? AND d.enabled=1 AND (SELECT serves FROM ruphish_domain_policy WHERE id=d.id)").bind(rid).bind(origin).fetch_all(&mut *tx).await.map_err(storage)?;
         if row.len() != 1 {
             return Err(missing());
         }
         let row = &row[0];
         let result_id: i64 = row.try_get("result_id").map_err(storage)?;
         let campaign_id: i64 = row.try_get("campaign_id").map_err(storage)?;
-        let owner: i64 = row.try_get("user_id").map_err(storage)?;
         let text = |key: &str| {
             row.try_get::<Option<String>, _>(key)
                 .map(|v| v.unwrap_or_default())
@@ -45,31 +50,14 @@ impl Persistence for Interactions {
         let email = text("email")?;
         let mut rendering = None;
         if matches!(action, Action::View { .. } | Action::Submit { .. }) {
-            let resource = super::resources::load(
-                &mut tx,
-                owner,
-                Kind::Page,
-                row.try_get("page_id").map_err(storage)?,
-            )
-            .await?;
+            let frozen = super::campaigns::snapshot(&mut tx, campaign_id).await?;
+            let resource = frozen.page();
+            if resource.id == 0 {
+                return Err(missing());
+            }
             let Content::Page(page) = resource.content else {
                 return Err(Error::Internal);
             };
-            let sender: Option<String> =
-                sqlx::query_scalar("SELECT from_address FROM smtp WHERE id=? AND user_id=?")
-                    .bind(row.try_get::<i64, _>("smtp_id").map_err(storage)?)
-                    .bind(owner)
-                    .fetch_optional(&mut *tx)
-                    .await
-                    .map_err(storage)?;
-            let visible: Option<String> = sqlx::query_scalar(
-                "SELECT envelope_sender FROM templates WHERE id=? AND user_id=?",
-            )
-            .bind(row.try_get::<i64, _>("template_id").map_err(storage)?)
-            .bind(owner)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(storage)?;
             let message = MessageInput {
                 track_opens: row.try_get("track_opens").map_err(storage)?,
                 message_id: None,
@@ -80,13 +68,13 @@ impl Persistence for Interactions {
                     position: text("position")?,
                 },
                 template: Template {
-                    envelope_sender: visible.unwrap_or_default(),
+                    envelope_sender: frozen.template.content.envelope_sender,
                     ..Default::default()
                 },
                 template_id: 0,
                 page_id: resource.id,
                 profile: Profile {
-                    from_address: sender.unwrap_or_else(|| "training@example.invalid".into()),
+                    from_address: frozen.sender.content.from_address,
                     ..Default::default()
                 },
                 url: text("url")?,

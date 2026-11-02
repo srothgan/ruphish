@@ -25,6 +25,7 @@ pub mod tls;
 mod webhook_delivery;
 
 mod campaign_preparation;
+mod campaign_snapshot;
 mod integration_work;
 mod observation_schema;
 mod participant_privacy;

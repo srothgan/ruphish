@@ -1,4 +1,6 @@
 //! Resource metadata responses and explicit test-delivery inputs.
+pub mod fields;
+pub mod request;
 use serde::{Deserialize, Serialize};
 
 /// Recipient-group summary response.
@@ -13,6 +15,12 @@ pub struct GroupSummaries {
 /// Group metadata without recipient payloads.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GroupSummary {
+    /// Server-assigned creator and last-editor attribution.
+    #[serde(flatten)]
+    pub attribution: crate::attribution::Attribution,
+    /// Monotonic configuration revision used for conditional writes.
+    pub revision: i64,
+
     /// Persistent ID.
     pub id: i64,
     /// Saved name.
@@ -36,6 +44,12 @@ pub struct ResourceSummaries {
 /// Resource metadata without bodies, attachments or service credentials.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ResourceSummary {
+    /// Server-assigned creator and last-editor attribution.
+    #[serde(flatten)]
+    pub attribution: crate::attribution::Attribution,
+    /// Monotonic configuration revision used for conditional writes.
+    pub revision: i64,
+
     /// Persistent ID.
     pub id: i64,
     /// Saved name.
@@ -129,9 +143,8 @@ mod tests {
 
     #[test]
     fn missing_counts_and_identity_are_not_displayed_as_zero() {
-        let group =
-            json!({"id":4,"name":"Example","modified_date":"2026-10-21T12:00:00Z","num_targets":0});
-        let resource = json!({"id":4,"name":"Example","modified_date":"2026-10-21T12:00:00Z","active_campaigns":0});
+        let group = json!({"revision":1,"created_by":null,"edited_by":null,"edited_at":null,"id":4,"name":"Example","modified_date":"2026-10-21T12:00:00Z","num_targets":0});
+        let resource = json!({"revision":1,"created_by":null,"edited_by":null,"edited_at":null,"id":4,"name":"Example","modified_date":"2026-10-21T12:00:00Z","active_campaigns":0});
         for field in ["id", "name", "modified_date", "num_targets"] {
             let mut row = group.clone();
             row.as_object_mut().map(|o| o.remove(field));
@@ -144,30 +157,18 @@ mod tests {
     }
 }
 
-/// Authored static learning-page input; public identity is always server owned.
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-pub struct LearningPageInput {
-    /// Existing resource ID; ignored when creating.
-    #[serde(default)]
-    pub id: i64,
-    /// Owner-scoped resource name.
-    pub name: String,
-    /// Static authored HTML.
-    pub html: String,
-}
-
 /// Explicit SMTP selection for a test message; never inferred from failed validation.
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(tag = "source", rename_all = "snake_case", deny_unknown_fields)]
 pub enum TestProfile {
-    /// Use the current owner-scoped saved configuration and credential.
+    /// Use the current shared saved configuration and credential.
     Saved {
         /// Saved sending-profile identifier.
         id: i64,
     },
-    /// Test supplied settings. A nonzero profile ID resolves an omitted password from that owned profile.
+    /// Test supplied settings. A nonzero profile ID resolves an omitted password from that shared profile.
     Draft {
         /// Editable SMTP settings and optional replacement credential.
-        profile: crate::legacy::SendingProfile,
+        profile: crate::resources::request::SendingProfile,
     },
 }

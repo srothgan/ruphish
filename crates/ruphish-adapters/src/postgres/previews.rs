@@ -38,10 +38,10 @@ impl PreviewPersistence for PreviewStore {
         user.authenticate(caller)?;
         user.require("modify_objects")?;
         crate::database::text::preview(m)?;
-        // Recheck both ownership and continued existence after message composition.
+        // Recheck continued existence after message composition; caller authorization was checked above.
         for (kind, id) in [(Kind::Template, m.template_id), (Kind::Page, m.page_id)] {
             if id != 0 {
-                super::resources::load(&mut tx, caller.id, kind, id).await?;
+                super::resources::load(&mut tx, kind, id).await?;
             }
         }
         let visible = if m.template.envelope_sender.is_empty() {
@@ -70,13 +70,10 @@ impl PreviewPersistence for PreviewStore {
                 .map(|v| v.unwrap_or_default())
                 .map_err(crate::postgres::resource_error)
         };
-        let owner = row
-            .try_get("user_id")
-            .map_err(crate::postgres::resource_error)?;
         let id = row
             .try_get("page_id")
             .map_err(crate::postgres::resource_error)?;
-        let resource = super::resources::load(&mut tx, owner, Kind::Page, id).await?;
+        let resource = super::resources::load(&mut tx, Kind::Page, id).await?;
         let Content::Page(page) = resource.content else {
             return Err(Error::Internal);
         };

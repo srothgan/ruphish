@@ -1,5 +1,5 @@
 //! Explicit authentication wire types. Password hashes and session secrets never belong here.
-use crate::legacy::Timestamp;
+use crate::common::Timestamp;
 use serde::{Deserialize, Serialize};
 
 /// Legacy public role metadata.

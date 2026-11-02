@@ -1,5 +1,7 @@
 -- Ruphish release baseline. Fresh installs and direct Gophish conversions share this schema.
 
+CREATE TABLE ruphish_deleted_accounts (id BIGINT PRIMARY KEY, username VARCHAR(255) NOT NULL);
+
 CREATE TABLE "attachments" (
   "id" integer primary key autoincrement,
   "template_id" bigint,
@@ -9,6 +11,8 @@ CREATE TABLE "attachments" (
 );
 
 CREATE TABLE "campaigns" (
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   "id" integer primary key autoincrement,
   "user_id" bigint,
   "name" varchar(255) NOT NULL,
@@ -20,7 +24,9 @@ CREATE TABLE "campaigns" (
   "url" varchar(255),
   "smtp_id" bigint,
   "launch_date" DATETIME,
-  send_by_date DATETIME
+  send_by_date DATETIME,
+  frozen_content TEXT,
+  learning_public_id VARCHAR(64)
 );
 
 CREATE TABLE "email_requests" (
@@ -58,6 +64,9 @@ CREATE TABLE "group_targets" (
 );
 
 CREATE TABLE "groups" (
+  revision BIGINT NOT NULL DEFAULT 1,
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   "id" integer primary key autoincrement,
   "user_id" bigint,
   "name" varchar(255),
@@ -99,6 +108,9 @@ CREATE TABLE "mail_logs" (
 );
 
 CREATE TABLE "pages" (
+  revision BIGINT NOT NULL DEFAULT 1,
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   "id" integer primary key autoincrement,
   "user_id" bigint,
   "name" varchar(255),
@@ -163,6 +175,8 @@ CREATE TABLE ruphish_campaign_domains (
 );
 
 CREATE TABLE ruphish_campaign_drafts (
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   id TEXT PRIMARY KEY NOT NULL,
   owner_id INTEGER NOT NULL,
   revision INTEGER NOT NULL,
@@ -237,12 +251,9 @@ CREATE TABLE ruphish_domain_checks (
   CHECK((finished_at IS NULL AND outcome IS NULL) OR (finished_at IS NOT NULL AND outcome IS NOT NULL))
 );
 
-CREATE TABLE ruphish_domain_claims (
-  hostname TEXT PRIMARY KEY,
-  owner_id INTEGER NOT NULL
-);
-
 CREATE TABLE ruphish_domains (
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   id INTEGER PRIMARY KEY,
   owner_id INTEGER NOT NULL,
   name TEXT NOT NULL,
@@ -275,6 +286,9 @@ CREATE TABLE "ruphish_event_receipts" (
 );
 
 CREATE TABLE ruphish_learning_pages (
+  revision BIGINT NOT NULL DEFAULT 1,
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
   name TEXT NOT NULL,
@@ -309,8 +323,10 @@ CREATE TABLE "ruphish_mailbox_runs" (
 );
 
 CREATE TABLE "ruphish_mailboxes" (
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  owner_id INTEGER NOT NULL,
+  owner_id INTEGER,
   name TEXT NOT NULL,
   revision INTEGER NOT NULL DEFAULT 1,
   enabled INTEGER NOT NULL,
@@ -402,12 +418,17 @@ CREATE TABLE "ruphish_webhook_jobs" (
 );
 
 CREATE TABLE ruphish_webhook_state (
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   webhook_id INTEGER PRIMARY KEY,
   revision INTEGER NOT NULL DEFAULT 1,
-  owner_id INTEGER NOT NULL
+  owner_id INTEGER
 );
 
 CREATE TABLE smtp (
+  revision BIGINT NOT NULL DEFAULT 1,
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   id integer primary key autoincrement,
   user_id bigint,
   interface_type varchar(255),
@@ -429,6 +450,9 @@ CREATE TABLE "targets" (
 );
 
 CREATE TABLE "templates" (
+  revision BIGINT NOT NULL DEFAULT 1,
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
   "id" integer primary key autoincrement,
   "user_id" bigint,
   "name" varchar(255),
@@ -517,6 +541,8 @@ CREATE INDEX ruphish_templates_owner ON templates(user_id);
 CREATE INDEX ruphish_webhook_attempts_unfinished ON ruphish_webhook_attempts(job_id) WHERE finished IS NULL;
 
 CREATE INDEX ruphish_webhook_due ON ruphish_webhook_jobs(state,due,lease);
+
+CREATE UNIQUE INDEX campaigns_learning_public_id ON campaigns(learning_public_id);
 
 CREATE VIEW event_history AS SELECT id,campaign_id,email,time,CASE kind WHEN 'campaign_created' THEN 'Campaign Created' WHEN 'email_sent' THEN 'Email Sent' WHEN 'email_error' THEN 'Error Sending Email' WHEN 'email_opened' THEN 'Email Opened' WHEN 'link_clicked' THEN 'Clicked Link' WHEN 'form_submitted' THEN 'Submitted Data' WHEN 'email_reported' THEN 'Email Reported' WHEN 'delivery_reconciled' THEN 'Delivery reconciled' ELSE kind END AS message,metadata AS details,recipient_id,source,edited,revision,client FROM events;
 

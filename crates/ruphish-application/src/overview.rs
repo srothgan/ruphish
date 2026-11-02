@@ -1,4 +1,4 @@
-//! Owner-scoped dashboard aggregate: one authorized read-model spanning campaigns,
+//! Shared dashboard aggregate: one authorized read-model spanning campaigns,
 //! engagement, resources and domains. Read-only, with no mutation, event payloads
 //! or entered participant values.
 use crate::{auth::Identity, resources::Error};

@@ -19,12 +19,14 @@ pub(super) struct Persistence {
     pub saved_generation: RwSignal<u64>,
     pub modified: RwSignal<Value>,
     pub saving: RwSignal<bool>,
+    pub write_error: RwSignal<Option<ruphish_ui::api_error::ApiError>>,
 }
 impl Persistence {
     pub fn new(saved: Option<&Value>) -> Self {
         Self {
             queries: expect_context::<CampaignQueries>(),
             saving: RwSignal::new(false),
+            write_error: RwSignal::new(None),
             id: RwSignal::new(saved.map(|s| text(s, "id")).unwrap_or_default()),
             revision: RwSignal::new(saved.and_then(|s| s["revision"].as_i64())),
             saved_generation: RwSignal::new(0),
@@ -43,10 +45,16 @@ impl Persistence {
                 .map_err(|_| ruphish_ui::tr!(ui.cannot_generate_a_secure_launch_key)())?;
             self.id.set(key);
         }
-        let body = json!({"revision":self.revision.get_untracked(),"configuration":state.value,"step":step});
+        let body = serde_json::to_value(ruphish_contracts::campaign::request::DraftWrite {
+            revision: self.revision.get_untracked(),
+            configuration: serde_json::from_value(state.value.clone())
+                .map_err(|_| api.invalid_read())?,
+            step: i64::try_from(step).map_err(|_| api.invalid_read())?,
+        })
+        .map_err(|_| api.invalid_read())?;
         self.saving.set(true);
         let result = api
-            .resource(
+            .resource_response(
                 "PUT",
                 &format!("/api/campaign-drafts/{}", self.id.get_untracked()),
                 token,
@@ -55,7 +63,11 @@ impl Persistence {
             )
             .await;
         self.saving.set(false);
-        let (saved, _) = result?;
+        let (saved, _) = result.map_err(|error| {
+            self.write_error.set(Some(error.clone()));
+            error.message
+        })?;
+        self.write_error.set(None);
         let parsed: ruphish_contracts::campaign_reads::Draft =
             serde_json::from_value(saved.clone()).map_err(|_| api.invalid_read())?;
         if parsed.id != self.id.get_untracked() {
@@ -169,6 +181,13 @@ fn read_only(api: Api, token: String, id: String) -> impl IntoView {
     let busy = RwSignal::new(false);
     let deleting = RwSignal::new(None::<i64>);
     let message = Message::new(String::new());
+    let delete_error = RwSignal::new(None::<ruphish_ui::api_error::ApiError>);
+    let needs_review = Signal::derive(move || {
+        delete_error.with(|e| {
+            e.as_ref()
+                .is_some_and(ruphish_ui::api_error::ApiError::needs_write_recovery)
+        })
+    });
     let navigate = use_navigate();
     let redirect = navigate.clone();
     Effect::new(move |_| {
@@ -190,7 +209,7 @@ fn read_only(api: Api, token: String, id: String) -> impl IntoView {
         }
     });
     let delete = Callback::new(move |()| {
-        if busy.get_untracked() {
+        if busy.get_untracked() || needs_review.get_untracked() {
             return;
         }
         let Some(revision) = deleting.get_untracked() else {
@@ -200,7 +219,7 @@ fn read_only(api: Api, token: String, id: String) -> impl IntoView {
         let navigate = navigate.clone();
         tasks.spawn(async move {
             match api
-                .command(
+                .command_response(
                     "DELETE",
                     &format!(
                         "/api/campaign-drafts/{}?revision={revision}",
@@ -216,7 +235,10 @@ fn read_only(api: Api, token: String, id: String) -> impl IntoView {
                     queries.deleted("draft", &id.get_value());
                     navigate("/campaigns", Default::default());
                 }
-                Err(e) => message.error(e),
+                Err(e) => {
+                    message.error(e.message.clone());
+                    delete_error.set(Some(e));
+                }
             }
             busy.set(false);
         });
@@ -232,10 +254,21 @@ fn read_only(api: Api, token: String, id: String) -> impl IntoView {
                     edit_href=format!("/campaigns/drafts/{}/edit", id.get_value())
                     can_edit=can_edit
                     on_delete=Callback::new(move |()| {
+                        delete_error.set(None);
+                        message.clear();
                         deleting.set(saved.get_untracked()["revision"].as_i64())
                     })
                 />
             </PageHeader>
+            <AttributionInfo value=Signal::derive(move || {
+                saved
+                    .with(|value| {
+                        <ruphish_contracts::attribution::Attribution as serde::Deserialize>::deserialize(
+                                value,
+                            )
+                            .unwrap_or_default()
+                    })
+            }) />
             {message.view()}
             <QueryBoundary
                 fetching=read.fetching
@@ -375,9 +408,17 @@ fn read_only(api: Api, token: String, id: String) -> impl IntoView {
                             confirm_label=trs!(ui.delete)
                             busy=Signal::derive(move || busy.get())
                             message=message
+                            confirm_disabled=needs_review
                             on_confirm=delete
                             on_cancel=Callback::new(move |()| deleting.set(None))
-                        />
+                        >
+                            <DeleteRecovery
+                                error=delete_error
+                                saved_href=Signal::derive(move || {
+                                    format!("/campaigns/drafts/{}", id.get_value())
+                                })
+                            />
+                        </DeleteConfirmation>
                     </Show>
                 </QueryBoundary>
             </QueryBoundary>

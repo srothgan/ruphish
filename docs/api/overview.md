@@ -1,6 +1,6 @@
 ---
 title: Overview API
-description: Read owner-scoped dashboard activity and delivered-recipient posture metrics.
+description: Read installation-wide dashboard activity and delivered-recipient posture metrics.
 sidebar:
   order: 14
 ---
@@ -12,7 +12,7 @@ Ruphish provides dashboard-specific endpoints so clients do not need to download
 | GET | `/api/overview` | Campaign inventory, recent executions, and attention items |
 | GET | `/api/overview/posture` | Delivered-recipient cohort metrics and previous-window comparison |
 
-Only `/api/overview/posture` accepts `window=all`, `7d`, `30d`, or `365d`. Its API default is `all`; the UI initially selects 30 days. Unknown or repeated window values are rejected there. `/api/overview` has no period filter and does not validate a supplied window parameter. Responses are owner-scoped, authenticated, and not cacheable as public content.
+Only `/api/overview/posture` accepts `window=all`, `7d`, `30d`, or `365d`. Its API default is `all`; the UI initially selects 30 days. Unknown or repeated window values are rejected there. `/api/overview` has no period filter and does not validate a supplied window parameter. Responses are installation-wide, authenticated, and not cacheable as public content.
 
 ## Overview snapshot
 

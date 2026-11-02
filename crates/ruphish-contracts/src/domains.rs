@@ -14,8 +14,12 @@ pub fn decode_request<T: serde::de::DeserializeOwned>(
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-/// Owner-visible domain resource and derived readiness.
+/// Shared domain resource and derived readiness.
 pub struct Domain {
+    /// Server-assigned creator and last-editor attribution.
+    #[serde(flatten)]
+    pub attribution: crate::attribution::Attribution,
+
     /// Effective policy, separate from historical observations.
     pub verification: Verification,
     /// Persistent resource identifier.

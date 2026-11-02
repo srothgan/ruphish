@@ -7,7 +7,7 @@ use ruphish_adapters::{
     database::{self, Config, Database, Error},
     outbound::Policy,
 };
-use ruphish_application::resources::{Content, Kind, Recipient, Resource};
+use ruphish_application::resources::{Content, Input, Kind, Recipient};
 use std::path::Path;
 
 async fn open(path: &Path) -> Database {
@@ -62,10 +62,8 @@ async fn configured_databases_stay_isolated_and_closed_capabilities_cannot_recon
     let saved = resources
         .save(
             actor.identity,
-            Resource {
-                id: 0,
+            Input {
                 name: "Independent audience".into(),
-                modified_date: String::new(),
                 content: Content::Group(vec![Recipient {
                     email: "fixture@example.test".into(),
                     ..Default::default()

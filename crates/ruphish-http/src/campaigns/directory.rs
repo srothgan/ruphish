@@ -1,14 +1,7 @@
 //! Additive combined management list; legacy campaign APIs remain execution-only.
 use super::*;
 use app::directory::{Cursor, Filter};
-#[derive(Default, serde::Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub(super) struct QueryPage {
-    after: String,
-    filter: String,
-    sort: Option<ruphish_application::pagination::DirectorySort>,
-    order: Option<ruphish_application::reporting::SortDirection>,
-}
+use ruphish_contracts::campaign::request::DirectoryPage as QueryPage;
 pub(super) async fn list(
     c: Context,
     page: Result<Query<QueryPage>, axum::extract::rejection::QueryRejection>,

@@ -284,7 +284,33 @@ export function dataset(now) {
     campaign_id: null,
     status: 'draft',
   }));
+  const authors = users.map(({ id, username }) => ({ id, username, deleted: false }));
+  authors.push({ id: 100, username: 'Morgan Brooks', deleted: true });
+  const attribution = (item, i) =>
+    Object.assign(item, {
+      created_by: i % 3 === 2 ? 100 : users[0].id,
+      edited_by: users[Math.min(1, users.length - 1)].id,
+      edited_at: item.modified_date ?? item.modified ?? iso(now - 3600),
+    });
+  for (const items of [
+    groups,
+    templates,
+    pages,
+    learning,
+    smtp,
+    domains,
+    webhooks,
+    mailboxes,
+    drafts,
+  ]) {
+    items.forEach((item, i) => {
+      item.revision ??= 1;
+      attribution(item, i);
+    });
+  }
+  campaigns.forEach((campaign, i) => attribution(campaign.header, i));
   return {
+    authors,
     now,
     groups,
     templates,

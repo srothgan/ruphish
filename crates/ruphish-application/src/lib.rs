@@ -26,3 +26,6 @@ pub use ruphish_domain::validation;
 pub use ruphish_domain::pagination;
 
 pub mod event_edit;
+
+/// Persisted attribution shared by application resources and transport projections.
+pub mod attribution;

@@ -5,6 +5,7 @@ use crate::{
 };
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use leptos_router::hooks::{use_navigate, use_params_map};
+use ruphish_contracts::integrations::request::{MailboxWrite, WebhookWrite};
 use ruphish_domain::reporting::SortDirection;
 use ruphish_ui::table_state::Value as SortValue;
 use ruphish_ui::view_tasks::ViewTasks;
@@ -93,6 +94,12 @@ pub(crate) enum Record {
     Mailbox(ruphish_contracts::integrations::Mailbox),
 }
 impl Record {
+    fn attribution(&self) -> ruphish_contracts::attribution::Attribution {
+        match self {
+            Self::Webhook(v) => v.attribution.clone(),
+            Self::Mailbox(v) => v.attribution.clone(),
+        }
+    }
     pub fn id(&self) -> i64 {
         match self {
             Self::Webhook(v) => v.id,
@@ -144,13 +151,14 @@ impl Record {
             Self::Mailbox(v) => v.history,
         }
     }
-    fn edit_value(&self) -> Value {
+    fn edit_value(&self) -> Result<Value, String> {
         match self {
             Self::Webhook(v) => {
-                json!({"name":v.name,"url":v.url,"is_active":v.is_active,"revision":v.revision})
+                serde_json::to_value(WebhookWrite::from(v)).map_err(|e| e.to_string())
             }
             Self::Mailbox(v) => {
-                json!({"name":v.name,"enabled":v.enabled,"host":v.host,"port":v.port,"username":v.username,"tls":v.tls,"ignore_cert_errors":v.ignore_cert_errors,"folder":v.folder,"restrict_domain":v.restrict_domain,"delete_reported":v.delete_reported,"frequency":v.frequency,"revision":v.revision})
+                serde_json::to_value(MailboxWrite::try_from(v).map_err(|e| e.to_string())?)
+                    .map_err(|e| e.to_string())
             }
         }
     }
@@ -265,7 +273,7 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
                                     id: row.id(),
                                     name: row.name().to_owned(),
                                     path: format!("{}/{}", kind.api(), row.id()),
-                                    revision: Some(row.revision().to_string()),
+                                    revision: Some(format!("\"{}\"", row.revision())),
                                     description: leptos_i18n::t_string!(
                                         i18n, ui.this_removes_the_configuration_and_its_processing_history_already_dispatched_req
                                     ),
@@ -399,9 +407,29 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
 
     let queries = expect_context::<ManagementQueries>();
     let initial = if kind.webhook() {
-        json!({"name":"","url":"","is_active":true,"revision":null})
+        json!(WebhookWrite {
+            name: String::new(),
+            url: String::new(),
+            secret: None,
+            is_active: true,
+            revision: None
+        })
     } else {
-        json!({"name":"","enabled":true,"host":"","port":993,"username":"","tls":true,"ignore_cert_errors":false,"folder":"INBOX","restrict_domain":"","delete_reported":false,"frequency":60,"revision":null})
+        json!(MailboxWrite {
+            name: String::new(),
+            enabled: true,
+            host: String::new(),
+            port: 993,
+            username: String::new(),
+            password: None,
+            tls: true,
+            ignore_cert_errors: false,
+            folder: "INBOX".into(),
+            restrict_domain: String::new(),
+            delete_reported: false,
+            frequency: 60,
+            revision: None
+        })
     };
     let draft = RwSignal::new(initial.clone());
     let baseline = RwSignal::new(initial);
@@ -413,10 +441,12 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
     let busy = RwSignal::new(false);
     let refresh = RwSignal::new(0u64);
     let message = Message::new(String::new());
+    let write_error = RwSignal::new(None::<ruphish_ui::api_error::ApiError>);
     let tasks = ViewTasks::default();
     let token = StoredValue::new(token);
     let navigate = StoredValue::new(use_navigate());
     let editable = use_context::<ResourceAccess>().is_some_and(|access| access.0);
+    let blocked = Signal::derive(move || busy.get() || loading.get() || !loaded.get() || !editable);
     crate::navigation::protect_draft(move || {
         loaded.get() && draft.get() != baseline.get() || busy.get()
     });
@@ -426,11 +456,18 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
             loading.set(true);
 
             spawn_local(async move {
-                match ManagementQueries::read_integration(api, kind, id).await {
-                    Ok(value) => {
+                match ManagementQueries::read_integration(api, kind, id)
+                    .await
+                    .and_then(|record| {
+                        record
+                            .edit_value()
+                            .map(|value| (record.has_secret(), value))
+                            .map_err(|_| api.invalid_read_err())
+                    }) {
+                    Ok((has_secret, value)) => {
                         load_error.set(None);
-                        has_saved_secret.set(value.has_secret());
-                        let value = value.edit_value();
+                        write_error.set(None);
+                        has_saved_secret.set(has_secret);
                         baseline.set(value.clone());
                         draft.set(value);
                         loaded.set(true);
@@ -453,7 +490,7 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
     });
     let save = move |event: leptos::ev::SubmitEvent| {
         event.prevent_default();
-        if busy.get_untracked() || !loaded.get_untracked() || !editable {
+        if blocked.get_untracked() {
             return;
         }
         if !validation.check() {
@@ -465,6 +502,18 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
         if value[secret].as_str().is_none_or(str::is_empty) {
             value.as_object_mut().map(|object| object.remove(secret));
         }
+        let value = if kind.webhook() {
+            serde_json::from_value::<WebhookWrite>(value).and_then(serde_json::to_value)
+        } else {
+            serde_json::from_value::<MailboxWrite>(value).and_then(serde_json::to_value)
+        };
+        let value = match value {
+            Ok(value) => value,
+            Err(_) => {
+                message.error(api.invalid_read());
+                return;
+            }
+        };
         busy.set(true);
         tasks.spawn(async move {
             let path = id.map_or_else(
@@ -503,6 +552,7 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                 }
                 Err(error) => {
                     busy.set(false);
+                    write_error.set(Some(error.clone()));
                     validation.server(ticket, &error);
                     message.error(error.message);
                 }
@@ -560,11 +610,18 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                     }}
                 </p>
                 {message.view()}
+                <WriteRecovery
+                    error=write_error
+                    saved_href=Signal::derive(move || {
+                        format!("{}/{}", kind.path(), id.unwrap_or(0))
+                    })
+                    busy=Signal::derive(move || busy.get() || loading.get())
+                    on_reload=Callback::new(move |_| refresh.update(|n| *n += 1))
+                />
+
                 <form novalidate on:submit=save>
                     <ValidationSummary form=validation />
-                    <FormFields disabled=Signal::derive(move || {
-                        busy.get() || !loaded.get() || !editable
-                    })>
+                    <FormFields disabled=blocked>
                         {field(draft, "name", trs!(ui.name), "text")}
                         {if kind.webhook() {
                             view! {
@@ -684,9 +741,7 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
                         </ActionButton>
                         <SaveButton
                             kind="submit"
-                            disabled=Signal::derive(move || {
-                                busy.get() || !loaded.get() || !editable
-                            })
+                            disabled=blocked
                             label=Signal::derive(move || {
                                 if busy.get() {
                                     leptos_i18n::t_string!(i18n, ui.saving).to_owned()
@@ -754,7 +809,7 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
             id,
             name: data.name().to_owned(),
             path: format!("{}/{id}", kind.api()),
-            revision: Some(data.revision().to_string()),
+            revision: Some(format!("\"{}\"", data.revision())),
             description: leptos_i18n::t_string!(
                 i18n,
                 ui.this_removes_the_configuration_and_its_processing_history_already_dispatched_req
@@ -870,6 +925,9 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                         }
                     })}
             </PageHeader>
+            <AttributionInfo value=Signal::derive(move || {
+                value.get().map(|v| v.attribution()).unwrap_or_default()
+            }) />
 
             {message.view()}
             <QueryBoundary

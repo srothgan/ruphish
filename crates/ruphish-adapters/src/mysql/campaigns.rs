@@ -44,16 +44,11 @@ fn random() -> Result<String, Error> {
     getrandom::fill(&mut bytes).map_err(|_| Error::Internal)?;
     Ok(hex::encode(bytes))
 }
-async fn selection(
-    c: &mut MySqlConnection,
-    owner: i64,
-    kind: Kind,
-    s: &Selection,
-) -> Result<Resource, Error> {
-    let resource = super::resources::load(c, owner, kind, s.id).await?;
+async fn selection(c: &mut MySqlConnection, kind: Kind, s: &Selection) -> Result<Resource, Error> {
+    let resource = super::resources::load(c, kind, s.id).await?;
     if s.revision
         .as_ref()
-        .is_some_and(|v| v != &resource.modified_date)
+        .is_some_and(|v| v != &resource.revision.to_string())
     {
         return Err(Error::Changed);
     }
@@ -62,7 +57,6 @@ async fn selection(
 async fn prepare_authorized(
     work: &ruphish_application::content_work::ContentWork,
     c: &mut MySqlConnection,
-    caller: Identity,
     input: &Create,
     now: i64,
 ) -> Result<Prepared, Error> {
@@ -71,30 +65,43 @@ async fn prepare_authorized(
     let mut groups = Vec::new();
     let mut audience = ruphish_application::campaign::preparation::AudienceBuilder::default();
     for s in &input.groups {
-        groups.push(audience.add_group(selection(c, caller.id, Kind::Group, s).await?)?);
+        groups.push(audience.add_group(selection(c, Kind::Group, s).await?)?);
     }
     let ruphish_application::campaign::preparation::Audience {
         recipients,
         conflicts,
         conflict_count,
     } = audience.finish()?;
-    let template = selection(c, caller.id, Kind::Template, &input.template).await?;
-    let page = selection(c, caller.id, Kind::Page, &input.page).await?;
-    let profile = selection(c, caller.id, Kind::Profile, &input.profile).await?;
+    let template = selection(c, Kind::Template, &input.template).await?;
+    let page = selection(c, Kind::Page, &input.page).await?;
+    let profile = selection(c, Kind::Profile, &input.profile).await?;
     let policy = ruphish_application::campaign::preparation::policy(input, &page)?;
-    if let Some(id) = policy.learning_page_id {
-        super::resources::load(c, caller.id, Kind::LearningPage, id).await?;
-    }
+    let learning = if let Some(id) = policy.learning_page_id {
+        Some(
+            selection(
+                c,
+                Kind::LearningPage,
+                &Selection {
+                    id,
+                    revision: input.learning_revision.clone(),
+                },
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
     // Validate syntax using the same renderer; recipient-dependent failures are still
     // checked before every individual submission.
     let source = input.url.clone();
     let url = work
         .run(move || crate::campaign_preparation::url(&source))
         .await?;
-    let domain_id = super::domains::eligible(c, caller.id, &url, now).await?;
+    let domain_id = super::domains::eligible(c, &url, now).await?;
     let (page, policy) =
         crate::campaign_preparation::validate_content(work, page, policy, url).await?;
     Ok(Prepared {
+        learning,
         domain_id,
         conflicts,
         conflict_count,
@@ -107,15 +114,24 @@ async fn prepare_authorized(
         launch,
     })
 }
-async fn missing_resource(
+pub(super) async fn snapshot(
     c: &mut MySqlConnection,
-    owner: i64,
-    kind: Kind,
     id: i64,
-) -> Result<Resource, Error> {
-    match super::resources::load(c, owner, kind, id).await {
+) -> Result<crate::campaign_snapshot::Snapshot, Error> {
+    let value: Option<String> =
+        sqlx::query_scalar("SELECT frozen_content FROM campaigns WHERE id=?")
+            .bind(id)
+            .fetch_one(&mut *c)
+            .await
+            .map_err(storage)?;
+    crate::campaign_snapshot::Snapshot::decode(value.as_deref().ok_or(Error::Internal)?)
+}
+async fn missing_resource(c: &mut MySqlConnection, kind: Kind, id: i64) -> Result<Resource, Error> {
+    match super::resources::load(c, kind, id).await {
         Ok(r) => Ok(r),
         Err(Error::NotFound(_)) => Ok(Resource {
+            attribution: Default::default(),
+            revision: 0,
             id: 0,
             name: "[Deleted]".into(),
             modified_date: ZERO.into(),
@@ -130,40 +146,22 @@ async fn missing_resource(
         Err(e) => Err(e),
     }
 }
-async fn load(c: &mut MySqlConnection, owner: i64, id: i64) -> Result<Campaign, Error> {
-    load_aggregate(c, owner, id, true).await
+async fn load(c: &mut MySqlConnection, id: i64) -> Result<Campaign, Error> {
+    load_aggregate(c, id, true).await
 }
 async fn load_aggregate(
     c: &mut MySqlConnection,
-    owner: i64,
     id: i64,
     include_groups: bool,
 ) -> Result<Campaign, Error> {
-    let row = sqlx::query("SELECT * FROM campaigns WHERE id=? AND user_id=?")
+    let row = sqlx::query("SELECT * FROM campaigns WHERE id=? ")
         .bind(id)
-        .bind(owner)
         .fetch_optional(&mut *c)
         .await
         .map_err(storage)?
         .ok_or(Error::NotFound("Campaign"))?;
-    let mut resources = Vec::new();
-    for (kind, column) in [
-        (Kind::Template, "template_id"),
-        (Kind::Page, "page_id"),
-        (Kind::Profile, "smtp_id"),
-    ] {
-        resources.push(
-            missing_resource(
-                c,
-                owner,
-                kind,
-                row.try_get::<Option<i64>, _>(column)
-                    .map_err(storage)?
-                    .unwrap_or(0),
-            )
-            .await?,
-        );
-    }
+    let frozen = snapshot(c, id).await?;
+    let resources = vec![frozen.template(), frozen.page(), frozen.sender()];
     let mut results = Vec::new();
     for r in sqlx::query("SELECT * FROM results WHERE campaign_id=? ORDER BY id")
         .bind(id)
@@ -237,7 +235,7 @@ async fn load_aggregate(
         .await
         .map_err(storage)?;
         for group_id in group_ids {
-            match super::resources::load(c, owner, Kind::Group, group_id).await {
+            match super::resources::load(c, Kind::Group, group_id).await {
                 Ok(r) => groups.push(r),
                 Err(Error::NotFound(_)) => {}
                 Err(e) => return Err(e),
@@ -245,6 +243,7 @@ async fn load_aggregate(
         }
     }
     Ok(Campaign {
+        attribution: super::attribution::read(&row, "user_id")?,
         groups,
         id,
         name: text(&row, "name")?,
@@ -260,10 +259,10 @@ async fn load_aggregate(
         policy,
     })
 }
-async fn header(c: &mut MySqlConnection, owner: i64, id: i64) -> Result<CampaignHeader, Error> {
-    let row=sqlx::query("SELECT c.id,c.name,c.status,c.launch_date,c.send_by_date,c.url,c.template_id,c.page_id,c.smtp_id,t.name AS template_name,t.subject,t.envelope_sender,s.name AS profile_name,s.from_address,l.name AS page_name,(SELECT count(*) FROM results r WHERE r.campaign_id=c.id) AS total,p.campaign_id AS policy_id,p.redirect_url,p.learning_page_id,p.track_opens FROM campaigns c LEFT JOIN ruphish_campaign_policy p ON p.campaign_id=c.id LEFT JOIN templates t ON t.id=c.template_id AND t.user_id=c.user_id LEFT JOIN pages l ON l.id=c.page_id AND l.user_id=c.user_id LEFT JOIN smtp s ON s.id=c.smtp_id AND s.user_id=c.user_id WHERE c.id=? AND c.user_id=?").bind(id).bind(owner).fetch_optional(&mut *c).await.map_err(storage)?.ok_or(Error::NotFound("Campaign"))?;
+async fn header(c: &mut MySqlConnection, id: i64) -> Result<CampaignHeader, Error> {
+    let row=sqlx::query("SELECT c.user_id,c.edited_by,c.edited_at,c.id,c.name,c.status,c.launch_date,c.send_by_date,c.url,c.template_id,c.page_id,c.smtp_id,json_unquote(json_extract(c.frozen_content,'$.template.name')) AS template_name,json_unquote(json_extract(c.frozen_content,'$.template.content.subject')) AS subject,json_unquote(json_extract(c.frozen_content,'$.template.content.envelope_sender')) AS envelope_sender,json_unquote(json_extract(c.frozen_content,'$.sender.name')) AS profile_name,json_unquote(json_extract(c.frozen_content,'$.sender.content.from_address')) AS from_address,json_unquote(json_extract(c.frozen_content,'$.page.name')) AS page_name,(SELECT count(*) FROM results r WHERE r.campaign_id=c.id) AS total,p.campaign_id AS policy_id,p.redirect_url,p.learning_page_id,p.track_opens FROM campaigns c LEFT JOIN ruphish_campaign_policy p ON p.campaign_id=c.id WHERE c.id=? ").bind(id).fetch_optional(&mut *c).await.map_err(storage)?.ok_or(Error::NotFound("Campaign"))?;
     let policy_id: Option<i64> = row.try_get("policy_id").map_err(storage)?;
-    let domain: Option<(i64,bool,i64)> = sqlx::query_as("SELECT d.id,d.enabled,(SELECT eligible_until FROM ruphish_domain_policy WHERE id=d.id) FROM ruphish_campaign_domains cd JOIN ruphish_domains d ON d.id=cd.domain_id AND d.owner_id=? WHERE cd.campaign_id=?").bind(owner).bind(id).fetch_optional(&mut *c).await.map_err(storage)?;
+    let domain: Option<(i64,bool,i64)> = sqlx::query_as("SELECT d.id,d.enabled,(SELECT eligible_until FROM ruphish_domain_policy WHERE id=d.id) FROM ruphish_campaign_domains cd JOIN ruphish_domains d ON d.id=cd.domain_id  WHERE cd.campaign_id=?").bind(id).fetch_optional(&mut *c).await.map_err(storage)?;
     let domain_id = domain.map(|d| d.0);
     let domain_block = domain
         .map_or(Err("domain_not_verified"), |(_, enabled, until)| {
@@ -276,6 +275,7 @@ async fn header(c: &mut MySqlConnection, owner: i64, id: i64) -> Result<Campaign
         .err()
         .map(str::to_owned);
     Ok(CampaignHeader {
+        attribution: super::attribution::read(&row, "user_id")?,
         domain_id,
         domain_block,
         id,
@@ -325,7 +325,7 @@ impl Repository for Campaigns {
     async fn header(&self, caller: Identity, id: i64) -> Result<CampaignHeader, Error> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         super::resources::authorize(&mut tx, caller, false).await?;
-        let value = header(&mut tx, caller.id, id).await?;
+        let value = header(&mut tx, id).await?;
         tx.commit().await.map_err(storage)?;
         Ok(value)
     }
@@ -353,9 +353,8 @@ impl Repository for Campaigns {
         super::resources::authorize(&mut tx, caller, false).await?;
         let limit = limit.clamp(1, 200);
         let mut ids: Vec<i64> = sqlx::query_scalar(
-            "SELECT id FROM campaigns WHERE user_id=? AND id>? AND (?=0 OR (?=1 AND status='Completed') OR (?=2 AND (status IS NULL OR status<>'Completed'))) ORDER BY id LIMIT ?",
+            "SELECT id FROM campaigns WHERE id>? AND (?=0 OR (?=1 AND status='Completed') OR (?=2 AND (status IS NULL OR status<>'Completed'))) ORDER BY id LIMIT ?",
         )
-        .bind(caller.id)
         .bind(after)
         .bind(completed.map(|v|if v{1i32}else{2}).unwrap_or(0))
         .bind(completed.map(|v|if v{1i32}else{2}).unwrap_or(0))
@@ -369,7 +368,7 @@ impl Repository for Campaigns {
         let next_after = ids.last().copied().filter(|_| has_more);
         let mut result = Vec::new();
         for id in ids {
-            result.push(header(&mut tx, caller.id, id).await?);
+            result.push(header(&mut tx, id).await?);
         }
         tx.commit()
             .await
@@ -385,13 +384,18 @@ impl Repository for Campaigns {
             .await
             .map_err(storage)?;
         super::resources::authorize(&mut tx, caller, true).await?;
-        let value = prepare_authorized(&self.content_work, &mut tx, caller, input, now).await?;
+        let value = prepare_authorized(&self.content_work, &mut tx, input, now).await?;
         tx.commit()
             .await
             .map_err(|e| Error::Storage(crate::mysql::commit_error(e)))?;
         Ok(value)
     }
-    async fn create(&self, caller: Identity, input: Create, now: i64) -> Result<Campaign, Error> {
+    async fn create(
+        &self,
+        caller: Identity,
+        input: Create,
+        now: i64,
+    ) -> Result<ruphish_application::attribution::Saved<Campaign>, Error> {
         self.create_inner(caller, input, now, None).await
     }
     async fn get(&self, caller: Identity, id: i64) -> Result<Campaign, Error> {
@@ -399,7 +403,7 @@ impl Repository for Campaigns {
             .await
             .map_err(storage)?;
         super::resources::authorize(&mut tx, caller, false).await?;
-        let v = load(&mut tx, caller.id, id).await?;
+        let v = load(&mut tx, id).await?;
         tx.commit()
             .await
             .map_err(|e| Error::Storage(crate::mysql::commit_error(e)))?;
@@ -413,20 +417,17 @@ impl Repository for Campaigns {
         let weight: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(
             crate::campaign_listing::QUERY.replace("AS BIGINT", "AS SIGNED"),
         ))
-        .bind(caller.id)
         .fetch_one(&mut *tx)
         .await
         .map_err(storage)?;
         crate::campaign_listing::check(weight)?;
-        let ids: Vec<i64> =
-            sqlx::query_scalar("SELECT id FROM campaigns WHERE user_id=? ORDER BY id")
-                .bind(caller.id)
-                .fetch_all(&mut *tx)
-                .await
-                .map_err(storage)?;
+        let ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM campaigns  ORDER BY id")
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(storage)?;
         let mut values = Vec::new();
         for id in ids {
-            values.push(load_aggregate(&mut tx, caller.id, id, false).await?);
+            values.push(load_aggregate(&mut tx, id, false).await?);
         }
         tx.commit()
             .await
@@ -443,13 +444,11 @@ impl Repository for Campaigns {
             .fetch_optional(&mut *tx)
             .await
             .map_err(storage)?;
-        let exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM campaigns WHERE id=? AND user_id=?)")
-                .bind(id)
-                .bind(caller.id)
-                .fetch_one(&mut *tx)
-                .await
-                .map_err(storage)?;
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM campaigns WHERE id=? )")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(storage)?;
         if !exists {
             return Err(Error::NotFound("Campaign"));
         }
@@ -469,13 +468,11 @@ impl Repository for Campaigns {
             .fetch_optional(&mut *tx)
             .await
             .map_err(storage)?;
-        let exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM campaigns WHERE id=? AND user_id=?)")
-                .bind(id)
-                .bind(caller.id)
-                .fetch_one(&mut *tx)
-                .await
-                .map_err(storage)?;
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM campaigns WHERE id=? )")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(storage)?;
         if !exists {
             return Err(Error::NotFound("Campaign"));
         }
@@ -521,17 +518,15 @@ impl Repository for Campaigns {
             .await
             .map_err(storage)?;
         super::resources::authorize(&mut tx, caller, false).await?;
-        let exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM campaigns WHERE id=? AND user_id=?)")
-                .bind(id)
-                .bind(caller.id)
-                .fetch_one(&mut *tx)
-                .await
-                .map_err(storage)?;
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM campaigns WHERE id=? )")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(storage)?;
         if !exists {
             return Err(Error::NotFound("Campaign"));
         }
-        let campaign = header(&mut tx, caller.id, id).await?;
+        let campaign = header(&mut tx, id).await?;
         let counts: Vec<(String, i64)> = sqlx::query_as(
             "SELECT state,count(*) FROM ruphish_delivery WHERE campaign_id=? GROUP BY state",
         )
@@ -667,8 +662,8 @@ impl Repository for Campaigns {
             .await
             .map_err(storage)?;
         super::resources::authorize(&mut tx, caller, false).await?;
-        let email: String = sqlx::query_scalar("SELECT r.email FROM results r JOIN campaigns c ON c.id=r.campaign_id WHERE c.user_id=? AND c.id=? AND r.id=?")
-            .bind(caller.id).bind(campaign).bind(result).fetch_optional(&mut *tx).await.map_err(storage)?.ok_or(Error::NotFound("Recipient"))?;
+        let email: String = sqlx::query_scalar("SELECT r.email FROM results r JOIN campaigns c ON c.id=r.campaign_id WHERE c.id=? AND r.id=?")
+            .bind(campaign).bind(result).fetch_optional(&mut *tx).await.map_err(storage)?.ok_or(Error::NotFound("Recipient"))?;
         let mut rows = sqlx::query("SELECT * FROM ruphish_delivery_attempt WHERE result_id=? AND (? IS NULL OR generation<?) ORDER BY generation DESC LIMIT 101")
             .bind(result).bind(before_attempt).bind(before_attempt).fetch_all(&mut *tx).await.map_err(storage)?;
         let more_attempts = rows.len() > 100;
@@ -733,13 +728,12 @@ impl Repository for Campaigns {
             .await
             .map_err(storage)?;
         super::resources::authorize(&mut tx, caller, true).await?;
-        sqlx::query("SELECT id FROM campaigns WHERE id=? AND user_id=? FOR UPDATE")
+        sqlx::query("SELECT id FROM campaigns WHERE id=?  FOR UPDATE")
             .bind(campaign)
-            .bind(caller.id)
             .fetch_optional(&mut *tx)
             .await
             .map_err(storage)?;
-        let row=sqlx::query("SELECT d.state,d.generation,c.smtp_id FROM ruphish_delivery d JOIN campaigns c ON c.id=d.campaign_id WHERE d.result_id=? AND d.campaign_id=? AND c.user_id=? AND c.status!='Completed'").bind(result).bind(campaign).bind(caller.id).fetch_optional(&mut *tx).await.map_err(storage)?.ok_or(Error::NotFound("Delivery"))?;
+        let row=sqlx::query("SELECT d.state,d.generation,c.smtp_id FROM ruphish_delivery d JOIN campaigns c ON c.id=d.campaign_id WHERE d.result_id=? AND d.campaign_id=?  AND c.status!='Completed'").bind(result).bind(campaign).fetch_optional(&mut *tx).await.map_err(storage)?.ok_or(Error::NotFound("Delivery"))?;
         if row.try_get::<i64, _>("generation").map_err(storage)? != generation {
             return Err(Error::Changed);
         }
@@ -802,7 +796,7 @@ impl Campaigns {
         mut input: Create,
         now: i64,
         draft: Option<(&str, i64)>,
-    ) -> Result<Campaign, Error> {
+    ) -> Result<ruphish_application::attribution::Saved<Campaign>, Error> {
         let mut tx = crate::mysql::locks::write(&self.pool)
             .await
             .map_err(storage)?;
@@ -811,9 +805,10 @@ impl Campaigns {
             input.idempotency = None;
         }
         if let Some((id, revision)) = draft {
-            let saved = drafts::launching(&mut tx, caller.id, id).await?;
+            let saved = drafts::launching(&mut tx, id).await?;
             if let Some(campaign_id) = saved.campaign_id {
-                return load(&mut tx, caller.id, campaign_id).await;
+                let record = load(&mut tx, campaign_id).await?;
+                return super::attribution::saved(&mut tx, record).await;
             }
             ruphish_application::campaign::drafts::validate_launch(&saved, revision, &input, now)?;
         }
@@ -823,10 +818,11 @@ impl Campaigns {
             }
             if let Some(row)=sqlx::query("SELECT fingerprint,campaign_id FROM ruphish_campaign_launch WHERE owner_id=? AND `key`=?").bind(caller.id).bind(key).fetch_optional(&mut *tx).await.map_err(storage)? {
                 if text(&row,"fingerprint")?!=*fingerprint {return Err(Error::Conflict("Launch key"));}
-                return load(&mut tx,caller.id,row.try_get("campaign_id").map_err(storage)?).await;
+                let record = load(&mut tx, row.try_get("campaign_id").map_err(storage)?).await?;
+                return super::attribution::saved(&mut tx, record).await;
             }
         }
-        let p = prepare_authorized(&self.content_work, &mut tx, caller, &input, now).await?;
+        let p = prepare_authorized(&self.content_work, &mut tx, &input, now).await?;
         let created = stamp(now)?;
         let launch = stamp(p.launch)?;
         let end = input.send_by.map(stamp).transpose()?.unwrap_or(ZERO.into());
@@ -836,6 +832,21 @@ impl Campaigns {
             "Queued"
         };
         let id=sqlx::query("INSERT INTO campaigns(user_id,name,created_date,launch_date,send_by_date,completed_date,template_id,page_id,status,smtp_id,url) VALUES(?,?,?,?,?,?,?,?,?,?,?)").bind(caller.id).bind(&input.name).bind(&created).bind(&launch).bind(end).bind(ZERO).bind(p.template.id).bind(p.page.id).bind(status).bind(p.profile.id).bind(&input.url).execute(&mut *tx).await.map_err(storage)?.insert_id().map_err(storage)?;
+        super::attribution::edit(&mut tx, "campaigns", id, caller.id, &created).await?;
+        let frozen = crate::campaign_snapshot::Snapshot::capture(
+            &p.template,
+            &p.page,
+            &p.profile,
+            p.learning.as_ref(),
+        )?;
+        let learning_public_id = p.learning.as_ref().map(|_| random()).transpose()?;
+        sqlx::query("UPDATE campaigns SET frozen_content=?,learning_public_id=? WHERE id=?")
+            .bind(frozen.encode()?)
+            .bind(learning_public_id)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
         sqlx::query("INSERT INTO ruphish_campaign_domains VALUES(?,?)")
             .bind(id)
             .bind(p.domain_id)
@@ -891,9 +902,17 @@ impl Campaigns {
                 .map_err(storage)?;
         }
         if let Some((draft_id, _)) = draft {
-            sqlx::query("UPDATE ruphish_campaign_drafts SET campaign_id=?,revision=revision+1,modified=? WHERE id=? AND owner_id=?").bind(id).bind(now).bind(draft_id).bind(caller.id).execute(&mut *tx).await.map_err(storage)?;
+            sqlx::query("UPDATE ruphish_campaign_drafts SET campaign_id=?,revision=revision+1,modified=? WHERE id=? ").bind(id).bind(now).bind(draft_id).execute(&mut *tx).await.map_err(storage)?;
+            sqlx::query("UPDATE ruphish_campaign_drafts SET edited_by=?,edited_at=? WHERE id=?")
+                .bind(caller.id)
+                .bind(&created)
+                .bind(draft_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(storage)?;
         }
-        let campaign = load(&mut tx, caller.id, id).await?;
+        let campaign = load(&mut tx, id).await?;
+        let campaign = super::attribution::saved(&mut tx, campaign).await?;
         tx.commit()
             .await
             .map_err(|e| Error::Storage(crate::mysql::commit_error(e)))?;
@@ -901,7 +920,7 @@ impl Campaigns {
     }
 }
 
-/// Shared completion transition for owner-scoped and installation-wide actions.
+/// Shared completion transition for campaign and installation-wide actions.
 pub(super) async fn complete_transaction(
     c: &mut MySqlConnection,
     id: i64,
@@ -915,5 +934,42 @@ pub(super) async fn complete_transaction(
         .execute(&mut *c)
         .await
         .map_err(storage)?;
+    Ok(())
+}
+
+/// Preserve the content available at conversion; upstream did not retain launch-time copies.
+pub(super) async fn freeze_imported(c: &mut MySqlConnection) -> Result<(), Error> {
+    let rows = sqlx::query("SELECT id,user_id,template_id,page_id,smtp_id FROM campaigns WHERE frozen_content IS NULL ORDER BY id").fetch_all(&mut *c).await.map_err(storage)?;
+    for row in rows {
+        let mut resources = Vec::new();
+        for (kind, field) in [
+            (Kind::Template, "template_id"),
+            (Kind::Page, "page_id"),
+            (Kind::Profile, "smtp_id"),
+        ] {
+            resources.push(
+                missing_resource(
+                    c,
+                    kind,
+                    row.try_get::<Option<i64>, _>(field)
+                        .map_err(storage)?
+                        .unwrap_or(0),
+                )
+                .await?,
+            );
+        }
+        let frozen = crate::campaign_snapshot::Snapshot::capture(
+            &resources[0],
+            &resources[1],
+            &resources[2],
+            None,
+        )?;
+        sqlx::query("UPDATE campaigns SET frozen_content=? WHERE id=? AND frozen_content IS NULL")
+            .bind(frozen.encode()?)
+            .bind(row.try_get::<i64, _>("id").map_err(storage)?)
+            .execute(&mut *c)
+            .await
+            .map_err(storage)?;
+    }
     Ok(())
 }

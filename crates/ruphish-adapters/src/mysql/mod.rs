@@ -70,3 +70,5 @@ mod event_edit;
 
 mod inventory_sql;
 mod worker_sql;
+
+mod attribution;

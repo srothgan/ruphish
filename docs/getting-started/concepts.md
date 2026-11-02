@@ -31,7 +31,7 @@ The SMTP server accepting a message establishes a delivery observation; it does 
 
 Resources belong to application accounts. Administrator permissions do not make every campaign appear in your own dashboard. Account administration and campaign ownership are separate boundaries.
 
-Saved campaign resources are not a general versioning system. Editing a referenced resource can affect its consumers. Duplicate content when you need a separate version, and review current resources before launch. Resources used by unfinished campaigns have deletion protection.
+Campaigns freeze authored content when launched or scheduled; later resource edits affect future campaigns. SMTP transport settings and operational controls stay live. Review the [freeze boundary](../user-guide/campaigns/launch.md#what-stays-fixed-after-launch) and current resources before launch. Resources used by unfinished campaigns have deletion protection.
 
 ## Two different kinds of credentials
 

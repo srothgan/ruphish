@@ -23,7 +23,7 @@ sidebar:
 }
 ```
 
-The saved object adds `id`, `modified_date`, and `warnings`. Updates require the matching body ID and support an ETag precondition.
+The saved object adds `id`, `revision`, `modified_date`, and `warnings`. Updates require the matching body ID and require an ETag precondition.
 
 ## Interaction tracking
 
@@ -46,3 +46,5 @@ The preview expands compatible template expressions using the supplied recipient
 Embed the returned HTML only in an iframe with `sandbox="allow-scripts allow-forms"` and `referrerpolicy="no-referrer"`, preserving its generated content policy. Never add `allow-same-origin`, top-navigation or popup permissions. `allow-forms` permits native validation and submit events; CSP `form-action 'none'` blocks native network submissions. Do not insert the HTML into the administrative document or serve it as unrestricted same-origin content. Public landing responses additionally enforce the sandbox in their HTTP CSP header.
 
 Use this endpoint for landing-page previews. The legacy [`/api/util/preview`](imports-and-previews.md#preview-html) endpoint retains template/email-preview behavior; it is not the restricted public-page representation. [Learning-page previews](learning-pages.md) use the same page renderer in static mode without recipient expansion or form controls.
+
+PUT and DELETE require the returned quoted numeric ETag in `If-Match`. Missing preconditions return `428`; stale revisions return `412` without changing saved data. See [conditional resource writes](conventions.md#updating-a-resource) for the full contract and conflict recovery.

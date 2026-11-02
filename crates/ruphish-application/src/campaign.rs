@@ -9,7 +9,7 @@ pub mod directory;
 pub mod drafts;
 pub mod preparation;
 
-/// Owner-scoped resource identity and optional reviewed revision.
+/// Shared resource identity and optional reviewed revision.
 #[derive(Clone, Default)]
 pub struct Selection {
     /// Persistent resource identity; zero is an incomplete selection.
@@ -24,7 +24,7 @@ pub struct Overrides {
     pub track_opens: bool,
     /// Explicit empty string clears the default redirect.
     pub redirect_url: Option<String>,
-    /// Selected owned learning page; custom redirect must be empty when present.
+    /// Selected shared learning page; custom redirect must be empty when present.
     pub learning_page_id: Option<i64>,
 }
 impl Default for Overrides {
@@ -40,6 +40,8 @@ impl Default for Overrides {
 /// Normalized campaign input, with no caller-controlled ownership or result IDs.
 #[derive(Clone, Default)]
 pub struct Create {
+    /// Reviewed learning content revision, checked at launch when selected.
+    pub learning_revision: Option<String>,
     /// Human-readable campaign name; duplicates remain allowed.
     pub name: String,
     /// Ordered group selections establish duplicate precedence.
@@ -58,11 +60,13 @@ pub struct Create {
     pub send_by: Option<i64>,
     /// Optional campaign capture/redirect overrides.
     pub policy: Overrides,
-    /// Owner-scoped launch key and canonical request digest.
+    /// Caller-scoped launch key and canonical request digest.
     pub idempotency: Option<(String, String)>,
 }
 /// Immutable selection metadata retained after consuming a group's recipients.
 pub struct PreparedGroup {
+    /// Reviewed configuration revision.
+    pub revision: i64,
     /// Owned group identity.
     pub id: i64,
     /// Display name at preparation time.
@@ -75,6 +79,8 @@ pub struct PreparedGroup {
 
 /// Resolved, reviewable resource input and unique audience.
 pub struct Prepared {
+    /// Selected learning content in the same selection transaction.
+    pub learning: Option<Resource>,
     /// Verified domain resolved in the same resource-selection transaction.
     pub domain_id: i64,
     /// Number of overlapping entries whose recipient attributes conflict.
@@ -138,9 +144,12 @@ pub struct Event {
     /// Legacy string-encoded JSON.
     pub details: String,
 }
-/// Owner-scoped campaign with current referenced resources and immutable audience.
+/// Shared campaign with frozen authored content and immutable audience.
 pub struct Campaign {
-    /// Current owned source groups, if provenance was recorded at creation.
+    /// Server-assigned creator and last-editor attribution.
+    pub attribution: ruphish_domain::attribution::Attribution,
+
+    /// Current shared source groups, if provenance was recorded at creation.
     pub groups: Vec<Resource>,
     /// Campaign identifier.
     pub id: i64,
@@ -158,7 +167,7 @@ pub struct Campaign {
     pub completed: String,
     /// Public URL template.
     pub url: String,
-    /// Current referenced resources; missing legacy resources remain explicit.
+    /// Frozen authored resources; transport settings and credentials are not historical content.
     pub resources: Vec<Resource>,
     /// Recipient snapshots and public progression.
     pub results: Vec<RecipientResult>,
@@ -197,7 +206,7 @@ pub struct Claim {
     pub campaign_id: i64,
     /// Unique generation for conditional writes.
     pub generation: i64,
-    /// Resource revisions used for composition, checked before arming submission.
+    /// Content and transport revisions used for composition; live transport is rechecked before submission.
     pub revisions: [String; 2],
     /// Fully resolved coherent message input.
     pub message: MessageInput,
@@ -206,7 +215,7 @@ pub struct Claim {
 pub struct DeliveryView {
     /// Selection-bound continuation for explicit sorted queries.
     pub next_cursor: Option<String>,
-    /// Cursor for another page only when additional owned rows exist.
+    /// Cursor for another page only when additional rows exist.
     pub next_after: Option<i64>,
     /// Most recent fifty sanitized activity records, newest first.
     pub activity: Vec<Event>,
@@ -221,11 +230,14 @@ pub struct DeliveryView {
 pub struct CampaignOverview {
     /// Requested page in campaign-ID order.
     pub items: Vec<CampaignHeader>,
-    /// Last returned ID, only when another owned row exists.
+    /// Last returned ID, only when another row exists.
     pub next_after: Option<i64>,
 }
 /// Metadata for campaign navigation, separate from the full legacy representation.
 pub struct CampaignHeader {
+    /// Server-assigned creator and last-editor attribution.
+    pub attribution: ruphish_domain::attribution::Attribution,
+
     /// Bound domain resource, absent for an unsupported legacy origin.
     pub domain_id: Option<i64>,
     /// Current delivery eligibility failure; absent when evidence is current.
@@ -263,7 +275,7 @@ pub struct CampaignHeader {
 pub struct CampaignResource {
     /// Saved resource ID, including a missing legacy reference.
     pub id: i64,
-    /// Current owned resource name; absent if the resource is unavailable.
+    /// Current shared resource name; absent if the resource is unavailable.
     pub name: Option<String>,
 }
 /// Recipient-specific history, independently paged from campaign-wide activity.
@@ -341,7 +353,7 @@ pub trait Queue: Send + Sync {
 /// Owner-authorized campaign transaction boundary.
 #[async_trait::async_trait]
 pub trait Repository: drafts::Repository + crate::event_edit::Repository + Send + Sync {
-    /// Owner-scoped campaign context without recipient arrays, content or secrets.
+    /// Shared campaign context without recipient arrays, content or secrets.
     async fn header(&self, caller: Identity, id: i64) -> Result<CampaignHeader, Error>;
     /// Bounded metadata for the UI without content, secrets or event payloads.
     async fn overview(
@@ -352,7 +364,7 @@ pub trait Repository: drafts::Repository + crate::event_edit::Repository + Send 
     ) -> Result<CampaignOverview, Error> {
         self.overview_filtered(caller, after, limit, None).await
     }
-    /// Unified owner-scoped management list, filtered before a single page is selected.
+    /// Unified shared management list, filtered before a single page is selected.
     async fn directory(
         &self,
         caller: Identity,
@@ -378,14 +390,19 @@ pub trait Repository: drafts::Repository + crate::event_edit::Repository + Send 
     /// Resolve resources and schedule without side effects.
     async fn prepare(&self, caller: Identity, input: &Create, now: i64) -> Result<Prepared, Error>;
     /// Commit the complete campaign or replay its existing idempotent launch.
-    async fn create(&self, caller: Identity, input: Create, now: i64) -> Result<Campaign, Error>;
+    async fn create(
+        &self,
+        caller: Identity,
+        input: Create,
+        now: i64,
+    ) -> Result<crate::attribution::Saved<Campaign>, Error>;
     /// Read current campaign state within ownership.
     async fn get(&self, caller: Identity, id: i64) -> Result<Campaign, Error>;
-    /// List owned campaigns in stable order.
+    /// List shared campaigns in stable order.
     async fn list(&self, caller: Identity) -> Result<Vec<Campaign>, Error>;
     /// Stop future execution and preserve history and first completion time.
     async fn complete(&self, caller: Identity, id: i64, now: i64) -> Result<(), Error>;
-    /// Remove owned history and fence in-flight writers in the same transaction.
+    /// Remove campaign history and fence in-flight writers in the same transaction.
     async fn delete(&self, caller: Identity, id: i64) -> Result<(), Error>;
     /// Read bounded delivery history after current authorization and ownership checks.
     async fn deliveries(

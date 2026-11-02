@@ -63,7 +63,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
     let busy = RwSignal::new(false);
     let message = Message::new(String::new());
     let notice = use_context::<Notice>();
-    let queries = expect_context::<ManagementQueries>();
+    let query_client = expect_context::<leptos_fetch::QueryClient>();
     let navigate = leptos_router::hooks::use_navigate();
     let cancel_navigation = navigate.clone();
     let dirty = Signal::derive(move || {
@@ -164,7 +164,8 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
             busy.set(false);
             match result {
                 Ok(_) => {
-                    queries.users.invalidate(());
+                    // Resource DTOs embed names; invalidate cached responses after account changes.
+                    query_client.invalidate_all_queries();
                     #[cfg(feature = "demo")]
                     api.notifications.show(if id.is_none() {
                         DemoNotice::Created
@@ -352,6 +353,7 @@ fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
     let token = StoredValue::new(token);
     let tasks = ruphish_ui::view_tasks::ViewTasks::default();
     let queries = expect_context::<ManagementQueries>();
+    let query_client = expect_context::<leptos_fetch::QueryClient>();
     let list = queries.users.observe(|| ());
     let confirmed = Signal::derive(move || list.data.with(Option::is_some));
     let search = RwSignal::new(String::new());
@@ -387,6 +389,7 @@ fn list(api: Api, current_user: i64, token: String) -> impl IntoView {
                             .users
                             .confirmed((), |rows| rows.retain(|user| user.id != id));
                         deleting.set(None);
+                        query_client.invalidate_all_queries();
                         message.status(
                             leptos_i18n::t_string!(i18n, ui.user_and_owned_data_deleted).to_owned(),
                         );

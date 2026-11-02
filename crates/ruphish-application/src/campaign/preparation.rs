@@ -52,6 +52,7 @@ impl AudienceBuilder {
             id: group.id,
             name: group.name,
             modified_date: group.modified_date,
+            revision: group.revision,
             recipient_count,
         })
     }
@@ -128,6 +129,8 @@ mod tests {
 
     fn group(id: i64, rows: Vec<Recipient>) -> Resource {
         Resource {
+            attribution: Default::default(),
+            revision: 0,
             id,
             name: format!("Group {id}"),
             modified_date: "2026-10-28T12:00:00Z".into(),

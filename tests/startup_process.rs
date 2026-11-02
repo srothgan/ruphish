@@ -987,7 +987,8 @@ fn failed_bootstrap_rolls_back_then_forced_process_death_allows_clean_restart() 
 }
 
 #[test]
-fn migration_skips_unowned_mailboxes_with_a_private_warning_and_recoverable_originals() {
+fn migration_preserves_unowned_mailboxes_disabled_with_a_private_warning_and_recoverable_originals()
+{
     use sqlx::Row;
     let directory = workspace_without_assets();
     std::fs::copy(
@@ -1004,13 +1005,38 @@ fn migration_skips_unowned_mailboxes_with_a_private_warning_and_recoverable_orig
         process.ready();
         process.stop();
         assert_eq!(version(directory.path()), 1);
-        for query in [
-            "SELECT count(*) FROM imap",
-            "SELECT count(*) FROM ruphish_mailboxes",
-            "SELECT reporting_mailboxes_enabled FROM ruphish_settings WHERE id=1",
-        ] {
-            assert_eq!(database(directory.path(), query)[0].get::<i64, _>(0), 0);
+        assert_eq!(
+            database(directory.path(), "SELECT count(*) FROM imap")[0].get::<i64, _>(0),
+            0
+        );
+        let mailboxes = database(
+            directory.path(),
+            "SELECT owner_id,enabled,host,username,password FROM ruphish_mailboxes ORDER BY password",
+        );
+        assert_eq!(mailboxes.len(), 4);
+        for (mailbox, (owner, password)) in mailboxes.iter().zip([
+            (None, "private-negative-secret"),
+            (None, "private-null-secret"),
+            (Some(999999_i64), "private-orphan-secret"),
+            (None, "private-zero-secret"),
+        ]) {
+            assert_eq!(mailbox.get::<Option<i64>, _>("owner_id"), owner);
+            assert_eq!(mailbox.get::<i64, _>("enabled"), 0);
+            assert_eq!(
+                mailbox.get::<String, _>("host"),
+                "private-mailbox.example.test"
+            );
+            assert_eq!(mailbox.get::<String, _>("username"), "private-service");
+            assert_eq!(mailbox.get::<String, _>("password"), password);
         }
+        assert_eq!(
+            database(
+                directory.path(),
+                "SELECT reporting_mailboxes_enabled FROM ruphish_settings WHERE id=1"
+            )[0]
+            .get::<i64, _>(0),
+            1
+        );
         assert_eq!(
             database(directory.path(), "SELECT api_key FROM users WHERE id=17")[0]
                 .get::<String, _>(0),
@@ -1046,9 +1072,9 @@ fn migration_skips_unowned_mailboxes_with_a_private_warning_and_recoverable_orig
         ]
     );
     let logs = std::fs::read_to_string(directory.path().join("server.log")).unwrap();
-    assert_eq!(logs.matches("Skipping legacy IMAP settings").count(), 1);
-    assert!(logs.contains("missing, invalid, or deleted owners"));
-    assert!(logs.contains("skipped_mailboxes=4"));
+    assert_eq!(logs.matches("Preserving legacy IMAP settings").count(), 1);
+    assert!(logs.contains("missing, invalid, or deleted creators"));
+    assert!(logs.contains("disabled_imported_mailboxes=4"));
     assert!(!logs.contains("private-"));
 }
 

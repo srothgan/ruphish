@@ -5,7 +5,7 @@ sidebar:
   order: 17
 ---
 
-Webhook configurations belong to their creator: callers with `view_objects` can read their own configurations and history, and callers with `modify_objects` can create, edit, delete, and validate their own endpoints. Ownership is assigned from the authenticated caller; it cannot be supplied or changed through the API. Other callers receive `404`, including administrators outside explicit impersonation. No `modify_system` permission or per-endpoint approval is required. Enabled endpoints receive committed events from all campaigns regardless of creator, so authorize receivers for that installation-wide scope.
+Webhook configurations and delivery history are shared across the installation. Reading requires `view_objects`; creating, editing, deleting and validating requires `modify_objects`. The administrator-controlled feature switch still controls creation, saves and external actions. Creator and last-editor attribution is server-assigned and read-only.
 
 Only administrators can change the global feature switch. While webhooks are disabled, creation, configuration saves, and validation return `409` with `FEATURE_DISABLED`; authorized reads and deletion remain available. Disabling also stops event delivery; see [company settings](../administration/settings.md).
 
@@ -15,7 +15,7 @@ Only administrators can change the global feature switch. While webhooks are dis
 | GET, PUT, DELETE | `/api/webhooks/{id}` | Read, edit, or delete |
 | POST | `/api/webhooks/{id}/validate` | Send a signed validation request |
 
-Writes contain `name`, `url`, optional `secret`, `is_active`, and optional `revision`. Send the current revision on edits and `If-Match` on deletion. Responses include identity, configuration, revision, `has_secret`, and recent `history`; they never return the secret. Omitting a secret on edit preserves it. Use HTTPS for a receiving service.
+Writes contain `name`, `url`, optional `secret`, `is_active`, and `revision` (required for edits, omitted for creation). Send the current revision on edits and `If-Match` on deletion. The path supplies the endpoint ID; write bodies reject unknown fields, including `id`, attribution and history. Responses include identity, configuration, revision, `has_secret`, and recent `history`; they never return the secret. Omitting a secret on edit preserves it. Use HTTPS for a receiving service.
 
 ## Event payload
 
@@ -72,3 +72,5 @@ Network failures and statuses 408, 429, 500, 502, 503, and 504 are retryable, up
 There is no ordering or exactly-once guarantee. A timeout can happen after the receiver processed the event. Return success only after durable acceptance, and tolerate duplicates and out-of-order arrivals.
 
 Editing an endpoint cancels queued work for its old configuration. An already authorized or in-flight request can still finish. During secret rotation, allow for this overlap at the receiver; retiring the old secret immediately can reject those requests. See [administrative operation](../administration/webhooks.md) for validation and history.
+
+Updates require the numeric `revision` from the saved webhook; deletion requires that revision as a quoted `If-Match`. Missing preconditions return `428 REVISION_REQUIRED`, stale revisions return `412 RESOURCE_CHANGED`, and deleted records return `404 RESOURCE_NOT_FOUND`. Review changes before retrying; see [conditional writes](conventions.md#updating-a-resource).

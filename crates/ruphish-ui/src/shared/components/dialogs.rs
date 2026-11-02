@@ -50,6 +50,8 @@ pub(crate) fn DeleteConfirmation(
     on_confirm: Callback<()>,
     on_cancel: Callback<()>,
     message: Message,
+    #[prop(into, optional)] confirm_disabled: Signal<bool>,
+    #[prop(optional)] children: Option<Children>,
 ) -> impl IntoView {
     let accessible_title = title;
     let dialog = NodeRef::<html::Dialog>::new();
@@ -72,6 +74,7 @@ pub(crate) fn DeleteConfirmation(
             <h2>{move || title.get()}</h2>
             <p>{move || description.get()}</p>
             {message.view()}
+            {children.map(|children| children())}
             <div class="confirmation-actions">
                 <ActionButton
                     style=ButtonStyle::Ghost
@@ -83,7 +86,7 @@ pub(crate) fn DeleteConfirmation(
                 </ActionButton>
                 <ActionButton
                     style=ButtonStyle::Danger
-                    disabled=busy
+                    disabled=Signal::derive(move || busy.get() || confirm_disabled.get())
                     on_click=move |_| on_confirm.run(())
                 >
                     {move || confirm_label.get()}

@@ -1,5 +1,7 @@
 //! Account transactions over the preserved Gophish schema.
-use ruphish_application::auth::{Account, Error, Identity, Repository, Role, Write};
+use ruphish_application::auth::{
+    Account, DisplayIdentity, Error, Identity, Repository, Role, Write,
+};
 use ruphish_domain::account::preserve_administrator;
 use sqlx::{Row, SqliteConnection, SqlitePool, sqlite::SqliteRow};
 
@@ -99,6 +101,13 @@ fn random_key() -> Result<String, Error> {
 
 #[async_trait::async_trait]
 impl Repository for Accounts {
+    async fn display_identities(&self, ids: &[i64]) -> Result<Vec<DisplayIdentity>, Error> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut connection = self.pool.acquire().await.map_err(storage)?;
+        display_identities(&mut connection, ids).await
+    }
     async fn by_id(&self, id: i64) -> Result<Account, Error> {
         account(&mut *self.pool.acquire().await.map_err(storage)?, id).await
     }
@@ -256,48 +265,11 @@ impl Repository for Accounts {
                     false,
                     remaining_admins(&mut tx).await?,
                 )?;
-                // Fence owned endpoint deletion against claims and configuration writes.
-                let webhooks: Vec<i64> = sqlx::query_scalar("SELECT w.id FROM webhooks w JOIN ruphish_webhook_state s ON s.webhook_id=w.id WHERE s.owner_id=? ORDER BY w.id")
-                    .bind(id).fetch_all(&mut *tx).await.map_err(storage)?;
-                for webhook in webhooks {
-                    super::integrations::remove_webhook(&mut tx, webhook)
-                        .await
-                        .map_err(storage)?;
-                }
-                // All owned records, including legacy queue state, are removed in this transaction.
-                // Shared target rows have no exclusive account ownership.
+                sqlx::query("INSERT INTO ruphish_deleted_accounts(id,username) SELECT id,username FROM users WHERE id=?")
+                    .bind(id).execute(&mut *tx).await.map_err(storage)?;
                 for statement in [
-                    "DELETE FROM ruphish_delivery_attempt WHERE result_id IN (SELECT id FROM results WHERE user_id=?)",
-                    "DELETE FROM ruphish_event_receipts WHERE result_id IN (SELECT id FROM results WHERE user_id=?)",
-                    "DELETE FROM ruphish_campaign_domains WHERE campaign_id IN (SELECT id FROM campaigns WHERE user_id=?)",
-                    "DELETE FROM ruphish_domain_claims WHERE owner_id=?",
-                    "DELETE FROM ruphish_domain_checks WHERE domain_id IN (SELECT id FROM ruphish_domains WHERE owner_id=?)",
-                    "DELETE FROM ruphish_domains WHERE owner_id=?",
-                    "DELETE FROM ruphish_delivery WHERE campaign_id IN (SELECT id FROM campaigns WHERE user_id=?)",
-                    "DELETE FROM ruphish_campaign_policy WHERE campaign_id IN (SELECT id FROM campaigns WHERE user_id=?)",
-                    "DELETE FROM ruphish_campaign_groups WHERE campaign_id IN (SELECT id FROM campaigns WHERE user_id=?)",
-                    "DELETE FROM ruphish_campaign_launch WHERE owner_id=?",
-                    "DELETE FROM ruphish_profile_cooldown WHERE profile_id IN (SELECT id FROM smtp WHERE user_id=?)",
-                    "DELETE FROM ruphish_legacy_queue_issues WHERE mail_log_id IN (SELECT id FROM mail_logs WHERE user_id=?)",
-                    "DELETE FROM events WHERE campaign_id IN (SELECT id FROM campaigns WHERE user_id=?)",
-                    "DELETE FROM results WHERE user_id=?",
-                    "DELETE FROM mail_logs WHERE user_id=?",
-                    "DELETE FROM campaigns WHERE user_id=?",
-                    "DELETE FROM attachments WHERE template_id IN (SELECT id FROM templates WHERE user_id=?)",
-                    "DELETE FROM templates WHERE user_id=?",
-                    "DELETE FROM pages WHERE user_id=?",
-                    "DELETE FROM ruphish_learning_pages WHERE user_id=?",
-                    "DELETE FROM group_targets WHERE group_id IN (SELECT id FROM groups WHERE user_id=?)",
-                    "DELETE FROM groups WHERE user_id=?",
-                    "DELETE FROM headers WHERE smtp_id IN (SELECT id FROM smtp WHERE user_id=?)",
-                    "DELETE FROM smtp WHERE user_id=?",
-                    "DELETE FROM ruphish_mailbox_runs WHERE mailbox_id IN (SELECT id FROM ruphish_mailboxes WHERE owner_id=?)",
-                    "DELETE FROM ruphish_mailbox_messages WHERE mailbox_id IN (SELECT id FROM ruphish_mailboxes WHERE owner_id=?)",
-                    "DELETE FROM ruphish_mailboxes WHERE owner_id=?",
-                    "DELETE FROM imap WHERE user_id=?",
                     "DELETE FROM email_requests WHERE user_id=?",
                     "DELETE FROM ruphish_user_preferences WHERE user_id=?",
-                    "DELETE FROM ruphish_campaign_drafts WHERE owner_id=?",
                     "DELETE FROM users WHERE id=?",
                 ] {
                     sqlx::query(statement)
@@ -319,4 +291,25 @@ impl Repository for Accounts {
         tx.commit().await.map_err(storage)?;
         Ok(result)
     }
+}
+
+pub(super) async fn display_identities(
+    c: &mut SqliteConnection,
+    ids: &[i64],
+) -> Result<Vec<DisplayIdentity>, Error> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let requested = serde_json::to_string(ids).map_err(|_| Error::Internal)?;
+    let rows = sqlx::query("SELECT id,username,FALSE AS deleted FROM users WHERE id IN (SELECT value FROM json_each(?1)) UNION ALL SELECT id,username,TRUE AS deleted FROM ruphish_deleted_accounts WHERE id IN (SELECT value FROM json_each(?1)) ORDER BY id")
+            .bind(&requested).fetch_all(&mut *c).await.map_err(storage)?;
+    rows.into_iter()
+        .map(|r| {
+            Ok(DisplayIdentity {
+                id: r.try_get("id").map_err(storage)?,
+                username: r.try_get("username").map_err(storage)?,
+                deleted: r.try_get("deleted").map_err(storage)?,
+            })
+        })
+        .collect()
 }

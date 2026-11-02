@@ -25,22 +25,22 @@ The same-engine upgrade converts a recognized Gophish database in place to Ruphi
 
 | Data | Upgrade treatment | Follow-up |
 | --- | --- | --- |
-| Accounts, roles, and API keys | Existing identities, usable password hashes, and keys are retained where present in the recognized history; older histories receive the required later schema/defaults | Verify account access, locks, roles, and owner isolation; sign in again rather than expecting old browser cookies to transfer |
-| Groups and recipients | IDs, ownership, target fields, and group membership are carried through | Compare saved membership and campaign recipient identity separately |
+| Accounts, roles, and API keys | Existing identities, usable password hashes, and keys are retained where present in the recognized history; older histories receive the required later schema/defaults | Verify account access, locks, roles, and shared access; sign in again rather than expecting old browser cookies to transfer |
+| Groups and recipients | IDs, creator attribution, target fields, and group membership are carried through | Compare saved membership and campaign recipient identity separately |
 | Templates, pages, and attachments | Stored resource content and relationships are retained | Preview actual templates and supported attachment formats; served-page restrictions still apply |
 | Sending profiles | Existing profile settings and stored service credentials are carried through supported histories | Very old histories may not contain later credential fields; confirm authentication and TLS with a controlled send |
 | Campaigns and events | IDs, relationships, history, and supported timestamps are retained/transformed; event provenance is marked legacy | Compare lifecycle state and historical counts using the new metric definitions |
 | Captured participant details and location | Opaque legacy event details are cleared from active records; result IP/location fields are cleared/zeroed | Preserve sensitive recovery copies separately; do not expect captured form values in exports |
-| Reporting settings | Legacy IMAP settings with an existing owner become named mailbox resources; stored credentials are retained; invalid/incomplete connection settings can import disabled, with bounded defaults for port/folder/frequency | Review every imported mailbox before enabling processing; the first successful poll checkpoints existing mail and watches new arrivals |
-| Webhooks | Existing endpoints, activity flags, and secrets receive revision state and an owner; see [webhook ownership](#webhook-ownership) | Use the assigned owner or explicit impersonation to review them; imported historical events do not imply a historical webhook replay |
+| Reporting settings | Legacy IMAP settings become named shared mailboxes with credentials retained; missing creators and invalid/incomplete connection settings import disabled, with bounded defaults for port/folder/frequency | Review every imported mailbox before enabling processing; the initial checkpoint uses the earliest actual send in any active campaign, or watches new arrivals when none exists |
+| Webhooks | Existing endpoints, activity flags, and secrets receive revision state and unknown creator attribution; see [webhook attribution](#webhook-attribution) | Review them using any account with the existing resource permissions; imported historical events do not imply a historical webhook replay |
 | Campaign origins | Fixed HTTP/HTTPS DNS and IP origins are extracted without verification evidence | Enable the origin and satisfy the current verification policy; origin extraction does not confer trust |
 | Files and process settings | Database migration does not transfer configuration files, certificates/private keys, static files, or service-manager settings | Copy and review them separately, using the target configuration contract |
 
 Display preferences and persistent campaign drafts are Ruphish additions. A Gophish database does not supply equivalent saved UI state. Individual resource imports are separate from whole-database migration and can create duplicate work; they are not an idempotent substitute for this procedure.
 
-Compare account IDs, resource ownership, group membership, templates, attachments, profiles, campaign relationships, historical events, and timestamps. Verify that existing account hashes authenticate without resetting every account. Keep exported profile data and integration credentials private during inspection.
+Compare account IDs, creator attribution, group membership, templates, attachments, profiles, campaign relationships, historical events, and timestamps. Verify that existing account hashes authenticate without resetting every account. Keep exported profile data and integration credentials private during inspection.
 
-Gophish account deletion can leave IMAP settings behind. Settings with a missing, invalid, or deleted owner are skipped without blocking migration. A warning reports the number skipped and the ownership problem, without logging mailbox details or credentials. These rows are removed from the migrated application's legacy `imap` table and never become mailbox resources. Originals remain available in the SQLite pre-upgrade snapshot (or unchanged source when upgrading a copy), or in MySQL's `rp_original_imap` recovery table. Both engines preserve source identity allocation counters so deleted object IDs are not reused after migration.
+Gophish account deletion can leave IMAP settings behind. Settings with a missing, invalid, or deleted creator are preserved as disabled shared mailboxes for review. Positive historical creator IDs remain attribution; invalid IDs become unknown. A warning reports the number disabled without logging mailbox details or credentials. Converted rows leave the legacy `imap` table. Originals remain available in the SQLite pre-upgrade snapshot (or unchanged source when upgrading a copy), or in MySQL's `rp_original_imap` recovery table. Both engines preserve source identity allocation counters so deleted object IDs are not reused after migration.
 
 Legacy participant-value capture is outside the Ruphish data model. Inspect the [privacy changes](differences-from-gophish.md) and resulting history representation rather than expecting arbitrary captured fields to remain accessible. Protect the pre-migration backup as sensitive legacy data.
 
@@ -48,9 +48,13 @@ Run your actual templates through preview and a controlled inbox. Check HTML/pla
 
 Inspect imported scheduled/active campaign and delivery states before allowing any worker to send. Ambiguous legacy work must be reconciled explicitly; do not infer that every unsent-looking row is safe to resend. Check [delivery outcomes](../user-guide/campaigns/delivery.md) and [migration verification](verification-and-rollback.md).
 
+### Campaign content
+
+Conversion freezes the template, attachments, landing page, and sender identity/headers available in the source database. Gophish did not preserve launch-time versions, so imported content is a conversion-time record, not proof of the original message. Missing resources remain explicitly missing. SMTP connection settings and credentials stay live for operational recovery.
+
 ### Pending messages
 
-Recognized legacy queue rows map by recipient, campaign, and owner. Completed campaigns become cancelled work. Rows marked as processing become `unknown`, with diagnostic `legacy_delivery_outcome_unknown`, because migration cannot establish whether SMTP accepted them. Otherwise, a row can become ready, or blocked with `campaign_page_missing` when its required page/policy is unavailable. Due times and supported retry counts carry across.
+Recognized legacy queue rows map by recipient, campaign, and historical creator identity; the creator account need not still exist. Completed campaigns become cancelled work. Rows marked as processing become `unknown`, with diagnostic `legacy_delivery_outcome_unknown`, because migration cannot establish whether SMTP accepted them. Otherwise, a row can become ready, or blocked with `campaign_page_missing` when its required page/policy is unavailable. Due times and supported retry counts carry across.
 
 Ambiguous associations, duplicate queue identities, invalid attempt counts, or invalid due times are retained as legacy queue issues instead of guessed into runnable work. There is no documented bulk repair endpoint for those issues. Keep that campaign stopped, preserve the original, and investigate its mappings before resuming or recreating work.
 
@@ -66,9 +70,9 @@ After a successful rehearsal, schedule a write stop, take a fresh consistent bac
 
 Retain the rollback environment and record when new work begins. Rolling back after Ruphish has sent messages or processed reports requires reconciliation of those external effects; restoring a database cannot undo them.
 
-## Webhook ownership
+## Webhook attribution
 
-Gophish webhooks do not record a creator. Conversion assigns them to the existing account with the lowest user ID whose role grants `modify_system`; this is migration ownership, not a reconstructed creator identity. URLs, signing secrets, and individual activation states are preserved. Conversion rejects a source containing webhooks but no such administrator. New webhook ownership is always taken from the authenticated creator. Review migrated endpoints through that account or explicit administrator impersonation; delivery still includes events from all campaign creators.
+Gophish webhooks do not record a creator. Conversion leaves creator and last-editor attribution unknown instead of assigning an administrator. URLs, signing secrets, and individual activation states are preserved; conversion does not require an administrator solely to adopt webhooks. New webhook attribution comes from the authenticated creator. All authenticated users with the existing resource permissions can manage these endpoints; delivery includes events from all campaigns.
 
 ## Email-open tracking
 

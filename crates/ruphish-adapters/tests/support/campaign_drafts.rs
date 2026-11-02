@@ -54,7 +54,7 @@ pub(super) async fn exercise(
     assert_eq!(page.items[0].id, id);
     assert_eq!(page.items[0].revision, Some(1));
     assert!(page.items[0].total.is_none());
-    assert!(
+    assert_eq!(
         store
             .directory(
                 other,
@@ -64,31 +64,27 @@ pub(super) async fn exercise(
             )
             .await
             .unwrap()
-            .items
-            .is_empty()
+            .items[0]
+            .id,
+        id
     );
     assert!(store.list(actor).await.unwrap().is_empty());
     assert!(
         store.claim(now).await.unwrap().is_none(),
         "saving a draft schedules nothing"
     );
-    assert!(matches!(
-        store.draft(other, id).await,
-        Err(Error::NotFound(_))
-    ));
-    assert!(matches!(
+    assert_eq!(store.draft(other, id).await.unwrap().revision, 1);
+    assert_eq!(
         store
-            .save_draft(other, id, Some(1), empty.clone(), 0, now)
-            .await,
-        Err(Error::NotFound(_))
-    ));
+            .save_draft(other, id, None, empty.clone(), 0, now)
+            .await
+            .unwrap()
+            .revision,
+        1
+    );
     assert!(matches!(
-        store.delete_draft(other, id, 1).await,
-        Err(Error::NotFound(_))
-    ));
-    assert!(matches!(
-        store.launch_draft(other, id, 1, input.clone(), now).await,
-        Err(Error::NotFound(_))
+        store.delete_draft(other, id, 999).await,
+        Err(Error::Changed)
     ));
     let left = Configuration {
         name: "First tab".into(),
@@ -98,9 +94,15 @@ pub(super) async fn exercise(
         name: "Second tab".into(),
         ..empty.clone()
     };
+    assert!(matches!(
+        store
+            .save_draft(other, id, None, left.clone(), 1, now)
+            .await,
+        Err(Error::RevisionRequired)
+    ));
     let (a, b) = tokio::join!(
         store.save_draft(actor, id, Some(1), left.clone(), 1, now),
-        store.save_draft(actor, id, Some(1), right.clone(), 1, now)
+        store.save_draft(other, id, Some(1), right.clone(), 1, now)
     );
     assert_eq!(
         usize::from(a.is_ok()) + usize::from(b.is_ok()),
@@ -111,7 +113,10 @@ pub(super) async fn exercise(
         a.as_ref().err().or(b.as_ref().err()),
         Some(Error::Changed)
     ));
+    let winning_editor = if a.is_ok() { actor.id } else { other.id };
     let winner = a.or(b).unwrap();
+    assert_eq!(winner.attribution.created_by, Some(actor.id));
+    assert_eq!(winner.attribution.edited_by, Some(winning_editor));
     assert_eq!(
         store.draft(actor, id).await.unwrap().configuration,
         winner.configuration
@@ -124,6 +129,10 @@ pub(super) async fn exercise(
             .revision,
         2,
         "lost update response is reconcilable"
+    );
+    assert_eq!(
+        store.draft(other, id).await.unwrap().attribution,
+        winner.attribution
     );
     assert!(matches!(
         store.delete_draft(actor, id, 1).await,
@@ -203,7 +212,7 @@ pub(super) async fn exercise(
         Err(Error::Changed)
     ));
     let mut stale = input.clone();
-    stale.template.revision = Some("stale".into());
+    stale.template.revision = Some("999999".into());
     assert!(
         store
             .launch_draft(actor, id, saved.revision, stale, now)
@@ -227,7 +236,7 @@ pub(super) async fn exercise(
     }
     let (a, b) = tokio::join!(
         store.launch_draft(actor, id, saved.revision, input.clone(), now),
-        store.launch_draft(actor, id, saved.revision, input.clone(), now)
+        store.launch_draft(other, id, saved.revision, input.clone(), now)
     );
     let launched = a.unwrap();
     assert!(!launched.policy.as_ref().unwrap().track_opens);

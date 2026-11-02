@@ -187,6 +187,7 @@ fn profile_credentials_are_write_only_and_clear_only_when_requested() {
     value = browser
         .put(&path)
         .bearer_auth("synthetic-bootstrap-token")
+        .header("If-Match", format!("\"{}\"", value["revision"]))
         .json(&value)
         .send()
         .unwrap()
@@ -211,6 +212,7 @@ fn profile_credentials_are_write_only_and_clear_only_when_requested() {
     value = browser
         .put(&path)
         .bearer_auth("synthetic-bootstrap-token")
+        .header("If-Match", format!("\"{}\"", value["revision"]))
         .json(&value)
         .send()
         .unwrap()
@@ -386,6 +388,7 @@ fn smtp_cram_negotiates_and_delivers_without_fallback_or_secret_diagnostics() {
         profile = client()
             .put(&path)
             .bearer_auth("synthetic-bootstrap-token")
+            .header("If-Match", format!("\"{}\"", profile["revision"]))
             .json(&profile)
             .send()
             .unwrap()
@@ -399,6 +402,7 @@ fn smtp_cram_negotiates_and_delivers_without_fallback_or_secret_diagnostics() {
         profile = client()
             .put(&path)
             .bearer_auth("synthetic-bootstrap-token")
+            .header("If-Match", format!("\"{}\"", profile["revision"]))
             .json(&profile)
             .send()
             .unwrap()
@@ -887,6 +891,7 @@ fn email_create_edit_and_preview_share_validation_without_mutating_source() {
         let response = client
             .put(format!("{base}/api/templates/{id}"))
             .bearer_auth("synthetic-bootstrap-token")
+            .header("If-Match", format!("\"{}\"", saved["revision"]))
             .json(&invalid)
             .send()
             .unwrap();
@@ -904,11 +909,13 @@ fn email_create_edit_and_preview_share_validation_without_mutating_source() {
     let response = client
         .put(format!("{base}/api/templates/{id}"))
         .bearer_auth("synthetic-bootstrap-token")
+        .header("If-Match", format!("\"{}\"", saved["revision"]))
         .json(&json!({"id":id,"name":"Managed tracking", "html":edited_source}))
         .send()
         .unwrap();
     assert_eq!(response.status(), 200);
-    assert_eq!(response.json::<Value>().unwrap()["html"], edited_source);
+    let edited: Value = response.json().unwrap();
+    assert_eq!(edited["html"], edited_source);
     let response = client
         .post(format!("{base}/api/util/preview"))
         .bearer_auth("synthetic-bootstrap-token")
@@ -919,6 +926,7 @@ fn email_create_edit_and_preview_share_validation_without_mutating_source() {
     let preview: Value = response.json().unwrap();
     assert_eq!(preview["html"], "<p>Hello</p>");
     let response = client.put(format!("{base}/api/templates/{id}"))
+        .header("If-Match", format!("\"{}\"", edited["revision"]))
         .bearer_auth("synthetic-bootstrap-token")
         .json(&json!({"id":id,"name":"Managed tracking", "html":"{{if eq .FirstName \"Unsafe\"}}<img src=x onerror='bad()'>{{else}}<p>Hello</p>{{end}}"}))
         .send().unwrap();
@@ -1033,6 +1041,21 @@ fn group(name: &str, first: &str) -> Value {
 fn normalize(value: &mut Value) {
     match value {
         Value::Object(fields) => {
+            // New attribution is asserted separately from the captured Gophish payload.
+            if let Some(creator) = fields.remove("created_by") {
+                assert_eq!(creator, json!({"id":1,"username":"admin","deleted":false}));
+                assert_eq!(
+                    fields.remove("edited_by"),
+                    Some(json!({"id":1,"username":"admin","deleted":false}))
+                );
+                let edited = fields.remove("edited_at").unwrap();
+                assert!(
+                    ruphish_application::datetime::parse_stored(edited.as_str().unwrap()).is_ok()
+                );
+            }
+            if let Some(revision) = fields.remove("revision") {
+                assert!(revision.as_i64().is_some_and(|value| value > 0));
+            }
             if fields.contains_key("modified_date") {
                 fields.insert("modified_date".into(), json!("<modified>"));
             }
@@ -1062,8 +1085,21 @@ fn independent_go_resource_observations_run_against_the_executable() {
         let id = case["id"].as_str().unwrap();
         let method =
             reqwest::Method::from_bytes(case["method"].as_str().unwrap().as_bytes()).unwrap();
-        let response = client
-            .request(method, format!("{base}{}", case["path"].as_str().unwrap()))
+        let path = case["path"].as_str().unwrap();
+        let mut request = client.request(method.clone(), format!("{base}{path}"));
+        if matches!(method, reqwest::Method::PUT | reqwest::Method::DELETE) {
+            let current: Value = client
+                .get(format!("{base}{path}"))
+                .bearer_auth("synthetic-bootstrap-token")
+                .send()
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .unwrap();
+            request = request.header("If-Match", format!("\"{}\"", current["revision"]));
+        }
+        let response = request
             .bearer_auth("synthetic-bootstrap-token")
             .header("content-type", "application/json")
             .body(case["body"].as_str().unwrap().to_owned())
@@ -1262,6 +1298,7 @@ fn migrated_shared_recipients_and_duplicate_names_are_preserved_then_isolated() 
         client
             .put(format!("{base}/api/groups/1"))
             .bearer_auth("synthetic-bootstrap-token")
+            .header("If-Match", format!("\"{}\"", first["revision"]))
             .json(&first)
             .send()
             .unwrap()
@@ -1330,6 +1367,7 @@ fn resource_replacements_roll_back_children_and_block_live_campaign_deletion() {
             client
                 .put(format!("{base}/api/{family}/{id}"))
                 .bearer_auth("synthetic-bootstrap-token")
+                .header("If-Match", format!("\"{}\"", changed["revision"]))
                 .json(&changed)
                 .send()
                 .unwrap()
@@ -1351,6 +1389,7 @@ fn resource_replacements_roll_back_children_and_block_live_campaign_deletion() {
             client
                 .delete(format!("{base}/api/{family}/{id}"))
                 .bearer_auth("synthetic-bootstrap-token")
+                .header("If-Match", format!("\"{}\"", original["revision"]))
                 .send()
                 .unwrap()
                 .status(),
@@ -1385,6 +1424,7 @@ fn groups_round_trip_isolate_recipients_clear_fields_and_survive_restart() {
     let response = client
         .put(format!("{base}/api/groups/{id}"))
         .bearer_auth("synthetic-bootstrap-token")
+        .header("If-Match", format!("\"{}\"", first["revision"]))
         .json(&first)
         .send()
         .unwrap();
@@ -1455,6 +1495,7 @@ fn groups_round_trip_isolate_recipients_clear_fields_and_survive_restart() {
         client
             .delete(format!("{base}/api/groups/{id}"))
             .bearer_auth("synthetic-bootstrap-token")
+            .header("If-Match", format!("\"{}\"", stored["revision"]))
             .send()
             .unwrap()
             .status(),
@@ -1698,6 +1739,7 @@ fn legacy_resource_validation_and_page_policy_survive_round_trip_and_restart() {
         page = client
             .put(format!("{base}/api/pages/{id}"))
             .bearer_auth("synthetic-bootstrap-token")
+            .header("If-Match", format!("\"{}\"", page["revision"]))
             .json(&page)
             .send()
             .unwrap()
@@ -1830,7 +1872,7 @@ fn landing_diagnostics_warn_without_blocking_save_and_preserve_correct_form_sema
 }
 
 #[test]
-fn ownership_and_concurrent_writes_hold_through_real_http_requests() {
+fn shared_access_and_concurrent_writes_hold_through_real_http_requests() {
     let directory = workspace();
     let mut process = Process::start(directory.path(), "admin");
     let base = ready(&mut process);
@@ -1848,12 +1890,12 @@ fn ownership_and_concurrent_writes_hold_through_real_http_requests() {
     let user: Value = response.json().unwrap();
     let key = user["api_key"].as_str().unwrap();
     for (family, value) in [
-        ("groups", group("Private", "Alice")),
-        ("templates", json!({"name":"Private","text":"Hello"})),
-        ("pages", json!({"name":"Private","html":"<p>private</p>"})),
+        ("groups", group("Shared", "Alice")),
+        ("templates", json!({"name":"Shared","text":"Hello"})),
+        ("pages", json!({"name":"Shared","html":"<p>shared</p>"})),
         (
             "smtp",
-            json!({"name":"Private","host":"localhost:25","from_address":"sender@example.test","password":"must-not-leak"}),
+            json!({"name":"Shared","host":"localhost:25","from_address":"sender@example.test","password":"must-not-leak"}),
         ),
     ] {
         let created = client
@@ -1865,28 +1907,26 @@ fn ownership_and_concurrent_writes_hold_through_real_http_requests() {
         assert_eq!(created.status(), 201);
         let saved: Value = created.json().unwrap();
         let path = format!("{base}/api/{family}/{}", saved["id"]);
-        assert_eq!(
-            client.get(&path).bearer_auth(key).send().unwrap().status(),
-            404
-        );
-        assert_eq!(
-            client
-                .put(&path)
-                .bearer_auth(key)
-                .json(&saved)
-                .send()
+        let read = client.get(&path).bearer_auth(key).send().unwrap();
+        assert_eq!(read.status(), 200);
+        let read: Value = read.json().unwrap();
+        assert_eq!(read["id"], saved["id"]);
+        assert!(
+            !serde_json::to_string(&read)
                 .unwrap()
-                .status(),
-            404
+                .contains("must-not-leak")
         );
+        let updated = client
+            .put(&path)
+            .bearer_auth(key)
+            .header("If-Match", format!("\"{}\"", saved["revision"]))
+            .json(&saved)
+            .send()
+            .unwrap();
+        assert_eq!(updated.status(), 200);
         assert_eq!(
-            client
-                .delete(&path)
-                .bearer_auth(key)
-                .send()
-                .unwrap()
-                .status(),
-            404
+            updated.json::<Value>().unwrap()["edited_by"]["id"],
+            user["id"]
         );
         let list: Value = client
             .get(format!("{base}/api/{family}/"))
@@ -1895,8 +1935,8 @@ fn ownership_and_concurrent_writes_hold_through_real_http_requests() {
             .unwrap()
             .json()
             .unwrap();
-        assert_eq!(list, json!([]));
-        // Naming scopes are owner-specific, including credentials and memberships.
+        assert_eq!(list.as_array().unwrap().len(), 1);
+        // Resource names are unique across creators.
         assert_eq!(
             client
                 .post(format!("{base}/api/{family}/"))
@@ -1905,7 +1945,7 @@ fn ownership_and_concurrent_writes_hold_through_real_http_requests() {
                 .send()
                 .unwrap()
                 .status(),
-            201
+            409
         );
     }
     let statuses = std::thread::scope(|scope| {
@@ -2181,6 +2221,7 @@ fn landing_bundle_import_preview_and_saved_assets_survive_restart() {
         client
             .delete(format!("{base}/api/pages/{id}"))
             .bearer_auth("synthetic-bootstrap-token")
+            .header("If-Match", format!("\"{}\"", reloaded["revision"]))
             .send()
             .unwrap()
             .status(),
@@ -2196,4 +2237,436 @@ fn landing_bundle_import_preview_and_saved_assets_survive_restart() {
         404
     );
     process.stop();
+}
+
+#[test]
+fn shared_resources_stamp_real_editors_and_survive_account_deletion() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = ready(&mut process);
+    unlock(directory.path());
+    database(
+        directory.path(),
+        "INSERT INTO users(username,hash,api_key,role_id,password_change_required,account_locked) SELECT 'colleague',hash,'colleague-key',2,FALSE,FALSE FROM users WHERE id=1;",
+    );
+    let client = client();
+    let request = |method, path: &str, key: &str, body: Option<&Value>, revision: Option<&str>| {
+        let mut request = client
+            .request(method, format!("{base}{path}"))
+            .bearer_auth(key);
+        if let Some(body) = body {
+            request = request.json(body);
+        }
+        if let Some(revision) = revision {
+            request = request.header("If-Match", revision);
+        }
+        request.send().unwrap()
+    };
+    let body = json!({"name":"Shared API group","targets":[{"email":"person@example.test","first_name":"Original"}],"created_by":999,"edited_by":999,"edited_at":"1900-01-01T00:00:00Z"});
+    let created = request(
+        reqwest::Method::POST,
+        "/api/groups/",
+        "colleague-key",
+        Some(&body),
+        None,
+    );
+    assert_eq!(created.status(), 201);
+    let tag = created.headers()["etag"].to_str().unwrap().to_owned();
+    let created: Value = created.json().unwrap();
+    assert_eq!(created["created_by"]["id"], 2);
+    assert_eq!(created["edited_by"]["id"], 2);
+    assert_eq!(
+        created["created_by"],
+        json!({"id":2,"username":"colleague","deleted":false})
+    );
+    assert_eq!(created["edited_by"], created["created_by"]);
+    assert_ne!(created["edited_at"], body["edited_at"]);
+    let path = format!("/api/groups/{}", created["id"]);
+    assert_eq!(
+        client.get(format!("{base}{path}")).send().unwrap().status(),
+        401
+    );
+    assert_eq!(
+        request(
+            reqwest::Method::GET,
+            "/api/users/",
+            "colleague-key",
+            None,
+            None
+        )
+        .status(),
+        403
+    );
+    assert_eq!(
+        request(
+            reqwest::Method::GET,
+            &path,
+            "synthetic-bootstrap-token",
+            None,
+            None
+        )
+        .json::<Value>()
+        .unwrap(),
+        created
+    );
+    let mut edit = created.clone();
+    edit["name"] = json!("Edited by administrator");
+    edit["edited_by"] = json!(999);
+    let saved = request(
+        reqwest::Method::PUT,
+        &path,
+        "synthetic-bootstrap-token",
+        Some(&edit),
+        Some(&tag),
+    );
+    assert_eq!(saved.status(), 200);
+    let saved: Value = saved.json().unwrap();
+    assert_eq!(saved["created_by"]["id"], 2);
+    assert_eq!(saved["edited_by"]["id"], 1);
+    assert_eq!(
+        request(
+            reqwest::Method::PUT,
+            &path,
+            "colleague-key",
+            Some(&created),
+            Some(&tag)
+        )
+        .status(),
+        412
+    );
+    assert_eq!(
+        request(reqwest::Method::GET, &path, "colleague-key", None, None)
+            .json::<Value>()
+            .unwrap(),
+        saved
+    );
+    // Two independently authenticated editors submit the same current revision.
+    // A barrier releases both HTTP requests together; exactly one may commit.
+    let current = request(reqwest::Method::GET, &path, "colleague-key", None, None);
+    let current_tag = current.headers()["etag"].to_str().unwrap().to_owned();
+    let barrier = std::sync::Barrier::new(2);
+    let (left, right) = std::thread::scope(|scope| {
+        let submit = |key: &str, name: &str| {
+            let mut body = saved.clone();
+            body["name"] = json!(name);
+            body["edited_by"] = json!(999);
+            barrier.wait();
+            let response = request(
+                reqwest::Method::PUT,
+                &path,
+                key,
+                Some(&body),
+                Some(&current_tag),
+            );
+            let status = response.status().as_u16();
+            (status, response.json::<Value>().unwrap())
+        };
+        let left = scope.spawn(move || submit("synthetic-bootstrap-token", "Administrator wins"));
+        let right = scope.spawn(move || submit("colleague-key", "Colleague wins"));
+        (left.join().unwrap(), right.join().unwrap())
+    });
+    assert!(
+        matches!((left.0, right.0), (200, 412) | (412, 200)),
+        "unexpected save results: {left:?}, {right:?}"
+    );
+    let (saved, editor, name) = if left.0 == 200 {
+        (left.1, 1, "Administrator wins")
+    } else {
+        (right.1, 2, "Colleague wins")
+    };
+    assert_eq!(saved["name"], name);
+    assert_eq!(saved["created_by"]["id"], 2);
+    assert_eq!(saved["edited_by"]["id"], editor);
+    assert_eq!(
+        request(reqwest::Method::GET, &path, "colleague-key", None, None)
+            .json::<Value>()
+            .unwrap(),
+        saved
+    );
+    assert_eq!(
+        request(
+            reqwest::Method::DELETE,
+            "/api/users/2",
+            "synthetic-bootstrap-token",
+            None,
+            None
+        )
+        .status(),
+        200
+    );
+    let mut saved = saved;
+    saved["created_by"]["deleted"] = json!(true);
+    if editor == 2 {
+        saved["edited_by"]["deleted"] = json!(true);
+    }
+    assert_eq!(
+        saved["created_by"],
+        json!({"id":2,"username":"colleague","deleted":true})
+    );
+    assert_eq!(
+        request(
+            reqwest::Method::GET,
+            &path,
+            "synthetic-bootstrap-token",
+            None,
+            None
+        )
+        .json::<Value>()
+        .unwrap(),
+        saved
+    );
+    assert_eq!(
+        request(reqwest::Method::GET, &path, "colleague-key", None, None).status(),
+        401
+    );
+    process.stop();
+    let mut restarted = Process::start(directory.path(), "admin");
+    let restarted_base = ready(&mut restarted);
+    let persisted: Value = client
+        .get(format!("{restarted_base}{path}"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(persisted, saved);
+    // Historical missing identities remain explicit; they must not become the current user.
+    database(
+        directory.path(),
+        &format!(
+            "UPDATE groups SET user_id=99999,edited_by=NULL,edited_at=NULL WHERE id={}",
+            persisted["id"]
+        ),
+    );
+    let unknown: Value = client
+        .get(format!("{restarted_base}{path}"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(
+        unknown["created_by"],
+        json!({"id":99999,"username":null,"deleted":false})
+    );
+    assert!(unknown["edited_by"].is_null());
+    assert!(unknown["edited_at"].is_null());
+    assert_eq!(unknown["targets"], persisted["targets"]);
+
+    restarted.stop();
+}
+
+#[test]
+fn shared_resource_revisions_prevent_lost_updates_and_stale_deletes_end_to_end() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = ready(&mut process);
+    unlock(directory.path());
+    let client = client();
+    let mut removed = Vec::new();
+    for (family, body) in [
+        (
+            "groups",
+            json!({"name":"Concurrent group","targets":[{"email":"person@example.test","first_name":"Original","last_name":"Person","position":"Test"}]}),
+        ),
+        (
+            "templates",
+            json!({"name":"Concurrent email","subject":"Original","text":"Original","html":"<p>Original</p>","attachments":[]}),
+        ),
+        (
+            "pages",
+            json!({"name":"Concurrent page","html":"<p>Original</p>","redirect_url":""}),
+        ),
+        (
+            "learning-pages",
+            json!({"name":"Concurrent learning","html":"<p>Original</p>"}),
+        ),
+        (
+            "smtp",
+            json!({"name":"Concurrent sender","host":"127.0.0.1:2525","from_address":"training@example.test","interface_type":"SMTP","username":"","password":"synthetic-secret","ignore_cert_errors":false,"headers":[]}),
+        ),
+    ] {
+        let created = client
+            .post(format!("{base}/api/{family}/"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&body)
+            .send()
+            .unwrap();
+        assert!(
+            created.status().is_success(),
+            "{family}: {}",
+            created.text().unwrap()
+        );
+        assert_eq!(created.headers()["etag"], "\"1\"");
+        let original: Value = created.json().unwrap();
+        assert_eq!(original["revision"], 1);
+        let mut body = body;
+        body["id"] = original["id"].clone();
+        body["revision"] = json!(999999); // Server metadata cannot override the reviewed header.
+        let path = format!("/api/{family}/{}", original["id"]);
+        let url = format!("{base}{path}");
+        for method in [reqwest::Method::PUT, reqwest::Method::DELETE] {
+            let missing = client
+                .request(method.clone(), &url)
+                .bearer_auth("synthetic-bootstrap-token")
+                .json(&body)
+                .send()
+                .unwrap();
+            assert_eq!(missing.status(), 428, "{family}");
+            assert_eq!(
+                missing.json::<Value>().unwrap()["code"],
+                "REVISION_REQUIRED"
+            );
+            for invalid in [
+                "*",
+                "1",
+                "W/\"1\"",
+                "\"1\", \"2\"",
+                "\"0\"",
+                "\"01\"",
+                "\"+1\"",
+                "\"old-timestamp\"",
+            ] {
+                let response = client
+                    .request(method.clone(), &url)
+                    .bearer_auth("synthetic-bootstrap-token")
+                    .header("If-Match", invalid)
+                    .json(&body)
+                    .send()
+                    .unwrap();
+                assert_eq!(response.status(), 400, "{family}: {invalid}");
+                assert_eq!(
+                    response.json::<Value>().unwrap()["code"],
+                    "REVISION_REQUIRED"
+                );
+            }
+        }
+        let read = || {
+            client
+                .get(&url)
+                .bearer_auth("synthetic-bootstrap-token")
+                .send()
+                .unwrap()
+        };
+        let read_saved = || {
+            let mut value: Value = read().json().unwrap();
+            // Detail-only derived preview markup is not part of a save response.
+            value.as_object_mut().unwrap().remove("preview_html");
+            value
+        };
+        assert_eq!(read_saved(), original);
+        let mut left = body.clone();
+        left["name"] = json!("Concurrent A");
+        let mut right = body.clone();
+        right["name"] = json!("Concurrent B");
+        let save = |value: &Value| {
+            client
+                .put(&url)
+                .bearer_auth("synthetic-bootstrap-token")
+                .header("If-Match", "\"1\"")
+                .json(value)
+                .send()
+                .unwrap()
+        };
+        let (a, b) = std::thread::scope(|scope| {
+            let a = scope.spawn(|| save(&left));
+            let b = scope.spawn(|| save(&right));
+            (a.join().unwrap(), b.join().unwrap())
+        });
+        let (winner, loser) = if a.status().is_success() {
+            (a, b)
+        } else {
+            (b, a)
+        };
+        assert_eq!(winner.status(), 200);
+        assert_eq!(winner.headers()["etag"], "\"2\"");
+        assert_eq!(loser.status(), 412);
+        assert_eq!(loser.json::<Value>().unwrap()["code"], "RESOURCE_CHANGED");
+        let winner: Value = winner.json().unwrap();
+        assert_eq!(winner["revision"], 2);
+        assert_eq!(read_saved(), winner);
+        let stale = client
+            .delete(&url)
+            .bearer_auth("synthetic-bootstrap-token")
+            .header("If-Match", "\"1\"")
+            .send()
+            .unwrap();
+        assert_eq!(stale.status(), 412);
+        assert_eq!(read_saved(), winner);
+        let summary: Value = client
+            .get(format!("{base}/api/{family}/summary"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .send()
+            .unwrap()
+            .json()
+            .unwrap();
+        assert_eq!(
+            summary[if family == "groups" {
+                "groups"
+            } else {
+                "items"
+            }]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["id"] == winner["id"])
+            .unwrap()["revision"],
+            2
+        );
+        let (edit, delete) = std::thread::scope(|scope| {
+            let edit = scope.spawn(|| {
+                client
+                    .put(&url)
+                    .bearer_auth("synthetic-bootstrap-token")
+                    .header("If-Match", "\"2\"")
+                    .json(&body)
+                    .send()
+                    .unwrap()
+            });
+            let delete = scope.spawn(|| {
+                client
+                    .delete(&url)
+                    .bearer_auth("synthetic-bootstrap-token")
+                    .header("If-Match", "\"2\"")
+                    .send()
+                    .unwrap()
+            });
+            (edit.join().unwrap(), delete.join().unwrap())
+        });
+        if edit.status().is_success() {
+            assert_eq!(delete.status(), 412);
+            assert_eq!(read().json::<Value>().unwrap()["revision"], 3);
+            assert_eq!(
+                client
+                    .delete(&url)
+                    .bearer_auth("synthetic-bootstrap-token")
+                    .header("If-Match", "\"3\"")
+                    .send()
+                    .unwrap()
+                    .status(),
+                200
+            );
+        } else {
+            assert_eq!(edit.status(), 404);
+            assert_eq!(delete.status(), 200);
+        }
+        assert_eq!(save(&body).status(), 404);
+        assert_eq!(read().status(), 404);
+        removed.push(path);
+    }
+    process.stop();
+    let mut reopened = Process::start(directory.path(), "admin");
+    let base = ready(&mut reopened);
+    for path in removed {
+        assert_eq!(
+            client
+                .get(format!("{base}{path}"))
+                .bearer_auth("synthetic-bootstrap-token")
+                .send()
+                .unwrap()
+                .status(),
+            404
+        );
+    }
+    reopened.stop();
 }

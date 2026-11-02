@@ -96,13 +96,7 @@ pub(super) async fn convert(c: &mut SqliteConnection, version: i64) -> Result<()
             return Err(unsupported());
         }
     }
-    if version >= 20191104103306 {
-        let orphaned: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM webhooks) AND NOT EXISTS(SELECT 1 FROM users u JOIN role_permissions rp ON rp.role_id=u.role_id JOIN permissions p ON p.id=rp.permission_id WHERE p.slug='modify_system')")
-            .fetch_one(&mut *c).await?;
-        if orphaned {
-            return Err(UpgradeError::Unrecognized("Legacy webhooks require an existing administrator to assign configuration ownership".into()));
-        }
-    }
+
     let tables:Vec<String>=sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name<>'goose_db_version' ORDER BY name").fetch_all(&mut *c).await?;
     let mut source = BTreeMap::new();
     for table in &tables {
@@ -182,10 +176,13 @@ pub(super) async fn convert(c: &mut SqliteConnection, version: i64) -> Result<()
         } else {
             "NULL"
         };
-        statement(c,format!("INSERT INTO smtp(id,user_id,interface_type,name,host,username,password,from_address,ignore_cert_errors) SELECT s.smtp_id,c.user_id,'SMTP','Migrated SMTP '||s.smtp_id,s.host,s.username,'',s.from_address,{ignore} FROM gophish_smtp s JOIN gophish_campaigns c ON c.id=s.campaign_id;")).await?;
+        statement(c,format!("INSERT INTO smtp(id,user_id,interface_type,name,host,username,password,from_address,ignore_cert_errors,modified_date) SELECT s.smtp_id,c.user_id,'SMTP','Migrated SMTP '||s.smtp_id,s.host,s.username,'',s.from_address,{ignore},'0001-01-01T00:00:00Z' FROM gophish_smtp s JOIN gophish_campaigns c ON c.id=s.campaign_id;")).await?;
     }
     initialize_work(c).await?;
     import_domains(c).await?;
+    super::campaigns::freeze_imported(c).await.map_err(|_| {
+        UpgradeError::Unrecognized("Cannot preserve imported campaign content".into())
+    })?;
     // Preserve AUTOINCREMENT high-water marks, including deleted source identities.
     for table in &tables {
         sqlx::query("UPDATE sqlite_sequence SET seq=max(seq,coalesce((SELECT seq FROM sqlite_sequence WHERE name=?),0)) WHERE name=?")
@@ -196,19 +193,19 @@ pub(super) async fn convert(c: &mut SqliteConnection, version: i64) -> Result<()
 }
 
 async fn initialize_work(c: &mut SqliteConnection) -> Result<(), UpgradeError> {
-    let skipped: i64 = sqlx::query_scalar("SELECT count(*) FROM imap WHERE user_id IS NULL OR user_id<=0 OR typeof(user_id)<>'integer' OR NOT EXISTS(SELECT 1 FROM users u WHERE u.id=imap.user_id)")
+    let disabled: i64 = sqlx::query_scalar("SELECT count(*) FROM imap WHERE user_id IS NULL OR user_id<=0 OR typeof(user_id)<>'integer' OR NOT EXISTS(SELECT 1 FROM users u WHERE u.id=imap.user_id)")
         .fetch_one(&mut *c).await?;
-    crate::database::migrations::warn_skipped_mailboxes(skipped);
-    // Gophish account deletion leaves IMAP rows behind. Recovery data retains
-    // unusable settings; the application imports only settings with a valid owner.
+    crate::database::migrations::warn_disabled_imported_mailboxes(disabled);
+    // Gophish account deletion leaves IMAP rows behind. Preserve shared settings
+    // and disable unresolved creators for review, without discarding credentials.
     sqlx::raw_sql(r#"
 INSERT INTO ruphish_campaign_policy(campaign_id,redirect_url) SELECT c.id,coalesce(p.redirect_url,'') FROM campaigns c JOIN pages p ON p.id=c.page_id AND p.user_id=c.user_id;
-INSERT INTO ruphish_legacy_queue_issues SELECT m.id,'Unresolved or ambiguous legacy queue association' FROM mail_logs m WHERE (SELECT count(*) FROM results r JOIN campaigns c ON c.id=r.campaign_id JOIN users u ON u.id=c.user_id WHERE r.r_id=m.r_id AND r.user_id=m.user_id AND r.campaign_id=m.campaign_id AND c.user_id=m.user_id)!=1 OR (SELECT count(*) FROM results all_results WHERE all_results.r_id=m.r_id)!=1 OR (SELECT count(*) FROM mail_logs d WHERE d.r_id=m.r_id)!=1 OR coalesce(m.send_attempt,0) NOT BETWEEN 0 AND 8 OR unixepoch(m.send_date) IS NULL;
+INSERT INTO ruphish_legacy_queue_issues SELECT m.id,'Unresolved or ambiguous legacy queue association' FROM mail_logs m WHERE (SELECT count(*) FROM results r JOIN campaigns c ON c.id=r.campaign_id WHERE r.r_id=m.r_id AND r.user_id=m.user_id AND r.campaign_id=m.campaign_id AND c.user_id=m.user_id)!=1 OR (SELECT count(*) FROM results all_results WHERE all_results.r_id=m.r_id)!=1 OR (SELECT count(*) FROM mail_logs d WHERE d.r_id=m.r_id)!=1 OR coalesce(m.send_attempt,0) NOT BETWEEN 0 AND 8 OR unixepoch(m.send_date) IS NULL;
 INSERT INTO ruphish_delivery(result_id,campaign_id,state,due,retries,code) SELECT r.id,m.campaign_id,CASE WHEN c.status='Completed' THEN 'cancelled' WHEN coalesce(m.processing,0)!=0 THEN 'unknown' WHEN p.campaign_id IS NULL THEN 'blocked' ELSE 'ready' END,unixepoch(m.send_date),coalesce(m.send_attempt,0),CASE WHEN coalesce(m.processing,0)!=0 THEN 'legacy_delivery_outcome_unknown' WHEN p.campaign_id IS NULL THEN 'campaign_page_missing' ELSE '' END FROM mail_logs m JOIN results r ON r.r_id=m.r_id AND r.campaign_id=m.campaign_id AND r.user_id=m.user_id JOIN campaigns c ON c.id=m.campaign_id LEFT JOIN ruphish_campaign_policy p ON p.campaign_id=c.id WHERE m.id NOT IN (SELECT mail_log_id FROM ruphish_legacy_queue_issues);
 DELETE FROM mail_logs WHERE id NOT IN (SELECT mail_log_id FROM ruphish_legacy_queue_issues);
-INSERT INTO ruphish_webhook_state(webhook_id,revision,owner_id) SELECT id,1,(SELECT min(u.id) FROM users u JOIN role_permissions rp ON rp.role_id=u.role_id JOIN permissions p ON p.id=rp.permission_id WHERE p.slug='modify_system') FROM webhooks;
+INSERT INTO ruphish_webhook_state(webhook_id,revision,owner_id) SELECT id,1,NULL FROM webhooks;
 INSERT INTO ruphish_mailboxes(owner_id,name,enabled,host,port,username,password,tls,folder,restrict_domain,delete_reported,frequency,modified_date,last_login,ignore_cert_errors)
- SELECT user_id,'Imported reporting mailbox ' || rowid,CASE WHEN port BETWEEN 1 AND 65535 AND length(host)>0 AND length(username)>0 AND length(password)>0 THEN COALESCE(enabled,0) ELSE 0 END,COALESCE(host,''),CASE WHEN port BETWEEN 1 AND 65535 THEN port ELSE 993 END,COALESCE(username,''),COALESCE(password,''),COALESCE(tls,1),COALESCE(NULLIF(folder,''),'INBOX'),COALESCE(restrict_domain,''),COALESCE(delete_reported_campaign_email,0),CASE WHEN imap_freq>=30 AND imap_freq<=31540000 THEN imap_freq ELSE 60 END,COALESCE(NULLIF(modified_date,''),'0001-01-01T00:00:00Z'),COALESCE(NULLIF(last_login,''),'0001-01-01T00:00:00Z'),COALESCE(ignore_cert_errors,0)<>0 FROM imap WHERE user_id>0 AND typeof(user_id)='integer' AND EXISTS(SELECT 1 FROM users u WHERE u.id=imap.user_id);
+ SELECT CASE WHEN user_id>0 AND typeof(user_id)='integer' THEN user_id ELSE NULL END,'Imported reporting mailbox ' || rowid,CASE WHEN user_id>0 AND typeof(user_id)='integer' AND EXISTS(SELECT 1 FROM users u WHERE u.id=imap.user_id) AND port BETWEEN 1 AND 65535 AND length(host)>0 AND length(username)>0 AND length(password)>0 THEN COALESCE(enabled,0) ELSE 0 END,COALESCE(host,''),CASE WHEN port BETWEEN 1 AND 65535 THEN port ELSE 993 END,COALESCE(username,''),COALESCE(password,''),COALESCE(tls,1),COALESCE(NULLIF(folder,''),'INBOX'),COALESCE(restrict_domain,''),COALESCE(delete_reported_campaign_email,0),CASE WHEN imap_freq>=30 AND imap_freq<=31540000 THEN imap_freq ELSE 60 END,COALESCE(NULLIF(modified_date,''),'0001-01-01T00:00:00Z'),COALESCE(NULLIF(last_login,''),'0001-01-01T00:00:00Z'),COALESCE(ignore_cert_errors,0)<>0 FROM imap;
 DELETE FROM imap;
 UPDATE ruphish_settings SET reporting_mailboxes_enabled=EXISTS(SELECT 1 FROM ruphish_mailboxes),webhooks_enabled=EXISTS(SELECT 1 FROM webhooks) WHERE id=1;
 "#).execute(c).await?;

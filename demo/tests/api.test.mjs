@@ -524,13 +524,12 @@ function setup(storage = new Map(), data) {
     removeItem: (key) => storage.delete(key),
   };
   const api = createDemoApi({ now, storage: store, data });
-  const request = async (path, method = 'GET', body) => {
+  const request = async (path, method = 'GET', body, headers = {}) => {
     const response = await api.execute(
       new Request(`https://demo.example.test${path}`, {
         method,
-        ...(body === undefined
-          ? {}
-          : { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }),
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        headers: { 'content-type': 'application/json', ...headers },
       }),
     );
     return { status: response.status, value: await response.json() };
@@ -895,11 +894,23 @@ test('all resource mutations resolve to real sample IDs without changing any rea
     );
     const path = `/api/${family}/${created.value.id}`;
     assert.equal(
-      (await f.request(path, 'PUT', { name: 'Changed', username: 'changed' })).status,
+      (
+        await f.request(
+          path,
+          'PUT',
+          { name: 'Changed', username: 'changed', revision: created.value.revision },
+          { 'if-match': `"${created.value.revision}"` },
+        )
+      ).status,
       200,
       family,
     );
-    assert.equal((await f.request(path, 'DELETE')).value.success, true, family);
+    assert.equal(
+      (await f.request(path, 'DELETE', undefined, { 'if-match': `"${created.value.revision}"` }))
+        .value.success,
+      true,
+      family,
+    );
     assert.deepEqual((await f.request(`/api/${family}/`)).value, before, family);
     assert.equal((await f.request(path)).status, 200, family);
     assert.equal((await f.request(`/api/${family}/999999`)).status, 404, family);
@@ -996,7 +1007,11 @@ test('drafts retain distinct inputs and steps across navigation but never enter 
   assert.deepEqual((await f.request(path)).value.configuration, update.configuration);
   assert.equal((await f.request(path)).value.step, 2);
   assert.deepEqual((await f.request(path, 'PUT', update)).value, saved.value, 'save retry');
-  assert.equal((await f.request(path, 'PUT', create)).status, 409, 'stale save cannot overwrite');
+  assert.equal(
+    (await f.request(path, 'PUT', create)).status,
+    428,
+    'missing revision cannot overwrite',
+  );
   assert.equal((await f.request(path, 'PUT', { ...update, revision: 2, step: 0 })).status, 200);
   assert.equal((await f.request(path)).value.step, 0, 'Back preserves the draft');
   assert.equal(
@@ -1015,10 +1030,11 @@ test('drafts retain distinct inputs and steps across navigation but never enter 
     (await reloaded.request('/api/campaigns/directory?filter=drafts')).value.items.length,
     2,
   );
-  assert.deepEqual(
-    (await reloaded.request(`/api/campaign-drafts/${draftId(1)}`)).value,
-    original[0],
-  );
+  assert.deepEqual((await reloaded.request(`/api/campaign-drafts/${draftId(1)}`)).value, {
+    ...original[0],
+    created_by: { id: 1, username: data.users[0].username, deleted: false },
+    edited_by: { id: 2, username: data.users[1].username, deleted: false },
+  });
 });
 
 test('incomplete drafts can be saved and deleted; rejected writes leave the confirmed draft unchanged', async () => {
@@ -1068,7 +1084,7 @@ test('incomplete drafts can be saved and deleted; rejected writes leave the conf
     (await f.request(`${path}/launch`, 'POST', { revision: 2, campaign: incomplete })).status,
     400,
   );
-  assert.equal((await f.request(`${path}?revision=1`, 'DELETE')).status, 409);
+  assert.equal((await f.request(`${path}?revision=1`, 'DELETE')).status, 412);
   assert.deepEqual((await f.request(path)).value, saved.value);
   assert.equal((await f.request(`${path}?revision=2`, 'DELETE')).status, 200);
   assert.equal((await f.request(path)).status, 404);
@@ -1120,7 +1136,7 @@ test('simulated launch reconciles reopening and retries without changing sample 
   };
   assert.equal(
     (await f.request(`${path}/launch`, 'POST', { ...request, revision: 2 })).status,
-    409,
+    412,
   );
   const launched = await f.request(`${path}/launch`, 'POST', request);
   assert.equal(launched.status, 200);
@@ -1144,9 +1160,9 @@ test('simulated launch reconciles reopening and retries without changing sample 
   assert.equal(
     (await f.request(path, 'PUT', { revision: 2, step: 0, configuration: original.configuration }))
       .status,
-    409,
+    412,
   );
-  assert.equal((await f.request(`${path}?revision=2`, 'DELETE')).status, 409);
+  assert.equal((await f.request(`${path}?revision=2`, 'DELETE')).status, 412);
   assert.ok(
     !(await f.request('/api/campaigns/directory?filter=drafts')).value.items.some(
       (r) => r.id === original.id,
@@ -1426,4 +1442,35 @@ test('client categories remain read-only across demo history, edits and exports'
   );
   const csv = await response.text();
   assert.ok(csv.includes('"edge","windows","desktop"'));
+});
+
+test('resource responses embed safe current, deleted and unknown attribution without account reads', async () => {
+  const data = dataset(now);
+  data.domains[0].created_by = 100;
+  data.domains[0].edited_by = data.users[1].id;
+  data.groups[0].created_by = 99999;
+  data.groups[0].edited_by = null;
+  data.groups[0].edited_at = null;
+  const f = setup(new Map(), data);
+  await f.login();
+  const get = async (path) => {
+    const response = await f.request(path);
+    assert.equal(response.status, 200, path);
+    return response.value;
+  };
+  const domain = await get('/api/domains/1');
+  assert.deepEqual(domain.created_by, { id: 100, username: 'Morgan Brooks', deleted: true });
+  assert.deepEqual(domain.edited_by, {
+    id: data.users[1].id,
+    username: data.users[1].username,
+    deleted: false,
+  });
+  assert.deepEqual((await get('/api/domains/'))[0], domain);
+  data.users[1].username = 'renamed.colleague';
+  assert.equal((await get('/api/domains/1')).edited_by.username, 'renamed.colleague');
+  const group = await get('/api/groups/1');
+  assert.deepEqual(group.created_by, { id: 99999, username: null, deleted: false });
+  assert.equal(group.edited_by, null);
+  assert.equal(group.edited_at, null);
+  assert.equal((await f.request('/api/authors')).status, 404);
 });

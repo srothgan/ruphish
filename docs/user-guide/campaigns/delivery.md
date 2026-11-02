@@ -20,6 +20,8 @@ Administrative history names the action taken: retry requested, resend requested
 | Sending unconfirmed | Acceptance may have happened; inspect the receiving system before deciding |
 | Cancelled | Work is no longer scheduled for submission |
 
+Messages use the campaign's frozen content, including on retries. Editing a template or sender identity cannot repair an already launched campaign's authored content; create a new campaign for that change. SMTP connection, credential and TLS changes remain available to recover delivery.
+
 ## Automatic retries
 
 Retryable failures allow eight retries after the initial attempt. Delays grow exponentially from two minutes with bounded positive jitter. Permanent rejection is not automatically retried. Profile connection/TLS/authentication problems can also trigger cooldown behavior.

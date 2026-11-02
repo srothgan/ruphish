@@ -1,4 +1,5 @@
 //! Legacy resource API mapping; authorization and CSRF share the account boundary.
+use crate::attribution::Lookup;
 use crate::auth::{AuthState, Context, Rejection, failure};
 use axum::{
     Router,
@@ -9,8 +10,9 @@ use axum::{
     routing::get,
 };
 use ruphish_application::resources::{self as app, Content, Kind, Resource};
+use ruphish_contracts::common;
 use ruphish_contracts::errors::ErrorCode;
-use ruphish_contracts::legacy as wire;
+use ruphish_contracts::resources::request as wire;
 use ruphish_contracts::{resource_details as details, resources as summaries_wire};
 
 pub(crate) fn routes() -> Router<AuthState> {
@@ -124,11 +126,7 @@ async fn import_group(
     }
     response(StatusCode::OK, &recipients(&targets), None)
 }
-#[derive(serde::Deserialize)]
-struct CsvRequest {
-    content: String,
-    columns: Option<[String; 4]>,
-}
+use ruphish_contracts::resources::request::CsvRequest;
 async fn review_group(context: Context, body: Bytes) -> Result<Response, Rejection> {
     editor_identity(&context).await?;
     let request: CsvRequest = parse(&body)?;
@@ -160,12 +158,7 @@ async fn review_group(context: Context, body: Bytes) -> Result<Response, Rejecti
         None,
     )
 }
-#[derive(serde::Deserialize)]
-struct EmailRequest {
-    content: String,
-    #[serde(default)]
-    convert_links: bool,
-}
+use ruphish_contracts::resources::request::EmailRequest;
 async fn import_email(context: Context, body: Bytes) -> Result<Response, Rejection> {
     editor_identity(&context).await?;
     let request: EmailRequest = parse(&body)?;
@@ -184,15 +177,8 @@ async fn import_email(context: Context, body: Bytes) -> Result<Response, Rejecti
         None,
     )
 }
-#[derive(serde::Deserialize)]
-struct SiteRequest {
-    url: String,
-}
-#[derive(serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-struct PageBundleRequest {
-    content: String,
-}
+use ruphish_contracts::resources::request::PageBundleRequest;
+use ruphish_contracts::resources::request::SiteRequest;
 async fn import_page_bundle(context: Context, body: Bytes) -> Result<Response, Rejection> {
     editor_identity(&context).await?;
     let request: PageBundleRequest = parse(&body)?;
@@ -214,12 +200,7 @@ async fn import_site(context: Context, body: Bytes) -> Result<Response, Rejectio
     editor_identity(&context).await?;
     response(StatusCode::OK, &summaries_wire::HtmlImport { html }, None)
 }
-#[derive(serde::Deserialize)]
-struct PreviewRequest {
-    html: String,
-    #[serde(default)]
-    recipient: wire::Recipient,
-}
+use ruphish_contracts::resources::request::PreviewRequest;
 async fn preview_learning(context: Context, body: Bytes) -> Result<Response, Rejection> {
     preview_page(context, body, true).await
 }
@@ -306,24 +287,7 @@ async fn preview(context: Context, body: Bytes) -> Result<Response, Rejection> {
         None,
     )
 }
-#[derive(serde::Deserialize)]
-struct TestRequest {
-    #[serde(default)]
-    template: wire::EmailTemplate,
-    #[serde(default)]
-    page: wire::LandingPage,
-    smtp: ruphish_contracts::resources::TestProfile,
-    #[serde(default)]
-    url: String,
-    #[serde(default)]
-    email: String,
-    #[serde(default)]
-    first_name: String,
-    #[serde(default)]
-    last_name: String,
-    #[serde(default)]
-    position: String,
-}
+use ruphish_contracts::resources::request::TestRequest;
 fn draft_profile(p: wire::SendingProfile) -> ruphish_application::delivery::ProfileSelection {
     ruphish_application::delivery::ProfileSelection::Draft {
         id: (p.id != 0).then_some(p.id),
@@ -338,14 +302,7 @@ fn profile(p: wire::SendingProfile) -> app::Profile<Option<String>> {
         password: p.password,
         from_address: p.from_address,
         ignore_cert_errors: p.ignore_cert_errors,
-        headers: p
-            .headers
-            .into_iter()
-            .map(|h| app::Header {
-                key: h.key,
-                value: h.value,
-            })
-            .collect(),
+        headers: p.headers,
     }
 }
 async fn send_test(context: Context, body: Bytes) -> Result<Response, Rejection> {
@@ -385,7 +342,7 @@ async fn send_test(context: Context, body: Bytes) -> Result<Response, Rejection>
         })?;
     response(
         StatusCode::OK,
-        &wire::Envelope::<()> {
+        &common::Envelope::<()> {
             success: true,
             message: "Email Sent".into(),
             data: None,
@@ -403,7 +360,7 @@ async fn test_connection(context: Context, body: Bytes) -> Result<Response, Reje
         .map_err(error)?;
     response(
         StatusCode::OK,
-        &wire::Envelope::<()> {
+        &common::Envelope::<()> {
             success: true,
             message: "SMTP connection verified".into(),
             data: None,
@@ -432,6 +389,7 @@ pub(crate) fn resource_code(error: &app::Error) -> ErrorCode {
         app::Error::NotFound(_) => ErrorCode::ResourceNotFound,
         app::Error::Conflict(_) => ErrorCode::ResourceNameTaken,
         app::Error::Changed => ErrorCode::ResourceChanged,
+        app::Error::RevisionRequired => ErrorCode::RevisionRequired,
         app::Error::InUse => ErrorCode::ResourceInUse,
         app::Error::Invalid(_) | app::Error::Validation(_) => ErrorCode::ResourceInvalid,
         app::Error::DraftSchedulePast => ErrorCode::DraftSchedulePast,
@@ -446,6 +404,7 @@ fn error_status(error: &app::Error) -> StatusCode {
         app::Error::NotFound(_) => StatusCode::NOT_FOUND,
         app::Error::Conflict(_) | app::Error::InUse => StatusCode::CONFLICT,
         app::Error::Changed => StatusCode::PRECONDITION_FAILED,
+        app::Error::RevisionRequired => StatusCode::PRECONDITION_REQUIRED,
         app::Error::FeatureDisabled(_) => StatusCode::CONFLICT,
         app::Error::Internal | app::Error::Storage(_) | app::Error::Delivery(_) => {
             StatusCode::INTERNAL_SERVER_ERROR
@@ -495,38 +454,14 @@ pub(crate) fn error(error: app::Error) -> Rejection {
     }
 }
 fn expected(context: &Context) -> Result<Option<String>, Rejection> {
-    context
-        .headers
-        .get(header::IF_MATCH)
-        .map(|h| {
-            let value = h.to_str().map_err(|_| {
-                failure(
-                    StatusCode::BAD_REQUEST,
-                    ErrorCode::RevisionRequired,
-                    "Invalid If-Match header",
-                )
-            })?;
-            value
-                .strip_prefix('"')
-                .and_then(|v| v.strip_suffix('"'))
-                .filter(|v| !v.contains('"'))
-                .map(str::to_owned)
-                .ok_or_else(|| {
-                    failure(
-                        StatusCode::BAD_REQUEST,
-                        ErrorCode::RevisionRequired,
-                        "Use the ETag returned when loading this resource",
-                    )
-                })
-        })
-        .transpose()
+    crate::revision::optional(&context.headers).map(|v| v.map(|v| v.to_string()))
 }
 pub(crate) fn response<T: serde::Serialize>(
     status: StatusCode,
     value: &T,
     revision: Option<&str>,
 ) -> Result<Response, Rejection> {
-    let bytes = wire::json(value).map_err(|_| error(app::Error::Internal))?;
+    let bytes = common::json(value).map_err(|_| error(app::Error::Internal))?;
     let mut response =
         (status, [(header::CONTENT_TYPE, "application/json")], bytes).into_response();
     if let Some(revision) = revision {
@@ -539,9 +474,11 @@ pub(crate) fn response<T: serde::Serialize>(
     }
     Ok(response)
 }
-pub(crate) fn encode(r: &Resource) -> details::Resource {
+pub(crate) fn encode(r: &Resource, lookup: &Lookup) -> details::Resource {
     details::Resource {
         metadata: details::Metadata {
+            attribution: lookup.resolve(&r.attribution),
+            revision: r.revision,
             id: r.id,
             name: r.name.clone(),
             modified_date: crate::response::stored_date(&r.modified_date),
@@ -560,7 +497,7 @@ pub(crate) fn encode(r: &Resource) -> details::Resource {
                     .iter()
                     .map(|a| details::Attachment {
                         name: a.name.clone(),
-                        mime: a.mime_type.clone(),
+                        mime_type: a.mime_type.clone(),
                         content: a.content.clone(),
                     })
                     .collect(),
@@ -581,14 +518,7 @@ pub(crate) fn encode(r: &Resource) -> details::Resource {
                 host: p.host.clone(),
                 from_address: p.from_address.clone(),
                 ignore_cert_errors: p.ignore_cert_errors,
-                headers: p
-                    .headers
-                    .iter()
-                    .map(|h| details::Header {
-                        key: h.key.clone(),
-                        value: h.value.clone(),
-                    })
-                    .collect(),
+                headers: p.headers.clone(),
                 username: (!p.username.is_empty()).then(|| p.username.clone()),
                 has_password: !p.password.is_empty(),
             }),
@@ -604,7 +534,7 @@ pub(crate) fn warnings(values: Vec<app::PageWarning>) -> Vec<details::PageWarnin
         })
         .collect()
 }
-fn decode(kind: Kind, bytes: &[u8]) -> Result<app::Input, Rejection> {
+fn decode(kind: Kind, bytes: &[u8]) -> Result<(i64, app::Input), Rejection> {
     let invalid = |_| {
         failure(
             StatusCode::BAD_REQUEST,
@@ -615,94 +545,89 @@ fn decode(kind: Kind, bytes: &[u8]) -> Result<app::Input, Rejection> {
     match kind {
         Kind::Group => {
             let v: wire::Group = serde_json::from_slice(bytes).map_err(invalid)?;
-            Ok(Resource {
-                id: v.id,
-                name: v.name,
-                modified_date: String::new(),
-                content: Content::Group(
-                    v.targets
-                        .into_iter()
-                        .map(|t| app::Recipient {
-                            email: t.email,
-                            first_name: t.first_name,
-                            last_name: t.last_name,
-                            position: t.position,
-                        })
-                        .collect(),
-                ),
-            })
+            Ok((
+                v.id,
+                app::Input {
+                    name: v.name,
+                    content: Content::Group(
+                        v.targets
+                            .into_iter()
+                            .map(|t| app::Recipient {
+                                email: t.email,
+                                first_name: t.first_name,
+                                last_name: t.last_name,
+                                position: t.position,
+                            })
+                            .collect(),
+                    ),
+                },
+            ))
         }
         Kind::Template => {
             let v: wire::EmailTemplate = serde_json::from_slice(bytes).map_err(invalid)?;
-            Ok(Resource {
-                id: v.id,
-                name: v.name,
-                modified_date: String::new(),
-                content: Content::Template(app::Template {
-                    subject: v.subject,
-                    text: v.text,
-                    html: v.html,
-                    envelope_sender: v.envelope_sender,
-                    attachments: v
-                        .attachments
-                        .into_iter()
-                        .map(|a| app::Attachment {
-                            name: a.name,
-                            mime_type: a.mime_type,
-                            content: a.content,
-                        })
-                        .collect(),
-                }),
-            })
+            Ok((
+                v.id,
+                app::Input {
+                    name: v.name,
+                    content: Content::Template(app::Template {
+                        subject: v.subject,
+                        text: v.text,
+                        html: v.html,
+                        envelope_sender: v.envelope_sender,
+                        attachments: v
+                            .attachments
+                            .into_iter()
+                            .map(|a| app::Attachment {
+                                name: a.name,
+                                mime_type: a.mime_type,
+                                content: a.content,
+                            })
+                            .collect(),
+                    }),
+                },
+            ))
         }
         Kind::LearningPage => {
-            let v: ruphish_contracts::resources::LearningPageInput =
+            let v: ruphish_contracts::resources::request::LearningPage =
                 serde_json::from_slice(bytes).map_err(invalid)?;
-            Ok(Resource {
-                id: v.id,
-                name: v.name,
-                modified_date: String::new(),
-                content: Content::LearningPage(app::LearningPage {
-                    html: v.html,
-                    public_id: String::new(),
-                }),
-            })
+            Ok((
+                v.id,
+                app::Input {
+                    name: v.name,
+                    content: Content::LearningPage(app::LearningPageInput { html: v.html }),
+                },
+            ))
         }
         Kind::Page => {
             let v: wire::LandingPage = serde_json::from_slice(bytes).map_err(invalid)?;
-            Ok(Resource {
-                id: v.id,
-                name: v.name,
-                modified_date: String::new(),
-                content: Content::Page(app::Page {
-                    html: v.html,
-                    redirect_url: v.redirect_url,
-                }),
-            })
+            Ok((
+                v.id,
+                app::Input {
+                    name: v.name,
+                    content: Content::Page(app::Page {
+                        html: v.html,
+                        redirect_url: v.redirect_url,
+                    }),
+                },
+            ))
         }
         Kind::Profile => {
             let v: wire::SendingProfile = serde_json::from_slice(bytes).map_err(invalid)?;
-            Ok(Resource {
-                id: v.id,
-                name: v.name,
-                modified_date: String::new(),
-                content: Content::Profile(app::Profile {
-                    interface_type: v.interface_type,
-                    host: v.host,
-                    username: v.username,
-                    password: v.password,
-                    from_address: v.from_address,
-                    ignore_cert_errors: v.ignore_cert_errors,
-                    headers: v
-                        .headers
-                        .into_iter()
-                        .map(|h| app::Header {
-                            key: h.key,
-                            value: h.value,
-                        })
-                        .collect(),
-                }),
-            })
+            Ok((
+                v.id,
+                app::Input {
+                    name: v.name,
+                    content: Content::Profile(app::Profile {
+                        interface_type: v.interface_type,
+                        host: v.host,
+                        username: v.username,
+                        password: v.password,
+                        from_address: v.from_address,
+                        ignore_cert_errors: v.ignore_cert_errors,
+                        headers: v.headers,
+                    }),
+                },
+            ))
         }
     }
 }
@@ -732,9 +657,13 @@ async fn list(context: Context) -> Result<Response, Rejection> {
         .list(user.identity, kind(&context)?)
         .await
         .map_err(error)?;
+    let lookup = Lookup::load(&context, values.iter().map(|v| &v.attribution)).await?;
     response(
         StatusCode::OK,
-        &values.iter().map(encode).collect::<Vec<_>>(),
+        &values
+            .iter()
+            .map(|v| encode(v, &lookup))
+            .collect::<Vec<_>>(),
         None,
     )
 }
@@ -745,7 +674,8 @@ async fn read(context: Context, Path(id): Path<i64>) -> Result<Response, Rejecti
         .get(user.identity, kind(&context)?, id)
         .await
         .map_err(error)?;
-    let mut wire = encode(&value);
+    let lookup = Lookup::load(&context, [&value.attribution]).await?;
+    let mut wire = encode(&value, &lookup);
     if let details::Content::Page(page) = &mut wire.content {
         page.warnings = Some(warnings(
             context
@@ -764,7 +694,7 @@ async fn read(context: Context, Path(id): Path<i64>) -> Result<Response, Rejecti
         page.preview_html = Some(html);
         page.warnings = Some(warnings(findings));
     }
-    response(StatusCode::OK, &wire, Some(&value.modified_date))
+    response(StatusCode::OK, &wire, Some(&value.revision.to_string()))
 }
 async fn create(context: Context, body: Bytes) -> Result<Response, Rejection> {
     save(context, None, body).await
@@ -784,8 +714,8 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
             .await
             .map_err(error)?;
     }
-    let value = decode(kind, &body)?;
-    if id.is_some_and(|id| value.id != id) {
+    let (request_id, value) = decode(kind, &body)?;
+    if id.is_some_and(|id| request_id != id) {
         return Err(failure(
             if kind == Kind::Group {
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -806,7 +736,9 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
         .save(user.identity, value, id, expected(&context)?)
         .await
         .map_err(error)?;
-    let mut wire = encode(&saved);
+    let lookup = Lookup::from_identities(saved.identities);
+    let saved = saved.record;
+    let mut wire = encode(&saved, &lookup);
     match &mut wire.content {
         details::Content::Page(page) => page.warnings = Some(warnings(findings)),
         details::Content::LearningPage(page) => page.warnings = Some(warnings(findings)),
@@ -819,7 +751,7 @@ async fn save(context: Context, id: Option<i64>, body: Bytes) -> Result<Response
             StatusCode::CREATED
         },
         &wire,
-        Some(&saved.modified_date),
+        Some(&saved.revision.to_string()),
     )
 }
 async fn delete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejection> {
@@ -839,7 +771,7 @@ async fn delete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejec
     };
     response(
         StatusCode::OK,
-        &wire::Envelope::<()> {
+        &common::Envelope::<()> {
             success: true,
             message: message.into(),
             data: None,
@@ -847,8 +779,13 @@ async fn delete(context: Context, Path(id): Path<i64>) -> Result<Response, Rejec
         None,
     )
 }
-fn group_summary_value(s: &app::Summary) -> Result<summaries_wire::GroupSummary, Rejection> {
+fn group_summary_value(
+    s: &app::Summary,
+    lookup: &Lookup,
+) -> Result<summaries_wire::GroupSummary, Rejection> {
     Ok(summaries_wire::GroupSummary {
+        attribution: lookup.resolve(&s.attribution),
+        revision: s.revision,
         id: s.id,
         name: s.name.clone(),
         modified_date: crate::response::stored_date(&s.modified_date),
@@ -858,8 +795,13 @@ fn group_summary_value(s: &app::Summary) -> Result<summaries_wire::GroupSummary,
             .map_err(|_| error(app::Error::Internal))?,
     })
 }
-fn resource_summary(s: &app::Summary) -> Result<summaries_wire::ResourceSummary, Rejection> {
+fn resource_summary(
+    s: &app::Summary,
+    lookup: &Lookup,
+) -> Result<summaries_wire::ResourceSummary, Rejection> {
     Ok(summaries_wire::ResourceSummary {
+        attribution: lookup.resolve(&s.attribution),
+        revision: s.revision,
         id: s.id,
         name: s.name.clone(),
         modified_date: crate::response::stored_date(&s.modified_date),
@@ -877,10 +819,11 @@ async fn summaries(context: Context) -> Result<Response, Rejection> {
         .summaries(user.identity, kind, None)
         .await
         .map_err(error)?;
+    let lookup = Lookup::load(&context, values.iter().map(|v| &v.attribution)).await?;
     if kind == Kind::Group {
         let groups = values
             .iter()
-            .map(group_summary_value)
+            .map(|v| group_summary_value(v, &lookup))
             .collect::<Result<Vec<_>, _>>()?;
         response(
             StatusCode::OK,
@@ -893,7 +836,7 @@ async fn summaries(context: Context) -> Result<Response, Rejection> {
     } else {
         let items = values
             .iter()
-            .map(resource_summary)
+            .map(|v| resource_summary(v, &lookup))
             .collect::<Result<Vec<_>, _>>()?;
         response(
             StatusCode::OK,
@@ -915,5 +858,6 @@ async fn group_summary(context: Context, Path(id): Path<i64>) -> Result<Response
     let value = values
         .first()
         .ok_or_else(|| error(app::Error::NotFound("Group")))?;
-    response(StatusCode::OK, &group_summary_value(value)?, None)
+    let lookup = Lookup::load(&context, [&value.attribution]).await?;
+    response(StatusCode::OK, &group_summary_value(value, &lookup)?, None)
 }

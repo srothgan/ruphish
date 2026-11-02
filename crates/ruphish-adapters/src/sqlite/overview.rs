@@ -1,4 +1,4 @@
-//! Owner-scoped dashboard aggregation over the existing database. Read-only, and
+//! Shared dashboard aggregation over the existing database. Read-only, and
 //! never reads entered participant values: credentials-entered counts only the
 //! stored password-presence boolean.
 use ruphish_application::{auth::Identity, overview::*, resources::Error};
@@ -23,15 +23,13 @@ impl Repository for Overview {
     async fn snapshot(&self, caller: Identity, now: i64) -> Result<Snapshot, Error> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         super::resources::authorize(&mut tx, caller, false).await?;
-        let owner = caller.id;
 
         // Recent campaigns, newest first, with audience size.
         let rows = sqlx::query(
             "SELECT id,name,status,launch_date,\
              (SELECT count(*) FROM results r WHERE r.campaign_id=c.id) AS total \
-             FROM campaigns c WHERE user_id=? ORDER BY id DESC LIMIT 5",
+             FROM campaigns c  ORDER BY id DESC LIMIT 5",
         )
-        .bind(owner)
         .fetch_all(&mut *tx)
         .await
         .map_err(storage)?;
@@ -49,55 +47,42 @@ impl Repository for Overview {
                     .map_err(storage)?
                     .unwrap_or_default(),
                 recipients: r.try_get("total").map_err(storage)?,
-                outcomes: aggregate(
-                    &mut tx,
-                    owner,
-                    None,
-                    now,
-                    Some(r.try_get("id").map_err(storage)?),
-                )
-                .await?,
+                outcomes: aggregate(&mut tx, None, now, Some(r.try_get("id").map_err(storage)?))
+                    .await?,
             });
         }
 
-        // Resource inventory. Each owner-scoped count is an explicit literal query.
+        // Resource inventory. Each installation-wide count is an explicit literal query.
         let inventory = Inventory {
             reporting_mailboxes: sqlx::query_scalar(
-                "SELECT count(*) FROM ruphish_mailboxes WHERE owner_id=?",
+                "SELECT count(*) FROM ruphish_mailboxes ",
             )
-            .bind(owner)
             .fetch_one(&mut *tx)
             .await
             .map_err(storage)?,
             templates: sqlx::query_scalar(super::inventory_sql::TEMPLATES)
-                .bind(owner)
                 .fetch_one(&mut *tx)
                 .await
                 .map_err(storage)?,
             pages: sqlx::query_scalar(super::inventory_sql::PAGES)
-                .bind(owner)
                 .fetch_one(&mut *tx)
                 .await
                 .map_err(storage)?,
             groups: sqlx::query_scalar(super::inventory_sql::GROUPS)
-                .bind(owner)
                 .fetch_one(&mut *tx)
                 .await
                 .map_err(storage)?,
             profiles: sqlx::query_scalar(super::inventory_sql::PROFILES)
-                .bind(owner)
                 .fetch_one(&mut *tx)
                 .await
                 .map_err(storage)?,
-            domains: sqlx::query_scalar("SELECT count(*) FROM ruphish_domains WHERE owner_id=?")
-                .bind(owner)
+            domains: sqlx::query_scalar("SELECT count(*) FROM ruphish_domains ")
                 .fetch_one(&mut *tx)
                 .await
                 .map_err(storage)?,
             domains_verified: sqlx::query_scalar(
-                "SELECT count(*) FROM ruphish_domains WHERE owner_id=? AND (SELECT verification_required FROM ruphish_domain_policy WHERE id=ruphish_domains.id) AND (SELECT eligible_until FROM ruphish_domain_policy WHERE id=ruphish_domains.id)>?",
+                "SELECT count(*) FROM ruphish_domains WHERE (SELECT verification_required FROM ruphish_domain_policy WHERE id=ruphish_domains.id) AND (SELECT eligible_until FROM ruphish_domain_policy WHERE id=ruphish_domains.id)>?",
             )
-            .bind(owner)
             .bind(now)
             .fetch_one(&mut *tx)
             .await
@@ -106,29 +91,26 @@ impl Repository for Overview {
 
         // Attention items.
         let unverified_enabled_domains: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM ruphish_domains WHERE owner_id=? AND enabled=1 AND (SELECT verification_required FROM ruphish_domain_policy WHERE id=ruphish_domains.id) AND (SELECT eligible_until FROM ruphish_domain_policy WHERE id=ruphish_domains.id)<=?",
+            "SELECT count(*) FROM ruphish_domains WHERE enabled=1 AND (SELECT verification_required FROM ruphish_domain_policy WHERE id=ruphish_domains.id) AND (SELECT eligible_until FROM ruphish_domain_policy WHERE id=ruphish_domains.id)<=?",
         )
-        .bind(owner)
         .bind(now)
         .fetch_one(&mut *tx)
         .await
         .map_err(storage)?;
         let delivery_problems: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM ruphish_delivery d JOIN campaigns c ON c.id=d.campaign_id \
-             WHERE c.user_id=? AND c.status!='Completed' AND d.state IN ('failed','blocked','unknown')",
+             WHERE c.status!='Completed' AND d.state IN ('failed','blocked','unknown')",
         )
-        .bind(owner)
         .fetch_one(&mut *tx)
         .await
         .map_err(storage)?;
-        let campaign_ids: Vec<i64> = sqlx::query_scalar("SELECT DISTINCT c.id FROM campaigns c JOIN ruphish_delivery d ON d.campaign_id=c.id WHERE c.user_id=? AND c.status!='Completed' AND d.state IN ('failed','blocked','unknown') ORDER BY c.id LIMIT 10")
-            .bind(owner).fetch_all(&mut *tx).await.map_err(storage)?;
+        let campaign_ids: Vec<i64> = sqlx::query_scalar("SELECT DISTINCT c.id FROM campaigns c JOIN ruphish_delivery d ON d.campaign_id=c.id WHERE c.status!='Completed' AND d.state IN ('failed','blocked','unknown') ORDER BY c.id LIMIT 10")
+            .fetch_all(&mut *tx).await.map_err(storage)?;
         let next_launch = sqlx::query(
             "SELECT id,name,launch_date FROM campaigns \
-             WHERE user_id=? AND status!='Completed' AND unixepoch(launch_date)>? \
+             WHERE status!='Completed' AND unixepoch(launch_date)>? \
              ORDER BY unixepoch(launch_date),id LIMIT 1",
         )
-        .bind(owner)
         .bind(now)
         .fetch_optional(&mut *tx)
         .await
@@ -163,13 +145,13 @@ impl Repository for Overview {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         super::resources::authorize(&mut tx, caller, false).await?;
         let since = window.since(now);
-        let counts = aggregate(&mut tx, caller.id, since, now, None).await?;
+        let counts = aggregate(&mut tx, since, now, None).await?;
         let previous = if let Some(until) = since {
             let start = until - (now - until);
             Some(PreviousPeriod {
                 since: start,
                 until,
-                counts: aggregate(&mut tx, caller.id, Some(start), until - 1, None).await?,
+                counts: aggregate(&mut tx, Some(start), until - 1, None).await?,
             })
         } else {
             None
@@ -184,7 +166,6 @@ impl Repository for Overview {
 /// progression from evidence without changing the recorded history.
 async fn aggregate(
     connection: &mut sqlx::SqliteConnection,
-    owner: i64,
     since: Option<i64>,
     now: i64,
     campaign: Option<i64>,
@@ -196,24 +177,23 @@ async fn aggregate(
         WITH identities AS (
             SELECT r.campaign_id,r.email,r.id
             FROM results r JOIN campaigns c ON c.id=r.campaign_id
-            WHERE c.user_id=?1 AND (?4 IS NULL OR c.id=?4)
+            WHERE (?3 IS NULL OR c.id=?3)
         ), accepted AS (
             SELECT i.*,min(unixepoch(e.time)) AS first_sent
             FROM identities i JOIN event_history e ON e.campaign_id=i.campaign_id AND e.recipient_id=i.id
-            WHERE e.message='Email Sent' AND unixepoch(e.time)<=?3
+            WHERE e.message='Email Sent' AND unixepoch(e.time)<=?2
             GROUP BY i.id
         ), cohort AS (
-            SELECT * FROM accepted WHERE (?2 IS NULL OR first_sent>=?2)
+            SELECT * FROM accepted WHERE (?1 IS NULL OR first_sent>=?1)
         ), outcomes AS (
             SELECT c.id, {flags}
             FROM cohort c LEFT JOIN event_history e ON e.campaign_id=c.campaign_id AND e.recipient_id=c.id
-                AND unixepoch(e.time)<=?3
+                AND unixepoch(e.time)<=?2
             GROUP BY c.id
         )
         {groups}
     "#,
     )))
-    .bind(owner)
     .bind(since)
     .bind(now)
     .bind(campaign)

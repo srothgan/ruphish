@@ -26,7 +26,7 @@ Templates provide personalized email content. They are separate from the SMTP co
 }
 ```
 
-Send the body to `POST /api/templates/`. The response adds `id` and `modified_date`. A PUT must include the matching `id`; use the ETag for a conditional edit.
+Send the body to `POST /api/templates/`. The response adds `id`, `revision` and `modified_date`. A PUT must include the matching `id`; send the returned ETag as `If-Match`.
 
 HTML tracking is inserted automatically during composition; it is not added to stored source or shown in previews. Legacy tracking expressions remain supported. See [email tracking](../contributing/email-tracking.md) for validation and compatibility details.
 
@@ -35,3 +35,5 @@ HTML tracking is inserted automatically during composition; it is not added to s
 An attachment contains `name`, `type` (media type), and `content` (base64). `attachments` is an array; `[]` means no attachments. File types have different rendering and size rules; see [attachments](../user-guide/attachments.md).
 
 Template syntax is not limited to variable substitution, and HTML is not automatically escaped. Read the [template reference](../user-guide/template-reference.md) before placing untrusted text into HTML. Use [imports and previews](imports-and-previews.md) to inspect MIME content or render a preview before saving.
+
+PUT and DELETE require the returned quoted numeric ETag in `If-Match`. Missing preconditions return `428`; stale revisions return `412` without changing saved data. See [conditional resource writes](conventions.md#updating-a-resource) for the full contract and conflict recovery.

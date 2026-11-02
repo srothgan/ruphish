@@ -676,41 +676,23 @@ async fn summaries(inspect: &mut Inspector) {
                 Inspector::Postgres(_) => summary_sql::Dialect::Postgres,
             };
             let statement = summary_sql::query(kind, table, dialect);
-            for (owner, id) in [
-                (1, None),
-                (1, Some(10)),
-                (1, Some(11)),
-                (1, Some(20)),
-                (1, Some(999)),
-                (3, None),
-            ] {
+            // Detail cost stays bounded by the selected resource, across creators.
+            for id in [Some(10), Some(11), Some(999)] {
                 let value = id.unwrap_or(-999);
-                let sql = bound(&statement, &[owner, value, value]).replace("-999", "NULL");
-                let expected = if owner == 3 {
-                    vec![]
-                } else {
-                    match (kind, id) {
-                        (Kind::Group, None) => vec![(10, 0), (11, 2)],
-                        (Kind::Group, Some(10)) => vec![(10, 0)],
-                        (Kind::Group, Some(11)) => vec![(11, 2)],
-                        (_, None) => vec![(10, 4), (11, 0)],
-                        (_, Some(10)) => vec![(10, 4)],
-                        (_, Some(11)) => vec![(11, 0)],
-                        _ => vec![],
-                    }
+                let sql = bound(&statement, &[value, value]).replace("-999", "NULL");
+                let expected = match (kind, id) {
+                    (Kind::Group, Some(10)) => vec![(10, 0)],
+                    (Kind::Group, Some(11)) => vec![(11, 2)],
+                    (_, Some(10)) => vec![(10, 4)],
+                    (_, Some(11)) => vec![(11, 0)],
+                    _ => vec![],
                 };
-                assert_eq!(
-                    inspect.totals(&sql).await,
-                    expected,
-                    "{kind:?}, owner={owner}, id={id:?}"
-                );
+                assert_eq!(inspect.totals(&sql).await, expected, "{kind:?}, id={id:?}");
                 sample.push(
                     inspect
                         .measure(
                             &sql,
-                            &format!(
-                                "summary {kind:?}, owner={owner}, id={id:?}, unrelated={size}"
-                            ),
+                            &format!("summary {kind:?}, id={id:?}, unrelated={size}"),
                         )
                         .await,
                 );
@@ -971,47 +953,21 @@ async fn inventory(inspect: &mut Inspector) {
             ])
             .await;
         let mut sample = Vec::new();
-        for (i, statement) in statements.iter().enumerate() {
-            for owner in [1, 3] {
-                let sql = bound(statement, &[owner]);
-                assert_eq!(inspect.scalar(&sql).await, if owner == 1 { 2 } else { 0 });
-                sample.push(
-                    inspect
-                        .measure(
-                            &sql,
-                            &format!("inventory {i}, owner={owner}, unrelated={size}"),
-                        )
-                        .await,
-                );
-            }
+        // Shared inventory intentionally counts the entire installation.
+        for statement in statements {
+            assert_eq!(inspect.scalar(statement).await, 3 + size);
         }
-        for (owner, id) in [
-            (1, None),
-            (1, Some(10)),
-            (1, Some(11)),
-            (1, Some(20)),
-            (1, Some(999)),
-            (3, None),
-        ] {
-            let predicate = id.map_or(String::new(), |id| format!(" AND d.id={id}"));
-            let sql = format!("{domains} WHERE d.owner_id={owner}{predicate} ORDER BY d.id");
-            let expected = if owner == 3 {
-                vec![]
-            } else {
-                match id {
-                    None => vec![(10, 3), (11, 0)],
-                    Some(10) => vec![(10, 3)],
-                    Some(11) => vec![(11, 0)],
-                    _ => vec![],
-                }
+        for id in [10, 11, 999] {
+            let sql = format!("{domains} WHERE d.id={id} ORDER BY d.id");
+            let expected = match id {
+                10 => vec![(10, 3)],
+                11 => vec![(11, 0)],
+                _ => vec![],
             };
             assert_eq!(inspect.counts(&sql, "campaigns").await, expected);
             sample.push(
                 inspect
-                    .measure(
-                        &sql,
-                        &format!("domain owner={owner}, id={id:?}, unrelated={size}"),
-                    )
+                    .measure(&sql, &format!("domain id={id:?}, unrelated={size}"))
                     .await,
             );
         }

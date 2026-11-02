@@ -2,24 +2,17 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// Preserved resource endpoint family.
-#[derive(Clone, Copy)]
-pub enum Kind {
-    /// Recipient groups.
-    Group,
-    /// Email templates.
-    Template,
-    /// Landing pages.
-    Page,
-    /// Static learning pages.
-    LearningPage,
-    /// Sending profiles.
-    Profile,
-}
+pub use ruphish_domain::resources::Kind;
 
 /// Confirmed identity and revision metadata shared by all resource families.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Metadata {
+    /// Server-assigned creator and last-editor attribution.
+    #[serde(flatten)]
+    pub attribution: crate::attribution::Attribution,
+    /// Monotonic configuration revision used for conditional writes.
+    pub revision: i64,
+
     /// Persistent resource identity.
     pub id: i64,
     /// Display name.
@@ -83,17 +76,7 @@ pub struct Group {
     /// Ordered recipient records.
     pub targets: Vec<Recipient>,
 }
-/// Complete attachment content.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Attachment {
-    /// Filename.
-    pub name: String,
-    /// Media type.
-    #[serde(rename = "type")]
-    pub mime: String,
-    /// Base64 content.
-    pub content: String,
-}
+pub use crate::resources::fields::{Attachment, Header};
 /// Complete email template.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Template {
@@ -132,14 +115,6 @@ pub struct LearningPage {
     /// Advisory findings, when supplied.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub warnings: Option<Vec<PageWarning>>,
-}
-/// Custom email header.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Header {
-    /// Header name.
-    pub key: String,
-    /// Header value expression.
-    pub value: String,
 }
 /// Complete sending-profile fields returned to an authorized administrator.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -185,7 +160,7 @@ mod tests {
 
     #[test]
     fn page_reads_preserve_diagnostics_and_require_complete_defaults() {
-        let page = json!({"id":7,"name":"Landing","modified_date":null,"html":"<p>Training</p>","redirect_url":"https://training.example.test/","warnings":[{"code":"unsupported-control","control":2}]});
+        let page = json!({"revision":1,"created_by":null,"edited_by":null,"edited_at":null,"id":7,"name":"Landing","modified_date":null,"html":"<p>Training</p>","redirect_url":"https://training.example.test/","warnings":[{"code":"unsupported-control","control":2}]});
         let resource = decode(Kind::Page, page.clone()).unwrap();
         assert_eq!(resource.metadata.id, 7);
         assert_eq!(serde_json::to_value(resource).unwrap(), page);
@@ -201,7 +176,7 @@ mod tests {
 
     #[test]
     fn learning_reads_keep_prepared_preview_separate_from_authored_content() {
-        let page = json!({"id":8,"name":"Learning","modified_date":null,"html":"authored","public_id":"public-page","preview_html":"prepared","warnings":[{"code":"script","control":null}]});
+        let page = json!({"revision":1,"created_by":null,"edited_by":null,"edited_at":null,"id":8,"name":"Learning","modified_date":null,"html":"authored","public_id":"public-page","preview_html":"prepared","warnings":[{"code":"script","control":null}]});
         let resource = decode(Kind::LearningPage, page.clone()).unwrap();
         assert_eq!(serde_json::to_value(resource).unwrap(), page);
         let mut acknowledgement = page;
@@ -213,11 +188,39 @@ mod tests {
     }
 
     #[test]
+    fn attribution_references_are_complete_typed_response_values() {
+        let base = json!({"revision":1,"id":7,"name":"Group","modified_date":null,"targets":[],"created_by":{"id":2,"username":"colleague","deleted":true},"edited_by":null,"edited_at":null});
+        let resource = decode(Kind::Group, base.clone()).unwrap();
+        assert_eq!(serde_json::to_value(resource).unwrap(), base);
+        for invalid in [
+            json!(2),
+            json!({"id":2,"deleted":true}),
+            json!({"id":2,"username":"colleague"}),
+            json!({"id":2,"username":"colleague","deleted":"true"}),
+        ] {
+            let mut value = base.clone();
+            value["created_by"] = invalid;
+            assert!(decode(Kind::Group, value).is_err());
+        }
+        let mut unknown = base;
+        unknown["created_by"] = json!({"id":99999,"username":null,"deleted":false});
+        assert!(decode(Kind::Group, unknown).is_ok());
+    }
+
+    #[test]
     fn missing_resource_fields_are_not_valid_blank_drafts() {
-        let group =
-            json!({"id":1,"name":"Audience","modified_date":"2026-10-21T12:00:00Z","targets":[]});
+        let group = json!({"revision":1,"created_by":null,"edited_by":null,"edited_at":null,"id":1,"name":"Audience","modified_date":"2026-10-21T12:00:00Z","targets":[]});
         assert!(decode(Kind::Group, group.clone()).is_ok());
-        for field in ["id", "name", "modified_date", "targets"] {
+        for field in [
+            "id",
+            "revision",
+            "name",
+            "modified_date",
+            "targets",
+            "created_by",
+            "edited_by",
+            "edited_at",
+        ] {
             let mut broken = group.clone();
             broken.as_object_mut().map(|v| v.remove(field));
             assert!(decode(Kind::Group, broken).is_err());

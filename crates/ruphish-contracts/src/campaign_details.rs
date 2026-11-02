@@ -5,6 +5,10 @@ use serde::{Deserialize, Serialize};
 /// Campaign identity, lifecycle and preserved schedule metadata.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Metadata {
+    /// Server-assigned creator and last-editor attribution.
+    #[serde(flatten)]
+    pub attribution: crate::attribution::Attribution,
+
     /// Whether this campaign collects email-open observations.
     pub track_opens: bool,
     /// Execution identity.
@@ -27,7 +31,7 @@ pub struct Metadata {
     pub completed_date: Option<String>,
 }
 
-/// Current referenced resources and the immutable campaign audience.
+/// Frozen authored resources and the immutable campaign audience.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Campaign {
     /// Shared execution metadata.
@@ -35,11 +39,11 @@ pub struct Campaign {
     pub metadata: Metadata,
     /// Public campaign URL.
     pub url: String,
-    /// Current template; unavailable resources have explicit empty records.
+    /// Frozen template; unavailable imported resources have explicit empty records.
     pub template: resource::Resource<resource::Template>,
-    /// Current landing page.
+    /// Frozen landing page.
     pub page: resource::Resource<resource::Page>,
-    /// Current SMTP settings, never the stored password.
+    /// Frozen sender identity with current transport settings, never the stored password.
     pub smtp: resource::Resource<resource::Profile>,
     /// Audience snapshots; an empty audience is omitted in this projection.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -125,7 +129,7 @@ pub struct Summary {
     pub stats: Counts,
 }
 
-/// Owner-scoped campaign summaries.
+/// Shared campaign summaries.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Summaries {
     /// Number of returned campaigns.

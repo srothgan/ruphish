@@ -25,7 +25,7 @@ async fn group_summary_work_does_not_scale_with_unrelated_memberships()
     ).execute(&pool).await?;
     let repository = Resources::new(pool.clone());
     let owner = Identity { id: 1, epoch: 0 };
-    let selections = [None, Some(10), Some(11), Some(20), Some(999)];
+    let selections = [Some(10), Some(11), Some(999)];
     // Warm the actual statement cache before measuring execution, excluding setup.
     for id in selections {
         repository.summaries(owner, Kind::Group, id).await?;
@@ -75,7 +75,6 @@ async fn group_summary_work_does_not_scale_with_unrelated_memberships()
                 "EXPLAIN QUERY PLAN {}",
                 summary_query(Kind::Group)
             )))
-            .bind(owner.id)
             .bind(id)
             .bind(id)
             .fetch_all(&pool)
