@@ -158,6 +158,7 @@ if (
   scenario === 'history-domain' ||
   scenario.startsWith('integration-') ||
   scenario === 'campaign-wizard' ||
+  scenario === 'sort-directory' ||
   scenario.endsWith('-attribution') ||
   scenario.startsWith('conflict-') ||
   scenario === 'deleted-group' ||
@@ -604,6 +605,7 @@ async function until(condition) {
     if (
       (scenario.startsWith('auth-') ||
         scenario === 'campaign-wizard' ||
+        scenario === 'sort-directory' ||
         recoveryPath ||
         scenario.startsWith('delete-conflict') ||
         scenario.startsWith('empty-') ||
@@ -619,7 +621,7 @@ async function until(condition) {
         .map((node) => node.textContent)
         .join(' | ');
       assert.fail(
-        `Wizard did not settle at ${win.location.pathname}, ${current}: ${condition}. ${feedback}`,
+        `UI scenario ${scenario} did not settle at ${win.location.pathname}, ${current}: ${condition}. ${feedback}`,
       );
     }
     await nextTurn();
@@ -2021,6 +2023,10 @@ if (scenario === 'sort-directory') {
     );
   const firstLink = () =>
     document.querySelector('.management-table tbody th a')?.getAttribute('href');
+  const rowLinks = () =>
+    [...document.querySelectorAll('.management-table tbody th a')].map((a) =>
+      a.getAttribute('href'),
+    );
   const lastRequest = () =>
     new URL(
       requests.filter((r) => r.startsWith('/api/campaigns/directory?')).at(-1),
@@ -2031,6 +2037,7 @@ if (scenario === 'sort-directory') {
   assert.equal(lastRequest().searchParams.get('sort'), 'recent');
   assert.equal(lastRequest().searchParams.get('order'), 'desc');
   assert.match(firstLink(), /^\/campaigns\/drafts\//);
+  const recentFirstPage = rowLinks();
   [...document.querySelectorAll('button')]
     .find((b) => b.textContent.trim() === 'Next page')
     .click();
@@ -2039,20 +2046,27 @@ if (scenario === 'sort-directory') {
   await until(() => lastRequest().searchParams.get('sort') === 'name' && settled());
   assert.ok(!lastRequest().searchParams.get('after'), 'header sorting resets pagination');
   assert.equal(firstLink(), '/campaigns/1/results');
+  const nameFirstPage = rowLinks();
   assert.equal(preset().getAttribute('aria-pressed'), 'false');
   [...document.querySelectorAll('button')]
     .find((b) => b.textContent.trim() === 'Next page')
     .click();
   await until(() => lastRequest().searchParams.get('after') && settled());
   preset().click();
-  await until(() => lastRequest().searchParams.get('sort') === 'recent' && settled());
-  assert.ok(!lastRequest().searchParams.get('after'), 'restoring workflow order resets pagination');
-  assert.equal(lastRequest().searchParams.get('order'), 'desc');
+  // Returning to a cached selection need not make another HTTP request.
+  await until(
+    () =>
+      preset().getAttribute('aria-pressed') === 'true' &&
+      firstLink() === recentFirstPage[0] &&
+      settled(),
+  );
+  assert.deepEqual(rowLinks(), recentFirstPage, 'restoring workflow order returns its first page');
   assert.match(firstLink(), /^\/campaigns\/drafts\//);
   assert.equal(preset().getAttribute('aria-pressed'), 'true');
   // A manually selected order persists across route navigation.
   document.querySelector('.management-table th .table-sort').click();
-  await until(() => lastRequest().searchParams.get('sort') === 'name' && settled());
+  await until(() => firstLink() === '/campaigns/1/results' && settled());
+  assert.deepEqual(rowLinks(), nameFirstPage, 'cached column sorting returns its first page');
   document.querySelector('.management-table tbody th a').click();
   await until(() => win.location.pathname === '/campaigns/1/results' && settled());
   document.querySelector('.admin-nav a[href="/campaigns"]').click();
