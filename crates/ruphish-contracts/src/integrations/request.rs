@@ -99,6 +99,7 @@ mod tests {
         for key in [
             "id",
             "owner_id",
+            "created_at",
             "created_by",
             "edited_by",
             "edited_at",

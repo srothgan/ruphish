@@ -25,6 +25,8 @@ mod tabs;
 pub(crate) use tabs::*;
 mod layout;
 pub(crate) use layout::*;
+mod details;
+pub(crate) use details::*;
 mod lists;
 pub(crate) use lists::*;
 mod multi_select;

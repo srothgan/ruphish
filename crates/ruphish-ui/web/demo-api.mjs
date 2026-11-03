@@ -292,6 +292,7 @@ function attributed(data, value) {
   };
   return {
     ...value,
+    created_at: value.created_at ?? value.created ?? value.created_date ?? null,
     created_by: user(value.created_by),
     edited_by: user(value.edited_by),
     edited_at: value.edited_at ?? null,
@@ -305,6 +306,7 @@ function summaries(data, family) {
     modified_date: r.modified_date,
     revision: r.revision,
     ...attributed(data, {
+      created_at: r.created_at,
       created_by: r.created_by,
       edited_by: r.edited_by,
       edited_at: r.edited_at,

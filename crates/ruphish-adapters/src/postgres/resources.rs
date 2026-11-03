@@ -406,7 +406,7 @@ impl Repository for Resources {
             id
         } else {
             sqlx::query(sqlx::AssertSqlSafe(format!(
-                "INSERT INTO {}(user_id,name,modified_date) VALUES($1,$2,$3) RETURNING id",
+                "INSERT INTO {}(user_id,name,modified_date,created_at) VALUES($1,$2,$3,$3) RETURNING id",
                 table(kind)
             )))
             .bind(caller.id)
@@ -514,6 +514,10 @@ impl Repository for Resources {
         )
         .await?;
         value.attribution = ruphish_domain::attribution::Attribution {
+            created_at: old.as_ref().map_or_else(
+                || Some(value.modified_date.clone()),
+                |r| r.attribution.created_at.clone(),
+            ),
             created_by: old
                 .as_ref()
                 .map_or(Some(caller.id), |r| r.attribution.created_by),

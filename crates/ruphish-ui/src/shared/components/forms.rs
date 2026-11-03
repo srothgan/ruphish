@@ -3,11 +3,12 @@ use leptos::prelude::*;
 
 #[component]
 pub(crate) fn FormFields(
+    #[prop(default = "")] class: &'static str,
     #[prop(into)] disabled: Signal<bool>,
     children: Children,
 ) -> impl IntoView {
     view! {
-        <fieldset class="management-form" disabled=move || disabled.get()>
+        <fieldset class=format!("management-form {class}") disabled=move || disabled.get()>
             {children()}
         </fieldset>
     }

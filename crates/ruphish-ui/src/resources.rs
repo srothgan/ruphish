@@ -389,6 +389,18 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
                         trs!(ui.actions),
                     ]
                 >
+                    <TableEmpty slot:empty_content>
+                        <ListEmptyState
+                            ready=Signal::derive(move || {
+                                confirmed.get() && list.error.get().is_none()
+                            })
+                            count=Signal::derive(move || visible.with(Vec::len))
+                            search=search
+                            title=Signal::derive(move || family.empty_title().to_owned())
+                            guidance=Signal::derive(move || family.empty_guidance().to_owned())
+                        />
+                    </TableEmpty>
+
                     {move || {
                         sorting
                             .rows(
@@ -460,13 +472,7 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
                             .collect_view()
                     }}
                 </DataTable>
-                <ListEmptyState
-                    ready=Signal::derive(move || { confirmed.get() && list.error.get().is_none() })
-                    count=Signal::derive(move || visible.with(Vec::len))
-                    search=search
-                    title=Signal::derive(move || family.empty_title().to_owned())
-                    guidance=Signal::derive(move || family.empty_guidance().to_owned())
-                />
+
             </QueryBoundary>
         </ManagementPage>
     }
@@ -950,6 +956,9 @@ fn group_fields(editor: Editor) -> impl IntoView {
             </div>
             <ValidationAnchor field="targets" />
             <DataTable
+                empty=Signal::derive(move || {
+                    editor.draft.with(|d| d.value()["targets"].as_array().is_none_or(Vec::is_empty))
+                })
                 sorting=sorting
                 columns=vec!["email", "first_name", "last_name", "position", ""]
                 label=trs!(ui.recipients)
@@ -962,6 +971,10 @@ fn group_fields(editor: Editor) -> impl IntoView {
                 ]
                 class="recipient-table"
             >
+                <TableEmpty slot:empty_content>
+                    <p>{tr!(ui.add_recipient_to_start)}</p>
+                </TableEmpty>
+
                 <For
                     each=move || {
                         editor

@@ -18,6 +18,7 @@ pub(super) struct Persistence {
     pub revision: RwSignal<Option<i64>>,
     pub saved_generation: RwSignal<u64>,
     pub modified: RwSignal<Value>,
+    pub attribution: RwSignal<ruphish_contracts::attribution::Attribution>,
     pub saving: RwSignal<bool>,
     pub write_error: RwSignal<Option<ruphish_ui::api_error::ApiError>>,
 }
@@ -26,6 +27,11 @@ impl Persistence {
         Self {
             queries: expect_context::<CampaignQueries>(),
             saving: RwSignal::new(false),
+            attribution: RwSignal::new(
+                saved
+                    .and_then(|v| serde_json::from_value(v.clone()).ok())
+                    .unwrap_or_default(),
+            ),
             write_error: RwSignal::new(None),
             id: RwSignal::new(saved.map(|s| text(s, "id")).unwrap_or_default()),
             revision: RwSignal::new(saved.and_then(|s| s["revision"].as_i64())),
@@ -77,6 +83,7 @@ impl Persistence {
         self.revision.set(saved["revision"].as_i64());
         self.saved_generation.set(state.generation);
         self.modified.set(saved["modified"].clone());
+        self.attribution.set(parsed.attribution);
         Ok(saved)
     }
 }
@@ -246,8 +253,7 @@ fn read_only(api: Api, token: String, id: String) -> impl IntoView {
     let content = view! {
         <ManagementPage>
             <BackLink href="/campaigns">{tr!(ui.back_to_campaigns)}</BackLink>
-            <PageHeader title=title subtitle=trs!(ui.draft_description)>
-                <StatusBadge tone=StatusTone::Warning>{tr!(ui.draft)}</StatusBadge>
+            <PageHeader title=title>
                 <RefreshButton fetching=read.fetching on_refresh=read.refresh />
                 <ResourceActions
                     disabled=Signal::derive(move || !confirmed.get() || busy.get())
@@ -260,16 +266,6 @@ fn read_only(api: Api, token: String, id: String) -> impl IntoView {
                     })
                 />
             </PageHeader>
-            <AttributionInfo value=Signal::derive(move || {
-                saved
-                    .with(|value| {
-                        <ruphish_contracts::attribution::Attribution as serde::Deserialize>::deserialize(
-                                value,
-                            )
-                            .unwrap_or_default()
-                    })
-            }) />
-            {message.view()}
             <QueryBoundary
                 fetching=read.fetching
                 has_data=confirmed
@@ -285,55 +281,52 @@ fn read_only(api: Api, token: String, id: String) -> impl IntoView {
                     refresh=resources.refresh
                 >
                     <Show when=move || confirmed.get()>
-                        <Card>
-                            <dl class="campaign-review-fields">
-                                <div>
-                                    <dt>{tr!(ui.last_saved)}</dt>
-                                    <dd>
-                                        {move || crate::time_display::instant(
-                                            &saved.get()["modified"],
-                                        )}
-                                    </dd>
-                                </div>
+                        <DetailCard>
+                            {message.view()} <DetailSection title=trs!(ui.details)>
+                                <DetailGrid>
+                                    <DetailField label=trs!(ui.status)>
+                                        <StatusBadge tone=StatusTone::Warning>
+                                            {tr!(ui.draft)}
+                                        </StatusBadge>
+                                    </DetailField>
 
-                                {[
-                                    ("template", trs!(ui.email_template)),
-                                    ("page", trs!(ui.landing_page)),
-                                    ("smtp", trs!(ui.sending_profile)),
-                                ]
-                                    .into_iter()
-                                    .map(move |(key, label)| {
-                                        view! {
-                                            <div>
-                                                <dt>{move || label.get()}</dt>
-                                                <dd>
-                                                    {move || {
-                                                        let selected = config.get()["selection"][key]["id"].clone();
-                                                        if !names_known.get() {
-                                                            return leptos_i18n::t_string!(i18n,ui.unavailable)
-                                                                .to_owned();
-                                                        }
-                                                        array(&names.get(), key)
-                                                            .iter()
-                                                            .find(|v| v["id"] == selected)
-                                                            .map(|v| text(v, "name"))
-                                                            .unwrap_or_else(|| {
-                                                                if selected.as_i64().is_some_and(|id| id > 0) {
-                                                                    leptos_i18n::t_string!(i18n,ui.unavailable).to_owned()
-                                                                } else {
-                                                                    ruphish_ui::tr!(ui.choose_a_resource)()
-                                                                }
-                                                            })
-                                                    }}
-                                                </dd>
-                                            </div>
-                                        }
-                                    })
-                                    .collect_view()}
-                                <div>
-                                    <dt>{tr!(ui.recipients)}</dt>
-                                    <dd>
-                                        {move || {
+                                    {[
+                                        ("template", trs!(ui.email_template)),
+                                        ("page", trs!(ui.landing_page)),
+                                        ("smtp", trs!(ui.sending_profile)),
+                                    ]
+                                        .into_iter()
+                                        .map(move |(key, label)| {
+                                            view! {
+                                                <div>
+                                                    <dt>{move || label.get()}</dt>
+                                                    <dd>
+                                                        {move || {
+                                                            let selected = config.get()["selection"][key]["id"].clone();
+                                                            if !names_known.get() {
+                                                                return leptos_i18n::t_string!(i18n,ui.unavailable)
+                                                                    .to_owned();
+                                                            }
+                                                            array(&names.get(), key)
+                                                                .iter()
+                                                                .find(|v| v["id"] == selected)
+                                                                .map(|v| text(v, "name"))
+                                                                .unwrap_or_else(|| {
+                                                                    if selected.as_i64().is_some_and(|id| id > 0) {
+                                                                        leptos_i18n::t_string!(i18n,ui.unavailable).to_owned()
+                                                                    } else {
+                                                                        ruphish_ui::tr!(ui.not_set)()
+                                                                    }
+                                                                })
+                                                        }}
+                                                    </dd>
+                                                </div>
+                                            }
+                                        })
+                                        .collect_view()}
+                                    <DetailText
+                                        label=trs!(ui.recipient_groups)
+                                        value=Signal::derive(move || {
                                             if !names_known.get() {
                                                 return leptos_i18n::t_string!(i18n,ui.unavailable)
                                                     .to_owned();
@@ -351,55 +344,64 @@ fn read_only(api: Api, token: String, id: String) -> impl IntoView {
                                                 })
                                                 .collect::<Vec<_>>()
                                                 .join(", ")
-                                        }}
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt>{tr!(ui.public_url)}</dt>
-                                    <dd>{move || text(&config.get(), "url")}</dd>
-                                </div>
-                            </dl>
-                        </Card>
-                        <Card>
-                            <h2>{tr!(ui.schedule)}</h2>
-                            <p>{tr!(ui.not_scheduled)}</p>
-                            <dl class="campaign-review-fields">
-                                {[
-                                    ("launch_local", trs!(ui.launch_time)),
-                                    ("send_by_local", trs!(ui.initial_distribution_end_optional)),
-                                ]
-                                    .into_iter()
-                                    .map(move |(key, label)| {
-                                        view! {
-                                            <div>
-                                                <dt>{move || label.get()}</dt>
-                                                <dd>
-                                                    {move || {
-                                                        let value = config.get();
-                                                        let time = &value[key];
-                                                        if time.is_null() {
-                                                            ruphish_ui::tr!(ui.not_set)()
-                                                        } else {
-                                                            match ruphish_domain::datetime::resolve_local(
-                                                                &text(time, "local"),
-                                                                &text(time, "time_zone"),
-                                                            ) {
-                                                                Ok(time) => {
-                                                                    crate::time_display::instant(
-                                                                        &json!(ruphish_domain::datetime::utc(time)),
-                                                                    )
+                                        })
+                                    />
+                                    <DetailText
+                                        label=trs!(ui.public_url)
+                                        value=Signal::derive(move || text(&config.get(), "url"))
+                                    />
+                                </DetailGrid>
+                            </DetailSection> <DetailSection title=trs!(ui.schedule)>
+                                <DetailGrid>
+                                    {[
+                                        ("launch_local", trs!(ui.launch_time)),
+                                        (
+                                            "send_by_local",
+                                            trs!(ui.initial_distribution_end_optional),
+                                        ),
+                                    ]
+                                        .into_iter()
+                                        .map(move |(key, label)| {
+                                            view! {
+                                                <div>
+                                                    <dt>{move || label.get()}</dt>
+                                                    <dd>
+                                                        {move || {
+                                                            let value = config.get();
+                                                            let time = &value[key];
+                                                            if time.is_null() {
+                                                                ruphish_ui::tr!(ui.not_set)()
+                                                            } else {
+                                                                match ruphish_domain::datetime::resolve_local(
+                                                                    &text(time, "local"),
+                                                                    &text(time, "time_zone"),
+                                                                ) {
+                                                                    Ok(time) => {
+                                                                        crate::time_display::instant(
+                                                                            &json!(ruphish_domain::datetime::utc(time)),
+                                                                        )
+                                                                    }
+                                                                    Err(_) => ruphish_ui::tr!(ui.time_not_recorded)(),
                                                                 }
-                                                                Err(_) => ruphish_ui::tr!(ui.time_not_recorded)(),
                                                             }
-                                                        }
-                                                    }}
-                                                </dd>
-                                            </div>
-                                        }
+                                                        }}
+                                                    </dd>
+                                                </div>
+                                            }
+                                        })
+                                        .collect_view()}
+                                </DetailGrid>
+                            </DetailSection>
+                            <AttributionInfo value=Signal::derive(move || {
+                                saved
+                                    .with(|value| {
+                                        <ruphish_contracts::attribution::Attribution as serde::Deserialize>::deserialize(
+                                                value,
+                                            )
+                                            .unwrap_or_default()
                                     })
-                                    .collect_view()}
-                            </dl>
-                        </Card>
+                            }) />
+                        </DetailCard>
                     </Show>
                     <Show when=move || deleting.get().is_some()>
                         <DeleteConfirmation

@@ -358,11 +358,12 @@ mod tests {
             Some("bob")
         );
         d.merge_import(
-            &json!({"created_by":999,"edited_by":999,"edited_at":"forged"}),
+            &json!({"created_at":"forged","created_by":999,"edited_by":999,"edited_at":"forged"}),
             "groups",
         )
         .unwrap();
         for field in [
+            "created_at",
             "created_by",
             "edited_by",
             "edited_at",

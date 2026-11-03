@@ -119,7 +119,7 @@ mod tests {
 
     #[test]
     fn incomplete_integration_responses_cannot_become_disabled_or_empty() {
-        let complete = json!({"created_by":null,"edited_by":null,"edited_at":null,"id":3,"name":"Events","url":"https://example.test/hook","is_active":false,"revision":2,"has_secret":false,"history":[]});
+        let complete = json!({"created_at":null,"created_by":null,"edited_by":null,"edited_at":null,"id":3,"name":"Events","url":"https://example.test/hook","is_active":false,"revision":2,"has_secret":false,"history":[]});
         assert!(serde_json::from_value::<Webhook>(complete.clone()).is_ok());
         for field in [
             "id",

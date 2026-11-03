@@ -799,6 +799,8 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         .await
         .unwrap();
     assert!(hook.has_secret);
+    let hook_created = hook.attribution.created_at.clone();
+    assert!(hook_created.is_some());
     assert_eq!(
         integrations.webhooks(normal.identity).await.unwrap().len(),
         1
@@ -816,6 +818,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         .await
         .unwrap();
     assert_eq!(hook.attribution.created_by, Some(normal.identity.id));
+    assert_eq!(hook.attribution.created_at, hook_created);
     assert_eq!(hook.attribution.edited_by, Some(actor.id));
     assert!(matches!(
         integrations
@@ -888,6 +891,8 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         .save_mailbox(actor, None, mail_edit(None))
         .await
         .unwrap();
+    let mailbox_created = mailbox.attribution.created_at.clone();
+    assert!(mailbox_created.is_some());
     assert!(
         !mailbox.modified_date.starts_with("0001-"),
         "a newly created mailbox records its creation timestamp"
@@ -912,6 +917,7 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
         .await
         .unwrap();
     assert!(mailbox.ignore_cert_errors);
+    assert_eq!(mailbox.attribution.created_at, mailbox_created);
     assert!(
         integrations
             .mailbox(actor, mailbox.id)

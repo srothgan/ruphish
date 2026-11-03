@@ -221,7 +221,11 @@ async fn load_aggregate(
         }
     }
     Ok(Campaign {
-        attribution: super::attribution::read(&row, "user_id")?,
+        attribution: super::attribution::read_at(
+            &row,
+            "user_id",
+            Some(text(&row, "created_date")?),
+        )?,
         groups,
         id,
         name: text(&row, "name")?,
@@ -238,7 +242,7 @@ async fn load_aggregate(
     })
 }
 async fn header(c: &mut PgConnection, id: i64) -> Result<CampaignHeader, Error> {
-    let row=sqlx::query("SELECT c.user_id,c.edited_by,c.edited_at,c.id,c.name,c.status,c.launch_date,c.send_by_date,c.url,c.template_id,c.page_id,c.smtp_id,c.frozen_content::json->'template'->>'name' AS template_name,c.frozen_content::json->'template'->'content'->>'subject' AS subject,c.frozen_content::json->'template'->'content'->>'envelope_sender' AS envelope_sender,c.frozen_content::json->'sender'->>'name' AS profile_name,c.frozen_content::json->'sender'->'content'->>'from_address' AS from_address,c.frozen_content::json->'page'->>'name' AS page_name,(SELECT count(*) FROM results r WHERE r.campaign_id=c.id) AS total,p.campaign_id AS policy_id,p.redirect_url,p.learning_page_id,p.track_opens FROM campaigns c LEFT JOIN ruphish_campaign_policy p ON p.campaign_id=c.id WHERE c.id=$1 ").bind(id).fetch_optional(&mut *c).await.map_err(storage)?.ok_or(Error::NotFound("Campaign"))?;
+    let row=sqlx::query("SELECT c.created_date,c.user_id,c.edited_by,c.edited_at,c.id,c.name,c.status,c.launch_date,c.send_by_date,c.url,c.template_id,c.page_id,c.smtp_id,c.frozen_content::json->'template'->>'name' AS template_name,c.frozen_content::json->'template'->'content'->>'subject' AS subject,c.frozen_content::json->'template'->'content'->>'envelope_sender' AS envelope_sender,c.frozen_content::json->'sender'->>'name' AS profile_name,c.frozen_content::json->'sender'->'content'->>'from_address' AS from_address,c.frozen_content::json->'page'->>'name' AS page_name,(SELECT count(*) FROM results r WHERE r.campaign_id=c.id) AS total,p.campaign_id AS policy_id,p.redirect_url,p.learning_page_id,p.track_opens FROM campaigns c LEFT JOIN ruphish_campaign_policy p ON p.campaign_id=c.id WHERE c.id=$1 ").bind(id).fetch_optional(&mut *c).await.map_err(storage)?.ok_or(Error::NotFound("Campaign"))?;
     let policy_id: Option<i64> = row.try_get("policy_id").map_err(storage)?;
     let domain: Option<(i64,bool,i64)> = sqlx::query_as("SELECT d.id,d.enabled,(SELECT eligible_until FROM ruphish_domain_policy WHERE id=d.id) FROM ruphish_campaign_domains cd JOIN ruphish_domains d ON d.id=cd.domain_id  WHERE cd.campaign_id=$1").bind(id).fetch_optional(&mut *c).await.map_err(storage)?;
     let domain_id = domain.map(|d| d.0);
@@ -253,7 +257,11 @@ async fn header(c: &mut PgConnection, id: i64) -> Result<CampaignHeader, Error> 
         .err()
         .map(str::to_owned);
     Ok(CampaignHeader {
-        attribution: super::attribution::read(&row, "user_id")?,
+        attribution: super::attribution::read_at(
+            &row,
+            "user_id",
+            Some(text(&row, "created_date")?),
+        )?,
         domain_id,
         domain_block,
         id,

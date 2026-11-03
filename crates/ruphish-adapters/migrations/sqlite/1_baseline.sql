@@ -64,6 +64,7 @@ CREATE TABLE "group_targets" (
 );
 
 CREATE TABLE "groups" (
+  created_at VARCHAR(40),
   revision BIGINT NOT NULL DEFAULT 1,
   edited_by BIGINT,
   edited_at VARCHAR(40),
@@ -108,6 +109,7 @@ CREATE TABLE "mail_logs" (
 );
 
 CREATE TABLE "pages" (
+  created_at VARCHAR(40),
   revision BIGINT NOT NULL DEFAULT 1,
   edited_by BIGINT,
   edited_at VARCHAR(40),
@@ -252,6 +254,7 @@ CREATE TABLE ruphish_domain_checks (
 );
 
 CREATE TABLE ruphish_domains (
+  created_at VARCHAR(40),
   edited_by BIGINT,
   edited_at VARCHAR(40),
   id INTEGER PRIMARY KEY,
@@ -286,6 +289,7 @@ CREATE TABLE "ruphish_event_receipts" (
 );
 
 CREATE TABLE ruphish_learning_pages (
+  created_at VARCHAR(40),
   revision BIGINT NOT NULL DEFAULT 1,
   edited_by BIGINT,
   edited_at VARCHAR(40),
@@ -323,6 +327,7 @@ CREATE TABLE "ruphish_mailbox_runs" (
 );
 
 CREATE TABLE "ruphish_mailboxes" (
+  created_at VARCHAR(40),
   edited_by BIGINT,
   edited_at VARCHAR(40),
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -418,6 +423,7 @@ CREATE TABLE "ruphish_webhook_jobs" (
 );
 
 CREATE TABLE ruphish_webhook_state (
+  created_at VARCHAR(40),
   edited_by BIGINT,
   edited_at VARCHAR(40),
   webhook_id INTEGER PRIMARY KEY,
@@ -426,6 +432,7 @@ CREATE TABLE ruphish_webhook_state (
 );
 
 CREATE TABLE smtp (
+  created_at VARCHAR(40),
   revision BIGINT NOT NULL DEFAULT 1,
   edited_by BIGINT,
   edited_at VARCHAR(40),
@@ -450,6 +457,7 @@ CREATE TABLE "targets" (
 );
 
 CREATE TABLE "templates" (
+  created_at VARCHAR(40),
   revision BIGINT NOT NULL DEFAULT 1,
   edited_by BIGINT,
   edited_at VARCHAR(40),

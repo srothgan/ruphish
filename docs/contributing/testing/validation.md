@@ -219,6 +219,7 @@ Three entry points own schedules and branch rules. The reusable [validation work
 | File | Trigger | Validation | Required status |
 | --- | --- | --- | --- |
 | [pr.yml](../../../.github/workflows/pr.yml) | PR to main; push to main; manual full run | YAML path groups select fixed suites; a manual run selects all suites | PR gate on main |
+| [pr-title.yml](../../../.github/workflows/pr-title.yml) | PR to main opened, edited, synchronized or reopened | Conventional Commit title with an allowed type and optional scope | Lint PR title on main |
 | [nightly.yml](../../../.github/workflows/nightly.yml) | Daily at 02:23 UTC; manual | Full development-profile source acceptance, all provider versions and native platforms, histories/recovery, dependency policy and bounded performance measurement | Monitoring; does not replace PR gates |
 | [release.yml](../../../.github/workflows/release.yml) | Version tag push; manual | Full source acceptance, dependency security audits, optimized UI, native packages and container image verification | Release gate before tag-triggered publication; manual runs validate without publishing |
 | [validation.yml](../../../.github/workflows/validation.yml) | Called by the three entry points | Normal source checks and an internal Validation gate | Internal prerequisite of the caller's gate |

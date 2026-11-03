@@ -252,6 +252,18 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
                         trs!(ui.actions),
                     ]
                 >
+                    <TableEmpty slot:empty_content>
+                        <ListEmptyState
+                            ready=Signal::derive(move || {
+                                confirmed.get() && list.error.get().is_none()
+                            })
+                            count=Signal::derive(move || visible.with(Vec::len))
+                            search=search
+                            title=Signal::derive(move || kind.empty_title().to_owned())
+                            guidance=Signal::derive(move || kind.empty_guidance().to_owned())
+                        />
+                    </TableEmpty>
+
                     {move || {
                         sorting
                             .rows(
@@ -292,11 +304,18 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
                                             }}
                                         </td>
                                         <td>
-                                            {if row.running() {
-                                                leptos_i18n::t_string!(i18n, ui.checking).into()
-                                            } else {
-                                                row.code().to_owned()
-                                            }}
+                                            <ReadValue
+                                                value=if row.running() {
+                                                    leptos_i18n::t_string!(i18n, ui.checking).to_owned()
+                                                } else {
+                                                    row.code().to_owned()
+                                                }
+                                                fallback=if kind.webhook() {
+                                                    trs!(ui.not_applicable)
+                                                } else {
+                                                    trs!(ui.not_recorded)
+                                                }
+                                            />
                                         </td>
                                         <td>
                                             <ResourceActions
@@ -316,13 +335,7 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
                             .collect_view()
                     }}
                 </DataTable>
-                <ListEmptyState
-                    ready=Signal::derive(move || { confirmed.get() && list.error.get().is_none() })
-                    count=Signal::derive(move || visible.with(Vec::len))
-                    search=search
-                    title=Signal::derive(move || kind.empty_title().to_owned())
-                    guidance=Signal::derive(move || kind.empty_guidance().to_owned())
-                />
+
             </QueryBoundary>
         </ManagementPage>
     }
@@ -924,12 +937,23 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                             />
                         }
                     })}
+                <Show when=move || {
+                    !kind.webhook()
+                        && value.get().is_some_and(|v| v.code() == "mailbox_uidvalidity_changed")
+                }>
+                    {editable
+                        .then(|| {
+                            view! {
+                                <ActionButton
+                                    disabled=unavailable
+                                    on_click=move |_| resuming.set(true)
+                                >
+                                    {tr!(ui.resume_with_new_arrivals)}
+                                </ActionButton>
+                            }
+                        })}
+                </Show>
             </PageHeader>
-            <AttributionInfo value=Signal::derive(move || {
-                value.get().map(|v| v.attribution()).unwrap_or_default()
-            }) />
-
-            {message.view()}
             <QueryBoundary
                 fetching=read.fetching
                 has_data=confirmed
@@ -938,254 +962,310 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                 refresh=read.refresh
             >
                 <Show when=move || confirmed.get()>
-                    <Card class="integration-status">
-                        <dl>
-                            <dt>{tr!(ui.destination)}</dt>
-                            <dd>
-                                {move || {
-                                    value
-                                        .get()
-                                        .map(|v| v.destination().to_owned())
-                                        .unwrap_or_default()
-                                }}
-                            </dd>
-                            <dt>{tr!(ui.enabled)}</dt>
-                            <dd>
-                                {move || {
-                                    if value.get().is_some_and(|v| v.enabled()) {
-                                        leptos_i18n::t_string!(i18n, ui.yes)
-                                    } else {
-                                        leptos_i18n::t_string!(i18n, ui.no)
-                                    }
-                                }}
-                            </dd>
-                            <dt>{tr!(ui.credential_configured)}</dt>
-                            <dd>
-                                {move || {
-                                    if value.get().is_some_and(|v| v.has_secret()) {
-                                        leptos_i18n::t_string!(i18n, ui.yes)
-                                    } else {
-                                        leptos_i18n::t_string!(i18n, ui.no)
-                                    }
-                                }}
-                            </dd>
-                            {(!kind.webhook())
-                                .then(|| {
-                                    view! {
-                                        <dt>{tr!(ui.account)}</dt>
-                                        <dd>
-                                            {move || {
-                                                mailbox.get().map(|v| v.username).unwrap_or_default()
-                                            }}
-                                        </dd>
-                                        <dt>{tr!(ui.folder)}</dt>
-                                        <dd>
-                                            {move || {
-                                                mailbox.get().map(|v| v.folder).unwrap_or_default()
-                                            }}
-                                        </dd>
-                                        <dt>{tr!(ui.transport)}</dt>
-                                        <dd>
-                                            {move || {
-                                                leptos_i18n::t_string!(
-                                                    i18n, messages.transport_port, transport = if mailbox.get().is_some_and(|v| v.tls) { "TLS" } else { "STARTTLS" }, port = mailbox.get().map(|v| v.port.to_string()).unwrap_or_default()
-                                                )
-                                            }}
-                                        </dd>
-                                        <dt>{tr!(ui.certificate_verification)}</dt>
-                                        <dd>
-                                            {move || {
-                                                if mailbox.get().is_some_and(|v| v.ignore_cert_errors) {
-                                                    trs!(ui.certificate_verification_skipped)
-                                                } else {
-                                                    trs!(ui.certificate_verification_enabled)
-                                                }
-                                            }}
-                                        </dd>
-                                        <dt>{tr!(ui.check_interval)}</dt>
-                                        <dd>
-                                            {move || {
-                                                leptos_i18n::t_string!(
-                                                    i18n, messages.count_seconds, count = mailbox.get().map(|v| v.frequency.to_string()).unwrap_or_default()
-                                                )
-                                            }}
-                                        </dd>
-                                        <dt>{tr!(ui.last_outcome)}</dt>
-                                        <dd>
-                                            {move || {
-                                                value.get().map(|v| v.code().to_owned()).unwrap_or_default()
-                                            }}
-                                        </dd>
-                                        <dt>{tr!(ui.last_successful_check)}</dt>
-                                        <dd>
-                                            {move || {
-                                                if mailbox.get().is_some_and(|v| v.last_success == 0) {
-                                                    leptos_i18n::t_string!(i18n, ui.not_recorded).into()
-                                                } else {
-                                                    instant(&json!(mailbox.get().map(|v| v.last_success)))
-                                                }
-                                            }}
-                                        </dd>
-                                        <dt>{tr!(ui.next_check)}</dt>
-                                        <dd>
-                                            {move || {
-                                                if !value.get().is_some_and(|v| v.enabled()) {
-                                                    leptos_i18n::t_string!(i18n, ui.disabled).into()
-                                                } else if mailbox.get().is_some_and(|v| v.next_check == 0) {
-                                                    leptos_i18n::t_string!(i18n, ui.queued).into()
-                                                } else {
-                                                    instant(&json!(mailbox.get().map(|v| v.next_check)))
-                                                }
-                                            }}
-                                        </dd>
-                                    }
-                                })}
-                        </dl>
-                        <Show when=move || value.get().is_some_and(|v| v.running())>
-                            <p role="status" aria-busy="true">
-                                {tr!(ui.checking_reporting_mailbox)}
-                            </p>
-                        </Show>
-                    </Card>
-                    <Show when=move || {
-                        !kind.webhook()
-                            && value
-                                .get()
-                                .is_some_and(|v| v.code() == "mailbox_uidvalidity_changed")
-                    }>
-                        <p role="alert">
-                            {tr!(
-                                ui.the_mail_server_changed_its_message_identifiers_processing_is_paused_to_protect
-                            )}
-                        </p>
-                        {editable
-                            .then(|| {
-                                view! {
-                                    <ActionButton
-                                        disabled=unavailable
-                                        on_click=move |_| resuming.set(true)
-                                    >
-                                        {tr!(ui.resume_with_new_arrivals)}
-                                    </ActionButton>
-                                }
-                            })}
-                    </Show>
-                    <Show when=move || resuming.get()>
-                        <DeleteConfirmation
-                            title=trs!(ui.resume_with_new_arrivals_2)
-                            description=trs!(
-                                ui.existing_messages_in_the_changed_folder_will_be_left_untouched_monitoring_starts
-                            )
-                            confirm_label=trs!(ui.resume_monitoring)
-                            busy=Signal::derive(move || busy.get())
-                            on_confirm=Callback::new(move |()| action("resume"))
-                            on_cancel=Callback::new(move |()| resuming.set(false))
-                            message=message
-                        />
-                    </Show>
-                    <h2>
-                        {move || {
-                            if kind.webhook() {
-                                leptos_i18n::t_string!(i18n, ui.recent_delivery_attempts)
-                            } else {
-                                leptos_i18n::t_string!(i18n, ui.recent_mailbox_checks)
-                            }
-                        }}
-                    </h2>
-                    <DataTable
-                        sorting=history_sort
-                        columns=if kind.webhook() {
-                            vec!["started", "finished", "code", "status", "event_id", "attempt"]
-                        } else {
-                            vec!["started", "finished", "code", "matched", "rejected"]
-                        }
-                        label=trs!(ui.integration_history)
-                        headers=if kind.webhook() {
-                            vec![
-                                trs!(ui.started),
-                                trs!(ui.finished),
-                                trs!(ui.outcome),
-                                trs!(ui.http_status),
-                                trs!(ui.event),
-                                trs!(ui.attempt),
-                            ]
-                        } else {
-                            vec![
-                                trs!(ui.started),
-                                trs!(ui.finished),
-                                trs!(ui.outcome),
-                                trs!(ui.matched),
-                                trs!(ui.rejected),
-                            ]
-                        }
-                    >
-                        {move || {
-                            history_sort
-                                .rows(
-                                    value.get().map(Record::history).unwrap_or_default(),
-                                    |row, key| match key {
-                                        "finished" => {
-                                            row.finished.map_or(SortValue::Missing, Into::into)
-                                        }
-                                        "code" => row.code.clone().into(),
-                                        "status" => {
-                                            row.status
-                                                .map_or(
-                                                    SortValue::Missing,
-                                                    |v| SortValue::Number(i128::from(v)),
-                                                )
-                                        }
-                                        "event_id" => {
-                                            row.event_id.map_or(SortValue::Missing, Into::into)
-                                        }
-                                        "attempt" => {
-                                            row.attempt.map_or(SortValue::Missing, Into::into)
-                                        }
-                                        "matched" => row.matched.into(),
-                                        "rejected" => row.rejected.into(),
-                                        _ => row.started.into(),
-                                    },
-                                    |row| row.id.into(),
-                                )
-                                .into_iter()
-                                .map(|run| {
-                                    view! {
-                                        <tr>
-                                            <td class="data-value">{instant(&json!(run.started))}</td>
-                                            <td>
-                                                {if run.finished.is_none() {
-                                                    leptos_i18n::t_string!(i18n, ui.running).into()
-                                                } else {
-                                                    instant(&json!(run.finished))
-                                                }}
-                                            </td>
-                                            <td>{run.code}</td>
-                                            {if kind.webhook() {
-                                                view! {
-                                                    <td>
-                                                        {run.status.map(|s| s.to_string()).unwrap_or_default()}
-                                                    </td>
-                                                    <td>
-                                                        {run.event_id.map(|s| s.to_string()).unwrap_or_default()}
-                                                    </td>
-                                                    <td>
-                                                        {run.attempt.map(|s| s.to_string()).unwrap_or_default()}
-                                                    </td>
-                                                }
-                                                    .into_any()
+                    <DetailCard>
+                        {message.view()} <DetailSection title=trs!(ui.details)>
+                            <DetailGrid>
+                                <div>
+                                    <dt>{tr!(ui.destination)}</dt>
+                                    <dd>
+                                        {move || {
+                                            value
+                                                .get()
+                                                .map(|v| v.destination().to_owned())
+                                                .unwrap_or_default()
+                                        }}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>{tr!(ui.enabled)}</dt>
+                                    <dd>
+                                        {move || {
+                                            if value.get().is_some_and(|v| v.enabled()) {
+                                                leptos_i18n::t_string!(i18n, ui.yes)
                                             } else {
-                                                view! {
-                                                    <td>{run.matched}</td>
-                                                    <td>{run.rejected}</td>
-                                                }
-                                                    .into_any()
-                                            }}
-                                        </tr>
+                                                leptos_i18n::t_string!(i18n, ui.no)
+                                            }
+                                        }}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>{tr!(ui.credential_configured)}</dt>
+                                    <dd>
+                                        {move || {
+                                            if value.get().is_some_and(|v| v.has_secret()) {
+                                                leptos_i18n::t_string!(i18n, ui.yes)
+                                            } else {
+                                                leptos_i18n::t_string!(i18n, ui.no)
+                                            }
+                                        }}
+                                    </dd>
+                                </div>
+                                {(!kind.webhook())
+                                    .then(|| {
+                                        view! {
+                                            <div>
+                                                <dt>{tr!(ui.account)}</dt>
+                                                <dd>
+                                                    <ReadValue value=Signal::derive(move || {
+                                                        mailbox.get().map(|v| v.username).unwrap_or_default()
+                                                    }) />
+                                                </dd>
+                                            </div>
+                                            <div>
+                                                <dt>{tr!(ui.folder)}</dt>
+                                                <dd>
+                                                    <ReadValue value=Signal::derive(move || {
+                                                        mailbox.get().map(|v| v.folder).unwrap_or_default()
+                                                    }) />
+                                                </dd>
+                                            </div>
+                                            <div>
+                                                <dt>{tr!(ui.transport)}</dt>
+                                                <dd>
+                                                    {move || {
+                                                        leptos_i18n::t_string!(
+                                                            i18n, messages.transport_port, transport = if mailbox.get().is_some_and(|v| v.tls) { "TLS" } else { "STARTTLS" }, port = mailbox.get().map(|v| v.port.to_string()).unwrap_or_default()
+                                                        )
+                                                    }}
+                                                </dd>
+                                            </div>
+                                            <div>
+                                                <dt>{tr!(ui.certificate_verification)}</dt>
+                                                <dd>
+                                                    {move || {
+                                                        if mailbox.get().is_some_and(|v| v.ignore_cert_errors) {
+                                                            trs!(ui.certificate_verification_skipped)
+                                                        } else {
+                                                            trs!(ui.certificate_verification_enabled)
+                                                        }
+                                                    }}
+                                                </dd>
+                                            </div>
+                                            <div>
+                                                <dt>{tr!(ui.check_interval)}</dt>
+                                                <dd>
+                                                    {move || {
+                                                        leptos_i18n::t_string!(
+                                                            i18n, messages.count_seconds, count = mailbox.get().map(|v| v.frequency.to_string()).unwrap_or_default()
+                                                        )
+                                                    }}
+                                                </dd>
+                                            </div>
+                                            <div>
+                                                <dt>{tr!(ui.last_outcome)}</dt>
+                                                <dd>
+                                                    <ReadValue
+                                                        value=Signal::derive(move || {
+                                                            value.get().map(|v| v.code().to_owned()).unwrap_or_default()
+                                                        })
+                                                        fallback=trs!(ui.not_recorded)
+                                                    />
+                                                </dd>
+                                            </div>
+                                            <div>
+                                                <dt>{tr!(ui.last_successful_check)}</dt>
+                                                <dd>
+                                                    {move || {
+                                                        if mailbox.get().is_some_and(|v| v.last_success == 0) {
+                                                            leptos_i18n::t_string!(i18n, ui.not_recorded).into()
+                                                        } else {
+                                                            instant(&json!(mailbox.get().map(|v| v.last_success)))
+                                                        }
+                                                    }}
+                                                </dd>
+                                            </div>
+                                            <div>
+                                                <dt>{tr!(ui.next_check)}</dt>
+                                                <dd>
+                                                    {move || {
+                                                        if !value.get().is_some_and(|v| v.enabled()) {
+                                                            leptos_i18n::t_string!(i18n, ui.disabled).into()
+                                                        } else if mailbox.get().is_some_and(|v| v.next_check == 0) {
+                                                            leptos_i18n::t_string!(i18n, ui.queued).into()
+                                                        } else {
+                                                            instant(&json!(mailbox.get().map(|v| v.next_check)))
+                                                        }
+                                                    }}
+                                                </dd>
+                                            </div>
+                                        }
+                                    })}
+                            </DetailGrid>
+                            <Show when=move || value.get().is_some_and(|v| v.running())>
+                                <p role="status" aria-busy="true">
+                                    {tr!(ui.checking_reporting_mailbox)}
+                                </p>
+                            </Show>
+                        </DetailSection>
+                        <Show when=move || {
+                            !kind.webhook()
+                                && value
+                                    .get()
+                                    .is_some_and(|v| v.code() == "mailbox_uidvalidity_changed")
+                        }>
+                            <p role="alert">
+                                {tr!(
+                                    ui.the_mail_server_changed_its_message_identifiers_processing_is_paused_to_protect
+                                )}
+                            </p>
+
+                        </Show> <section class="detail-section">
+                            <h2>
+                                {move || {
+                                    if kind.webhook() {
+                                        leptos_i18n::t_string!(i18n, ui.recent_delivery_attempts)
+                                    } else {
+                                        leptos_i18n::t_string!(i18n, ui.recent_mailbox_checks)
                                     }
+                                }}
+                            </h2>
+                            <DataTable
+                                empty=Signal::derive(move || {
+                                    value.get().is_none_or(|v| v.history().is_empty())
                                 })
-                                .collect_view()
-                        }}
-                    </DataTable>
+                                sorting=history_sort
+                                columns=if kind.webhook() {
+                                    vec![
+                                        "started",
+                                        "finished",
+                                        "code",
+                                        "status",
+                                        "event_id",
+                                        "attempt",
+                                    ]
+                                } else {
+                                    vec!["started", "finished", "code", "matched", "rejected"]
+                                }
+                                label=trs!(ui.integration_history)
+                                headers=if kind.webhook() {
+                                    vec![
+                                        trs!(ui.started),
+                                        trs!(ui.finished),
+                                        trs!(ui.outcome),
+                                        trs!(ui.http_status),
+                                        trs!(ui.event),
+                                        trs!(ui.attempt),
+                                    ]
+                                } else {
+                                    vec![
+                                        trs!(ui.started),
+                                        trs!(ui.finished),
+                                        trs!(ui.outcome),
+                                        trs!(ui.matched),
+                                        trs!(ui.rejected),
+                                    ]
+                                }
+                            >
+                                <TableEmpty slot:empty_content>
+                                    <p>{tr!(ui.integration_history_empty)}</p>
+                                </TableEmpty>
+
+                                {move || {
+                                    history_sort
+                                        .rows(
+                                            value.get().map(Record::history).unwrap_or_default(),
+                                            |row, key| match key {
+                                                "finished" => {
+                                                    row.finished.map_or(SortValue::Missing, Into::into)
+                                                }
+                                                "code" => row.code.clone().into(),
+                                                "status" => {
+                                                    row.status
+                                                        .map_or(
+                                                            SortValue::Missing,
+                                                            |v| SortValue::Number(i128::from(v)),
+                                                        )
+                                                }
+                                                "event_id" => {
+                                                    row.event_id.map_or(SortValue::Missing, Into::into)
+                                                }
+                                                "attempt" => {
+                                                    row.attempt.map_or(SortValue::Missing, Into::into)
+                                                }
+                                                "matched" => row.matched.into(),
+                                                "rejected" => row.rejected.into(),
+                                                _ => row.started.into(),
+                                            },
+                                            |row| row.id.into(),
+                                        )
+                                        .into_iter()
+                                        .map(|run| {
+                                            view! {
+                                                <tr>
+                                                    <td class="data-value">{instant(&json!(run.started))}</td>
+                                                    <td>
+                                                        {if run.finished.is_none() {
+                                                            leptos_i18n::t_string!(i18n, ui.running).into()
+                                                        } else {
+                                                            instant(&json!(run.finished))
+                                                        }}
+                                                    </td>
+                                                    <td>
+                                                        <ReadValue value=run.code fallback=trs!(ui.not_recorded) />
+                                                    </td>
+                                                    {if kind.webhook() {
+                                                        view! {
+                                                            <td>
+                                                                <ReadValue
+                                                                    value=run.status.map(|s| s.to_string()).unwrap_or_default()
+                                                                    fallback=Signal::derive(move || {
+                                                                        if run.finished.is_none() {
+                                                                            leptos_i18n::t_string!(i18n, ui.running).to_owned()
+                                                                        } else {
+                                                                            leptos_i18n::t_string!(i18n, ui.no_http_response).to_owned()
+                                                                        }
+                                                                    })
+                                                                />
+                                                            </td>
+                                                            <td>
+                                                                <ReadValue
+                                                                    value=run
+                                                                        .event_id
+                                                                        .map(|s| s.to_string())
+                                                                        .unwrap_or_default()
+                                                                    fallback=trs!(ui.not_applicable)
+                                                                />
+                                                            </td>
+                                                            <td>
+                                                                <ReadValue
+                                                                    value=run.attempt.map(|s| s.to_string()).unwrap_or_default()
+                                                                    fallback=trs!(ui.not_applicable)
+                                                                />
+                                                            </td>
+                                                        }
+                                                            .into_any()
+                                                    } else {
+                                                        view! {
+                                                            <td>{run.matched}</td>
+                                                            <td>{run.rejected}</td>
+                                                        }
+                                                            .into_any()
+                                                    }}
+                                                </tr>
+                                            }
+                                        })
+                                        .collect_view()
+                                }}
+                            </DataTable>
+                        </section>
+                        <AttributionInfo value=Signal::derive(move || {
+                            value.get().map(|v| v.attribution()).unwrap_or_default()
+                        }) />
+
+                    </DetailCard>
+                </Show>
+                <Show when=move || resuming.get()>
+                    <DeleteConfirmation
+                        title=trs!(ui.resume_with_new_arrivals_2)
+                        description=trs!(
+                            ui.existing_messages_in_the_changed_folder_will_be_left_untouched_monitoring_starts
+                        )
+                        confirm_label=trs!(ui.resume_monitoring)
+                        busy=Signal::derive(move || busy.get())
+                        on_confirm=Callback::new(move |()| action("resume"))
+                        on_cancel=Callback::new(move |()| resuming.set(false))
+                        message=message
+                    />
                 </Show>
                 <ResourceDeleteDialog
                     deletion=deletion

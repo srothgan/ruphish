@@ -78,7 +78,7 @@ impl Repository for Integrations {
         super::resources::authorize(&mut tx, who, false).await?;
         sqlx::query(
             r#"
-                SELECT w.*,s.revision,s.owner_id,s.edited_by,s.edited_at
+                SELECT w.*,s.revision,s.owner_id,s.created_at,s.edited_by,s.edited_at
                 FROM webhooks w
                 JOIN ruphish_webhook_state s ON s.webhook_id=w.id
 
@@ -175,10 +175,11 @@ impl Repository for Integrations {
             .insert_id()
             .map_err(db)?;
             sqlx::query(
-                "INSERT INTO ruphish_webhook_state(webhook_id,revision,owner_id) VALUES($1,1,$2)",
+                "INSERT INTO ruphish_webhook_state(webhook_id,revision,owner_id,created_at) VALUES($1,1,$2,$3)",
             )
             .bind(id)
             .bind(who.id)
+            .bind(ruphish_application::datetime::utc(ruphish_application::datetime::now()))
             .execute(&mut *tx)
             .await
             .map_err(db)?;
@@ -361,8 +362,8 @@ impl Repository for Integrations {
             .await
             .map_err(db)?;
             sqlx::query(r#"
-                INSERT INTO ruphish_mailboxes(owner_id,name,enabled,host,port,username,password,tls,folder,restrict_domain,delete_reported,frequency,ignore_cert_errors,initial_since)
-                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id"#)
+                INSERT INTO ruphish_mailboxes(owner_id,name,enabled,host,port,username,password,tls,folder,restrict_domain,delete_reported,frequency,ignore_cert_errors,initial_since,created_at)
+                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id"#)
 .bind(who.id)
 .bind(&e.name)
 .bind(e.enabled)
@@ -377,6 +378,7 @@ impl Repository for Integrations {
 .bind(i64::from(e.frequency))
 .bind(e.ignore_cert_errors)
 .bind(initial_since.map(|stamp| format!("{stamp}Z")))
+.bind(ruphish_application::datetime::utc(ruphish_application::datetime::now()))
 .fetch_one(&mut *tx)
 .await
 .map_err(db)?
@@ -562,7 +564,7 @@ async fn load_webhook(
     let mut value = webhook_row(
         sqlx::query(
             r#"
-                SELECT w.*,s.revision,s.owner_id,s.edited_by,s.edited_at
+                SELECT w.*,s.revision,s.owner_id,s.created_at,s.edited_by,s.edited_at
                 FROM webhooks w
                 JOIN ruphish_webhook_state s ON s.webhook_id=w.id
                 WHERE w.id=$1

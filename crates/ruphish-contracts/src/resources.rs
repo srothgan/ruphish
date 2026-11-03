@@ -143,8 +143,8 @@ mod tests {
 
     #[test]
     fn missing_counts_and_identity_are_not_displayed_as_zero() {
-        let group = json!({"revision":1,"created_by":null,"edited_by":null,"edited_at":null,"id":4,"name":"Example","modified_date":"2026-10-21T12:00:00Z","num_targets":0});
-        let resource = json!({"revision":1,"created_by":null,"edited_by":null,"edited_at":null,"id":4,"name":"Example","modified_date":"2026-10-21T12:00:00Z","active_campaigns":0});
+        let group = json!({"revision":1,"created_at":null,"created_by":null,"edited_by":null,"edited_at":null,"id":4,"name":"Example","modified_date":"2026-10-21T12:00:00Z","num_targets":0});
+        let resource = json!({"revision":1,"created_at":null,"created_by":null,"edited_by":null,"edited_at":null,"id":4,"name":"Example","modified_date":"2026-10-21T12:00:00Z","active_campaigns":0});
         for field in ["id", "name", "modified_date", "num_targets"] {
             let mut row = group.clone();
             row.as_object_mut().map(|o| o.remove(field));

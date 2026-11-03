@@ -25,7 +25,7 @@ Historical `user_id` and `owner_id` columns on shared resources store creator pr
 
 ## Migrations and schema checks
 
-Application migrations start at `crates/ruphish-adapters/migrations/{sqlite,mysql,postgres}/1_baseline.sql`. Each baseline defines the final release schema directly. Once released, it is immutable; append forward migrations rather than editing its checksum. All providers use SQLx application history. Git pins release SQL to LF on every platform so checksums are stable. Startup rejects unrecognized histories, modified checksums, and inconsistent schemas.
+Application migrations start at `crates/ruphish-adapters/migrations/{sqlite,mysql,postgres}/1_baseline.sql`. Each baseline defines the final release schema directly. Once released, it is immutable; append forward migrations rather than editing its checksum. The baseline includes nullable creation timestamps; Gophish conversion leaves unavailable creation history unknown. Campaigns and drafts retain their existing authoritative creation fields. All providers use SQLx application history. Git pins release SQL to LF on every platform so checksums are stable. Startup rejects unrecognized histories, modified checksums, and inconsistent schemas.
 
 SQLite's `migrations.rs` owns application history, `schema.rs` verifies the complete schema, and `legacy.rs` recognizes Gophish shapes and converts source data. `startup.rs` owns locking, verified backups and connection lifecycle. MySQL's `preflight.rs` recognizes legacy shapes; `upgrade.rs` converts into final staging tables and `migrations.rs` owns publication/recovery. PostgreSQL initializes fresh schemas and has no Gophish importer.
 

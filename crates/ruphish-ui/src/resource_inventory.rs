@@ -72,6 +72,7 @@ mod tests {
             value["name"] = json!("Confirmed name");
             value["modified_date"] = json!(null);
             value["revision"] = json!(1);
+            value["created_at"] = json!(null);
             value["created_by"] = json!(null);
             value["edited_by"] = json!(null);
             value["edited_at"] = json!(null);
@@ -110,7 +111,7 @@ mod tests {
 
     #[test]
     fn group_saves_use_confirmed_recipients_including_empty_edits() {
-        let mut value = json!({"revision":1,"created_by":null,"edited_by":null,"edited_at":null,"id":7,"name":"Group","modified_date":"2026-10-29T10:00:00Z","targets":[{"email":"one@example.test","first_name":"","last_name":"","position":""},{"email":"two@example.test","first_name":"","last_name":"","position":""}]});
+        let mut value = json!({"revision":1,"created_at":null,"created_by":null,"edited_by":null,"edited_at":null,"id":7,"name":"Group","modified_date":"2026-10-29T10:00:00Z","targets":[{"email":"one@example.test","first_name":"","last_name":"","position":""},{"email":"two@example.test","first_name":"","last_name":"","position":""}]});
         let mut rows = vec![];
         saved(&mut rows, &decode(Kind::Group, value.clone()).unwrap());
         assert_eq!(rows[0].count, Some(2));

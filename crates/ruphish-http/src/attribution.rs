@@ -40,6 +40,7 @@ impl Lookup {
             })
         };
         Attribution {
+            created_at: value.created_at.clone(),
             created_by: value.created_by.map(user),
             edited_by: value.edited_by.map(user),
             edited_at: value.edited_at.clone(),

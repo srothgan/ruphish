@@ -457,6 +457,9 @@ fn detail(api: Api, id: i64) -> impl IntoView {
                     </details>
                     <h2>{tr!(ui.participants)}</h2>
                     <DataTable
+                        empty=Signal::derive(move || {
+                            data.with(|p| p.as_ref().is_none_or(|p| p.recipients.is_empty()))
+                        })
                         label=trs!(ui.recipient_observations)
                         sorting=sorting
                         columns=vec!["email", "opened", "clicked", "submitted", "reported", ""]
@@ -469,6 +472,10 @@ fn detail(api: Api, id: i64) -> impl IntoView {
                             trs!(ui.details),
                         ]
                     >
+                        <TableEmpty slot:empty_content>
+                            <p>{tr!(ui.no_matching_results)}</p>
+                        </TableEmpty>
+
                         <For
                             each=move || {
                                 data.with(|v| {
@@ -570,11 +577,7 @@ fn detail(api: Api, id: i64) -> impl IntoView {
                         />
 
                     </DataTable>
-                    <Show when=move || total.get() == 0>
-                        <EmptyState title=trs!(ui.no_matching_results)>
-                            <p>{tr!(ui.change_or_clear_the_filters_to_see_more_activity)}</p>
-                        </EmptyState>
-                    </Show>
+
                 </Show>
                 <Show when=move || {
                     loaded.get() && (filters.get().offset > 0 || filters.get().limit < total.get())

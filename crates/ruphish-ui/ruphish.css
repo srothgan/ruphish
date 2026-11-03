@@ -307,8 +307,6 @@
   .management-table tbody th { font-weight: var(--fw-semibold); }
   .management-table .row-actions { align-items: center; flex-wrap: nowrap; gap: var(--s3); }
   .management-table button { padding: 0 var(--s2); min-height: var(--control-h-sm); font-size: var(--fs-sm); }
-  .management-table.is-empty { min-width: 0; }
-  .management-table.is-empty thead { display: none; }
   .management-empty { padding: 48px var(--s5); text-align: center; background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md); }
   .management-empty p { margin-inline: auto; color: var(--muted); }
 
@@ -581,7 +579,18 @@
   .import-content iframe { width: 100%; min-height: 280px; border: 1px solid var(--line); border-radius: var(--r-sm); }
   .import-content pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow-y: auto; }
   .resource-read-panel h2 { margin-top: 0; }
-  .resource-facts { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: var(--s5); margin: 0 0 var(--s5); }
+  .resource-facts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--s5); margin: 0 0 var(--s5); }
+  .resource-facts > div { min-width: 0; text-align: left; }
+  .detail-card .resource-facts { margin: 0; }
+  .detail-card .resource-facts + .management-table-wrap,
+  .detail-card .resource-facts + .resource-facts,
+  .detail-card .resource-facts + .saved-content-preview { margin-top: var(--s5); }
+  .detail-card .detail-section + .detail-section,
+  .detail-card .resource-section + .detail-section,
+  .detail-card .detail-section + .resource-section { margin-top: var(--s6); }
+  .detail-card .detail-section > h2 { margin: 0 0 var(--s4); font-size: var(--fs-md); }
+  .detail-card .resource-section + .resource-section { padding-top: 0; border: 0; }
+  @media(max-width:600px) { .resource-facts { grid-template-columns: 1fr; } }
   .resource-facts dt { font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--muted); }
   .resource-facts dd { margin: var(--s2) 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
   .resource-read-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow-y: auto; padding: var(--s4); border-radius: var(--r-sm); background: var(--canvas); }
@@ -599,7 +608,6 @@
 
   /* Campaign steps + context. */
   .campaign-resource-links { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s3) var(--s5); margin: var(--s4) 0; padding: 0; list-style: none; }
-  .campaign-review { margin-top: var(--s5); padding-top: var(--s5); border-top: 1px solid var(--line); }
   .delivery-code { display: block; color: var(--muted); font-family: var(--font-mono); font-size: var(--fs-sm); }
   .campaign-context, .domain-context { margin-bottom: var(--s5); }
   .domain-context .resource-facts { margin-bottom: 0; }
@@ -695,12 +703,10 @@
   .account-app .analysis-explanation p { max-width: none; }
   .analysis-pagination { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--s4); padding-block: var(--s5); }
   .analysis-pagination > span { color: var(--muted); font-size: var(--fs-sm); }
-  .integration-status { margin-block: var(--s5); }
-  .integration-status dl { display: grid; grid-template-columns: minmax(150px,1fr) 3fr; gap: var(--s4); }
   @container (max-width: 1050px) { .analysis-filter-fields { grid-template-columns: repeat(3, minmax(0,1fr)); } }
   @container (max-width: 650px) { .analysis-filter-fields { grid-template-columns: repeat(2, minmax(0,1fr)); } }
   @container (max-width: 420px) { .analysis-filter-fields { grid-template-columns: 1fr; } }
-  @media(max-width: 800px) { .analysis-summary { grid-template-columns: repeat(2,minmax(0,1fr)); } .analysis-chart { padding: var(--s4); } .integration-status dl { grid-template-columns: 1fr; gap: var(--s2); } }
+  @media(max-width: 800px) { .analysis-summary { grid-template-columns: repeat(2,minmax(0,1fr)); } .analysis-chart { padding: var(--s4); } }
   .analysis-chart-tooltip { position: absolute; top: var(--s3); z-index: 4; width: min(280px,100%); padding: var(--s3); font-size: var(--fs-sm); pointer-events: none; }
   .analysis-chart-tooltip > strong, .analysis-chart-tooltip > span { display: block; }
   .analysis-chart-tooltip > span { margin-top: var(--s1); color: var(--muted); }

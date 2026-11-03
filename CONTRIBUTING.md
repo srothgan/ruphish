@@ -25,7 +25,7 @@ Understand the changes you submit, explain their behavior, and verify the affect
 4. Review your diff for unrelated changes, generated output, credentials, and unintended behavior. Check that the implementation, tests, and documentation describe the same result.
 5. Submit a pull request explaining the concrete problem and resulting behavior. Link related issues and scope discussions where available, and include validation results and remaining limitations.
 
-Use commit messages in the form `type(scope): imperative summary`, such as `docs(api): explain campaign launch retries`. Keep the scope meaningful and the description about the final change.
+Use commit messages and pull request titles in the form `type(scope): imperative summary`, such as `docs(api): explain campaign launch retries`. Allowed types are `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`, and `revert`; scope is optional. Keep the scope meaningful and the description about the final change. The required [PR title workflow](.github/workflows/pr-title.yml) checks titles on PRs to main, including title edits.
 
 Record user-visible changes in the **Unreleased** section of [CHANGELOG.md](CHANGELOG.md). Describe the outcome and any action users need to take; small editorial corrections do not need an entry.
 

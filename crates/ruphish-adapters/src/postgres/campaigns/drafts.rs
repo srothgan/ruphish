@@ -16,7 +16,11 @@ fn decode(row: sqlx::postgres::PgRow) -> Result<Draft, Error> {
     }
     let configuration: String = row.try_get("configuration").map_err(storage)?;
     Ok(Draft {
-        attribution: super::super::attribution::read(&row, "owner_id")?,
+        attribution: super::super::attribution::read_at(
+            &row,
+            "owner_id",
+            Some(super::stamp(row.try_get("created").map_err(storage)?)?),
+        )?,
         id: row.try_get("id").map_err(storage)?,
         revision: row.try_get("revision").map_err(storage)?,
         configuration: serde_json::from_str(&configuration).map_err(|_| Error::Internal)?,

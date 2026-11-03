@@ -4,7 +4,20 @@ use ruphish_domain::attribution::Attribution;
 use sqlx::{Row, SqliteConnection, sqlite::SqliteRow};
 
 pub(super) fn read(row: &SqliteRow, creator: &str) -> Result<Attribution, Error> {
+    read_at(
+        row,
+        creator,
+        row.try_get("created_at").map_err(super::resource_error)?,
+    )
+}
+
+pub(super) fn read_at(
+    row: &SqliteRow,
+    creator: &str,
+    created_at: Option<String>,
+) -> Result<Attribution, Error> {
     Ok(Attribution {
+        created_at,
         created_by: row.try_get(creator).map_err(super::resource_error)?,
         edited_by: row.try_get("edited_by").map_err(super::resource_error)?,
         edited_at: row.try_get("edited_at").map_err(super::resource_error)?,

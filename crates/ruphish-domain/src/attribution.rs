@@ -3,6 +3,8 @@
 /// Stable account identifiers survive account deletion and are never reassigned.
 #[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Attribution {
+    /// UTC creation instant, or unknown when historical evidence is unavailable.
+    pub created_at: Option<String>,
     /// Original creator, or unknown for historical records without reliable attribution.
     pub created_by: Option<i64>,
     /// Last authenticated editor; background processing does not change this value.

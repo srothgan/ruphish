@@ -367,6 +367,7 @@ pub(super) fn table(
                 </p>
             </Show>
             <DataTable
+                empty=Signal::derive(move || history.with(|h| h.events.is_empty()))
                 label=trs!(ui.recipient_events)
                 sorting=sorting
                 columns=vec!["time", "message", "", "", ""]
@@ -378,6 +379,10 @@ pub(super) fn table(
                     trs!(ui.actions),
                 ]
             >
+                <TableEmpty slot:empty_content>
+                    <p>{tr!(ui.no_recipient_activity)}</p>
+                </TableEmpty>
+
                 <For
                     each=move || {
                         sorting

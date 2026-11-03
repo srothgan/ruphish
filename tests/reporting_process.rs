@@ -910,6 +910,7 @@ fn reporting_api_shares_access_preserves_secrets_and_rejects_stale_and_malformed
         "enabled",
         "has_password",
         "revision",
+        "created_at",
         "created_by",
         "edited_by",
         "edited_at",

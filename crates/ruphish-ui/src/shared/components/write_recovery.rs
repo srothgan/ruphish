@@ -6,43 +6,49 @@ use ruphish_ui::{api_error::ApiError, tr, trs};
 #[component]
 pub(crate) fn WriteRecovery(
     error: RwSignal<Option<ApiError>>,
+    #[prop(default = false)] actions_only: bool,
     #[prop(into)] saved_href: Signal<String>,
     on_reload: Callback<()>,
     #[prop(into, optional)] busy: Signal<bool>,
 ) -> impl IntoView {
     let confirm = RwSignal::new(false);
-    let deleted_help = trs!(ui.write_deleted_help);
-    let conflict_help = trs!(ui.write_conflict_help);
     let missing =
         Signal::derive(move || error.with(|e| e.as_ref().is_some_and(ApiError::is_not_found)));
     let visible = move || error.with(|e| e.as_ref().is_some_and(ApiError::needs_write_recovery));
+    let actions = move || {
+        view! {
+            <div class="row-actions">
+                <Show when=move || {
+                    !missing.get()
+                }>
+                    {move || {
+                        view! {
+                            <ActionLink href=saved_href.get() new_tab=true>
+                                {tr!(ui.review_saved_version)}
+                            </ActionLink>
+                        }
+                    }} <ActionButton disabled=busy on_click=move |_| confirm.set(true)>
+                        {tr!(ui.discard_and_reload)}
+                    </ActionButton>
+                </Show>
+            </div>
+        }
+    };
     view! {
         <Show when=visible>
-            <Card>
-                <p role="alert">
-                    {move || {
-                        if missing.get() { deleted_help.get() } else { conflict_help.get() }
-                    }}
-                </p>
-                <p>
-                    <code>{move || error.get().map(|e| e.code).unwrap_or_default()}</code>
-                </p>
-                <div class="row-actions">
-                    <Show when=move || {
-                        !missing.get()
-                    }>
-                        {move || {
-                            view! {
-                                <ActionLink href=saved_href.get() new_tab=true>
-                                    {tr!(ui.review_saved_version)}
-                                </ActionLink>
-                            }
-                        }} <ActionButton disabled=busy on_click=move |_| confirm.set(true)>
-                            {tr!(ui.discard_and_reload)}
-                        </ActionButton>
-                    </Show>
-                </div>
-            </Card>
+            {move || {
+                if actions_only {
+                    actions().into_any()
+                } else {
+                    view! {
+                        <Card>
+                            <WriteRecoveryNotice error=error />
+                            {actions()}
+                        </Card>
+                    }
+                        .into_any()
+                }
+            }}
         </Show>
         <Show when=move || confirm.get()>
             <DeleteConfirmation
@@ -57,6 +63,27 @@ pub(crate) fn WriteRecovery(
                     on_reload.run(());
                 })
             />
+        </Show>
+    }
+}
+
+/// A save-conflict explanation that can share the form's existing white surface.
+#[component]
+pub(crate) fn WriteRecoveryNotice(error: RwSignal<Option<ApiError>>) -> impl IntoView {
+    view! {
+        <Show when=move || error.with(|e| e.as_ref().is_some_and(ApiError::needs_write_recovery))>
+            <p role="alert">
+                {move || {
+                    if error.with(|e| e.as_ref().is_some_and(ApiError::is_not_found)) {
+                        tr!(ui.write_deleted_help)()
+                    } else {
+                        tr!(ui.write_conflict_help)()
+                    }
+                }}
+            </p>
+            <p>
+                <code>{move || error.get().map(|e| e.code).unwrap_or_default()}</code>
+            </p>
         </Show>
     }
 }

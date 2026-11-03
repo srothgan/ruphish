@@ -21,6 +21,26 @@ const path =
     'delete-conflict-mailbox': '/reporting-mailboxes',
     'delete-conflict-draft': '/campaigns',
     'delete-conflict-draft-detail': '/campaigns/drafts/00000000-0000-4000-8000-000000000001',
+    'empty-group': '/groups/6',
+    'empty-webhook': '/webhooks/1',
+    'empty-mailbox': '/reporting-mailboxes/1',
+    'empty-directory': '/groups',
+    'empty-inventory': '/groups',
+    'missing-webhook-directory': '/webhooks',
+    'missing-smtp': '/smtp/1',
+    'missing-content': '/learning-pages/1',
+    'missing-webhook-values': '/webhooks/1',
+    'missing-mailbox-values': '/reporting-mailboxes/1',
+    'history-domain': '/domains/1',
+    'detail-group': '/groups/1',
+    'detail-template': '/templates/1',
+    'detail-page': '/pages/1',
+    'detail-learning': '/learning-pages/1',
+    'detail-smtp': '/smtp/1',
+    'detail-domain': '/domains/1',
+    'detail-webhook': '/webhooks/1',
+    'detail-mailbox': '/reporting-mailboxes/1',
+    'detail-draft': '/campaigns/drafts/00000000-0000-4000-8000-000000000001',
     'domain-attribution': '/domains/1',
     'shared-attribution': '/groups/1/edit',
     'unknown-attribution': '/groups/1/edit',
@@ -108,6 +128,10 @@ win.Response = globalThis.Response;
 Object.assign(preferences, { language: 'de', format_locale: 'de-DE', time_zone: 'Europe/Berlin' });
 if (
   scenario.startsWith('form-') ||
+  scenario.startsWith('detail-') ||
+  scenario.startsWith('empty-') ||
+  scenario.startsWith('missing-') ||
+  scenario === 'history-domain' ||
   scenario.startsWith('integration-') ||
   scenario === 'campaign-wizard' ||
   scenario.endsWith('-attribution') ||
@@ -129,9 +153,54 @@ class FixtureDate extends NativeDate {
 }
 globalThis.Date = win.Date = FixtureDate;
 const data = dataset(now);
+if (scenario === 'empty-inventory') {
+  data.groups = [];
+}
+if (scenario === 'empty-webhook') {
+  data.webhooks[0].history = [];
+}
+if (scenario === 'empty-mailbox') {
+  data['reporting-mailboxes'][0].history = [];
+}
+if (scenario === 'missing-smtp') {
+  Object.assign(data.smtp[0], {
+    username: '   ',
+    headers: [],
+    has_password: false,
+    ignore_cert_errors: false,
+  });
+}
+if (scenario === 'missing-content') {
+  data['learning-pages'][0].html = '';
+}
+if (scenario === 'missing-webhook-values') {
+  Object.assign(data.webhooks[0].history[0], { status: null, event_id: null, attempt: null });
+}
+if (scenario === 'missing-mailbox-values') {
+  Object.assign(data['reporting-mailboxes'][0], {
+    username: '   ',
+    code: '',
+    last_success: 0,
+    enabled: false,
+  });
+  Object.assign(data['reporting-mailboxes'][0].history[0], { matched: 0, rejected: 0 });
+}
+if (scenario === 'history-domain') {
+  data.domains[0].history = [
+    {
+      id: 1,
+      state: 'passed',
+      code: 'domain_verified',
+      started_at: now - 10,
+      finished_at: now - 10,
+      scheduled_at: now - 10,
+    },
+  ];
+}
 
 if (scenario.endsWith('-attribution')) {
   Object.assign(scenario === 'domain-attribution' ? data.domains[0] : data.groups[0], {
+    created_at: scenario === 'unknown-attribution' ? null : '2026-10-24T12:00:00Z',
     created_by: 100,
     edited_by: scenario === 'unknown-attribution' ? null : data.users[1].id,
     edited_at: scenario === 'unknown-attribution' ? null : '2026-10-25T12:00:00Z',
@@ -451,7 +520,13 @@ async function until(condition) {
   const deadline = performance.now() + 15000;
   while (!condition()) {
     if (
-      (scenario === 'campaign-wizard' || recoveryPath || scenario.startsWith('delete-conflict')) &&
+      (scenario === 'campaign-wizard' ||
+        recoveryPath ||
+        scenario.startsWith('delete-conflict') ||
+        scenario.startsWith('empty-') ||
+        scenario.startsWith('missing-') ||
+        scenario.startsWith('detail-') ||
+        scenario === 'history-domain') &&
       performance.now() > deadline
     ) {
       const current = win.document.querySelector('[aria-current="step"]')?.textContent;
@@ -594,19 +669,136 @@ if (scenario.startsWith('delete-conflict')) {
   process.exit(0);
 }
 
+const visibleTables = (root = document) =>
+  [...root.querySelectorAll('table')].filter((table) => !table.closest('[hidden]'));
+const detailValue = (label) =>
+  [...document.querySelectorAll('.detail-card dt')]
+    .find((node) => node.textContent.trim() === label)
+    ?.nextElementSibling?.textContent.trim();
+if (
+  scenario.startsWith('empty-') ||
+  scenario.startsWith('missing-') ||
+  scenario === 'history-domain'
+) {
+  await until(settled);
+  if (scenario === 'empty-directory') {
+    const search = document.querySelector('.management-toolbar input');
+    assert.ok(visibleTables().length > 0);
+    search.value = 'No such recipient group';
+    search.dispatchEvent(new win.Event('input', { bubbles: true }));
+    await until(() => visibleTables().length === 0);
+    assert.match(document.querySelector('.table-empty').textContent, /No matching results/);
+    assert.match(document.querySelector('.table-empty').textContent, /Try another search/);
+    search.value = '';
+    search.dispatchEvent(new win.Event('input', { bubbles: true }));
+    await until(() => visibleTables().length > 0);
+    assert.ok(document.querySelector('.table-empty').hidden);
+  } else if (scenario === 'empty-inventory') {
+    assert.equal(visibleTables().length, 0);
+    assert.match(document.querySelector('.table-empty').textContent, /No recipient groups yet/);
+    assert.doesNotMatch(document.querySelector('.table-empty').textContent, /No matching results/);
+  } else if (scenario.startsWith('empty-')) {
+    assert.equal(visibleTables().length, 0, 'an empty collection exposes no sorting headers');
+    assert.match(
+      document.querySelector('.detail-card').textContent,
+      scenario === 'empty-group' ? /No recipients added/ : /No processing history recorded yet/,
+    );
+    if (scenario === 'empty-group') {
+      assert.equal(detailValue('Recipients'), '0');
+    }
+  } else if (scenario === 'missing-webhook-directory') {
+    const rows = [...visibleTables()[0].querySelectorAll('tbody tr')];
+    assert.ok(rows.length > 0);
+    for (const row of rows) {
+      assert.equal(row.children[3].textContent.trim(), 'Not applicable');
+    }
+  } else if (scenario === 'missing-smtp') {
+    assert.equal(detailValue('Username'), 'Not set');
+    assert.equal(detailValue('Password'), 'Not configured');
+    assert.equal(detailValue('Ignore certificate errors'), 'No');
+    assert.match(
+      document.querySelector('.detail-card').textContent,
+      /No additional headers configured/,
+    );
+  } else if (scenario === 'missing-content') {
+    assert.match(document.querySelector('.detail-card').textContent, /No content available/);
+    assert.equal(document.querySelector('.saved-content-preview'), null);
+  } else if (scenario === 'missing-webhook-values') {
+    const values = [...visibleTables()[0].querySelectorAll('tbody td')].map((node) =>
+      node.textContent.trim(),
+    );
+    assert.deepEqual(values.slice(-3), ['No HTTP response', 'Not applicable', 'Not applicable']);
+  } else if (scenario === 'missing-mailbox-values') {
+    assert.equal(detailValue('Account'), 'Not set');
+    assert.equal(detailValue('Last outcome'), 'Not recorded');
+    assert.equal(detailValue('Last successful check'), 'Not recorded');
+    assert.equal(detailValue('Next check'), 'Disabled');
+    const values = [...visibleTables()[0].querySelectorAll('tbody td')].map((node) =>
+      node.textContent.trim(),
+    );
+    assert.deepEqual(values.slice(-2), ['0', '0']);
+  } else {
+    const history = document.querySelector('.domain-history');
+    assert.equal(visibleTables(history).length, 1);
+    assert.equal(history.querySelectorAll('tbody tr').length, 1);
+    assert.ok(history.querySelector('.table-empty').hidden);
+  }
+  process.exit(0);
+}
+
+if (scenario.startsWith('detail-')) {
+  await until(() =>
+    document
+      .querySelector('section[aria-label="Record information"] dd')
+      ?.textContent.includes('2026'),
+  );
+  const card = document.querySelector('.detail-card');
+  assert.ok(card, 'record values have a shared white detail surface');
+  assert.equal(document.querySelectorAll('.detail-card').length, 1);
+  assert.equal(card.querySelectorAll('.card').length, 0, 'sections are not nested cards');
+  assert.equal(document.querySelector('.management-heading p'), null, 'no record-data subtitle');
+  assert.ok(!card.contains(document.querySelector('h1')), 'the title remains outside');
+  for (const grid of document.querySelectorAll('.resource-facts')) {
+    assert.ok(card.contains(grid), 'every read-only field group belongs to the record card');
+    for (const value of grid.querySelectorAll('dd')) {
+      assert.equal(value.previousElementSibling?.tagName, 'DT', 'values retain their label');
+    }
+  }
+  const record = card.querySelector('section[aria-label="Record information"]');
+  assert.deepEqual(
+    [...record.querySelectorAll('dt')].map((n) => n.textContent.trim()),
+    ['Created at', 'Created by', 'Last edited at', 'Last edited by'],
+  );
+  assert.ok(!card.querySelector('.resource-actions'), 'record actions remain outside');
+  if (scenario === 'detail-domain') {
+    assert.ok(data.domains[0].checked_at > 0, 'a past check does not guarantee retained history');
+    const history = card.querySelector('.domain-history');
+    assert.ok(
+      history.querySelector('.management-table-wrap').hidden,
+      'empty history hides its table and sorting controls',
+    );
+    assert.match(history.textContent, /No verification history available/);
+  }
+  process.exit(0);
+}
+
 if (scenario.endsWith('-attribution')) {
   await until(() =>
-    document.querySelector('.resource-facts')?.textContent.includes('Morgan Brooks'),
+    document
+      .querySelector('section[aria-label="Record information"]')
+      ?.textContent.includes('Morgan Brooks'),
   );
-  const metadata = document.querySelector('.resource-facts');
+  const metadata = document.querySelector('section[aria-label="Record information"]');
   assert.match(metadata.textContent, /Created by/);
   assert.match(metadata.textContent, /Morgan Brooks.*deleted/i);
   assert.equal(metadata.querySelectorAll('input,select,textarea,[contenteditable]').length, 0);
   const values = [...metadata.querySelectorAll('dd')].map((node) => node.textContent.trim());
   if (scenario === 'unknown-attribution') {
-    assert.deepEqual(values.slice(1), ['-', '-']);
+    assert.equal(values[0], 'Unknown');
+    assert.deepEqual(values.slice(2), ['Unknown', 'Unknown']);
   } else {
-    assert.equal(values[1], data.users[1].username);
+    assert.equal(values[3], data.users[1].username);
+    assert.match(values[0], /2026/);
     assert.match(values[2], /2026/);
   }
   assert.equal(
@@ -731,6 +923,15 @@ if (scenario === 'campaign-wizard') {
   await advance(3);
   const launchLabel = demo ? 'Simulate launch' : 'Launch campaign';
   await until(() => button(launchLabel) && !button(launchLabel).disabled);
+  const reviewCard = document.querySelector('.management-form.detail-card');
+  assert.ok(reviewCard);
+  assert.equal(reviewCard.querySelectorAll('.card').length, 0);
+  assert.ok(reviewCard.contains(document.querySelector('iframe.saved-content-preview')));
+  assert.ok(!reviewCard.contains(button(launchLabel)));
+  assert.ok(!reviewCard.contains(button('Send test email')));
+  assert.ok(reviewCard.querySelector('section[aria-label="Record information"]'));
+  assert.equal(document.querySelector('.management-heading p'), null);
+
   assert.ok(!document.querySelector('.demo-toast.has-content'));
   if (demo) {
     const template = dataset(now).templates.find((row) => row.id === 1);

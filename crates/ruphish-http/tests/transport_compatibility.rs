@@ -36,11 +36,11 @@ async fn typed_api_values_preserve_explicit_absence_collections_integer_and_time
         ("timestamp", json!("2020-01-02T03:04:05.1234Z")),
         (
             "default-group",
-            json!({"id":0,"name":"","modified_date":null,"targets":[],"revision":1,"created_by":null,"edited_by":null,"edited_at":null}),
+            json!({"id":0,"name":"","modified_date":null,"targets":[],"revision":1,"created_at":null,"created_by":null,"edited_by":null,"edited_at":null}),
         ),
         (
             "empty-targets",
-            json!({"id":9007199254740993_i64,"name":"Ada & <Team>","modified_date":"2020-01-02T03:04:05.1234Z","targets":[],"revision":1,"created_by":null,"edited_by":null,"edited_at":null}),
+            json!({"id":9007199254740993_i64,"name":"Ada & <Team>","modified_date":"2020-01-02T03:04:05.1234Z","targets":[],"revision":1,"created_at":null,"created_by":null,"edited_by":null,"edited_at":null}),
         ),
         (
             "escaped-envelope",

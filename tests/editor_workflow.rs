@@ -14,6 +14,7 @@ fn checkpoint(
     use serde_json::json;
     value["revision"] = json!(1);
     value["modified_date"] = json!("2026-10-25T12:00:00Z");
+    value["created_at"] = serde_json::Value::Null;
     value["created_by"] = serde_json::Value::Null;
     value["edited_by"] = serde_json::Value::Null;
     value["edited_at"] = serde_json::Value::Null;

@@ -1043,6 +1043,10 @@ fn normalize(value: &mut Value) {
         Value::Object(fields) => {
             // New attribution is asserted separately from the captured Gophish payload.
             if let Some(creator) = fields.remove("created_by") {
+                let created = fields.remove("created_at").unwrap();
+                assert!(
+                    ruphish_application::datetime::parse_stored(created.as_str().unwrap()).is_ok()
+                );
                 assert_eq!(creator, json!({"id":1,"username":"admin","deleted":false}));
                 assert_eq!(
                     fields.remove("edited_by"),
@@ -2262,7 +2266,7 @@ fn shared_resources_stamp_real_editors_and_survive_account_deletion() {
         }
         request.send().unwrap()
     };
-    let body = json!({"name":"Shared API group","targets":[{"email":"person@example.test","first_name":"Original"}],"created_by":999,"edited_by":999,"edited_at":"1900-01-01T00:00:00Z"});
+    let body = json!({"name":"Shared API group","targets":[{"email":"person@example.test","first_name":"Original"}],"created_at":"1900-01-01T00:00:00Z","created_by":999,"edited_by":999,"edited_at":"1900-01-01T00:00:00Z"});
     let created = request(
         reqwest::Method::POST,
         "/api/groups/",
@@ -2280,6 +2284,8 @@ fn shared_resources_stamp_real_editors_and_survive_account_deletion() {
         json!({"id":2,"username":"colleague","deleted":false})
     );
     assert_eq!(created["edited_by"], created["created_by"]);
+    assert_eq!(created["created_at"], created["modified_date"]);
+    assert_ne!(created["created_at"], body["created_at"]);
     assert_ne!(created["edited_at"], body["edited_at"]);
     let path = format!("/api/groups/{}", created["id"]);
     assert_eq!(
@@ -2321,6 +2327,7 @@ fn shared_resources_stamp_real_editors_and_survive_account_deletion() {
     );
     assert_eq!(saved.status(), 200);
     let saved: Value = saved.json().unwrap();
+    assert_eq!(saved["created_at"], created["created_at"]);
     assert_eq!(saved["created_by"]["id"], 2);
     assert_eq!(saved["edited_by"]["id"], 1);
     assert_eq!(
@@ -2375,6 +2382,7 @@ fn shared_resources_stamp_real_editors_and_survive_account_deletion() {
         (right.1, 2, "Colleague wins")
     };
     assert_eq!(saved["name"], name);
+    assert_eq!(saved["created_at"], created["created_at"]);
     assert_eq!(saved["created_by"]["id"], 2);
     assert_eq!(saved["edited_by"]["id"], editor);
     assert_eq!(

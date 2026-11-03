@@ -691,7 +691,7 @@ async fn confirmed_resource_saves_survive_late_reads_and_failed_refreshes() {
             assert_eq!(calls.get(), 1);
             query.invalidate(1);
             old_started.wait().await;
-            let mut response = json!({"revision":1,"created_by":null,"edited_by":null,"edited_at":null,"id":7,"name":"Server name","modified_date":"2026-10-29T10:00:00Z"});
+            let mut response = json!({"revision":1,"created_at":null,"created_by":null,"edited_by":null,"edited_at":null,"id":7,"name":"Server name","modified_date":"2026-10-29T10:00:00Z"});
             let kind = if group {
                 response["targets"] = json!([{ "email":"confirmed@example.test","first_name":"","last_name":"","position":"" }]);
                 Kind::Group

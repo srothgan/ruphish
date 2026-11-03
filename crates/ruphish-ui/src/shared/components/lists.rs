@@ -61,7 +61,13 @@ pub(crate) fn ListEmptyState(
 
     view! {
         <Show when=move || ready.get() && count.get() == 0>
-            <EmptyState title=title>
+            <EmptyState title=Signal::derive(move || {
+                if search.get().trim().is_empty() {
+                    title.get()
+                } else {
+                    leptos_i18n::t_string!(i18n, ui.no_matching_results).to_owned()
+                }
+            })>
                 <p>
                     {move || {
                         if search.get().trim().is_empty() {
@@ -150,6 +156,12 @@ impl TableSorting {
     }
 }
 
+/// Callers provide contextual empty content; the table owns its visibility.
+#[slot]
+pub(crate) struct TableEmpty {
+    children: Children,
+}
+
 #[component]
 pub(crate) fn DataTable(
     #[prop(into)] label: Signal<String>,
@@ -160,17 +172,19 @@ pub(crate) fn DataTable(
     children: Children,
     #[prop(default = "")] class: &'static str,
     #[prop(default = false)] compact: bool,
-    /// Hide the column headers when there are no rows, so their full-width rule
-    /// does not overhang a rounded empty-state card rendered below.
-    #[prop(into, optional)]
+    /// Use the displayed rows, not a timestamp or a total from another collection.
+    #[prop(into)]
     empty: Signal<bool>,
+    empty_content: TableEmpty,
 ) -> impl IntoView {
     view! {
-        <div class="management-table-wrap">
+        <div class="table-empty" hidden=move || !empty.get()>
+            {(empty_content.children)()}
+        </div>
+        <div class="management-table-wrap" hidden=move || empty.get()>
             <table
                 class=format!("management-table {class}")
                 class:compact=compact
-                class:is-empty=move || empty.get()
                 aria-label=move || label.get()
             >
                 <thead>

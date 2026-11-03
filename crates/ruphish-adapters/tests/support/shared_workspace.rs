@@ -89,6 +89,10 @@ async fn contract(db: &Database, inspect: &mut Inspector) {
         let read = resources.get(BOB, kind, saved.id).await.unwrap();
         assert_eq!(read.attribution, saved.attribution);
         assert_eq!(
+            saved.attribution.created_at.as_deref(),
+            Some(saved.modified_date.as_str())
+        );
+        assert_eq!(
             resources.summaries(BOB, kind, None).await.unwrap()[0].attribution,
             saved.attribution
         );
@@ -129,6 +133,10 @@ async fn contract(db: &Database, inspect: &mut Inspector) {
     let editor = if a.is_ok() { BOB.id } else { ALICE.id };
     let edited = a.or(b).unwrap();
     assert_eq!(edited.attribution.created_by, Some(ALICE.id));
+    assert_eq!(
+        edited.attribution.created_at,
+        template.attribution.created_at
+    );
     assert_eq!(edited.attribution.edited_by, Some(editor));
     assert_eq!(
         edited.attribution.edited_at.as_ref(),
@@ -387,6 +395,23 @@ async fn contract(db: &Database, inspect: &mut Inspector) {
     assert_eq!(historical.attribution.created_by, Some(ALICE.id));
     assert_eq!(historical.attribution.edited_by, None);
     assert_eq!(historical.attribution.edited_at, None);
+    assert_eq!(historical.attribution.created_at, None);
+    let mut historical_edit = historical.clone();
+    historical_edit.content = Content::Page(Page {
+        html: "<p>Updated</p>".into(),
+        ..Default::default()
+    });
+    let historical_edit = resources
+        .save(
+            ADMIN,
+            historical_edit.into(),
+            Some(historical.id),
+            Some(historical.revision.to_string()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(historical_edit.attribution.created_at, None);
+    assert!(historical_edit.attribution.edited_at.is_some());
     assert_eq!(resources.get(ADMIN, Kind::Page, 901).await.unwrap().id, 901);
     assert!(matches!(
         resources
@@ -499,6 +524,7 @@ async fn revision_contract(db: &Database) {
         .await
         .unwrap();
     assert_eq!(domain.revision, 1);
+    assert!(domain.attribution.created_at.is_some());
     assert!(matches!(
         domains
             .save(
@@ -531,6 +557,7 @@ async fn revision_contract(db: &Database) {
     ));
     let saved = a.or(b).unwrap();
     assert_eq!(saved.revision, 2);
+    assert_eq!(saved.attribution.created_at, domain.attribution.created_at);
     assert_eq!(domains.get(ADMIN, saved.id).await.unwrap().name, saved.name);
     assert!(matches!(
         domains.delete(ADMIN, saved.id, 1).await,

@@ -15,6 +15,9 @@ pub struct UserReference {
 /// Attribution is returned with the resource and cannot be assigned by a client.
 #[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Attribution {
+    /// UTC creation instant, or unknown when historical evidence is unavailable.
+    #[serde(deserialize_with = "crate::nullable")]
+    pub created_at: Option<String>,
     /// Original creator, or unknown for unattributed historical resources.
     #[serde(deserialize_with = "crate::nullable")]
     pub created_by: Option<UserReference>,
