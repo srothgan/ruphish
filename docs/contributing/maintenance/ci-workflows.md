@@ -14,6 +14,7 @@ The [shared validation workflow](../../../.github/workflows/validation.yml) owns
 | `pr.yml` | Pull request to main, push to main, manual dispatch | Selects applicable source/demo checks; manual dispatch selects full checks |
 | `pr-title.yml` | PR opened, edited, synchronized, or reopened against main | Checks the conventional title format |
 | `nightly.yml` | Daily at 02:23 UTC or manual dispatch | Runs full source acceptance, including server versions and bounded measurement |
+| `codeql.yml` | Pull request to main, push to main, Monday at 04:27 UTC, manual dispatch | Runs default CodeQL security queries for Rust, JavaScript/TypeScript, and GitHub Actions, excluding test-only files |
 | `release.yml` | Version tag push or manual dispatch | Full source checks, dependency security, optimized builds, and artifact verification; only matching tag pushes publish |
 
 CI starts even for documentation and housekeeping changes so its final gate can report a result. A documentation-only change does not select product acceptance unless it also changes a broader input. Website checks and deployment follow the website's separate Vercel configuration.
@@ -33,6 +34,22 @@ Shared build inputs include manifests, lockfile, toolchain, formatter/dependency
 The always-run quality job installs root npm tools, checks formatting/lint, runs workflow/fixture-initialization script tests, and lints workflows. Changes limited to script test files still exercise these checks without selecting product builds. Issue templates, CODEOWNERS, and Dependabot configuration do not select product acceptance by themselves.
 
 The pinned path-filter action compares PR merge commits with their base using Git. Push selection uses changes since the prior main revision. Full checkout history supports deleted paths and both sides of renames. Nightly, release, and manual full runs bypass filtering.
+
+## CodeQL security analysis
+
+The [CodeQL workflow](../../../.github/workflows/codeql.yml) runs each language independently with `build-mode: none`, a 45-minute job timeout, and pinned actions maintained by Dependabot. Rust uses the repository's pinned toolchain. CodeQL can execute Rust build scripts and compile macros during extraction, but this workflow does not perform a full application build. It does not restore or populate dependency caches.
+
+The [CodeQL configuration](../../../.github/codeql/codeql-config.yml) owns analysis exclusions: `test/` and `tests/` directories at any depth, `*.test.*` files, and Rust files named `tests.rs` or ending in `_tests.rs`. These locations contain test-only code; keep production implementations outside them. Application source, shipped starter templates, demo implementation, and CI workflows remain in scope. The default security queries remain enabled, including hard-coded credential detection; no severity or query is suppressed globally.
+
+Path exclusions cannot remove individual inline `#[cfg(test)]` blocks from otherwise scanned source files. The flagged resource-state, SMTP-authentication, and webhook-delivery unit tests live in adjacent `tests/` directories and remain compiled through their original `#[cfg(test)]` modules. Their module names, assertions, and test execution are preserved. Other inline unit tests remain scanned; assess future alerts before moving a test module or excluding a file.
+
+To activate this workflow when GitHub default setup is enabled:
+
+1. Prepare the workflow and configuration changes for `main`. In repository **Settings → Advanced Security → CodeQL analysis**, choose **Switch to advanced** and disable default setup, following [GitHub's migration instructions](https://docs.github.com/en/code-security/how-tos/find-and-fix-code-vulnerabilities/configure-code-scanning/configuring-advanced-setup-for-code-scanning). Default setup otherwise blocks uploads from advanced workflows.
+2. Merge the prepared changes and verify that the push-triggered CodeQL run completes for all three languages. You can also dispatch **CodeQL** manually against `main`. The weekly schedule starts only after the workflow exists on the default branch.
+3. Inspect code-scanning tool status and alert locations to confirm production coverage and test exclusions. A local workflow lint does not prove successful extraction or uploaded results. If alerts persist only under a retired analysis configuration, inspect and remove that stale configuration using [GitHub's alert-resolution procedure](https://docs.github.com/en/code-security/how-tos/manage-security-alerts/manage-code-scanning-alerts/resolve-alerts#removing-stale-configurations-and-alerts-from-a-branch).
+
+See [GitHub's configuration reference](https://docs.github.com/en/code-security/reference/code-scanning/workflow-configuration-options) for supported exclusion patterns. Workflow event filters only control when scanning starts; they do not exclude files from analysis.
 
 ## Artifacts and caches
 
