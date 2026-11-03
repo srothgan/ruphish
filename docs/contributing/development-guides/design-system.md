@@ -1,8 +1,8 @@
 ---
 title: Design system
-description: Use consistent layout, typography, controls, and feedback in the admin interface.
+description: Apply shared layout, typography, controls, and feedback consistently.
 sidebar:
-  order: 5
+  order: 250
 ---
 
 This guide defines Ruphish's visual language and how to apply it when designing or extending the admin interface. Use it to choose colors, typography, layouts, components and interaction patterns consistently.

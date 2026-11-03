@@ -1,11 +1,18 @@
 ---
-title: Manual UI checks
-description: Review operator workflows and participant-browser behavior that compilation and protocol tests cannot establish.
+title: Manual browser checks
+description: Review workflows, accessibility, content rendering, and sandbox behavior in a real browser.
 sidebar:
-  order: 5
+  order: 340
+next:
+  link: /docs/contributing/maintenance/
+  label: Maintenance
 ---
 
-The user performs browser appearance and interaction review. Use synthetic data in the [local fixture](local-fixture.md), and record browser/version, scenario, expected result, actual result, and unresolved failures.
+Use these scenarios for changes that affect browser behavior or presentation. Select the relevant sections; a small UI change does not require every scenario. Prepare synthetic data in the [local fixture](local-fixture.md), use an actual browser, and record browser/version, actions, expected result, actual result, and unresolved failures.
+
+For ordinary administration screens, use the account and resources you prepared locally. For permissions and conflicts, use a second application account/session. For participant checks, use the fixture browser profile and controlled inbox. Never substitute real credentials or recipients.
+
+Automated mounted-UI tests complement this review but do not implement browser layout, sandbox enforcement, or mail-client rendering.
 
 ## Admin workflows
 
@@ -17,16 +24,16 @@ The user performs browser appearance and interaction review. Use synthetic data 
 - Switch English/German, formatting locale, and time zone independently. Check persistence after another login and reset-to-browser behavior.
 - Inspect narrow layouts, wrapped labels/actions, keyboard navigation, visible focus, reduced motion, and long localized strings.
 
-## First-release feature boundaries
+## Campaign and integration behavior
 
 Use disposable campaigns, synthetic recipients, and controlled SMTP/IMAP/webhook services. These are review scenarios to execute and record, not claims that manual acceptance has already passed.
 
 - **Open tracking:** Save, reload, review, and copy drafts with **Track email opens** enabled and disabled. Inspect delivered HTML with ordinary images and imported legacy tracker markup: enabled produces one managed pixel; disabled produces none. Plain-text-only messages remain plain text. Disabled open summaries show **Not tracked** or **-**, open chart series are absent, and click/submission/report observations still work.
-- **Campaign origins:** With verification off, use enabled owned DNS, IPv4, and bracketed IPv6 origins over HTTP and HTTPS in the controlled fixture. Confirm scheme and port are respected. Enable verification and confirm only DNS over HTTPS can qualify; inspect the explanation for HTTP/IP origins and reject recipient-dependent origins.
+- **Campaign origins:** With verification off, use enabled DNS, IPv4, and bracketed IPv6 origins over HTTP and HTTPS in the controlled fixture. Confirm scheme and port are respected. Enable verification and confirm only DNS over HTTPS can qualify; inspect the explanation for HTTP/IP origins and reject recipient-dependent origins.
 - **Client observations:** Open per-recipient Results and the expanded history/event dialog in Sending. Clicks and submissions show read-only browser/OS/device categories; other or migrated events without collected data show unavailable information. Compare event exports and webhook payloads with those categories. Confirm the UI does not offer category editing or show raw headers, IP/location, exact versions, or device models.
 - **Reporting boundaries:** Create a mailbox after an actual send in another account's active campaign and forward an existing message within the initial window. Also create a mailbox with no eligible active send and confirm existing mail is skipped on initialization. Verify ordinary polling continues between campaigns and after restart. Complete a campaign, forward its message, then forward another active campaign's message: the late report must not alter results or emit a report webhook, while the later valid message is processed.
 - **Ambiguous reports:** Forward a message containing two distinct recipient-ID/origin pairs. Inspect `mailbox_ambiguous` and confirm neither is attributed. Send separate new forwards and confirm each eligible report is processed. Repeated references to one pair should still match.
-- **Integration ownership:** As a regular user, create/edit/validate an integration while its feature is enabled. A colleague or administrator outside impersonation must not access its configuration/history. Confirm a webhook receives an event from another creator's campaign and a reporting mailbox matches that campaign without granting editing rights. Disable the global feature and confirm the navigation/form state explains it; creation, saves and network actions must be blocked while existing configuration is retained.
+- **Shared integrations and permissions:** With the feature enabled by an administrator, create an integration using an account with resource-editing permission. Confirm another appropriately permitted account can read or edit it regardless of its creator. A read-only account must not save changes or trigger actions requiring editing permission. Confirm webhook events and mailbox reports can relate to campaigns created by colleagues. Disable the feature and confirm creation, saves, and network actions are blocked while existing configuration is retained. Check that credential values remain hidden in read responses.
 
 Automated coverage lives in `crates/ruphish-adapters/tests/support/{open_tracking,campaign_origins,mailbox_reporting,webhook_ownership}.rs`, `tests/settings_process.rs`, `tests/proxy_process.rs`, and the built-UI scenarios in `crates/ruphish-ui/web/tests/ui-interactions.artifact.mjs`. Use the [validation policy](validation.md) to select commands, and [database-provider checks](database-providers.md) when persistence or migration behavior changes. The [legacy test map](../../../tests/legacy-test-map.toml) records inherited guarantees and intentional differences.
 
@@ -51,7 +58,7 @@ Keep the admin campaign view open alongside DevTools Network on the public page.
 5. Block the public submission request in DevTools, submit, then unblock and use **Retry this submission**. The page must show an unconfirmed/error state, recover, and reuse the original event ID. For a true timeout, use a request-stalling proxy; DevTools Offline usually produces immediate failure, which does not prove the 15-second deadline. Timeout/retry logic also has isolated functional tests.
 6. Disable JavaScript and reload the public page. Attempt submission: no form data may leave through native navigation. Re-enable JavaScript afterward. Check console CSP failures as well as Network; an error alone does not prove that no data was sent.
 7. Disable the domain in admin, then try another page load/submission. It must fail without new events. Re-enable and verify as needed; complete the campaign and confirm later submissions likewise fail. Use a fresh campaign for subsequent cases.
-8. Inspect campaign responses/history and `tests/acceptance/data/ruphish.log` for your synthetic canaries. The automated test additionally scans database/WAL bytes for its own rejected-payload canary. Record browser/version, case, expected/actual result and any failure; do not attach real credentials or unredacted admin tokens.
+8. Inspect campaign responses/history and the application output from `docker compose -f tests/acceptance/compose.yaml logs app` for your synthetic canaries. Fresh fixture configurations log to stderr rather than a local log file. The automated test additionally scans database/WAL bytes for its own rejected-payload canary. Record browser/version, case, expected/actual result and any failure; do not attach real credentials or unredacted admin tokens.
 
 9. In an authenticated administrator session, open a functional landing preview with synthetic scripts that attempt to read `parent.document`, `document.cookie` and origin storage, navigate the admin window, open a popup and embed another frame. These capabilities must remain unavailable. Verify an attempted credentialed admin API read cannot expose its response and an attempted write cannot mutate application state. Repeat after the preview navigates within its own frame. Keep probes local and never print credentials. Browser enforcement requires this manual check; JSDOM does not implement the sandbox.
 10. Exercise custom validation, `type="button"` intermediate steps, dynamic fields and final `window.ruphish.submit(form)`. Cancelled submit events must not be tracked; a final accepted event must use the same presence-only body and retry semantics. In editor/starter/test-email previews, scripts run but built-in submissions show preview feedback and create no events or campaign redirects. Source editing and saved-source overview remain inert.
@@ -59,11 +66,11 @@ Keep the admin campaign view open alongside DevTools Network on the public page.
 
 ## Interactive starter templates
 
-- Confirm the catalog offers 25 landing pages and 23 emails, including six new interactive pages and three matching document invitations. Existing entries must remain independently selectable.
-- Preview each new page at desktop and narrow widths. Check logo placement, readable file cards, labels, keyboard focus, native required-field feedback and the Microsoft side-panel layout. Compare the intended compositions with the [reference notes](../../../crates/ruphish-http/starter-templates/interactive-references.md); no automated test establishes visual fidelity.
+- Compare the picker with the current `catalog.json`: every declared entry must be independently selectable in its resource family, with no missing or duplicated IDs.
+- Preview each changed page at desktop and narrow widths. Check logo placement, readable file cards, labels, keyboard focus, native required-field feedback and the Microsoft side-panel layout. Compare the intended compositions with the [reference notes](../../../crates/ruphish-http/starter-templates/interactive-references.md); no automated test establishes visual fidelity.
 - Open each document card, continue from email to password where applicable, reveal the synthetic password and go back. The password must clear while the email remains. Use Enter in both steps and confirm it activates the current action. Repeat with recipient-email prefill and supported company-logo options, then add a copy and reopen its editor preview.
 - Verify intermediate actions create no submission requests. Final submission must show preview feedback in previews and send only the collector's presence-only payload in a synthetic campaign. Repeated clicks must not create duplicate submissions. Interrupt final delivery and recover with **Retry this submission**; close and reopen a completed preview to restart.
-- Preview the three new invitation emails in HTML and plain text. Confirm sender and filename match the corresponding landing card and the campaign link opens that page. Edit both independent copies when customizing those details.
+- Preview the changed invitation emails in HTML and plain text. Confirm sender and filename match the corresponding landing card and the campaign link opens that page. Edit both independent copies when customizing those details.
 
 ## Record the boundary
 

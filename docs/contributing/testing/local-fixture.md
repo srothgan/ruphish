@@ -1,8 +1,8 @@
 ---
 title: Local acceptance fixture
-description: Run the canonical controlled DNS, HTTPS, SMTP, and participant protocol environment.
+description: Start and inspect the controlled Docker environment for DNS, HTTPS, SMTP, and participant tests.
 sidebar:
-  order: 3
+  order: 320
 ---
 
 This is the single Docker test environment for domain verification, public interactions and SMTP acceptance. Keep its admin address on port 3334 and public HTTPS on 8443. Extend this fixture when scenarios change; use fresh data in CI instead of maintaining another lab definition.
@@ -11,7 +11,7 @@ This fixture runs a separate Ruphish installation, authoritative test DNS, trust
 
 ## Start the fixture
 
-Requirements: Docker with Linux containers and Compose v2, Node with native Fetch and `Headers.getSetCookie()`, and the toolchain documented in AGENTS.md. Run commands from the product root. Build the admin distribution first if `dist/admin/` is absent or stale: `npm ci --prefix crates/ruphish-ui/web`, then `trunk build --locked` (PowerShell: set `$env:NO_COLOR = 'true'` first).
+Requirements: Docker with Linux containers and Compose v2, the product Node version from development setup, and the [development toolchain](../development-setup/index.md). Run commands from the product root. Build the admin distribution first if `dist/admin/` is absent or stale: `npm ci --prefix crates/ruphish-ui/web`, then `trunk build --locked` (PowerShell: set `$env:NO_COLOR = 'true'` first).
 
 ```sh
 node tests/acceptance/lab.mjs init
@@ -60,17 +60,13 @@ To verify with disposable fixture state while preserving the existing lab, set `
 
 Log in as `admin`; retrieve the fixture password with `node tests/acceptance/lab.mjs password`. This is a separate account/database. Its generated secrets, certificate keys and database are ignored under `tests/acceptance/data/`; the exported binary is ignored under `target/docker/`. Do not publish the data directory or raw Mailpit messages as CI artifacts. If you change the admin password/API key manually, update the local bootstrap file before using fixture commands again.
 
-## Local image definition
+## What the fixture builds
 
-The root [Dockerfile](../../../Dockerfile) packages a prebuilt executable on a pinned Debian Bookworm slim base compatible with the Linux builder. The runtime includes CA certificates, curl and libgcc, runs as UID/GID `10001:10001`, and starts Ruphish directly as PID 1. It contains no Rust or Node toolchain. The [.dockerignore](../../../.dockerignore) allows only the executable, image configuration, licenses/notices and probe script into the build context. The UI is embedded in the executable; the default preparation command uses development optimization, while `prepare --release` produces the optimized server.
+The root Dockerfile packages a prebuilt executable with embedded UI. `prepare` builds a development executable, and `prepare --release` selects optimized code. `prepare --certificates-only` leaves a supplied binary/image intact when verifying release artifacts.
 
-The image sets `XDG_CONFIG_HOME=/etc` and includes a default `/etc/ruphish/config.json`, so additional CLI flags retain container defaults. The default listeners are HTTP on `0.0.0.0:3333` and `0.0.0.0:8081` inside the container, SQLite lives at `/var/lib/ruphish/ruphish.db`, and logs go to stderr. Mount a named volume at `/var/lib/ruphish` to preserve data. Publish the administration port on host loopback unless intentionally configuring remote access with trusted HTTPS. Mount a replacement configuration read-only at `/etc/ruphish/config.json`, or pass `--config` for another path. Native binary defaults remain unchanged.
+The fixture chooses its own configuration and persistent state mount. It is separate from your ordinary development database. See [Docker hosting](../../administration/hosting-and-maintenance/docker.md) for production image configuration and [monitoring](../../administration/hosting-and-maintenance/monitoring.md) for probes.
 
-The fixture explicitly selects `/lab/data/config.json` and supplies SQLite, certificates, credentials and data through its state mount. Database selection still comes from the ordinary [database configuration](../../administration/databases/index.md). Preparation preserves host ownership of fixture inputs, grants the app group write access to the data directory, and assigns the server key and existing database/log files to the app user. A deployment that enables direct TLS must supply a readable certificate chain and private key at its configured paths; a reverse proxy can instead terminate HTTPS. Fixture certificates and credentials are never included in the image.
-
-The image's [health probe](../../administration/health.md) requires exactly HTTP `200` from `http://127.0.0.1:3333/health/ready`. It checks every 30 seconds, allows a 60-second startup grace period and becomes unhealthy after three consecutive failures. Curl has a two-second deadline inside Docker's three-second command timeout. Set `RUPHISH_HEALTH_URL` to match an alternative listener/port/scheme and `RUPHISH_HEALTH_CA` to a mounted CA file for private HTTPS; the URL's hostname must match the certificate. These variables configure the probe only. The script bypasses proxy environment variables, rejects redirects and validates TLS. Docker health status alone does not restart a process.
-
-Optional Compose build inputs are `RUPHISH_APP_IMAGE` (default `ruphish:local`), `RUPHISH_IMAGE_VERSION` (default `local-development`) and `RUPHISH_IMAGE_REVISION` (default `unknown`). The latter two label the image and do not change the compiled application version. No image is published by these commands.
+Optional Compose build inputs are `RUPHISH_APP_IMAGE` (default `ruphish:local`), `RUPHISH_IMAGE_VERSION` (default `local-development`), and `RUPHISH_IMAGE_REVISION` (default `unknown`). The latter two set image labels, not the compiled application version. These local commands do not publish an image.
 
 ## Open a browser without changing system DNS or trust
 
@@ -117,4 +113,4 @@ The fixture is self-contained and designed for a Linux GitHub-hosted runner with
 
 For a containerized Node test client on the `ruphish-acceptance_lab` network, set `RUPHISH_ACCEPTANCE_ADMIN=http://app:3333`, `RUPHISH_ACCEPTANCE_INBOX=http://inbox:8025` and `RUPHISH_ACCEPTANCE_PUBLIC_IP=172.30.53.10`, mount this product directory at `/workspace` and run the same test from there. These overrides change connection addresses only; the public origin and TLS hostname remain `good.ruphish.test`. Host-run Node needs no overrides.
 
-Fresh fixture configurations use stderr-only application logging and the Compose app service uses Docker's `local` driver with `max-size: "10m"` and `max-file: "5"`. Existing running containers and their configuration files are not changed by source edits. See [logging and retention](../../administration/logging.md#docker-output) before recreating a fixture or opting into application file logs.
+Fresh fixture configurations use stderr-only application logging and the Compose app service uses Docker's `local` driver with `max-size: "10m"` and `max-file: "5"`. Existing running containers and their configuration files are not changed by source edits. See [logging and retention](../../administration/hosting-and-maintenance/monitoring.md) before recreating a fixture or opting into application file logs.

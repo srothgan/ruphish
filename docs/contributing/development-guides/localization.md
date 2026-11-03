@@ -1,8 +1,8 @@
 ---
 title: Localization
-description: Translate interface text and preserve independent language, date-format, and time-zone preferences.
+description: Update translations and preserve independent language, formatting, and time-zone preferences.
 sidebar:
-  order: 6
+  order: 260
 ---
 
 Ruphish currently provides English and German interface text. Translation catalogs live in `crates/ruphish-ui/locales/en.json` and `de.json`; the UI build uses `leptos_i18n` to generate checked keys. English is the default and fallback.
@@ -12,11 +12,23 @@ Ruphish currently provides English and German interface text. Translation catalo
 1. Find the feature's existing keys and shared terminology. Add equivalent entries to both catalogs instead of embedding a literal in a view.
 2. Preserve interpolation names and the intent of action, field, help, and error text. Translate the task meaning rather than copying English word order.
 3. Use the existing localization context and helpers: `tr!` for reactive view text, `trs!` for shared control labels, and `t_string!` with a captured context in callbacks or reactive computations.
-4. Run the locale/functional checks and affected WASM checks from [validation](testing/validation.md). Review the changed screens in both languages, including longer labels and wrapped controls.
+4. Run the locale/functional checks and affected WASM checks from [validation](../testing/validation.md). Review the changed screens in both languages, including longer labels and wrapped controls.
 
 Backend error codes remain stable machine identifiers. Translate them in the response handler instead of localizing server contracts. Already displayed error strings do not automatically change when the interface language changes.
 
-Editor text uses the browser editor's translation integration in `web/editor-i18n.mjs`; update it when changing editor-specific labels. Adding a new supported language also needs the locale inventory, preference validation, picker, and editor behavior reviewed, not only a new JSON file.
+Editor text uses `crates/ruphish-ui/web/editor-i18n.mjs`; update it when changing editor-specific labels. Run the focused translation check from the repository root:
+
+```sh
+node --test crates/ruphish-ui/web/tests/locales.test.mjs
+```
+
+Then build the interface and select the relevant WASM checks. A JSON syntax check alone cannot detect every missing generated key or presentation issue.
+
+## Add a supported language
+
+Adding a catalog alone does not enable a language. Update the `leptos_i18n` configuration in `crates/ruphish-ui/build.rs`, the domain language inventory and preference validation, the language picker, and editor translations together. Match every key and interpolation used by existing catalogs. Review fallback behavior and unsupported browser locale handling before adding the language to published documentation.
+
+Run the UI build and the locale, preference, and browser checks affected by these changes. Use [validation](../testing/validation.md#frontend-and-browser-code) for commands. Verify the picker, saved preference, reset-to-browser behavior, errors, and long labels in the actual interface.
 
 ## Keep three preferences independent
 

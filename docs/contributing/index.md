@@ -1,22 +1,26 @@
 ---
-title: Contribute to Ruphish
-description: Find the development, testing, translation, and documentation guidance for a focused contribution.
+title: Contributor documentation
+description: Build a development checkout, work on the code or content, and verify your changes.
 sidebar:
-  order: 1
+  order: 0
+prev: false
+next:
+  link: /docs/contributing/development-setup/
+  label: Build and run locally
 ---
 
-Read the repository's [contribution guide](../../CONTRIBUTING.md) for review expectations, then choose the part of the project you want to work on.
+Start with [CONTRIBUTING.md](../../CONTRIBUTING.md) for proposing work, submitting pull requests, and working through review. These guides explain how to do the technical work.
 
-| Work | Guide |
+| Your task | Start here |
 | --- | --- |
-| Build and run a development checkout | [Setup](setup.md) |
-| Understand responsibility boundaries | [Architecture](architecture.md), [database development](database-development.md) |
-| Extend the admin interface | [Frontend](frontend.md), [design system](design-system.md) |
-| Maintain the static public demo and shared sample data | [Public demo](demo.md) |
-| Translate interface text or change date/time presentation | [Localization](localization.md) |
-| Verify a change | [Testing](testing/index.md), [validation commands](testing/validation.md) |
-| Exercise real protocols locally | [Canonical fixture](testing/local-fixture.md), [database providers](testing/database-providers.md) |
-| Review browser behavior | [Manual UI checks](testing/manual-ui.md) |
-| Improve these docs | [Documentation](documentation.md) |
+| Build and run Ruphish from source | [Development setup](development-setup/index.md) |
+| Find where a change belongs | [Architecture](development-guides/architecture.md) |
+| Change server behavior or persistence | [Backend development](development-guides/backend.md), [database development](development-guides/database-development.md) |
+| Change the application interface | [Frontend development](development-guides/frontend.md), [design system](development-guides/design-system.md) |
+| Translate the interface | [Localization](development-guides/localization.md) |
+| Improve the docs or website | [Documentation and website](development-guides/documentation.md) |
+| Add bundled content or change the demo | [Starter templates](development-guides/starter-templates.md), [public demo](development-guides/demo.md) |
+| Choose and run checks | [Testing](testing/index.md) |
+| Maintain CI, releases, or demo deployment | [Maintenance](maintenance/index.md) |
 
-The guides explain how to work on the product. Historical investigation results, migration-project plans, and per-run verification records belong outside the published documentation.
+For your first code change, set up the checkout, use the architecture guide to locate the implementation, and select checks for the behavior you change. Documentation-only work needs the website tools, not a Rust build.
