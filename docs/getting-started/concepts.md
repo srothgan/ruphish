@@ -1,40 +1,51 @@
 ---
-title: Understand a campaign
-description: Learn the objects and lifecycle behind a Ruphish exercise.
+title: Understand your campaign
+description: Understand how your campaign's audience, content, sending account, and results fit together.
 sidebar:
-  order: 3
+  order: 4
 ---
 
-A campaign brings together an audience, a message, a destination, and delivery settings. You can reuse the resources across exercises, but each launched campaign has its own recipient results and history.
+In [your first campaign](first-campaign.md), you brought together an audience, a message, a destination, and a way to send mail. These are reusable **resources**. A campaign combines them for one exercise and keeps its own recipient history.
 
-| Concept | What it means |
-| --- | --- |
-| Application account | A person who signs in to manage resources or administer the installation |
-| Recipient | An address and optional name/position supplied by the campaign operator |
-| Group | A saved collection of recipients |
-| Email template | The subject, HTML/plain-text content, visible sender override, and attachments |
-| Landing page | The content shown after a recipient follows a campaign link |
-| Sending profile | SMTP connection settings and transport sender |
-| Domain | A public HTTPS origin whose control, routing, DNS, and TLS have been verified |
-| Draft | Editable campaign configuration that has not started delivery |
-| Campaign | A launched or scheduled execution with recipients, delivery work, and event history |
+## How the resources fit together
 
-## From resources to results
+| Resource | Its job | In your first campaign |
+| --- | --- | --- |
+| Group | Lists the recipients and details such as their names | Your own inbox in `First campaign audience` |
+| Email template | Defines the subject, message, and optional attachments | The Google Drive document-sharing invitation |
+| Landing page | Provides the page opened by a recipient's campaign link | The simulated Google Drive document page |
+| Learning page | Provides an explanation after submission | The SLAM guidance |
+| Sending profile | Connects Ruphish to your mail service and sets the default sender address | Your dedicated sending account in `Training mail account` |
+| Domain | Sets the base web address used for campaign links | `http://127.0.0.1:8081` in `Training campaign pages` |
 
-Suppose you're preparing an exercise for a small training group. You import its recipients, write a personalized email, and create a landing page. You then choose a sending profile and eligible domain, save a draft, and review the final audience and message.
+You sign in to Ruphish to manage campaigns. Recipients follow links to your campaign pages at a separate web address. They must be able to open those pages from the devices where they read the email.
 
-Launching creates the execution state. A future launch time leaves messages waiting until they are due. Saving a draft does not start a campaign, even when its proposed launch time passes.
+One Ruphish installation is a shared company workspace. Depending on their permissions, users can view and edit resources and campaigns created by colleagues. Creator and editor details show who prepared them. Recipients are the people receiving the campaign emails; they don't need user accounts. See [accounts and permissions](../administration/accounts-and-permissions.md) for who can do what.
 
-The SMTP server accepting a message establishes a delivery observation; it does not prove that the message reached an inbox. Requests for tracking images and landing pages create other observations. Reporting a message is a separate outcome.
+## From draft to campaign
 
-## Resource changes and ownership
+A **draft** saves your selections while you prepare. You can return to it, change content, and review the audience. Saving it never starts delivery, even if a proposed launch time passes.
 
-Resources belong to application accounts. Administrator permissions do not make every campaign appear in your own dashboard. Account administration and campaign ownership are separate boundaries.
+**Launching** starts the campaign, or schedules it to start at the time you chose. During review, Ruphish combines the selected groups into one recipient list and removes duplicate addresses. A person listed in several groups receives one campaign message.
 
-Campaigns freeze authored content when launched or scheduled; later resource edits affect future campaigns. SMTP transport settings and operational controls stay live. Review the [freeze boundary](../user-guide/campaigns/launch.md#what-stays-fixed-after-launch) and current resources before launch. Resources used by unfinished campaigns have deletion protection.
+At launch, Ruphish saves the recipient list, content, and tracking choices for that campaign. Editing an email template afterward affects future campaigns. You can still update the sending profile's connection settings to fix a delivery problem. See [what stays fixed after launch](../user-guide/campaigns/launch.md#what-stays-fixed-after-launch) for the details.
 
-## Two different kinds of credentials
+**Completing** a campaign stops remaining deliveries and new recipient activity while keeping its history. **Deleting** it removes that history. You can't delete resources that an unfinished campaign still uses.
 
-Your application password and configured SMTP/IMAP credentials authorize the application to do work. Participant-entered values are different: they are not supported campaign data. A password-presence observation means only that a designated field was nonempty, not that a password was valid or retained.
+## What the results tell you
 
-Continue with [installation](installation.md), or follow the [local tutorial](first-campaign.md) if the build tools are already available.
+Delivery and participant interactions answer different questions:
+
+- **SMTP acceptance** means the mail server accepted the message. It doesn't prove that the message reached the inbox or that a person read it.
+- **An open** means the tracking image was requested, when open tracking is enabled. Image proxies and automated clients can cause that request.
+- **A click** means a campaign link was requested. It may come from a person or an automated scanner.
+- **A submission** records that the form was submitted and whether the password field contained anything. Ruphish doesn't store the usernames, passwords, or other values entered in the form.
+- **A report** records that the message was reported as phishing, separately from clicks and submissions.
+
+The timeline shows individual recorded events. Summary counts also reflect how far recipients progressed: for example, a click can count toward opens even when no tracking image was loaded. See [how metrics are counted](../user-guide/results/metrics.md) when interpreting results or comparing exports.
+
+If a delivery has an **unknown outcome**, the SMTP service may have accepted the message before a connection failed. Check the receiving system before choosing to resend; see [delivery recovery](../user-guide/campaigns/delivery.md).
+
+## Prepare your next exercise
+
+Reuse your resources when they still fit, or create new ones for a different audience and lesson. Start with [email templates](../user-guide/email-templates.md), [landing pages](../user-guide/landing-pages.md), and [groups](../user-guide/groups.md). Check that the sending account and campaign address still suit the new campaign, then review and launch it.

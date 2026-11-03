@@ -1,129 +1,117 @@
 ---
-title: Run your first local campaign
-description: Create a campaign with synthetic recipients and inspect its message and results in the local fixture.
+title: Run your first campaign
+description: Connect a sending account, use starter content, and follow a campaign through your own inbox.
 sidebar:
-  order: 5
+  order: 3
 ---
 
-This exercise uses Ruphish's existing local fixture: an isolated application database, test DNS and HTTPS, and a Mailpit inbox. All recipients use `.test` addresses. Messages stay in the supplied capture service when you keep the sending profile below unchanged.
+Your first campaign sends a document-sharing invitation to an inbox you control. You'll use ready-made content from the **Starter Template Repository**, open the campaign link on the computer running Ruphish, and inspect the results. You don't need a public domain for this local tryout.
 
-You'll create your own resources through the interface, launch a small campaign, and inspect its results. The fixture's `seed` command is not needed for this walkthrough; it creates a separate demonstration campaign automatically.
+## Before you begin
 
-## Prepare the fixture
+You'll need:
 
-Complete the [build prerequisites and browser build](installation.md#build). You also need Docker with Linux containers and Compose v2. Run commands from `ruphish/`:
+- A running Ruphish installation and an account with permission to create resources and campaigns. The administrator created during [installation](installation.mdx) can also access the Starter Template Repository.
+- An SMTP service you can send through. Use a dedicated sending account for your exercises, with its SMTP hostname, port, username, password, and permitted From address.
+- An inbox you control and can check.
+- Access to your inbox on the computer running Ruphish, so you can open the local campaign link there.
 
-```sh
-node tests/acceptance/lab.mjs init
-docker compose -f tests/acceptance/compose.yaml --profile setup run --rm prepare
-docker compose -f tests/acceptance/compose.yaml build app
-docker compose -f tests/acceptance/compose.yaml up -d --wait dns inbox app
-node tests/acceptance/lab.mjs demo
-```
+SMTP is how Ruphish connects to your mail provider to send email. Your provider may require you to enable SMTP access, create an app password, or verify a sender address or domain. Follow its setup instructions and use the SMTP login details it provides.
 
-Preparation builds the Linux executable and test certificates; the image build packages the executable and completed admin UI. The first run needs dependency downloads. Initialization preserves existing fixture data and credentials. `demo` completes the fixture account's initial password change, enables domain verification for the demonstration, publishes the local domain proof, and verifies the passing origin. It also keeps a deliberately failing domain for comparison.
+## 1. Connect your sending account
 
-Open `http://127.0.0.1:3334`. Retrieve the fixture password locally:
+A **sending profile** stores the settings Ruphish uses to send email through your account. Open **Resources → Sending profiles → Create** and enter:
 
-```sh
-node tests/acceptance/lab.mjs password
-```
-
-Sign in as `admin`. Under **Domains**, `https://good.ruphish.test:8443` should be eligible for campaign use. Leave the wrong-TXT example alone.
-
-## Open the exercise browser
-
-The public `.test` hostname needs a local mapping and trust for the fixture certificate. Use an isolated Chromium profile rather than changing system DNS or trust. On Windows with Chrome installed, run in PowerShell:
-
-```powershell
-$pin = node tests/acceptance/lab.mjs browser-pin
-$profile = Join-Path (Get-Location) 'tests/acceptance/data/browser-profile'
-& 'C:\Program Files\Google\Chrome\Application\chrome.exe' "--user-data-dir=$profile" '--host-resolver-rules=MAP good.ruphish.test 127.0.0.1, MAP bad.ruphish.test 127.0.0.1' "--ignore-certificate-errors-spki-list=$pin" 'http://127.0.0.1:8026'
-```
-
-Adjust the executable path if needed. Linux Chromium instructions and fixture troubleshooting are in [the local fixture guide](../contributing/testing/local-fixture.md). Close this dedicated browser completely before changing its flags. The certificate exception is scoped to the fixture key; do not substitute a general certificate-validation bypass.
-
-## Create a sending profile
-
-Open **Resources → Sending profiles** and choose **Create**:
-
-| Field | Value |
+| Field | What to enter |
 | --- | --- |
-| Name | `First exercise inbox` |
-| SMTP host | `172.30.53.20:1025` |
-| From address | `Training <training@example.test>` |
-| Username/password | Leave empty |
+| Name | `Training mail account`, or another name you'll recognize |
+| SMTP host and port | Your provider's SMTP hostname and port, such as `smtp.example.com:587`; replace this example with the provider's actual settings |
+| From address | An address your account is allowed to send from, optionally with a display name such as `Training <training@example.com>` |
+| Username | The SMTP username supplied by your provider, often the full sending-account email address |
+| Password | The SMTP password or app password required by your provider |
 
-Save, open **Send test**, and choose **Test connection only**. This address is the fixture inbox on its private Docker network. It is not the address to use for an unrelated native installation. A successful connection test confirms connectivity; it has not sent a campaign.
+Keep **Ignore SMTP certificate errors** off and use the host and port specified by your provider. The [sending-profile guide](../user-guide/sending-profiles.md) explains connection security if you need more detail.
 
-## Import two recipients
+Save the profile. Open **Send test** and choose **Test connection only**. This checks whether Ruphish can connect and sign in to your mail service, without sending a message.
 
-Create a UTF-8 file named `first-exercise.csv` with this content:
+If sign-in fails, check the SMTP username and password and whether SMTP access is enabled for the account. For a connection or certificate error, check the hostname, port, and provider's instructions. If you use an internal company mail server, the person managing Ruphish may need to [allow connections to it](../administration/outbound-connections.md).
 
-```csv
-First Name,Last Name,Email,Position
-Alex,Rivera,alex@example.test,Operations
-Sam,Lee,sam@example.test,Support
-```
+## 2. Send yourself a test message
 
-Open **Groups → Import**, select the file, and use **Advanced → Column mapping** only if its headers differ from the defaults. Continue to the create form, review the accepted rows, name the group `First exercise audience`, and save. Confirm both addresses appear. If you repeated the tutorial, choose a new resource name rather than overwriting previous work.
+In **Send test**, enter your own inbox address under **Recipient email**. Leave the optional public test URL and landing-page selection empty, then choose **Send test email**. Ruphish can send a default test message before you've created campaign content.
 
-## Write the email and landing page
+Check your inbox and junk folder. Confirm that the message arrived and shows the expected sender address. If Ruphish says the mail server accepted it but it doesn't arrive, check your provider's delivery logs or filtering before retrying.
 
-Create an email template named `First exercise email`, with subject `A local exercise for {{.FirstName}}`. Put this in its HTML source:
+## 3. Add starter content
 
-```html
-<p>Hello {{.FirstName}},</p>
-<p><a href="{{.URL}}">Open the local training page</a>.</p>
-{{.Tracker}}
-```
+Open **Company settings → Starter Template Repository**. You'll add an email, a landing page, and a learning page. Each is saved as a copy you can edit; adding them doesn't send any email.
 
-Add the plain-text alternative:
+1. Under **Email templates**, select **Google Drive - Document sharing invitation (EN)**. Use **Preview** to inspect the message.
+2. Under **Landing pages**, select **Google Drive - Shared document**. Leave **Prefill recipient email** and **Use company logo** off for this first campaign.
+3. Under **Learning pages**, select **SLAM (EN)**. This is the explanation you'll show after a test submission. Leave **Use company logo** off.
+4. Choose **Add selected** and check that all three additions succeed.
 
-```text
-Hello {{.FirstName}},
-Open the local training page: {{.URL}}
-```
+The email invites its recipient to open “Project review notes.” Its campaign link leads to your selected landing page. The page simulates a document-sharing sign-in; it doesn't retrieve a Google document or validate an account.
 
-Save the template. Create a landing page named `First exercise page` with:
+If you don't have access to the repository, ask an administrator to add these resources. You can edit the copies later or return to [the repository](../user-guide/starter-templates.md) for other designs. If an addition is interrupted, check **Resources** before adding it again.
 
-```html
-<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><title>Local training exercise</title></head>
-<body>
-  <h1>You've reached the training page</h1>
-  <p>This is a local example. No sign-in is needed.</p>
-</body>
-</html>
-```
+## 4. Create a group containing yourself
 
-Leave submission tracking and the redirect unset for this first exercise. Preview and save. A preview does not create campaign events.
+A **group** supplies the audience for a campaign. Open **Resources → Groups → Create**, name the group **First campaign audience**, and add one recipient with your name and the inbox address you tested above. Save and confirm that the group contains only that address.
 
-## Review and launch
+This first campaign sends a real email. Keeping the audience to your own inbox lets you inspect the complete experience before preparing a wider exercise. Recipients don't need Ruphish application accounts.
 
-Open **Campaigns → Create campaign**. Name it `My first local campaign`, select your group, email, page, and sending profile, and choose the verified passing domain. Leave the schedule empty for immediate delivery.
+## 5. Register your campaign address
 
-Review the audience and personalized message. You should see two unique recipients and the fixture's HTTPS origin. If the domain is unavailable, return to **Domains** and inspect its latest check before proceeding.
+Open **Resources → Domains → Create**. Name the domain **Training campaign pages**, enter `http://127.0.0.1:8081` in the origin field, leave it enabled, and save. If you changed the campaign-page port during installation, use that port instead of `8081`.
 
-Choose **Launch campaign**. Open Mailpit at `http://127.0.0.1:8026` and find the messages by subject and recipient. The greetings and campaign links should be personalized. SMTP acceptance means the capture service accepted the mail; in a real installation, it would not establish inbox placement.
+This address opens campaign pages on your own computer. Open the email's link on the same computer where Ruphish is running; it won't work on your phone or another device.
 
-## Inspect the result
+The local address works with domain verification off, which is the default on a fresh installation. If Ruphish is hosted elsewhere, you want to use multiple devices, or your installation requires verification, follow [Domain setup](../user-guide/domains.md) and use that address instead.
 
-In the dedicated exercise browser, follow Alex's campaign link from Mailpit. The training page should open. Return to the campaign and choose **Results**. Inspect Alex's timeline and the click observation. An image open appears only if the mail viewer requests the tracking image; the click can count toward summary progression even without a separate open event.
+## 6. Review and launch
 
-Download **Recipients CSV** or **Events CSV**. The recipient export summarizes people; the event export lists observations. Use [metric definitions](../user-guide/results/metrics.md) to understand the difference.
+Open **Campaigns → Create campaign** and select:
 
-## Finish
+| Selection | Value |
+| --- | --- |
+| Name | `My first campaign` |
+| Group | `First campaign audience` |
+| Email template | `Google Drive - Document sharing invitation (EN)` |
+| Landing page | `Google Drive - Shared document` |
+| Sending profile | `Training mail account` |
+| Domain | `Training campaign pages` |
+| Redirect destination | **Learning page**, then `SLAM (EN)` |
 
-Complete the campaign when you're done. New public interactions no longer update its history. Completion retains the campaign for review; deletion removes it.
+Leave the launch schedule empty to send now and keep **Track email opens** enabled. Check the recipient list: it should contain **one recipient—your own address**. Review the personalized email, From address, campaign link, and selected learning page.
 
-Stop the local services without deleting their data:
+Saving a draft only saves your preparation. Choose **Launch campaign** when you're ready to send.
 
-```sh
-docker compose -f tests/acceptance/compose.yaml stop app inbox dns
-```
+Open your inbox and find the document-sharing invitation. If it doesn't arrive, check the campaign's delivery view and your mail provider's delivery information before launching another campaign. A mail server can accept a message even if it later ends up in junk or isn't delivered to the inbox.
 
-Close the dedicated browser. Delete only your tutorial resources through the interface if you want to remove them; referenced resources may require deleting the campaign first. Do not remove the fixture data directory to clean up one exercise.
+## 7. Follow the link and inspect your results
 
-Next, explore [scheduled campaigns](../user-guide/campaigns/scheduling.md), [landing-page forms](../user-guide/landing-pages.md), or [the API](../api/index.md).
+In the campaign message, choose **Open document**. The landing page should open at your configured campaign address. Choose its document card to reach the simulated sign-in. To try a submission, enter the fictional address `alex@example.test`, continue, and use the dummy password **`tutorial-only`**. Submit the form; the SLAM learning page should appear.
+
+The page records whether you entered something in the password field, without sending the email address or password you typed to Ruphish. Use the made-up details above for this step. See [participant data](../user-guide/participant-data.md) for what Ruphish records.
+
+Return to Ruphish, open the campaign's **Results**, and inspect your recipient timeline. You should find the link click and submission. An email-open event appears only when the mail viewer requests the tracking image.
+
+Mail scanners and image proxies can also produce opens and clicks, so you may see activity before you manually open the message. Use [metric definitions](../user-guide/results/metrics.md) to interpret those observations.
+
+Download **Recipients CSV** to see the recipient summary, or **Events CSV** to inspect individual observations.
+
+## Finish and prepare your next exercise
+
+Complete the campaign when you're done. You can still review its history, but Ruphish stops recording new recipient activity for it. Deleting a campaign removes its history.
+
+You can reuse the sending profile and starter resources for later campaigns. Before expanding the audience, adapt the message and learning content to your organization and review the recipients and destination again.
+
+## What's next?
+
+- [Understand your campaign](concepts.md): learn how resources, delivery, and results fit together.
+- [Reporting mailboxes](../user-guide/reporting-mailboxes.md): connect a mailbox to process campaign emails that recipients report as phishing.
+- [Webhooks](../administration/webhooks.md): send campaign events to other systems.
+- [User guide](../user-guide/index.md): explore content, scheduling, and reporting.
+
+Reporting mailboxes and webhooks are optional. An administrator must enable each feature in company settings before you can configure it.
