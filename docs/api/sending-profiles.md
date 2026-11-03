@@ -309,4 +309,4 @@ Example response:
 
 ## Related operations
 
-[Test SMTP connectivity or send a test message](imports-and-previews.md). Saving a profile does not send mail or verify account ownership.
+[Test SMTP connectivity or send a test message](imports-previews-and-test-sends.md). Saving a profile does not send mail or verify account ownership.

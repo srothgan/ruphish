@@ -12,7 +12,7 @@ Ruphish currently provides English and German interface text. Translation catalo
 1. Find the feature's existing keys and shared terminology. Add equivalent entries to both catalogs instead of embedding a literal in a view.
 2. Preserve interpolation names and the intent of action, field, help, and error text. Translate the task meaning rather than copying English word order.
 3. Use the existing localization context and helpers: `tr!` for reactive view text, `trs!` for shared control labels, and `t_string!` with a captured context in callbacks or reactive computations.
-4. Run the locale/functional checks and affected WASM checks from [validation](../testing/validation.md). Review the changed screens in both languages, including longer labels and wrapped controls.
+4. Run the locale/functional checks and affected WASM checks from [validation](../testing/validation-commands.md). Review the changed screens in both languages, including longer labels and wrapped controls.
 
 Backend error codes remain stable machine identifiers. Translate them in the response handler instead of localizing server contracts. Already displayed error strings do not automatically change when the interface language changes.
 
@@ -28,7 +28,7 @@ Then build the interface and select the relevant WASM checks. A JSON syntax chec
 
 Adding a catalog alone does not enable a language. Update the `leptos_i18n` configuration in `crates/ruphish-ui/build.rs`, the domain language inventory and preference validation, the language picker, and editor translations together. Match every key and interpolation used by existing catalogs. Review fallback behavior and unsupported browser locale handling before adding the language to published documentation.
 
-Run the UI build and the locale, preference, and browser checks affected by these changes. Use [validation](../testing/validation.md#frontend-and-browser-code) for commands. Verify the picker, saved preference, reset-to-browser behavior, errors, and long labels in the actual interface.
+Run the UI build and the locale, preference, and browser checks affected by these changes. Use [validation](../testing/validation-commands.md#frontend-and-browser-code) for commands. Verify the picker, saved preference, reset-to-browser behavior, errors, and long labels in the actual interface.
 
 ## Keep three preferences independent
 

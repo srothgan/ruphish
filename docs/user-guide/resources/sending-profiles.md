@@ -50,13 +50,13 @@ Open **Edit** to change the profile. A blank password field keeps the saved pass
 
 Passwords are not included in profile exports or copies. Enter the password again when creating a profile from an import or duplicate.
 
-Connection, password, and certificate settings can help recover sending for existing campaigns. Changing the sender or template content does not rewrite messages in campaigns already launched. After fixing a connection problem, inspect [campaign sending](../campaigns/delivery.md) and retry the affected deliveries where needed.
+Connection, password, and certificate settings can help recover sending for existing campaigns. Changing the sender or template content does not rewrite messages in campaigns already launched. After fixing a connection problem, inspect [campaign sending](../campaigns/monitor-sending.md) and retry the affected deliveries where needed.
 
 ## Resolve a failed test
 
 | What you see | What to check |
 | --- | --- |
-| Connection or destination rejected | Confirm the hostname and port. For an internal mail server, ask the host operator to check [outbound access](../../administration/outbound-connections.md). |
+| Connection or destination rejected | Confirm the hostname and port. For an internal mail server, ask the host operator to check [outbound access](../../administration/hosting-and-maintenance/connect-to-internal-services.md). |
 | Certificate error | Check the hostname, port, certificate, and trusted roots. Keep certificate checking enabled for your provider. |
 | Authentication failed | Check the account's credentials and whether SMTP access or an app password must be enabled with the provider. |
 | Sender rejected | Check that the provider allows the sender address and any template override. |

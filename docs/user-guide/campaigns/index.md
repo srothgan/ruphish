@@ -9,10 +9,10 @@ A campaign brings together recipients, content, a sending profile, and a campaig
 
 | Task | Guide |
 | --- | --- |
-| Select resources, save a draft, review, and launch | [Create a campaign](create.md) |
-| Choose when messages are sent | [Schedule a campaign](scheduling.md) |
-| Follow delivery and resolve failures | [Monitor sending](delivery.md) |
-| Finish the campaign or remove its records | [Complete or delete a campaign](completion-and-deletion.md) |
+| Select resources, save a draft, review, and launch | [Create a campaign](create-a-campaign.md) |
+| Choose when messages are sent | [Schedule a campaign](schedule-a-campaign.md) |
+| Follow delivery and resolve failures | [Monitor sending](monitor-sending.md) |
+| Finish the campaign or remove its records | [Complete or delete a campaign](complete-or-delete-a-campaign.md) |
 
 ## Find your work
 

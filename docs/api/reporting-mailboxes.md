@@ -5,7 +5,7 @@ sidebar:
   order: 17
 ---
 
-These resources are shared across the installation. Reads require `view_objects`; configuration changes, deletion, and network actions require `modify_objects`. Administrators control the global feature switch through [settings](settings.md). While disabled, reads and deletion remain available; saves and network actions return `409 FEATURE_DISABLED`. The body limit is 16 KiB.
+These resources are shared across the installation. Reads require `view_objects`; configuration changes, deletion, and network actions require `modify_objects`. Administrators control the global feature switch through [settings](company-settings.md). While disabled, reads and deletion remain available; saves and network actions return `409 FEATURE_DISABLED`. The body limit is 16 KiB.
 
 ## Request fields
 

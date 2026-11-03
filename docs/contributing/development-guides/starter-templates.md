@@ -13,9 +13,9 @@ Open a local development installation after building the UI and server. Find the
 
 1. Review each email, landing page or learning page individually, including its preview and applicable form behavior.
 2. Add its metadata and content paths to `crates/ruphish-http/starter-templates/catalog.json`. IDs are unique across all resource families; paths resolve relative to the manifest directory.
-3. Declare prefill and company-logo support only where the template supports them. Keep the [starter-template user guidance](../../user-guide/starter-templates.md) consistent with supported options.
+3. Declare prefill and company-logo support only where the template supports them. Keep the [starter-template user guidance](../../user-guide/add-starter-templates.md) consistent with supported options.
 4. Keep all required assets offline and preserve supported Go-template expressions.
-5. Extend the relevant catalog and transformation tests, following [validation](../testing/validation.md).
+5. Extend the relevant catalog and transformation tests, following [validation](../testing/validation-commands.md).
 
 Emails, landing pages and learning pages are independent entries. Imported copies are ordinary resources with no catalog relationship, installed status or automatic updates.
 
@@ -37,4 +37,4 @@ The three learning starters are independently authored documents with distinct l
 
 The executable catalog workflow in `tests/starter_templates_process.rs` compares every native catalog summary and complete entry against the demo API, then exercises bundled entries and an unpublished learning fixture through creation, preview, independent-copy edits, authorization and restart. The dedicated bundled-content case in `tests/learning_pages_process.rs` imports all three methods with their standard and company logos, serves them through `/learn/`, and checks that policy preserves their content and layout. `crates/ruphish-ui/web/tests/learning-starters.test.mjs` exercises branding and rejected options on the actual documents. Keep synthetic test content in tests; catalog entries belong in the bundled content directory and the shared manifest.
 
-Use [starter-template validation](../testing/validation.md#starter-templates) for direct commands. After changing embedded files, rebuild the server and review the prepared catalog preview, not just the raw HTML file. Verify a copied resource independently of its catalog entry; copied resources do not receive later catalog updates.
+Use [starter-template validation](../testing/validation-commands.md#starter-templates) for direct commands. After changing embedded files, rebuild the server and review the prepared catalog preview, not just the raw HTML file. Verify a copied resource independently of its catalog entry; copied resources do not receive later catalog updates.

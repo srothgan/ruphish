@@ -9,10 +9,10 @@ Results help you understand what Ruphish recorded during a campaign. Begin with 
 
 | Your question | Guide |
 | --- | --- |
-| What happened in this campaign or for one recipient? | [View campaign results](campaign-analysis.md) |
-| What do the counts and rates mean? | [Understand the metrics](metrics.md) |
-| How do I correct an observation? | [Correct events](correcting-events.md) |
-| How do I download the records? | [Export results](exports.md) |
+| What happened in this campaign or for one recipient? | [View campaign results](view-campaign-results.md) |
+| What do the counts and rates mean? | [Understand the metrics](understand-the-metrics.md) |
+| How do I correct an observation? | [Correct events](correct-events.md) |
+| How do I download the records? | [Export results](export-results.md) |
 | What participant information is recorded? | [Participant data](participant-data.md) |
 
 ## Start from the dashboard
@@ -27,4 +27,4 @@ For a failed or unconfirmed email, use the campaign's **Sending** tab. For opens
 
 A recorded request is an observation, not proof of a person's intention. Mail scanners can follow links, email clients can block images, and repeated requests can come from one recipient.
 
-When presenting findings, state the campaign and selected filters, distinguish people from repeated events, and explain the relevant measurement limits. [Understand the metrics](metrics.md) covers those distinctions.
+When presenting findings, state the campaign and selected filters, distinguish people from repeated events, and explain the relevant measurement limits. [Understand the metrics](understand-the-metrics.md) covers those distinctions.

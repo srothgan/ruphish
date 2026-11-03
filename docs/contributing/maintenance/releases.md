@@ -11,7 +11,7 @@ The [release workflow](../../../.github/workflows/release.yml) validates source,
 
 1. Select the release commit on `main`. Update the workspace package version and its lockfile records through the normal Cargo workflow.
 2. For a final release, add exactly one dated `CHANGELOG.md` section matching the version, such as `## [0.1.1] - 2026-11-03`. Complete the release notes; the metadata check rejects empty notes and TODOs.
-3. Review migrations and compatibility instructions. Released SQL migrations are immutable; schema changes need forward migrations and the relevant [database tests](../testing/database-providers.md).
+3. Review migrations and compatibility instructions. Released SQL migrations are immutable; schema changes need forward migrations and the relevant [database tests](../testing/database-provider-tests.md).
 4. Run the **Release** workflow manually on the intended commit/ref to validate the release process without publication. Inspect its source, dependency-security, native, image, bundle, and gate jobs.
 5. After validation and maintainer review, create an annotated version tag on the release commit and push that tag to publish. The tag must equal `v` followed by the workspace version, and the commit must be an ancestor of `origin/main`.
 
@@ -65,4 +65,4 @@ From the repository root, using the product Node version:
 node --test .github/scripts/release.test.mjs
 ```
 
-Also run the applicable [JavaScript checks](../testing/validation.md#javascript) and [workflow checks](ci.md). Tests of package metadata and simulated publication failures do not establish that a hosted release or platform executable has passed its actual workflow.
+Also run the applicable [JavaScript checks](../testing/validation-commands.md#javascript) and [workflow checks](ci-workflows.md). Tests of package metadata and simulated publication failures do not establish that a hosted release or platform executable has passed its actual workflow.

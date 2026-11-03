@@ -6,7 +6,7 @@ sidebar:
 next: false
 ---
 
-The public demo uses its own Vercel project. The website is a separate application and deployment. Start with [local demo development](../development-guides/demo.md) when changing its UI or sample data.
+The public demo uses its own Vercel project. The website is a separate application and deployment. Start with [local demo development](../development-guides/public-demo.md) when changing its UI or sample data.
 
 ## Understand the publication path
 
@@ -57,10 +57,10 @@ Eligible PR previews use one bot comment showing build, approval, deployment, or
 
 ## Verify and recover
 
-Open the deployed URL and run the relevant [manual demo review](../development-guides/demo.md#verify-your-change). Include nested-route refresh, asset loading, login, simulation feedback, and exports. Confirm that simulated operations do not contact a backend or send messages.
+Open the deployed URL and run the relevant [manual demo review](../development-guides/public-demo.md#verify-your-change). Include nested-route refresh, asset loading, login, simulation feedback, and exports. Confirm that simulated operations do not contact a backend or send messages.
 
 If publication fails, inspect credentials, selected project IDs, environment approval, and the retained artifact before retrying. A manual CI run on main can rebuild and publish the current main demo when a previous run was cancelled or its artifact expired.
 
 Set `DEMO_DEPLOY_ENABLED` to a value other than `true` to stop new workflow publications. If restoring the previous Vercel Git deployment path, reconnect the demo project's repository integration. These configuration changes do not remove the existing deployment or alter the website project.
 
-Use the script/workflow checks in [CI workflows](ci.md) for implementation changes. Build, packaging, approval, and deployed behavior are separate verification stages.
+Use the script/workflow checks in [CI workflows](ci-workflows.md) for implementation changes. Build, packaging, approval, and deployed behavior are separate verification stages.

@@ -31,7 +31,7 @@ The administration browser calls HTTP endpoints; it never connects directly to a
 4. The provider saves the record, nested content, new revision, and attribution in one transaction.
 5. HTTP maps the confirmed result to a response. The UI updates its confirmed state while preserving any newer local edits.
 
-A stale revision fails without overwriting another person's change. A lost response can leave the client uncertain even if the database committed. These are different outcomes and require different recovery behavior. See [backend development](backend.md), [database development](database-development.md), and [frontend development](frontend.md).
+A stale revision fails without overwriting another person's change. A lost response can leave the client uncertain even if the database committed. These are different outcomes and require different recovery behavior. See [backend development](backend-development.md), [database development](database-development.md), and [frontend development](frontend-development.md).
 
 ## Follow a campaign
 
@@ -63,8 +63,8 @@ The built-in participant collector accepts a closed observation schema and optio
 
 | Question | Guide |
 | --- | --- |
-| How do I change a request, validation rule, or worker? | [Backend development](backend.md) |
+| How do I change a request, validation rule, or worker? | [Backend development](backend-development.md) |
 | How do transactions, schema checks, and migrations work? | [Database development](database-development.md) |
-| How do I preserve form state and handle late responses? | [Frontend development](frontend.md) |
+| How do I preserve form state and handle late responses? | [Frontend development](frontend-development.md) |
 | Where do translations and time conversion belong? | [Localization](localization.md) |
 | Which tests cover the change? | [Testing](../testing/index.md) |

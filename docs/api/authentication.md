@@ -51,4 +51,4 @@ An invalid key returns `401 Unauthorized`:
 
 Resources and campaigns are shared across the installation. Creator attribution does not make a resource private. A key cannot bypass a locked account, mandatory password setup, revision checks, disabled features, or state restrictions.
 
-See [account endpoints](users-and-api-keys.md) for access to your own account, account administration, and API-key rotation. Rotating a key invalidates the previous key immediately.
+See [account endpoints](accounts-and-keys.md) for access to your own account, account administration, and API-key rotation. Rotating a key invalidates the previous key immediately.

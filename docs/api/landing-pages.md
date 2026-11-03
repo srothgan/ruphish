@@ -276,4 +276,4 @@ Example response:
 
 ## Related operations
 
-[Import content, validate HTML, and render previews](imports-and-previews.md).
+[Import content, validate HTML, and render previews](imports-previews-and-test-sends.md).

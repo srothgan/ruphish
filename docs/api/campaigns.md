@@ -1006,7 +1006,7 @@ Example response:
 | `email_reported` | `integer` | Independent reports. |
 | `error` | `integer` | Failed recipients. |
 
-These summary counts represent recipient progression: a submission contributes to clicked and opened counts, and a click contributes to opened. SMTP acceptance is never inferred. Use [results](analysis-and-exports.md) for separate observed totals and unique counts.
+These summary counts represent recipient progression: a submission contributes to clicked and opened counts, and a click contributes to opened. SMTP acceptance is never inferred. Use [results](results-and-exports.md) for separate observed totals and unique counts.
 
 ## GET `/api/campaigns/{id}/draft`
 

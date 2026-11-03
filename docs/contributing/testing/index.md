@@ -5,7 +5,7 @@ sidebar:
   order: 300
 ---
 
-Start with the guarantee your change affects. A domain rule, SQL transaction, browser form, and release archive need different evidence. Use focused regressions while editing, then run the applicable [validation commands](validation.md) once the change settles.
+Start with the guarantee your change affects. A domain rule, SQL transaction, browser form, and release archive need different evidence. Use focused regressions while editing, then run the applicable [validation commands](validation-commands.md) once the change settles.
 
 ## Choose the test boundary
 
@@ -17,9 +17,9 @@ Start with the guarantee your change affects. A domain rule, SQL transaction, br
 | Server startup or background workflow | `tests/startup_process.rs` and its modules: actual process, HTTP/protocol effects, restart, and shutdown |
 | Browser transformation or request | Native UI tests, functional JavaScript tests, and WASM request tests |
 | Mounted forms and navigation | Built-UI artifact tests with synthetic API/demo transports |
-| Layout, keyboard, sandbox, or mail-client rendering | [Manual browser checks](manual-ui.md), including actual browsers or mail clients where required |
-| MySQL/PostgreSQL behavior | [Real database-provider tests](database-providers.md) |
-| Public DNS/HTTPS/SMTP and packaged image behavior | [Local acceptance fixture](local-fixture.md) |
+| Layout, keyboard, sandbox, or mail-client rendering | [Manual browser checks](manual-browser-checks.md), including actual browsers or mail clients where required |
+| MySQL/PostgreSQL behavior | [Real database-provider tests](database-provider-tests.md) |
+| Public DNS/HTTPS/SMTP and packaged image behavior | [Local acceptance fixture](local-acceptance-fixture.md) |
 | Documentation | Links, example syntax and source correctness, site build, and the affected reader journey |
 
 Native workspace defaults exclude the UI. Native success alone does not establish WASM compatibility. A built-UI test in JSDOM exercises real application code but cannot prove layout or browser sandbox enforcement.

@@ -339,4 +339,4 @@ Example response:
 
 ## Related operations
 
-[Import and review CSV recipients](imports-and-previews.md). Campaign preparation deduplicates the combined audience; see [campaigns](campaigns.md).
+[Import and review CSV recipients](imports-previews-and-test-sends.md). Campaign preparation deduplicates the combined audience; see [campaigns](campaigns.md).

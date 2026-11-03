@@ -17,7 +17,7 @@ Learning pages contain static educational content. Visits do not record a new ca
 4. Choose **Check learning page**, then inspect **Preview**.
 5. Apply any visual-editor changes and choose **Create**.
 
-You can also add a ready-made lesson through [Starter templates](../starter-templates.md). Customize its reporting instructions and contact details for your organization.
+You can also add a ready-made lesson through [Starter templates](../add-starter-templates.md). Customize its reporting instructions and contact details for your organization.
 
 Keep the explanation useful to someone who has just interacted with the message: show the clues they could check, explain what to do next, and tell them how your organization expects suspicious messages to be reported.
 

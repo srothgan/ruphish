@@ -18,7 +18,7 @@ Adding a domain does not register a hostname, create DNS records, or set up HTTP
 
 The local address points back to the computer opening the link. It will not reach your installation when a recipient opens it on another device. Use `127.0.0.1` for the local example; the domain form does not accept the single-label hostname `localhost`.
 
-For hosted use, arrange DNS and HTTPS with the person hosting Ruphish. The address must serve campaign pages, normally through the public listener on port 8081 or a reverse proxy to that listener. A browser redirect to the Ruphish sign-in page does not provide this routing. See [network access and HTTPS setup](../../administration/listeners-and-tls.md).
+For hosted use, arrange DNS and HTTPS with the person hosting Ruphish. The address must serve campaign pages, normally through the public listener on port 8081 or a reverse proxy to that listener. A browser redirect to the Ruphish sign-in page does not provide this routing. See [network access and HTTPS setup](../../administration/hosting-and-maintenance/network-access-and-https.md).
 
 ## Add the domain
 

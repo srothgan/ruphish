@@ -17,14 +17,14 @@ These instructions are for coding agents. The human contribution process lives i
 
 ## Frontend
 
-- **Use the shared UI.** Follow [frontend development](docs/contributing/development-guides/frontend.md) and the [design system](docs/contributing/development-guides/design-system.md). Extend `crates/ruphish-ui/src/shared/components/`, `ruphish.css`, and `theme.css` instead of recreating generic controls or styles in features. Features own their fields, permissions, API calls, and state; preserve specialized accessibility behavior.
+- **Use the shared UI.** Follow [frontend development](docs/contributing/development-guides/frontend-development.md) and the [design system](docs/contributing/development-guides/design-system.md). Extend `crates/ruphish-ui/src/shared/components/`, `ruphish.css`, and `theme.css` instead of recreating generic controls or styles in features. Features own their fields, permissions, API calls, and state; preserve specialized accessibility behavior.
 - **Fix layout at its owner.** Align buttons with the actual input/select row and match control heights. Choose alignment deliberately for headings and wrapped rows; avoid pixel nudges and indiscriminate centering. The user owns manual visual/interaction review; do not add browser or screenshot automation by default.
 
 ## Tests and validation
 
 - **Test real guarantees.** Assert observable responses, persisted state, protocols, and effects with independent expectations and realistic failure cases. Do not mirror implementation details, weaken assertions, or mock away the boundary under test. Keep affected entries in `tests/legacy-test-map.toml` accurate.
 - **Keep fixtures isolated.** Reuse existing setup and the canonical `tests/acceptance/` fixture. Use disposable server databases, copy fixtures before mutation, preserve application-lab data, and never contact real recipients or external integration endpoints.
-- **Validate by impact.** Follow [validation](docs/contributing/testing/validation.md) for change-specific checks and commands. Cover affected consumers and real failure boundaries, including provider and recovery scenarios when relevant. Run focused regressions during implementation and applicable completion checks after edits settle; ordinary changes or commit requests do not require full acceptance.
+- **Validate by impact.** Follow [validation](docs/contributing/testing/validation-commands.md) for change-specific checks and commands. Cover affected consumers and real failure boundaries, including provider and recovery scenarios when relevant. Run focused regressions during implementation and applicable completion checks after edits settle; ordinary changes or commit requests do not require full acceptance.
 - **Check the actual target.** Run rustfmt, affected Clippy/tests, and Leptos formatting for changed markup. Include WASM checks for UI/browser-shared Rust and a development UI build for changed output/assets. Run relevant JavaScript tests; avoid redundant syntax checks. Prose-only changes require link/example/consistency checks, not product builds.
 - **Control validation cost.** Diagnose failures before retrying and rerun affected checks only. Do not duplicate Clippy with `cargo check` for identical targets or build without an executable/artifact need.
 

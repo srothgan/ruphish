@@ -5,7 +5,7 @@ sidebar:
   order: 16
 ---
 
-These resources are shared across the installation. Reads require `view_objects`; configuration changes, deletion, and network actions require `modify_objects`. Administrators control the global feature switch through [settings](settings.md). While disabled, reads and deletion remain available; saves and network actions return `409 FEATURE_DISABLED`. The body limit is 16 KiB.
+These resources are shared across the installation. Reads require `view_objects`; configuration changes, deletion, and network actions require `modify_objects`. Administrators control the global feature switch through [settings](company-settings.md). While disabled, reads and deletion remain available; saves and network actions return `409 FEATURE_DISABLED`. The body limit is 16 KiB.
 
 ## Request fields
 
@@ -308,7 +308,7 @@ Ruphish sends POST requests with `Content-Type: application/json`, `X-Ruphish-Ev
 | time | string | Event timestamp in RFC 3339 UTC. |
 | message | string | Recorded event label, such as `Clicked Link`. |
 | details | string | JSON-encoded sanitized details, or an empty string when none are retained; it is not an object in the outer payload. |
-| client | object or null | Coarse browser, OS, and device categories; see [client observations](analysis-and-exports.md#client-observations). |
+| client | object or null | Coarse browser, OS, and device categories; see [client observations](results-and-exports.md#client-observations). |
 
 Validation sends this body instead of an event:
 

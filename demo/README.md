@@ -15,4 +15,4 @@ node demo/serve.mjs
 
 Open `http://127.0.0.1:8080`. Stop with Ctrl+C. The completed artifact is `dist/admin`; rebuild with `trunk build --locked` before using that directory for the normal application.
 
-See the [demo development guide](../docs/contributing/development-guides/demo.md) for architecture, dataset ownership and GitHub-to-Vercel deployment setup, and [validation](../docs/contributing/testing/validation.md#public-demo) for test commands. Local preview uses the development build; CI packages an optimized artifact for deployment. Visual review remains a user task.
+See the [demo development guide](../docs/contributing/development-guides/public-demo.md) for architecture, dataset ownership and GitHub-to-Vercel deployment setup, and [validation](../docs/contributing/testing/validation-commands.md#public-demo) for test commands. Local preview uses the development build; CI packages an optimized artifact for deployment. Visual review remains a user task.

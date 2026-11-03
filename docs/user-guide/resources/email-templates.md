@@ -7,7 +7,7 @@ sidebar:
 
 An email template contains the subject, message body, optional visible sender, and attachments recipients receive. You can reuse it across campaigns; each recipient gets their own personalized message and campaign link.
 
-Start from [starter content](../starter-templates.md), import an existing email, or write a new message.
+Start from [starter content](../add-starter-templates.md), import an existing email, or write a new message.
 
 ## Create a template
 
@@ -27,7 +27,7 @@ For example, this HTML personalizes the greeting and adds the campaign link:
 <p><a href="{{.URL | html}}">Open the shared document</a>.</p>
 ```
 
-Use [Personalize content](../template-reference.md) for other fields, conditional text, and escaping. Do not replace `{{.URL}}` with a single recipient's copied campaign link.
+Use [Personalize content](../personalize-content.md) for other fields, conditional text, and escaping. Do not replace `{{.URL}}` with a single recipient's copied campaign link.
 
 ## Import an email
 

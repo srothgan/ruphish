@@ -9,7 +9,7 @@ Resources are the building blocks you select when creating a campaign. Prepare t
 
 | Resource | Its role |
 | --- | --- |
-| [Recipient groups](groups.md) | The people you want to include. |
+| [Recipient groups](recipient-groups.md) | The people you want to include. |
 | [Sending profiles](sending-profiles.md) | The mail account Ruphish uses to send messages. |
 | [Email templates](email-templates.md) | The message and any attachments recipients receive. |
 | [Landing pages](landing-pages.md) | The page recipients open from the message. |
@@ -20,7 +20,7 @@ Resources are the building blocks you select when creating a campaign. Prepare t
 
 A campaign needs recipient groups, an email template, a landing page, a sending profile, and an eligible domain. Learning pages, reporting mailboxes, and webhooks support additional workflows.
 
-For ready-made content, see [Add starter templates](../starter-templates.md). For personalized greetings and links, see [Personalize content](../template-reference.md).
+For ready-made content, see [Add starter templates](../add-starter-templates.md). For personalized greetings and links, see [Personalize content](../personalize-content.md).
 
 ## Create and reuse resources
 

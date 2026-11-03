@@ -67,4 +67,4 @@ Use the [migration guide](../../migration/index.md) for operator-visible behavio
 
 ## Verify the change
 
-Use [database-provider tests](../testing/database-providers.md) for focused checks, server preparation, version matrices, and cleanup. Run affected consumers when changing shared semantics. Keep [legacy-test obligations](../../../tests/legacy-test-map.toml) accurate and report ignored server cases separately from executed results.
+Use [database-provider tests](../testing/database-provider-tests.md) for focused checks, server preparation, version matrices, and cleanup. Run affected consumers when changing shared semantics. Keep [legacy-test obligations](../../../tests/legacy-test-map.toml) accurate and report ignored server cases separately from executed results.

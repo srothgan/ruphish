@@ -13,12 +13,12 @@ Ruphish records page visits and supported form submissions. Its built-in trackin
 
 1. Open **Resources → Landing pages** and choose **Create**.
 2. Enter a name.
-3. Write the HTML in the source or visual editor, or start with [starter content](../starter-templates.md).
+3. Write the HTML in the source or visual editor, or start with [starter content](../add-starter-templates.md).
 4. Use **Check landing page** to inspect the current content and address the relevant warnings.
 5. Open **Preview** to check layout and interactions.
 6. Choose **Create**.
 
-Apply visual-editor changes before saving. Page checks inspect your current draft; they do not save it. You can use [personalization expressions](../template-reference.md) to include recipient details.
+Apply visual-editor changes before saving. Page checks inspect your current draft; they do not save it. You can use [personalization expressions](../personalize-content.md) to include recipient details.
 
 ## Import existing content
 

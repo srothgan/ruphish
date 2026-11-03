@@ -12,7 +12,7 @@ Ruphish is a phishing-simulation application with a native Rust server and a Rus
 
 **[Try the demo](https://demo.ruphish.com/)** with username `demo` and password `demodemo`.
 
-Ruphish is a successor to Gophish with its own API, a new interface, persistent campaign drafts, verified domains, richer analysis, and explicit delivery recovery. Supported Gophish SQLite and MySQL databases migrate directly to Ruphish, preserving supported data and authored Go-template behavior. Adapt automation to the documented Ruphish API and review the [documented differences](https://ruphish.com/docs/migration/differences-from-gophish/) before migrating.
+Ruphish is a successor to Gophish with its own API, a new interface, persistent campaign drafts, verified domains, richer analysis, and explicit delivery recovery. Supported Gophish SQLite and MySQL databases migrate directly to Ruphish, preserving supported data and authored Go-template behavior. Adapt automation to the documented Ruphish API and review the [documented differences](https://ruphish.com/docs/migration/changes-to-review-before-migrating/) before migrating.
 
 ![Ruphish dashboard showing campaign outcomes, recent campaigns, and deliveries needing review.](assets/dashboard.png)
 
@@ -26,14 +26,14 @@ Ruphish is a successor to Gophish with its own API, a new interface, persistent 
 - Use English or German interface text with independent date-format and time-zone preferences.
 - Automate workflows through Ruphish's HTTP API.
 
-Participant tracking is designed around interaction events and optional presence booleans. Entered usernames, passwords, OTPs, and arbitrary form values are outside the supported collection model. Read [participant data](https://ruphish.com/docs/user-guide/participant-data/) for behavior and verification limits.
+Participant tracking is designed around interaction events and optional presence booleans. Entered usernames, passwords, OTPs, and arbitrary form values are outside the supported collection model. Read [participant data](https://ruphish.com/docs/user-guide/results/participant-data/) for behavior and verification limits.
 
 ## Start here
 
 | Your goal | Guide |
 | --- | --- |
-| Try a contained exercise with a local inbox | [Your first campaign](https://ruphish.com/docs/getting-started/first-campaign/) |
-| Install a release binary or run the Docker image | [Installation](https://ruphish.com/docs/getting-started/installation/) |
+| Try a contained exercise with a local inbox | [Your first campaign](https://ruphish.com/docs/getting-started/run-your-first-campaign/) |
+| Install a release binary or run the Docker image | [Installation](https://ruphish.com/docs/getting-started/install-ruphish/) |
 | Run campaigns and understand results | [User guide](https://ruphish.com/docs/user-guide/) |
 | Configure databases, TLS, accounts, or recovery | [Administration](https://ruphish.com/docs/administration/) |
 | Integrate with Ruphish | [HTTP API](https://ruphish.com/docs/api/) |
@@ -74,9 +74,9 @@ irm https://www.ruphish.com/install.ps1 | iex
 
 Until a full release is published, use the preview option; the default reports that no full release is available. Previews are intended for disposable installations, and upgrades are not guaranteed.
 
-The PowerShell setting lasts for the current session; clear it with `Remove-Item Env:RUPHISH_INCLUDE_PREVIEWS` to return to full-release selection. See the [installer options](https://www.ruphish.com/docs/getting-started/installation/#installer-options-and-environment) for environment settings and explicit overrides.
+The PowerShell setting lasts for the current session; clear it with `Remove-Item Env:RUPHISH_INCLUDE_PREVIEWS` to return to full-release selection. See the [installer options](https://www.ruphish.com/docs/getting-started/install-ruphish/#installer-options-and-environment) for environment settings and explicit overrides.
 
-The installer prints the installed executable's path and does not start the server automatically. See the [installation guide](https://ruphish.com/docs/getting-started/installation/) for supported platforms, first startup, Docker, updates, and removal. SQLite is the default database; see [database administration](https://ruphish.com/docs/administration/databases/) for MySQL and PostgreSQL requirements.
+The installer prints the installed executable's path and does not start the server automatically. See the [installation guide](https://ruphish.com/docs/getting-started/install-ruphish/) for supported platforms, first startup, Docker, updates, and removal. SQLite is the default database; see [database administration](https://ruphish.com/docs/administration/hosting-and-maintenance/databases/) for MySQL and PostgreSQL requirements.
 
 For development, follow [contributing](CONTRIBUTING.md) for setup, architecture, and validation.
 

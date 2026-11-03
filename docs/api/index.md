@@ -30,12 +30,12 @@ Paths below use `{id}` for numeric resource IDs. Request examples use concrete I
 | GET | `/api/groups/summary` | List resource metadata without authored content. | [Groups](groups.md) |
 | GET | `/api/groups/{id}/summary` | Read metadata and recipient count for one group. | [Groups](groups.md) |
 | DELETE | `/api/groups/{id}` | Delete the resource at the specified revision. | [Groups](groups.md) |
-| POST | `/api/templates/` | Create a resource. | [Email templates](templates.md) |
-| GET | `/api/templates/` | List the stored resources. The response is an array, including `[]` when empty. | [Email templates](templates.md) |
-| GET | `/api/templates/{id}` | Read one resource. | [Email templates](templates.md) |
-| PUT | `/api/templates/{id}` | Replace the editable content at the current revision. | [Email templates](templates.md) |
-| GET | `/api/templates/summary` | List resource metadata without authored content. | [Email templates](templates.md) |
-| DELETE | `/api/templates/{id}` | Delete the resource at the specified revision. | [Email templates](templates.md) |
+| POST | `/api/templates/` | Create a resource. | [Email templates](email-templates.md) |
+| GET | `/api/templates/` | List the stored resources. The response is an array, including `[]` when empty. | [Email templates](email-templates.md) |
+| GET | `/api/templates/{id}` | Read one resource. | [Email templates](email-templates.md) |
+| PUT | `/api/templates/{id}` | Replace the editable content at the current revision. | [Email templates](email-templates.md) |
+| GET | `/api/templates/summary` | List resource metadata without authored content. | [Email templates](email-templates.md) |
+| DELETE | `/api/templates/{id}` | Delete the resource at the specified revision. | [Email templates](email-templates.md) |
 | POST | `/api/pages/` | Create a resource. | [Landing pages](landing-pages.md) |
 | GET | `/api/pages/` | List the stored resources. The response is an array, including `[]` when empty. | [Landing pages](landing-pages.md) |
 | GET | `/api/pages/{id}` | Read one resource. | [Landing pages](landing-pages.md) |
@@ -80,18 +80,18 @@ Paths below use `{id}` for numeric resource IDs. Request examples use concrete I
 
 | Method | Endpoint | Purpose | Reference |
 | --- | --- | --- | --- |
-| POST | `/api/import/group/review` | Parse CSV and return valid recipients alongside rejected rows. | [Imports, previews, and test sends](imports-and-previews.md) |
-| POST | `/api/import/group` | Parse CSV file parts and return recipients. | [Imports, previews, and test sends](imports-and-previews.md) |
-| POST | `/api/import/email` | Extract subject, text, and HTML from an RFC 822 message. | [Imports, previews, and test sends](imports-and-previews.md) |
-| POST | `/api/import/site` | Fetch and transform an HTTP(S) page into editable source. | [Imports, previews, and test sends](imports-and-previews.md) |
-| POST | `/api/import/page-bundle` | Import a base64-encoded ZIP containing index.html and its local assets. | [Imports, previews, and test sends](imports-and-previews.md) |
-| POST | `/api/util/preview` | Render email HTML with sample recipient values without adding an open tracker. | [Imports, previews, and test sends](imports-and-previews.md) |
-| POST | `/api/pages/preview` | Prepare a landing-page preview with the managed collector in nontracking mode. | [Imports, previews, and test sends](imports-and-previews.md) |
-| POST | `/api/pages/validate` | Return landing-page diagnostics without a prepared HTML document. | [Imports, previews, and test sends](imports-and-previews.md) |
-| POST | `/api/learning-pages/preview` | Prepare static learning HTML and return diagnostics. | [Imports, previews, and test sends](imports-and-previews.md) |
-| POST | `/api/learning-pages/validate` | Prepare static learning HTML and return diagnostics. | [Imports, previews, and test sends](imports-and-previews.md) |
-| POST | `/api/util/test_connection` | Test SMTP connectivity and authentication without sending a message. | [Imports, previews, and test sends](imports-and-previews.md) |
-| POST | `/api/util/send_test_email` | Send a saved template and page to one explicit test recipient. | [Imports, previews, and test sends](imports-and-previews.md) |
+| POST | `/api/import/group/review` | Parse CSV and return valid recipients alongside rejected rows. | [Imports, previews, and test sends](imports-previews-and-test-sends.md) |
+| POST | `/api/import/group` | Parse CSV file parts and return recipients. | [Imports, previews, and test sends](imports-previews-and-test-sends.md) |
+| POST | `/api/import/email` | Extract subject, text, and HTML from an RFC 822 message. | [Imports, previews, and test sends](imports-previews-and-test-sends.md) |
+| POST | `/api/import/site` | Fetch and transform an HTTP(S) page into editable source. | [Imports, previews, and test sends](imports-previews-and-test-sends.md) |
+| POST | `/api/import/page-bundle` | Import a base64-encoded ZIP containing index.html and its local assets. | [Imports, previews, and test sends](imports-previews-and-test-sends.md) |
+| POST | `/api/util/preview` | Render email HTML with sample recipient values without adding an open tracker. | [Imports, previews, and test sends](imports-previews-and-test-sends.md) |
+| POST | `/api/pages/preview` | Prepare a landing-page preview with the managed collector in nontracking mode. | [Imports, previews, and test sends](imports-previews-and-test-sends.md) |
+| POST | `/api/pages/validate` | Return landing-page diagnostics without a prepared HTML document. | [Imports, previews, and test sends](imports-previews-and-test-sends.md) |
+| POST | `/api/learning-pages/preview` | Prepare static learning HTML and return diagnostics. | [Imports, previews, and test sends](imports-previews-and-test-sends.md) |
+| POST | `/api/learning-pages/validate` | Prepare static learning HTML and return diagnostics. | [Imports, previews, and test sends](imports-previews-and-test-sends.md) |
+| POST | `/api/util/test_connection` | Test SMTP connectivity and authentication without sending a message. | [Imports, previews, and test sends](imports-previews-and-test-sends.md) |
+| POST | `/api/util/send_test_email` | Send a saved template and page to one explicit test recipient. | [Imports, previews, and test sends](imports-previews-and-test-sends.md) |
 | GET | `/api/starter-templates/` | List the bundled catalog metadata. | [Starter templates](starter-templates.md) |
 | GET | `/api/starter-templates/{catalog_id}` | Read a catalog entry and its ordinary resource-creation payload. | [Starter templates](starter-templates.md) |
 
@@ -119,16 +119,16 @@ Paths below use `{id}` for numeric resource IDs. Request examples use concrete I
 | POST | `/api/campaign-drafts/prepare` | Review launch input for a draft without saving or launching it. | [Campaign drafts](campaign-drafts.md) |
 | POST | `/api/campaign-drafts/{id}/launch` | Launch the unchanged saved configuration at its reviewed revision. | [Campaign drafts](campaign-drafts.md) |
 | DELETE | `/api/campaign-drafts/{id}` | Remove an editable draft at the supplied query revision. | [Campaign drafts](campaign-drafts.md) |
-| GET | `/api/campaigns/{id}/delivery` | Read the queue state, attempt summaries, and recent campaign activity. | [Delivery and history](delivery.md) |
-| GET | `/api/campaigns/{id}/recipients/{recipient_id}/history` | Read one recipient’s attempt history and editable event records. | [Delivery and history](delivery.md) |
-| POST | `/api/campaigns/{id}/delivery/{recipient_id}` | Apply an explicit recovery decision to the reviewed delivery generation. | [Delivery and history](delivery.md) |
+| GET | `/api/campaigns/{id}/delivery` | Read the queue state, attempt summaries, and recent campaign activity. | [Delivery and history](delivery-and-history.md) |
+| GET | `/api/campaigns/{id}/recipients/{recipient_id}/history` | Read one recipient’s attempt history and editable event records. | [Delivery and history](delivery-and-history.md) |
+| POST | `/api/campaigns/{id}/delivery/{recipient_id}` | Apply an explicit recovery decision to the reviewed delivery generation. | [Delivery and history](delivery-and-history.md) |
 
 ### Results
 
 | Method | Endpoint | Purpose | Reference |
 | --- | --- | --- | --- |
-| GET | `/api/campaigns/{id}/results` | Read filtered counts, recipient rows, events, and time buckets. | [Results and exports](analysis-and-exports.md) |
-| GET | `/api/campaigns/{id}/export` | Download the filtered snapshot. | [Results and exports](analysis-and-exports.md) |
+| GET | `/api/campaigns/{id}/results` | Read filtered counts, recipient rows, events, and time buckets. | [Results and exports](results-and-exports.md) |
+| GET | `/api/campaigns/{id}/export` | Download the filtered snapshot. | [Results and exports](results-and-exports.md) |
 | POST | `/api/campaigns/{id}/recipients/{recipient_id}/events` | Add an operator observation to a recipient history. | [Event corrections](event-corrections.md) |
 | GET | `/api/overview` | Read recent campaigns, inventory counts, and operational attention items. | [Overview](overview.md) |
 | GET | `/api/overview/posture` | Read recipient engagement for an SMTP-acceptance cohort. | [Overview](overview.md) |
@@ -137,13 +137,13 @@ Paths below use `{id}` for numeric resource IDs. Request examples use concrete I
 
 | Method | Endpoint | Purpose | Reference |
 | --- | --- | --- | --- |
-| GET | `/api/settings` | Read company policy and its revision. | [Company settings](settings.md) |
-| PUT | `/api/settings` | Replace company policy at the current revision. | [Company settings](settings.md) |
-| POST | `/api/campaigns/complete-all/preview` | Obtain a confirmation token for closing the current active campaign set. | [Company settings](settings.md) |
-| POST | `/api/campaigns/complete-all` | Close the campaign set identified by the preview token. | [Company settings](settings.md) |
-| POST | `/api/users/` | Create an application account. | [Accounts and keys](users-and-api-keys.md) |
-| GET | `/api/users/` | List accounts visible to an administrator. | [Accounts and keys](users-and-api-keys.md) |
-| GET | `/api/users/{id}` | Read the specified account. | [Accounts and keys](users-and-api-keys.md) |
-| PUT | `/api/users/{id}` | Replace account configuration while preserving its password. | [Accounts and keys](users-and-api-keys.md) |
-| DELETE | `/api/users/{id}` | Delete another account. Self-deletion and removal of the last available administrator are rejected. | [Accounts and keys](users-and-api-keys.md) |
-| POST | `/api/reset` | Rotate the authenticated account’s API key. | [Accounts and keys](users-and-api-keys.md) |
+| GET | `/api/settings` | Read company policy and its revision. | [Company settings](company-settings.md) |
+| PUT | `/api/settings` | Replace company policy at the current revision. | [Company settings](company-settings.md) |
+| POST | `/api/campaigns/complete-all/preview` | Obtain a confirmation token for closing the current active campaign set. | [Company settings](company-settings.md) |
+| POST | `/api/campaigns/complete-all` | Close the campaign set identified by the preview token. | [Company settings](company-settings.md) |
+| POST | `/api/users/` | Create an application account. | [Accounts and keys](accounts-and-keys.md) |
+| GET | `/api/users/` | List accounts visible to an administrator. | [Accounts and keys](accounts-and-keys.md) |
+| GET | `/api/users/{id}` | Read the specified account. | [Accounts and keys](accounts-and-keys.md) |
+| PUT | `/api/users/{id}` | Replace account configuration while preserving its password. | [Accounts and keys](accounts-and-keys.md) |
+| DELETE | `/api/users/{id}` | Delete another account. Self-deletion and removal of the last available administrator are rejected. | [Accounts and keys](accounts-and-keys.md) |
+| POST | `/api/reset` | Rotate the authenticated account’s API key. | [Accounts and keys](accounts-and-keys.md) |

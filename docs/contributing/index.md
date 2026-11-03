@@ -15,11 +15,11 @@ Start with [CONTRIBUTING.md](../../CONTRIBUTING.md) for proposing work, submitti
 | --- | --- |
 | Build and run Ruphish from source | [Development setup](development-setup/index.md) |
 | Find where a change belongs | [Architecture](development-guides/architecture.md) |
-| Change server behavior or persistence | [Backend development](development-guides/backend.md), [database development](development-guides/database-development.md) |
-| Change the application interface | [Frontend development](development-guides/frontend.md), [design system](development-guides/design-system.md) |
+| Change server behavior or persistence | [Backend development](development-guides/backend-development.md), [database development](development-guides/database-development.md) |
+| Change the application interface | [Frontend development](development-guides/frontend-development.md), [design system](development-guides/design-system.md) |
 | Translate the interface | [Localization](development-guides/localization.md) |
-| Improve the docs or website | [Documentation and website](development-guides/documentation.md) |
-| Add bundled content or change the demo | [Starter templates](development-guides/starter-templates.md), [public demo](development-guides/demo.md) |
+| Improve the docs or website | [Documentation and website](development-guides/documentation-and-website.md) |
+| Add bundled content or change the demo | [Starter templates](development-guides/starter-templates.md), [public demo](development-guides/public-demo.md) |
 | Choose and run checks | [Testing](testing/index.md) |
 | Maintain CI, releases, or demo deployment | [Maintenance](maintenance/index.md) |
 

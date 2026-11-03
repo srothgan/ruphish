@@ -27,4 +27,4 @@ Initial release of a Gophish successor with a native Rust server, a Rust/WASM ad
 - Automate campaign workflows through documented Ruphish contracts, with separate `/api/`, `/auth/`, and `/internal/` interfaces.
 - Track participant interactions and password presence without collecting entered credentials or other form values through the built-in collector.
 
-See [differences from Gophish](https://ruphish.com/docs/migration/differences-from-gophish/) for intentional changes and migration considerations.
+See [differences from Gophish](https://ruphish.com/docs/migration/changes-to-review-before-migrating/) for intentional changes and migration considerations.

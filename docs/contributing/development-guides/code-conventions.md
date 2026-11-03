@@ -27,7 +27,7 @@ Give mutable state one owner and derive dependent values. Represent mutually exc
 
 Use typed outcomes for expected success and failure. Propagate errors with useful context while keeping secrets and participant input out of diagnostics. A fallback must not turn an unsuccessful operation into apparent success.
 
-For asynchronous work, prevent stale responses and duplicate effects. Handle cancellation, retry, and uncertain outcomes where they can occur. Release tasks, listeners, subscriptions, and other resources when their owner ends. See [frontend state](frontend.md#give-each-state-one-owner) and [worker development](backend.md#change-a-worker).
+For asynchronous work, prevent stale responses and duplicate effects. Handle cancellation, retry, and uncertain outcomes where they can occur. Release tasks, listeners, subscriptions, and other resources when their owner ends. See [frontend state](frontend-development.md#give-each-state-one-owner) and [worker development](backend-development.md#change-a-worker).
 
 ## Preserve Rust safety
 
@@ -39,13 +39,13 @@ Keep test-only Clippy exemptions limited to assertions and fixture setup that mu
 
 Use the [pinned toolchain](../development-setup/index.md) and checked-in lockfiles. Let Cargo/rustup and npm update dependency/tool inputs rather than manually inventing lockfile entries. Keep dependency exceptions narrow, and retain attribution and license notices for reused material.
 
-Run documented commands directly. Do not add test-runner wrappers, Cargo aliases, or npm wrappers around existing checks. CI uses fixed commands and shared path groups; see [CI workflows](../maintenance/ci.md).
+Run documented commands directly. Do not add test-runner wrappers, Cargo aliases, or npm wrappers around existing checks. CI uses fixed commands and shared path groups; see [CI workflows](../maintenance/ci-workflows.md).
 
 Run `npm ci` for a fresh dependency installation or changed dependency inputs. Reuse generated assets only when their inputs match. Let Trunk generate its inputs and publish through `dist/.stage/` to `dist/admin/`; do not edit generated output or weaken manifest checks. Use development builds for ordinary work and optimized builds for release validation.
 
 ## Review and verify
 
-Use focused regressions while implementing, then run the applicable [validation commands](../testing/validation.md) after edits settle. Diagnose failures before rerunning them. Repeating an unchanged successful check or compiling an identical target twice does not add evidence.
+Use focused regressions while implementing, then run the applicable [validation commands](../testing/validation-commands.md) after edits settle. Diagnose failures before rerunning them. Repeating an unchanged successful check or compiling an identical target twice does not add evidence.
 
 Review the final diff and affected consumers for correctness, unrelated edits, obsolete code, secrets, and mismatches between implementation and documentation. Report the exact commands and outcomes, including unavailable or unexecuted checks. Keep unrelated findings separate from the change rather than expanding its scope silently.
 

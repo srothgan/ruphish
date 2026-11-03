@@ -5,11 +5,11 @@ sidebar:
   order: 400
 ---
 
-These guides cover repository and publication infrastructure. Ordinary contributions use [development setup](../development-setup/index.md) and the applicable [validation commands](../testing/validation.md).
+These guides cover repository and publication infrastructure. Ordinary contributions use [development setup](../development-setup/index.md) and the applicable [validation commands](../testing/validation-commands.md).
 
 | Task | Guide |
 | --- | --- |
-| Understand checks, path selection, and failure gates | [CI workflows](ci.md) |
+| Understand checks, path selection, and failure gates | [CI workflows](ci-workflows.md) |
 | Validate and publish binary and Docker releases | [Releases](releases.md) |
 | Configure or recover the separate demo deployment | [Demo deployment](demo-deployment.md) |
 

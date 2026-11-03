@@ -18,7 +18,7 @@ A ready server proves startup completed; it does not prove that all data, client
 | Shared visibility | Reviewers understand and accept which accounts can now access resources and campaigns created by others. |
 | Resources and audiences | Names, recipient fields, group membership, attachments, and campaign recipient snapshots match the source where preservation is expected. |
 | Dates and lifecycle | Scheduled times, event times, completion state, and any pre-UTC MySQL conversion agree with independently recorded source values. |
-| Data transformations | Cleared participant values/location and missing historical client/attribution fields agree with [conversion rules](data-changes.md), rather than being mistaken for unexplained data loss. |
+| Data transformations | Cleared participant values/location and missing historical client/attribution fields agree with [conversion rules](what-happens-to-your-data.md), rather than being mistaken for unexplained data loss. |
 | Pending deliveries | Every runnable, blocked, unknown, or unresolved legacy queue item has been reviewed before workers are enabled. |
 | Integrations | Imported mailbox/webhook settings, feature switches, secrets, and processing boundaries have been reviewed. |
 | Restart | Restarting the same release reopens the converted database without repeating the Gophish conversion or losing confirmed state. |
@@ -27,7 +27,7 @@ Use controlled services and recipients for protocol checks. Allow only the desti
 
 ## Verify the chosen client path
 
-For UI users, check the tasks in [Using the new interface](using-the-interface.md): inspect resources, prepare a campaign, and read its results. A hosting operator should complete this with a representative ordinary account as well as any administrator checks.
+For UI users, check the tasks in [Using the new interface](using-the-new-interface.md): inspect resources, prepare a campaign, and read its results. A hosting operator should complete this with a representative ordinary account as well as any administrator checks.
 
 For API integrations, use the [endpoint inventory](api/index.md) to check every operation your client calls. Confirm request types, changed response parsers, HTTP methods/statuses, permission boundaries, conditional edits, result paging, and secret handling. Include a stale revision response and a failed operation; a successful list request is not an integration migration test.
 
@@ -46,7 +46,7 @@ Keep the original application/configuration and backup available until the migra
 
 Stop Ruphish and prevent further writes or external work. Preserve the failed working database, startup errors, and migration recovery artifacts. Do not delete schema history or an upgrade journal to make startup succeed.
 
-For SQLite, restore the untouched backup to a separate path and configure the matching Gophish installation to use it. For MySQL, restore the pre-conversion dump/snapshot into a separate database and point Gophish there. Validate that restored installation in isolation before directing traffic back. See [Back up and restore](../administration/hosting-and-maintenance/backup-and-restore.md).
+For SQLite, restore the untouched backup to a separate path and configure the matching Gophish installation to use it. For MySQL, restore the pre-conversion dump/snapshot into a separate database and point Gophish there. Validate that restored installation in isolation before directing traffic back. See [Back up and restore](../administration/hosting-and-maintenance/back-up-and-restore.md).
 
 Restoration discards Ruphish changes made after the backup. It also cannot unsend SMTP-accepted messages, retract delivered webhooks, undo deleted mailbox messages, or recover participant events written only to the discarded database. Reconcile those effects and pending work before resuming Gophish so rollback does not duplicate delivery or silently lose observations.
 

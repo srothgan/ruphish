@@ -2,7 +2,7 @@
 
 Bugs, errors, security issues, and reliability problems are addressed continuously across all releases.
 
-Ruphish is a successor to Gophish, covering its campaign workflows with supported data/template migration and independent API contracts. The [documented differences](docs/migration/differences-from-gophish.md) define intentional changes and deferred features.
+Ruphish is a successor to Gophish, covering its campaign workflows with supported data/template migration and independent API contracts. The [documented differences](docs/migration/changes-to-review-before-migrating.md) define intentional changes and deferred features.
 
 Milestones describe priorities, not release dates; scope may change with feedback.
 

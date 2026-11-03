@@ -12,7 +12,7 @@ Use this guide when you are preparing or managing your own phishing campaigns. F
 | Prepare recipients, messages, pages, and connections | [Resources](resources/index.md) |
 | Create, schedule, and run a campaign | [Campaigns](campaigns/index.md) |
 | Investigate activity and share findings | [Results](results/index.md) |
-| Change your password or display preferences | [Your account](account.md) |
+| Change your password or display preferences | [Your account](your-account.md) |
 | Resolve a problem | [Troubleshooting](troubleshooting.md) |
 
 ## Work with your team

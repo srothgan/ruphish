@@ -1,0 +1,161 @@
+---
+title: Install Ruphish
+description: Install Ruphish with Docker or a native binary, start it locally, and sign in.
+sidebar:
+  order: 2
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Install Ruphish on the computer where you'll try your first campaign. Choose **Docker** if you already use containers, or **Native binary** to run the application directly. Both include the server and browser interface. You don't need Rust, Node.js, or a separate database.
+
+These instructions create a local installation with SQLite. If you have an existing Ruphish or Gophish database, follow [upgrading](../migration/upgrade-an-existing-ruphish-installation.md) or [migration](../migration/migrate-the-database.md) instead.
+
+## Install and start
+
+<Tabs syncKey="ruphish-installation">
+<TabItem label="Docker">
+
+You need Docker running with Linux containers and Docker Compose. The image supports Linux x64 and ARM64; Docker Desktop can run it on Windows and macOS.
+
+**1. Create your installation folder.**
+
+Run this in your terminal, then keep using that folder for the Docker commands on this page:
+
+```sh
+mkdir ruphish
+cd ruphish
+```
+
+**2. Save this as `compose.yaml` in the folder.**
+
+```yaml
+services:
+  ruphish:
+    image: ghcr.io/srothgan/ruphish:latest
+    restart: unless-stopped
+    stop_grace_period: 30s
+    ports:
+      - "127.0.0.1:3333:3333"
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - ruphish-data:/var/lib/ruphish
+volumes:
+  ruphish-data:
+```
+
+Docker stores your database in a volume named `ruphish-data`, so your data survives when the container is replaced. This setup makes Ruphish and its campaign pages available on this computer only. Keep this Compose file in the same folder for future starts so Docker continues to use your existing data.
+
+**3. Download the image and start Ruphish.**
+
+```sh
+docker compose pull
+docker compose up -d --wait
+docker compose logs ruphish
+```
+
+Wait for Ruphish to finish starting. The logs show `RUPHISH_READY` when it's ready and include a temporary password for your first sign-in.
+
+Open Ruphish in your browser at **http://127.0.0.1:3333**.
+
+</TabItem>
+<TabItem label="Native binary">
+
+The installer downloads Ruphish and makes the `ruphish` command available to your user account. It does not start the application or create a background service.
+
+<Tabs syncKey="ruphish-os">
+<TabItem label="Linux or macOS">
+
+Supported systems are Linux x64 or ARM64 with glibc 2.36 or newer, and macOS 15 or newer on Apple Silicon. You need `curl`, `tar`, and either `sha256sum` or `shasum`.
+
+Run:
+
+```sh
+curl -fsSL https://www.ruphish.com/install.sh | sh
+```
+
+</TabItem>
+<TabItem label="Windows">
+
+Use Windows x64 or ARM64 with Windows PowerShell 5.1 or PowerShell 7. Run:
+
+```powershell
+irm https://www.ruphish.com/install.ps1 | iex
+```
+
+</TabItem>
+</Tabs>
+
+Open a new terminal after installation so it recognizes the `ruphish` command. Check the installed version, then start Ruphish:
+
+```sh
+ruphish --version
+ruphish
+```
+
+The version command shows which version you installed. On its first start, Ruphish creates its settings file, database, logs, and a certificate for the local HTTPS connection. The terminal shows [where these files are stored](../administration/hosting-and-maintenance/configuration-reference.md#default-locations-and-explicit-configuration), a temporary password for your first sign-in, and `RUPHISH_READY` when Ruphish is ready.
+
+Leave this terminal open while you use Ruphish. Open **https://127.0.0.1:3333** in your browser. Because Ruphish created the certificate locally, your browser will show a certificate warning. Check that you're visiting this local address and review the certificate before continuing.
+
+Native binaries are unsigned, and the macOS binary is not notarized. If your operating system blocks launch, inspect its security message; the installer does not bypass operating-system protections.
+
+</TabItem>
+</Tabs>
+
+## Sign in
+
+1. Open Ruphish in your browser using the URL shown above.
+2. Sign in with username **`admin`** and the temporary password shown in the terminal or Docker logs.
+3. Choose a new password when prompted. You're then ready to set up your sending account and create campaigns.
+
+Use your new password the next time you sign in. Your account and campaign data are saved between restarts. Remove the temporary password from any startup logs you share.
+
+## Stop and start again
+
+<Tabs syncKey="ruphish-installation">
+<TabItem label="Docker">
+
+From your installation folder, stop the application:
+
+```sh
+docker compose stop
+```
+
+Start it again with:
+
+```sh
+docker compose up -d --wait
+```
+
+The named volume keeps your data between starts and container replacements. `docker compose down` also retains that volume; adding `--volumes` deletes it.
+
+</TabItem>
+<TabItem label="Native binary">
+
+Press **Ctrl+C** in the terminal running Ruphish. To start it again, run:
+
+```sh
+ruphish
+```
+
+Run Ruphish under the same user account on your computer so it finds your existing settings and data. You can run the command from a different folder.
+
+</TabItem>
+</Tabs>
+
+## If you can't start or sign in
+
+| What you see | What to do |
+| --- | --- |
+| `ruphish` isn't recognized | Open a new terminal, or run Ruphish using the full file path shown by the installer. |
+| Port `3333` or `8081` is already in use | Another program is using that port. Stop it if you don't need it, or choose a different port for Ruphish. In Docker, change the host port: for example, `127.0.0.1:3334:3333` makes Ruphish available at `http://127.0.0.1:3334`. For a native installation, change the relevant `listen_url` in your settings file and restart. |
+| No temporary password in the logs | If you've already set up this installation, use the password you chose. For a fresh Docker installation, run `docker compose logs ruphish` to find the startup messages. |
+| Ruphish won't open in the browser | Check that it's still running. Use `http://` for this Docker setup or `https://` for the native setup. Check the terminal or Docker logs for an error. |
+
+For other startup failures, follow [administration troubleshooting](../administration/hosting-and-maintenance/troubleshoot-the-installation.md).
+
+## Run your first campaign
+
+Continue with **[Run your first campaign](run-your-first-campaign.md)**. You'll connect your sending account and use ready-made starter content to send an exercise to your own inbox.
+
+When you're ready to make Ruphish available beyond your computer, follow the guides for [network access and HTTPS](../administration/hosting-and-maintenance/network-access-and-https.md), [settings](../administration/hosting-and-maintenance/configuration-reference.md), and [backups](../administration/hosting-and-maintenance/back-up-and-restore.md).

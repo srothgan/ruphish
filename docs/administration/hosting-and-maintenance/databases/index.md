@@ -9,9 +9,9 @@ Ruphish uses one database for accounts, company settings, resources, campaigns, 
 
 | Provider | Choose it when | Supported setup |
 | --- | --- | --- |
-| [SQLite](sqlite.md) | You want a database file managed with the Ruphish host or Docker volume. | Default for new installations; recognized Gophish SQLite databases can be converted. |
-| [MySQL](mysql.md) | Your team already operates MySQL. | MySQL 8.4 and 9.7 LTS lines; new installations and recognized Gophish MySQL conversion. MariaDB is not supported. |
-| [PostgreSQL](postgresql.md) | Your team already operates PostgreSQL. | PostgreSQL 17 and 18; new Ruphish installations. |
+| [SQLite](use-sqlite.md) | You want a database file managed with the Ruphish host or Docker volume. | Default for new installations; recognized Gophish SQLite databases can be converted. |
+| [MySQL](use-mysql.md) | Your team already operates MySQL. | MySQL 8.4 and 9.7 LTS lines; new installations and recognized Gophish MySQL conversion. MariaDB is not supported. |
+| [PostgreSQL](use-postgresql.md) | Your team already operates PostgreSQL. | PostgreSQL 17 and 18; new Ruphish installations. |
 
 For a server database, create the database and service account before starting Ruphish. Ruphish creates and updates its application tables automatically, but does not install the database server or create its login account.
 
@@ -19,6 +19,6 @@ For a server database, create the database and service account before starting R
 
 Changing `db_name`, a database name, or a SQLite file path selects different storage. It does not copy accounts or campaigns to that storage. Ruphish has no cross-engine data-transfer tool.
 
-If you need to move a database between hosts, use a backup and restore for the same provider, then update its connection settings. See [Back up and restore](../backup-and-restore.md).
+If you need to move a database between hosts, use a backup and restore for the same provider, then update its connection settings. See [Back up and restore](../back-up-and-restore.md).
 
-Fresh setup, a Ruphish release upgrade, and a Gophish conversion are different tasks. Use [Upgrade Ruphish](../upgrades.md) for an existing Ruphish installation and [Migration from Gophish](../../../migration/from-gophish.md) for a Gophish database. Ruphish rejects unrecognized or inconsistent database histories instead of treating them as empty installations.
+Fresh setup, a Ruphish release upgrade, and a Gophish conversion are different tasks. Use [Upgrade Ruphish](../upgrade-ruphish.md) for an existing Ruphish installation and [Migration from Gophish](../../../migration/migrate-the-database.md) for a Gophish database. Ruphish rejects unrecognized or inconsistent database histories instead of treating them as empty installations.

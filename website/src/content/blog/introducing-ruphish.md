@@ -20,7 +20,7 @@ Ruphish is a successor, so the capabilities for which someone might use Gophish 
 However, Ruphish is not a drop-in replacement for Gophish. I originally aimed to create a drop-in replacement for Gophish, but this was not feasible. This mainly concerns the differences between the API endpoints that Gophish and Ruphish offer, while new capabilities were also introduced with `0.1.0`. These changes are:
 
 - **Improved campaign results:** Ruphish restructured how interaction events are tracked and stored. This allows for an improved results analysis with a dedicated dashboard for each campaign, per-recipient views and an export for your own analysis.
-- **Careful and safe tracking:** Unlike Gophish, Ruphish does not collect recipients' credentials. Instead, Ruphish only records whether a password was entered, preventing any harm by design. The [participant-data guide](/docs/user-guide/participant-data/) describes the model.
+- **Careful and safe tracking:** Unlike Gophish, Ruphish does not collect recipients' credentials. Instead, Ruphish only records whether a password was entered, preventing any harm by design. The [participant-data guide](/docs/user-guide/results/participant-data/) describes the model.
 - **Starter templates:** To shorten the time from setup to the first campaign, Ruphish offers a starter template repository in the company settings. There, admins can directly import email templates as well as landing and learning pages.
 - **Draft campaigns before launch:** Users can now create, save and continue editing a campaign while keeping it as a draft.
 

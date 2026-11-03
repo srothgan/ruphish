@@ -5,13 +5,13 @@ sidebar:
   order: 100
 ---
 
-This procedure builds the native server and its WebAssembly interface from source. It uses a separate local SQLite database and loopback listeners. To edit only documentation, use [the website workflow](../development-guides/documentation.md#preview-your-changes).
+This procedure builds the native server and its WebAssembly interface from source. It uses a separate local SQLite database and loopback listeners. To edit only documentation, use [the website workflow](../development-guides/documentation-and-website.md#preview-your-changes).
 
 ## Prepare your tools
 
 Install Git, [rustup](https://rustup.rs/), and Node.js. Product CI uses Node **26.8.1**; website development uses **24.x**, as declared in `website/package.json`. Select the appropriate Node version before installing dependencies.
 
-Native Rust compilation also needs a platform linker. On Windows, install Visual Studio Build Tools with **Desktop development with C++** and the Windows SDK. On macOS, install the Xcode command-line tools. On Linux, install your distribution's C/C++ build tools. Docker with Linux containers and Compose v2 is needed only for the [acceptance fixture](../testing/local-fixture.md) and server-database tests.
+Native Rust compilation also needs a platform linker. On Windows, install Visual Studio Build Tools with **Desktop development with C++** and the Windows SDK. On macOS, install the Xcode command-line tools. On Linux, install your distribution's C/C++ build tools. Docker with Linux containers and Compose v2 is needed only for the [acceptance fixture](../testing/local-acceptance-fixture.md) and server-database tests.
 
 Clone your fork, or clone the upstream repository to inspect and build it:
 
@@ -89,7 +89,7 @@ Save the following as `data/development.json`. The directory is ignored by Git. 
 }
 ```
 
-This configuration uses HTTP on loopback for local development. With an explicit `--config` path, relative file paths resolve from the process working directory, not from the configuration file. Keep running from the repository root. Environment overrides still apply; check for previously configured overrides such as `DB_PATH` or `ADMIN_SERVER_LISTEN_URL` if the effective settings differ. See [configuration](../../administration/hosting-and-maintenance/configuration.md) for the complete contract.
+This configuration uses HTTP on loopback for local development. With an explicit `--config` path, relative file paths resolve from the process working directory, not from the configuration file. Keep running from the repository root. Environment overrides still apply; check for previously configured overrides such as `DB_PATH` or `ADMIN_SERVER_LISTEN_URL` if the effective settings differ. See [configuration](../../administration/hosting-and-maintenance/configuration-reference.md) for the complete contract.
 
 ## Start and sign in
 
@@ -107,13 +107,13 @@ curl --fail http://127.0.0.1:3333/health/ready
 
 Use `curl.exe` in Windows PowerShell if `curl` resolves to a PowerShell alias. Expect HTTP `200` when the application is ready. Startup errors and application logs appear in the first terminal.
 
-Use synthetic recipients and the [controlled acceptance fixture](../testing/local-fixture.md) when exercising delivery, domain verification, or participant interactions. An empty development database has no sending account; starting the server does not configure a mail service.
+Use synthetic recipients and the [controlled acceptance fixture](../testing/local-acceptance-fixture.md) when exercising delivery, domain verification, or participant interactions. An empty development database has no sending account; starting the server does not configure a mail service.
 
 ## Make a change and restart
 
 Stop the server with **Ctrl+C**. For Rust server changes, rerun the same `cargo run` command. For UI, JavaScript, CSS, or browser dependency changes, rebuild with `trunk build --locked` before starting the server again. Refresh the browser after restart.
 
-The ordinary development server loads `dist/admin/` from the checkout. `trunk serve` alone does not provide the server's authentication or API. The separate [public demo](../development-guides/demo.md) uses simulated responses. Release binaries embed the UI through the `embedded-assets` feature; see [releases](../maintenance/releases.md).
+The ordinary development server loads `dist/admin/` from the checkout. `trunk serve` alone does not provide the server's authentication or API. The separate [public demo](../development-guides/public-demo.md) uses simulated responses. Release binaries embed the UI through the `embedded-assets` feature; see [releases](../maintenance/releases.md).
 
 Stopping preserves `data/development.db`. To start a separate clean installation, use a new database filename in a separate configuration; do not delete data from an installation you still need. Never commit the data directory, credentials, or generated assets.
 
@@ -138,4 +138,4 @@ cargo install cargo-deny --version 0.19.9 --locked --profile dev
 
 Tool versions come from workspace metadata, `Trunk.toml`, the lockfiles, and the checked-in CI toolchain action. `rust-analyzer.toml` integrates `leptosfmt`; put the installed formatter on your editor's PATH. Use Cargo/npm commands for dependency changes so manifests and lockfiles remain consistent.
 
-Next, locate your change in [architecture](../development-guides/architecture.md) and choose [validation commands](../testing/validation.md). If setup fails, use [development troubleshooting](troubleshooting.md).
+Next, locate your change in [architecture](../development-guides/architecture.md) and choose [validation commands](../testing/validation-commands.md). If setup fails, use [development troubleshooting](troubleshoot-development-setup.md).
