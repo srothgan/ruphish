@@ -4,7 +4,6 @@ use crate::{
     outbound::Policy,
 };
 use async_imap::imap_proto::{AttributeValue, MailboxDatum, Response, Status};
-use mail_parser::MimeHeaders;
 use ruphish_application::integrations::work::MailboxConfig as Config;
 use std::{collections::BTreeSet, sync::Arc};
 use tokio_rustls::rustls;
@@ -158,9 +157,8 @@ pub(crate) fn identify(bytes: &[u8], restrict: &str) -> Result<(String, String),
         .ok_or("mailbox_invalid_message")?;
     if !restrict.is_empty() {
         let allowed = message.from().is_some_and(|a| {
-            a.iter().any(|a| {
-                a.address
-                    .as_ref()
+            a.mailboxes().any(|a| {
+                a.address()
                     .and_then(|s| s.rsplit_once('@'))
                     .is_some_and(|(_, d)| d.eq_ignore_ascii_case(restrict))
             })
@@ -175,7 +173,7 @@ pub(crate) fn identify(bytes: &[u8], restrict: &str) -> Result<(String, String),
         bytes: 4 * MAX_MESSAGE,
         attempts: 256,
     };
-    scan(&message, 0, &mut budget, &mut candidates)?;
+    scan(message.root(), 0, &mut budget, &mut candidates)?;
     if candidates.len() != 1 {
         return Err(if candidates.is_empty() {
             "mailbox_unmatched"
@@ -192,7 +190,7 @@ struct ScanBudget {
     attempts: usize,
 }
 fn scan(
-    m: &mail_parser::Message<'_>,
+    m: mail_parser::MessageRef<'_>,
     depth: usize,
     budget: &mut ScanBudget,
     found: &mut BTreeSet<(String, String)>,
@@ -200,13 +198,14 @@ fn scan(
     if depth > 8 {
         return Err("mailbox_nesting_limit");
     }
-    for part in &m.parts {
+    for part in m.parts() {
         budget.parts += 1;
         if budget.parts > 256 {
             return Err("mailbox_part_limit");
         }
-        match &part.body {
-            mail_parser::PartType::Text(t) | mail_parser::PartType::Html(t) => {
+        match part.kind() {
+            mail_parser::PartKind::Text | mail_parser::PartKind::Html => {
+                let t = part.text().ok_or("mailbox_invalid_message")?;
                 let mut decoded = t.replace("&amp;", "&");
                 for _ in 0..3 {
                     let next = percent_encoding::percent_decode_str(&decoded)
@@ -252,16 +251,17 @@ fn scan(
                     }
                 }
             }
-            mail_parser::PartType::Message(child) => scan(child, depth + 1, budget, found)?,
-            mail_parser::PartType::Binary(bytes) | mail_parser::PartType::InlineBinary(bytes)
+            mail_parser::PartKind::Message(child) => scan(child, depth + 1, budget, found)?,
+            mail_parser::PartKind::Binary | mail_parser::PartKind::InlineBinary
                 if part
                     .attachment_name()
                     .is_some_and(|name| name.to_ascii_lowercase().ends_with(".eml")) =>
             {
+                let bytes = part.decoded();
                 let child = mail_parser::MessageParser::default()
                     .parse(bytes.as_ref())
                     .ok_or("mailbox_invalid_message")?;
-                scan(&child, depth + 1, budget, found)?;
+                scan(child.root(), depth + 1, budget, found)?;
             }
             _ => {}
         }
@@ -458,6 +458,57 @@ async fn session_command(session: &mut Session, command: String) -> Result<(), &
 #[cfg(test)]
 mod tests {
     use super::identify;
+    use base64::{Engine, engine::general_purpose::STANDARD};
+
+    #[test]
+    fn encoded_forwarded_reports_preserve_outer_sender_filtering() {
+        let original = b"From: training@other.test\r\nContent-Type: text/plain\r\n\r\nhttps://training.test/?rid=abc123";
+        for content_type in ["message/rfc822", "application/octet-stream"] {
+            let message = format!(
+                "From: Reporters: Employee <employee@example.test>;\r\nContent-Type: {content_type}\r\nContent-Disposition: attachment; filename=report.eml\r\nContent-Transfer-Encoding: base64\r\n\r\n{}",
+                STANDARD.encode(original)
+            );
+            assert_eq!(
+                identify(message.as_bytes(), "EXAMPLE.TEST"),
+                Ok(("abc123".into(), "https://training.test".into()))
+            );
+            assert_eq!(
+                identify(message.as_bytes(), "other.test"),
+                Err("mailbox_sender_filtered")
+            );
+        }
+    }
+
+    #[test]
+    fn forwarded_reports_keep_message_wide_part_and_nesting_limits() {
+        let mut nested = "Subject: original\r\n\r\nhttps://training.test/?rid=abc123".to_owned();
+        for _ in 0..8 {
+            nested = format!("Content-Type: message/rfc822\r\n\r\n{nested}");
+        }
+        assert_eq!(
+            identify(nested.as_bytes(), ""),
+            Ok(("abc123".into(), "https://training.test".into()))
+        );
+        let too_deep = format!("Content-Type: message/rfc822\r\n\r\n{nested}");
+        assert_eq!(
+            identify(too_deep.as_bytes(), ""),
+            Err("mailbox_nesting_limit")
+        );
+
+        // Root multipart + forwarded message + its text + 253 siblings = 256 parts.
+        let mut parts = "Content-Type: multipart/mixed; boundary=report\r\n\r\n--report\r\nContent-Type: message/rfc822\r\n\r\nSubject: original\r\n\r\nhttps://training.test/?rid=abc123\r\n".to_owned();
+        let sibling = "--report\r\nContent-Type: text/plain\r\n\r\nNo identifier\r\n";
+        parts.push_str(&sibling.repeat(253));
+        assert_eq!(
+            identify(format!("{parts}--report--\r\n").as_bytes(), ""),
+            Ok(("abc123".into(), "https://training.test".into()))
+        );
+        assert_eq!(
+            identify(format!("{parts}{sibling}--report--\r\n").as_bytes(), ""),
+            Err("mailbox_part_limit")
+        );
+    }
+
     #[test]
     fn report_origins_preserve_scheme_port_and_ip_and_normalize_dns() {
         for (link, expected) in [
