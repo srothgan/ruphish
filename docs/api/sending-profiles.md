@@ -1,49 +1,312 @@
 ---
-title: Sending profiles API
-description: Configure SMTP transport and test it without confusing acceptance with delivery.
+title: Sending profiles
+description: Sending profiles endpoints, request fields, response objects, and revision handling.
 sidebar:
-  order: 8
+  order: 14
 ---
 
-| Method | Path | Result |
+Sending profiles are shared installation resources. Reads require `view_objects`; writes require `modify_objects`. Paths use the numeric resource ID.
+
+## Request fields
+
+| Attribute | Type | Contract |
 | --- | --- | --- |
-| GET, POST | `/api/smtp/` | List or create sending profiles |
-| GET, PUT, DELETE | `/api/smtp/{id}` | Read, replace, or delete a profile |
-| GET | `/api/smtp/summary` | `total` and resource `items` |
+| id | integer | Omit on creation. For replacement, supply the same ID as the URL. |
+| name | string | Required profile name. |
+| interface_type | string | Interface label; use `SMTP`. |
+| host | string | SMTP hostname with optional port, such as `smtp.example.com:587`. |
+| from_address | string | SMTP envelope sender and default visible From address. |
+| username | string | SMTP authentication username; empty when authentication is not configured. |
+| password | string or null | Write-only secret. On update, omission or null preserves the saved password, an empty string clears it, and a nonempty string replaces it. |
+| ignore_cert_errors | boolean | Whether to bypass certificate verification. Defaults to false. |
+| headers | Header[] | Additional message headers. Each item has string `key` and `value`; CR, LF, and NUL are rejected, and the key must not be empty. |
 
-## Profile fields
+PUT replaces the editable fields; it is not a partial update. Omitted strings default to empty, arrays to empty arrays, and booleans to false. Unknown JSON fields are ignored. Send only writable fields.
 
-| Field | Meaning |
-| --- | --- |
-| `name` | Resource name |
-| `interface_type` | Use `SMTP` |
-| `host` | SMTP host, optionally with a port |
-| `from_address` | Sender mailbox, optionally with a display name |
-| `username` | Optional SMTP login name |
-| `password` | Write only: omit or use null to retain the saved password; a supplied string replaces it, and an empty string clears it |
-| `has_password` | Read only: whether a password is configured |
-| `ignore_cert_errors` | Whether to bypass SMTP certificate verification; keep false for normal use |
-| `headers` | Array of objects containing `key` and `value`; `[]` when empty |
+## Response fields
 
-The response adds `id`, `revision` and `modified_date`. Profile reads, save responses and nested campaign projections never return the password. PUT requires a matching `id`; use `If-Match` to prevent overwriting a concurrent edit. Password retention is resolved inside the authorized save transaction, so an accepted edit with an omitted password retains the saved credential. New profiles without a password start with no configured credential.
+Responses add the [resource metadata](conventions.md#resource-metadata) to the content fields above. Passwords are never returned.
 
-This example targets only the canonical local fixture's mail-capture container:
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| has_password | boolean | Whether a password is stored. There is no response `password` member. |
+| username | string, optional | Returned when present in the stored profile. |
+
+## POST `/api/smtp/`
+
+Create a resource.
+
+**Request:** resources::request::SendingProfile. **Response:** `201 Created`, `resource_details::Resource<resource_details::Profile>` as `application/json`.
+
+The response includes `ETag: "1"`. Save the returned revision for subsequent replacement or deletion.
+
+Request body (`request.json`):
 
 ```json
 {
-  "name": "Local inbox",
+  "name": "Training sender",
   "interface_type": "SMTP",
-  "host": "172.30.53.20:1025",
-  "from_address": "Training <training@example.test>",
+  "host": "smtp.example.com:587",
+  "from_address": "training@example.com",
   "ignore_cert_errors": false,
-  "headers": []
+  "headers": [],
+  "username": "training@example.com",
+  "password": "example-password"
 }
 ```
 
-It is not a public mail server. Use it from the [local tutorial](../getting-started/first-campaign.md), where the application and inbox share the fixture network.
+```sh
+curl --request POST "$RUPHISH_URL/api/smtp/" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data-binary @request.json
+```
 
-Port 465 uses implicit TLS; other ports negotiate STARTTLS when offered. Authentication is restricted on unencrypted connections. For exact operational behavior and trust choices, read [sending profiles](../user-guide/sending-profiles.md).
+Example response:
 
-`POST /api/util/test_connection` tests supplied profile settings without saving them. Include an existing shared profile `id` to retain its password when `password` is omitted; without an ID, omitted credentials are empty. A nonzero unknown ID fails without contacting SMTP. `POST /api/util/send_test_email` sends a message with template, page, profile, URL, and recipient inputs; see [imports and previews](imports-and-previews.md). A successful SMTP submission means the server accepted responsibility, not that a person received or read the message.
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "revision": 1,
+  "id": 1,
+  "name": "Training sender",
+  "modified_date": "2026-11-03T12:00:00Z",
+  "interface_type": "SMTP",
+  "host": "smtp.example.com:587",
+  "from_address": "training@example.com",
+  "ignore_cert_errors": false,
+  "headers": [],
+  "username": "training@example.com",
+  "has_password": true
+}
+```
 
-PUT and DELETE require the returned quoted numeric ETag in `If-Match`. Missing preconditions return `428`; stale revisions return `412` without changing saved data. See [conditional resource writes](conventions.md#updating-a-resource) for the full contract and conflict recovery.
+## GET `/api/smtp/`
+
+List the stored resources. The response is an array, including `[]` when empty.
+
+**Request:** No body. **Response:** `200 OK`, `Vec<resource_details::Resource<resource_details::Profile>>` as `application/json`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/smtp/" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+[
+  {
+    "created_at": "2026-11-03T12:00:00Z",
+    "created_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_at": "2026-11-03T12:00:00Z",
+    "revision": 1,
+    "id": 1,
+    "name": "Training sender",
+    "modified_date": "2026-11-03T12:00:00Z",
+    "interface_type": "SMTP",
+    "host": "smtp.example.com:587",
+    "from_address": "training@example.com",
+    "ignore_cert_errors": false,
+    "headers": [],
+    "username": "training@example.com",
+    "has_password": true
+  }
+]
+```
+
+## GET `/api/smtp/{id}`
+
+Read one resource.
+
+**Request:** No body. **Response:** `200 OK`, `resource_details::Resource<resource_details::Profile>` as `application/json`.
+
+The response includes an `ETag` containing the current quoted numeric revision, for example `ETag: "1"`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/smtp/1" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "revision": 1,
+  "id": 1,
+  "name": "Training sender",
+  "modified_date": "2026-11-03T12:00:00Z",
+  "interface_type": "SMTP",
+  "host": "smtp.example.com:587",
+  "from_address": "training@example.com",
+  "ignore_cert_errors": false,
+  "headers": [],
+  "username": "training@example.com",
+  "has_password": true
+}
+```
+
+## PUT `/api/smtp/{id}`
+
+Replace the editable content at the current revision.
+
+**Request:** resources::request::SendingProfile. **Response:** `200 OK`, `resource_details::Resource<resource_details::Profile>` as `application/json`.
+
+Returns the new revision and `ETag: "2"`. A stale revision returns `412`; read again before deciding whether to replace newer content.
+
+Request body (`request.json`):
+
+```json
+{
+  "id": 1,
+  "name": "Training sender",
+  "interface_type": "SMTP",
+  "host": "smtp.example.com:587",
+  "from_address": "training@example.com",
+  "ignore_cert_errors": false,
+  "headers": [],
+  "username": "training@example.com",
+  "password": "example-password"
+}
+```
+
+```sh
+curl --request PUT "$RUPHISH_URL/api/smtp/1" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header 'If-Match: "1"' \
+  --header "Content-Type: application/json" \
+  --data-binary @request.json
+```
+
+Example response:
+
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "revision": 2,
+  "id": 1,
+  "name": "Training sender",
+  "modified_date": "2026-11-03T12:00:00Z",
+  "interface_type": "SMTP",
+  "host": "smtp.example.com:587",
+  "from_address": "training@example.com",
+  "ignore_cert_errors": false,
+  "headers": [],
+  "username": "training@example.com",
+  "has_password": true
+}
+```
+
+## GET `/api/smtp/summary`
+
+List resource metadata without authored content.
+
+**Request:** No body. **Response:** `200 OK`, `resources::ResourceSummaries` as `application/json`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/smtp/summary" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "total": 1,
+  "items": [
+    {
+      "created_at": "2026-11-03T12:00:00Z",
+      "created_by": {
+        "id": 1,
+        "username": "operator",
+        "deleted": false
+      },
+      "edited_by": {
+        "id": 1,
+        "username": "operator",
+        "deleted": false
+      },
+      "edited_at": "2026-11-03T12:00:00Z",
+      "revision": 1,
+      "id": 1,
+      "name": "Training sender",
+      "modified_date": "2026-11-03T12:00:00Z",
+      "active_campaigns": 0
+    }
+  ]
+}
+```
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| total | integer | Number of returned resources. |
+| items | resources::ResourceSummary[] | Resource metadata plus `active_campaigns`, the active campaign reference count. |
+
+## DELETE `/api/smtp/{id}`
+
+Delete the resource at the specified revision.
+
+**Request:** No body. **Response:** `200 OK`, `common::Envelope<()>` as `application/json`.
+
+```sh
+curl --request DELETE "$RUPHISH_URL/api/smtp/1" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header 'If-Match: "2"'
+```
+
+Example response:
+
+```json
+{
+  "success": true,
+  "message": "SMTP Deleted Successfully",
+  "data": null
+}
+```
+
+## Related operations
+
+[Test SMTP connectivity or send a test message](imports-and-previews.md). Saving a profile does not send mail or verify account ownership.

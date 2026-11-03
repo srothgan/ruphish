@@ -1,42 +1,501 @@
 ---
-title: Reporting mailboxes API
-description: Configure IMAP reporting sources and inspect validation, polling, and resume state.
+title: Reporting mailboxes
+description: Reporting mailboxes configuration, action endpoints, and operational response fields.
 sidebar:
-  order: 16
+  order: 17
 ---
 
-Reporting mailboxes match reported messages to campaign recipients. Multiple mailbox resources replace the single-setting model used by older integrations.
+These resources are shared across the installation. Reads require `view_objects`; configuration changes, deletion, and network actions require `modify_objects`. Administrators control the global feature switch through [settings](settings.md). While disabled, reads and deletion remain available; saves and network actions return `409 FEATURE_DISABLED`. The body limit is 16 KiB.
 
-Once an administrator enables reporting mailboxes, regular users with `modify_objects` can create and manage shared configurations without per-mailbox approval. Reading requires `view_objects`. Configuration access and campaign report matching are shared across creators. While the feature is disabled, creation, configuration saves, and validation/check/resume actions return `409` with `FEATURE_DISABLED`; authorized reads and deletion remain available.
+## Request fields
 
-| Method | Path | Purpose |
+| Attribute | Type | Contract |
 | --- | --- | --- |
-| GET, POST | `/api/reporting-mailboxes/` | List or create shared mailboxes |
-| GET, PUT, DELETE | `/api/reporting-mailboxes/{id}` | Read, edit, or delete configuration |
-| POST | `/api/reporting-mailboxes/{id}/validate` | Test configuration; return updated resource |
-| POST | `/api/reporting-mailboxes/{id}/check` | Request a poll; returns `202` with resource state |
-| POST | `/api/reporting-mailboxes/{id}/resume` | Resume after a mailbox-identity change |
+| `name` | `string` | Operator-supplied display name. |
+| `enabled` | `boolean` | Whether processing is enabled. |
+| `host` | `string` | Service hostname. |
+| `port` | `integer` | Service port. |
+| `username` | `string` | Service login name. |
+| `password` | `string or null` | Replacement password, 1–4,096 bytes; omission or null preserves it. |
+| `tls` | `boolean` | Use implicit TLS; false requests STARTTLS. |
+| `ignore_cert_errors` | `boolean` | Explicit certificate-verification exception. |
+| `folder` | `string` | Monitored mailbox folder. |
+| `restrict_domain` | `string` | Optional sender-domain filter. |
+| `delete_reported` | `boolean` | Remove successfully correlated messages. |
+| `frequency` | `integer` | Polling interval: 30–31,540,000 seconds. |
+| `revision` | `integer or null` | Expected saved revision; absent only for creation. |
 
-## Configuration
+Unknown fields are rejected. Omit `revision` on creation; supply it on updates. `password` is required on creation. Omission or null preserves the stored secret on update; an empty replacement is rejected.
 
-Writes contain `name`, `enabled`, `host`, `port`, `username`, optional `password`, `tls`, optional `ignore_cert_errors`, `folder`, `restrict_domain`, `delete_reported`, `frequency`, and expected `revision` for edits. Unknown fields are rejected. Poll frequency is in seconds, from 30 through 31,540,000.
+## Response fields
 
-`tls: true` selects implicit TLS; false selects STARTTLS, not unencrypted authentication. Username/password authentication is supported. OAuth is not part of this interface. Omitting a password on an edit retains the saved secret; responses expose `has_password`, not the password.
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `id` | `integer` | Persistent identifier. |
+| `name` | `string` | Operator-visible name. |
+| `enabled` | `boolean` | Whether polling is enabled. |
+| `host` | `string` | IMAP hostname. |
+| `port` | `integer` | IMAP port. |
+| `username` | `string` | Configured service account name. |
+| `has_password` | `boolean` | Whether a service password is configured; never its value. |
+| `tls` | `boolean` | Whether to use implicit TLS. |
+| `ignore_cert_errors` | `boolean` | Explicitly skip server certificate chain and hostname verification; TLS is still required. |
+| `folder` | `string` | Monitored mailbox folder. |
+| `restrict_domain` | `string` | Optional sender-domain restriction. |
+| `delete_reported` | `boolean` | Whether matched messages are removed. |
+| `frequency` | `integer` | Polling interval: 30–31,540,000 seconds. |
+| `revision` | `integer` | Optimistic concurrency revision. |
+| `last_check` | `integer` | Last check time in UTC Unix seconds. |
+| `last_success` | `integer` | Last successful check in UTC Unix seconds. |
+| `next_check` | `integer` | Next scheduled check in UTC Unix seconds. |
+| `running` | `boolean` | Whether a worker currently owns a check. |
+| `code` | `string` | Application-owned outcome code. |
+| `history` | `Run[]` | Recent processing attempts. |
 
-`ignore_cert_errors` defaults to false. Explicitly enabling it skips server certificate chain, validity and hostname checks while retaining encryption and TLS handshake signature verification. The same policy applies to validation and background polling; there is no automatic bypass or plaintext fallback. Editing the policy increments the configuration revision and preserves UID checkpoints and pending acknowledgements. Workers recheck the revision before sending credentials and committing results; authentication already authorized when an edit commits may be in flight.
+Responses also contain [attribution](conventions.md#attribution). Secrets are represented only by presence flags. History uses the following run object; nullable fields are returned explicitly as null.
 
-Responses add `id`, `revision`, `last_check`, `last_success`, `next_check`, `running`, `code`, and recent `history`. Run timestamps use UTC Unix seconds. History includes fixed outcome codes and matched/rejected counts; a successful connection test does not mean a report was matched.
+### Run
 
-Edits require the expected numeric `revision`; deletion requires its quoted `If-Match`. Missing preconditions return `428 REVISION_REQUIRED`, stale versions return `412 RESOURCE_CHANGED`, and deleted resources return `404 RESOURCE_NOT_FOUND`. Resume requires a JSON body containing `revision`. It deliberately establishes a new-arrival checkpoint after UIDVALIDITY changes; it is not a request to process all historical mail.
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `id` | `integer` | Persistent identifier. |
+| `event_id` | `integer or null` | Associated webhook event, when applicable. |
+| `attempt` | `integer or null` | Webhook delivery attempt number, when applicable. |
+| `started` | `integer` | Attempt start in UTC Unix seconds. |
+| `finished` | `integer or null` | Completion time; absent while in progress. |
+| `status` | `integer or null` | HTTP response status, when applicable. |
+| `code` | `string` | Application-owned outcome code. |
+| `matched` | `integer` | Number of correlated reports. |
+| `rejected` | `integer` | Number of rejected reports. |
 
-## Matching and acknowledgement
+## POST `/api/reporting-mailboxes/`
 
-At creation, the initial scan boundary is the earliest actual Ruphish email-send observation across all non-completed campaigns, independently of their creators. The first successful poll translates it into a durable UID checkpoint; without an eligible send, it checkpoints existing messages and starts with new arrivals. The boundary is internal, not a configurable API field. Ordinary edits, restarts, and campaign lifecycle changes preserve progress. See the [initial discovery and timezone behavior](../user-guide/reporting-mailboxes.md#send-a-report).
+Create the configuration.
 
-Forwarded content must contain one distinct matching campaign-origin/recipient-ID pair in this installation. Repeated references to that pair are allowed; several distinct pairs produce `mailbox_ambiguous` without a report event. Send each original separately as a new forward; see [reporting mailboxes](../user-guide/reporting-mailboxes.md#send-a-report). The mailbox creator does not restrict eligible campaign owners. A sender-domain filter narrows candidates but is not sender authentication. Reports for completed campaigns produce the bounded operational reason `mailbox_campaign_closed` and advance the checkpoint without changing campaign results or queuing webhooks.
+**Request:** integrations::request::MailboxWrite. **Response:** `201 Created`, `integrations::Mailbox` as `application/json`.
 
-Matched outcomes commit before mailbox acknowledgement. Retrying acknowledgement must not create another report event, including when the campaign has since completed. Deletion, when enabled, requires UID-scoped behavior rather than a broad mailbox expunge. Read [reporting mailboxes](../user-guide/reporting-mailboxes.md) before enabling it.
+Request body (`request.json`):
 
-The singleton `/api/imap/` and `/api/imap/validate` routes have been removed. Use the reporting-mailbox resources above with numeric `port` and `frequency`, explicit mailbox IDs and revision-checked edits. Create or update a mailbox before validating its saved configuration.
+```json
+{
+  "name": "Reported messages",
+  "enabled": true,
+  "host": "imap.example.com",
+  "port": 993,
+  "username": "reports@example.com",
+  "password": "example-password",
+  "tls": true,
+  "ignore_cert_errors": false,
+  "folder": "INBOX",
+  "restrict_domain": "",
+  "delete_reported": false,
+  "frequency": 300
+}
+```
 
-An email-client reporting button can instead call the recipient's public [report endpoint](participant-endpoints.md). That uses a campaign tracking identity, not an administrative API key, and is separate from IMAP polling.
+```sh
+curl --request POST "$RUPHISH_URL/api/reporting-mailboxes/" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data-binary @request.json
+```
+
+Example response:
+
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "id": 1,
+  "name": "Reported messages",
+  "enabled": true,
+  "host": "imap.example.com",
+  "port": 993,
+  "username": "reports@example.com",
+  "tls": true,
+  "ignore_cert_errors": false,
+  "folder": "INBOX",
+  "restrict_domain": "",
+  "delete_reported": false,
+  "frequency": 300,
+  "revision": 1,
+  "has_password": true,
+  "history": [],
+  "last_check": 0,
+  "last_success": 0,
+  "next_check": 0,
+  "running": false,
+  "code": ""
+}
+```
+
+## GET `/api/reporting-mailboxes/`
+
+List configurations.
+
+**Request:** No body. **Response:** `200 OK`, `Vec<integrations::Mailbox>` as `application/json`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/reporting-mailboxes/" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+[
+  {
+    "created_at": "2026-11-03T12:00:00Z",
+    "created_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_at": "2026-11-03T12:00:00Z",
+    "id": 1,
+    "name": "Reported messages",
+    "enabled": true,
+    "host": "imap.example.com",
+    "port": 993,
+    "username": "reports@example.com",
+    "tls": true,
+    "ignore_cert_errors": false,
+    "folder": "INBOX",
+    "restrict_domain": "",
+    "delete_reported": false,
+    "frequency": 300,
+    "revision": 1,
+    "has_password": true,
+    "history": [],
+    "last_check": 0,
+    "last_success": 0,
+    "next_check": 0,
+    "running": false,
+    "code": ""
+  }
+]
+```
+
+## GET `/api/reporting-mailboxes/{id}`
+
+Read configuration and recent operational history.
+
+**Request:** No body. **Response:** `200 OK`, `integrations::Mailbox` as `application/json`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/reporting-mailboxes/1" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "id": 1,
+  "name": "Reported messages",
+  "enabled": true,
+  "host": "imap.example.com",
+  "port": 993,
+  "username": "reports@example.com",
+  "tls": true,
+  "ignore_cert_errors": false,
+  "folder": "INBOX",
+  "restrict_domain": "",
+  "delete_reported": false,
+  "frequency": 300,
+  "revision": 1,
+  "has_password": true,
+  "history": [],
+  "last_check": 0,
+  "last_success": 0,
+  "next_check": 0,
+  "running": false,
+  "code": ""
+}
+```
+
+## PUT `/api/reporting-mailboxes/{id}`
+
+Replace configuration while preserving the saved secret.
+
+**Request:** integrations::request::MailboxWrite. **Response:** `200 OK`, `integrations::Mailbox` as `application/json`.
+
+Request body (`request.json`):
+
+```json
+{
+  "name": "Reported messages",
+  "enabled": true,
+  "host": "imap.example.com",
+  "port": 993,
+  "username": "reports@example.com",
+  "tls": true,
+  "ignore_cert_errors": false,
+  "folder": "INBOX",
+  "restrict_domain": "",
+  "delete_reported": false,
+  "frequency": 300,
+  "revision": 1
+}
+```
+
+```sh
+curl --request PUT "$RUPHISH_URL/api/reporting-mailboxes/1" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data-binary @request.json
+```
+
+Example response:
+
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "id": 1,
+  "name": "Reported messages",
+  "enabled": true,
+  "host": "imap.example.com",
+  "port": 993,
+  "username": "reports@example.com",
+  "tls": true,
+  "ignore_cert_errors": false,
+  "folder": "INBOX",
+  "restrict_domain": "",
+  "delete_reported": false,
+  "frequency": 300,
+  "revision": 2,
+  "has_password": true,
+  "history": [],
+  "last_check": 0,
+  "last_success": 0,
+  "next_check": 0,
+  "running": false,
+  "code": ""
+}
+```
+
+## POST `/api/reporting-mailboxes/{id}/validate`
+
+Validate the saved mailbox connection and credentials.
+
+**Request:** No body. **Response:** `200 OK`, `integrations::Mailbox` as `application/json`.
+
+Returns the resource after successful validation. Transport or validation failure is an error response, not a successful resource with `success: false`.
+
+```sh
+curl --request POST "$RUPHISH_URL/api/reporting-mailboxes/1/validate" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "id": 1,
+  "name": "Reported messages",
+  "enabled": true,
+  "host": "imap.example.com",
+  "port": 993,
+  "username": "reports@example.com",
+  "tls": true,
+  "ignore_cert_errors": false,
+  "folder": "INBOX",
+  "restrict_domain": "",
+  "delete_reported": false,
+  "frequency": 300,
+  "revision": 1,
+  "has_password": true,
+  "history": [],
+  "last_check": 0,
+  "last_success": 0,
+  "next_check": 0,
+  "running": false,
+  "code": ""
+}
+```
+
+## POST `/api/reporting-mailboxes/{id}/check`
+
+Schedule processing of the saved mailbox.
+
+**Request:** No body. **Response:** `202 Accepted`, `integrations::Mailbox` as `application/json`.
+
+Scheduling does not mean that messages have been processed. Read the resource again for `running`, `code`, timestamps, and history.
+
+```sh
+curl --request POST "$RUPHISH_URL/api/reporting-mailboxes/1/check" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "id": 1,
+  "name": "Reported messages",
+  "enabled": true,
+  "host": "imap.example.com",
+  "port": 993,
+  "username": "reports@example.com",
+  "tls": true,
+  "ignore_cert_errors": false,
+  "folder": "INBOX",
+  "restrict_domain": "",
+  "delete_reported": false,
+  "frequency": 300,
+  "revision": 1,
+  "has_password": true,
+  "history": [],
+  "last_check": 0,
+  "last_success": 0,
+  "next_check": 0,
+  "running": false,
+  "code": ""
+}
+```
+
+## POST `/api/reporting-mailboxes/{id}/resume`
+
+Resume a mailbox paused by a UIDVALIDITY change at the expected revision.
+
+**Request:** common::Revision. **Response:** `200 OK`, `integrations::Mailbox` as `application/json`.
+
+This independent example assumes the saved mailbox has code `mailbox_uidvalidity_changed`. Resume resets the UID checkpoint and increments the configuration revision; other states return a conflict.
+
+Request body (`request.json`):
+
+```json
+{
+  "revision": 1
+}
+```
+
+```sh
+curl --request POST "$RUPHISH_URL/api/reporting-mailboxes/1/resume" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data-binary @request.json
+```
+
+Example response:
+
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "id": 1,
+  "name": "Reported messages",
+  "enabled": true,
+  "host": "imap.example.com",
+  "port": 993,
+  "username": "reports@example.com",
+  "tls": true,
+  "ignore_cert_errors": false,
+  "folder": "INBOX",
+  "restrict_domain": "",
+  "delete_reported": false,
+  "frequency": 300,
+  "revision": 2,
+  "has_password": true,
+  "history": [],
+  "last_check": 0,
+  "last_success": 0,
+  "next_check": 0,
+  "running": false,
+  "code": ""
+}
+```
+
+`tls: true` selects implicit TLS; false selects required STARTTLS. `ignore_cert_errors` changes certificate verification, not whether TLS is used. `delete_reported` applies only to successfully correlated reports.
+
+## DELETE `/api/reporting-mailboxes/{id}`
+
+Delete the configuration at its current revision.
+
+**Request:** No body. **Response:** `200 OK`, `serde_json::Value` as `application/json`.
+
+```sh
+curl --request DELETE "$RUPHISH_URL/api/reporting-mailboxes/1" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header 'If-Match: "2"'
+```
+
+Example response:
+
+```json
+{
+  "success": true
+}
+```

@@ -1,22 +1,75 @@
 ---
-title: Settings API
-description: Installation policy and confirmed closure of active campaigns.
+title: Company settings
+description: Policy revisions, optional features, and bulk campaign closure.
 sidebar:
-  order: 18
+  order: 40
 ---
 
-These additive endpoints require an authenticated administrator with `modify_system`. API keys and browser sessions are supported; browser writes require CSRF protection. Impersonated browser sessions cannot use these endpoints.
+All operations on this page require `modify_system`. The settings JSON body limit is 8 KiB.
 
-| Method | Path | Result |
+## Settings fields
+
+| Attribute | Type | Contract |
 | --- | --- | --- |
-| GET | `/api/settings` | `200`, policy resource and revision ETag |
-| PUT | `/api/settings` | `200`, atomically saved policy resource |
-| POST | `/api/campaigns/complete-all/preview` | `200`, expiring confirmation token and counts |
-| POST | `/api/campaigns/complete-all` | `200`, durable closure result |
+| `revision` | `integer` | Optimistic concurrency revision. |
+| `policy` | `Policy` | Complete installation policy. |
+| `updated_at` | `integer` | Last policy change in UTC Unix seconds. |
+| `updated_by` | `integer or null` | Administrator responsible for the last policy change. |
 
-## Policy resource
 
-GET returns `revision`, `policy`, `updated_at` (UTC Unix seconds), and nullable `updated_by` (administrator ID). PUT requires `If-Match` with the current revision and a complete object shaped as follows:
+### Policy
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `verification_enabled` | `boolean` | Whether verification is required and checks may run. |
+| `verification_expires` | `boolean` | Whether successful evidence has a time limit. |
+| `verification_validity_seconds` | `integer` | Successful evidence lifetime in seconds. |
+| `verification_recheck_seconds` | `integer` | Automatic recheck interval in seconds. |
+| `reporting_mailboxes_enabled` | `boolean` | Whether mailbox network operations are authorized. |
+| `webhooks_enabled` | `boolean` | Whether webhook enqueueing and delivery are authorized. |
+
+All policy fields are required; unknown fields are rejected. Validity must be 3,600–31,536,000 seconds and recheck interval 300–604,800 seconds. When expiry is enabled, the recheck interval plus its jitter allowance (`min(recheck / 10, 300)`) must fit within half the validity period.
+
+## GET `/api/settings`
+
+Read company policy and its revision.
+
+**Request:** No body. **Response:** `200 OK`, `settings::Settings` as `application/json`.
+
+Returns `ETag: "1"`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/settings" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "revision": 1,
+  "policy": {
+    "verification_enabled": false,
+    "verification_expires": true,
+    "verification_validity_seconds": 86400,
+    "verification_recheck_seconds": 21600,
+    "reporting_mailboxes_enabled": false,
+    "webhooks_enabled": false
+  },
+  "updated_at": 1793707200,
+  "updated_by": 1
+}
+```
+
+## PUT `/api/settings`
+
+Replace company policy at the current revision.
+
+**Request:** settings::Edit. **Response:** `200 OK`, `settings::Settings` as `application/json`.
+
+Returns the updated policy and `ETag: "2"`. A missing or invalid precondition returns `428`; a stale revision returns `412`.
+
+Request body (`request.json`):
 
 ```json
 {
@@ -31,20 +84,97 @@ GET returns `revision`, `policy`, `updated_at` (UTC Unix seconds), and nullable 
 }
 ```
 
-This example shows defaults without existing integration configurations. During upgrade, each integration feature starts enabled if configurations of that type already exist, regardless of their individual enabled states; domain verification starts off. `verification_expires` applies only when verification is enabled. Validity must be 3,600 to 31,536,000 seconds; rechecks must be 300 to 604,800 seconds. When expiry is selected, recheck interval plus jitter (the smaller of 10% of the interval and 300 seconds) must not exceed half the validity window. Invalid policy or unknown fields returns `400`; missing/invalid write revision returns `428`; stale revision returns `412`. Rejected writes leave policy and associated work unchanged.
-
-Feature flags are also included in authenticated `/auth/session` responses for UI presentation. They do not grant permissions. See [company settings](../administration/settings.md) for disablement, upgrade defaults, and effects on active work.
-
-## Confirm campaign closure
-
-POST the preview endpoint without a body. It returns `token`, `expires_at` (Unix seconds), `campaigns`, and `pending_deliveries`. The token belongs to the requesting administrator, expires after five minutes, and identifies the exact active campaign set across owners. Drafts are excluded.
-
-Send the token back with the exact confirmation string:
-
-```json
-{"token":"replace-with-the-preview-token","confirmation":"CLOSE ALL"}
+```sh
+curl --request PUT "$RUPHISH_URL/api/settings" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header 'If-Match: "1"' \
+  --header "Content-Type: application/json" \
+  --data-binary @request.json
 ```
 
-A successful result contains `campaigns`, `cancelled_deliveries`, and `completed_at`. Completion and the saved result commit together. Repeating the same token returns the original result even after its original deadline or process restart. Newly created campaigns are unaffected by a replay. An expired unexecuted token or incorrect confirmation returns `400`; a missing or another administrator's token returns `404`; a changed campaign set returns `409`. Request a fresh preview after those failures.
+Example response:
 
-The action closes scheduled and running campaigns, cancels unsent deliveries, and preserves results. Already submitted or externally in-flight mail cannot be recalled. No persistent pause state is created.
+```json
+{
+  "revision": 2,
+  "policy": {
+    "verification_enabled": false,
+    "verification_expires": true,
+    "verification_validity_seconds": 86400,
+    "verification_recheck_seconds": 21600,
+    "reporting_mailboxes_enabled": false,
+    "webhooks_enabled": false
+  },
+  "updated_at": 1793707200,
+  "updated_by": 1
+}
+```
+
+## POST `/api/campaigns/complete-all/preview`
+
+Obtain a confirmation token for closing the current active campaign set.
+
+**Request:** No body. **Response:** `200 OK`, `settings::ClosurePreview` as `application/json`.
+
+```sh
+curl --request POST "$RUPHISH_URL/api/campaigns/complete-all/preview" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "token": "example-closure-token",
+  "expires_at": 1793707500,
+  "campaigns": 2,
+  "pending_deliveries": 15
+}
+```
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `token` | `string` | Opaque actor-bound confirmation identity. |
+| `expires_at` | `integer` | Confirmation deadline in UTC Unix seconds. |
+| `campaigns` | `integer` | Number of affected launched campaigns across owners. |
+| `pending_deliveries` | `integer` | Number of unsent deliveries at review time. |
+
+## POST `/api/campaigns/complete-all`
+
+Close the campaign set identified by the preview token.
+
+**Request:** settings::CloseCampaigns. **Response:** `200 OK`, `settings::ClosureResult` as `application/json`.
+
+Use the actual token from preview. It is bound to the caller and expires after five minutes. Confirmation is case-sensitive. If the active campaign set changes, request a new preview. A committed token can be retried to recover its recorded result.
+
+Request body (`request.json`):
+
+```json
+{
+  "token": "example-closure-token",
+  "confirmation": "CLOSE ALL"
+}
+```
+
+```sh
+curl --request POST "$RUPHISH_URL/api/campaigns/complete-all" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data-binary @request.json
+```
+
+Example response:
+
+```json
+{
+  "campaigns": 2,
+  "cancelled_deliveries": 15,
+  "completed_at": 1793707200
+}
+```
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `campaigns` | `integer` | Number of affected launched campaigns across owners. |
+| `cancelled_deliveries` | `integer` | Number of unsent deliveries cancelled by the operation. |
+| `completed_at` | `integer` | Completion time in UTC Unix seconds. |

@@ -1,50 +1,279 @@
 ---
-title: Landing pages API
-description: Manage campaign pages, redirects and event-only interaction tracking.
+title: Landing pages
+description: Landing pages endpoints, request fields, response objects, and revision handling.
 sidebar:
-  order: 7
+  order: 12
 ---
 
-| Method | Path | Result |
-| --- | --- | --- |
-| GET, POST | `/api/pages/` | List or create landing pages |
-| GET, PUT, DELETE | `/api/pages/{id}` | Read, replace, or delete a page |
-| GET | `/api/pages/summary` | `total` and resource `items` |
-| POST | `/api/pages/preview` | Prepared page `html` and advisory `warnings` |
-| POST | `/api/pages/validate` | Advisory `warnings` for supplied `html` |
+Landing pages are shared installation resources. Reads require `view_objects`; writes require `modify_objects`. Paths use the numeric resource ID.
 
-## Create a page
+## Request fields
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| id | integer | Omit on creation. For replacement, supply the same ID as the URL. |
+| name | string | Required page name. |
+| html | string | Authored HTML. Ruphish prepares it for participant delivery; this response is the saved source. |
+| redirect_url | string | Default post-submission redirect expression. Empty string means no external redirect. |
+
+PUT replaces the editable fields; it is not a partial update. Omitted strings default to empty, arrays to empty arrays, and booleans to false. Unknown JSON fields are ignored. Send only writable fields.
+
+## Response fields
+
+Responses combine the content fields above with [resource metadata](conventions.md#resource-metadata).
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| warnings | PageWarning[], optional | Returned by detail and save operations; absent from collection items. An empty array means no warnings. Each warning has `code` and nullable `control`, a one-based control index. |
+
+## POST `/api/pages/`
+
+Create a resource.
+
+**Request:** resources::request::LandingPage. **Response:** `201 Created`, `resource_details::Resource<resource_details::Page>` as `application/json`.
+
+The response includes `ETag: "1"`. Save the returned revision for subsequent replacement or deletion.
+
+Request body (`request.json`):
 
 ```json
 {
-  "name": "Local exercise",
-  "html": "<h1>Exercise complete</h1><p>This is a local demonstration.</p>",
+  "name": "Training page",
+  "html": "<h1>Training page</h1>",
   "redirect_url": ""
 }
 ```
 
-The saved object adds `id`, `revision`, `modified_date`, and `warnings`. Updates require the matching body ID and require an ETag precondition.
+```sh
+curl --request POST "$RUPHISH_URL/api/pages/" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data-binary @request.json
+```
 
-## Interaction tracking
+Example response:
 
-The API has no capture settings. Every supported submission records an event and password presence. Neither pages nor campaign overrides can disable this built-in tracking or enable stored usernames, passwords, OTPs, arbitrary field values, or value derivatives. Responses omit `capture_credentials` and `capture_passwords`.
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "revision": 1,
+  "id": 1,
+  "name": "Training page",
+  "modified_date": "2026-11-03T12:00:00Z",
+  "html": "<h1>Training page</h1>",
+  "redirect_url": "",
+  "warnings": []
+}
+```
 
-The served page preserves authored scripts, event handlers and visual assets while enforcing managed native submissions and an opaque-origin sandbox. Custom code can make independent requests; it is outside the built-in presence-only guarantee. See [landing pages](../user-guide/landing-pages.md) for supported content, asset imports and `window.ruphish.submit(form)`, and [participant data](../user-guide/participant-data.md) for the privacy boundary.
+## GET `/api/pages/`
 
-`redirect_url` controls the destination after a tracked submission. Use a supported HTTP(S) or relative destination. An empty value leaves the participant on the page. This API is for administrative page management; participant interaction endpoints are not a general-purpose form collection API.
+List the stored resources. The response is an array, including `[]` when empty.
 
-## Advisory validation
+**Request:** No body. **Response:** `200 OK`, `Vec<resource_details::Resource<resource_details::Page>>` as `application/json`.
 
-`POST /api/pages/validate` accepts `{"html":"<form>...</form>"}` and requires the same authenticated editing permission as saving a page. It returns `{"warnings":[{"code":"password_disabled","control":1}]}`. `control` is an optional one-based input index, never a field value. Landing-page codes are `password_disabled`, `password_unnamed`, `password_without_form`, `form_without_submit`, `duplicate_control_id` and `html_repaired`; `authored_execution_removed` remains applicable to static learning pages only. Invalid template syntax still rejects the request; advisory findings do not block saving. Page reads, saves, `POST /api/util/preview`, and campaign review include warnings. Diagnostics use a rendered sample and do not certify scripts or replace representative recipient/manual browser checks.
+```sh
+curl --request GET "$RUPHISH_URL/api/pages/" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
 
-## Preview a landing page
+Example response:
 
-`POST /api/pages/preview` accepts `html` and an optional `recipient` object with `email`, `first_name`, `last_name` and `position`. Omitted recipient fields are empty strings. It returns `200` with `{"html":"...","warnings":[]}` and does not save content or create campaign events. The same editing permission and session-CSRF rules apply as for saving pages; malformed requests and invalid template expressions return `400`.
+```json
+[
+  {
+    "created_at": "2026-11-03T12:00:00Z",
+    "created_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_at": "2026-11-03T12:00:00Z",
+    "revision": 1,
+    "id": 1,
+    "name": "Training page",
+    "modified_date": "2026-11-03T12:00:00Z",
+    "html": "<h1>Training page</h1>",
+    "redirect_url": ""
+  }
+]
+```
 
-The preview expands compatible template expressions using the supplied recipient and uses the same document preparation as public pages. Authored scripts, event handlers and remote visual resources remain. Its collector has no event endpoint: submission shows preview feedback without campaign events or redirects. External authored requests remain possible. The first document title stays in the head, and semantic layout elements are preserved.
+## GET `/api/pages/{id}`
 
-Embed the returned HTML only in an iframe with `sandbox="allow-scripts allow-forms"` and `referrerpolicy="no-referrer"`, preserving its generated content policy. Never add `allow-same-origin`, top-navigation or popup permissions. `allow-forms` permits native validation and submit events; CSP `form-action 'none'` blocks native network submissions. Do not insert the HTML into the administrative document or serve it as unrestricted same-origin content. Public landing responses additionally enforce the sandbox in their HTTP CSP header.
+Read one resource.
 
-Use this endpoint for landing-page previews. The legacy [`/api/util/preview`](imports-and-previews.md#preview-html) endpoint retains template/email-preview behavior; it is not the restricted public-page representation. [Learning-page previews](learning-pages.md) use the same page renderer in static mode without recipient expansion or form controls.
+**Request:** No body. **Response:** `200 OK`, `resource_details::Resource<resource_details::Page>` as `application/json`.
 
-PUT and DELETE require the returned quoted numeric ETag in `If-Match`. Missing preconditions return `428`; stale revisions return `412` without changing saved data. See [conditional resource writes](conventions.md#updating-a-resource) for the full contract and conflict recovery.
+The response includes an `ETag` containing the current quoted numeric revision, for example `ETag: "1"`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/pages/1" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "revision": 1,
+  "id": 1,
+  "name": "Training page",
+  "modified_date": "2026-11-03T12:00:00Z",
+  "html": "<h1>Training page</h1>",
+  "redirect_url": "",
+  "warnings": []
+}
+```
+
+## PUT `/api/pages/{id}`
+
+Replace the editable content at the current revision.
+
+**Request:** resources::request::LandingPage. **Response:** `200 OK`, `resource_details::Resource<resource_details::Page>` as `application/json`.
+
+Returns the new revision and `ETag: "2"`. A stale revision returns `412`; read again before deciding whether to replace newer content.
+
+Request body (`request.json`):
+
+```json
+{
+  "id": 1,
+  "name": "Training page",
+  "html": "<h1>Training page</h1>",
+  "redirect_url": ""
+}
+```
+
+```sh
+curl --request PUT "$RUPHISH_URL/api/pages/1" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header 'If-Match: "1"' \
+  --header "Content-Type: application/json" \
+  --data-binary @request.json
+```
+
+Example response:
+
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "revision": 2,
+  "id": 1,
+  "name": "Training page",
+  "modified_date": "2026-11-03T12:00:00Z",
+  "html": "<h1>Training page</h1>",
+  "redirect_url": "",
+  "warnings": []
+}
+```
+
+## GET `/api/pages/summary`
+
+List resource metadata without authored content.
+
+**Request:** No body. **Response:** `200 OK`, `resources::ResourceSummaries` as `application/json`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/pages/summary" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "total": 1,
+  "items": [
+    {
+      "created_at": "2026-11-03T12:00:00Z",
+      "created_by": {
+        "id": 1,
+        "username": "operator",
+        "deleted": false
+      },
+      "edited_by": {
+        "id": 1,
+        "username": "operator",
+        "deleted": false
+      },
+      "edited_at": "2026-11-03T12:00:00Z",
+      "revision": 1,
+      "id": 1,
+      "name": "Training page",
+      "modified_date": "2026-11-03T12:00:00Z",
+      "active_campaigns": 0
+    }
+  ]
+}
+```
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| total | integer | Number of returned resources. |
+| items | resources::ResourceSummary[] | Resource metadata plus `active_campaigns`, the active campaign reference count. |
+
+## DELETE `/api/pages/{id}`
+
+Delete the resource at the specified revision.
+
+**Request:** No body. **Response:** `200 OK`, `common::Envelope<()>` as `application/json`.
+
+```sh
+curl --request DELETE "$RUPHISH_URL/api/pages/1" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header 'If-Match: "2"'
+```
+
+Example response:
+
+```json
+{
+  "success": true,
+  "message": "Page Deleted Successfully",
+  "data": null
+}
+```
+
+## Related operations
+
+[Import content, validate HTML, and render previews](imports-and-previews.md).

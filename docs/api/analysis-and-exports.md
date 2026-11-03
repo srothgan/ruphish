@@ -1,120 +1,260 @@
 ---
-title: Results and exports API
-description: Query effective campaign events and download consistent CSV or XLSX reports.
+title: Results and exports
+description: Analysis filters, event shapes, observation counts, and CSV or XLSX downloads.
 sidebar:
-  order: 13
+  order: 23
 ---
 
-`GET /api/campaigns/{id}/results` returns a filtered snapshot. `GET /api/campaigns/{id}/export` downloads a report from the same filter model. Both require access to the campaign. Results, charts and exports use current event rows: edits replace their values, additions contribute immediately, and deleted events are absent. Later system observations continue to contribute independently.
+These endpoints require `view_objects`. Results distinguish observed event totals, unique recipients, and cumulative progression. Export applies the same selection filters to a downloadable snapshot.
 
-## Filters
+## GET `/api/campaigns/{id}/results`
 
-| Parameter | Meaning |
-| --- | --- |
-| `recipient` | One numeric recipient-row ID |
-| `recipients` | Comma-separated numeric recipient-row IDs; at most 200 |
-| `from` | Inclusive UTC Unix seconds |
-| `until` | Exclusive UTC Unix seconds |
-| `event` | Comma-separated stable event identifiers; select recipients with any of these events within the time/source scope, retaining all their scoped event types; omit for no event-based selection |
-| `source` | `legacy`, `application`, `public`, `mailbox`, or `operator`; omit for all sources |
-| `search` | Case-insensitive recipient name/email substring |
-| `sort` | Recipient column: `email` (default), `name`, `delivery`, `accepted`, `opened`, `clicked`, `submitted`, or `reported` |
-| `order` | Recipient direction: `asc` (default) or `desc` |
-| `event_sort` | Event column: `time` (default), `kind`, `source`, or `password_present` |
-| `event_order` | Event direction: `desc` (default) or `asc` |
-| `offset` | Table offset, default 0 |
-| `limit` | Requested table rows, 1–200; default 50 |
+Read filtered counts, recipient rows, events, and time buckets.
 
-Recipient filters intersect when combined. Event types select recipients with at least one matching event inside the `from` (inclusive), `until` (exclusive), and `source` restrictions. All event types for those recipients within the same time/source restrictions contribute to rows, totals, charts, and exports. Multiple types match any selected type; duplicates are ignored. Events outside the time window cannot qualify a recipient and are not returned.
+**Request:** Query: reporting::Filter. **Response:** `200 OK`, `campaign_reads::Results` as `application/json`.
 
-This changes the meaning of existing `event` URLs from event-type restriction to recipient selection. Unattributed events cannot qualify a recipient and are excluded when `event` is set; without it, existing unattributed history remains available.
+This independent example shows an active campaign with one public click. The source filter excludes SMTP and campaign-lifecycle events from the observed counts; delivery state remains visible on the recipient row.
 
-Invalid filters fail rather than silently broadening the result. Supported event filters are `campaign_created`, `email_sent`, `email_error`, `email_opened`, `link_clicked`, `form_submitted`, `email_reported`, and `delivery_reconciled`. Display labels are not filter identifiers; for example, use `event=email_opened,form_submitted`. Unknown event identifiers or sources return `400`.
-
-Sorting applies to the complete filtered collection before pagination. Recipient text uses case-sensitive Unicode order, and counts sort numerically. Event-kind ordering uses the readable event name shown in the table and exports. Equal recipient values use ascending recipient ID; equal event values use event ID in the selected direction. Presence sorts absent, false, then true in ascending order. Undated historical report flags do not contribute to the recorded report count. Unknown sort columns or directions return `400`.
-
-Changing sort or filters should reset `offset` to zero. Separate requests read current data, so new observations can move rows between pages; an offset is not a frozen snapshot. Exports use the same selected ordering across all matching rows and ignore the displayed page offset/limit.
-
-For example, `/api/campaigns/42/results?limit=25&offset=0` reads the first page for campaign 42. That ID is illustrative; use an execution returned by your installation.
-
-## Snapshot fields
-
-`first_observed` and `last_observed` contain the earliest/latest effective UTC Unix second for each metric across the complete filtered selection, before pagination. Both are objects with required `accepted`, `opened`, `clicked`, `submitted` and `reported` fields; a field is `null` when no valid timestamp exists. These are observed times, not inferred progression timestamps.
-
-The response contains campaign `id`, `name`, `status`, `as_of` (UTC Unix seconds), unfiltered `audience`, filtered `recipient_total` and `event_total`, current `recipients` and `events` pages, raw-event chart `buckets`, cumulative `participant_buckets`, and `bucket_seconds`.
-
-`unique`, `progression`, `totals`, recipient `counts`, and bucket `counts` are objects with five required numeric fields: `accepted`, `opened`, `clicked`, `submitted`, and `reported`. Empty results contain zero values, not omitted fields or positional arrays. `unique` counts distinct recipients with effective matching events; `totals` counts the events themselves. `progression` includes inferred earlier engagement stages. They answer different questions. See [metric definitions](../user-guide/results/metrics.md).
-
-Recipient rows contain `id`, `email`, `name`, `delivery`, `counts`, and `historical_reported`. Delivery is one of `ready`, `preparing`, `submitting`, `retry`, `accepted`, `failed`, `unknown`, `blocked`, `cancelled`, or explicit `null`. `unknown` means ambiguous transport acceptance; `null` means no native transport record exists. The property is required even when null. The UI and tabular exports label that absence as historical; delivery sorting puts it before recorded states ascending and after them descending. Campaign `status` is `Created`, `Queued`, `In progress`, `Emails Sent`, or `Completed`; the first and fourth values can occur in imported campaign history.
-
-Event rows contain `id`, nullable `recipient_id`, `email`, UTC `time`, `kind`, `source`, nullable `password_present` and `username_present`, and boolean `edited`. The nullable fields must still be present. `source` is `legacy`, `application`, `public`, `mailbox`, or `operator`. Missing presence evidence is not the same as `false`. Historical reported state is separate from an observed report event.
-
-A recognized event uses a classified kind such as `{"type":"known","value":"form_submitted"}`. Unrecognized imported names remain explicit history, for example `{"type":"historical","value":"Proxied request"}`. They remain visible in event rows and exports but never contribute to a known action's metrics. CSV and XLSX retain readable event names.
-
-## Downloads
-
-Add `format=csv` or `format=xlsx` and `scope=events`, `recipients`, or, for a workbook, `all`. Defaults are CSV and events. Export uses matching rows independently of the displayed table page; it is bounded to 100,000 rows per sheet and a 32 MiB snapshot. Narrow the filter if an export exceeds its limit.
-
-CSV event columns, in order:
-
-```text
-Event ID,Recipient ID,Email,Time (UTC),Event,Source,Password present,Edited
+```sh
+curl --request GET "$RUPHISH_URL/api/campaigns/1/results?source=public&offset=0&limit=50" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
 ```
 
-CSV recipient columns, in order:
-
-```text
-Recipient ID,Email,Name,Delivery,Accepted events,Open events,Click events,Submission events,Report events,Historical reported,First Name,Last Name,Position,Send Date (UTC),Modified Date (UTC)
-```
-
-XLSX includes a Summary sheet and the selected Events and/or Recipients sheets. Summary records the campaign, snapshot time, filters, and counts. CSV text that could be interpreted as a spreadsheet formula is prefixed to keep it text; XLSX text cells are written explicitly as strings. Do not strip that protection before opening untrusted content in a spreadsheet.
-
-The added audience fields come from the campaign's recipient records, preserving separate names and position alongside the existing display name. Send Date and Modified Date use the stored result timestamps, normalized to UTC with fractional precision retained; null, empty, zero-sentinel and invalid historical dates export as empty cells. Send Date retains legacy semantics: it may be a scheduled or retry time, or an accepted send time, so its presence alone does not establish delivery. Event filters affect observed counts, not these stored timestamps. No date is inferred from other events, and exports include all matching recipients regardless of the table's current page.
-
-Downloads use `Content-Disposition: attachment`, a `campaign-{id}` filename, and `Cache-Control: no-store`. They contain operator-provided recipient identities and selected event metadata, not submitted participant values or IP-derived location. See [export interpretation](../user-guide/results/exports.md).
-
-`participant_buckets` uses the same `{time, counts}` shape as `buckets`. Each attributed recipient contributes once per action, at the first matching timestamp inside the selected filters. Counts are cumulative through each interval (end exclusive), retain totals through quiet intervals, and are independent of table pagination. Unattributed events and events without valid timestamps cannot add chart participants. Existing `buckets`, `totals`, and recipient `counts` retain their event-count semantics.
-
-## Event corrections
-
-`POST /api/campaigns/{campaign}/recipients/{recipient}/events` commits one permission-checked change. It requires `modify_objects`; browser sessions also require the existing CSRF token and origin checks. Completed campaigns accept corrections without changing their lifecycle or delivery work. The response contains the affected `id` and `event`. For add/edit, `event` contains `id`, `current`, `source`, `revision`, and boolean `edited`; deletion returns `event: null`.
+Example response:
 
 ```json
 {
-  "request_id": "operator-request-2026-0001",
-  "event_id": 901,
-  "revision": 0,
-  "action": "edit",
-  "value": {
-    "time": "2026-06-02T12:00:00+02:00",
-    "kind": "form_submitted",
-    "presence": { "username_present": null, "password_present": true }
-  }
+  "track_opens": true,
+  "first_observed": {
+    "accepted": null,
+    "opened": null,
+    "clicked": 1793707200,
+    "submitted": null,
+    "reported": null
+  },
+  "last_observed": {
+    "accepted": null,
+    "opened": null,
+    "clicked": 1793707200,
+    "submitted": null,
+    "reported": null
+  },
+  "id": 1,
+  "name": "Training campaign",
+  "status": "In progress",
+  "as_of": 1793707260,
+  "audience": 1,
+  "unique": {
+    "accepted": 0,
+    "opened": 0,
+    "clicked": 1,
+    "submitted": 0,
+    "reported": 0
+  },
+  "progression": {
+    "accepted": 0,
+    "opened": 1,
+    "clicked": 1,
+    "submitted": 0,
+    "reported": 0
+  },
+  "totals": {
+    "accepted": 0,
+    "opened": 0,
+    "clicked": 1,
+    "submitted": 0,
+    "reported": 0
+  },
+  "recipient_total": 1,
+  "event_total": 1,
+  "recipients": [
+    {
+      "id": 1,
+      "email": "ada@example.com",
+      "name": "Ada Lovelace",
+      "delivery": "accepted",
+      "counts": {
+        "accepted": 0,
+        "opened": 0,
+        "clicked": 1,
+        "submitted": 0,
+        "reported": 0
+      },
+      "historical_reported": false
+    }
+  ],
+  "events": [
+    {
+      "client": {
+        "browser": "firefox",
+        "os": "linux",
+        "device": "desktop"
+      },
+      "edited": false,
+      "id": 3,
+      "recipient_id": 1,
+      "email": "ada@example.com",
+      "time": "2026-11-03T12:00:00Z",
+      "kind": {
+        "type": "known",
+        "value": "link_clicked"
+      },
+      "source": "public",
+      "password_present": null,
+      "username_present": null
+    }
+  ],
+  "buckets": [
+    {
+      "time": 1793707200,
+      "counts": {
+        "accepted": 0,
+        "opened": 0,
+        "clicked": 1,
+        "submitted": 0,
+        "reported": 0
+      }
+    }
+  ],
+  "participant_buckets": [
+    {
+      "time": 1793707200,
+      "counts": {
+        "accepted": 0,
+        "opened": 0,
+        "clicked": 1,
+        "submitted": 0,
+        "reported": 0
+      }
+    }
+  ],
+  "bucket_seconds": 60
 }
 ```
 
-The IDs and time above are illustrative. Use the reviewed recipient event and an occurrence within that campaign's known launch/completion boundaries. Times require an explicit offset and are normalized to UTC. Independent events need not be chronologically ordered. Presence accepts only booleans or null, and applies only to `form_submitted`; no participant-entered values or derivatives are accepted. Editable kinds are `email_opened`, `link_clicked`, `form_submitted`, and `email_reported`. SMTP and lifecycle events are read-only here.
+### Query fields
 
-| Action | Required values | Effect |
+| Attribute | Type | Contract |
 | --- | --- | --- |
-| `add` | `event_id: null`, `revision: 0`, and `value` | Create an operator-originated entry with `edited: false` |
-| `edit` | Existing `event_id`, reviewed `revision`, and `value` | Change that event's time, type or presence indicators; retain its origin |
-| `delete` | Existing `event_id`, reviewed `revision`, `value: null` | Permanently remove that event row |
+| `recipient` | `integer or null` | Recipient row identity. |
+| `recipients` | `string` | Comma-separated recipient identities for multi-selection; empty means all. |
+| `from` | `integer or null` | Inclusive UTC seconds. |
+| `until` | `integer or null` | Exclusive UTC seconds. |
+| `event` | `string` | Select recipients with any of these comma-separated event identifiers in the time/source scope, retaining all their scoped events. Empty means no selection. Validated by HTTP. |
+| `search` | `string` | Recipient search. |
+| `source` | `string` | Observation source supplied by the client; the HTTP boundary validates it. |
+| `event_sort` | `EventSort` | Event ordering before pagination. |
+| `event_order` | `SortDirection` | Event direction, independent of recipient ordering. |
+| `sort` | `RecipientSort` | Recipient ordering before pagination, independent of event ordering. |
+| `order` | `SortDirection` | Sort direction; equal values always use ascending recipient identity. |
+| `offset` | `integer` | Row offset. |
+| `limit` | `integer` | Page length. |
+| `format` | `string` | Download format. |
+| `scope` | `string` | Download scope. |
 
-Use a unique 16 to 64 character alphanumeric/hyphen `request_id`. An addition stores that identity on the event row: retrying the same values returns the unchanged created event, while reusing the identity with different values or after the event was edited returns `412 Precondition Failed`. Deleting the row also removes its creation identity.
+| Parameter | Accepted values and behavior |
+| --- | --- |
+| recipient / recipients | A numeric recipient ID, or comma-separated numeric IDs. Omission or an empty multi-selection selects all. |
+| from / until | Inclusive start and exclusive end in Unix seconds; start must precede end. |
+| event | Comma-separated keys: `campaign_created`, `email_sent`, `email_error`, `email_opened`, `link_clicked`, `form_submitted`, `email_reported`, `delivery_reconciled`. Selects recipients with any matching event and retains their other scoped events. |
+| source | `operator`, `legacy`, `application`, `public`, or `mailbox`; empty means all. |
+| sort / order | Recipient sort: `email` (default), `name`, `delivery`, `accepted`, `opened`, `clicked`, `submitted`, `reported`. Direction: `asc` (default) or `desc`. |
+| event_sort / event_order | Event sort: `time` (default), `kind`, `source`, or `password_present`. Direction defaults to `desc`. |
+| offset / limit | Defaults 0 and 50. Limit must be 1–200. Recipient and event orderings are independent. |
+| format / scope | Export only: `csv` or `xlsx`; `events`, `recipients`, or `all`. CSV cannot use `all`. Defaults: `csv`, `events`. |
 
-Edits and deletions require the reviewed row version. An actual edit increments `revision` and sets `edited: true`; a no-op preserves both fields. Origin and collected client categories remain unchanged. A stale edit returns `412`, except that an identical request matching the immediately next version is acknowledged without another write. A missing event, including a repeated delete, returns `404`. Each mutation is transactional. Administrative additions and edits do not enqueue participant-event webhooks; edits and deletions cancel outstanding webhook jobs for the affected event.
+### Response fields
 
-Event rows retain only their current values. There is no original-value copy, audit endpoint or restore operation. The boolean `edited` is independent of origin and remains true after an actual edit, including when values are changed back later. Results and event exports expose that boolean; `revision` is only used to prevent conflicting writes.
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `track_opens` | `boolean` | Whether open counts represent an enabled observation channel. |
+| `first_observed` | `ObservationTimes` | First observed UTC second per metric, before pagination; absent without valid evidence. |
+| `last_observed` | `ObservationTimes` | Latest observed UTC second per metric, before pagination. |
+| `id` | `integer` | Campaign identity. |
+| `name` | `string` | Campaign display name. |
+| `status` | `CampaignStatus` | Lifecycle state. |
+| `as_of` | `integer` | Snapshot UTC seconds. |
+| `audience` | `integer` | Unfiltered audience size. |
+| `unique` | `Counts` | Unique recipients per observed event type. |
+| `progression` | `Counts` | Cumulative recipient progression. |
+| `totals` | `Counts` | Effective event counts. |
+| `recipient_total` | `integer` | Matching recipients before pagination. |
+| `event_total` | `integer` | Matching events before pagination. |
+| `recipients` | `ResultRecipient[]` | Recipient page. |
+| `events` | `ResultEvent[]` | Event page. |
+| `buckets` | `Bucket[]` | Chart intervals. |
+| `participant_buckets` | `Bucket[]` | Cumulative distinct participants per action, independent of pagination. |
+| `bucket_seconds` | `integer` | Interval width in seconds. |
 
-## Disabled open tracking
+`Counts` always contains integer `accepted`, `opened`, `clicked`, `submitted`, and `reported` members. `totals` counts observations, including repeats. `unique` counts recipients with each observed event. `progression` also counts submissions as clicks and opens, and clicks as opens; it never infers SMTP acceptance. `first_observed` and `last_observed` use those same five keys with nullable Unix timestamps, without progression inference.
 
-Results include the campaign Boolean `track_opens`. Raw observation counts remain numeric; clients must use the Boolean to distinguish disabled open tracking from zero observed opens. The UI shows **Not tracked** or **-** and hides the open series when disabled. Recipient CSV/XLSX open-count cells and workbook open summaries contain **Not tracked** instead of a numeric zero. Historical event rows remain available; disabling collection does not delete observations.
+### Recipient, event, and bucket fields
 
-## Client observations
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `id` | `integer` | Recipient identity. |
+| `email` | `string` | Administrator-supplied address. |
+| `name` | `string` | Administrator-supplied name. |
+| `delivery` | `DeliveryState or null` | Transport outcome, or null when no native delivery record exists. |
+| `counts` | `Counts` | Observed event counts. |
+| `historical_reported` | `boolean` | Legacy report state without an observed timestamp. |
 
-Result events include nullable `client` with `browser`, `os`, and `device` fields. Recipient-history events expose the same data in `record.client`; campaign timeline and delivery-activity events expose `client` directly. It is immutable observation metadata and cannot be supplied through event-edit commands or the public submission body.
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `client` | `Info or null` | Immutable coarse request categories; absent for historical or non-client observations. |
+| `edited` | `boolean` | Whether an operator has changed the event values since creation. |
+| `id` | `integer` | Event identity. |
+| `recipient_id` | `integer or null` | Recipient when resolvable. |
+| `email` | `string` | Administrator-supplied address. |
+| `time` | `string` | Normalized UTC timestamp. |
+| `kind` | `events::RecordedKind` | Event kind. |
+| `source` | `Source` | Observation provenance. |
+| `password_present` | `boolean or null` | Presence only, when recorded. |
+| `username_present` | `boolean or null` | Username presence when explicitly recorded, never inferred from addressing. |
 
-Browser values are `chrome`, `edge`, `firefox`, `safari`, `opera`, `samsung_internet`, `internet_explorer`, and `unknown`. OS values are `windows`, `macos`, `linux`, `android`, `ios`, `chromeos`, and `unknown`. Device values are `desktop`, `mobile`, `tablet`, and `unknown`. A `null` client means no metadata was collected; an object containing `unknown` fields means the request could not be classified. Historical and operator-added events remain `null`.
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `time` | `integer` | UTC bucket start. |
+| `counts` | `Counts` | Observed event counts. |
 
-CSV and XLSX event sheets append **Browser**, **Operating system**, and **Device** columns with these stable identifiers. Cells are blank for `null`; unclassified categories contain `unknown`. See [participant data](../user-guide/participant-data.md#browser-and-device-observations) for the collection boundary and interpretation limits.
+A recorded event kind is tagged JSON, for example:
+
+```json
+{"type":"known","value":"link_clicked"}
+```
+
+Imported unrecognized kinds use `{"type":"historical","value":"Original label"}`. Presence fields record booleans, not entered usernames or passwords. Null means unknown evidence; it is different from false.
+
+### Client observations
+
+`client` is null when no client observation was collected. Otherwise it has this shape:
+
+```json
+{"browser":"firefox","os":"linux","device":"desktop"}
+```
+
+| Attribute | Values |
+| --- | --- |
+| browser | `unknown`, `chrome`, `edge`, `firefox`, `safari`, `opera`, `samsung_internet`, `internet_explorer` |
+| os | `unknown`, `windows`, `macos`, `linux`, `android`, `ios`, `chromeos` |
+| device | `unknown`, `desktop`, `mobile`, `tablet` |
+
+These are coarse request categories, not verified device identities. Responses exclude raw User-Agent headers, versions, models, and submitted field values.
+
+## GET `/api/campaigns/{id}/export`
+
+Download the filtered snapshot. **Request:** query `reporting::Filter`, no body. **Response:** `200 OK`, CSV bytes or an XLSX workbook, with `Content-Disposition: attachment`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/campaigns/1/export?format=csv&scope=events" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --output campaign-events.csv
+```
+
+Example `text/csv; charset=utf-8` response for a selection with no events:
+
+```csv
+Event ID,Recipient ID,Email,Time (UTC),Event,Source,Password present,Edited,Browser,Operating system,Device
+```
+
+For a workbook containing both tables, request `?format=xlsx&scope=all` and save the response as `.xlsx`. Its media type is `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`; the response is binary, not JSON. Export contains the selected snapshot rather than just the current on-screen page. CSV cells beginning with spreadsheet formula characters are prefixed to prevent formula execution.

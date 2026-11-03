@@ -1,30 +1,232 @@
 ---
-title: Users and API keys
-description: Manage application accounts and rotate the caller's API key.
+title: Accounts and keys
+description: Account administration and rotation of the authenticated API key.
 sidebar:
-  order: 15
+  order: 41
 ---
 
-These users are application accounts. Campaign recipients belong to [groups](groups.md) and have no administrative login.
+Account endpoints return application accounts, including their API keys. List and create operations require system administration. Reading another account requires `modify_system`; reading your own account does not. Editing requires `modify_objects`, and editing another account additionally requires `modify_system`. Ordinary users cannot change their role, lock state, or password-setup requirement.
 
-| Method | Path | Purpose |
+## Request fields
+
+| Attribute | Type | Contract |
 | --- | --- | --- |
-| GET, POST | `/api/users/` | List accounts or create one, subject to permission |
-| GET, PUT, DELETE | `/api/users/{id}` | Read, replace editable account settings, or delete |
-| POST | `/api/reset` | Rotate the authenticated caller's API key |
+| `username` | `string` | Exact login name. |
+| `password` | `string` | New password, if provided. |
+| `role` | `string` | Role slug. |
+| `password_change_required` | `boolean` | Require password setup. |
+| `account_locked` | `boolean` | Disable authentication. |
 
-## Account fields
+This is a full replacement input. Omitted strings default to empty and omitted flags to false; send the intended current values. Creation requires a password. On update an empty password preserves the existing password. Administrators can reset another account’s password; this operation rejects replacing your own password. Built-in role slugs are `admin` and `user`. Passwords are 8–1,024 UTF-8 bytes.
 
-Writes use `username`, `password`, `role` (role slug), `password_change_required`, and `account_locked`. The response includes `id`, `username`, `api_key`, a `role` object with slug/name/description, the two account flags, and `last_login`. Treat this response as credential-bearing data; do not put it in ordinary application logs.
+## Response fields
 
-An empty password on an eligible edit preserves the existing password. Password changes have different authorization rules from profile edits: use the browser's current-password flow for self-service password changes. Generic self-update is not an API shortcut around current-password verification.
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `id` | `integer` | Persistent identifier. |
+| `username` | `string` | Exact login name. |
+| `api_key` | `string` | Automation credential; returned only by authorized account endpoints. |
+| `role` | `Role` | Role metadata. |
+| `password_change_required` | `boolean` | Mandatory password setup. |
+| `account_locked` | `boolean` | Account is disabled. |
+| `last_login` | `string or null` | Most recent successful login. |
 
-The server protects the last unlocked administrator and rejects self-deletion. System administration permission does not remove these invariants. Read [accounts and permissions](../administration/accounts-and-permissions.md) before automating account provisioning.
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `slug` | `string` | Stable role name. |
+| `name` | `string` | Display name. |
+| `description` | `string` | Description. |
 
-## Rotate your key
+`last_login` is an RFC 3339 timestamp or null. Treat `api_key` as a credential; do not include account responses in application logs.
 
-POST `/api/reset` accepts form input and can authenticate through the bearer header. A successful response has `success: true`, a message, and the new key in `data`. Replace the key in your secret store before the next authenticated request; the old key stops working.
+## POST `/api/users/`
 
-If the rotation response is lost, do not assume the old key is still valid. Recover through the authenticated account interface or your established administrator recovery process. Ruphish does not provide an unauthenticated key-recovery endpoint.
+Create an application account.
 
-Display language, date/time locale, and time-zone preferences belong to the browser account flow under `/internal/preferences`. They are deliberately separate from this public account-management contract. See [account preferences](../user-guide/account.md).
+**Request:** auth::UserEdit. **Response:** `200 OK`, `auth::User` as `application/json`.
+
+This endpoint returns `200 OK`, not `201`.
+
+Request body (`request.json`):
+
+```json
+{
+  "username": "automation",
+  "password": "example-password",
+  "role": "user",
+  "password_change_required": false,
+  "account_locked": false
+}
+```
+
+```sh
+curl --request POST "$RUPHISH_URL/api/users/" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data-binary @request.json
+```
+
+Example response:
+
+```json
+{
+  "id": 2,
+  "username": "automation",
+  "api_key": "example-api-key",
+  "role": {
+    "slug": "user",
+    "name": "User",
+    "description": "User role with edit access to objects and campaigns"
+  },
+  "password_change_required": false,
+  "account_locked": false,
+  "last_login": null
+}
+```
+
+## GET `/api/users/`
+
+List accounts visible to an administrator.
+
+**Request:** No body. **Response:** `200 OK`, `Vec<auth::User>` as `application/json`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/users/" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+[
+  {
+    "id": 2,
+    "username": "automation",
+    "api_key": "example-api-key",
+    "role": {
+      "slug": "user",
+      "name": "User",
+      "description": "User role with edit access to objects and campaigns"
+    },
+    "password_change_required": false,
+    "account_locked": false,
+    "last_login": null
+  }
+]
+```
+
+## GET `/api/users/{id}`
+
+Read the specified account.
+
+**Request:** No body. **Response:** `200 OK`, `auth::User` as `application/json`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/users/2" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "id": 2,
+  "username": "automation",
+  "api_key": "example-api-key",
+  "role": {
+    "slug": "user",
+    "name": "User",
+    "description": "User role with edit access to objects and campaigns"
+  },
+  "password_change_required": false,
+  "account_locked": false,
+  "last_login": null
+}
+```
+
+## PUT `/api/users/{id}`
+
+Replace account configuration while preserving its password.
+
+**Request:** auth::UserEdit. **Response:** `200 OK`, `auth::User` as `application/json`.
+
+Request body (`request.json`):
+
+```json
+{
+  "username": "automation",
+  "password": "",
+  "role": "user",
+  "password_change_required": false,
+  "account_locked": false
+}
+```
+
+```sh
+curl --request PUT "$RUPHISH_URL/api/users/2" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data-binary @request.json
+```
+
+Example response:
+
+```json
+{
+  "id": 2,
+  "username": "automation",
+  "api_key": "example-api-key",
+  "role": {
+    "slug": "user",
+    "name": "User",
+    "description": "User role with edit access to objects and campaigns"
+  },
+  "password_change_required": false,
+  "account_locked": false,
+  "last_login": null
+}
+```
+
+## DELETE `/api/users/{id}`
+
+Delete another account. Self-deletion and removal of the last available administrator are rejected.
+
+**Request:** No body. **Response:** `200 OK`, `common::Envelope<()>` as `application/json`.
+
+```sh
+curl --request DELETE "$RUPHISH_URL/api/users/2" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "success": true,
+  "message": "User deleted Successfully!",
+  "data": null
+}
+```
+
+## POST `/api/reset`
+
+Rotate the authenticated account’s API key. **Request:** empty URL-encoded form, with Bearer authentication. **Response:** `200 OK`, `common::Envelope<String>`. This example is independent of account deletion above.
+
+```sh
+curl --request POST "$RUPHISH_URL/api/reset" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header "Content-Type: application/x-www-form-urlencoded" \
+  --data ""
+```
+
+Example response:
+
+```json
+{
+  "success": true,
+  "message": "API Key successfully reset",
+  "data": "example-replacement-api-key"
+}
+```
+
+`data` is the new key. Store it and replace the old credential in your integration. The previous key stops working immediately; retrying with that old key will fail authentication.

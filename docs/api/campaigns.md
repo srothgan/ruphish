@@ -1,120 +1,1158 @@
 ---
-title: Campaigns API
-description: Prepare, launch, inspect, complete, and resolve campaign delivery through the API.
+title: Campaigns
+description: Preparation, creation, execution reads, duplication, test sends, and completion.
 sidebar:
-  order: 10
+  order: 20
 ---
 
-A campaign is an execution with a fixed audience and selected resources. Use [campaign drafts](campaign-drafts.md) for incomplete work that must not send messages yet.
-
-## Routes
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| GET, POST | `/api/campaigns/` | List executions or launch one |
-| POST | `/api/campaigns/prepare` | Validate selections, audience, policy, schedule, and preview without launching |
-| POST | `/api/campaigns/test` | Send a test from the selected campaign configuration |
-| GET | `/api/campaigns/{id}` | Legacy execution detail |
-| DELETE | `/api/campaigns/{id}` | Delete execution data |
-| GET | `/api/campaigns/{id}/context` | Typed campaign configuration and linked-resource context |
-| GET | `/api/campaigns/{id}/results` | Filtered native results, chart buckets and bounded recipient/event pages |
-| GET | `/api/campaigns/summary` | Legacy collection summaries |
-| GET | `/api/campaigns/{id}/summary` | Legacy execution summary |
-| GET | `/api/campaigns/overview` | Bounded execution headers; `after`, `limit`, and optional `completed` |
-| GET | `/api/campaigns/directory` | Paged mixed draft/execution directory |
-| GET | `/api/campaigns/{id}/draft` | Read inputs for duplication; does not save a draft |
-| POST | `/api/campaigns/{id}/complete` | Complete a campaign |
-| GET | `/api/campaigns/{id}/delivery` | Delivery state and attempts |
-| GET | `/api/campaigns/{id}/recipients/{result}/history` | Recipient attempts and current individual events, including read-only client categories |
-| POST | `/api/campaigns/{id}/recipients/{result}/events` | [Add, edit or delete an event](analysis-and-exports.md#event-corrections) |
-| POST | `/api/campaigns/{id}/delivery/{result}` | Resolve or retry a delivery outcome |
-
-`/complete` accepts POST only; GET and HEAD return `405` without changing campaign state. Requests in this route family have a 1 MiB body limit.
-
-## Read a campaign
-
-Set the connection variables from [your first API request](index.md#make-your-first-request), then replace the dummy ID with an existing campaign ID:
-
-```sh
-export CAMPAIGN_ID='123'
-
-curl --header "Authorization: Bearer $RUPHISH_API_KEY" \
-  "$RUPHISH_URL/api/campaigns/$CAMPAIGN_ID"
-```
-
-This request reads campaign details without launching or changing the campaign. Include the private-CA option from the setup example if your installation requires it.
+Campaigns are executions. Saving incomplete configuration uses [campaign drafts](campaign-drafts.md). Reads require `view_objects`; preparation, test sends, creation, completion, and deletion require `modify_objects`. Campaign request bodies are limited to 1 MiB.
 
 ## Prepare and launch
 
-Campaign requests select shared resources by ID. Use the same body for preparation and direct launch:
+`campaign::Create` is accepted by preparation and creation, and nested inside test and draft-launch requests. Unknown fields are rejected.
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `learning_revision` | `string or null, optional` | Reviewed learning content revision, when a learning page is selected. |
+| `name` | `string` | Campaign display name. |
+| `url` | `string` | Public URL template. |
+| `selection` | `Selections` | Shared resource IDs and optional reviewed revisions. |
+| `launch_date` | `string or null` | UTC or offset launch; exclusive with launch_local. Both absent means now. |
+| `send_by_date` | `string or null` | UTC or offset distribution end; exclusive with send_by_local. |
+| `policy` | `Policy or null` | Optional open tracking and destination choices. |
+| `launch_local` | `LocalTime or null` | Named-zone launch input; exclusive with launch_date. |
+| `send_by_local` | `LocalTime or null` | Named-zone distribution end; exclusive with send_by_date. |
+
+### Selection
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| groups | ReviewedResource[] | Ordered recipient groups; at least one is required. |
+| template | ReviewedResource | Saved email template. |
+| page | ReviewedResource | Saved landing page. |
+| smtp | ReviewedResource | Saved sending profile. |
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `id` | `integer` | Shared persistent resource ID. |
+| `revision` | `string or null` | Revision shown during review, if already reviewed. |
+
+Preparation resolves missing revisions. For creation, send the reviewed revisions as strings; they detect changes between review and execution. An integer revision used elsewhere in the API is not interchangeable with this string field.
+
+### Policy and schedule
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `track_opens` | `boolean` | Whether email-open observations are enabled for this campaign. |
+| `redirect_url` | `string or null` | Post-submission redirect override. |
+| `learning_page_id` | `integer or null, optional` | Selected shared learning page; custom redirect must be empty when present. |
+
+Absent policy defaults to open tracking enabled and the page redirect default. A null `redirect_url` inherits the page value; an empty string explicitly disables the custom redirect. A learning page and a nonempty custom redirect are mutually exclusive. When selecting learning content, carry its reviewed `learning_revision` into the launch command.
+
+Absolute schedule fields accept RFC 3339 strings with an offset. Local schedule objects have `local` (for example `2030-01-01T09:00`) and `time_zone` (for example `Europe/Berlin`). Supply either absolute or local input for each boundary. Missing launch input means immediate launch; missing send-by input means no distribution deadline. Local times are resolved on the server; invalid or ambiguous times are rejected.
+
+## POST `/api/campaigns/prepare`
+
+Resolve selections, deduplicate the audience, validate the destination, and render a sample without creating an execution.
+
+**Request:** campaign::Create. **Response:** `200 OK`, `campaign_workflow::Review` as `application/json`.
+
+Request body (`request.json`):
 
 ```json
 {
-  "name": "Local exercise",
+  "name": "Training campaign",
+  "url": "http://127.0.0.1:8081",
   "selection": {
-    "groups": [{"id": 1}],
-    "template": {"id": 2},
-    "page": {"id": 3},
-    "smtp": {"id": 4}
+    "groups": [
+      {
+        "id": 1,
+        "revision": "1"
+      }
+    ],
+    "template": {
+      "id": 1,
+      "revision": "1"
+    },
+    "page": {
+      "id": 1,
+      "revision": "1"
+    },
+    "smtp": {
+      "id": 1,
+      "revision": "1"
+    }
   },
-  "url": "https://campaign.test:8443"
+  "launch_date": "2030-01-01T00:00:00Z",
+  "send_by_date": null,
+  "policy": {
+    "track_opens": false,
+    "redirect_url": ""
+  },
+  "launch_local": null,
+  "send_by_local": null
 }
 ```
 
-This body is illustrative: replace the example IDs with existing shared resources, and the URL must be an eligible campaign origin under the current [verification policy](settings.md). Posting it to `/api/campaigns/` schedules real sending. Use the [local fixture](../getting-started/first-campaign.md) for a contained trial.
+```sh
+curl --request POST "$RUPHISH_URL/api/campaigns/prepare" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data-binary @request.json
+```
 
-`selection` is required: `groups` is an array, and `template`, `page`, and `smtp` are objects with `id` and an optional revision string. Preparation returns resolved selections, `total`, `duplicate_count`, `conflict_count`, conflicting recipient details, resolved policy and schedule, `mailer_enabled`, and a rendered `preview`. Carry each selected `id` and `revision` into launch so changed content is detected. When a learning page is selected, preparation also returns `learning_revision`; carry it into the top-level launch request. Saved-draft launch requires this revision. Review selections also include display names; omit those names from command inputs. Resource renaming does not change the selected identity. Missing resources are rejected; there is no fallback lookup by name.
+Example response:
 
-Request fields are case-sensitive. Unknown fields, duplicate fields, invalid types and trailing JSON are rejected with `400`. Top-level legacy `groups`, `template`, `page` and `smtp` inputs are no longer accepted, including alongside `selection`. The same typed campaign input is used inside test-send and draft-launch requests.
+```json
+{
+  "learning_revision": null,
+  "warnings": [],
+  "total": 1,
+  "duplicate_count": 0,
+  "launch_date": 1893456000,
+  "send_by_date": null,
+  "selection": {
+    "groups": [
+      {
+        "id": 1,
+        "revision": "1",
+        "name": "Training recipients"
+      }
+    ],
+    "template": {
+      "id": 1,
+      "revision": "1",
+      "name": "Training message"
+    },
+    "page": {
+      "id": 1,
+      "revision": "1",
+      "name": "Training page"
+    },
+    "smtp": {
+      "id": 1,
+      "revision": "1",
+      "name": "Training sender"
+    }
+  },
+  "policy": {
+    "track_opens": false,
+    "redirect_url": ""
+  },
+  "mailer_enabled": true,
+  "conflict_count": 0,
+  "conflicts": [],
+  "preview": {
+    "subject": "Training notification",
+    "html": "<p>Hello Ada</p>",
+    "text": "Hello Ada",
+    "visible_sender": "training@example.com",
+    "transport_sender": "training@example.com"
+  }
+}
+```
 
-The optional `policy` contains `track_opens` (Boolean, default `true`), `redirect_url`, and an optional owned `learning_page_id`. `track_opens: false` disables managed email pixels and public open observations while leaving clicks, submissions, and reports independent. The setting is fixed at launch, returned in confirmed policy reads, and preserved by campaign copying and test sends. `null` is not a valid tracking choice. A learning page and a nonempty custom redirect are mutually exclusive. Every supported submission records an event and password presence; there are no capture settings. Campaign commands reject `capture_credentials` and `capture_passwords` fields. See [landing pages](landing-pages.md).
+### Review fields
 
-Saved draft policies can retain `track_opens` while `redirect_url` is explicitly `null`, representing unresolved page defaults. Such drafts remain saveable but cannot launch until the destination choice is resolved and saved. An empty redirect string is a confirmed choice of no redirect.
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `learning_revision` | `string or null` | Learning-page revision included in the reviewed launch. |
+| `warnings` | `resource_details::PageWarning[]` | Advisory findings on the processed landing page. |
+| `total` | `integer` | Number of unique recipients. |
+| `duplicate_count` | `integer` | Number of discarded duplicate entries. |
+| `launch_date` | `integer` | Resolved launch time in UTC seconds. |
+| `send_by_date` | `integer or null` | Optional distribution end in UTC seconds. |
+| `selection` | `Selection<ReviewedResource>` | Resolved resource selections. |
+| `policy` | `Policy` | Effective tracking policy confirmed by review. |
+| `mailer_enabled` | `boolean` | Whether delivery is enabled by startup configuration. |
+| `conflict_count` | `integer` | Total conflicts including those beyond the displayed sample. |
+| `conflicts` | `Conflict[]` | Bounded conflicting recipient sample. |
+| `preview` | `Preview` | Rendered sample using the first recipient. |
 
-`launch_date` and `send_by_date` accept UTC or offset timestamps. Alternatively, `launch_local` and `send_by_local` each contain `local` and `time_zone`. For each boundary, supply at most one non-null representation: combining `launch_date` with `launch_local`, or `send_by_date` with `send_by_local`, returns `400` with validation issues for both fields, even if they describe the same instant. This applies to preparation, direct creation, test sends and draft launch. Different boundaries may use different representations. If both launch fields are omitted or null, launch is immediate; if both send-by fields are omitted or null, there is no distribution window.
+The audience is deduplicated by email, retaining the first occurrence in group and recipient order. `duplicate_count` counts discarded rows; differing recipient attributes are reported as conflicts without creating multiple deliveries. `selection` adds `name` to each reviewed resource.
 
-Local inputs are resolved through the named IANA zone. Repeated civil times use the first occurrence; nonexistent times shift forward. Review the resolved schedule before launching. Read [scheduling](../user-guide/campaigns/scheduling.md) before relying on distribution timing.
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `email` | `string` | Recipient mailbox identity. |
+| `kept` | `RecipientAttributes` | Attributes retained from the first occurrence. |
+| `discarded` | `RecipientAttributes` | Conflicting attributes from a later occurrence. |
 
-For direct creation, supply an `Idempotency-Key` and retain it with the original request when recovering from a lost response. Do not reuse one operation's key for a different campaign request. For saved drafts, the draft identity owns launch idempotency instead.
+`kept` and `discarded` each contain `first_name`, `last_name`, and `position` strings. The conflict sample is bounded; use `conflict_count` for the full count.
 
-Direct creation returns `201`, while draft launch returns `200`. An idempotency key must be nonempty and at most 128 bytes. The response to direct creation omits the timeline and includes the resolved groups. A repeated key does not authorize a new execution after deletion.
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `subject` | `string` | Rendered subject. |
+| `html` | `string` | Rendered HTML body. |
+| `text` | `string` | Rendered plain-text body. |
+| `visible_sender` | `string` | Rendered visible From address. |
+| `transport_sender` | `string` | SMTP envelope sender. |
 
-`POST /api/campaigns/test` takes an object containing `campaign` (the campaign request) and `email` (the controlled test recipient). It uses sample personalization values and returns a `200` success envelope after SMTP acceptance. It sends a real test message without launching the campaign; a lost response is not a reason to resend automatically.
+## POST `/api/campaigns/`
 
-## Learning-page destinations
+Create an execution using the reviewed resource selections.
 
-Set `policy.learning_page_id` to an owned [learning page](learning-pages.md) to use its hosted explanation after submission. A nonempty custom `redirect_url` cannot be combined with that selection. The campaign destination is fixed at launch; the reusable page content remains editable. Omitting the learning-page field preserves legacy redirect behavior.
+**Request:** campaign::Create. **Response:** `201 Created`, `campaign_details::Campaign` as `application/json`.
 
-## Read results
+Use a fresh key for each intended execution. Reuse the same key and typed request after an uncertain response; a different request with the same key conflicts. Keys are nonempty and at most 128 bytes. The header is optional for direct creation, but omitting it removes this retry protection.
 
-Campaign detail includes `track_opens`, identity, lifecycle timestamps, URL, selected resources, and available `results` and `timeline`. Absent lifecycle dates return `null`, including `send_by_date` and `completed_date`. Empty results or timeline fields may be omitted. Result `id` is the opaque recipient tracking ID. Legacy network-location fields are not a source of participant identity; do not build new tracking around them.
+Request body (`request.json`):
 
-Legacy summaries also return `track_opens`; use it to distinguish disabled open tracking from measured zero activity. Legacy summary `stats` includes `total`, `sent`, `opened`, `clicked`, `submitted_data`, `email_reported`, and `error`. These use progression semantics. Use [results](analysis-and-exports.md) for observed event counts, filters, and exportable rows; do not combine the two models as if they were identical metrics.
+```json
+{
+  "name": "Training campaign",
+  "url": "http://127.0.0.1:8081",
+  "selection": {
+    "groups": [
+      {
+        "id": 1,
+        "revision": "1"
+      }
+    ],
+    "template": {
+      "id": 1,
+      "revision": "1"
+    },
+    "page": {
+      "id": 1,
+      "revision": "1"
+    },
+    "smtp": {
+      "id": 1,
+      "revision": "1"
+    }
+  },
+  "launch_date": "2030-01-01T00:00:00Z",
+  "send_by_date": null,
+  "policy": {
+    "track_opens": false,
+    "redirect_url": ""
+  },
+  "launch_local": null,
+  "send_by_local": null
+}
+```
 
-The directory accepts `filter=all`, `drafts`, `active`, `completed`, or `executions` and an opaque `after` cursor. It returns `items` and `next_after`, with at most 50 rows per page. Keep cursor values opaque.
+```sh
+curl --request POST "$RUPHISH_URL/api/campaigns/" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header 'Idempotency-Key: training-campaign-2030-01' \
+  --header "Content-Type: application/json" \
+  --data-binary @request.json
+```
 
-For sorted directory pages, add `sort=recent`, `name`, `status`, `total`, or `launch` and optional `order=asc` (default) or `desc`. Pass the returned `next_after` unchanged as the next request's `after`. The cursor is bound to the owner, filter, column and direction; clear it when any selection changes. Sorting covers the full matching directory before its 50-row page is selected. `sort=recent&order=desc` is the browser default: drafts come first by last saved modification (creation time if absent), followed by executions by creation time, newest first in each group. Missing execution creation dates sort last. `order=asc` reverses the groups and time order. Launch schedules and participant activity do not define recency. Without `sort`, the existing draft-first ID traversal remains available; `order` requires `sort`.
+Example response:
 
-Sorted continuations retain the boundary value and row identity, so deleting the boundary row does not invalidate traversal. Equal values use stable identities; absent audience/schedule values precede present values ascending. These are live queries, not a snapshot spanning requests: changes to draft modification times, names, status, schedules or audience sizes can move rows across the current boundary. Treat cursor strings as opaque and URL-encode them; malformed or mismatched sorted cursors return `400`.
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "track_opens": false,
+  "id": 1,
+  "name": "Training campaign",
+  "status": "Queued",
+  "created_date": "2026-11-03T12:00:00Z",
+  "launch_date": "2030-01-01T00:00:00Z",
+  "send_by_date": null,
+  "completed_date": null,
+  "url": "http://127.0.0.1:8081",
+  "template": {
+    "created_at": "2026-11-03T12:00:00Z",
+    "created_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_at": "2026-11-03T12:00:00Z",
+    "revision": 1,
+    "id": 1,
+    "name": "Training message",
+    "modified_date": "2026-11-03T12:00:00Z",
+    "subject": "Training notification",
+    "text": "Hello {{.FirstName}}",
+    "html": "<p>Hello {{.FirstName}}</p>",
+    "envelope_sender": "",
+    "attachments": []
+  },
+  "page": {
+    "created_at": "2026-11-03T12:00:00Z",
+    "created_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_at": "2026-11-03T12:00:00Z",
+    "revision": 1,
+    "id": 1,
+    "name": "Training page",
+    "modified_date": "2026-11-03T12:00:00Z",
+    "html": "<h1>Training page</h1>",
+    "redirect_url": ""
+  },
+  "smtp": {
+    "created_at": "2026-11-03T12:00:00Z",
+    "created_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_at": "2026-11-03T12:00:00Z",
+    "revision": 1,
+    "id": 1,
+    "name": "Training sender",
+    "modified_date": "2026-11-03T12:00:00Z",
+    "interface_type": "SMTP",
+    "host": "smtp.example.com:587",
+    "from_address": "training@example.com",
+    "ignore_cert_errors": false,
+    "headers": [],
+    "username": "training@example.com",
+    "has_password": true
+  },
+  "results": [
+    {
+      "id": "AbCd1234",
+      "email": "ada@example.com",
+      "first_name": "Ada",
+      "last_name": "Lovelace",
+      "position": "Engineer",
+      "status": "Scheduled",
+      "ip": "",
+      "latitude": 0.0,
+      "longitude": 0.0,
+      "reported": false,
+      "send_date": "2030-01-01T00:00:00Z",
+      "modified_date": "2026-11-03T12:00:00Z"
+    }
+  ],
+  "groups": [
+    {
+      "created_at": "2026-11-03T12:00:00Z",
+      "created_by": {
+        "id": 1,
+        "username": "operator",
+        "deleted": false
+      },
+      "edited_by": {
+        "id": 1,
+        "username": "operator",
+        "deleted": false
+      },
+      "edited_at": "2026-11-03T12:00:00Z",
+      "revision": 1,
+      "id": 1,
+      "name": "Training recipients",
+      "modified_date": "2026-11-03T12:00:00Z",
+      "targets": [
+        {
+          "email": "ada@example.com",
+          "first_name": "Ada",
+          "last_name": "Lovelace",
+          "position": "Engineer"
+        }
+      ]
+    }
+  ]
+}
+```
 
-`/api/campaigns/overview` is a different execution-only read. It accepts numeric `after`, optional `limit` (default 50), and optional boolean `completed`. Its response contains header `items`, numeric/null `next_after`, and `mailer_enabled`. Headers include identity, status, schedule, URL, resource references, audience total, and available policy/domain-block metadata. Unknown historical policy is `null`, including in the editable copy returned by `/api/campaigns/{id}/draft`; `{}` is not a policy value.
+### Campaign response
 
-## Delivery and uncertain outcomes
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `track_opens` | `boolean` | Whether this campaign collects email-open observations. |
+| `id` | `integer` | Execution identity. |
+| `name` | `string` | Display name. |
+| `status` | `CampaignStatus` | Campaign lifecycle. |
+| `created_date` | `string or null` | Creation timestamp, or explicitly unknown. |
+| `launch_date` | `string or null` | Launch timestamp, or explicitly unknown. |
+| `send_by_date` | `string or null` | Distribution end, or no deadline. |
+| `completed_date` | `string or null` | Completion timestamp, or not completed. |
 
-Delivery reads use numeric result-row IDs. The page includes a campaign header, sparse state `counts`, `items`, optional `next_after`, policy, `mailer_enabled`, and recent activity. Rows expose `id`, `rid`, `email`, `state`, `due` (UTC Unix seconds), `attempt_count`, `retries`, `generation`, `code`, and recent `attempts`. Missing state-count keys mean no rows in that state. Queue states are `ready`, `preparing`, `submitting`, `retry`, `accepted`, `failed`, `unknown`, `blocked`, and `cancelled`. They are separate from campaign lifecycle (`Created`, `Queued`, `In progress`, `Emails Sent`, `Completed`) and draft state (`draft`, `launched`). The directory's `kind` selects the corresponding lifecycle; a draft cannot have an execution status.
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `url` | `string` | Public campaign URL. |
+| `template` | `Resource<Template>` | Frozen template; unavailable imported resources have explicit empty records. |
+| `page` | `Resource<Page>` | Frozen landing page. |
+| `smtp` | `Resource<Profile>` | Frozen sender identity with current transport settings, never the stored password. |
+| `results` | `Recipient[], optional` | Audience snapshots; an empty audience is omitted in this projection. |
+| `timeline` | `Event[], optional` | Committed history; omitted when empty and in creation acknowledgements. |
+| `groups` | `Resource<Group> or null[], optional` | Source groups supplied only in creation acknowledgements. |
 
-To sort delivery pages, send `sort=priority`, `email`, `state`, `due`, or `attempt_count` with optional `order=asc` (default) or `desc`, and `limit` from 1 to 200 (default 50). The response adds nullable `next_cursor`; supply it as `cursor` on the next request with the same campaign, owner and ordering. Do not combine a sorted cursor with a nonzero numeric `after`. Sort/filter changes start again without a cursor. `sort=priority&order=asc` is the browser default: unknown, blocked, failed, pending work (ready/preparing/submitting/retry together), accepted, then cancelled. Pending work sorts by due time ascending; other groups use result ID. Descending reverses the priority groups and due order. Equal values use ascending result ID; due times and attempt counts sort numerically. The original numeric `after`/`next_after` path remains available when `sort` is omitted.
+The response also includes [attribution](conventions.md#attribution). `template`, `page`, and `smtp` use their resource response shapes. Empty `results` and `timeline` are omitted. Direct creation includes `groups` and omits `timeline`; ordinary reads omit `groups`. Authored content and audience are captured for the execution; sending credentials and domain eligibility remain operational dependencies.
 
-History accepts `before_attempt` and `before_event` cursors and returns attempts, events, and separate next cursors. Attempt fields include generation, start/finish times, state, SMTP stage, optional SMTP code, and message ID. Attempt states are `preparing`, `submitting`, `retry`, `accepted`, `failed`, `unknown`, `blocked`, `cancelled`, and `abandoned`. An abandoned attempt means its preparation lease expired before submission; `ready` belongs to the queue, not an attempt.
+### Recipient and timeline fields
 
-A resolution POST contains the current `generation` and an `action`: `confirm_accepted` or `resend_unknown` for an unknown outcome, or `retry` for an eligible failed/blocked result. Reload before resolving a stale generation. An unknown outcome can mean SMTP accepted the message before the connection failed; resending may produce a duplicate.
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `id` | `string` | Opaque public recipient identifier. |
+| `status` | `string` | Current engagement projection, distinct from delivery state. |
+| `ip` | `string` | Sanitized historical address. |
+| `latitude` | `number` | Sanitized historical latitude. |
+| `longitude` | `number` | Sanitized historical longitude. |
+| `reported` | `boolean` | Independent reported flag. |
+| `send_date` | `string or null` | Scheduled send timestamp, or explicitly unknown. |
+| `modified_date` | `string or null` | Last change, or explicitly unknown. |
 
-Completion stops remaining campaign work but cannot recall accepted mail. Deletion removes history. See [completion and deletion](../user-guide/campaigns/completion-and-deletion.md) before invoking either operation.
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `client` | `Info or null` | Immutable coarse request categories; absent for historical or non-client observations. |
+| `campaign_id` | `integer` | Owning execution. |
+| `email` | `string` | Administrator-supplied recipient address, empty for campaign-wide events. |
+| `time` | `string or null` | Recorded time, or explicitly unknown. |
+| `message` | `string` | Recorded event name. |
+| `details` | `string` | Sanitized string-encoded metadata; never participant-entered values. |
 
-The compact context read returns the launched schedule, audience size, policy and resource references. Template subject and sender/profile information describe the saved campaign content. It excludes resource bodies and service credentials. Recipient history pages contain at most 100 attempts and 100 events each; use `next_attempt` and `next_event` as the exclusive `before_attempt` and `before_event` cursors. Numeric recipient identities belong to the campaign, and cross-campaign or cross-owner reads fail with `404`.
+Recipient rows also contain `email`, `first_name`, `last_name`, and `position`. Their string `id` is the public recipient token, not the numeric row ID used by delivery, history, and result operations. `details` is sanitized JSON encoded inside a string, or an empty string when no details remain.
 
-## Campaign content snapshots
+| Campaign `status` | Meaning |
+| --- | --- |
+| Created | Created execution. |
+| Queued | Waiting for its scheduled launch. |
+| In progress | Active execution. |
+| Emails Sent | Supported imported lifecycle state. |
+| Completed | Closed execution. |
 
-Launch and scheduling freeze approved authored content, attachments, sender identity/headers, landing content, and the selected learning content alongside the existing audience and campaign policy. Context and campaign detail responses show these saved values even after source edits or deletion. Historical SMTP projections contain the saved sender and headers, not connection settings or credentials. Copying a campaign retains source IDs for a fresh review using current resources.
+## GET `/api/campaigns/`
 
-SMTP connection/authentication/TLS settings, domain eligibility, account authorization, and campaign lifecycle remain operational controls. See [launch behavior](../user-guide/campaigns/launch.md#what-stays-fixed-after-launch) for the boundary and imported-history limitation.
+List complete execution records. Prefer overview or directory when full content and timelines are unnecessary.
+
+**Request:** No body. **Response:** `200 OK`, `Vec<campaign_details::Campaign>` as `application/json`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/campaigns/" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+[
+  {
+    "created_at": "2026-11-03T12:00:00Z",
+    "created_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_at": "2026-11-03T12:00:00Z",
+    "track_opens": false,
+    "id": 1,
+    "name": "Training campaign",
+    "status": "Queued",
+    "created_date": "2026-11-03T12:00:00Z",
+    "launch_date": "2030-01-01T00:00:00Z",
+    "send_by_date": null,
+    "completed_date": null,
+    "url": "http://127.0.0.1:8081",
+    "template": {
+      "created_at": "2026-11-03T12:00:00Z",
+      "created_by": {
+        "id": 1,
+        "username": "operator",
+        "deleted": false
+      },
+      "edited_by": {
+        "id": 1,
+        "username": "operator",
+        "deleted": false
+      },
+      "edited_at": "2026-11-03T12:00:00Z",
+      "revision": 1,
+      "id": 1,
+      "name": "Training message",
+      "modified_date": "2026-11-03T12:00:00Z",
+      "subject": "Training notification",
+      "text": "Hello {{.FirstName}}",
+      "html": "<p>Hello {{.FirstName}}</p>",
+      "envelope_sender": "",
+      "attachments": []
+    },
+    "page": {
+      "created_at": "2026-11-03T12:00:00Z",
+      "created_by": {
+        "id": 1,
+        "username": "operator",
+        "deleted": false
+      },
+      "edited_by": {
+        "id": 1,
+        "username": "operator",
+        "deleted": false
+      },
+      "edited_at": "2026-11-03T12:00:00Z",
+      "revision": 1,
+      "id": 1,
+      "name": "Training page",
+      "modified_date": "2026-11-03T12:00:00Z",
+      "html": "<h1>Training page</h1>",
+      "redirect_url": ""
+    },
+    "smtp": {
+      "created_at": "2026-11-03T12:00:00Z",
+      "created_by": {
+        "id": 1,
+        "username": "operator",
+        "deleted": false
+      },
+      "edited_by": {
+        "id": 1,
+        "username": "operator",
+        "deleted": false
+      },
+      "edited_at": "2026-11-03T12:00:00Z",
+      "revision": 1,
+      "id": 1,
+      "name": "Training sender",
+      "modified_date": "2026-11-03T12:00:00Z",
+      "interface_type": "SMTP",
+      "host": "smtp.example.com:587",
+      "from_address": "training@example.com",
+      "ignore_cert_errors": false,
+      "headers": [],
+      "username": "training@example.com",
+      "has_password": true
+    },
+    "results": [
+      {
+        "id": "AbCd1234",
+        "email": "ada@example.com",
+        "first_name": "Ada",
+        "last_name": "Lovelace",
+        "position": "Engineer",
+        "status": "Scheduled",
+        "ip": "",
+        "latitude": 0.0,
+        "longitude": 0.0,
+        "reported": false,
+        "send_date": "2030-01-01T00:00:00Z",
+        "modified_date": "2026-11-03T12:00:00Z"
+      }
+    ],
+    "timeline": [
+      {
+        "client": null,
+        "campaign_id": 1,
+        "email": "",
+        "time": "2026-11-03T12:00:00Z",
+        "message": "Campaign Created",
+        "details": ""
+      }
+    ]
+  }
+]
+```
+
+## GET `/api/campaigns/{id}`
+
+Read one execution and its recorded audience and timeline.
+
+**Request:** No body. **Response:** `200 OK`, `campaign_details::Campaign` as `application/json`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/campaigns/1" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "track_opens": false,
+  "id": 1,
+  "name": "Training campaign",
+  "status": "Queued",
+  "created_date": "2026-11-03T12:00:00Z",
+  "launch_date": "2030-01-01T00:00:00Z",
+  "send_by_date": null,
+  "completed_date": null,
+  "url": "http://127.0.0.1:8081",
+  "template": {
+    "created_at": "2026-11-03T12:00:00Z",
+    "created_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_at": "2026-11-03T12:00:00Z",
+    "revision": 1,
+    "id": 1,
+    "name": "Training message",
+    "modified_date": "2026-11-03T12:00:00Z",
+    "subject": "Training notification",
+    "text": "Hello {{.FirstName}}",
+    "html": "<p>Hello {{.FirstName}}</p>",
+    "envelope_sender": "",
+    "attachments": []
+  },
+  "page": {
+    "created_at": "2026-11-03T12:00:00Z",
+    "created_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_at": "2026-11-03T12:00:00Z",
+    "revision": 1,
+    "id": 1,
+    "name": "Training page",
+    "modified_date": "2026-11-03T12:00:00Z",
+    "html": "<h1>Training page</h1>",
+    "redirect_url": ""
+  },
+  "smtp": {
+    "created_at": "2026-11-03T12:00:00Z",
+    "created_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_at": "2026-11-03T12:00:00Z",
+    "revision": 1,
+    "id": 1,
+    "name": "Training sender",
+    "modified_date": "2026-11-03T12:00:00Z",
+    "interface_type": "SMTP",
+    "host": "smtp.example.com:587",
+    "from_address": "training@example.com",
+    "ignore_cert_errors": false,
+    "headers": [],
+    "username": "training@example.com",
+    "has_password": true
+  },
+  "results": [
+    {
+      "id": "AbCd1234",
+      "email": "ada@example.com",
+      "first_name": "Ada",
+      "last_name": "Lovelace",
+      "position": "Engineer",
+      "status": "Scheduled",
+      "ip": "",
+      "latitude": 0.0,
+      "longitude": 0.0,
+      "reported": false,
+      "send_date": "2030-01-01T00:00:00Z",
+      "modified_date": "2026-11-03T12:00:00Z"
+    }
+  ],
+  "timeline": [
+    {
+      "client": null,
+      "campaign_id": 1,
+      "email": "",
+      "time": "2026-11-03T12:00:00Z",
+      "message": "Campaign Created",
+      "details": ""
+    }
+  ]
+}
+```
+
+## GET `/api/campaigns/{id}/context`
+
+Read operational context without full content or recipient history.
+
+**Request:** No body. **Response:** `200 OK`, `campaign_reads::Header` as `application/json`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/campaigns/1/context" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "id": 1,
+  "name": "Training campaign",
+  "status": "Queued",
+  "launch_date": "2030-01-01T00:00:00Z",
+  "send_by_date": null,
+  "url": "http://127.0.0.1:8081",
+  "template": {
+    "id": 1,
+    "name": "Training message"
+  },
+  "page": {
+    "id": 1,
+    "name": "Training page"
+  },
+  "smtp": {
+    "id": 1,
+    "name": "Training sender"
+  },
+  "subject": "Training notification",
+  "profile_sender": "training@example.com",
+  "template_sender": "",
+  "total": 1,
+  "policy": {
+    "track_opens": false,
+    "redirect_url": ""
+  },
+  "domain_id": 1,
+  "domain_block": null
+}
+```
+
+### Context fields
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `id` | `integer` | Execution identity. |
+| `name` | `string` | Display name. |
+| `status` | `CampaignStatus` | Lifecycle state. |
+| `launch_date` | `string or null` | Preserved timestamp. |
+| `send_by_date` | `string or null` | Distribution end; null when absent. |
+| `url` | `string` | Public campaign URL. |
+| `template` | `Resource` | Selected email template. |
+| `page` | `Resource` | Selected landing page. |
+| `smtp` | `Resource` | Selected sending profile. |
+| `subject` | `string or null` | Current subject; null when unavailable. |
+| `profile_sender` | `string or null` | Current sender; null when unavailable. |
+| `template_sender` | `string or null` | Current override; null when unavailable. |
+| `total` | `integer` | Confirmed audience size. |
+| `policy` | `Policy or null` | Effective policy; null for unsupported legacy state. |
+| `domain_id` | `integer or null` | Bound domain identity. |
+| `domain_block` | `string or null` | Current domain eligibility failure. |
+
+Resource references contain numeric `id` and nullable `name`. `policy` contains `track_opens`, `redirect_url`, and optional `learning_page_id`; null means no known historical policy.
+
+## GET `/api/campaigns/overview`
+
+Read a bounded page of execution contexts.
+
+**Request:** Query: campaign::request::OverviewPage. **Response:** `200 OK`, `campaign_reads::Overview` as `application/json`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/campaigns/overview?after=0&limit=50" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "items": [
+    {
+      "created_at": "2026-11-03T12:00:00Z",
+      "created_by": {
+        "id": 1,
+        "username": "operator",
+        "deleted": false
+      },
+      "edited_by": {
+        "id": 1,
+        "username": "operator",
+        "deleted": false
+      },
+      "edited_at": "2026-11-03T12:00:00Z",
+      "id": 1,
+      "name": "Training campaign",
+      "status": "Queued",
+      "launch_date": "2030-01-01T00:00:00Z",
+      "send_by_date": null,
+      "url": "http://127.0.0.1:8081",
+      "template": {
+        "id": 1,
+        "name": "Training message"
+      },
+      "page": {
+        "id": 1,
+        "name": "Training page"
+      },
+      "smtp": {
+        "id": 1,
+        "name": "Training sender"
+      },
+      "subject": "Training notification",
+      "profile_sender": "training@example.com",
+      "template_sender": "",
+      "total": 1,
+      "policy": {
+        "track_opens": false,
+        "redirect_url": ""
+      },
+      "domain_id": 1,
+      "domain_block": null
+    }
+  ],
+  "next_after": null,
+  "mailer_enabled": true
+}
+```
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `after` | `integer` | Continuation returned by the previous page. |
+| `limit` | `integer or null` | Requested page size. |
+| `completed` | `boolean or null` | Optional completion filter. |
+
+Pass `next_after` as the next request’s `after`; null ends traversal. `completed=true` selects completed executions, false selects unfinished executions, and omission selects both. `mailer_enabled` reflects startup configuration.
+
+## GET `/api/campaigns/directory`
+
+List saved drafts and executions in one bounded directory.
+
+**Request:** Query: campaign::request::DirectoryPage. **Response:** `200 OK`, `campaign_reads::Directory` as `application/json`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/campaigns/directory?filter=all&sort=name&order=asc" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "items": [
+    {
+      "id": "1",
+      "revision": null,
+      "name": "Training campaign",
+      "kind": "campaign",
+      "status": "Queued",
+      "total": 1,
+      "launch_date": "2030-01-01T00:00:00Z"
+    }
+  ],
+  "next_after": null
+}
+```
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| filter | string | `all` (default), `drafts`, `active`, `completed`, or `executions`. |
+| sort | string, optional | `recent`, `name`, `status`, `total`, or `launch`. |
+| order | string, optional | `asc` (default for explicit sort) or `desc`. Requires `sort`. |
+| after | string | Copy `next_after` unchanged and URL-encode it. Keep the caller, filter, sort, and order unchanged. Each page contains at most 50 items. |
+
+Directory items contain a string `id`, `name`, nullable draft `revision`, `kind` (`draft` or `campaign`), and the corresponding `status`. Draft states are `draft` and `launched`; execution states are listed above. `total` and `launch_date` are nullable for drafts.
+
+## GET `/api/campaigns/summary`
+
+List execution metadata and progression counts.
+
+**Request:** No body. **Response:** `200 OK`, `campaign_details::Summaries` as `application/json`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/campaigns/summary" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "total": 1,
+  "campaigns": [
+    {
+      "created_at": "2026-11-03T12:00:00Z",
+      "created_by": {
+        "id": 1,
+        "username": "operator",
+        "deleted": false
+      },
+      "edited_by": {
+        "id": 1,
+        "username": "operator",
+        "deleted": false
+      },
+      "edited_at": "2026-11-03T12:00:00Z",
+      "track_opens": false,
+      "id": 1,
+      "name": "Training campaign",
+      "status": "Queued",
+      "created_date": "2026-11-03T12:00:00Z",
+      "launch_date": "2030-01-01T00:00:00Z",
+      "send_by_date": null,
+      "completed_date": null,
+      "stats": {
+        "total": 1,
+        "sent": 0,
+        "opened": 0,
+        "clicked": 0,
+        "submitted_data": 0,
+        "email_reported": 0,
+        "error": 0
+      }
+    }
+  ]
+}
+```
+
+## GET `/api/campaigns/{id}/summary`
+
+Read metadata and progression counts for one execution.
+
+**Request:** No body. **Response:** `200 OK`, `campaign_details::Summary` as `application/json`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/campaigns/1/summary" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "track_opens": false,
+  "id": 1,
+  "name": "Training campaign",
+  "status": "Queued",
+  "created_date": "2026-11-03T12:00:00Z",
+  "launch_date": "2030-01-01T00:00:00Z",
+  "send_by_date": null,
+  "completed_date": null,
+  "stats": {
+    "total": 1,
+    "sent": 0,
+    "opened": 0,
+    "clicked": 0,
+    "submitted_data": 0,
+    "email_reported": 0,
+    "error": 0
+  }
+}
+```
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `total` | `integer` | Audience size. |
+| `sent` | `integer` | Recorded SMTP acceptances. |
+| `opened` | `integer` | Cumulative opens. |
+| `clicked` | `integer` | Cumulative clicks. |
+| `submitted_data` | `integer` | Recorded submissions. |
+| `email_reported` | `integer` | Independent reports. |
+| `error` | `integer` | Failed recipients. |
+
+These summary counts represent recipient progression: a submission contributes to clicked and opened counts, and a click contributes to opened. SMTP acceptance is never inferred. Use [results](analysis-and-exports.md) for separate observed totals and unique counts.
+
+## GET `/api/campaigns/{id}/draft`
+
+Return editable duplication input without persisting a saved draft.
+
+**Request:** No body. **Response:** `200 OK`, `campaign_workflow::Duplicate` as `application/json`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/campaigns/1/draft" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "name": "Training campaign (copy)",
+  "url": "http://127.0.0.1:8081",
+  "selection": {
+    "groups": [
+      {
+        "id": 1
+      }
+    ],
+    "template": {
+      "id": 1
+    },
+    "page": {
+      "id": 1
+    },
+    "smtp": {
+      "id": 1
+    }
+  },
+  "policy": {
+    "track_opens": false,
+    "redirect_url": ""
+  }
+}
+```
+
+The duplication response contains `name`, `url`, ID-only `selection`, and nullable `policy`. It carries no schedule or reviewed revisions; prepare the new configuration before creating or launching it.
+
+## POST `/api/campaigns/test`
+
+Send a prepared sample to one explicit recipient without creating an execution.
+
+**Request:** campaign::Test. **Response:** `200 OK`, `common::Envelope<()>` as `application/json`.
+
+`campaign` uses the command above. `email` is the test destination; rendering uses Sample Recipient as the recipient name. Success means SMTP acceptance, not inbox delivery.
+
+Request body (`request.json`):
+
+```json
+{
+  "campaign": {
+    "name": "Training campaign",
+    "url": "http://127.0.0.1:8081",
+    "selection": {
+      "groups": [
+        {
+          "id": 1,
+          "revision": "1"
+        }
+      ],
+      "template": {
+        "id": 1,
+        "revision": "1"
+      },
+      "page": {
+        "id": 1,
+        "revision": "1"
+      },
+      "smtp": {
+        "id": 1,
+        "revision": "1"
+      }
+    },
+    "launch_date": "2030-01-01T00:00:00Z",
+    "send_by_date": null,
+    "policy": {
+      "track_opens": false,
+      "redirect_url": ""
+    },
+    "launch_local": null,
+    "send_by_local": null
+  },
+  "email": "tester@example.com"
+}
+```
+
+```sh
+curl --request POST "$RUPHISH_URL/api/campaigns/test" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data-binary @request.json
+```
+
+Example response:
+
+```json
+{
+  "success": true,
+  "message": "Accepted by SMTP server",
+  "data": null
+}
+```
+
+## POST `/api/campaigns/{id}/complete`
+
+Close the execution and stop pending delivery work.
+
+**Request:** No body. **Response:** `200 OK`, `common::Envelope<()>` as `application/json`.
+
+```sh
+curl --request POST "$RUPHISH_URL/api/campaigns/1/complete" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "success": true,
+  "message": "Campaign completed successfully!",
+  "data": null
+}
+```
+
+## DELETE `/api/campaigns/{id}`
+
+Delete the execution and its retained campaign data.
+
+**Request:** No body. **Response:** `200 OK`, `common::Envelope<()>` as `application/json`.
+
+```sh
+curl --request DELETE "$RUPHISH_URL/api/campaigns/1" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "success": true,
+  "message": "Campaign deleted successfully!",
+  "data": null
+}
+```
