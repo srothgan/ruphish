@@ -503,7 +503,7 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
 }
 fn show(api: Api, token: String, id: i64) -> impl IntoView {
     let history_sort = TableSorting::new("domain-history", "finished", SortDirection::Desc);
-    let checks_sort = TableSorting::new("domain-checks", "name", SortDirection::Asc);
+    let checks_sort = TableSorting::new("domain-checks", "setup", SortDirection::Asc);
 
     let i18n = ruphish_ui::localization::use_i18n();
 
@@ -825,18 +825,18 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                                         ),
                                     ),
                                     (
-                                        "routing",
-                                        leptos_i18n::t_string!(i18n, ui.instance_routing),
-                                        d.routing,
-                                        leptos_i18n::t_string!(i18n, ui.reach_this_ruphish_instance),
-                                    ),
-                                    (
                                         "HTTPS",
                                         "HTTPS",
                                         d.tls,
                                         leptos_i18n::t_string!(
                                             i18n, ui.present_a_trusted_certificate_for_this_hostname
                                         ),
+                                    ),
+                                    (
+                                        "routing",
+                                        leptos_i18n::t_string!(i18n, ui.instance_routing),
+                                        d.routing,
+                                        leptos_i18n::t_string!(i18n, ui.reach_this_ruphish_instance),
                                     ),
                                 ]
                                     .map(|(kind, name, passed, help)| (
@@ -942,6 +942,11 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                                             label=trs!(ui.domain_verification)
                                             class="domain-verification"
                                             sorting=checks_sort
+                                            default_sort=(
+                                                "setup",
+                                                SortDirection::Asc,
+                                                trs!(ui.sort_setup),
+                                            )
                                             columns=vec!["name", "result", "help"]
                                             headers=vec![
                                                 trs!(ui.check),
@@ -961,26 +966,33 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                                                         leptos_i18n::t_string!(
                                                             i18n, ui.publish_this_txt_record_at_your_dns_provider_and_keep_it_for_periodic_checks
                                                         ),
-                                                        true,
+                                                        0_usize,
                                                     ),
                                                 ];
                                                 rows.extend(
                                                     check_rows
                                                         .iter()
-                                                        .map(|(name, result, help)| (*name, *result, *help, false)),
+                                                        .enumerate()
+                                                        .map(|(index, (name, result, help))| (
+                                                            *name,
+                                                            *result,
+                                                            *help,
+                                                            index + 1,
+                                                        )),
                                                 );
                                                 checks_sort
                                                     .rows(
                                                         rows,
                                                         |row, key| match key {
+                                                            "setup" => row.3.into(),
                                                             "result" => row.1.into(),
                                                             "help" => row.2.into(),
                                                             _ => row.0.into(),
                                                         },
-                                                        |row| row.0.into(),
+                                                        |row| row.3.into(),
                                                     )
                                                     .into_iter()
-                                                    .map(|(name, result, help, _control)| {
+                                                    .map(|(name, result, help, _step)| {
                                                         view! {
                                                             <tr>
                                                                 <th scope="row">{name}</th>

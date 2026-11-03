@@ -42,8 +42,8 @@ pub struct Cursor {
         Option<ruphish_domain::pagination::SortedPage<ruphish_domain::pagination::DirectorySort>>,
     /// Zero while in drafts, one after entering executions.
     pub kind: i32,
-    /// Last draft identifier, or empty at the beginning.
-    pub draft: String,
+    /// Last draft identifier, or zero at the beginning.
+    pub draft: i64,
     /// Last execution identifier, or zero before executions.
     pub campaign: i64,
 }
@@ -53,10 +53,12 @@ impl Cursor {
         if value.is_empty() {
             return Ok(Self::default());
         }
-        if let Some(id) = value.strip_prefix("draft:") {
-            super::drafts::validate(id, &super::drafts::Configuration::default(), 0)?;
+        if let Some(id) = value.strip_prefix("draft:")
+            && let Ok(id) = id.parse::<i64>()
+            && id > 0
+        {
             return Ok(Self {
-                draft: id.into(),
+                draft: id,
                 ..Self::default()
             });
         }
@@ -67,7 +69,7 @@ impl Cursor {
             return Ok(Self {
                 kind: 1,
                 campaign: id,
-                draft: String::new(),
+                draft: 0,
                 sorted: None,
             });
         }
@@ -76,7 +78,7 @@ impl Cursor {
 }
 /// Lightweight row; no authored content, secrets, or draft configuration payload.
 pub struct Entry {
-    /// Draft ID, or decimal execution ID.
+    /// Decimal draft or execution ID.
     pub id: String,
     /// Saved revision identifies a draft; executions have no editable draft revision.
     pub revision: Option<i64>,

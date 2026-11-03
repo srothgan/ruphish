@@ -81,10 +81,7 @@ fn demo_responses_decode_through_the_existing_contracts() {
     decode::<campaign_reads::Delivery>(&values, "/api/campaigns/3/delivery");
     decode::<campaign_reads::Results>(&values, "/api/campaigns/3/results");
     decode::<campaign_reads::History>(&values, "/api/campaigns/3/recipients/30001/history");
-    decode::<campaign_reads::Draft>(
-        &values,
-        "/api/campaign-drafts/00000000-0000-4000-8000-000000000001",
-    );
+    decode::<campaign_reads::Draft>(&values, "/api/campaign-drafts/1");
     decode::<campaign_workflow::Review>(&values, "review");
     for state in [
         "created_draft",

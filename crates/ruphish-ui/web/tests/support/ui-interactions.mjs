@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { JSDOM } from 'jsdom';
+import jsdomUtils from 'jsdom/lib/generated/idl/utils.js';
+import whatwgURL from 'whatwg-url';
 import { createDemoApi, preferences } from '../../demo-api.mjs';
 import { dataset } from '../../../../../assets/website-demo/dataset.mjs';
 
@@ -10,7 +12,15 @@ const returnOrigin =
   '/campaigns/2/results?source=public&event=link_clicked&from=0&until=1999999999&sort=name&order=desc&offset=1&limit=25';
 const path =
   {
-    'conflict-draft': '/campaigns/drafts/00000000-0000-4000-8000-000000000001/edit',
+    'auth-existing': '/login?next=/',
+    'auth-existing-loop': '/login?next=%2Fgroups%2F..%2Flogin',
+    'auth-existing-reset': '/login?next=/campaigns',
+    'auth-other-tab': '/login?next=/campaigns',
+    'auth-login-refresh': '/login?next=/campaigns',
+    'auth-login-stale': '/login?next=/campaigns',
+    'auth-login-late': '/login?next=/campaigns',
+    'auth-login-retry': '/login?next=/campaigns',
+    'conflict-draft': '/campaigns/drafts/1/edit',
     'conflict-group': '/groups/1/edit',
     'deleted-group': '/groups/1/edit',
     'conflict-domain': '/domains/1/edit',
@@ -20,7 +30,7 @@ const path =
     'delete-conflict-webhook': '/webhooks',
     'delete-conflict-mailbox': '/reporting-mailboxes',
     'delete-conflict-draft': '/campaigns',
-    'delete-conflict-draft-detail': '/campaigns/drafts/00000000-0000-4000-8000-000000000001',
+    'delete-conflict-draft-detail': '/campaigns/drafts/1',
     'empty-group': '/groups/6',
     'empty-webhook': '/webhooks/1',
     'empty-mailbox': '/reporting-mailboxes/1',
@@ -40,7 +50,7 @@ const path =
     'detail-domain': '/domains/1',
     'detail-webhook': '/webhooks/1',
     'detail-mailbox': '/reporting-mailboxes/1',
-    'detail-draft': '/campaigns/drafts/00000000-0000-4000-8000-000000000001',
+    'detail-draft': '/campaigns/drafts/1',
     'domain-attribution': '/domains/1',
     'shared-attribution': '/groups/1/edit',
     'unknown-attribution': '/groups/1/edit',
@@ -63,7 +73,7 @@ const path =
     'form-settings': '/settings',
     'form-campaign': '/campaigns/new',
     'campaign-wizard': '/campaigns/new',
-    'form-draft': '/campaigns/drafts/00000000-0000-4000-8000-000000000001/edit',
+    'form-draft': '/campaigns/drafts/1/edit',
     'form-session': '/groups/new',
     'results-chart': '/campaigns/2/results',
     'results-untracked': '/campaigns/2/results',
@@ -83,6 +93,7 @@ const path =
     bookmark: '/campaigns/2?source=mailbox#history',
     dashboard: '/',
     directory: '/campaigns',
+    'sort-directory': '/campaigns',
     invalid: '/campaigns/not-an-id',
     new: '/campaigns/new',
   }[scenario] ?? '/campaigns/2';
@@ -91,6 +102,18 @@ const dom = new JSDOM('<!doctype html><html><body></body></html>', {
   pretendToBeVisual: true,
 });
 const win = dom.window;
+// JSDOM cannot load a new document. Observe the actual Location boundary instead.
+const authNavigations = [];
+if (scenario.startsWith('auth-')) {
+  const location = jsdomUtils.implForWrapper(win.location);
+  location._locationObjectNavigate = (url, options = {}) => {
+    authNavigations.push({
+      url: whatwgURL.serializeURL(url),
+      replacement: options.replacement === true,
+    });
+  };
+  location.reload = () => authNavigations.push({ reload: true });
+}
 for (const key of Object.getOwnPropertyNames(win)) {
   if (!(key in globalThis)) {
     try {
@@ -127,6 +150,7 @@ win.Request = globalThis.Request;
 win.Response = globalThis.Response;
 Object.assign(preferences, { language: 'de', format_locale: 'de-DE', time_zone: 'Europe/Berlin' });
 if (
+  scenario.startsWith('auth-') ||
   scenario.startsWith('form-') ||
   scenario.startsWith('detail-') ||
   scenario.startsWith('empty-') ||
@@ -134,6 +158,7 @@ if (
   scenario === 'history-domain' ||
   scenario.startsWith('integration-') ||
   scenario === 'campaign-wizard' ||
+  scenario === 'sort-directory' ||
   scenario.endsWith('-attribution') ||
   scenario.startsWith('conflict-') ||
   scenario === 'deleted-group' ||
@@ -281,6 +306,20 @@ campaign.header.status =
     : scenario === 'queued-entry'
       ? 'Queued'
       : 'Completed';
+if (scenario === 'sort-directory') {
+  data.drafts.forEach((draft, index) => {
+    draft.configuration.name = `Zulu draft ${index}`;
+  });
+  data.campaigns = Array.from({ length: 55 }, (_, i) => ({
+    ...campaign,
+    header: {
+      ...campaign.header,
+      id: i + 1,
+      name: `Campaign ${String(i + 1).padStart(2, '0')}`,
+      created_at: new Date((now + i) * 1000).toISOString(),
+    },
+  }));
+}
 const api = createDemoApi({ now, data, storage: { getItem: () => '1' } });
 const requests = [];
 const changes = [];
@@ -297,12 +336,17 @@ let releaseHistory;
 let holdSession = false;
 let releaseSession;
 let sessionExpired = false;
+let authSignedIn = scenario.startsWith('auth-existing');
+let authLoginRelease;
+let authLoginStatus = 200;
+let authSessionFinished = 0;
+let authLoginCount = 0;
 let releaseValidation;
 const featureOverrides = { webhooks_enabled: true, reporting_mailboxes_enabled: true };
 let failSave = false;
 const writes = [];
 const recoveryPath = {
-  'conflict-draft': '/api/campaign-drafts/00000000-0000-4000-8000-000000000001',
+  'conflict-draft': '/api/campaign-drafts/1',
   'conflict-group': '/api/groups/1',
   'deleted-group': '/api/groups/1',
   'conflict-domain': '/api/domains/1',
@@ -318,6 +362,22 @@ let releaseRecoveryRead;
 globalThis.fetch = async (request, options) => {
   const url = new URL(request.url);
   requests.push(url.pathname + url.search);
+  if (scenario.startsWith('auth-') && url.pathname === '/auth/login') {
+    authLoginCount += 1;
+    const fields = new URLSearchParams(await request.text());
+    assert.equal(fields.get('next'), '/campaigns');
+    assert.equal(fields.get('username'), 'demo');
+    if (authLoginStatus !== 200) {
+      return new Response(JSON.stringify({ success: false, code: 'AUTH_INVALID' }), {
+        status: authLoginStatus,
+      });
+    }
+    authSignedIn = true;
+    await new Promise((resolve) => {
+      authLoginRelease = resolve;
+    });
+    return new Response(JSON.stringify({ success: true, data: '/campaigns' }));
+  }
   if (recoveryPath === url.pathname) {
     if (request.method === 'PUT') {
       const body = await request.clone().json();
@@ -378,8 +438,16 @@ globalThis.fetch = async (request, options) => {
     (scenario.startsWith('form-') || scenario === 'campaign-wizard') &&
     ['POST', 'PUT'].includes(request.method)
   ) {
-    writes.push({ path: url.pathname, body: await request.clone().json() });
+    writes.push({
+      path: url.pathname,
+      body: await request.clone().json(),
+      key: request.headers.get('idempotency-key'),
+    });
     if (failSave) {
+      if (scenario === 'campaign-wizard' && url.pathname === '/api/campaign-drafts') {
+        const accepted = await api.execute(request.clone(), options);
+        assert.equal(accepted.status, 201, 'creation persisted before losing its acknowledgement');
+      }
       return new Response(JSON.stringify({ success: false, code: 'TEST_FAILURE' }), {
         status: 503,
       });
@@ -400,6 +468,7 @@ globalThis.fetch = async (request, options) => {
     }
   }
   if (url.pathname === '/auth/session') {
+    const authSnapshot = authSignedIn;
     if (holdSession) {
       await new Promise((resolve) => {
         releaseSession = resolve;
@@ -420,6 +489,17 @@ globalThis.fetch = async (request, options) => {
     }
     if (sessionExpired) {
       value.user = null;
+    }
+    if (scenario.startsWith('auth-')) {
+      if (scenario === 'auth-existing-reset') {
+        value.user.password_change_required = true;
+      }
+      if (
+        !(['auth-login-stale', 'auth-login-late'].includes(scenario) ? authSnapshot : authSignedIn)
+      ) {
+        value.user = null;
+      }
+      authSessionFinished += 1;
     }
     return new Response(JSON.stringify(value), {
       status: response.status,
@@ -505,6 +585,9 @@ win.fetch = globalThis.fetch;
 const dist = new URL('../../../../../dist/admin/', import.meta.url);
 const html = readFileSync(new URL('index.html', dist), 'utf8');
 const demo = html.includes('<title>Ruphish Demo</title>');
+if (scenario.startsWith('auth-')) {
+  assert.equal(demo, false, 'auth regressions need the normal WASM bundle');
+}
 if (scenario === 'campaign-wizard' && demo) {
   win.sessionStorage.setItem('ruphish-demo-session-v1', '1');
   win.sessionStorage.setItem('ruphish-demo-time-v1', String(now));
@@ -520,7 +603,9 @@ async function until(condition) {
   const deadline = performance.now() + 15000;
   while (!condition()) {
     if (
-      (scenario === 'campaign-wizard' ||
+      (scenario.startsWith('auth-') ||
+        scenario === 'campaign-wizard' ||
+        scenario === 'sort-directory' ||
         recoveryPath ||
         scenario.startsWith('delete-conflict') ||
         scenario.startsWith('empty-') ||
@@ -536,7 +621,7 @@ async function until(condition) {
         .map((node) => node.textContent)
         .join(' | ');
       assert.fail(
-        `Wizard did not settle at ${win.location.pathname}, ${current}: ${condition}. ${feedback}`,
+        `UI scenario ${scenario} did not settle at ${win.location.pathname}, ${current}: ${condition}. ${feedback}`,
       );
     }
     await nextTurn();
@@ -548,6 +633,95 @@ const settled = () =>
   regions().length > 0 &&
   regions().every((e) => e.dataset.ready === 'true' && e.getAttribute('aria-busy') === 'false');
 const resultsPath = '/campaigns/2/results';
+
+if (scenario.startsWith('auth-')) {
+  if (scenario.startsWith('auth-existing')) {
+    const destination = scenario === 'auth-existing-reset' ? '/reset_password' : '/';
+    await until(
+      () => win.location.pathname === destination && document.querySelector('.admin-shell'),
+    );
+    assert.doesNotMatch(document.querySelector('.admin-content').textContent, /404/);
+    if (scenario === 'auth-existing-reset') {
+      assert.ok(document.querySelector('.account-form'));
+    }
+    assert.equal(authNavigations.length, 0);
+    process.exit(0);
+  }
+  await until(() => document.querySelector('.login-form form'));
+  if (scenario === 'auth-other-tab') {
+    authSignedIn = true;
+    win.dispatchEvent(new win.Event('focus'));
+    await until(() => authNavigations.length > 0);
+  } else {
+    const form = document.querySelector('.login-form form');
+    const submit = () => {
+      for (const [name, value] of [
+        ['username', 'demo'],
+        ['password', 'demodemo'],
+      ]) {
+        const input = form.elements.namedItem(name);
+        input.value = value;
+        input.dispatchEvent(new win.Event('input', { bubbles: true }));
+      }
+      form.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
+    };
+    if (scenario === 'auth-login-retry') {
+      for (const status of [401, 503]) {
+        authLoginStatus = status;
+        const count = authLoginCount;
+        submit();
+        await until(
+          () => authLoginCount > count && !form.querySelector('button[type="submit"]').disabled,
+        );
+        assert.equal(authNavigations.length, 0);
+        const reads = authSessionFinished;
+        win.dispatchEvent(new win.Event('focus'));
+        await until(() => authSessionFinished > reads);
+      }
+      authLoginStatus = 200;
+    } else {
+      holdSession = true;
+      win.dispatchEvent(new win.Event('focus'));
+      await until(() => releaseSession);
+    }
+    submit();
+    await until(() => authLoginRelease);
+    submit();
+    const count = authLoginCount;
+    win.dispatchEvent(new win.Event('focus'));
+    if (releaseSession && scenario !== 'auth-login-late') {
+      const reads = authSessionFinished;
+      holdSession = false;
+      releaseSession();
+      await until(() => authSessionFinished > reads);
+      for (let i = 0; i < 20; i++) {
+        await nextTurn();
+      }
+      assert.equal(authNavigations.length, 0, 'refresh must not preempt login navigation');
+    }
+    authLoginRelease();
+    await until(() => authNavigations.length > 0);
+    if (scenario === 'auth-login-late') {
+      const reads = authSessionFinished;
+      holdSession = false;
+      releaseSession();
+      await until(() => authSessionFinished > reads);
+      for (let i = 0; i < 20; i++) {
+        await nextTurn();
+      }
+    }
+    assert.equal(authLoginCount, count, 'duplicate submit must not send another login');
+  }
+  assert.deepEqual(authNavigations, [
+    { url: 'https://admin.example.test/campaigns', replacement: true },
+  ]);
+  assert.equal(
+    document.querySelector('.admin-shell'),
+    null,
+    'old identity is not displayed during navigation',
+  );
+  process.exit(0);
+}
 
 if (recoveryPath) {
   const button = (name) =>
@@ -867,6 +1041,7 @@ if (scenario === 'campaign-wizard') {
   set(field('Campaign name'), 'Temporary wizard campaign');
   document.querySelector('section:not([hidden]) input[type="checkbox"]').click();
   if (!demo) {
+    set(field('Campaign name'), 'Before lost response');
     failSave = true;
     button('Continue').click();
     await until(
@@ -874,16 +1049,20 @@ if (scenario === 'campaign-wizard') {
         document.querySelector('.form-message.error.has-content') && !button('Continue').disabled,
     );
     assert.equal(step(), 0, 'a rejected save must not advance');
-    assert.equal(field('Campaign name').value, 'Temporary wizard campaign');
+    assert.equal(field('Campaign name').value, 'Before lost response');
+    set(field('Campaign name'), 'Temporary wizard campaign');
     failSave = false;
   }
   await advance(1);
+  if (!demo) {
+    const creates = writes.filter((w) => w.path === '/api/campaign-drafts');
+    assert.equal(creates.length, 2);
+    assert.ok(creates[0].key);
+    assert.deepEqual(creates[1], creates[0], 'lost response retries the original key and input');
+  }
   const editPath = win.location.pathname;
-  assert.match(editPath, /^\/campaigns\/drafts\/[a-f0-9-]+\/edit$/);
-  assert.ok(
-    !editPath.includes('00000000-0000-4000-8000-000000000001'),
-    'new draft keeps its own ID',
-  );
+  assert.match(editPath, /^\/campaigns\/drafts\/[1-9][0-9]*\/edit$/);
+  assert.notEqual(editPath, '/campaigns/drafts/1/edit', 'new draft keeps its own ID');
   assert.equal(field('Campaign name').value, 'Temporary wizard campaign');
   assert.ok(!document.querySelector('.demo-toast.has-content'), 'Continue needs no save toast');
   button('Continue').click();
@@ -1835,6 +2014,65 @@ if (scenario === 'new') {
   await until(() => document.querySelector('.step-navigation'));
   assert.equal(win.location.pathname, '/campaigns/new');
   assert.ok(!requests.some((url) => url.startsWith('/api/campaigns/new')));
+  process.exit(0);
+}
+if (scenario === 'sort-directory') {
+  const preset = () =>
+    [...document.querySelectorAll('button')].find(
+      (b) => b.textContent.trim() === 'Recent work (drafts first)',
+    );
+  const firstLink = () =>
+    document.querySelector('.management-table tbody th a')?.getAttribute('href');
+  const rowLinks = () =>
+    [...document.querySelectorAll('.management-table tbody th a')].map((a) =>
+      a.getAttribute('href'),
+    );
+  const lastRequest = () =>
+    new URL(
+      requests.filter((r) => r.startsWith('/api/campaigns/directory?')).at(-1),
+      'https://fixture.test',
+    );
+  await until(() => preset() && settled());
+  assert.equal(preset().getAttribute('aria-pressed'), 'true');
+  assert.equal(lastRequest().searchParams.get('sort'), 'recent');
+  assert.equal(lastRequest().searchParams.get('order'), 'desc');
+  assert.match(firstLink(), /^\/campaigns\/drafts\//);
+  const recentFirstPage = rowLinks();
+  [...document.querySelectorAll('button')]
+    .find((b) => b.textContent.trim() === 'Next page')
+    .click();
+  await until(() => lastRequest().searchParams.get('after') && settled());
+  document.querySelector('.management-table th .table-sort').click();
+  await until(() => lastRequest().searchParams.get('sort') === 'name' && settled());
+  assert.ok(!lastRequest().searchParams.get('after'), 'header sorting resets pagination');
+  assert.equal(firstLink(), '/campaigns/1/results');
+  const nameFirstPage = rowLinks();
+  assert.equal(preset().getAttribute('aria-pressed'), 'false');
+  [...document.querySelectorAll('button')]
+    .find((b) => b.textContent.trim() === 'Next page')
+    .click();
+  await until(() => lastRequest().searchParams.get('after') && settled());
+  preset().click();
+  // Returning to a cached selection need not make another HTTP request.
+  await until(
+    () =>
+      preset().getAttribute('aria-pressed') === 'true' &&
+      firstLink() === recentFirstPage[0] &&
+      settled(),
+  );
+  assert.deepEqual(rowLinks(), recentFirstPage, 'restoring workflow order returns its first page');
+  assert.match(firstLink(), /^\/campaigns\/drafts\//);
+  assert.equal(preset().getAttribute('aria-pressed'), 'true');
+  // A manually selected order persists across route navigation.
+  document.querySelector('.management-table th .table-sort').click();
+  await until(() => firstLink() === '/campaigns/1/results' && settled());
+  assert.deepEqual(rowLinks(), nameFirstPage, 'cached column sorting returns its first page');
+  document.querySelector('.management-table tbody th a').click();
+  await until(() => win.location.pathname === '/campaigns/1/results' && settled());
+  document.querySelector('.admin-nav a[href="/campaigns"]').click();
+  await until(() => win.location.pathname === '/campaigns' && preset() && settled());
+  assert.equal(firstLink(), '/campaigns/1/results');
+  assert.equal(preset().getAttribute('aria-pressed'), 'false');
   process.exit(0);
 }
 if (['dashboard', 'directory'].includes(scenario)) {

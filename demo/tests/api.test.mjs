@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDemoApi } from '../../crates/ruphish-ui/web/demo-api.mjs';
-import { dataset, draftId } from '../../assets/website-demo/dataset.mjs';
+import { dataset } from '../../assets/website-demo/dataset.mjs';
 import { addWorkingTime, recipientHistory } from '../../assets/website-demo/timing.mjs';
 import { startRequestWith } from '../../crates/ruphish-ui/web/http.mjs';
 import { readFileSync } from 'node:fs';
@@ -973,28 +973,35 @@ test('drafts retain distinct inputs and steps across navigation but never enter 
   const original = structuredClone(data.drafts);
   const f = setup(new Map(), data);
   await f.login();
-  const id = '11111111-1111-4111-8111-111111111111';
-  const path = `/api/campaign-drafts/${id}`;
   const configuration = { ...original[0].configuration, name: 'My temporary campaign' };
-  const create = { revision: null, configuration, step: 1 };
-  const created = await f.request(path, 'PUT', create);
-  assert.equal(created.status, 200);
-  assert.equal(created.value.id, id);
+  const create = { configuration, step: 1 };
+  const headers = { 'idempotency-key': 'first-draft' };
+  const created = await f.request('/api/campaign-drafts', 'POST', create, headers);
+  assert.equal(created.status, 201);
+  const id = created.value.id;
+  assert.ok(Number.isSafeInteger(id));
+  const path = `/api/campaign-drafts/${id}`;
   assert.equal(created.value.step, 1);
   assert.equal(created.value.revision, 1);
   assert.deepEqual(created.value.configuration, configuration);
   assert.deepEqual((await f.request(path)).value, created.value);
-  assert.deepEqual((await f.request(path, 'PUT', create)).value, created.value, 'creation retry');
-  const secondId = '22222222-2222-4222-8222-222222222222';
+  assert.deepEqual(
+    (await f.request('/api/campaign-drafts', 'POST', create, headers)).value,
+    created.value,
+    'creation retry',
+  );
+  const second = await f.request(
+    '/api/campaign-drafts',
+    'POST',
+    { configuration: { name: 'Independent draft' }, step: 0 },
+    { 'idempotency-key': 'second-draft' },
+  );
+  assert.equal(second.status, 201);
+  const secondId = second.value.id;
+  assert.ok(secondId > id);
   assert.equal(
-    (
-      await f.request(`/api/campaign-drafts/${secondId}`, 'PUT', {
-        ...create,
-        configuration: { ...configuration, name: 'Independent draft' },
-        step: 0,
-      })
-    ).status,
-    200,
+    (await f.request('/api/campaign-drafts', 'POST', { ...create, step: 2 }, headers)).status,
+    409,
   );
   const update = {
     revision: 1,
@@ -1020,8 +1027,8 @@ test('drafts retain distinct inputs and steps across navigation but never enter 
   );
   const rows = (await f.request('/api/campaigns/directory?filter=drafts')).value.items;
   assert.equal(rows.length, 4);
-  assert.equal(rows.find((r) => r.id === id).name, 'Updated draft');
-  assert.equal(rows.find((r) => r.id === id).revision, 3);
+  assert.equal(rows.find((r) => r.id === String(id)).name, 'Updated draft');
+  assert.equal(rows.find((r) => r.id === String(id)).revision, 3);
   assert.deepEqual(data.drafts, original);
   assert.deepEqual([...f.storage.values()], ['1'], 'only the actor is stored');
   const reloaded = setup(f.storage, data);
@@ -1030,7 +1037,7 @@ test('drafts retain distinct inputs and steps across navigation but never enter 
     (await reloaded.request('/api/campaigns/directory?filter=drafts')).value.items.length,
     2,
   );
-  assert.deepEqual((await reloaded.request(`/api/campaign-drafts/${draftId(1)}`)).value, {
+  assert.deepEqual((await reloaded.request(`/api/campaign-drafts/1`)).value, {
     ...original[0],
     created_by: { id: 1, username: data.users[0].username, deleted: false },
     edited_by: { id: 2, username: data.users[1].username, deleted: false },
@@ -1040,7 +1047,7 @@ test('drafts retain distinct inputs and steps across navigation but never enter 
 test('incomplete drafts can be saved and deleted; rejected writes leave the confirmed draft unchanged', async () => {
   const f = setup();
   await f.login();
-  const path = `/api/campaign-drafts/${draftId(1)}`;
+  const path = `/api/campaign-drafts/1`;
   const incomplete = {
     name: '',
     url: '',
@@ -1090,7 +1097,7 @@ test('incomplete drafts can be saved and deleted; rejected writes leave the conf
   assert.equal((await f.request(path)).status, 404);
   assert.ok(
     !(await f.request('/api/campaigns/directory?filter=drafts')).value.items.some(
-      (r) => r.id === draftId(1),
+      (r) => r.id === '1',
     ),
   );
   assert.equal(
@@ -1104,7 +1111,7 @@ test('incomplete drafts can be saved and deleted; rejected writes leave the conf
 test('campaign review previews each selected email without expanding its template expressions', async () => {
   const f = setup();
   await f.login();
-  const configuration = (await f.request(`/api/campaign-drafts/${draftId(1)}`)).value.configuration;
+  const configuration = (await f.request(`/api/campaign-drafts/1`)).value.configuration;
   const previews = new Set();
   for (const template of dataset(now).templates) {
     const response = await f.request('/api/campaign-drafts/prepare', 'POST', {
@@ -1124,7 +1131,7 @@ test('campaign review previews each selected email without expanding its templat
 test('simulated launch reconciles reopening and retries without changing sample campaigns', async () => {
   const f = setup();
   await f.login();
-  const path = `/api/campaign-drafts/${draftId(1)}`;
+  const path = `/api/campaign-drafts/1`;
   const original = (await f.request(path)).value;
   const sample = (await f.request('/api/campaigns/3/context')).value;
   const reviewed = (await f.request('/api/campaign-drafts/prepare', 'POST', original.configuration))

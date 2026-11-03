@@ -66,6 +66,53 @@ fn admin_key() -> &'static str {
 }
 
 #[test]
+fn authenticated_login_page_redirects_to_a_safe_destination() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = endpoint(&mut process);
+    let admin = browser();
+    assert_eq!(
+        sign_in(&admin, &base, "admin", "synthetic-bootstrap-password").status(),
+        200
+    );
+    let required = admin
+        .get(format!("{base}/login?next=/settings"))
+        .send()
+        .unwrap();
+    assert_eq!(required.status(), 307);
+    assert_eq!(required.headers()["location"], "/reset_password");
+    setup(&admin, &base);
+    for (next, expected) in [
+        ("/", "/"),
+        ("/campaigns", "/campaigns"),
+        ("/login?next=/login", "/"),
+        ("/logout", "/"),
+        ("/login/", "/"),
+        ("/groups/../login", "/"),
+        ("/%2foutside.invalid", "/"),
+        ("/\\outside.invalid", "/"),
+        ("https://outside.invalid/settings?discard=1", "/settings"),
+    ] {
+        let mut url = reqwest::Url::parse(&format!("{base}/login")).unwrap();
+        url.query_pairs_mut().append_pair("next", next);
+        let response = admin.get(url).send().unwrap();
+        assert_eq!(response.status(), 307, "next={next}");
+        assert_eq!(response.headers()["location"], expected);
+        assert_eq!(response.headers()["cache-control"], "no-store");
+    }
+    let anonymous = browser();
+    assert_eq!(
+        anonymous
+            .get(format!("{base}/login"))
+            .send()
+            .unwrap()
+            .status(),
+        200
+    );
+    process.stop();
+}
+
+#[test]
 fn session_services_use_grouped_post_routes_and_pages_cannot_mutate_identity() {
     let directory = workspace();
     let mut process = Process::start(directory.path(), "admin");
@@ -109,12 +156,10 @@ fn session_services_use_grouped_post_routes_and_pages_cannot_mutate_identity() {
             );
         }
     }
-    for path in ["/login", "/logout"] {
-        assert_eq!(
-            admin.get(format!("{base}{path}")).send().unwrap().status(),
-            200
-        );
-    }
+    assert_eq!(
+        admin.get(format!("{base}/logout")).send().unwrap().status(),
+        200
+    );
     let current = bootstrap(&admin, &base);
     assert_eq!(current["user"], initial["user"]);
     assert_eq!(current["actor"], initial["actor"]);

@@ -22,6 +22,10 @@
     "native_name": "Deutsch"
   },
   "ui": {
+    "sort_recent_work": "Zuletzt bearbeitet (Entwürfe zuerst)",
+    "sort_attention": "Handlungsbedarf zuerst",
+    "sort_newest": "Neueste zuerst",
+    "sort_setup": "Einrichtungsreihenfolge",
     "delete_conflict_help": "Diese Löschung wurde nicht ausgeführt. Schließen Sie diesen Dialog und aktualisieren Sie diese Seite. Prüfen Sie die aktuelle Ressource vor einer erneuten Bestätigung; sie wurde möglicherweise bereits gelöscht.",
     "write_conflict_help": "Dieser Speicherversuch wurde nicht ausgeführt. Ihre Eingaben sind noch vorhanden. Prüfen Sie die gespeicherte Version in einem neuen Tab, bevor Sie entscheiden, welche Änderungen Sie behalten.",
     "write_deleted_help": "Diese Ressource existiert nicht mehr. Ihre ungespeicherten Eingaben sind noch vorhanden; kopieren oder exportieren Sie benötigte Inhalte vor dem Verlassen. Speichern erstellt die Ressource nicht erneut.",
@@ -1170,7 +1174,7 @@
     "csv_invalid": "Prüfen Sie die CSV-Datei und die Spaltenzuordnung.",
     "csv_rows_invalid": "Die CSV-Datei enthält ungültige Zeilen. Prüfen Sie den Importbericht.",
     "campaign_invalid": "Prüfen Sie die Kampagneneinstellungen.",
-    "launch_key_invalid": "Die Startkennung ist ungültig. Öffnen Sie den Kampagnenentwurf erneut.",
+    "idempotency_key_invalid": "Die Startkennung ist ungültig. Öffnen Sie den Kampagnenentwurf erneut.",
     "delivery_action_invalid": "Diese Versandaktion ist ungültig. Aktualisieren Sie den Versandstatus.",
     "mailbox_tls_required": "Der Mailserver muss TLS unterstützen.",
     "mailbox_port_invalid": "Wählen Sie einen gültigen Mailserver-Port.",

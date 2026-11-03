@@ -291,6 +291,7 @@
 
   /* All data tables keep a readable width and scroll inside their container on small screens. */
   .management-table-wrap { min-width: 0; width: 100%; overflow-x: auto; }
+  .account-app .management-table-wrap .management-toolbar button[aria-pressed=true] { background: var(--teal-50); border-color: var(--teal-600); color: var(--teal-600); }
   .management-table { border-collapse: collapse; width: 100%; min-width: 48rem; background: var(--paper); font-size: var(--fs-sm); }
   .management-table th, .management-table td { padding: var(--s4); text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
   .management-table.compact th, .management-table.compact td { padding: var(--s2) var(--s4); }

@@ -9,6 +9,8 @@ A landing page is what a recipient sees after following the campaign link. Pages
 
 Administrators can choose a ready-made, independent page from the [Starter Template Repository](starter-templates.md), with optional email prefill and company branding on supported layouts.
 
+The resource list defaults to last modified, newest first, so recently saved or imported content is easy to resume. Select a column heading to change the order; the choice remains during navigation within the current application session.
+
 ## Create or import
 
 Open **Resources → Landing pages → Create**, enter a name, and author the HTML. You can use [template expressions](template-reference.md) for recipient personalization.

@@ -11,13 +11,12 @@ const api = createDemoApi({
   },
 });
 const responses = {};
-async function read(path, method = 'GET', body) {
+async function read(path, method = 'GET', body, headers = {}) {
   const response = await api.execute(
     new Request(`https://demo.example.test${path}`, {
       method,
-      ...(body === undefined
-        ? {}
-        : { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      headers: { 'content-type': 'application/json', ...headers },
     }),
   );
   if (!response.ok) {
@@ -34,7 +33,7 @@ for (const path of [
   '/api/campaigns/3/delivery',
   '/api/campaigns/3/results',
   '/api/campaigns/3/recipients/30001/history',
-  '/api/campaign-drafts/00000000-0000-4000-8000-000000000001',
+  '/api/campaign-drafts/1',
   '/api/settings',
   '/api/users/',
   '/api/users/1',
@@ -57,23 +56,26 @@ for (const family of ['groups', 'templates', 'pages', 'learning-pages', 'smtp'])
 responses.review = await read(
   '/api/campaign-drafts/prepare',
   'POST',
-  responses['/api/campaign-drafts/00000000-0000-4000-8000-000000000001'].configuration,
+  responses['/api/campaign-drafts/1'].configuration,
 );
-const draftPath = '/api/campaign-drafts/11111111-1111-4111-8111-111111111111';
-responses.created_draft = await read(draftPath, 'PUT', {
-  revision: null,
-  configuration: { name: 'Temporary draft', selection: { groups: [{ id: 1 }] } },
-  step: 1,
-});
+responses.created_draft = await read(
+  '/api/campaign-drafts',
+  'POST',
+  {
+    configuration: { name: 'Temporary draft', selection: { groups: [{ id: 1 }] } },
+    step: 1,
+  },
+  { 'idempotency-key': 'contract-sample-draft' },
+);
+const draftPath = `/api/campaign-drafts/${responses.created_draft.id}`;
 responses.reopened_draft = await read(draftPath);
 responses.updated_draft = await read(draftPath, 'PUT', {
-  revision: 1,
-  configuration:
-    responses['/api/campaign-drafts/00000000-0000-4000-8000-000000000001'].configuration,
+  revision: responses.created_draft.revision,
+  configuration: responses['/api/campaign-drafts/1'].configuration,
   step: 3,
 });
 await read(`${draftPath}/launch`, 'POST', {
-  revision: 2,
+  revision: responses.updated_draft.revision,
   campaign: responses.updated_draft.configuration,
 });
 responses.launched_draft = await read(draftPath);

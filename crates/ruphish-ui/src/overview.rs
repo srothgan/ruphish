@@ -107,7 +107,7 @@ pub(super) fn page() -> impl IntoView {
 }
 
 fn snapshot_sections(s: Snapshot) -> impl IntoView {
-    let sorting = TableSorting::new("recent-campaigns", "name", SortDirection::Asc);
+    let sorting = TableSorting::new("recent-campaigns", "recent", SortDirection::Desc);
     let api = expect_context::<crate::client::Api>();
     let i18n = ruphish_ui::localization::use_i18n();
 
@@ -125,6 +125,7 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                 </div>
                 <DataTable
                     sorting=sorting
+                    default_sort=("recent", SortDirection::Desc, trs!(ui.sort_newest))
                     columns=vec!["name", "recipients", "clicked", "reported", ""]
                     label=trs!(ui.recent_campaigns)
                     headers=vec![

@@ -1,5 +1,6 @@
 //! Explicit authentication wire types. Password hashes and session secrets never belong here.
 use crate::common::Timestamp;
+pub use ruphish_domain::navigation::login_destination;
 use serde::{Deserialize, Serialize};
 
 /// Legacy public role metadata.

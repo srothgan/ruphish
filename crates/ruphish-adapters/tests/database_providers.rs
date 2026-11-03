@@ -1863,12 +1863,14 @@ async fn sqlite_provider_contract() {
 
     let draft = db
         .campaigns()
-        .draft(
+        .drafts(
             db.accounts().by_name("admin").await.unwrap().identity,
-            "draft-survives-restart-01",
+            0,
+            51,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .remove(0);
     assert_eq!(draft.step, 2);
     assert_eq!(draft.configuration, Default::default());
 
@@ -1921,12 +1923,14 @@ async fn mysql_provider_contract() {
 
     let draft = db
         .campaigns()
-        .draft(
+        .drafts(
             db.accounts().by_name("admin").await.unwrap().identity,
-            "draft-survives-restart-01",
+            0,
+            51,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .remove(0);
     assert_eq!(draft.step, 2);
     assert_eq!(draft.configuration, Default::default());
 
@@ -2950,12 +2954,14 @@ async fn postgres_provider_contract() {
 
     let draft = db
         .campaigns()
-        .draft(
+        .drafts(
             db.accounts().by_name("admin").await.unwrap().identity,
-            "draft-survives-restart-01",
+            0,
+            51,
         )
         .await
-        .unwrap();
+        .unwrap()
+        .remove(0);
     assert_eq!(draft.step, 2);
     assert_eq!(draft.configuration, Default::default());
 

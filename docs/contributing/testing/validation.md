@@ -51,17 +51,13 @@ npm ci --ignore-scripts
 npm ci --prefix crates/ruphish-ui/web
 ```
 
-Keep local heavy work sequential. In PowerShell, set these values in the invoking process; Trunk requires the literal boolean `true` for `NO_COLOR`:
+In PowerShell, Trunk requires the literal boolean `true` for `NO_COLOR`:
 
 ```powershell
-$env:CARGO_BUILD_JOBS = '1'
-$env:RUST_TEST_THREADS = '1'
-$env:TOKIO_WORKER_THREADS = '2'
-$env:RAYON_NUM_THREADS = '2'
 $env:NO_COLOR = 'true'
 ```
 
-On POSIX shells use `export CARGO_BUILD_JOBS=1 RUST_TEST_THREADS=1 TOKIO_WORKER_THREADS=2 RAYON_NUM_THREADS=2 NO_COLOR=true`. Docker checks require Linux containers and Compose v2. Use only [the canonical acceptance fixture](../../../tests/acceptance/compose.yaml); initialize it with `node tests/acceptance/lab.mjs init` before first use. This preserves existing local application data and credentials.
+On POSIX shells use `export NO_COLOR=true`. Docker checks require Linux containers and Compose v2. Use only [the canonical acceptance fixture](../../../tests/acceptance/compose.yaml); initialize it with `node tests/acceptance/lab.mjs init` before first use. This preserves existing local application data and credentials.
 
 ## Checks after changes
 
@@ -78,12 +74,12 @@ For markup changes also run `leptosfmt --check crates/ruphish-ui/src crates/ruph
 Executable cases are independently selectable through the existing `startup_process` target. Use the appropriate filter, not the full suite by default:
 
 ```sh
-cargo test -p ruphish --test startup_process auth_process:: --locked -- --nocapture --test-threads=1
-cargo test -p ruphish --test startup_process campaign_process:: --locked -- --nocapture --test-threads=1
-cargo test -p ruphish --test startup_process resource_process:: --locked -- --nocapture --test-threads=1
-cargo test -p ruphish --test startup_process public_process:: --locked -- --nocapture --test-threads=1
-cargo test -p ruphish --test startup_process reporting_process:: --locked -- --nocapture --test-threads=1
-cargo test -p ruphish --test startup_process overview_process:: --locked -- --nocapture --test-threads=1
+cargo test -p ruphish --test startup_process auth_process:: --locked -- --nocapture
+cargo test -p ruphish --test startup_process campaign_process:: --locked -- --nocapture
+cargo test -p ruphish --test startup_process resource_process:: --locked -- --nocapture
+cargo test -p ruphish --test startup_process public_process:: --locked -- --nocapture
+cargo test -p ruphish --test startup_process reporting_process:: --locked -- --nocapture
+cargo test -p ruphish --test startup_process overview_process:: --locked -- --nocapture
 ```
 
 `campaign_process::proxy_process::` selects just proxy scenarios. Check the number of executed tests: a misspelled Rust filter can succeed with zero tests. For exact test names add `--exact` after `--`. These focused API/workflow scenarios use synthetic assets and do not require a UI build. The dedicated distribution tests and the complete process suite require the real current `dist/admin` distribution. CI runs the complete non-ignored process suite for the product group; these filters remain useful for focused local regressions.
@@ -91,7 +87,7 @@ cargo test -p ruphish --test startup_process overview_process:: --locked -- --no
 For SQL changes select the corresponding real-provider test in `database_providers`; use the fixture setup and direct commands in [MySQL verification](database-providers.md#mysql) or [PostgreSQL verification](database-providers.md#postgresql). MySQL transport/credentials/lock-timeout checks can now run independently of historical migrations:
 
 ```sh
-cargo test -p ruphish-adapters --test mysql_preflight mysql_preflight_transport --locked -- --ignored --nocapture --test-threads=1
+cargo test -p ruphish-adapters --test mysql_preflight mysql_preflight_transport --locked -- --ignored --nocapture
 ```
 
 The CI persistence group runs complete provider suites, including historical upgrades and schema recovery, on both supported versions. There are no filename-based migration exceptions or `--skip` lists. Agents still select focused local scenarios based on semantics; the broad CI groups do not replace inspecting changed behavior.
@@ -103,7 +99,7 @@ The default UI build is the production application. Its existing tests continue 
 For the shared dataset and demo transport, use the functional and real-contract checks:
 
 ```sh
-node --test --test-concurrency=1 demo/tests/api.test.mjs demo/tests/sorting.test.mjs demo/tests/preview.test.mjs
+node --test demo/tests/api.test.mjs demo/tests/sorting.test.mjs demo/tests/preview.test.mjs
 cargo test -p ruphish-ui --test demo_contracts --features demo --locked
 cargo clippy -p ruphish-ui --test demo_contracts --features demo --locked -- -D warnings
 ```
@@ -192,8 +188,8 @@ npx --no-install eslint . --max-warnings=0
 cargo fmt --all -- --check
 leptosfmt --check crates/ruphish-ui/src crates/ruphish-ui/tests
 cargo clippy --workspace --exclude ruphish-ui --all-targets --locked -- -D warnings
-cargo test --workspace --exclude ruphish-ui --locked -- --nocapture --test-threads=1
-node --test --test-concurrency=1 crates/ruphish-ui/web/tests/*.test.mjs
+cargo test --workspace --exclude ruphish-ui --locked -- --nocapture
+node --test crates/ruphish-ui/web/tests/*.test.mjs
 cargo test -p ruphish-ui --lib --tests --locked
 cargo clippy -p ruphish-ui --lib --locked -- -D warnings
 cargo test -p ruphish-ui --test '*' --target wasm32-unknown-unknown --locked
@@ -207,7 +203,7 @@ When doing direct WASM checks without first building Trunk, generate imported in
 The workspace command excludes explicitly ignored Docker/provider/performance cases. Complete acceptance additionally runs all direct commands for both supported versions in the MySQL/PostgreSQL guides, the [public fixture protocol test](local-fixture.md), and this measurement:
 
 ```sh
-cargo test -p ruphish-adapters --test campaign_storage measure_launch_read_claim_and_compose_at_legacy_audience_sizes --locked -- --ignored --exact --nocapture --test-threads=1
+cargo test -p ruphish-adapters --test campaign_storage measure_launch_read_claim_and_compose_at_legacy_audience_sizes --locked -- --ignored --exact --nocapture
 ```
 
 Run native acceptance on Linux, Windows and macOS when validating the full supported platform behavior. The UI's Node WASM test proves request construction; it does not replace the user's manual browser appearance/interaction review. Root rewrite/specification checks remain separate: `py -3 tools/verify_specification.py` runs from the parent migration root only when those records change.
@@ -243,7 +239,7 @@ These groups intentionally trade some extra execution for predictable coverage. 
 
 Linux native Clippy, library/integration tests, SQLite histories and executable scenarios share one job and Cargo target directory. Database jobs run independently of that job once browser assets are available; their fixed suite includes provider executable scenarios that consume those assets. Provider caches are separate from the Linux native cache so concurrent jobs cannot prevent its final test outputs from being saved. Browser compilation and each additional native platform still require their own compilation; this is not a single portable build artifact.
 
-CI uses the tools' default build, test and worker parallelism. Provider and platform matrices have no repository-imposed parallel-job cap; GitHub schedules them within its hosted-runner limits. The bounded commands above are for local work. macOS CI covers Apple Silicon (ARM64); Intel macOS is no longer a supported validation target. Superseded runs for the same PR or scheduled ref are cancelled. Matching UI inputs can reuse development assets; tests still run. Normal optimized UI is built in the release workflow; the selected demo job builds its optimized deployable artifact in CI. The final gates reject failed/cancelled checks, missing group outputs and unexpectedly skipped selected jobs.
+CI uses the tools' default build, test and worker parallelism. Provider and platform matrices have no repository-imposed parallel-job cap; GitHub schedules them within its hosted-runner limits. macOS CI covers Apple Silicon (ARM64); Intel macOS is no longer a supported validation target. Superseded runs for the same PR or scheduled ref are cancelled. Matching UI inputs can reuse development assets; tests still run. Normal optimized UI is built in the release workflow; the selected demo job builds its optimized deployable artifact in CI. The final gates reject failed/cancelled checks, missing group outputs and unexpectedly skipped selected jobs.
 
 Native platform and release test steps point `TMPDIR`, `TMP` and `TEMP` at GitHub's `runner.temp` directory. This keeps disposable databases and other fixtures in the job's temporary storage instead of the Windows user-profile directory. OS process metrics are optional failure diagnostics; an unavailable or timed-out metrics command does not itself fail a product test.
 
@@ -270,7 +266,7 @@ The release workflow validates optimized code and real optimized UI assets with 
 
 ```sh
 trunk build --release --locked
-cargo test --release --workspace --exclude ruphish-ui --locked -- --nocapture --test-threads=1
+cargo test --release --workspace --exclude ruphish-ui --locked -- --nocapture
 ```
 
 The intended distribution formats are a single release binary and a Docker image. Native release-profile suites run on Linux, Windows and macOS; real database/DNS/TLS/SMTP acceptance uses the canonical Linux Docker fixture in the preceding full source checks.

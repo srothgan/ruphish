@@ -2,6 +2,10 @@
 use crate::mysql::InsertId;
 mod directory;
 mod drafts;
+mod idempotency {
+    crate::campaign_idempotency::repository!(sqlx::MySqlConnection, false);
+}
+use ruphish_application::campaign::idempotency::Operation;
 mod queue;
 use ruphish_application::datetime;
 use ruphish_application::{
@@ -563,7 +567,7 @@ impl Repository for Campaigns {
             let sql = crate::sql::placeholders(
                 format!(
                     "{} {tail}",
-                    r#"WITH data AS (SELECT d.*,r.r_id,r.email,1 AS kind,'' AS draft_id,d.result_id AS campaign_id_key,(SELECT count(*) FROM ruphish_delivery_attempt a WHERE a.result_id=d.result_id) AS attempt_count FROM ruphish_delivery d JOIN results r ON r.id=d.result_id WHERE d.campaign_id=?)"#
+                    r#"WITH data AS (SELECT d.*,r.r_id,r.email,1 AS kind,0 AS draft_id,d.result_id AS campaign_id_key,(SELECT count(*) FROM ruphish_delivery_attempt a WHERE a.result_id=d.result_id) AS attempt_count FROM ruphish_delivery d JOIN results r ON r.id=d.result_id WHERE d.campaign_id=?)"#
                 ),
                 false,
             );
@@ -574,7 +578,7 @@ impl Repository for Campaigns {
                 .bind(&position.text)
                 .bind(position.number)
                 .bind(position.kind)
-                .bind(&position.draft)
+                .bind(position.draft)
                 .bind(position.id)
                 .bind(limit + 1)
                 .fetch_all(&mut *tx)
@@ -591,7 +595,7 @@ impl Repository for Campaigns {
                     text: row.try_get("sort_text").map_err(storage)?,
                     number: row.try_get("sort_number").map_err(storage)?,
                     kind: 1,
-                    draft: String::new(),
+                    draft: 0,
                     id: row.try_get("result_id").map_err(storage)?,
                 };
                 Some(serde_json::to_string(&order.cursor(position)).map_err(|_| Error::Internal)?)
@@ -803,7 +807,7 @@ impl Campaigns {
         caller: Identity,
         mut input: Create,
         now: i64,
-        draft: Option<(&str, i64)>,
+        draft: Option<(i64, i64)>,
     ) -> Result<ruphish_application::attribution::Saved<Campaign>, Error> {
         let mut tx = crate::mysql::locks::write(&self.pool)
             .await
@@ -820,15 +824,12 @@ impl Campaigns {
             }
             ruphish_application::campaign::drafts::validate_launch(&saved, revision, &input, now)?;
         }
-        if let Some((key, fingerprint)) = &input.idempotency {
-            if key.is_empty() || key.len() > 128 {
-                return Err(Error::Invalid("Invalid launch idempotency key".into()));
-            }
-            if let Some(row)=sqlx::query("SELECT fingerprint,campaign_id FROM ruphish_campaign_launch WHERE owner_id=? AND `key`=?").bind(caller.id).bind(key).fetch_optional(&mut *tx).await.map_err(storage)? {
-                if text(&row,"fingerprint")?!=*fingerprint {return Err(Error::Conflict("Launch key"));}
-                let record = load(&mut tx, row.try_get("campaign_id").map_err(storage)?).await?;
-                return super::attribution::saved(&mut tx, record).await;
-            }
+        if let Some(request) = &input.idempotency
+            && let Some(id) =
+                idempotency::lookup(&mut tx, caller.id, Operation::Campaign, request).await?
+        {
+            let record = load(&mut tx, id).await?;
+            return super::attribution::saved(&mut tx, record).await;
         }
         let p = prepare_authorized(&self.content_work, &mut tx, &input, now).await?;
         let created = stamp(now)?;
@@ -890,15 +891,8 @@ impl Campaigns {
             let result=sqlx::query("INSERT INTO results(campaign_id,user_id,r_id,email,first_name,last_name,position,status,ip,latitude,longitude,send_date,reported,modified_date) VALUES(?,?,?,?,?,?,?,?, '',0,0,?,0,?)").bind(id).bind(caller.id).bind(rid).bind(&r.email).bind(&r.first_name).bind(&r.last_name).bind(&r.position).bind(if due<=now {"Sending"} else {"Scheduled"}).bind(stamp(due)?).bind(&created).execute(&mut *tx).await.map_err(storage)?.insert_id().map_err(storage)?;
             sqlx::query("INSERT INTO ruphish_delivery(result_id,campaign_id,state,due) VALUES(?,?,'ready',?)").bind(result).bind(id).bind(due).execute(&mut *tx).await.map_err(storage)?;
         }
-        if let Some((key, fingerprint)) = input.idempotency {
-            sqlx::query("INSERT INTO ruphish_campaign_launch VALUES(?,?,?,?)")
-                .bind(caller.id)
-                .bind(key)
-                .bind(fingerprint)
-                .bind(id)
-                .execute(&mut *tx)
-                .await
-                .map_err(storage)?;
+        if let Some(request) = &input.idempotency {
+            idempotency::remember(&mut tx, caller.id, Operation::Campaign, request, id).await?;
         }
         for (index, g) in p.groups.iter().enumerate() {
             sqlx::query("INSERT INTO ruphish_campaign_groups VALUES(?,?,?)")

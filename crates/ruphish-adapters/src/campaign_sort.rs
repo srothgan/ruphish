@@ -57,6 +57,14 @@ pub(crate) fn timestamp_key(column: &str, provider: &str) -> String {
 }
 
 pub(crate) fn directory(sort: DirectorySort, provider: &str) -> (String, String, String) {
+    if sort == DirectorySort::Recent {
+        let created = timestamp_key("created_date", provider);
+        return (
+            "CASE WHEN kind=0 THEN 1 ELSE 0 END".into(),
+            format!("CASE WHEN kind=0 THEN '' ELSE COALESCE(({created}),'') END"),
+            "COALESCE(modified,0)".into(),
+        );
+    }
     if sort == DirectorySort::Launch {
         let key = timestamp_key("launch_date", provider);
         return (
@@ -73,12 +81,17 @@ pub(crate) fn directory(sort: DirectorySort, provider: &str) -> (String, String,
             "''",
             "COALESCE(total,0)",
         ),
-        DirectorySort::Launch => ("0", "''", "0"),
+        DirectorySort::Launch | DirectorySort::Recent => ("0", "''", "0"),
     };
     (present.into(), text.into(), number.into())
 }
 pub(crate) fn delivery(sort: DeliverySort) -> (String, String, String) {
     let (present, text, number) = match sort {
+        DeliverySort::Priority => (
+            "1",
+            "CASE state WHEN 'unknown' THEN '0' WHEN 'blocked' THEN '1' WHEN 'failed' THEN '2' WHEN 'accepted' THEN '4' WHEN 'cancelled' THEN '5' ELSE '3' END",
+            "CASE WHEN state IN ('ready','preparing','submitting','retry') THEN due ELSE 0 END",
+        ),
         DeliverySort::Email => ("1", "email", "0"),
         DeliverySort::State => ("1", "state", "0"),
         DeliverySort::Due => ("1", "''", "due"),
@@ -110,11 +123,11 @@ pub(crate) fn tail(
     };
     let key_text = binary("sort_text", provider);
     let pos_text = binary("p.text_value", provider);
-    let draft = binary("draft_id", provider);
-    let pos_draft = binary("p.draft", provider);
+    let draft = "draft_id";
+    let pos_draft = "p.draft";
     format!(
         r#", keyed AS (SELECT data.*,CAST({present} AS {number_type}) AS sort_present,{text} AS sort_text,CAST({number} AS {number_type}) AS sort_number FROM data),
-position AS (SELECT CAST(? AS {number_type}) AS active,CAST(? AS {number_type}) AS present,CAST(? AS {text_type}) AS text_value,CAST(? AS {number_type}) AS number_value,CAST(? AS {number_type}) AS kind,CAST(? AS {text_type}) AS draft,CAST(? AS {number_type}) AS id)
+position AS (SELECT CAST(? AS {number_type}) AS active,CAST(? AS {number_type}) AS present,CAST(? AS {text_type}) AS text_value,CAST(? AS {number_type}) AS number_value,CAST(? AS {number_type}) AS kind,CAST(? AS {number_type}) AS draft,CAST(? AS {number_type}) AS id)
 SELECT k.* FROM keyed k CROSS JOIN position p WHERE p.active=0 OR
 (sort_present {op} p.present OR (sort_present=p.present AND
 ({key_text} {op} {pos_text} OR ({key_text}={pos_text} AND

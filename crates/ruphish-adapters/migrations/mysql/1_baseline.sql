@@ -267,12 +267,13 @@ CREATE TABLE `ruphish_campaign_policy` (
   PRIMARY KEY (`campaign_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
-CREATE TABLE `ruphish_campaign_launch` (
+CREATE TABLE `ruphish_campaign_creation` (
   `owner_id` BIGINT NOT NULL,
-  `key` VARCHAR(255) NOT NULL,
+  `operation` VARCHAR(16) NOT NULL,
+  `request_key` VARCHAR(255) NOT NULL,
   `fingerprint` VARCHAR(255) NOT NULL,
-  `campaign_id` BIGINT NOT NULL,
-  PRIMARY KEY (`owner_id`,`key`)
+  `resource_id` BIGINT NOT NULL,
+  PRIMARY KEY (`owner_id`,`operation`,`request_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `ruphish_delivery` (
@@ -487,7 +488,7 @@ CREATE TABLE ruphish_user_preferences (
 CREATE TABLE ruphish_campaign_drafts (
   edited_by BIGINT,
   edited_at VARCHAR(40),
- id VARCHAR(64) COLLATE utf8mb4_0900_bin NOT NULL PRIMARY KEY,
+ id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
  owner_id BIGINT NOT NULL,
  revision BIGINT NOT NULL,
  name VARCHAR(255) COLLATE utf8mb4_0900_bin NOT NULL,

@@ -294,7 +294,7 @@ async fn contract(db: &Database, inspect: &mut Inspector) {
     );
     assert_eq!(
         inspect
-            .scalar("SELECT count(*) FROM ruphish_campaign_launch")
+            .scalar("SELECT count(*) FROM ruphish_campaign_creation")
             .await,
         2
     );

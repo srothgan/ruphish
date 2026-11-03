@@ -6,7 +6,6 @@ import { DAY, campaignTiming, recipientOutcomes, recipientHistory } from './timi
 export { DAY };
 export const features = Object.freeze(source.features);
 export const iso = (seconds) => new Date(seconds * 1000).toISOString();
-export const draftId = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 export const policy = { redirect_url: '', track_opens: true };
 
 // Synthetic request categories, including unrecognized requests and older observations.
@@ -269,7 +268,7 @@ export function dataset(now) {
   });
   const selection = { groups: [{ id: 1 }], template: { id: 1 }, page: { id: 1 }, smtp: { id: 1 } };
   const drafts = source.drafts.map((name, i) => ({
-    id: draftId(i + 1),
+    id: i + 1,
     revision: 1,
     configuration: {
       name,

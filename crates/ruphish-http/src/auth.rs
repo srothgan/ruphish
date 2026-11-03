@@ -671,7 +671,26 @@ async fn missing_page(context: Context) -> Response {
 
 async fn page(context: Context) -> Response {
     let path = context.uri.path();
-    if path != "/login" {
+    if path == "/login" {
+        match context.identity().await {
+            Ok((user, _)) => {
+                let query: HashMap<String, String> =
+                    serde_urlencoded::from_str(context.uri.query().unwrap_or(""))
+                        .unwrap_or_default();
+                let destination = ruphish_contracts::auth::login_destination(
+                    query.get("next").map(String::as_str).unwrap_or(""),
+                    user.password_change_required,
+                );
+                return redirect(StatusCode::TEMPORARY_REDIRECT, &destination);
+            }
+            Err(error)
+                if matches!(
+                    error.status(),
+                    StatusCode::UNAUTHORIZED | StatusCode::NOT_FOUND
+                ) => {}
+            Err(error) => return error.into_response(),
+        }
+    } else {
         match context.identity().await {
             Ok((user, _)) => {
                 if user.password_change_required && !matches!(path, "/reset_password" | "/logout") {
@@ -968,11 +987,7 @@ async fn login(context: Context, request: Request) -> Result<Response, Rejection
     } else {
         &input.next
     };
-    let next = if user.password_change_required && context.json() {
-        "/reset_password".to_owned()
-    } else {
-        local_next(requested)
-    };
+    let next = ruphish_contracts::auth::login_destination(requested, user.password_change_required);
     Ok(context.completed(&next))
 }
 async fn logout(context: Context, request: Request) -> Result<Response, Rejection> {
@@ -1036,7 +1051,12 @@ async fn password(context: Context, request: Request) -> Result<Response, Reject
         )
         .await?;
     if reset {
-        Ok(context.completed(&local_next(&input.next)))
+        Ok(
+            context.completed(&ruphish_contracts::auth::login_destination(
+                &input.next,
+                false,
+            )),
+        )
     } else {
         Ok(Json(Envelope::<()> {
             success: true,
@@ -1278,20 +1298,6 @@ fn wire(user: Account) -> Result<User, Rejection> {
         account_locked: user.account_locked,
         last_login: timestamp,
     })
-}
-fn local_next(value: &str) -> String {
-    let path = url::Url::parse(value)
-        .ok()
-        .map(|u| u.path().to_owned())
-        .unwrap_or_else(|| value.split(['?', '#']).next().unwrap_or("").to_owned());
-    // Backslashes and encoded separators must never become a browser authority redirect.
-    if path.contains('\\')
-        || path.to_ascii_lowercase().contains("%5c")
-        || path.to_ascii_lowercase().starts_with("%2f")
-    {
-        return "/".into();
-    }
-    format!("/{}", path.trim_start_matches('/'))
 }
 fn redirect(status: StatusCode, target: &str) -> Response {
     (status, [(header::LOCATION, target)]).into_response()

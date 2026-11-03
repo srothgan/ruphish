@@ -11,6 +11,8 @@ Choose **Create campaign** to prepare a draft. Open a recent campaign for **Resu
 
 Use **Needs attention** to find enabled domains without current verification and failed, blocked, or uncertain deliveries in unfinished campaigns. A disabled domain remains in inventory without requesting verification attention.
 
+The recent-campaign table shows the latest three entries, newest first. Column sorting reorders only that shortlist; select **Newest first** to restore its original order.
+
 Recent campaign rates cover each campaign's recorded sends. Use its Results view for filters, charts, individual observations, and exports. See [metric definitions](metrics.md) for interpretation.
 
 Refresh reloads the operational snapshot and drafts. Failed refreshes retain confirmed data and offer a retry. Check freshness before treating an attention count as current.

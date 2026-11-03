@@ -1,11 +1,21 @@
 //! Request contracts shared by HTTP handlers and browser clients.
 use serde::{Deserialize, Serialize};
 
-/// Create or replace an editable campaign draft.
+/// Create an editable campaign draft with an Idempotency-Key header.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DraftCreate {
+    /// Editable draft configuration.
+    pub configuration: ruphish_domain::campaign_draft::Configuration,
+    /// Current editing step.
+    pub step: i64,
+}
+
+/// Replace an existing editable campaign draft.
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DraftWrite {
-    /// Expected saved revision; absent only for creation.
+    /// Expected saved revision; missing revisions are rejected.
     pub revision: Option<i64>,
     /// Editable draft configuration.
     pub configuration: ruphish_domain::campaign_draft::Configuration,
@@ -18,7 +28,7 @@ pub struct DraftWrite {
 #[serde(default, deny_unknown_fields)]
 pub struct DraftPage {
     /// Continuation returned by the previous page.
-    pub after: String,
+    pub after: i64,
 }
 
 /// Combined campaign directory query.

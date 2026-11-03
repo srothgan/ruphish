@@ -4,7 +4,7 @@ import { createDemoApi } from '../../crates/ruphish-ui/web/demo-api.mjs';
 import { dataset } from '../../assets/website-demo/dataset.mjs';
 
 const now = 1793016000;
-async function setup() {
+async function setup(customize = () => {}) {
   const data = dataset(now);
   const seed = data.campaigns[0];
   seed.results = [
@@ -39,6 +39,7 @@ async function setup() {
       time: '2026-01-01T00:00:00Z',
     });
   }
+  customize(data, seed);
   const storage = new Map();
   const api = createDemoApi({
     now,
@@ -280,4 +281,139 @@ test('absent native transport stays null and sorts separately from unknown accep
     await request(`${path}/export?format=csv&scope=recipients&sort=delivery`)
   ).text();
   assert.match(csv, /"102","a@example.test","Same","historical"/);
+});
+
+test('recent work keeps edited drafts before executions across pages and survives boundary deletion', async () => {
+  const { data, request } = await setup((data, seed) => {
+    const draft = data.drafts[0];
+    data.drafts = [
+      {
+        ...draft,
+        id: 101,
+        configuration: { ...draft.configuration, name: 'Zulu' },
+        created: '2020-01-01T00:00:00Z',
+        modified: '2021-01-01T00:00:00Z',
+      },
+      {
+        ...draft,
+        id: 102,
+        configuration: { ...draft.configuration, name: 'Middle' },
+        created: '2019-01-01T00:00:00Z',
+        modified: '2022-01-01T00:00:00Z',
+      },
+      {
+        ...draft,
+        id: 103,
+        configuration: { ...draft.configuration, name: 'Alpha' },
+        created: '2021-01-01T00:00:00Z',
+        modified: null,
+      },
+    ];
+    data.campaigns = Array.from({ length: 53 }, (_, i) => ({
+      ...seed,
+      header: {
+        ...seed.header,
+        id: i + 1,
+        name: `Campaign ${53 - i}`,
+        status: 'Completed',
+        created_at: i === 52 ? null : new Date((now - i) * 1000).toISOString(),
+        launch_date: new Date((now + i) * 1000).toISOString(),
+      },
+    }));
+  });
+  const base = '/api/campaigns/directory?sort=recent&order=desc';
+  const firstResponse = await request(base);
+  assert.equal(firstResponse.status, 200);
+  const first = await firstResponse.json();
+  assert.deepEqual(
+    first.items.map((r) => `${r.kind}:${r.id}`),
+    [
+      'draft:102',
+      'draft:101',
+      'draft:103',
+      ...Array.from({ length: 47 }, (_, i) => `campaign:${i + 1}`),
+    ],
+  );
+  data.campaigns = data.campaigns.filter((c) => c.header.id !== 47);
+  const next = await (
+    await request(`${base}&after=${encodeURIComponent(first.next_after)}`)
+  ).json();
+  assert.deepEqual(
+    next.items.map((r) => r.id),
+    ['48', '49', '50', '51', '52', '53'],
+  );
+  assert.equal(next.next_after, null);
+  assert.equal(
+    (
+      await request(
+        `/api/campaigns/directory?sort=name&order=desc&after=${encodeURIComponent(first.next_after)}`,
+      )
+    ).status,
+    400,
+  );
+  const alphabetical = await (
+    await request('/api/campaigns/directory?sort=name&filter=drafts')
+  ).json();
+  assert.deepEqual(
+    alphabetical.items.map((r) => r.id),
+    ['103', '102', '101'],
+  );
+  assert.equal(
+    Object.hasOwn(first.items[0], 'modified'),
+    false,
+    'sort metadata is not a directory response field',
+  );
+});
+
+test('delivery priority orders attention states, due work and terminal states across pages', async () => {
+  const { seed, request } = await setup((_data, seed) => {
+    seed.results = [
+      'accepted',
+      'ready',
+      'failed',
+      'unknown',
+      'cancelled',
+      'retry',
+      'blocked',
+      'preparing',
+      'submitting',
+    ].map((state, i) => ({
+      ...seed.results[0],
+      id: 101 + i,
+      email: `${i}@example.test`,
+      state,
+      due: [1, 20, 1, 500, 1, 10, 100, 10, 15][i],
+      attempts: [],
+      events: [],
+    }));
+  });
+  const path = `/api/campaigns/${seed.header.id}/delivery`;
+  for (const [sort, order, expected] of [
+    ['priority', 'asc', [104, 107, 103, 106, 108, 109, 102, 101, 105]],
+    ['priority', 'desc', [105, 101, 102, 109, 106, 108, 103, 107, 104]],
+    ['email', 'asc', [101, 102, 103, 104, 105, 106, 107, 108, 109]],
+  ]) {
+    let cursor = '';
+    const actual = [];
+    do {
+      const response = await request(
+        `${path}?sort=${sort}&order=${order}&limit=2${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+      );
+      assert.equal(response.status, 200);
+      const page = await response.json();
+      actual.push(...page.items.map((r) => r.id));
+      cursor = page.next_cursor;
+      assert.ok(actual.length <= expected.length, 'cursor must advance');
+    } while (cursor);
+    assert.deepEqual(actual, expected);
+  }
+  const first = await (await request(`${path}?sort=priority&limit=4`)).json();
+  seed.results = seed.results.filter((r) => r.id !== 106);
+  const next = await (
+    await request(`${path}?sort=priority&limit=2&cursor=${encodeURIComponent(first.next_cursor)}`)
+  ).json();
+  assert.deepEqual(
+    next.items.map((r) => r.id),
+    [108, 109],
+  );
 });

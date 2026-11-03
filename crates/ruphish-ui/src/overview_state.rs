@@ -6,6 +6,13 @@ pub fn recent_campaigns(
     rows: &[ruphish_contracts::overview::RecentCampaign],
     sort: &crate::table_state::Sort,
 ) -> Vec<ruphish_contracts::overview::RecentCampaign> {
+    if sort.column == "recent" {
+        let mut recent: Vec<_> = rows.iter().take(3).cloned().collect();
+        if sort.order == ruphish_domain::reporting::SortDirection::Asc {
+            recent.reverse();
+        }
+        return recent;
+    }
     sort.rows(
         rows.iter().take(3).cloned().collect(),
         |row, key| match key {

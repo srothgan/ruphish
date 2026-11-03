@@ -459,11 +459,10 @@ pub(super) async fn exercise(db: &Database) {
         .create(other, other_launch, now + 3608)
         .await
         .unwrap();
-    campaigns
-        .save_draft(
+    let draft = campaigns
+        .create_draft(
             other,
-            "settings-draft-000001",
-            None,
+            ("settings-draft-000001".into(), "initial".into()),
             Default::default(),
             0,
             now,
@@ -509,12 +508,7 @@ pub(super) async fn exercise(db: &Database) {
         assert_eq!(closed.status.as_str(), "Completed");
         assert_eq!(closed.results.len(), 1);
     }
-    assert!(
-        campaigns
-            .draft(other, "settings-draft-000001")
-            .await
-            .is_ok()
-    );
+    assert!(campaigns.draft(other, draft.id).await.is_ok());
     assert!(
         db.interactions()
             .interact(

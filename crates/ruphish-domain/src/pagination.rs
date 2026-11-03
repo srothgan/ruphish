@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DirectorySort {
+    /// Drafts by last edit, followed by executions by creation time; newest first descending.
+    Recent,
     /// Display name across drafts and executions.
     #[default]
     Name,
@@ -20,6 +22,8 @@ pub enum DirectorySort {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DeliverySort {
+    /// Operator attention first, then pending work by due time, then terminal deliveries.
+    Priority,
     /// Original audience address.
     #[default]
     Email,
@@ -34,7 +38,7 @@ pub enum DeliverySort {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Position {
-    /// Whether the selected value exists (absent values sort first ascending).
+    /// Leading boolean key: value presence, or draft membership for recent work.
     pub present: bool,
     /// Text part; empty for numeric keys.
     pub text: String,
@@ -42,8 +46,8 @@ pub struct Position {
     pub number: i64,
     /// Stable identity family: zero draft, one execution/delivery.
     pub kind: i32,
-    /// Draft identity; empty for executions/deliveries.
-    pub draft: String,
+    /// Draft identity; zero for executions/deliveries.
+    pub draft: i64,
     /// Execution/delivery identity; zero for drafts.
     pub id: i64,
 }
@@ -70,7 +74,7 @@ impl<S: PartialEq> Cursor<S> {
             && self.order == order
             && self.scope == scope
             && self.position.text.len() <= 4096
-            && self.position.draft.len() <= 64
+            && self.position.draft >= 0
             && matches!(self.position.kind, 0 | 1)
             && self.position.id >= 0
     }

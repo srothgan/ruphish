@@ -7,6 +7,7 @@ use crate::{
 pub use ruphish_domain::campaign::*;
 pub mod directory;
 pub mod drafts;
+pub mod idempotency;
 pub mod preparation;
 
 /// Shared resource identity and optional reviewed revision.

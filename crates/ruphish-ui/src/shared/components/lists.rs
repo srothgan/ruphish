@@ -96,7 +96,7 @@ impl TablePreferences {
 #[derive(Clone, Copy)]
 pub(crate) struct TableSorting {
     pub current: Signal<ruphish_ui::table_state::Sort>,
-    pub change: Callback<String>,
+    pub change: Callback<ruphish_ui::table_state::Sort>,
 }
 impl TableSorting {
     pub fn new(
@@ -118,8 +118,7 @@ impl TableSorting {
         });
         Self {
             current,
-            change: Callback::new(move |column: String| {
-                let next = current.get_untracked().select(&column);
+            change: Callback::new(move |next| {
                 preferences.0.update(|v| {
                     v.insert(name.get_value(), next);
                 });
@@ -169,6 +168,13 @@ pub(crate) fn DataTable(
     /// Empty keys identify action-only columns.
     columns: Vec<&'static str>,
     sorting: TableSorting,
+    /// Named workflow order, restored without toggling a column or discarding pagination resets.
+    #[prop(optional)]
+    default_sort: Option<(
+        &'static str,
+        ruphish_domain::reporting::SortDirection,
+        Signal<String>,
+    )>,
     children: Children,
     #[prop(default = "")] class: &'static str,
     #[prop(default = false)] compact: bool,
@@ -182,6 +188,32 @@ pub(crate) fn DataTable(
             {(empty_content.children)()}
         </div>
         <div class="management-table-wrap" hidden=move || empty.get()>
+            {default_sort
+                .map(|(column, order, label)| {
+                    let selected = Signal::derive(move || {
+                        sorting.current.with(|sort| sort.column == column && sort.order == order)
+                    });
+                    view! {
+                        <div class="management-toolbar">
+                            <ActionButton
+                                size=super::ControlSize::Small
+                                pressed=Signal::derive(move || selected.get().to_string())
+                                on_click=move |_| {
+                                    if !selected.get_untracked() {
+                                        sorting
+                                            .change
+                                            .run(ruphish_ui::table_state::Sort {
+                                                column: column.into(),
+                                                order,
+                                            });
+                                    }
+                                }
+                            >
+                                {move || label.get()}
+                            </ActionButton>
+                        </div>
+                    }
+                })}
             <table
                 class=format!("management-table {class}")
                 class:compact=compact
@@ -204,7 +236,11 @@ pub(crate) fn DataTable(
                                             <button
                                                 type="button"
                                                 class="table-sort"
-                                                on:click=move |_| sorting.change.run(key.to_owned())
+                                                on:click=move |_| {
+                                                    sorting
+                                                        .change
+                                                        .run(sorting.current.get_untracked().select(key))
+                                                }
                                             >
                                                 <svg
                                                     class="table-sort-icon"

@@ -39,3 +39,5 @@ mod campaign_listing;
 mod campaign_sort;
 
 mod event_edit;
+
+mod campaign_idempotency;

@@ -99,7 +99,7 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
       '/api/webhooks/',
       '/api/reporting-mailboxes/',
       '/api/learning-pages/1',
-      '/api/campaign-drafts/00000000-0000-4000-8000-000000000001',
+      '/api/campaign-drafts/1',
     ]) {
       const response = await fetch(`http://127.0.0.1:${port}${path}`, {
         headers: { Authorization: `Bearer ${apiKey}` },

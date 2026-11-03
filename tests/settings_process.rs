@@ -413,16 +413,13 @@ fn company_policy_authorization_domains_integrations_and_closure_survive_restart
     );
     let second = campaign(&c, &base, user_key, "https://other.example.test");
     let draft = value(
-        request(
-            &c,
-            &base,
-            user_key,
-            Method::PUT,
-            "/api/campaign-drafts/settings-http-draft-01",
-            Some(&json!({"revision":None::<i64>,"configuration":{},"step":0})),
-            None,
-        ),
-        200,
+        c.post(format!("{base}/api/campaign-drafts"))
+            .bearer_auth(user_key)
+            .header("Idempotency-Key", "settings-http-draft-01")
+            .json(&json!({"configuration":{},"step":0}))
+            .send()
+            .unwrap(),
+        201,
     );
     assert_eq!(draft["revision"], 1);
     let review = value(
@@ -511,7 +508,7 @@ fn company_policy_authorization_domains_integrations_and_closure_survive_restart
             &c,
             &base,
             user_key,
-            "/api/campaign-drafts/settings-http-draft-01"
+            &format!("/api/campaign-drafts/{}", draft["id"])
         )["revision"],
         1
     );

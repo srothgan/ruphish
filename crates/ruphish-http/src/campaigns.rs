@@ -172,7 +172,6 @@ fn decode(context: &Context, bytes: &[u8]) -> Result<app::Create, Rejection> {
 }
 fn command(context: &Context, input: wire::Create) -> Result<app::Create, Rejection> {
     use ruphish_application::validation::{Code, Report};
-    use sha2::{Digest, Sha256};
     let mut report = Report::default();
     for (conflict, absolute, local) in [
         (
@@ -197,15 +196,7 @@ fn command(context: &Context, input: wire::Create) -> Result<app::Create, Reject
         }
     }
     report.finish().map_err(|r| error(Error::Validation(r)))?;
-    let fingerprint = hex::encode(Sha256::digest(serde_json::to_vec(&input).map_err(
-        |_| {
-            failure(
-                StatusCode::BAD_REQUEST,
-                ErrorCode::CampaignInvalid,
-                "Invalid campaign request",
-            )
-        },
-    )?));
+    let idempotency = creation_key(context, &input)?;
     let select = |s: wire::ReviewedResource| app::Selection {
         id: s.id,
         revision: s.revision,
@@ -227,7 +218,7 @@ fn command(context: &Context, input: wire::Create) -> Result<app::Create, Reject
             redirect_url: p.redirect_url,
             learning_page_id: p.learning_page_id,
         },
-        idempotency: None,
+        idempotency,
     };
     for (local, target, field) in [
         (input.launch_local, &mut result.launch, "launch_local.local"),
@@ -245,16 +236,6 @@ fn command(context: &Context, input: wire::Create) -> Result<app::Create, Reject
                     .map_err(|e| error(e.at(field)))?,
             );
         }
-    }
-    if let Some(key) = context.headers.get("idempotency-key") {
-        let key = key.to_str().map_err(|_| {
-            failure(
-                StatusCode::BAD_REQUEST,
-                ErrorCode::LaunchKeyInvalid,
-                "Invalid launch idempotency key",
-            )
-        })?;
-        result.idempotency = Some((key.into(), fingerprint));
     }
     Ok(result)
 }
@@ -833,4 +814,26 @@ async fn duplicate(context: Context, Path(id): Path<i64>) -> Result<Response, Re
         },
         None,
     )
+}
+
+/// Shared header validation and canonical typed-request fingerprinting.
+fn creation_key<T: serde::Serialize>(
+    context: &Context,
+    input: &T,
+) -> Result<Option<(String, String)>, Rejection> {
+    use sha2::{Digest, Sha256};
+    let Some(key) = context.headers.get("idempotency-key") else {
+        return Ok(None);
+    };
+    let invalid = || {
+        failure(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::IdempotencyKeyInvalid,
+            "Invalid idempotency key",
+        )
+    };
+    let key = key.to_str().map_err(|_| invalid())?;
+    app::idempotency::validate(key).map_err(|_| invalid())?;
+    let bytes = serde_json::to_vec(input).map_err(|_| error(Error::Internal))?;
+    Ok(Some((key.to_owned(), hex::encode(Sha256::digest(bytes)))))
 }

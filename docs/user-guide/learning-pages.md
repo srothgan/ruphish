@@ -7,6 +7,8 @@ sidebar:
 
 Learning pages are reusable explanations hosted by Ruphish. A campaign can redirect participants to one after an acknowledged submission. Opening a learning page does not create an interaction event or record training completion.
 
+The resource list defaults to last modified, newest first, so recently saved or imported content is easy to resume. Select a column heading to change the order; the choice remains during navigation within the current application session.
+
 ## Create and check a page
 
 Open **Resources → Learning pages → Create**. Enter a name and write the explanation in the HTML or visual editor. You can also import HTML or resource JSON. Use **Preview** and **Check learning page** before saving. Administrators can also add available entries from the **Learning pages** tab in the [Starter Template Repository](starter-templates.md); each addition creates an independent resource copy.
