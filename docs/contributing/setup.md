@@ -36,7 +36,7 @@ Maintained JavaScript uses the root `package.json` and lockfile for pinned Prett
 
 Trunk stages output in `dist/.stage/` and publishes the complete browser distribution to `dist/admin/`. The server checks its manifest before readiness. Rebuild when its inputs change; stale assets cannot validate changed UI source. See [frontend development](frontend.md).
 
-Keep heavy local work sequential. In PowerShell, set `NO_COLOR` to the literal string `true` before Trunk; `1` is not accepted as a boolean by the pinned version. The validation guide provides bounded Cargo/test concurrency settings.
+In PowerShell, set `NO_COLOR` to the literal string `true` before Trunk; `1` is not accepted as a boolean by the pinned version.
 
 ## Make and verify a focused change
 

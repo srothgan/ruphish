@@ -9,6 +9,14 @@ const fixture = fileURLToPath(new URL('./support/ui-interactions.mjs', import.me
 // Runs the built application in JSDOM with the existing synthetic API, never a live server.
 // Build the development distribution with `trunk build --locked` first.
 for (const scenario of [
+  'auth-existing',
+  'auth-existing-loop',
+  'auth-existing-reset',
+  'auth-other-tab',
+  'auth-login-refresh',
+  'auth-login-stale',
+  'auth-login-late',
+  'auth-login-retry',
   'conflict-draft',
   'conflict-group',
   'deleted-group',

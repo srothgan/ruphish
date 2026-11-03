@@ -74,6 +74,19 @@ fn navigate(path: &str) {
     }
 }
 
+fn requested_next() -> String {
+    web_sys::window()
+        .and_then(|w| w.location().search().ok())
+        .and_then(|s| {
+            serde_urlencoded::from_str::<std::collections::HashMap<String, String>>(
+                s.trim_start_matches('?'),
+            )
+            .ok()
+        })
+        .and_then(|mut query| query.remove("next"))
+        .unwrap_or_else(|| "/".into())
+}
+
 fn decode_session(value: serde_json::Value) -> Result<BrowserSession, ()> {
     // Missing fields must not silently reset an account to browser defaults.
     ruphish_ui::preference_state::decode(value.get("preferences").cloned().ok_or(())?).ok_or(())?;
@@ -105,7 +118,7 @@ pub(super) fn app() -> impl IntoView {
                 api.set_features(features);
             }
             preferences.apply(value.preferences.clone(), i18n);
-            api.observe_session(value);
+            api.observe_session(value, &requested_next());
         }
         session.set(Some(loaded));
     });
@@ -113,7 +126,11 @@ pub(super) fn app() -> impl IntoView {
     let checking = RwSignal::new(false);
     let owner = StoredValue::new(Owner::current());
     let revalidate = move || {
-        if !api.active() || session.get_untracked().is_none() || checking.get_untracked() {
+        let generation = api.session_generation();
+        if !api.accepts_session_read(generation)
+            || session.get_untracked().is_none()
+            || checking.get_untracked()
+        {
             return;
         }
         checking.set(true);
@@ -124,7 +141,7 @@ pub(super) fn app() -> impl IntoView {
             if let Some(owner) = owner {
                 owner.with(|| {
                     spawn_local(async move {
-                        match api
+                        let loaded = api
                             .get("/auth/session")
                             .await
                             .map_err(|e| e.message)
@@ -132,9 +149,14 @@ pub(super) fn app() -> impl IntoView {
                                 decode_session(v).map_err(|_| {
                                     leptos_i18n::t_string!(i18n, ui.invalid_session_response).into()
                                 })
-                            }) {
+                            });
+                        if !api.accepts_session_read(generation) {
+                            checking.set(false);
+                            return;
+                        }
+                        match loaded {
                             Ok(value) => {
-                                api.observe_session(&value);
+                                api.observe_session(&value, &requested_next());
                                 if api.active() {
                                     if feature_ticket == api.feature_ticket()
                                         && let Some(features) = value.features
@@ -184,11 +206,16 @@ pub(super) fn app() -> impl IntoView {
     // The authenticated shell survives routing and routine session checks.
     // Only an identity/permission change invalidates it.
     let action = Memo::new(move |_| api.session_action());
+    // Starting/finishing a failed login must not remount and cancel the form's task.
+    let active = Memo::new(move |_| action.get().active());
     Effect::new(move |_| {
         let action = action.get();
         if let Some(window) = web_sys::window() {
             match action {
-                SessionAction::Continue => {}
+                SessionAction::Continue | SessionAction::SigningIn => {}
+                SessionAction::Redirect(destination) => {
+                    let _ = window.location().replace(&destination);
+                }
                 SessionAction::SignedOut => {
                     let _ = window.location().replace("/login");
                 }
@@ -217,7 +244,7 @@ pub(super) fn app() -> impl IntoView {
                 }
             }} {navigation_guard}
             {move || {
-                if action.get() != SessionAction::Continue {
+                if !active.get() {
                     view! {
                         <main class="login-screen">
                             <p role="status">{tr!(ui.refreshing_your_session)}</p>
@@ -267,7 +294,7 @@ fn login(api: Api, token: String) -> impl IntoView {
     let token = StoredValue::new(token);
     let username = RwSignal::new(String::new());
     let password = RwSignal::new(String::new());
-    let busy = RwSignal::new(false);
+    let busy = Signal::derive(move || api.session_action() == SessionAction::SigningIn);
     let expired = web_sys::window()
         .and_then(|w| w.location().search().ok())
         .is_some_and(|q| {
@@ -282,22 +309,12 @@ fn login(api: Api, token: String) -> impl IntoView {
     });
     let submit = move |event: leptos::ev::SubmitEvent| {
         event.prevent_default();
-        if busy.get_untracked() {
+        if !api.begin_login() {
             return;
         }
-        busy.set(true);
         message.clear();
         spawn_local(async move {
-            let next = web_sys::window()
-                .and_then(|w| w.location().search().ok())
-                .and_then(|s| {
-                    serde_urlencoded::from_str::<std::collections::HashMap<String, String>>(
-                        s.trim_start_matches('?'),
-                    )
-                    .ok()
-                })
-                .and_then(|mut q| q.remove("next"))
-                .unwrap_or_else(|| "/".into());
+            let next = requested_next();
             let result = api
                 .form(
                     "/auth/login",
@@ -308,12 +325,21 @@ fn login(api: Api, token: String) -> impl IntoView {
                         ("next", next),
                     ],
                 )
-                .await;
+                .await
+                .and_then(|value| {
+                    value["data"]
+                        .as_str()
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_owned)
+                        .ok_or_else(|| api.invalid_read())
+                });
             password.set(String::new());
-            busy.set(false);
             match result {
-                Ok(value) => navigate(value["data"].as_str().unwrap_or("/")),
-                Err(error) => message.error(error),
+                Ok(destination) => api.finish_login(Some(destination)),
+                Err(error) => {
+                    api.finish_login(None);
+                    message.error(error);
+                }
             }
         });
     };
@@ -583,6 +609,23 @@ fn shell(api: Api, session: BrowserSession) -> impl IntoView {
         <Routes fallback=|| {
             view! { <NotFoundPage back_href="/" back_label=trs!(ui.go_to_dashboard) /> }
         }>
+            <Route
+                path=path!("/login")
+                view=move || {
+                    view! {
+                        <leptos_router::components::Redirect
+                            path=ruphish_contracts::auth::login_destination(
+                                &requested_next(),
+                                required,
+                            )
+                            options=leptos_router::NavigateOptions {
+                                replace: true,
+                                ..Default::default()
+                            }
+                        />
+                    }
+                }
+            />
             <Route
                 path=path!("/logout")
                 view=move || {

@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { JSDOM } from 'jsdom';
+import jsdomUtils from 'jsdom/lib/generated/idl/utils.js';
+import whatwgURL from 'whatwg-url';
 import { createDemoApi, preferences } from '../../demo-api.mjs';
 import { dataset } from '../../../../../assets/website-demo/dataset.mjs';
 
@@ -10,6 +12,14 @@ const returnOrigin =
   '/campaigns/2/results?source=public&event=link_clicked&from=0&until=1999999999&sort=name&order=desc&offset=1&limit=25';
 const path =
   {
+    'auth-existing': '/login?next=/',
+    'auth-existing-loop': '/login?next=%2Fgroups%2F..%2Flogin',
+    'auth-existing-reset': '/login?next=/campaigns',
+    'auth-other-tab': '/login?next=/campaigns',
+    'auth-login-refresh': '/login?next=/campaigns',
+    'auth-login-stale': '/login?next=/campaigns',
+    'auth-login-late': '/login?next=/campaigns',
+    'auth-login-retry': '/login?next=/campaigns',
     'conflict-draft': '/campaigns/drafts/1/edit',
     'conflict-group': '/groups/1/edit',
     'deleted-group': '/groups/1/edit',
@@ -92,6 +102,18 @@ const dom = new JSDOM('<!doctype html><html><body></body></html>', {
   pretendToBeVisual: true,
 });
 const win = dom.window;
+// JSDOM cannot load a new document. Observe the actual Location boundary instead.
+const authNavigations = [];
+if (scenario.startsWith('auth-')) {
+  const location = jsdomUtils.implForWrapper(win.location);
+  location._locationObjectNavigate = (url, options = {}) => {
+    authNavigations.push({
+      url: whatwgURL.serializeURL(url),
+      replacement: options.replacement === true,
+    });
+  };
+  location.reload = () => authNavigations.push({ reload: true });
+}
 for (const key of Object.getOwnPropertyNames(win)) {
   if (!(key in globalThis)) {
     try {
@@ -128,6 +150,7 @@ win.Request = globalThis.Request;
 win.Response = globalThis.Response;
 Object.assign(preferences, { language: 'de', format_locale: 'de-DE', time_zone: 'Europe/Berlin' });
 if (
+  scenario.startsWith('auth-') ||
   scenario.startsWith('form-') ||
   scenario.startsWith('detail-') ||
   scenario.startsWith('empty-') ||
@@ -312,6 +335,11 @@ let releaseHistory;
 let holdSession = false;
 let releaseSession;
 let sessionExpired = false;
+let authSignedIn = scenario.startsWith('auth-existing');
+let authLoginRelease;
+let authLoginStatus = 200;
+let authSessionFinished = 0;
+let authLoginCount = 0;
 let releaseValidation;
 const featureOverrides = { webhooks_enabled: true, reporting_mailboxes_enabled: true };
 let failSave = false;
@@ -333,6 +361,22 @@ let releaseRecoveryRead;
 globalThis.fetch = async (request, options) => {
   const url = new URL(request.url);
   requests.push(url.pathname + url.search);
+  if (scenario.startsWith('auth-') && url.pathname === '/auth/login') {
+    authLoginCount += 1;
+    const fields = new URLSearchParams(await request.text());
+    assert.equal(fields.get('next'), '/campaigns');
+    assert.equal(fields.get('username'), 'demo');
+    if (authLoginStatus !== 200) {
+      return new Response(JSON.stringify({ success: false, code: 'AUTH_INVALID' }), {
+        status: authLoginStatus,
+      });
+    }
+    authSignedIn = true;
+    await new Promise((resolve) => {
+      authLoginRelease = resolve;
+    });
+    return new Response(JSON.stringify({ success: true, data: '/campaigns' }));
+  }
   if (recoveryPath === url.pathname) {
     if (request.method === 'PUT') {
       const body = await request.clone().json();
@@ -423,6 +467,7 @@ globalThis.fetch = async (request, options) => {
     }
   }
   if (url.pathname === '/auth/session') {
+    const authSnapshot = authSignedIn;
     if (holdSession) {
       await new Promise((resolve) => {
         releaseSession = resolve;
@@ -443,6 +488,17 @@ globalThis.fetch = async (request, options) => {
     }
     if (sessionExpired) {
       value.user = null;
+    }
+    if (scenario.startsWith('auth-')) {
+      if (scenario === 'auth-existing-reset') {
+        value.user.password_change_required = true;
+      }
+      if (
+        !(['auth-login-stale', 'auth-login-late'].includes(scenario) ? authSnapshot : authSignedIn)
+      ) {
+        value.user = null;
+      }
+      authSessionFinished += 1;
     }
     return new Response(JSON.stringify(value), {
       status: response.status,
@@ -528,6 +584,9 @@ win.fetch = globalThis.fetch;
 const dist = new URL('../../../../../dist/admin/', import.meta.url);
 const html = readFileSync(new URL('index.html', dist), 'utf8');
 const demo = html.includes('<title>Ruphish Demo</title>');
+if (scenario.startsWith('auth-')) {
+  assert.equal(demo, false, 'auth regressions need the normal WASM bundle');
+}
 if (scenario === 'campaign-wizard' && demo) {
   win.sessionStorage.setItem('ruphish-demo-session-v1', '1');
   win.sessionStorage.setItem('ruphish-demo-time-v1', String(now));
@@ -543,7 +602,8 @@ async function until(condition) {
   const deadline = performance.now() + 15000;
   while (!condition()) {
     if (
-      (scenario === 'campaign-wizard' ||
+      (scenario.startsWith('auth-') ||
+        scenario === 'campaign-wizard' ||
         recoveryPath ||
         scenario.startsWith('delete-conflict') ||
         scenario.startsWith('empty-') ||
@@ -571,6 +631,95 @@ const settled = () =>
   regions().length > 0 &&
   regions().every((e) => e.dataset.ready === 'true' && e.getAttribute('aria-busy') === 'false');
 const resultsPath = '/campaigns/2/results';
+
+if (scenario.startsWith('auth-')) {
+  if (scenario.startsWith('auth-existing')) {
+    const destination = scenario === 'auth-existing-reset' ? '/reset_password' : '/';
+    await until(
+      () => win.location.pathname === destination && document.querySelector('.admin-shell'),
+    );
+    assert.doesNotMatch(document.querySelector('.admin-content').textContent, /404/);
+    if (scenario === 'auth-existing-reset') {
+      assert.ok(document.querySelector('.account-form'));
+    }
+    assert.equal(authNavigations.length, 0);
+    process.exit(0);
+  }
+  await until(() => document.querySelector('.login-form form'));
+  if (scenario === 'auth-other-tab') {
+    authSignedIn = true;
+    win.dispatchEvent(new win.Event('focus'));
+    await until(() => authNavigations.length > 0);
+  } else {
+    const form = document.querySelector('.login-form form');
+    const submit = () => {
+      for (const [name, value] of [
+        ['username', 'demo'],
+        ['password', 'demodemo'],
+      ]) {
+        const input = form.elements.namedItem(name);
+        input.value = value;
+        input.dispatchEvent(new win.Event('input', { bubbles: true }));
+      }
+      form.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
+    };
+    if (scenario === 'auth-login-retry') {
+      for (const status of [401, 503]) {
+        authLoginStatus = status;
+        const count = authLoginCount;
+        submit();
+        await until(
+          () => authLoginCount > count && !form.querySelector('button[type="submit"]').disabled,
+        );
+        assert.equal(authNavigations.length, 0);
+        const reads = authSessionFinished;
+        win.dispatchEvent(new win.Event('focus'));
+        await until(() => authSessionFinished > reads);
+      }
+      authLoginStatus = 200;
+    } else {
+      holdSession = true;
+      win.dispatchEvent(new win.Event('focus'));
+      await until(() => releaseSession);
+    }
+    submit();
+    await until(() => authLoginRelease);
+    submit();
+    const count = authLoginCount;
+    win.dispatchEvent(new win.Event('focus'));
+    if (releaseSession && scenario !== 'auth-login-late') {
+      const reads = authSessionFinished;
+      holdSession = false;
+      releaseSession();
+      await until(() => authSessionFinished > reads);
+      for (let i = 0; i < 20; i++) {
+        await nextTurn();
+      }
+      assert.equal(authNavigations.length, 0, 'refresh must not preempt login navigation');
+    }
+    authLoginRelease();
+    await until(() => authNavigations.length > 0);
+    if (scenario === 'auth-login-late') {
+      const reads = authSessionFinished;
+      holdSession = false;
+      releaseSession();
+      await until(() => authSessionFinished > reads);
+      for (let i = 0; i < 20; i++) {
+        await nextTurn();
+      }
+    }
+    assert.equal(authLoginCount, count, 'duplicate submit must not send another login');
+  }
+  assert.deepEqual(authNavigations, [
+    { url: 'https://admin.example.test/campaigns', replacement: true },
+  ]);
+  assert.equal(
+    document.querySelector('.admin-shell'),
+    null,
+    'old identity is not displayed during navigation',
+  );
+  process.exit(0);
+}
 
 if (recoveryPath) {
   const button = (name) =>

@@ -18,11 +18,11 @@ Start with the [validation catalog](validation.md). It owns direct commands, pre
 
 Tests should assert observable guarantees: responses, stored state, received messages, and external effects. Use exact bytes where they are the contract, not to freeze incidental markup or wording. Expected results should come from requirements or independent fixtures, not the production helper under test.
 
-## Keep work isolated and bounded
+## Keep work isolated
 
 Use synthetic recipients and controlled loopback services. Never contact real recipients or production integration endpoints from tests. Extend `tests/acceptance/` instead of creating another persistent environment. Preserve existing local application data when changing fixture tooling.
 
-Run one heavy workload at a time locally, initially with one build job and test thread. Select focused regressions while editing, then affected formatting, linting, and broader checks after changes settle. Repeating unchanged successful checks does not add useful evidence.
+Select focused regressions while editing, then affected formatting, linting, and broader checks after changes settle. Repeating unchanged successful checks does not add useful evidence.
 
 ## Report results honestly
 

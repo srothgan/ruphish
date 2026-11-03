@@ -38,8 +38,22 @@ impl Api {
         self.monitor.with(|m| m.action())
     }
     /// Reconcile the monitor with a freshly loaded session snapshot.
-    pub(crate) fn observe_session(self, session: &BrowserSession) {
-        self.monitor.update(|m| m.observe(session));
+    pub(crate) fn observe_session(self, session: &BrowserSession, requested: &str) {
+        self.monitor.update(|m| m.observe(session, requested));
+    }
+    pub(crate) fn session_generation(self) -> u64 {
+        self.monitor.with_untracked(SessionMonitor::generation)
+    }
+    pub(crate) fn accepts_session_read(self, generation: u64) -> bool {
+        self.monitor.with_untracked(|m| m.accepts_read(generation))
+    }
+    pub(crate) fn begin_login(self) -> bool {
+        self.monitor
+            .try_update(SessionMonitor::begin_login)
+            .unwrap_or(false)
+    }
+    pub(crate) fn finish_login(self, destination: Option<String>) {
+        self.monitor.update(|m| m.finish_login(destination));
     }
     /// Record a successful, terminal sign-out.
     pub(crate) fn mark_signed_out(self) {
@@ -238,8 +252,7 @@ impl Api {
         ruphish_ui::browser_http::save_file(&file, filename)
     }
     pub(crate) fn active(self) -> bool {
-        self.monitor
-            .with_untracked(|m| m.action() == SessionAction::Continue)
+        self.monitor.with_untracked(|m| m.action().active())
     }
 }
 impl Api {
@@ -249,8 +262,13 @@ impl Api {
         request: Request,
     ) -> Result<ruphish_ui::browser_http::Received, String> {
         let path = path.to_owned();
+        let generation = self.session_generation();
         ruphish_ui::browser_http::send(request, move |status| {
-            self.monitor.update(|m| m.response(&path, status))
+            self.monitor.update(|m| {
+                if m.generation() == generation {
+                    m.response(&path, status);
+                }
+            })
         })
         .await
     }
