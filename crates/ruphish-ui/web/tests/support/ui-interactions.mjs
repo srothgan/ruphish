@@ -83,6 +83,7 @@ const path =
     bookmark: '/campaigns/2?source=mailbox#history',
     dashboard: '/',
     directory: '/campaigns',
+    'sort-directory': '/campaigns',
     invalid: '/campaigns/not-an-id',
     new: '/campaigns/new',
   }[scenario] ?? '/campaigns/2';
@@ -281,6 +282,20 @@ campaign.header.status =
     : scenario === 'queued-entry'
       ? 'Queued'
       : 'Completed';
+if (scenario === 'sort-directory') {
+  data.drafts.forEach((draft, index) => {
+    draft.configuration.name = `Zulu draft ${index}`;
+  });
+  data.campaigns = Array.from({ length: 55 }, (_, i) => ({
+    ...campaign,
+    header: {
+      ...campaign.header,
+      id: i + 1,
+      name: `Campaign ${String(i + 1).padStart(2, '0')}`,
+      created_at: new Date((now + i) * 1000).toISOString(),
+    },
+  }));
+}
 const api = createDemoApi({ now, data, storage: { getItem: () => '1' } });
 const requests = [];
 const changes = [];
@@ -1848,6 +1863,53 @@ if (scenario === 'new') {
   await until(() => document.querySelector('.step-navigation'));
   assert.equal(win.location.pathname, '/campaigns/new');
   assert.ok(!requests.some((url) => url.startsWith('/api/campaigns/new')));
+  process.exit(0);
+}
+if (scenario === 'sort-directory') {
+  const preset = () =>
+    [...document.querySelectorAll('button')].find(
+      (b) => b.textContent.trim() === 'Recent work (drafts first)',
+    );
+  const firstLink = () =>
+    document.querySelector('.management-table tbody th a')?.getAttribute('href');
+  const lastRequest = () =>
+    new URL(
+      requests.filter((r) => r.startsWith('/api/campaigns/directory?')).at(-1),
+      'https://fixture.test',
+    );
+  await until(() => preset() && settled());
+  assert.equal(preset().getAttribute('aria-pressed'), 'true');
+  assert.equal(lastRequest().searchParams.get('sort'), 'recent');
+  assert.equal(lastRequest().searchParams.get('order'), 'desc');
+  assert.match(firstLink(), /^\/campaigns\/drafts\//);
+  [...document.querySelectorAll('button')]
+    .find((b) => b.textContent.trim() === 'Next page')
+    .click();
+  await until(() => lastRequest().searchParams.get('after') && settled());
+  document.querySelector('.management-table th .table-sort').click();
+  await until(() => lastRequest().searchParams.get('sort') === 'name' && settled());
+  assert.ok(!lastRequest().searchParams.get('after'), 'header sorting resets pagination');
+  assert.equal(firstLink(), '/campaigns/1/results');
+  assert.equal(preset().getAttribute('aria-pressed'), 'false');
+  [...document.querySelectorAll('button')]
+    .find((b) => b.textContent.trim() === 'Next page')
+    .click();
+  await until(() => lastRequest().searchParams.get('after') && settled());
+  preset().click();
+  await until(() => lastRequest().searchParams.get('sort') === 'recent' && settled());
+  assert.ok(!lastRequest().searchParams.get('after'), 'restoring workflow order resets pagination');
+  assert.equal(lastRequest().searchParams.get('order'), 'desc');
+  assert.match(firstLink(), /^\/campaigns\/drafts\//);
+  assert.equal(preset().getAttribute('aria-pressed'), 'true');
+  // A manually selected order persists across route navigation.
+  document.querySelector('.management-table th .table-sort').click();
+  await until(() => lastRequest().searchParams.get('sort') === 'name' && settled());
+  document.querySelector('.management-table tbody th a').click();
+  await until(() => win.location.pathname === '/campaigns/1/results' && settled());
+  document.querySelector('.admin-nav a[href="/campaigns"]').click();
+  await until(() => win.location.pathname === '/campaigns' && preset() && settled());
+  assert.equal(firstLink(), '/campaigns/1/results');
+  assert.equal(preset().getAttribute('aria-pressed'), 'false');
   process.exit(0);
 }
 if (['dashboard', 'directory'].includes(scenario)) {

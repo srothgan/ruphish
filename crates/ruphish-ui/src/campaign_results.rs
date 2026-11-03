@@ -129,17 +129,9 @@ fn detail(api: Api, id: i64) -> impl IntoView {
                 .unwrap_or_default(),
             order: filters.get().order,
         }),
-        change: Callback::new(move |column: String| {
+        change: Callback::new(move |current: ruphish_ui::table_state::Sort| {
             let mut filter = filters.get_untracked();
-            let current = ruphish_ui::table_state::Sort {
-                column: serde_json::to_value(filter.sort)
-                    .ok()
-                    .and_then(|v| v.as_str().map(str::to_owned))
-                    .unwrap_or_default(),
-                order: filter.order,
-            }
-            .select(&column);
-            if let Ok(sort) = serde_json::from_value(Value::String(column)) {
+            if let Ok(sort) = serde_json::from_value(Value::String(current.column)) {
                 filter.sort = sort;
                 filter.order = current.order;
                 filter.offset = 0;

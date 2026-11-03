@@ -23,10 +23,10 @@ impl Campaigns {
                 format!(
                     "{} {}",
                     r#"WITH data AS (
-SELECT 0 AS kind,id AS draft_id,CAST(0 AS BIGINT) AS campaign_id,name,'draft' AS status,NULL AS total,NULL AS launch_date,revision
+SELECT 0 AS kind,id AS draft_id,CAST(0 AS BIGINT) AS campaign_id,name,'draft' AS status,NULL AS total,NULL AS launch_date,revision,NULL AS created_date,COALESCE(modified,created) AS modified
 FROM ruphish_campaign_drafts WHERE campaign_id IS NULL AND ?=1
 UNION ALL
-SELECT 1 AS kind,CAST(0 AS BIGINT) AS draft_id,c.id AS campaign_id,c.name,COALESCE(c.status,'') AS status,(SELECT COUNT(*) FROM results r WHERE r.campaign_id=c.id) AS total,c.launch_date,NULL AS revision
+SELECT 1 AS kind,CAST(0 AS BIGINT) AS draft_id,c.id AS campaign_id,c.name,COALESCE(c.status,'') AS status,(SELECT COUNT(*) FROM results r WHERE r.campaign_id=c.id) AS total,c.launch_date,NULL AS revision,c.created_date,CAST(0 AS BIGINT) AS modified
 FROM campaigns c WHERE ?=1 AND (?=0 OR (?=1 AND c.status='Completed') OR (?=2 AND (c.status IS NULL OR c.status<>'Completed')))
 )"#,
                     crate::campaign_sort::tail(

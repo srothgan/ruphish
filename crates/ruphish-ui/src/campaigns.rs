@@ -42,10 +42,10 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
     );
     let queries = expect_context::<CampaignQueries>();
     let cursors = RwSignal::new(vec![String::new()]);
-    let preference = TableSorting::new("campaign-directory", "name", SortDirection::Asc);
+    let preference = TableSorting::new("campaign-directory", "recent", SortDirection::Desc);
     let sorting = TableSorting {
         current: preference.current,
-        change: Callback::new(move |column: String| {
+        change: Callback::new(move |column: ruphish_ui::table_state::Sort| {
             batch(move || {
                 cursors.set(vec![String::new()]);
                 preference.change.run(column);
@@ -178,6 +178,7 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
                 </QueryControls>
                 <DataTable
                     sorting=sorting
+                    default_sort=("recent", SortDirection::Desc, trs!(ui.sort_recent_work))
                     columns=vec!["name", "status", "total", "launch", ""]
                     label=trs!(ui.campaigns)
                     empty=Signal::derive(move || rows.get().is_empty())
@@ -1951,10 +1952,10 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
     });
     let queries = expect_context::<CampaignQueries>();
     let cursors = RwSignal::new(Vec::<String>::new());
-    let preference = TableSorting::new("campaign-delivery", "email", SortDirection::Asc);
+    let preference = TableSorting::new("campaign-delivery", "priority", SortDirection::Asc);
     let sorting = TableSorting {
         current: preference.current,
-        change: Callback::new(move |column: String| {
+        change: Callback::new(move |column: ruphish_ui::table_state::Sort| {
             batch(move || {
                 cursors.set(Vec::new());
                 preference.change.run(column);
@@ -2276,6 +2277,11 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
                                                 data.with(|p| p.as_ref().is_none_or(|p| p.items.is_empty()))
                                             })
                                             sorting=sorting
+                                            default_sort=(
+                                                "priority",
+                                                SortDirection::Asc,
+                                                trs!(ui.sort_attention),
+                                            )
                                             columns=vec!["", "email", "state", "due", "attempt_count"]
                                             label=trs!(ui.campaign_delivery)
                                             headers=vec![

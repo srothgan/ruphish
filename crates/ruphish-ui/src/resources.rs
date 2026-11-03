@@ -300,11 +300,13 @@ pub(super) fn list(api: Api, token: String, family: Family) -> impl IntoView {
             .filter(|v| v.name.to_lowercase().contains(&needle))
             .collect::<Vec<_>>()
     });
-    let sorting = TableSorting::new(
-        format!("resources-{}", family.route()),
-        "name",
-        SortDirection::Asc,
-    );
+    let (column, order) = match family {
+        Family::Templates | Family::Pages | Family::LearningPages => {
+            ("modified_date", SortDirection::Desc)
+        }
+        Family::Groups | Family::Profiles => ("name", SortDirection::Asc),
+    };
+    let sorting = TableSorting::new(format!("resources-{}", family.route()), column, order);
     view! {
         <ManagementPage>
             <PageHeader

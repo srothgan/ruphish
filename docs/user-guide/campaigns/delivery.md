@@ -7,6 +7,8 @@ sidebar:
 
 Open the campaign's **Sending** view to inspect recipient delivery state and attempt history. **Email sent** means the configured mail server accepted the message; it does not confirm final delivery to a person's inbox. The donut counts recipients once by their current delivery state, not once per attempt. Expand a recipient row for the timeline and delivery-attempt details; **Edit events** opens the [correction dialog](../results/correcting-events.md).
 
+The recipient table defaults to **Needs attention first**: sending unconfirmed, action required, sending failed, pending or in-progress work, email sent, then cancelled. Pending work is ordered by due time, earliest first. Select a column heading to inspect another order, or **Needs attention first** to restore the default; either change returns to the first page. Your choice survives refresh and navigation within the current application session.
+
 Administrative history names the action taken: retry requested, resend requested despite uncertainty, or marked as sent manually. These actions are separate from engagement observations.
 
 | State | Meaning and next action |

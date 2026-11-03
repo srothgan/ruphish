@@ -345,7 +345,7 @@ function delivery(campaign, query, owner) {
     const selected = keyset(
       campaign.results.map((row) => ({ ...row, attempt_count: row.attempts.length })),
       query,
-      ['email', 'state', 'due', 'attempt_count'],
+      ['email', 'state', 'due', 'attempt_count', 'priority'],
       `delivery:${owner}:${campaign.header.id}`,
       limit,
       'cursor',
@@ -707,6 +707,8 @@ export function createDemoApi({
             status: 'draft',
             total: null,
             launch_date: null,
+            created_date: d.created,
+            modified: d.modified,
           })),
         ...data.campaigns.map((c) => ({
           id: String(c.header.id),
@@ -716,6 +718,8 @@ export function createDemoApi({
           status: c.header.status,
           total: c.header.total,
           launch_date: c.header.launch_date,
+          created_date: c.header.created_at,
+          modified: null,
         })),
       ];
       const filter = url.searchParams.get('filter') ?? '';
@@ -744,12 +748,14 @@ export function createDemoApi({
           const page = keyset(
             filtered.map((row) => ({ ...row, launch: row.launch_date })),
             url.searchParams,
-            ['name', 'status', 'total', 'launch'],
+            ['name', 'status', 'total', 'launch', 'recent'],
             `directory:${current.id}:${draft}:${execution}:${completed}`,
             50,
           );
           return json({
-            items: page.items.map(({ launch: _launch, ...row }) => row),
+            items: page.items.map(
+              ({ launch: _launch, created_date: _created, modified: _modified, ...row }) => row,
+            ),
             next_after: page.cursor,
           });
         }
@@ -763,7 +769,9 @@ export function createDemoApi({
         if (after && !start) {
           return failure(400);
         }
-        const items = filtered.slice(start, start + 50);
+        const items = filtered
+          .slice(start, start + 50)
+          .map(({ created_date: _created, modified: _modified, ...row }) => row);
         return json({
           items,
           next_after:

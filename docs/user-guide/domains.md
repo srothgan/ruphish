@@ -19,6 +19,8 @@ With verification off, add and enable the origin; verification controls and chec
 4. Ensure the public certificate covers the hostname and is trusted by the running server.
 5. Choose **Verify domain** and inspect the completed check.
 
+The verification requirements default to **Setup order**: domain ownership, DNS, HTTPS, then instance routing. Column headings offer alternative sorts; **Setup order** restores the checklist order independently of the interface language. Verification history remains newest completed check first.
+
 The TXT name is `_ruphish-verify.<hostname>` and its value starts with `ruphish-verification=`. Keep the proof published for periodic checks. The application also checks a short-lived routing proof, so merely serving a page containing the public TXT value is insufficient.
 
 ## Read the status

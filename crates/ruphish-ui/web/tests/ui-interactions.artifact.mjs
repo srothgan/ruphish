@@ -83,6 +83,7 @@ for (const scenario of [
   'bookmark',
   'dashboard',
   'directory',
+  'sort-directory',
   'missing',
   'forbidden',
   'retry',

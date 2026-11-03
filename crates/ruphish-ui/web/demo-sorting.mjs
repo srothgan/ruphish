@@ -87,7 +87,7 @@ export function eventOrder(rows, query) {
 }
 function position(row, column) {
   const value = column === 'launch' ? instantKey(row[column]) : row[column];
-  return {
+  const key = {
     present: value != null,
     text: typeof value === 'string' ? value : '',
     number: typeof value === 'number' ? value : 0,
@@ -95,6 +95,17 @@ function position(row, column) {
     draft: row.kind === 'draft' ? Number(row.id) : 0,
     id: row.kind === 'draft' ? 0 : Number(row.id),
   };
+  if (column === 'recent') {
+    key.present = row.kind === 'draft';
+    key.text = key.present ? '' : (instantKey(row.created_date) ?? '');
+    key.number = key.present ? Math.floor(Date.parse(row.modified ?? row.created_date) / 1000) : 0;
+  } else if (column === 'priority') {
+    const ranks = { unknown: '0', blocked: '1', failed: '2', accepted: '4', cancelled: '5' };
+    key.present = true;
+    key.text = ranks[row.state] ?? '3';
+    key.number = ['ready', 'preparing', 'submitting', 'retry'].includes(row.state) ? row.due : 0;
+  }
+  return key;
 }
 function positionCompare(a, b, order) {
   const values =

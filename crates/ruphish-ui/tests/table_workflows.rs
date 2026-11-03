@@ -176,6 +176,17 @@ fn recent_campaign_window_stays_latest_three_when_sorting_and_refreshing() {
         row(2, "Alpha", 0),
         row(1, "zzzz", 100),
     ];
+    let default = Sort {
+        column: "recent".into(),
+        order: SortDirection::Desc,
+    };
+    assert_eq!(
+        recent_campaigns(&rows, &default)
+            .iter()
+            .map(|r| r.id)
+            .collect::<Vec<_>>(),
+        [5, 4, 3]
+    );
     for column in ["name", "recipients", "clicked", "reported"] {
         for (order, expected) in [
             (SortDirection::Asc, [3, 4, 5]),
@@ -190,6 +201,13 @@ fn recent_campaign_window_stays_latest_three_when_sorting_and_refreshing() {
         }
     }
     rows.insert(0, row(6, "Echo", 15));
+    assert_eq!(
+        recent_campaigns(&rows, &default)
+            .iter()
+            .map(|r| r.id)
+            .collect::<Vec<_>>(),
+        [6, 5, 4]
+    );
     let sort = Sort {
         column: "name".into(),
         order: SortDirection::Asc,

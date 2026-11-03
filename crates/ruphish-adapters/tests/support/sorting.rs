@@ -476,6 +476,148 @@ async fn exercise(db: &Database) {
     );
 }
 
+// The names, IDs, due times and timestamps deliberately disagree with workflow order.
+const WORKFLOW_SETUP: &str = "UPDATE campaigns SET created_date=launch_date WHERE id BETWEEN 900 AND 904;
+INSERT INTO campaigns(id,user_id,name,status,created_date,launch_date) VALUES(980,1,'First alphabetically','Queued','2025-01-01T00:00:00Z','2030-01-01T00:00:00Z');
+INSERT INTO ruphish_campaign_drafts(id,owner_id,revision,name,configuration,schema_version,step,created,modified) VALUES(1001,1,1,'Zulu','{}',1,0,1000,2000),(1002,1,1,'Middle','{}',1,0,500,3000),(1003,1,1,'Alpha','{}',1,0,2000,2000);
+INSERT INTO results(id,campaign_id,user_id,r_id,email,status,reported) VALUES(9801,980,1,'priority-1','a@example.test','Email Sent',false),(9802,980,1,'priority-2','b@example.test','Email Sent',false),(9803,980,1,'priority-3','c@example.test','Email Sent',false),(9804,980,1,'priority-4','d@example.test','Email Sent',false),(9805,980,1,'priority-5','e@example.test','Email Sent',false),(9806,980,1,'priority-6','f@example.test','Email Sent',false),(9807,980,1,'priority-7','g@example.test','Email Sent',false),(9808,980,1,'priority-8','h@example.test','Email Sent',false),(9809,980,1,'priority-9','i@example.test','Email Sent',false);
+INSERT INTO ruphish_delivery(result_id,campaign_id,state,due) VALUES(9801,980,'accepted',1),(9802,980,'ready',20),(9803,980,'failed',1),(9804,980,'unknown',500),(9805,980,'cancelled',1),(9806,980,'retry',10),(9807,980,'blocked',100),(9808,980,'preparing',10),(9809,980,'submitting',15);";
+
+async fn workflow_sorting(db: &Database) {
+    let actor = db.accounts().by_name("admin").await.unwrap().identity;
+    let store = db.campaigns();
+    for (filter, expected) in [
+        (
+            campaign::directory::Filter::All,
+            vec![
+                "1002", "1001", "1003", "904", "903", "900", "901", "980", "902",
+            ],
+        ),
+        (
+            campaign::directory::Filter::Drafts,
+            vec!["1002", "1001", "1003"],
+        ),
+        (campaign::directory::Filter::Active, vec!["980"]),
+        (
+            campaign::directory::Filter::Completed,
+            vec!["904", "903", "900", "901", "902"],
+        ),
+    ] {
+        let mut selection = SortedPage {
+            sort: DirectorySort::Recent,
+            order: SortDirection::Desc,
+            scope: "recent-work".into(),
+            after: None,
+        };
+        let mut actual = Vec::new();
+        loop {
+            let page = store
+                .directory(
+                    actor,
+                    filter,
+                    campaign::directory::Cursor {
+                        sorted: Some(selection.clone()),
+                        ..Default::default()
+                    },
+                    2,
+                )
+                .await
+                .unwrap();
+            actual.extend(page.items.into_iter().map(|row| row.id));
+            let Some(next) = page.next_after else {
+                break;
+            };
+            let cursor: SortedCursor<DirectorySort> = serde_json::from_str(&next).unwrap();
+            assert!(cursor.valid(&DirectorySort::Recent, SortDirection::Desc, "recent-work"));
+            assert!(!cursor.valid(&DirectorySort::Name, SortDirection::Desc, "recent-work"));
+            selection.after = Some(cursor.position);
+            assert!(actual.len() <= expected.len(), "recent cursor must advance");
+        }
+        assert_eq!(actual, expected);
+    }
+    let selection = SortedPage {
+        sort: DirectorySort::Recent,
+        order: SortDirection::Desc,
+        scope: "recent-work".into(),
+        after: None,
+    };
+    let first = store
+        .directory(
+            actor,
+            campaign::directory::Filter::All,
+            campaign::directory::Cursor {
+                sorted: Some(selection.clone()),
+                ..Default::default()
+            },
+            2,
+        )
+        .await
+        .unwrap();
+    store.delete_draft(actor, 1001, 1).await.unwrap();
+    let cursor: SortedCursor<DirectorySort> =
+        serde_json::from_str(first.next_after.as_ref().unwrap()).unwrap();
+    let next = store
+        .directory(
+            actor,
+            campaign::directory::Filter::All,
+            campaign::directory::Cursor {
+                sorted: Some(SortedPage {
+                    after: Some(cursor.position),
+                    ..selection
+                }),
+                ..Default::default()
+            },
+            2,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        next.items
+            .iter()
+            .map(|row| row.id.as_str())
+            .collect::<Vec<_>>(),
+        ["1003", "904"]
+    );
+
+    for (order, expected) in [
+        (
+            SortDirection::Asc,
+            vec![9804, 9807, 9803, 9806, 9808, 9809, 9802, 9801, 9805],
+        ),
+        (
+            SortDirection::Desc,
+            vec![9805, 9801, 9802, 9809, 9806, 9808, 9803, 9807, 9804],
+        ),
+    ] {
+        let mut selection = SortedPage {
+            sort: DeliverySort::Priority,
+            order,
+            scope: "delivery-priority".into(),
+            after: None,
+        };
+        let mut actual = Vec::new();
+        loop {
+            let page = store
+                .deliveries_sorted(actor, 980, 0, 2, Some(selection.clone()))
+                .await
+                .unwrap();
+            actual.extend(page.items.into_iter().map(|row| row.id));
+            let Some(next) = page.next_cursor else {
+                break;
+            };
+            let cursor: SortedCursor<DeliverySort> = serde_json::from_str(&next).unwrap();
+            assert!(cursor.valid(&DeliverySort::Priority, order, "delivery-priority"));
+            assert!(!cursor.valid(&DeliverySort::Email, order, "delivery-priority"));
+            selection.after = Some(cursor.position);
+            assert!(
+                actual.len() <= expected.len(),
+                "priority cursor must advance"
+            );
+        }
+        assert_eq!(actual, expected);
+    }
+}
+
 // Native transport absence must be distinct from an ambiguous submitted attempt.
 const MISSING_TRANSPORT: &str = "DELETE FROM ruphish_delivery WHERE result_id=9002; UPDATE ruphish_delivery SET state='unknown' WHERE result_id=9005;";
 async fn historical_transport(db: &Database) {
@@ -710,6 +852,11 @@ async fn sqlite_sorted_tables_cover_complete_sets_and_exports() {
     .unwrap();
     sqlx::raw_sql(SETUP).execute(&mut inspect).await.unwrap();
     exercise(&db).await;
+    sqlx::raw_sql(WORKFLOW_SETUP)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    workflow_sorting(&db).await;
     sqlx::raw_sql(EVENT_SELECTION)
         .execute(&mut inspect)
         .await
@@ -732,6 +879,11 @@ async fn mysql_sorted_tables_cover_complete_sets_and_exports() {
     bootstrap_sorting(&db).await;
     sqlx::raw_sql(SETUP).execute(&mut inspect).await.unwrap();
     exercise(&db).await;
+    sqlx::raw_sql(WORKFLOW_SETUP)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    workflow_sorting(&db).await;
     sqlx::raw_sql(EVENT_SELECTION)
         .execute(&mut inspect)
         .await
@@ -762,6 +914,11 @@ async fn postgres_sorted_tables_cover_complete_sets_and_exports() {
     let mut inspect = postgres_inspect(&config).await;
     sqlx::raw_sql(SETUP).execute(&mut inspect).await.unwrap();
     exercise(&db).await;
+    sqlx::raw_sql(WORKFLOW_SETUP)
+        .execute(&mut inspect)
+        .await
+        .unwrap();
+    workflow_sorting(&db).await;
     sqlx::raw_sql(EVENT_SELECTION)
         .execute(&mut inspect)
         .await

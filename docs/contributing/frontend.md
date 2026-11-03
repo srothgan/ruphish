@@ -9,7 +9,7 @@ The admin UI uses Leptos and the preserved HTTP API. Its scope includes campaign
 
 ## Shared presentation
 
-Use `crates/ruphish-ui/src/shared/components/` for page layouts, lists, tables, toolbars, fields, actions, dialogs, and explanatory controls. Feature modules own data, permissions, edits, and API calls. Do not recreate a generic list toolbar or empty state in each feature.
+Use `crates/ruphish-ui/src/shared/components/` for page layouts, lists, tables, toolbars, fields, actions, dialogs, and explanatory controls. Feature modules own data, permissions, edits, and API calls. Tables can expose a named `default_sort` for workflow orders that do not correspond to one displayed column. Restoring it uses the same typed sort callback as header selection, including the feature's pagination reset; explicit column choices take precedence over the default. Do not recreate a generic list toolbar or empty state in each feature.
 
 `crates/ruphish-ui/ruphish.css` owns shared styles; `theme.css` owns the palette shared with the isolated visual editor. Follow the [design system](design-system.md), especially label/control alignment, wrapped action rows, focus, and status text. Specialized editor tabs and disclosure controls retain their own accessibility semantics.
 

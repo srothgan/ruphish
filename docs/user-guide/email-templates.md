@@ -9,6 +9,8 @@ An email template contains your subject, HTML and/or plain-text body, optional v
 
 Administrators can also add an independent copy from the [Starter Template Repository](starter-templates.md).
 
+The resource list defaults to last modified, newest first, so recently saved or imported content is easy to resume. Select a column heading to change the order; the choice remains during navigation within the current application session.
+
 ## Write a message
 
 Open **Resources → Email templates → Create**. Give the template a name, enter its subject, and write the body in the source or visual editor. At least one body alternative is required; HTML-only and text-only templates are supported. The subject may be empty.

@@ -22,6 +22,10 @@
     "native_name": "English"
   },
   "ui": {
+    "sort_recent_work": "Recent work (drafts first)",
+    "sort_attention": "Needs attention first",
+    "sort_newest": "Newest first",
+    "sort_setup": "Setup order",
     "delete_conflict_help": "This deletion was not applied. Close this dialog and refresh this page. Review the current resource before confirming deletion again; it may already have been deleted.",
     "write_conflict_help": "This save was not applied. Your input is still here. Review the saved version in a new tab before deciding which changes to keep.",
     "write_deleted_help": "This resource no longer exists. Your unsaved input is still here; copy or export anything you need before leaving. Saving will not recreate the resource.",
