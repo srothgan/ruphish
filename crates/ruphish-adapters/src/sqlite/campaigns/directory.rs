@@ -26,7 +26,7 @@ impl Campaigns {
 SELECT 0 AS kind,id AS draft_id,CAST(0 AS BIGINT) AS campaign_id,name,'draft' AS status,NULL AS total,NULL AS launch_date,revision
 FROM ruphish_campaign_drafts WHERE campaign_id IS NULL AND ?=1
 UNION ALL
-SELECT 1 AS kind,'' AS draft_id,c.id AS campaign_id,c.name,COALESCE(c.status,'') AS status,(SELECT COUNT(*) FROM results r WHERE r.campaign_id=c.id) AS total,c.launch_date,NULL AS revision
+SELECT 1 AS kind,CAST(0 AS BIGINT) AS draft_id,c.id AS campaign_id,c.name,COALESCE(c.status,'') AS status,(SELECT COUNT(*) FROM results r WHERE r.campaign_id=c.id) AS total,c.launch_date,NULL AS revision
 FROM campaigns c WHERE ?=1 AND (?=0 OR (?=1 AND c.status='Completed') OR (?=2 AND (c.status IS NULL OR c.status<>'Completed')))
 )"#,
                     crate::campaign_sort::tail(
@@ -48,7 +48,7 @@ FROM campaigns c WHERE ?=1 AND (?=0 OR (?=1 AND c.status='Completed') OR (?=2 AN
                 .bind(&position.text)
                 .bind(position.number)
                 .bind(position.kind)
-                .bind(&position.draft)
+                .bind(position.draft)
                 .bind(position.id)
                 .bind(limit + 1)
                 .fetch_all(&mut *tx)
@@ -58,10 +58,10 @@ FROM campaigns c WHERE ?=1 AND (?=0 OR (?=1 AND c.status='Completed') OR (?=2 AN
             sqlx::query("SELECT 0 AS kind,id AS draft_id,NULL AS campaign_id,name,'draft' AS status,NULL AS total,NULL AS launch_date,revision
 FROM ruphish_campaign_drafts WHERE campaign_id IS NULL AND ?=1 AND ?=0 AND id>?
 UNION ALL
-SELECT 1 AS kind,'' AS draft_id,c.id AS campaign_id,c.name,COALESCE(c.status,'') AS status,(SELECT COUNT(*) FROM results r WHERE r.campaign_id=c.id) AS total,c.launch_date,NULL AS revision
+SELECT 1 AS kind,CAST(0 AS BIGINT) AS draft_id,c.id AS campaign_id,c.name,COALESCE(c.status,'') AS status,(SELECT COUNT(*) FROM results r WHERE r.campaign_id=c.id) AS total,c.launch_date,NULL AS revision
 FROM campaigns c WHERE ?=1 AND c.id>? AND (?=0 OR (?=1 AND c.status='Completed') OR (?=2 AND (c.status IS NULL OR c.status<>'Completed')))
 ORDER BY kind,draft_id,campaign_id LIMIT ?")
-            .bind(i32::from(filter.drafts())).bind(after.kind).bind(&after.draft)
+            .bind(i32::from(filter.drafts())).bind(after.kind).bind(after.draft)
             .bind(i32::from(filter.executions())).bind(after.campaign)
             .bind(filter.completed()).bind(filter.completed()).bind(filter.completed()).bind(limit + 1)
             .fetch_all(&mut *tx).await.map_err(storage)?
@@ -88,7 +88,9 @@ ORDER BY kind,draft_id,campaign_id LIMIT ?")
         for row in rows {
             let revision: Option<i64> = row.try_get("revision").map_err(storage)?;
             let id = if revision.is_some() {
-                row.try_get("draft_id").map_err(storage)?
+                row.try_get::<i64, _>("draft_id")
+                    .map_err(storage)?
+                    .to_string()
             } else {
                 row.try_get::<i64, _>("campaign_id")
                     .map_err(storage)?

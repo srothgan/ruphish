@@ -1,3 +1,4 @@
+# Draft creation uses numeric IDs and shared caller/operation receipts; provider campaign_drafts and draft_creation_requires_a_key_reconciles_retries_and_does_not_resurrect_deleted_drafts cover concurrent/restarted retries, conflicts, rollback, and deleted-record protection.
 # Shared contract cleanup keeps writable inputs separate from complete responses; shared_workspace adds eight-writer child-replacement races, and sqlite_attribution_failure_rolls_back_content_children_and_revision verifies rollback/retry/reopen when response attribution cannot be captured.
 # Numeric configuration revisions replace optional timestamp preconditions: provider shared_workspace and shared_resource_revisions_prevent_lost_updates_and_stale_deletes_end_to_end cover competing saves/deletes and missing/stale preconditions.
 # Existing Go scenarios; status and target_test distinguish implemented equivalents from planned work.

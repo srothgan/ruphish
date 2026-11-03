@@ -67,10 +67,9 @@ pub(super) async fn exercise(
         "policy":{"track_opens":true,"redirect_url":"","learning_page_id":page.id}
     })).unwrap();
     let draft = campaigns
-        .save_draft(
+        .create_draft(
             actor,
-            "learning-freeze-draft-0001",
-            None,
+            ("learning-freeze-draft-0001".into(), "initial".into()),
             configuration,
             3,
             now,
@@ -79,19 +78,13 @@ pub(super) async fn exercise(
         .unwrap();
     assert!(matches!(
         campaigns
-            .launch_draft(
-                actor,
-                &draft.id,
-                draft.revision,
-                reviewed_input.clone(),
-                now
-            )
+            .launch_draft(actor, draft.id, draft.revision, reviewed_input.clone(), now)
             .await,
         Err(Error::Invalid(_))
     ));
     reviewed_input.learning_revision = Some(page.revision.to_string());
     let launched = campaigns
-        .launch_draft(actor, &draft.id, draft.revision, reviewed_input, now)
+        .launch_draft(actor, draft.id, draft.revision, reviewed_input, now)
         .await
         .unwrap();
     assert_eq!(

@@ -9,6 +9,30 @@ fn request(base: &str, method: &str, path: &str, body: &Value) -> reqwest::block
         .send()
         .unwrap()
 }
+fn create_request(
+    base: &str,
+    key: &str,
+    configuration: &Value,
+    step: i64,
+) -> reqwest::blocking::Response {
+    client()
+        .post(format!("{base}/api/campaign-drafts"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .header("Idempotency-Key", key)
+        .json(&json!({"configuration":configuration,"step":step}))
+        .send()
+        .unwrap()
+}
+fn create(base: &str, key: &str, configuration: &Value, step: i64) -> Value {
+    let response = create_request(base, key, configuration, step);
+    assert_eq!(response.status(), 201);
+    let value: Value = response.json().unwrap();
+    assert!(value["id"].as_i64().unwrap() > 0);
+    let confirmed: ruphish_contracts::campaign_reads::Draft =
+        serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(serde_json::to_value(confirmed).unwrap(), value);
+    value
+}
 fn save(base: &str, path: &str, revision: Value, configuration: &Value, step: i64) -> Value {
     let value: Value = request(
         base,
@@ -66,12 +90,13 @@ fn launch_body(base: &str, configuration: &Value, revision: &Value) -> Value {
 fn conflicting_schedule_forms_reject_every_command_without_effects_then_draft_launch_recovers() {
     let directory = workspace();
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
-    let path = "/api/campaign-drafts/conflicting-schedule-01";
-    let launch_path = format!("{path}/launch");
+    let key = "conflicting-schedule-01";
     let mut config = configuration_for(&base);
     config["launch_local"] = json!({"local":"2030-01-01T10:00","time_zone":"UTC"});
     config["send_by_local"] = json!({"local":"2030-01-01T11:00","time_zone":"UTC"});
-    let saved = save(&base, path, Value::Null, &config, 3);
+    let saved = create(&base, key, &config, 3);
+    let path = &format!("/api/campaign-drafts/{}", saved["id"]);
+    let launch_path = format!("{path}/launch");
     let mut body = launch_body(&base, &config, &saved["revision"]);
     let before = counts(directory.path());
     for (absolute, local, times) in [
@@ -152,9 +177,10 @@ fn conflicting_schedule_forms_reject_every_command_without_effects_then_draft_la
 fn incomplete_review_step_draft_reopens_rejects_review_and_launch_then_recovers() {
     let directory = workspace();
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
-    let path = "/api/campaign-drafts/incomplete-review-step-01";
+    let key = "incomplete-review-step-01";
     let incomplete = json!({"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"redirect_url":null,"track_opens":false}});
-    let saved = save(&base, path, Value::Null, &incomplete, 3);
+    let saved = create(&base, key, &incomplete, 3);
+    let path = &format!("/api/campaign-drafts/{}", saved["id"]);
     let before = counts(directory.path());
     process.stop();
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
@@ -225,11 +251,12 @@ fn incomplete_review_step_draft_reopens_rejects_review_and_launch_then_recovers(
 fn campaign_draft_survives_restart_rejects_bad_input_and_launches_once_after_rollback() {
     let directory = workspace();
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
-    let path = "/api/campaign-drafts/functional-draft-000001";
+    let key = "functional-draft-000001";
     let before = counts(directory.path());
     let incomplete =
         json!({"name":"Incomplete training","launch_local":{"local":"2026-","time_zone":""}});
-    let saved = save(&base, path, Value::Null, &incomplete, 2);
+    let saved = create(&base, key, &incomplete, 2);
+    let path = &format!("/api/campaign-drafts/{}", saved["id"]);
     assert_eq!(saved["status"], "draft");
     assert_eq!(
         counts(directory.path()),
@@ -242,7 +269,7 @@ fn campaign_draft_survives_restart_rejects_bad_input_and_launches_once_after_rol
             .unwrap()
             .is_empty()
     );
-    let retry = save(&base, path, Value::Null, &incomplete, 2);
+    let retry = create(&base, key, &incomplete, 2);
     assert_eq!(
         retry, saved,
         "lost save response is replayable without another revision"
@@ -371,10 +398,11 @@ fn campaign_draft_survives_restart_rejects_bad_input_and_launches_once_after_rol
 fn campaign_draft_missing_resource_and_past_schedule_preserve_work_until_corrected() {
     let directory = workspace();
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
-    let path = "/api/campaign-drafts/functional-draft-000002";
+    let key = "functional-draft-000002";
     let mut config = configuration_for(&base);
     config["launch_local"] = json!({"local":"2000-01-01T12:00","time_zone":"UTC"});
-    let saved = save(&base, path, Value::Null, &config, 3);
+    let saved = create(&base, key, &config, 3);
+    let path = &format!("/api/campaign-drafts/{}", saved["id"]);
     let review = request(&base, "POST", "/api/campaign-drafts/prepare", &config);
     assert_eq!(review.status(), 400);
     assert_eq!(
@@ -462,17 +490,16 @@ fn campaign_drafts_and_existing_campaigns_survive_repeated_startup() {
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
     assert_eq!(read(&base, &path), existing);
     assert_eq!(counts(directory.path()), before);
-    let draft = save(
+    let draft = create(
         &base,
-        "/api/campaign-drafts/upgrade-persistence-001",
-        Value::Null,
+        "upgrade-persistence-001",
         &json!({"name":"After upgrade"}),
         1,
     );
     process.stop();
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
     assert_eq!(
-        read(&base, "/api/campaign-drafts/upgrade-persistence-001"),
+        read(&base, &format!("/api/campaign-drafts/{}", draft["id"])),
         draft
     );
     assert_eq!(read(&base, &path), existing);
@@ -486,20 +513,19 @@ fn campaign_draft_pagination_permissions_and_invalid_queries_use_real_http_contr
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
     let before = counts(directory.path());
     for index in 0..51 {
-        save(
+        create(
             &base,
-            &format!("/api/campaign-drafts/pagination-draft-{index:04}"),
-            Value::Null,
+            &format!("pagination-draft-{index:04}"),
             &json!({"name":format!("Draft {index}")}),
             0,
         );
     }
     let first = read(&base, "/api/campaign-drafts");
     assert_eq!(first["items"].as_array().unwrap().len(), 50);
-    assert_eq!(first["next_after"], "pagination-draft-0049");
-    let second = read(&base, "/api/campaign-drafts?after=pagination-draft-0049");
+    assert_eq!(first["next_after"], 50);
+    let second = read(&base, "/api/campaign-drafts?after=50");
     assert_eq!(second["items"].as_array().unwrap().len(), 1);
-    assert_eq!(second["items"][0]["id"], "pagination-draft-0050");
+    assert_eq!(second["items"][0]["id"], 51);
     assert!(second["next_after"].is_null());
     assert_eq!(counts(directory.path()), before);
     assert!(
@@ -510,11 +536,8 @@ fn campaign_draft_pagination_permissions_and_invalid_queries_use_real_http_contr
     );
     for (method, path) in [
         ("GET", "/api/campaign-drafts?unexpected=1"),
-        ("DELETE", "/api/campaign-drafts/pagination-draft-0000"),
-        (
-            "DELETE",
-            "/api/campaign-drafts/pagination-draft-0000?revision=invalid",
-        ),
+        ("DELETE", "/api/campaign-drafts/1"),
+        ("DELETE", "/api/campaign-drafts/1?revision=invalid"),
     ] {
         let response = request(&base, method, path, &json!({}));
         assert_eq!(response.status(), 400);
@@ -532,23 +555,23 @@ fn campaign_draft_pagination_permissions_and_invalid_queries_use_real_http_contr
         directory.path(),
         "INSERT INTO roles(id,slug,name,description) VALUES(99,'read-only','Read only','Synthetic view-only role'); INSERT INTO role_permissions(role_id,permission_id) SELECT 99,id FROM permissions WHERE slug='view_objects'; UPDATE users SET role_id=99",
     );
+    assert_eq!(
+        create_request(&base, "forbidden-create", &json!({"name":"Forbidden"}), 0).status(),
+        403
+    );
     for (method, path, body) in [
         (
             "PUT",
-            "/api/campaign-drafts/pagination-draft-0000",
+            "/api/campaign-drafts/1",
             json!({"revision":1,"configuration":{"name":"Forbidden"},"step":1}),
         ),
-        (
-            "DELETE",
-            "/api/campaign-drafts/pagination-draft-0000?revision=1",
-            json!({}),
-        ),
+        ("DELETE", "/api/campaign-drafts/1?revision=1", json!({})),
     ] {
         let response = request(&base, method, path, &body);
         assert_eq!(response.status(), 403);
     }
     assert_eq!(
-        read(&base, "/api/campaign-drafts/pagination-draft-0000")["configuration"]["name"],
+        read(&base, "/api/campaign-drafts/1")["configuration"]["name"],
         "Draft 0"
     );
     assert_eq!(counts(directory.path()), before);
@@ -560,10 +583,9 @@ fn campaign_directory_pages_across_drafts_and_executions_and_refreshes_after_del
     let directory = workspace();
     let (mut process, base) = start(&directory, &["--disable-mailer"]);
     for n in 0..49 {
-        save(
+        create(
             &base,
-            &format!("/api/campaign-drafts/mixed-directory-{n:04}"),
-            Value::Null,
+            &format!("mixed-directory-{n:04}"),
             &json!({"name":format!("Draft {n}")}),
             0,
         );
@@ -631,7 +653,7 @@ fn campaign_directory_pages_across_drafts_and_executions_and_refreshes_after_del
         request(
             &base,
             "DELETE",
-            "/api/campaign-drafts/mixed-directory-0000?revision=999",
+            "/api/campaign-drafts/1?revision=999",
             &json!({})
         )
         .status(),
@@ -640,7 +662,7 @@ fn campaign_directory_pages_across_drafts_and_executions_and_refreshes_after_del
     request(
         &base,
         "DELETE",
-        "/api/campaign-drafts/mixed-directory-0000?revision=1",
+        "/api/campaign-drafts/1?revision=1",
         &json!({}),
     )
     .error_for_status()
@@ -664,5 +686,130 @@ fn campaign_directory_pages_across_drafts_and_executions_and_refreshes_after_del
         2,
         "legacy list stays execution-only"
     );
+    process.stop();
+}
+
+#[test]
+fn draft_creation_requires_a_key_reconciles_retries_and_does_not_resurrect_deleted_drafts() {
+    let directory = workspace();
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
+    let config = json!({"name":"Original"});
+    let forced_id = client()
+        .post(format!("{base}/api/campaign-drafts"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .header("Idempotency-Key", "forced-id")
+        .json(&json!({"id":2,"configuration":config,"step":0}))
+        .send()
+        .unwrap();
+    assert_eq!(
+        forced_id.status(),
+        400,
+        "creation must reject client-chosen identities"
+    );
+    assert_eq!(
+        request(
+            &base,
+            "POST",
+            "/api/campaign-drafts",
+            &json!({"configuration":config,"step":0})
+        )
+        .status(),
+        400
+    );
+    for key in ["".to_owned(), "a".repeat(129)] {
+        assert_eq!(create_request(&base, &key, &config, 0).status(), 400);
+    }
+    sql(
+        directory.path(),
+        "CREATE TRIGGER draft_create_fault BEFORE INSERT ON ruphish_campaign_creation BEGIN SELECT RAISE(ABORT,'injected receipt failure'); END;",
+    );
+    assert!(
+        create_request(&base, "retry-key", &config, 0)
+            .status()
+            .is_server_error()
+    );
+    assert!(
+        read(&base, "/api/campaign-drafts")["items"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    sql(directory.path(), "DROP TRIGGER draft_create_fault;");
+    let (a, b) = std::thread::scope(|scope| {
+        let a = scope.spawn(|| create(&base, "retry-key", &config, 0));
+        let b = scope.spawn(|| create(&base, "retry-key", &config, 0));
+        (a.join().unwrap(), b.join().unwrap())
+    });
+    assert_eq!(a["id"], b["id"]);
+    assert_eq!(
+        read(&base, "/api/campaign-drafts")["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let path = format!("/api/campaign-drafts/{}", a["id"]);
+    assert_eq!(
+        request(
+            &base,
+            "PUT",
+            &path,
+            &json!({"revision":0,"configuration":config,"step":0})
+        )
+        .status(),
+        412
+    );
+    assert_eq!(
+        request(
+            &base,
+            "PUT",
+            &path,
+            &json!({"configuration":config,"step":0})
+        )
+        .status(),
+        428
+    );
+    assert_eq!(
+        request(
+            &base,
+            "PUT",
+            "/api/campaign-drafts/999999",
+            &json!({"revision":1,"configuration":config,"step":0})
+        )
+        .status(),
+        404
+    );
+    assert_eq!(
+        create_request(&base, "retry-key", &json!({"name":"Changed"}), 0).status(),
+        409
+    );
+    assert_eq!(create_request(&base, "retry-key", &config, 1).status(), 409);
+    let updated = save(&base, &path, json!(1), &json!({"name":"Edited"}), 1);
+    assert_eq!(create(&base, "retry-key", &config, 0), updated);
+    process.stop();
+    let (mut process, base) = start(&directory, &["--disable-mailer"]);
+    assert_eq!(create(&base, "retry-key", &config, 0), updated);
+    request(&base, "DELETE", &format!("{path}?revision=2"), &json!({}))
+        .error_for_status()
+        .unwrap();
+    assert_eq!(create_request(&base, "retry-key", &config, 0).status(), 404);
+    let fresh = create(&base, "new-key", &config, 0);
+    assert!(fresh["id"].as_i64().unwrap() > a["id"].as_i64().unwrap());
+    assert_eq!(counts(directory.path()), vec![0; 6]);
+    let input = resources(&base, "127.0.0.1:9");
+    let campaign: Value = client()
+        .post(format!("{base}/api/campaigns/"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .header("Idempotency-Key", "new-key")
+        .json(&input)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert!(campaign["id"].as_i64().unwrap() > 0);
+    assert_eq!(create(&base, "new-key", &config, 0), fresh);
+
     process.stop();
 }

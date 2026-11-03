@@ -367,7 +367,7 @@ pub(super) fn fault_statements(provider: &str, fault: Fault<'_>) -> Vec<String> 
         },
         Fault::RestoreInsert(table) if provider == "postgres" => vec![format!("DROP TRIGGER fixture_reject ON {table}"), "DROP FUNCTION fixture_reject()".into()],
         Fault::RestoreInsert(_) => vec!["DROP TRIGGER fixture_reject".into()],
-        Fault::AssertEmptyLaunch => ["campaigns","ruphish_campaign_policy","ruphish_campaign_groups","events","results","ruphish_delivery","ruphish_campaign_launch","ruphish_webhook_jobs"].into_iter().map(|t|format!("SELECT count(*) FROM {t}")).collect(),
+        Fault::AssertEmptyLaunch => ["campaigns","ruphish_campaign_policy","ruphish_campaign_groups","events","results","ruphish_delivery","ruphish_campaign_creation","ruphish_webhook_jobs"].into_iter().map(|t|format!("SELECT count(*) FROM {t}")).collect(),
     }
 }
 
@@ -559,7 +559,7 @@ fn campaign_workflow(
         "events",
         "results",
         "ruphish_delivery",
-        "ruphish_campaign_launch",
+        "ruphish_campaign_creation",
         "ruphish_webhook_jobs",
     ] {
         fault(directory, Fault::RejectInsert(table));

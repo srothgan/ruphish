@@ -179,7 +179,7 @@ CREATE TABLE ruphish_campaign_domains (
 CREATE TABLE ruphish_campaign_drafts (
   edited_by BIGINT,
   edited_at VARCHAR(40),
-  id TEXT PRIMARY KEY NOT NULL,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   owner_id INTEGER NOT NULL,
   revision INTEGER NOT NULL,
   name TEXT NOT NULL,
@@ -198,12 +198,13 @@ CREATE TABLE ruphish_campaign_groups (
   PRIMARY KEY(campaign_id,ordinal)
 );
 
-CREATE TABLE ruphish_campaign_launch (
+CREATE TABLE ruphish_campaign_creation (
   owner_id INTEGER NOT NULL,
-  key TEXT NOT NULL,
+  operation VARCHAR(16) NOT NULL,
+  request_key TEXT NOT NULL,
   fingerprint TEXT NOT NULL,
-  campaign_id INTEGER NOT NULL,
-  PRIMARY KEY(owner_id,key)
+  resource_id INTEGER NOT NULL,
+  PRIMARY KEY(owner_id,operation,request_key)
 );
 
 CREATE TABLE ruphish_campaign_policy (

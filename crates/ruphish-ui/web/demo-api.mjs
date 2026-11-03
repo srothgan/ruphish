@@ -533,6 +533,8 @@ export function createDemoApi({
   const drafts = new Map(
     data.drafts.map((draft) => [draft.id, { value: copy(draft), launch: null }]),
   );
+  const creations = new Map();
+  let nextDraftId = Math.max(0, ...drafts.keys()) + 1;
   let nextEventId =
     Math.max(
       0,
@@ -698,7 +700,7 @@ export function createDemoApi({
           .map(({ value }) => value)
           .filter((d) => d.campaign_id === null)
           .map((d) => ({
-            id: d.id,
+            id: String(d.id),
             kind: 'draft',
             revision: d.revision,
             name: d.configuration.name,
@@ -791,9 +793,55 @@ export function createDemoApi({
         return failure(400);
       }
     }
-    const draftMatch = path.match(/^\/api\/campaign-drafts\/([^/]+)(\/launch)?$/);
+    if (path === '/api/campaign-drafts' && method === 'POST') {
+      const key = request.headers.get('idempotency-key');
+      if (
+        !key ||
+        new TextEncoder().encode(key).length > 128 ||
+        !Number.isInteger(body.step) ||
+        body.step < 0 ||
+        body.step > 3 ||
+        Object.keys(body).some((k) => !['configuration', 'step'].includes(k))
+      ) {
+        return failure(400);
+      }
+      let configuration;
+      try {
+        configuration = draftConfiguration(body.configuration);
+      } catch {
+        return failure(400);
+      }
+      const receiptKey = JSON.stringify([current.id, key]);
+      const fingerprint = JSON.stringify([configuration, body.step]);
+      const receipt = creations.get(receiptKey);
+      if (receipt) {
+        if (receipt.fingerprint !== fingerprint) {
+          return failure(409);
+        }
+        const saved = drafts.get(receipt.id)?.value;
+        return saved ? json(attributed(data, saved), 201) : failure(404);
+      }
+      const id = nextDraftId++;
+      const saved = {
+        id,
+        revision: 1,
+        configuration,
+        step: body.step,
+        created_by: current.id,
+        edited_by: current.id,
+        edited_at: iso(now),
+        created: iso(now),
+        modified: iso(now),
+        campaign_id: null,
+        status: 'draft',
+      };
+      drafts.set(id, { value: saved, launch: null });
+      creations.set(receiptKey, { id, fingerprint });
+      return json(attributed(data, saved), 201);
+    }
+    const draftMatch = path.match(/^\/api\/campaign-drafts\/(\d+)(\/launch)?$/);
     if (draftMatch) {
-      const id = draftMatch[1];
+      const id = Number(draftMatch[1]);
       const entry = drafts.get(id);
       const draft = entry?.value;
       if (draftMatch[2]) {
@@ -830,7 +878,8 @@ export function createDemoApi({
       }
       if (method === 'PUT') {
         if (
-          !/^[a-zA-Z0-9-]{16,64}$/.test(id) ||
+          !Number.isSafeInteger(id) ||
+          id < 1 ||
           !body.configuration ||
           typeof body.configuration !== 'object' ||
           Array.isArray(body.configuration) ||
@@ -841,7 +890,7 @@ export function createDemoApi({
         ) {
           return failure(400);
         }
-        if (!draft && body.revision != null) {
+        if (!draft) {
           return failure(404);
         }
         let configuration;
@@ -849,6 +898,9 @@ export function createDemoApi({
           configuration = draftConfiguration(body.configuration);
         } catch {
           return failure(400);
+        }
+        if (body.revision == null) {
+          return failure(428, 'REVISION_REQUIRED');
         }
         if (draft) {
           if (draft.campaign_id !== null) {

@@ -1170,7 +1170,7 @@
     "csv_invalid": "Check the CSV file and its column mapping.",
     "csv_rows_invalid": "The CSV contains invalid rows. Review the import report.",
     "campaign_invalid": "Review the campaign settings before continuing.",
-    "launch_key_invalid": "The launch identifier is invalid. Reopen the campaign draft.",
+    "idempotency_key_invalid": "The request identifier is invalid. Retry with a valid idempotency key.",
     "delivery_action_invalid": "This delivery action is invalid. Refresh the delivery state.",
     "mailbox_tls_required": "The mail server must support TLS.",
     "mailbox_port_invalid": "Choose a valid mail server port.",

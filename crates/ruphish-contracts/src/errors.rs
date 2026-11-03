@@ -100,8 +100,8 @@ pub enum ErrorCode {
     CsvRowsInvalid,
     /// Review the campaign settings before continuing.
     CampaignInvalid,
-    /// The launch identifier is invalid. Reopen the campaign draft.
-    LaunchKeyInvalid,
+    /// The request identifier is invalid. Retry with a valid idempotency key.
+    IdempotencyKeyInvalid,
     /// This delivery action is invalid. Refresh the delivery state.
     DeliveryActionInvalid,
     /// The mail server must support TLS.
@@ -168,7 +168,7 @@ impl ErrorCode {
             Self::CsvInvalid => "CSV_INVALID",
             Self::CsvRowsInvalid => "CSV_ROWS_INVALID",
             Self::CampaignInvalid => "CAMPAIGN_INVALID",
-            Self::LaunchKeyInvalid => "LAUNCH_KEY_INVALID",
+            Self::IdempotencyKeyInvalid => "IDEMPOTENCY_KEY_INVALID",
             Self::DeliveryActionInvalid => "DELIVERY_ACTION_INVALID",
             Self::MailboxTlsRequired => "MAILBOX_TLS_REQUIRED",
             Self::MailboxPortInvalid => "MAILBOX_PORT_INVALID",

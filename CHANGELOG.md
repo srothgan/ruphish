@@ -16,7 +16,7 @@ Initial release of a Gophish successor with a native Rust server, a Rust/WASM ad
 - Manage recipient groups, email templates, landing pages, reusable static learning pages, attachments, and sending profiles.
 - Select hosted learning pages as campaign redirect destinations without adding training-completion tracking.
 - Choose campaign email-open tracking before launch, with disabled metrics shown as not tracked and enabled defaults for migrated campaigns.
-- Save campaign drafts, review campaigns before launch, and schedule delivery with explicit recovery for uncertain sends.
+- Save campaign drafts with numeric IDs and idempotent creation, review campaigns before launch, and schedule delivery with explicit recovery for uncertain sends.
 - Freeze campaign email, attachments, sender identity/headers, landing pages and learning content at launch while keeping SMTP transport settings and domain eligibility live.
 - Review dashboards and campaign/recipient timelines, with CSV and XLSX exports.
 - Use fixed DNS, IPv4, or IPv6 campaign origins over HTTP or HTTPS; required verification remains restricted to DNS hostnames over HTTPS.

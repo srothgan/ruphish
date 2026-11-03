@@ -389,12 +389,10 @@ async fn exercise(db: &Database) {
 
     // Mixed draft/execution identities remain deterministic for equal names and
     // absent audience/schedule values. A cursor must survive boundary deletion.
-    let draft_id = "sorting-draft-00000001";
-    store
-        .save_draft(
+    let draft = store
+        .create_draft(
             actor,
-            draft_id,
-            None,
+            ("sorting-draft-00000001".into(), "same-name".into()),
             campaign::drafts::Configuration {
                 name: "Same".into(),
                 ..Default::default()
@@ -404,6 +402,7 @@ async fn exercise(db: &Database) {
         )
         .await
         .unwrap();
+    let draft_id = draft.id.to_string();
     let selection = SortedPage {
         sort: DirectorySort::Name,
         order: SortDirection::Asc,
@@ -428,7 +427,7 @@ async fn exercise(db: &Database) {
             .iter()
             .map(|row| row.id.as_str())
             .collect::<Vec<_>>(),
-        ["902", draft_id]
+        ["902", &draft_id]
     );
     let cursor: SortedCursor<DirectorySort> =
         serde_json::from_str(first.next_after.as_ref().unwrap()).unwrap();
@@ -452,7 +451,7 @@ async fn exercise(db: &Database) {
         .unwrap();
     assert_eq!(total_first.items[0].id, draft_id);
     assert!(total_first.items[0].total.is_none());
-    store.delete_draft(actor, draft_id, 1).await.unwrap();
+    store.delete_draft(actor, draft.id, 1).await.unwrap();
     let next = store
         .directory(
             actor,

@@ -92,7 +92,7 @@ function position(row, column) {
     text: typeof value === 'string' ? value : '',
     number: typeof value === 'number' ? value : 0,
     kind: row.kind === 'draft' ? 0 : 1,
-    draft: row.kind === 'draft' ? row.id : '',
+    draft: row.kind === 'draft' ? Number(row.id) : 0,
     id: row.kind === 'draft' ? 0 : Number(row.id),
   };
 }
@@ -138,8 +138,8 @@ export function keyset(rows, query, columns, scope, limit, cursorKey = 'after') 
       typeof after.present !== 'boolean' ||
       typeof after.text !== 'string' ||
       new TextEncoder().encode(after.text).length > 4096 ||
-      typeof after.draft !== 'string' ||
-      after.draft.length > 64 ||
+      !Number.isSafeInteger(after.draft) ||
+      after.draft < 0 ||
       ![0, 1].includes(after.kind) ||
       !Number.isSafeInteger(after.number) ||
       !Number.isSafeInteger(after.id) ||

@@ -19,12 +19,7 @@ test('static preview supports deep links and WASM without turning API or missing
     server.listen(0, '127.0.0.1');
     await once(server, 'listening');
     const base = `http://127.0.0.1:${server.address().port}`;
-    for (const path of [
-      '/',
-      '/login',
-      '/groups/1',
-      '/campaigns/drafts/00000000-0000-4000-8000-000000000001',
-    ]) {
+    for (const path of ['/', '/login', '/groups/1', '/campaigns/drafts/1']) {
       const response = await fetch(base + path);
       assert.equal(response.status, 200);
       assert.equal(await response.text(), '<html>demo</html>');

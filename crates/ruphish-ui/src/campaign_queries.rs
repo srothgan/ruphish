@@ -233,7 +233,7 @@ impl CampaignQueries {
 
     pub async fn read_draft(api: Api, id: &str) -> Result<Value, ApiError> {
         let value: reads::Draft = api.read(&format!("/api/campaign-drafts/{id}")).await?;
-        if value.id != id {
+        if value.id.to_string() != id {
             return Err(api.invalid_read_err());
         }
         encoded(api, value)

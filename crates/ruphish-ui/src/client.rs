@@ -126,6 +126,29 @@ impl Api {
         self.resource_response("GET", path, "", None, None).await
     }
 
+    /// Create a resource with a stable key retained by its form owner until acknowledgement.
+    pub(crate) async fn create_response(
+        self,
+        path: &str,
+        token: &str,
+        key: &str,
+        value: &Value,
+    ) -> Result<Value, ApiError> {
+        if !self.active() {
+            return Err(ApiError::local(
+                leptos_i18n::t_string!(self.i18n, ui.your_session_ended_sign_in_again_to_continue)
+                    .to_owned(),
+            ));
+        }
+        let request = ruphish_ui::browser_http::launch_request(path, token, key, value)
+            .map_err(ApiError::local)?;
+        let response = self
+            .send_request(path, request)
+            .await
+            .map_err(ApiError::local)?;
+        self.response(path, response).await
+    }
+
     pub(crate) async fn resource_response(
         self,
         method: &str,

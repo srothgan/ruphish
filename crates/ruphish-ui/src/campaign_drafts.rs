@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 pub(super) struct Persistence {
     queries: CampaignQueries,
     pub id: RwSignal<String>,
+    creation: RwSignal<Option<(String, Value)>>,
     pub revision: RwSignal<Option<i64>>,
     pub saved_generation: RwSignal<u64>,
     pub modified: RwSignal<Value>,
@@ -33,7 +34,13 @@ impl Persistence {
                     .unwrap_or_default(),
             ),
             write_error: RwSignal::new(None),
-            id: RwSignal::new(saved.map(|s| text(s, "id")).unwrap_or_default()),
+            id: RwSignal::new(
+                saved
+                    .and_then(|s| s["id"].as_i64())
+                    .map(|id| id.to_string())
+                    .unwrap_or_default(),
+            ),
+            creation: RwSignal::new(None),
             revision: RwSignal::new(saved.and_then(|s| s["revision"].as_i64())),
             saved_generation: RwSignal::new(0),
             modified: RwSignal::new(saved.map(|s| s["modified"].clone()).unwrap_or(Value::Null)),
@@ -46,40 +53,67 @@ impl Persistence {
         state: &ruphish_ui::campaign_state::Draft,
         step: usize,
     ) -> Result<Value, String> {
-        if self.id.get_untracked().is_empty() {
-            let key = crate::campaigns::random_key()
-                .map_err(|_| ruphish_ui::tr!(ui.cannot_generate_a_secure_launch_key)())?;
-            self.id.set(key);
-        }
-        let body = serde_json::to_value(ruphish_contracts::campaign::request::DraftWrite {
-            revision: self.revision.get_untracked(),
-            configuration: serde_json::from_value(state.value.clone())
-                .map_err(|_| api.invalid_read())?,
+        let configuration =
+            serde_json::from_value(state.value.clone()).map_err(|_| api.invalid_read())?;
+        let create = serde_json::to_value(ruphish_contracts::campaign::request::DraftCreate {
+            configuration,
             step: i64::try_from(step).map_err(|_| api.invalid_read())?,
         })
         .map_err(|_| api.invalid_read())?;
+        if self.id.get_untracked().is_empty() && self.creation.get_untracked().is_none() {
+            let key = crate::campaigns::random_key()
+                .map_err(|_| ruphish_ui::tr!(ui.cannot_generate_a_secure_launch_key)())?;
+            self.creation.set(Some((key, create.clone())));
+        }
         self.saving.set(true);
-        let result = api
-            .resource_response(
+        let result = async {
+            if let Some((key, body)) = self.creation.get_untracked() {
+                let saved = api
+                    .create_response("/api/campaign-drafts", token, &key, &body)
+                    .await?;
+                let parsed: ruphish_contracts::campaign_reads::Draft =
+                    serde_json::from_value(saved.clone()).map_err(|_| api.invalid_read_err())?;
+                if parsed.id <= 0 {
+                    return Err(api.invalid_read_err());
+                }
+                self.id.set(parsed.id.to_string());
+                // Never silently adopt intervening edits after an uncertain creation.
+                self.revision.set(Some(1));
+                self.creation.set(None);
+                if saved["configuration"] == create["configuration"]
+                    && saved["step"] == create["step"]
+                    && parsed.campaign_id.is_none()
+                {
+                    return Ok((saved, None));
+                }
+            }
+            let mut body = create;
+            body["revision"] = json!(self.revision.get_untracked());
+            api.resource_response(
                 "PUT",
                 &format!("/api/campaign-drafts/{}", self.id.get_untracked()),
                 token,
                 Some(&body),
                 None,
             )
-            .await;
+            .await
+        }
+        .await;
         self.saving.set(false);
         let (saved, _) = result.map_err(|error| {
+            if matches!(error.status, 400 | 401 | 403 | 422) {
+                self.creation.set(None);
+            }
             self.write_error.set(Some(error.clone()));
             error.message
         })?;
         self.write_error.set(None);
         let parsed: ruphish_contracts::campaign_reads::Draft =
             serde_json::from_value(saved.clone()).map_err(|_| api.invalid_read())?;
-        if parsed.id != self.id.get_untracked() {
+        if parsed.id.to_string() != self.id.get_untracked() {
             return Err(api.invalid_read());
         }
-        self.queries.draft_saved(&parsed.id);
+        self.queries.draft_saved(&parsed.id.to_string());
         self.revision.set(saved["revision"].as_i64());
         self.saved_generation.set(state.generation);
         self.modified.set(saved["modified"].clone());

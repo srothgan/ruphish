@@ -1113,7 +1113,7 @@ fn campaign_commands_reject_ambiguous_json_without_creating_work() {
                 format!(r#"{{"campaign":{body},"email":"test@example.test"}}"#),
             ),
             (
-                "/api/campaign-drafts/strict-command-test/launch",
+                "/api/campaign-drafts/1/launch",
                 format!(r#"{{"revision":1,"campaign":{body}}}"#),
             ),
         ] {

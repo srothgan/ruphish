@@ -611,7 +611,7 @@ async fn every_creation_write_boundary_rolls_back_the_whole_launch() {
         "events",
         "results",
         "ruphish_delivery",
-        "ruphish_campaign_launch",
+        "ruphish_campaign_creation",
     ] {
         let before: i64 = sqlx::query_scalar("SELECT count(*) FROM campaigns")
             .fetch_one(&db.inspection_pool())
@@ -640,7 +640,6 @@ async fn every_creation_write_boundary_rolls_back_the_whole_launch() {
             "events",
             "results",
             "ruphish_delivery",
-            "ruphish_campaign_launch",
         ] {
             let query = format!(
                 "SELECT count(*) FROM {child} WHERE campaign_id NOT IN (SELECT id FROM campaigns)"
@@ -654,6 +653,19 @@ async fn every_creation_write_boundary_rolls_back_the_whole_launch() {
                 "{table}: {child}"
             );
         }
+        // Creation receipts outlive deleted campaigns, so check this failed
+        // operation directly rather than treating receipts as campaign children.
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM ruphish_campaign_creation WHERE owner_id=? AND operation='campaign' AND request_key='atomic'"
+            )
+            .bind(caller().id)
+            .fetch_one(&db.inspection_pool())
+            .await
+            .unwrap(),
+            0,
+            "{table}: failed launch must not retain a creation receipt"
+        );
         sqlx::raw_sql("DROP TRIGGER reject_write")
             .execute(&db.inspection_pool())
             .await

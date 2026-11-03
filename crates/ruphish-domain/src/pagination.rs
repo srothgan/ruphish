@@ -42,8 +42,8 @@ pub struct Position {
     pub number: i64,
     /// Stable identity family: zero draft, one execution/delivery.
     pub kind: i32,
-    /// Draft identity; empty for executions/deliveries.
-    pub draft: String,
+    /// Draft identity; zero for executions/deliveries.
+    pub draft: i64,
     /// Execution/delivery identity; zero for drafts.
     pub id: i64,
 }
@@ -70,7 +70,7 @@ impl<S: PartialEq> Cursor<S> {
             && self.order == order
             && self.scope == scope
             && self.position.text.len() <= 4096
-            && self.position.draft.len() <= 64
+            && self.position.draft >= 0
             && matches!(self.position.kind, 0 | 1)
             && self.position.id >= 0
     }

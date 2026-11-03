@@ -10,7 +10,7 @@ const returnOrigin =
   '/campaigns/2/results?source=public&event=link_clicked&from=0&until=1999999999&sort=name&order=desc&offset=1&limit=25';
 const path =
   {
-    'conflict-draft': '/campaigns/drafts/00000000-0000-4000-8000-000000000001/edit',
+    'conflict-draft': '/campaigns/drafts/1/edit',
     'conflict-group': '/groups/1/edit',
     'deleted-group': '/groups/1/edit',
     'conflict-domain': '/domains/1/edit',
@@ -20,7 +20,7 @@ const path =
     'delete-conflict-webhook': '/webhooks',
     'delete-conflict-mailbox': '/reporting-mailboxes',
     'delete-conflict-draft': '/campaigns',
-    'delete-conflict-draft-detail': '/campaigns/drafts/00000000-0000-4000-8000-000000000001',
+    'delete-conflict-draft-detail': '/campaigns/drafts/1',
     'empty-group': '/groups/6',
     'empty-webhook': '/webhooks/1',
     'empty-mailbox': '/reporting-mailboxes/1',
@@ -40,7 +40,7 @@ const path =
     'detail-domain': '/domains/1',
     'detail-webhook': '/webhooks/1',
     'detail-mailbox': '/reporting-mailboxes/1',
-    'detail-draft': '/campaigns/drafts/00000000-0000-4000-8000-000000000001',
+    'detail-draft': '/campaigns/drafts/1',
     'domain-attribution': '/domains/1',
     'shared-attribution': '/groups/1/edit',
     'unknown-attribution': '/groups/1/edit',
@@ -63,7 +63,7 @@ const path =
     'form-settings': '/settings',
     'form-campaign': '/campaigns/new',
     'campaign-wizard': '/campaigns/new',
-    'form-draft': '/campaigns/drafts/00000000-0000-4000-8000-000000000001/edit',
+    'form-draft': '/campaigns/drafts/1/edit',
     'form-session': '/groups/new',
     'results-chart': '/campaigns/2/results',
     'results-untracked': '/campaigns/2/results',
@@ -302,7 +302,7 @@ const featureOverrides = { webhooks_enabled: true, reporting_mailboxes_enabled: 
 let failSave = false;
 const writes = [];
 const recoveryPath = {
-  'conflict-draft': '/api/campaign-drafts/00000000-0000-4000-8000-000000000001',
+  'conflict-draft': '/api/campaign-drafts/1',
   'conflict-group': '/api/groups/1',
   'deleted-group': '/api/groups/1',
   'conflict-domain': '/api/domains/1',
@@ -378,8 +378,16 @@ globalThis.fetch = async (request, options) => {
     (scenario.startsWith('form-') || scenario === 'campaign-wizard') &&
     ['POST', 'PUT'].includes(request.method)
   ) {
-    writes.push({ path: url.pathname, body: await request.clone().json() });
+    writes.push({
+      path: url.pathname,
+      body: await request.clone().json(),
+      key: request.headers.get('idempotency-key'),
+    });
     if (failSave) {
+      if (scenario === 'campaign-wizard' && url.pathname === '/api/campaign-drafts') {
+        const accepted = await api.execute(request.clone(), options);
+        assert.equal(accepted.status, 201, 'creation persisted before losing its acknowledgement');
+      }
       return new Response(JSON.stringify({ success: false, code: 'TEST_FAILURE' }), {
         status: 503,
       });
@@ -867,6 +875,7 @@ if (scenario === 'campaign-wizard') {
   set(field('Campaign name'), 'Temporary wizard campaign');
   document.querySelector('section:not([hidden]) input[type="checkbox"]').click();
   if (!demo) {
+    set(field('Campaign name'), 'Before lost response');
     failSave = true;
     button('Continue').click();
     await until(
@@ -874,16 +883,20 @@ if (scenario === 'campaign-wizard') {
         document.querySelector('.form-message.error.has-content') && !button('Continue').disabled,
     );
     assert.equal(step(), 0, 'a rejected save must not advance');
-    assert.equal(field('Campaign name').value, 'Temporary wizard campaign');
+    assert.equal(field('Campaign name').value, 'Before lost response');
+    set(field('Campaign name'), 'Temporary wizard campaign');
     failSave = false;
   }
   await advance(1);
+  if (!demo) {
+    const creates = writes.filter((w) => w.path === '/api/campaign-drafts');
+    assert.equal(creates.length, 2);
+    assert.ok(creates[0].key);
+    assert.deepEqual(creates[1], creates[0], 'lost response retries the original key and input');
+  }
   const editPath = win.location.pathname;
-  assert.match(editPath, /^\/campaigns\/drafts\/[a-f0-9-]+\/edit$/);
-  assert.ok(
-    !editPath.includes('00000000-0000-4000-8000-000000000001'),
-    'new draft keeps its own ID',
-  );
+  assert.match(editPath, /^\/campaigns\/drafts\/[1-9][0-9]*\/edit$/);
+  assert.notEqual(editPath, '/campaigns/drafts/1/edit', 'new draft keeps its own ID');
   assert.equal(field('Campaign name').value, 'Temporary wizard campaign');
   assert.ok(!document.querySelector('.demo-toast.has-content'), 'Continue needs no save toast');
   button('Continue').click();

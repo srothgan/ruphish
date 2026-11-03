@@ -326,8 +326,8 @@ pub fn failure_label(context: leptos_i18n::I18nContext<Locale>, code: &str) -> S
         Ok(ErrorCode::CsvInvalid) => leptos_i18n::t_string!(context, errors.csv_invalid),
         Ok(ErrorCode::CsvRowsInvalid) => leptos_i18n::t_string!(context, errors.csv_rows_invalid),
         Ok(ErrorCode::CampaignInvalid) => leptos_i18n::t_string!(context, errors.campaign_invalid),
-        Ok(ErrorCode::LaunchKeyInvalid) => {
-            leptos_i18n::t_string!(context, errors.launch_key_invalid)
+        Ok(ErrorCode::IdempotencyKeyInvalid) => {
+            leptos_i18n::t_string!(context, errors.idempotency_key_invalid)
         }
         Ok(ErrorCode::DeliveryActionInvalid) => {
             leptos_i18n::t_string!(context, errors.delivery_action_invalid)

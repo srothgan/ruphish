@@ -110,11 +110,11 @@ pub(crate) fn tail(
     };
     let key_text = binary("sort_text", provider);
     let pos_text = binary("p.text_value", provider);
-    let draft = binary("draft_id", provider);
-    let pos_draft = binary("p.draft", provider);
+    let draft = "draft_id";
+    let pos_draft = "p.draft";
     format!(
         r#", keyed AS (SELECT data.*,CAST({present} AS {number_type}) AS sort_present,{text} AS sort_text,CAST({number} AS {number_type}) AS sort_number FROM data),
-position AS (SELECT CAST(? AS {number_type}) AS active,CAST(? AS {number_type}) AS present,CAST(? AS {text_type}) AS text_value,CAST(? AS {number_type}) AS number_value,CAST(? AS {number_type}) AS kind,CAST(? AS {text_type}) AS draft,CAST(? AS {number_type}) AS id)
+position AS (SELECT CAST(? AS {number_type}) AS active,CAST(? AS {number_type}) AS present,CAST(? AS {text_type}) AS text_value,CAST(? AS {number_type}) AS number_value,CAST(? AS {number_type}) AS kind,CAST(? AS {number_type}) AS draft,CAST(? AS {number_type}) AS id)
 SELECT k.* FROM keyed k CROSS JOIN position p WHERE p.active=0 OR
 (sort_present {op} p.present OR (sort_present=p.present AND
 ({key_text} {op} {pos_text} OR ({key_text}={pos_text} AND

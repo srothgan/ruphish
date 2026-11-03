@@ -1170,7 +1170,7 @@
     "csv_invalid": "Prüfen Sie die CSV-Datei und die Spaltenzuordnung.",
     "csv_rows_invalid": "Die CSV-Datei enthält ungültige Zeilen. Prüfen Sie den Importbericht.",
     "campaign_invalid": "Prüfen Sie die Kampagneneinstellungen.",
-    "launch_key_invalid": "Die Startkennung ist ungültig. Öffnen Sie den Kampagnenentwurf erneut.",
+    "idempotency_key_invalid": "Die Startkennung ist ungültig. Öffnen Sie den Kampagnenentwurf erneut.",
     "delivery_action_invalid": "Diese Versandaktion ist ungültig. Aktualisieren Sie den Versandstatus.",
     "mailbox_tls_required": "Der Mailserver muss TLS unterstützen.",
     "mailbox_port_invalid": "Wählen Sie einen gültigen Mailserver-Port.",

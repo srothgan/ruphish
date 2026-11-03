@@ -348,8 +348,8 @@ pub struct Draft {
     #[serde(flatten)]
     pub attribution: crate::attribution::Attribution,
 
-    /// Client-generated draft identity.
-    pub id: String,
+    /// Database-assigned draft identity.
+    pub id: i64,
     /// Conditional-write revision.
     pub revision: i64,
     /// Complete saved structure whose values may still be unfinished; saving never authorizes launch.
@@ -376,7 +376,7 @@ pub struct Drafts {
     pub items: Vec<Draft>,
     /// Next draft identity, or no further page.
     #[serde(deserialize_with = "nullable")]
-    pub next_after: Option<String>,
+    pub next_after: Option<i64>,
 }
 
 /// Successful removal of a saved draft at its requested revision.

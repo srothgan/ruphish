@@ -31,7 +31,8 @@ The legacy `GET /api/campaigns/` aggregate retains its successful response shape
 | `GET /api/campaigns/directory?filter=all&after=<cursor>` | Combined management metadata with one 50-row page; filters are `all`, `drafts`, `active`, `completed`, and execution-only `executions`. Use the returned opaque `next_after` unchanged. |
 | `GET /api/campaign-drafts?after=<id>` | Up to 50 editable drafts with an optional `next_after` cursor. |
 | `GET /api/campaign-drafts/{id}` | Saved configuration, revision, editing step, UTC timestamps, and nullable `campaign_id`. |
-| `PUT /api/campaign-drafts/{id}` | Save `{ "revision": null, "configuration": {}, "step": 0 }` to create an incomplete draft. Use the returned revision for subsequent saves. |
+| `POST /api/campaign-drafts` | Create `{ "configuration": {}, "step": 0 }` with an `Idempotency-Key` header; receive a numeric ID. |
+| `PUT /api/campaign-drafts/{id}` | Update an existing draft using its returned revision. |
 | `DELETE /api/campaign-drafts/{id}?revision=<revision>` | Delete an unchanged, unlaunched draft. |
 | `POST /api/campaign-drafts/prepare` | Review campaign input without saving or launching; reject a past launch time. |
 | `POST /api/campaign-drafts/{id}/launch` | Submit `{ "revision": 1, "campaign": { ... } }`, including the current reviewed selection revisions. Launch input must match the saved configuration. |
