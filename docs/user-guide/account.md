@@ -1,32 +1,45 @@
 ---
-title: Manage your account
-description: Change your password, display preferences, and API key.
+title: Your account
+description: Manage your password, display preferences, and API access.
 sidebar:
-  order: 2
+  order: 50
 ---
 
-Open your username at the bottom of the sidebar. **My account** shows your username, role, and API access. **Settings** controls how dates and interface text appear for your account.
+Open your username at the bottom of the sidebar to find **My account**, **Settings**, and **Sign out**.
+
+Your account's role and permissions control what you can do. Resources and campaigns are shared according to those permissions.
 
 ## Change your password
 
-From **My account**, choose **Change password**. Enter your current password, then the new password twice. Successful changes return you to your account and revoke your other sessions. Initial account setup uses a separate required password-change screen.
+1. Open **My account** and choose **Change password**.
+2. Enter your current password.
+3. Enter and confirm the new password.
+4. Save the change.
 
-New passwords must contain at least eight UTF-8 bytes and at most 1,024 bytes; confirmation must match, and the current password cannot be reused. Byte length and character count differ for some languages.
+The new password must differ from the current one. Ruphish validates its length and confirmation and displays any problem beside the form.
 
-If you cannot sign in, ask another authorized administrator to reset your account. There is no documented email-based self-service recovery flow. [Account administration](../administration/accounts-and-permissions.md) explains the protections on administrative changes.
+A successful password change revokes your other sessions. Initial account setup uses a separate required password-change screen.
 
-## Choose language and time presentation
+If you cannot sign in, ask an authorized administrator to reset your account. See [account administration](../administration/accounts-and-permissions.md).
 
-In **Settings**, choose English or German interface text, a date/time formatting locale, and a time zone independently. For example, you can use English interface text with German date formatting and a Berlin time zone. Reset an override to follow the browser again. These choices follow your account across devices.
+## Choose language and time settings
 
-The preview shows your selected presentation. Save to apply it. Failed saves keep your edits for retry; refreshing a dirty form does not silently replace your choices. Display preferences do not move existing campaign schedules. See [scheduling](campaigns/scheduling.md) for local-time input behavior.
+Open **Settings** from your account menu. Choose the interface language, date/time formatting, and time zone independently.
+
+For example, you can use English interface text with German date formatting and a Berlin time zone. Use the preview to check the result and save. Reset an override to follow the browser again.
+
+These preferences follow your account across devices. Changing the display zone does not reschedule existing campaigns, but it affects how you enter and read local times. See [Scheduling](campaigns/scheduling.md).
 
 ## Use or replace your API key
 
-On **My account**, reveal or copy the API key only when you need it. Copying a hidden key keeps it masked on screen. Replacing the key immediately invalidates the previous one, so update integrations that use it.
+**My account** lets you reveal or copy your API key. It acts with your account's permissions.
 
-The key acts with your account's permissions. Keep it out of shared screenshots, URLs, and logs. See [API authentication](../api/authentication.md) for request examples.
+Replace the key when it should no longer be used. The old key stops working immediately, so update any integrations that depend on it.
+
+Keep the key out of shared screenshots and messages. For request examples, see [API authentication](../api/authentication.md).
 
 ## Sign out
 
-Choose **Sign out** from the account menu. Unsaved work triggers a discard prompt. If sign-out fails, the session and draft remain so you can retry. Signing out ends this login; independently authenticated browsers remain signed in unless another account change revokes them.
+Choose **Sign out** from the account menu. If you have unsaved work, review the discard prompt before leaving.
+
+Signing out ends that login. Other independently authenticated browsers can remain signed in unless an account action revokes their sessions.

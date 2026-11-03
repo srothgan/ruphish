@@ -1,22 +1,39 @@
 ---
 title: Complete or delete a campaign
-description: Finish an exercise without confusing completion with removal of its history.
+description: End a campaign while keeping its results, or remove its records.
 sidebar:
-  order: 6
+  order: 24
 ---
 
-Complete a campaign when the exercise is over and you want to keep its results. Delete it when you intend to remove its campaign records and associated history.
+Complete a campaign when the exercise has ended and you want to keep its results. Delete it when you intend to remove the campaign and its associated history.
 
-## Complete
+## Complete a campaign
 
-Open the campaign and use its completion action. Completion closes the exercise to new public interactions and stops future ordinary delivery work. Messages already submitted cannot be recalled. A submission already in flight may finish, and its outcome still needs accurate reconciliation.
+1. Open the launched campaign.
+2. Choose **Complete campaign**.
+3. Review the confirmation and complete the action.
+4. Open **Results** to review the retained history.
 
-Analysis remains available. Completion also closes the campaign to new mailbox report events. The scanner ignores late reports and advances its checkpoint without changing campaign results or queuing report webhooks. Reports committed before completion remain recorded, and pending mailbox acknowledgements can still finish.
+Completion stops future ordinary sending and closes campaign tracking to new public interactions. It also stops new report events from reporting mailboxes.
 
-## Delete
+Emails already submitted cannot be recalled. An attempt already in progress can still settle, and a mailbox acknowledgement for an already-recorded report can still finish.
 
-Deletion removes the campaign and its associated records. Export the information you need before confirming. Deleting a launched campaign does not make its old draft launchable again.
+Saved results remain available for analysis, correction, and export. A campaign's saved learning-page link can remain available after completion, provided its domain remains eligible.
 
-Resource deletion is a separate action. Groups, templates, pages, profiles, and domains can be protected while a campaign references them. Remove only resources you no longer need; shared use within your account is a reason to inspect references first.
+## Delete a campaign
 
-Deleting a webhook job or campaign cannot recall a request that was already authorized or sent to an external service. If you need to remove copies retained by another system, handle that system separately.
+1. [Export](../results/exports.md) any records you need to keep.
+2. Open the campaign and choose **Delete**.
+3. Read the confirmation and confirm the deletion.
+
+Deletion removes the campaign and associated application records, including its saved learning-page link. There is no undo action for deleting a campaign.
+
+This does not delete the reusable resources you selected. Remove unwanted groups, templates, pages, profiles, or domains separately after checking their other uses.
+
+Downloaded exports, backups, and copies delivered to other systems are outside this deletion. Handle those copies in their respective systems.
+
+## Remove a draft
+
+Delete an unlaunched draft from **Campaigns** when you no longer need its saved setup. This sends no messages.
+
+A draft that has already launched points to its campaign and cannot be reused as an ordinary editable draft. Deleting the launched campaign does not make that old draft launchable again.

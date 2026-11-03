@@ -1,57 +1,76 @@
 ---
-title: Template reference
-description: Personalize email, pages, URLs, and supported attachments with Go-template expressions.
+title: Personalize content
+description: Use recipient fields, conditional text, and escaping in campaign content.
 sidebar:
-  order: 5
+  order: 41
 ---
 
-Ruphish evaluates Go-style text templates. Expressions are case-sensitive and enclosed in `{{` and `}}`. They are executed expressions, not a simple string-replacement vocabulary.
+Personalization inserts recipient and campaign details into email subjects, message bodies, landing pages, supported attachments, and campaign URL paths or queries. Learning pages are static and do not evaluate these expressions.
 
-## Available fields
+Expressions use Go-style template syntax inside `{{` and `}}`. Names are case-sensitive.
+
+## Choose a field
 
 | Expression | Value |
 | --- | --- |
-| `{{.FirstName}}` | Recipient's first name |
-| `{{.LastName}}` | Recipient's last name |
-| `{{.Email}}` | Recipient's email address |
-| `{{.Position}}` | Recipient's position |
-| `{{.From}}` | Sender context supplied for the message |
-| `{{.URL}}` | Personalized campaign URL |
-| `{{.RId}}` | Opaque public recipient identifier |
-| `{{.BaseURL}}` | Campaign origin without its path/query |
-| `{{.TrackingURL}}` | Tracking-image URL |
-| `{{.Tracker}}` | Complete tracking-image markup |
+| `{{.FirstName}}` | Recipient's first name. |
+| `{{.LastName}}` | Recipient's last name. |
+| `{{.Email}}` | Recipient's email address. |
+| `{{.Position}}` | Recipient's position. |
+| `{{.From}}` | The visible sender context for the message. |
+| `{{.URL}}` | This recipient's campaign link. |
+| `{{.BaseURL}}` | The campaign's base address, without its path or query. |
+| `{{.RId}}` | The recipient's public tracking identifier. |
+| `{{.TrackingURL}}` | The tracking-image address. |
+| `{{.Tracker}}` | Tracking-image HTML. |
 
-These tracking fields remain available for legacy templates. New email templates need neither: the sender automatically inserts one hidden tracking image in HTML, and previews remove rendered tracking images. Plain-text-only emails remain plain text.
+Use `{{.URL}}` for campaign links. You do not need to insert a tracking image yourself: **Track email opens** controls whether Ruphish adds one to HTML email.
 
-A recognized field can be empty. An unknown field, including a wrong-case field such as `.email`, produces an execution error rather than silently becoming an empty string.
+A known field may be empty when the recipient has no value. An unknown field, such as `{{.email}}`, fails rendering instead of producing an empty value.
 
-## Conditional content and formatting
+## Handle missing names
+
+Use a condition when a field is optional:
 
 ```text
 Hello {{if .FirstName}}{{.FirstName}}{{else}}there{{end}},
-Your exercise link: {{.URL}}
+Your campaign link: {{.URL}}
 ```
 
-Variables, `if`/`else`, `with`, `range`, named templates with `define`/`template`, comments, and pipelines are supported by the renderer. Expressions must receive appropriate values: for example, ranging over a recipient's name is not a supported collection operation.
+For HTML, escape inserted values:
+
+```html
+<p>Hello {{if .FirstName}}{{.FirstName | html}}{{else}}there{{end}},</p>
+<p><a href="{{.URL | html}}">Open the document</a></p>
+```
+
+This lets a name such as `Alex & Sam` appear as text rather than becoming part of the markup.
+
+## Escape for the destination
+
+Template evaluation does not automatically escape HTML. Use `html` for inserted HTML text and quoted attributes, and `urlquery` for a value inside a URL query.
+
+For example, a campaign path could include `/document?recipient={{.Email | urlquery}}`. Keep the scheme, hostname, and port fixed; they must match the selected domain.
+
+Avoid inserting recipient values into executable JavaScript. The page sandbox does not replace correct escaping.
+
+## Use expressions
+
+The renderer supports conditions with `if`/`else`, `with`, `range`, variables, named templates, comments, and pipelines.
+
+Common functions include `and`, `or`, `not`, comparisons such as `eq` and `ne`, formatting with `printf`, and `len`, `index`, `slice`, `html`, `js`, and `urlquery`. Functions require appropriate argument types; recipient fields are strings, not arbitrary collections or objects.
 
 ```text
-{{$name := .FirstName}}{{with .LastName}}{{$name}} {{.}}{{end}}
-{{printf "%s" .Email | printf "[%s]"}}
+{{if eq .Position "Operations"}}Operations update{{else}}Team update{{end}}
+{{printf "%s %s" .FirstName .LastName}}
 ```
 
-The renderer includes Go-style built-ins for boolean/comparison operations, formatting, indexing/slicing, length, and explicit escaping. Use the ordinary text-template functions (`and`, `or`, `not`, `eq`, `ne`, `lt`, `le`, `gt`, `ge`, `print`, `printf`, `println`, `index`, `slice`, `len`, `html`, `js`, and `urlquery`) with arguments of the appropriate type. Application-specific Sprig functions or arbitrary Go methods are not an extension interface.
+String length and slicing follow byte-based behavior. A slice that splits a UTF-8 character fails, so avoid byte slicing when you only need to display a person's name.
 
-## Escaping and Unicode
+## Check personalized output
 
-Text-template evaluation does not automatically HTML-escape recipient values. Choose explicit escaping for the insertion context, such as `{{html .FirstName}}` for HTML text. Avoid inserting recipient values into executable code. Authored landing pages permit scripts after expansion, so unescaped recipient markup can become executable too. The [participant-page sandbox](participant-data.md) isolates that document from administration; it does not provide contextual escaping or prevent code from reading the page's controls.
+Preview with representative recipients, including missing optional values and names containing accents or punctuation. Send a test message and open any personalized attachments.
 
-String length and indexing follow byte-oriented compatibility behavior. A slice that splits a UTF-8 character is rejected, rather than returning invalid UTF-8. For example, `{{slice "José" 3 5}}` yields `é`; slicing only one byte of that character fails.
+If rendering fails, check expression spelling, matching `end` statements, and function arguments. Rendering has limits on document size and expression work; simplify unusually large or deeply nested templates. Ruphish does not send a partial rendering as a successful message.
 
-## Errors and limits
-
-Invalid syntax fails parsing; missing fields, invalid function arguments, or an absent named template can fail execution. Rendering is bounded for nesting, iteration, allocation, and output. Resource documents and rendered output have an 8 MiB limit. Treat a failed render as an error, not as a usable partial message.
-
-Preview with representative values before launch, including empty optional names and non-ASCII text. Template rendering does not fetch arbitrary external data. Imported content retains its expressions; import is not a conversion to a different template language.
-
-See [email templates](email-templates.md), [landing pages](landing-pages.md), and [attachments](attachments.md) for where these expressions are used.
+See [Email templates](resources/email-templates.md#add-attachments) for supported attachment formats.

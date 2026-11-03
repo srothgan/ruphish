@@ -1,24 +1,51 @@
 ---
-title: Correct recipient events
-description: Add, edit and delete individual recipient events.
+title: Correct events
+description: Add, edit, or remove recipient observations and understand the effects.
 sidebar:
-  order: 6
+  order: 33
 ---
 
-Expand a recipient in campaign **Sending** to review the chronological result history alongside delivery attempts. Both columns are visible immediately and stack on narrow screens. Select **Edit events** to open the editing dialog. Editing works in ongoing and completed campaigns; your account needs permission to modify campaign objects.
+You can correct individual observations in ongoing or completed campaigns if your account has permission to modify campaigns.
 
-- Select **Edit** to change one event's occurrence time, type or submission-presence indicators, then **Save changes**. Time input uses the displayed zone.
-- Select **Delete**, review the explanation, and confirm to permanently remove that event.
-- Select **Add event**, supply its time and type, and save to create a **Manually recorded** entry.
+Corrections change the records used by summaries, charts, and exports. Previous values and deleted events cannot be restored through the application.
 
-Five clicks appear as five individual events. Deleting one leaves four clicks and one recipient with a click. Deleting the last direct click removes that direct outcome; a valid submission can still imply the clicked stage in progression statistics. Automatic recording continues normally, so later observations contribute independently.
+## Open the event editor
 
-**Origin** identifies how the event was created. **Manually recorded** means someone added it manually. **Edited** means someone subsequently changed its values. A newly added operator event is not marked edited; saving unchanged values does not mark an event edited either. An edited event keeps its origin and remains marked edited after further changes.
+1. Open the campaign's **Sending** tab.
+2. Expand the recipient row to inspect their history.
+3. Choose **Edit events**.
+4. Find the event you want to correct, loading older history if necessary.
 
-Summaries, charts, timelines and exports use the current event values. Edits replace those values and deletions remove the row; previous values and deleted events cannot be restored. SMTP attempts, delivery acceptance and campaign lifecycle records keep their dedicated operational controls. Editing events never resends messages, reopens completed campaigns or enqueues participant-event webhooks.
+Delivery attempts appear alongside activity, but they have separate controls. Editing an interaction does not retry an email or change the campaign's lifecycle.
 
-Only presence indicators are editable for submissions: **Entered**, **No entry detected**, or **Not recorded**. Ruphish does not accept entered usernames, passwords, OTPs, other participant field values or their derivatives through these controls.
+## Change an event
 
-Refreshes do not replace an active edit. Validation and conflict failures keep your input. If another operator changed the event, cancel and reopen it to review the current values. If the save outcome is unknown, keep the editor open and use **Retry**. An addition retry returns the existing event while it remains unchanged; a delete retry can report that the event no longer exists.
+Choose **Edit**, update the occurrence time, event type, or available submission-presence indicators, and choose **Save changes**.
 
-New events default to the current time; choose a historical occurrence when correcting a completed campaign. Load earlier history inside the dialog to reach older events. Closing with an active form asks whether to keep editing or discard the draft and close without saving. Refreshes preserve the open recipient row and dialog input.
+Time input uses your displayed zone. For a historical correction, enter the actual occurrence time rather than accepting the current-time default.
+
+Submission indicators describe presence only: **Entered**, **No entry detected**, or **Not recorded**. Do not enter passwords, usernames, or other submitted values; the editor does not collect them.
+
+Browser and device observations are read-only and remain attached to the original request.
+
+## Add or remove an observation
+
+Choose **Add event** to record an observation manually. Set its type and time, then save. The new event is labeled **Manually recorded**.
+
+Choose **Delete** to remove one event, then read and confirm the deletion. Five click events become four when one is deleted; the recipient still counts once as having clicked. Deleting their last recorded click removes that direct observation, although a progression summary can still infer a clicked stage from a submission.
+
+Manual changes do not send participant-event webhooks, resend mail, or reopen a completed campaign. Automatic recording can continue to add independent events while the campaign is active.
+
+## Read origin and edited labels
+
+**Origin** identifies how an event was first created. **Edited** means its values were subsequently changed.
+
+A manually added event is not automatically marked edited. Editing it later preserves its manual origin and marks it edited.
+
+## Recover a failed change
+
+Validation or conflict errors keep your input. If someone else changed the event, preserve your intended changes, cancel, and reopen it to inspect the current version.
+
+If the save outcome is unknown, keep the editor open and use **Retry**. Recreating an event from scratch could add a second observation.
+
+After a correction, check the recipient history and the affected [results](campaign-analysis.md).

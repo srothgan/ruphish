@@ -1,20 +1,34 @@
 ---
-title: Manage campaigns
-description: Follow a campaign from an editable draft to delivery and completion.
+title: Campaigns
+description: Prepare, launch, monitor, and finish a phishing campaign.
 sidebar:
-  order: 1
+  order: 20
 ---
 
-Open **Campaigns** to find saved drafts and launched campaigns. A draft is preparation; a launched campaign has delivery work and history. Passing a draft's proposed launch time does not start it.
+A campaign brings together recipients, content, a sending profile, and a campaign address. You can prepare it as a draft, review the complete setup, then send immediately or schedule it for later.
 
-| What you need | Guide |
+| Task | Guide |
 | --- | --- |
-| Prepare now and finish later | [Save and resume a draft](drafts.md) |
-| Check the audience and start | [Review and launch](launch.md) |
-| Choose a future time or distribute delivery | [Scheduling](scheduling.md) |
-| Understand a failed or uncertain send | [Delivery and recovery](delivery.md) |
-| Finish or remove an exercise | [Completion and deletion](completion-and-deletion.md) |
+| Select resources, save a draft, review, and launch | [Create a campaign](create.md) |
+| Choose when messages are sent | [Schedule a campaign](scheduling.md) |
+| Follow delivery and resolve failures | [Monitor sending](delivery.md) |
+| Finish the campaign or remove its records | [Complete or delete a campaign](completion-and-deletion.md) |
 
-The list defaults to **Recent work (drafts first)**: drafts by most recent saved edit, then executions by newest creation time. Use the lifecycle filter to narrow it. Selecting a column heading applies that column across the matching list and returns to the first page; select **Recent work (drafts first)** to restore the default. Explicit column sorting does not pin drafts above other rows. Your choice remains while navigating within the current application session. A failed refresh keeps the last confirmed data and provides a retry; don't treat stale data as confirmation that a launch, deletion, or delivery has finished.
+## Find your work
 
-Each campaign belongs to its creating account. Resource edits and the campaign's saved tracking policy have different lifecycles. Review the current selected resources before launch and use copies when independent content versions are needed.
+Open **Campaigns** to see shared drafts and launched campaigns. The default order puts recently edited drafts first, followed by launched campaigns. Use the search, lifecycle filter, or column sorting to find the item you need.
+
+A draft does not send messages, even if its proposed launch time passes. A scheduled campaign has already been launched and has work waiting for its due time.
+
+## Read a launched campaign
+
+| Tab | What it helps you check |
+| --- | --- |
+| **Setup** | The campaign's audience, schedule, address, and selected behavior. |
+| **Sending** | Each recipient's delivery state, attempts, and recovery actions. |
+| **Results** | Recorded interactions, filters, charts, and exports. |
+| **Resources** | The resources associated with the campaign. |
+
+Ongoing campaigns open **Sending**; completed campaigns open **Results**.
+
+Sending and participation are separate. A recipient can have a delivery problem, a recorded click, or a report, and each describes a different part of the campaign. Use [Results](../results/index.md) to interpret activity after checking delivery.

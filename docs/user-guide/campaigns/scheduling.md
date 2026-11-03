@@ -1,26 +1,46 @@
 ---
-title: Schedule delivery
-description: Choose launch times and delivery windows, including time-zone and restart behavior.
+title: Schedule a campaign
+description: Choose a launch time and spread initial sending across a window.
 sidebar:
-  order: 4
+  order: 22
 ---
 
-Leave the launch time empty for immediate delivery, or choose a future local date/time. Review resolves local input through the selected IANA time zone and shows the effective schedule. Changing your display preferences later does not move an existing campaign.
+Scheduling controls when messages become due for sending. It does not guarantee when they will reach an inbox.
 
-## Time zones and daylight saving
+## Send later
 
-Stored/API instants are UTC. The interface presents them in your account's selected zone or browser-detected zone. A formatting locale controls appearance independently of the zone.
+1. Open the campaign draft's schedule step.
+2. Choose scheduled delivery.
+3. Enter the launch date and time.
+4. Check the displayed time zone and the resolved time in review.
+5. Choose **Schedule campaign**.
 
-For repeated local times during a daylight-saving change, local scheduling uses the first occurrence. A nonexistent local time in a forward gap is shifted forward. Check the resolved time and UTC offset in review, especially near a transition. API clients can send an explicit offset timestamp when they need an unambiguous instant.
+The campaign is now launched, with sending waiting until its due time. A saved draft with the same time remains inactive until you launch it.
 
-## Spread the messages out
+Changing your account's display time zone later does not move an existing campaign schedule.
 
-An optional send-by time distributes initial due times across the audience. The distribution uses the unique resolved audience and minute-level spacing. Small audiences or short windows can share a due time; the final recipient need not be scheduled at the exact send-by instant.
+## Spread messages across a period
 
-The send-by time is not a guaranteed delivery deadline. SMTP retries, domain verification, outages, and worker capacity can delay acceptance beyond it. Without a send-by time, all initial deliveries are due at launch and workers process them within their bounded capacity.
+Set **Initial sending window ends** to a time after launch. Ruphish distributes initial due times across the unique campaign audience.
 
-## Restarts and paused delivery
+For example, a launch at 09:00 with a window ending at 11:00 spreads the initial sending work across that period. Small audiences and short windows can give several recipients the same due time.
 
-The queue persists. Restarting does not forget future schedules. Work that is due can resume when workers and required domain evidence are available. Only processes containing the administration listener run the campaign worker, and `--disable-mailer` stops that worker in the selected process.
+Without an end time, all initial messages become due at launch and are processed as capacity becomes available.
 
-A draft remains a draft when its proposed time passes. Replace the past time or clear it before launch. After launch, use [delivery status](delivery.md) to distinguish waiting work from failed or uncertain submissions.
+The end of the window is not a delivery deadline. Provider limits, retries, domain checks, or an outage can delay sending beyond it. It also does not complete the campaign.
+
+## Check time zones
+
+Schedule input follows your account's selected time zone or the browser's detected zone. The review shows the resolved time and offset; use these to confirm the intended instant.
+
+Near a daylight-saving change, a repeated local time uses its first occurrence. A local time that does not exist because the clock moves forward is shifted forward. Review such schedules carefully.
+
+You can change display preferences in [Your account](../account.md).
+
+## When scheduled sending does not start
+
+Check **Sending** for the affected recipients. Work may be waiting for capacity, a usable domain, or the installation's sending service.
+
+Schedules survive a restart. If sending is disabled for the installation process, ask the person hosting Ruphish to restore it. Recreating the campaign is not the first recovery step.
+
+Use [Monitor sending](delivery.md) to distinguish waiting, failed, and uncertain attempts.

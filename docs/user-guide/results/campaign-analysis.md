@@ -1,30 +1,60 @@
 ---
-title: Inspect campaign results
-description: Compare campaign outcomes and investigate individual recipient activity.
+title: View campaign results
+description: Filter campaign activity and inspect individual recipient histories.
 sidebar:
-  order: 4
+  order: 31
 ---
 
-Open **Campaigns** and select a launched campaign. **Sending** opens for ongoing campaigns; completed campaigns open **Results**. The four campaign tabs are **Setup**, **Sending**, **Results**, and **Resources**.
+Open **Campaigns**, select a launched campaign, and choose **Results**. Completed campaigns open this tab automatically.
 
-Use the recipient selector, event/source filters, and time range to narrow the question. Select up to 200 recipient identities, or leave the selector empty for everyone. Select engagement event types to include recipients with at least one of those events within the selected time range and source. All event types for those recipients remain visible within that same time/source scope. Multiple event types mean any selected type, not every type; leaving them unchecked adds no event-based recipient restriction. The start is inclusive and the end is exclusive. Local time input follows your display zone; the underlying filters use UTC instants.
+The summary cards show how many recipients have recorded opens, clicks, submissions, and reports within the selected filters. Each recipient counts once per action. The participant table shows the same observed activity at the individual level.
 
-The four summaries count participants with recorded opens, clicks, submissions and reports. Each campaign recipient counts at most once per action within the selected filters. The participant chart uses the first matching occurrence of each action in the selected period; repeat actions do not add participants.
+## Narrow the results
 
-Use the chart's **View** dropdown to choose **Cumulative** or **Per interval**. **Cumulative**, the default, shows totals through each interval as a step line and retains those totals during quiet intervals. **Per interval** shows how many participants recorded each action for the first time during that interval, with points joined by straight lines; quiet intervals return to zero. These are participant counts, not percentages or counts of repeat events. Both views use the same time range, with the automatic interval duration and display zone shown above the chart. Interval starts are inclusive and ends are exclusive.
+1. Select recipients if you want to focus on particular people. Leave the selection empty for everyone.
+2. Choose event types to find recipients with those activities.
+3. Set a source and time range if needed.
+4. Choose **Apply** and wait for the new results.
 
-Toggle event types in the legend, then hover, focus or select an interval for exact counts of the visible types. Press Escape to dismiss the interval details. Switching views preserves the legend selection and does not reload results. The selected view remains while filtering or refreshing this page, and resets to **Cumulative** after a page reload or leaving and reopening Results. Sending states have their own donut chart in **Sending**.
+Selecting several event types includes recipients with **any** of those events. It does not require every selected event. Once a recipient matches, all their event types within the same time and source filters remain in scope.
 
-The Results table shows whether each participant has a recorded action; repeat counts are shown in the individual recipient view. Select **Recipient activity** to open a separate page with the person's name, email, campaign, delivery status and event history. A compact outcome summary counts recorded opens, clicks, submissions and reports. The first-interaction statement uses the earliest recorded interaction across the full history relative to the email being sent; missing or inconsistent timestamps remain unavailable. Message context shows the selected template and landing page plus the currently configured subject and sender, not an archived copy of the sent email. Recipient links use a clean URL and show the full individual history, oldest event first. Opening an older recipient link with campaign filter parameters removes those parameters from the address bar. The page's back link returns to unfiltered campaign results; the browser Back button returns to the preceding filtered URL. Export and refresh are in the recipient page's own header. The individual history has no campaign tabs, filters, summary charts or time-summary columns. **Load more events** appears only when more than the initially displayed 50 events exist and adds them without replacing the visible history. Review and correct individual events through the expandable recipient rows in **Sending**.
+For example, selecting **Clicked** finds recipients with a recorded click in the chosen period. You can still see their submissions and reports in that period.
 
-Each click or submission in **Recipient activity** shows read-only browser, operating-system, and device categories. The expandable recipient history and event dialog in **Sending** show the same observations. They describe individual requests and may differ between events; see [client information and its limits](../participant-data.md#browser-and-device-observations). Disabled open metrics show **Not tracked** or **-**; see [metric definitions](metrics.md#when-email-opens-are-not-tracked).
+The start time is included and the end time is excluded. A period from 09:00 to 10:00 includes events at 09:00 and before 10:00. Input follows your display time zone.
 
-Select a recipient-table column heading to sort ascending; select it again to reverse the order. Changing order returns to the first page. The selected order remains in the URL, and downloads use that order across all matching rows.
+Filters apply before totals and pagination. Moving to the next table page does not change the totals. You can select up to 200 individual recipients.
 
-Filters apply before totals, occurrence-time summaries, chart aggregation and pagination. Moving between pages does not change those aggregates. Visible ongoing campaigns refresh automatically about five seconds after each completed read. Completed campaigns load on opening and explicit reload; edits also update affected data. Initial loading replaces the data area, including filters, with one loading panel. Applying filters keeps the controls and last confirmed results in place while a spinner replaces the Apply button label without resizing it. The new response replaces the displayed results; export is unavailable until that selection has loaded. Applying unchanged filters does not send another request; use the header refresh control to reload them. A successful result with no matching recipients or events shows one empty state and leaves the filters available. Background refresh keeps confirmed content in place and shows activity in the header reload control.
+## Read the activity chart
 
-Hidden pages pause periodic refresh; leaving a page stops its timer. Temporary refresh failures retain the last confirmed result and increase the retry delay up to 160 seconds for ongoing campaigns. If the first read fails, use Retry; automatic refresh starts only after a successful eligible response. Use the visible error/retry before drawing conclusions from stale data. Access-denied or missing-record failures remove stale results and stop periodic retries.
+Use **View** to choose:
 
-Use [exports](exports.md) to download all matching rows, [metric definitions](metrics.md) to distinguish observations from progression, and [event corrections](correcting-events.md) to correct individual events through the Sending view's editing dialog.
+- **Cumulative:** the number of participants who have recorded each action up to each interval. Quiet intervals keep the preceding total.
+- **Per interval:** the number of participants whose first matching action in the selected period falls in that interval. Quiet intervals return to zero.
 
-Form submissions show separate username and password indicators: a check means an entry was detected, a cross means no entry was detected, and a dash means the field was not recorded. Text labels explain each symbol. The built-in collector records password presence only, so username presence normally remains unrecorded. These indicators do not establish valid credentials or successful authentication. Delivery history uses the same indicators for each individual submission.
+The chart counts participants, not repeated events or percentages. A recipient clicking five times contributes once to the click series for the selected period.
+
+Use the legend to show or hide event types. Hover, focus, or select an interval for its exact counts. The chart shows its interval duration and display zone.
+
+When email-open tracking is off, open metrics show **Not tracked** and the open series is omitted.
+
+## Inspect one recipient
+
+Select **Recipient activity** in the table to open that person's full campaign history.
+
+Check their delivery status, recorded activity, and individual events. Repeated actions remain separate events. Use **Load more events** when older records are available.
+
+The individual page shows the full history rather than inheriting the campaign's time or event filters. Use the browser's Back action to return to the preceding filtered view.
+
+Click and submission events can show browser, operating-system, and device categories. These describe the request and may differ between events; they do not identify a device with certainty.
+
+Submission indicators distinguish **Entered**, **No entry detected**, and **Not recorded**. Built-in tracking records password presence; username presence normally remains unrecorded. An entered indicator does not mean the credential was valid.
+
+Message context helps identify the related content. Do not treat the currently displayed subject or sender as an archived copy of the exact email that was sent.
+
+## Refresh and continue
+
+Ongoing campaigns refresh while the page is visible. Completed campaigns can be refreshed manually.
+
+If a refresh fails, Ruphish can keep the last confirmed results on screen. Read the error and retry before treating those results as current. Exports become available once the requested filter selection has loaded.
+
+Continue with [metrics](metrics.md), [event corrections](correcting-events.md), or [exports](exports.md).
