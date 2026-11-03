@@ -61,7 +61,7 @@ export default defineConfig({
           .filter(([, directory]) => existsSync(resolve(sourceRoot, directory)))
           .map(([label, directory]) => ({
             label,
-            items: [{ autogenerate: { directory: `docs/${directory}` } }],
+            items: [{ autogenerate: { directory: `docs/${directory}`, collapsed: true } }],
             collapsed: directory !== 'getting-started',
           })),
       ],

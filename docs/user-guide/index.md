@@ -1,22 +1,24 @@
 ---
 title: User guide
-description: Prepare resources, run campaigns, and understand the results.
+description: Prepare resources, run phishing campaigns, and understand the results.
 sidebar:
-  order: 1
+  order: 0
 ---
 
-Use these guides for day-to-day campaign work. If you're new, the [local tutorial](../getting-started/first-campaign.md) walks through one complete exercise first.
+Use this guide when you are preparing or managing your own phishing campaigns. For installation and a guided first run, start with [Getting started](../getting-started/index.md).
 
-| Task | Guide |
+| What you want to do | Start here |
 | --- | --- |
-| Organize your audience | [Groups and CSV import](groups.md) |
-| Prepare a personalized message | [Email templates](email-templates.md), [template reference](template-reference.md), [attachments](attachments.md) |
-| Set up the destination | [Landing pages](landing-pages.md), [participant data](participant-data.md), [domains](domains.md) |
-| Connect your mail service | [Sending profiles](sending-profiles.md) |
-| Save, schedule, or launch | [Campaigns](campaigns/index.md) |
-| Interpret or download results | [Results and reporting](results/index.md) |
-| Process reported messages | [Reporting mailboxes](reporting-mailboxes.md) |
-| Change your own settings | [Your account](account.md) |
-| Recover from a problem | [Troubleshooting](troubleshooting.md) |
+| Prepare recipients, messages, pages, and connections | [Resources](resources/index.md) |
+| Create, schedule, and run a campaign | [Campaigns](campaigns/index.md) |
+| Investigate activity and share findings | [Results](results/index.md) |
+| Change your password or display preferences | [Your account](your-account.md) |
+| Resolve a problem | [Troubleshooting](troubleshooting.md) |
 
-Resources belong to the signed-in account. If an object appears to be missing, check which account you're using before recreating it. Administrators can manage accounts separately through [account administration](../administration/accounts-and-permissions.md).
+## Work with your team
+
+Resources, campaign drafts, and launched campaigns are shared across your Ruphish installation. Your account's permissions determine what you can view and change. The creator and last editor identify who worked on an item; they do not make it private to that person.
+
+Use recognizable names so colleagues can find the right content. Before changing a shared resource, check how it is used. Campaign launch saves the selected recipients and content, so later resource edits have different effects on drafts and campaigns already running. Each resource guide explains those effects.
+
+Some optional features must first be enabled by an administrator. You can run campaigns with an ordinary user account that has the necessary permissions; administration access is not a general prerequisite.

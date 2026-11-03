@@ -5,7 +5,7 @@ function capitalizeFolderLabels(entries: StarlightRouteData['sidebar']) {
   for (const entry of entries) {
     if (entry.type !== 'group') continue;
     if ('autogenerate' in entry) {
-      entry.label = entry.label.charAt(0).toUpperCase() + entry.label.slice(1);
+      entry.label = (entry.label.charAt(0).toUpperCase() + entry.label.slice(1)).replaceAll('-', ' ');
     }
     capitalizeFolderLabels(entry.entries);
   }

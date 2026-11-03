@@ -1,0 +1,10 @@
+name: Ruphish security analysis
+
+# Keep the default security queries, including hard-coded credential detection.
+# These exclude test-only files from analysis, not workflow triggers.
+paths-ignore:
+  - '**/test/**'
+  - '**/tests/**'
+  - '**/*.test.*'
+  - '**/tests.rs'
+  - '**/*_tests.rs'

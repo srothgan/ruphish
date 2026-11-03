@@ -1,43 +1,54 @@
 ---
-title: API authentication
-description: Authenticate scripts with an API key and keep browser authentication separate.
+title: Authentication
+description: Bearer API keys, account permissions, and credential rotation.
 sidebar:
-  order: 2
+  order: 1
 ---
 
-An API key acts as its application account. It does not bypass that account's permissions.
+Authenticate each request with the API key of a Ruphish application account. The key has that account’s current permissions.
 
-## Send a bearer token
+## Bearer header
 
-Send `Authorization: Bearer <key>` on each request. Use HTTPS and a trusted certificate. Avoid putting keys in URLs, shell history, screenshots, or logs.
+```http
+Authorization: Bearer YOUR_API_KEY
+```
 
-For legacy clients, Ruphish also accepts the `api_key` query parameter. The key-reset operation accepts a form API key. Prefer the bearer header for new code because URLs are more likely to be recorded.
+Set the base URL to your Ruphish application origin, without a trailing slash. The examples use POSIX shell syntax and curl.
 
-An explicitly supplied invalid key fails authentication; the server does not fall back to an existing browser cookie. Locked accounts and accounts that must finish password setup cannot use a key to bypass those restrictions.
+```sh
+export RUPHISH_URL="https://ruphish.example.com"
+export RUPHISH_API_KEY="YOUR_API_KEY"
+```
 
-## Permissions and shared access
+Replace `YOUR_API_KEY` with your account’s key. Use a secret store for deployed integrations. Send requests over HTTPS; avoid including the key in URLs or logs.
 
-Reading campaign resources requires `view_objects`; changing them requires `modify_objects`. System administration uses `modify_system`. Resources, campaigns, results and exports are shared across the installation. See the [permission matrix](../administration/accounts-and-permissions.md).
+Example authenticated request, with no body:
 
-| Endpoint group | Read boundary | Write or external-action boundary |
-| --- | --- | --- |
-| Groups, templates, pages, SMTP, campaigns, drafts, domains | `view_objects` | `modify_objects` and state/revision checks |
-| Analysis, exports, dashboard | `view_objects` | Read-only endpoints |
-| Imports, previews, SMTP/campaign tests | Not ordinary resource reads | `modify_objects`; a test send has an external effect |
-| Reporting mailboxes | `view_objects` | `modify_objects` and revision checks |
-| Webhooks | `view_objects` | `modify_objects`; the administrator-controlled feature switch must permit saves and network actions |
-| Other application accounts | System-administration boundary | System administration and applicable account-mutation rules |
+```sh
+curl --request GET "$RUPHISH_URL/api/groups/" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
 
-Operation-specific invariants still apply after permission checks, including a retained usable administrator, revision checks, active-campaign resource dependencies, and delivery generations.
+A successful response for an installation with no groups is `200 OK`, `application/json`:
 
-## Browser sessions
+```json
+[]
+```
 
-`/auth/session` supplies browser session bootstrap data. Session actions use POST `/auth/login`, `/auth/logout`, `/auth/password/reset`, `/auth/impersonate` and `/auth/impersonate/exit`. The corresponding browser pages keep `/login`, `/logout` and `/reset_password`; those page URLs accept no mutation requests. `/internal/` includes browser account operations such as password and preference changes. Session cookies and CSRF checks protect that flow; an API key is not a replacement for every browser-specific requirement.
+An invalid key returns `401 Unauthorized`:
 
-External clients should use documented `/api/` routes. See [users and API keys](users-and-api-keys.md) for key rotation and account management.
+```json
+{"success":false,"message":"Invalid API Key","data":null,"code":"AUTH_API_KEY_INVALID"}
+```
 
-## Read-only attribution
+## Permissions
 
-Resource, campaign and draft responses include nullable `created_by` and `edited_by` objects and nullable UTC `created_at` and `edited_at` timestamps. Each account reference contains only `{ "id": 2, "username": "operator", "deleted": false }`; it never contains credentials, permissions or preferences. A resource response includes everything needed to display attribution, without a separate account lookup. List responses use a batched server-side lookup.
+| Operation | Required permission |
+| --- | --- |
+| Resource and campaign reads; results, exports, overview | `view_objects` |
+| Resource writes; imports and previews; verification and integration actions; campaign preparation, tests, launch, completion, and corrections | `modify_objects` |
+| Company policy, bulk closure, account administration, and the starter catalog | `modify_system`, plus applicable account-edit permissions |
 
-The server derives attribution from authenticated writes; clients cannot assign it. Imported records retain creator IDs where known and leave unverified creation times and last-editor fields null. Creation time remains unchanged by later saves, including when its historical value is unknown. Campaigns and drafts reuse their authoritative creation timestamps. A known historical ID with no retained identity has `username: null` and `deleted: false`; the UI displays its ID rather than attributing it to someone else. Deleted accounts retain their display name with `deleted: true`. Frozen campaign resources retain their launch-time creator/editor IDs and edit timestamp; display names reflect the current account name or the name retained at deletion.
+Resources and campaigns are shared across the installation. Creator attribution does not make a resource private. A key cannot bypass a locked account, mandatory password setup, revision checks, disabled features, or state restrictions.
+
+See [account endpoints](accounts-and-keys.md) for access to your own account, account administration, and API-key rotation. Rotating a key invalidates the previous key immediately.

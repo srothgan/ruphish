@@ -1,57 +1,342 @@
 ---
-title: Groups API
-description: Create and maintain recipient groups and inspect their summaries.
+title: Groups
+description: Groups endpoints, request fields, response objects, and revision handling.
 sidebar:
-  order: 5
+  order: 10
 ---
 
-A group contains campaign recipients. It does not create application accounts or grant access to Ruphish.
+Groups are shared installation resources. Reads require `view_objects`; writes require `modify_objects`. Paths use the numeric resource ID.
 
-| Method | Path | Result |
+## Request fields
+
+| Attribute | Type | Contract |
 | --- | --- | --- |
-| GET | `/api/groups/` | Array of shared groups |
-| POST | `/api/groups/` | Create a group; return the saved object |
-| GET | `/api/groups/{id}` | Read a group and its ETag |
-| PUT | `/api/groups/{id}` | Replace a group; include the matching body ID |
-| DELETE | `/api/groups/{id}` | Delete an eligible group |
-| GET | `/api/groups/summary` | Collection counts and group summaries |
-| GET | `/api/groups/{id}/summary` | One group summary |
+| id | integer | Omit on creation. For replacement, supply the same ID as the URL. |
+| name | string | Required nonempty group name. |
+| targets | Recipient[] | Audience, in stored order. Each recipient has `email`, `first_name`, `last_name`, and `position` strings. Email is required; the other strings default to empty. A group requires at least one recipient. |
 
-## Read a group
+PUT replaces the editable fields; it is not a partial update. Omitted strings default to empty, arrays to empty arrays, and booleans to false. Unknown JSON fields are ignored. Send only writable fields.
 
-Set the connection variables from [your first API request](index.md#make-your-first-request), then replace the dummy ID with a group ID returned by the collection:
+## Response fields
 
-```sh
-export GROUP_ID='42'
+Responses combine the content fields above with [resource metadata](conventions.md#resource-metadata).
 
-curl --header "Authorization: Bearer $RUPHISH_API_KEY" \
-  "$RUPHISH_URL/api/groups/$GROUP_ID"
-```
+## POST `/api/groups/`
 
-The response contains the shared group. Include the private-CA option from the setup example if your installation requires it.
+Create a resource.
 
-## Create a group
+**Request:** resources::request::Group. **Response:** `201 Created`, `resource_details::Resource<resource_details::Group>` as `application/json`.
 
-Send this body to `POST /api/groups/`:
+The response includes `ETag: "1"`. Save the returned revision for subsequent replacement or deletion.
+
+Request body (`request.json`):
 
 ```json
 {
-  "name": "Local tutorial",
+  "name": "Training recipients",
   "targets": [
     {
-      "email": "alex@example.test",
-      "first_name": "Alex",
-      "last_name": "Example",
-      "position": "Support"
+      "email": "ada@example.com",
+      "first_name": "Ada",
+      "last_name": "Lovelace",
+      "position": "Engineer"
     }
   ]
 }
 ```
 
-The saved object adds `id`, `revision` and `modified_date`. Target fields are `email`, `first_name`, `last_name`, and `position`; an email address must pass validation. Treat identity and duplicate behavior as part of the import or launch operation, not as a promise that every possible duplicate is removed by a resource write.
+```sh
+curl --request POST "$RUPHISH_URL/api/groups/" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data-binary @request.json
+```
 
-The collection summary has `total` and `groups`. Each summary includes `id`, `name`, `revision`, `modified_date`, and `num_targets`.
+Example response:
 
-Use [CSV import review](imports-and-previews.md) to show row-level errors before saving an imported group. See [the group guide](../user-guide/groups.md) for CSV encoding, headers, and duplicate handling, and [conventions](conventions.md) for conditional updates.
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "revision": 1,
+  "id": 1,
+  "name": "Training recipients",
+  "modified_date": "2026-11-03T12:00:00Z",
+  "targets": [
+    {
+      "email": "ada@example.com",
+      "first_name": "Ada",
+      "last_name": "Lovelace",
+      "position": "Engineer"
+    }
+  ]
+}
+```
 
-PUT and DELETE require the returned quoted numeric ETag in `If-Match`. Missing preconditions return `428`; stale revisions return `412` without changing saved data. See [conditional resource writes](conventions.md#updating-a-resource) for the full contract and conflict recovery.
+## GET `/api/groups/`
+
+List the stored resources. The response is an array, including `[]` when empty.
+
+**Request:** No body. **Response:** `200 OK`, `Vec<resource_details::Resource<resource_details::Group>>` as `application/json`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/groups/" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+[
+  {
+    "created_at": "2026-11-03T12:00:00Z",
+    "created_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_by": {
+      "id": 1,
+      "username": "operator",
+      "deleted": false
+    },
+    "edited_at": "2026-11-03T12:00:00Z",
+    "revision": 1,
+    "id": 1,
+    "name": "Training recipients",
+    "modified_date": "2026-11-03T12:00:00Z",
+    "targets": [
+      {
+        "email": "ada@example.com",
+        "first_name": "Ada",
+        "last_name": "Lovelace",
+        "position": "Engineer"
+      }
+    ]
+  }
+]
+```
+
+## GET `/api/groups/{id}`
+
+Read one resource.
+
+**Request:** No body. **Response:** `200 OK`, `resource_details::Resource<resource_details::Group>` as `application/json`.
+
+The response includes an `ETag` containing the current quoted numeric revision, for example `ETag: "1"`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/groups/1" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "revision": 1,
+  "id": 1,
+  "name": "Training recipients",
+  "modified_date": "2026-11-03T12:00:00Z",
+  "targets": [
+    {
+      "email": "ada@example.com",
+      "first_name": "Ada",
+      "last_name": "Lovelace",
+      "position": "Engineer"
+    }
+  ]
+}
+```
+
+## PUT `/api/groups/{id}`
+
+Replace the editable content at the current revision.
+
+**Request:** resources::request::Group. **Response:** `200 OK`, `resource_details::Resource<resource_details::Group>` as `application/json`.
+
+Returns the new revision and `ETag: "2"`. A stale revision returns `412`; read again before deciding whether to replace newer content.
+
+Request body (`request.json`):
+
+```json
+{
+  "id": 1,
+  "name": "Training recipients",
+  "targets": [
+    {
+      "email": "ada@example.com",
+      "first_name": "Ada",
+      "last_name": "Lovelace",
+      "position": "Engineer"
+    }
+  ]
+}
+```
+
+```sh
+curl --request PUT "$RUPHISH_URL/api/groups/1" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header 'If-Match: "1"' \
+  --header "Content-Type: application/json" \
+  --data-binary @request.json
+```
+
+Example response:
+
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "revision": 2,
+  "id": 1,
+  "name": "Training recipients",
+  "modified_date": "2026-11-03T12:00:00Z",
+  "targets": [
+    {
+      "email": "ada@example.com",
+      "first_name": "Ada",
+      "last_name": "Lovelace",
+      "position": "Engineer"
+    }
+  ]
+}
+```
+
+## GET `/api/groups/summary`
+
+List resource metadata without authored content.
+
+**Request:** No body. **Response:** `200 OK`, `resources::GroupSummaries` as `application/json`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/groups/summary" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "total": 1,
+  "groups": [
+    {
+      "created_at": "2026-11-03T12:00:00Z",
+      "created_by": {
+        "id": 1,
+        "username": "operator",
+        "deleted": false
+      },
+      "edited_by": {
+        "id": 1,
+        "username": "operator",
+        "deleted": false
+      },
+      "edited_at": "2026-11-03T12:00:00Z",
+      "revision": 1,
+      "id": 1,
+      "name": "Training recipients",
+      "modified_date": "2026-11-03T12:00:00Z",
+      "num_targets": 1
+    }
+  ]
+}
+```
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| total | integer | Number of returned resources. |
+| groups | resources::GroupSummary[] | Resource metadata plus `num_targets`, the recipient count. |
+
+## GET `/api/groups/{id}/summary`
+
+Read metadata and recipient count for one group.
+
+**Request:** No body. **Response:** `200 OK`, `resources::GroupSummary` as `application/json`.
+
+```sh
+curl --request GET "$RUPHISH_URL/api/groups/1/summary" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "revision": 1,
+  "id": 1,
+  "name": "Training recipients",
+  "modified_date": "2026-11-03T12:00:00Z",
+  "num_targets": 1
+}
+```
+
+## DELETE `/api/groups/{id}`
+
+Delete the resource at the specified revision.
+
+**Request:** No body. **Response:** `200 OK`, `common::Envelope<()>` as `application/json`.
+
+```sh
+curl --request DELETE "$RUPHISH_URL/api/groups/1" \
+  --header "Authorization: Bearer $RUPHISH_API_KEY" \
+  --header 'If-Match: "2"'
+```
+
+Example response:
+
+```json
+{
+  "success": true,
+  "message": "Group deleted successfully!",
+  "data": null
+}
+```
+
+## Related operations
+
+[Import and review CSV recipients](imports-previews-and-test-sends.md). Campaign preparation deduplicates the combined audience; see [campaigns](campaigns.md).

@@ -1,42 +1,122 @@
 ---
-title: API conventions
-description: Understand JSON bodies, resource identities, revisions, timestamps, and pagination.
+title: Conventions
+description: Wire formats, resource metadata, revisions, timestamps, and retry contracts.
 sidebar:
-  order: 3
+  order: 2
 ---
 
-Send JSON writes with `Content-Type: application/json` unless an endpoint specifies a form or multipart body. Successful creation of groups, templates, pages, sending profiles, campaigns, domains, webhooks, and reporting mailboxes returns HTTP `201`. Reads, updates, deletions, preparation, draft saves/launches, and account creation normally return `200`; queued domain checks and mailbox polls return `202`. Consult the operation before hard-coding one success status.
+Send a Bearer API key on every request to the Ruphish application origin. Requests and responses use UTF-8 JSON unless the endpoint specifies multipart data, form data, CSV, or binary output.
 
-## Paths and identifiers
+## Reading the examples
 
-Use the documented trailing slash on collection routes, such as `/api/templates/`. Some legacy slashless routes redirect with `301`; clients can change a redirected POST into a GET, so use the correct path directly.
+Examples show synthetic data with the current request and response shapes. Replace IDs, domains, keys, dates, and credentials with values from your installation. Examples illustrate individual operations; they are not a script to execute consecutively. For JSON requests, save the shown body as `request.json` before running its curl command. A request described as “No body” sends neither `{}` nor `null`.
 
-Most resource IDs are integers. Draft IDs are client-selected strings. A recipient's opaque tracking identifier (`rid`, or `id` in a legacy result) is different from its numeric result-row ID in analysis and delivery APIs. Do not substitute one for the other.
+Type names such as `campaign::Create` identify the current contract type. JSON field names, nullability, and enum values in the examples and tables are the wire contract; Rust types are not required to use the service. Integer fields are JSON numbers, with signed 64-bit range unless a narrower bound is listed.
+
+## Paths and collections
+
+Use the documented trailing slash for resource collections. GET and POST on `/api/groups`, `/api/templates`, `/api/pages`, `/api/learning-pages`, `/api/smtp`, `/api/campaigns`, and `/api/users` redirect to their slash form with `301`. Send writes directly to the canonical slash URL to avoid client-specific redirect behavior. Other routes do not automatically share those aliases.
+
+Collections return arrays or named page objects as shown. An empty collection is `[]`, not null. Pagination is endpoint-specific: follow the returned cursor and keep the selection and ordering unchanged.
+
+## Attribution
+
+The following fields are flattened into resource, campaign, draft, domain, and integration responses:
+
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z"
+}
+```
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `created_at` | `string or null` | UTC creation instant, or unknown when historical evidence is unavailable. |
+| `created_by` | `UserReference or null` | Original creator, or unknown for unattributed historical resources. |
+| `edited_by` | `UserReference or null` | Last authenticated editor, or unknown for imported history. |
+| `edited_at` | `string or null` | UTC timestamp of the successful save. |
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `id` | `integer` | Stable account identifier, retained after deletion. |
+| `username` | `string or null` | Display name, or unknown when historical identity information is unavailable. |
+| `deleted` | `boolean` | True when a retained deleted-account record confirms deletion. |
+
+Each attribution member is nullable. A historical account ID may have `username: null`; deleted accounts use `deleted: true`. The server assigns these fields. They are not write inputs.
+
+## Resource metadata
+
+Groups, templates, landing pages, learning pages, and sending profiles combine attribution with this metadata and their content fields:
+
+```json
+{
+  "created_at": "2026-11-03T12:00:00Z",
+  "created_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_by": {
+    "id": 1,
+    "username": "operator",
+    "deleted": false
+  },
+  "edited_at": "2026-11-03T12:00:00Z",
+  "revision": 1,
+  "id": 1,
+  "name": "Example resource",
+  "modified_date": "2026-11-03T12:00:00Z"
+}
+```
+
+| Attribute | Type | Contract |
+| --- | --- | --- |
+| `revision` | `integer` | Monotonic configuration revision used for conditional writes. |
+| `id` | `integer` | Persistent resource identity. |
+| `name` | `string` | Display name. |
+| `modified_date` | `string or null` | Last modification, or explicitly unknown. |
 
 ## Updating a resource
 
-Group, template, landing-page, learning-page, and SMTP `PUT` requests replace the resource's editable fields; they are not JSON Merge Patch. Include the resource `id` matching the path. Read the current object before editing it, preserve the fields you intend to keep, and send the response's `ETag` as `If-Match`.
+Conditional writes prevent silently replacing a newer version. Read the latest revision, submit the appropriate precondition, and retain the new revision returned by a successful save.
 
-These resource families return a numeric `revision` in details and summaries, and a quoted revision such as `ETag: "3"` on detail reads and saves. New and migrated resources start at revision 1; every successful configuration save advances it. Both PUT and DELETE require exactly one quoted numeric `If-Match`, for example `If-Match: "3"`. Revisions identify the current configuration; they do not retain version history. Timestamps are display metadata, not concurrency tokens. Wildcards, weak validators and lists of validators are rejected.
+| Resource | Replacement precondition | Deletion precondition |
+| --- | --- | --- |
+| Groups, templates, pages, learning pages, SMTP | `If-Match: "1"` | `If-Match: "1"` |
+| Domains, webhooks, reporting mailboxes | JSON `"revision": 1` | `If-Match: "1"` |
+| Campaign drafts | JSON `"revision": 1` | Query `?revision=1` |
+| Company settings | `If-Match: "1"` | No delete operation |
+| Campaign creation selections | String `"revision": "1"` on each selected resource | Not applicable |
 
-Domains, webhooks and reporting mailboxes require the numeric `revision` in update bodies and a quoted `If-Match` on deletion. Drafts carry their revision in save/launch bodies and the delete query parameter. Their existing identical-save retry acknowledgement remains idempotent; it does not merge different edits.
+Resource If-Match values are a single quoted positive numeric revision. Weak ETags, wildcards, multiple values, unquoted values, and noncanonical numbers are rejected. Missing required preconditions return `428`; a stale revision returns `412`. Settings has its own parser; use the same quoted format there.
 
-Missing preconditions return `428 REVISION_REQUIRED`; malformed `If-Match` returns `400 REVISION_REQUIRED`; a stale revision returns `412 RESOURCE_CHANGED`; a resource removed before the write returns `404 RESOURCE_NOT_FOUND`. Revision checking, replacement/deletion and edit attribution happen in one database transaction. Of two competing writes against the same version, only one can commit. Losing edits never recreate deleted resources. These requirements apply to API clients as well as the UI; unconditional legacy updates are no longer supported.
+PUT replaces the editable configuration rather than applying a JSON patch. Omission, null, and empty strings can have different meanings, especially for secrets. Follow the endpoint’s field table.
 
-Keep the user's input on a conflict. Read the latest resource separately, compare changes and obtain an explicit decision before replacing their draft or submitting against a newer revision. Never automatically retry with the latest revision. The UI offers **Review saved version in a new tab** and a confirmed **Discard my changes and reload** action. If the record was deleted, copy or export anything needed before leaving.
+## Timestamps and identifiers
 
-Resource names must be unique for new resources and renames within their resource family across the installation. Existing imported duplicate names may remain editable. Prefer explicit IDs and revisions when a workflow supports them.
+RFC 3339 timestamps are strings with an offset, normally normalized to UTC with `Z`. Operational timestamps explicitly documented as Unix seconds are integer seconds, not milliseconds. Nullable timestamps are returned as null when unknown.
 
-## Time and missing values
+Public recipient tokens (`rid`, or the string `id` in a full campaign recipient) differ from numeric recipient row IDs in results and delivery endpoints. Resource IDs are scoped to their resource family.
 
-Resource timestamps use UTC RFC3339 strings, with explicit `null` for absent or unknown dates. An account with no recorded login likewise returns `last_login: null`; the year-0001 sentinel is not an API representation of absence. New analysis, domain, integration, and delivery fields may use UTC Unix seconds; each reference identifies them. Local scheduling inputs pair a local date/time with an IANA time-zone identifier. Do not apply the display locale's time zone to an API timestamp.
+## Success and retry behavior
 
-Resource `targets`, `attachments` and `headers` are arrays and return `[]` when empty, including immediately after saving. Collection inputs accept arrays, not `null`. Campaign `results` and `timeline` can still be absent. Do not assume every collection is always an array. New paginated APIs expose their continuation field explicitly.
+There is no universal success envelope. A resource read returns its object directly. Some actions instead return:
 
-## Pagination and retries
+```json
+{"success":true,"message":"Delivery updated","data":null}
+```
 
-Legacy resource lists return their collection without a shared pagination envelope. Drafts, the campaign directory, delivery, and analysis use different paging schemes. Follow each endpoint's cursor or offset contract; there is no universal `page` parameter.
+`success` is boolean, `message` is diagnostic text, and `data` is the operation-specific value or null. Integration deletion returns only `{"success":true}`. `202 Accepted` means queued work, not a completed verification or mailbox check.
 
-Retry reads after transient transport errors with a bounded delay. Do not automatically retry a write that might have succeeded. Draft launch provides identity-based retry behavior; direct campaign creation supports an `Idempotency-Key` header. Preserve the same operation identity and request when retrying a launch. Test sends and SMTP delivery can have an uncertain outcome.
-
-See [errors](errors.md) for status handling and [campaigns](campaigns.md) for delivery resolution.
+After an uncertain write response, reconcile using the operation’s identity or current resource state. Campaign and draft creation have explicit idempotency rules; a test email does not become safe to repeat simply because its HTTP response was lost.
