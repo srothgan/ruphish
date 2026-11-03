@@ -2,7 +2,7 @@
 title: Use PostgreSQL
 description: Connect a new Ruphish installation to PostgreSQL with a dedicated role and verified TLS.
 sidebar:
-  order: 27
+  order: 28
 ---
 
 Use PostgreSQL 17 or 18 with a writable UTF8 database and SCRAM password authentication. You need an existing server reachable from Ruphish and a dedicated login role.

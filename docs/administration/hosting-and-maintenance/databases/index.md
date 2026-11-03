@@ -2,7 +2,7 @@
 title: Databases
 description: Choose SQLite, MySQL, or PostgreSQL and understand what changing storage involves.
 sidebar:
-  order: 24
+  order: 25
 ---
 
 Ruphish uses one database for accounts, company settings, resources, campaigns, delivery state, and results. SQLite is included and needs no separate database server. Choose MySQL or PostgreSQL when you want to use your organization's server-database operations and backup tooling.

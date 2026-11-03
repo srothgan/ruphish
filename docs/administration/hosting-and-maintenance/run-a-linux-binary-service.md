@@ -2,7 +2,7 @@
 title: Run a Linux binary service
 description: Install the released binary and run it under systemd with a dedicated account and stable paths.
 sidebar:
-  order: 22
+  order: 23
 ---
 
 This guide runs the released Linux binary as a systemd service. You need a supported Linux host, `sudo` access, and systemd. For supported platforms and a foreground installation on Windows or macOS, see [Install Ruphish](../../getting-started/install-ruphish.mdx). The native installer does not register an operating-system service; [Docker Compose](run-with-docker-compose.md) is another way to manage a background installation.

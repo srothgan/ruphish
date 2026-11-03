@@ -2,7 +2,7 @@
 title: Configuration reference
 description: Find the configuration file and set process options through JSON or environment variables.
 sidebar:
-  order: 29
+  order: 30
 ---
 
 Ruphish reads a JSON configuration file at startup. Use it for listeners, database connections, logging, and network policy. [Company settings](../team-administration/company-settings.md), such as enabling webhooks, are saved separately in the database through the browser.

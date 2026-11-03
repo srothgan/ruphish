@@ -2,7 +2,7 @@
 title: Troubleshoot the installation
 description: Diagnose startup, access, storage, and integration problems from their symptoms.
 sidebar:
-  order: 34
+  order: 35
 ---
 
 Start with the service's recent output and readiness status. For Docker, run these from the installation folder:

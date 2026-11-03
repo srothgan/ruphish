@@ -2,7 +2,7 @@
 title: Use MySQL
 description: Connect Ruphish to a MySQL database with a dedicated account and verified TLS.
 sidebar:
-  order: 26
+  order: 27
 ---
 
 Use MySQL 8.4 or 9.7 LTS with InnoDB. You need an existing server reachable from Ruphish and a dedicated database account. MariaDB and other MySQL release lines are not accepted substitutes.

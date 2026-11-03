@@ -8,13 +8,15 @@
 [![Docs](https://img.shields.io/badge/docs-website-blueviolet)](https://ruphish.com/docs/)
 [![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/srothgan/ruphish/blob/main/LICENSE)
 
-Ruphish is a phishing-simulation application with a native Rust server and a Rust/WASM admin interface. Prepare personalized campaigns, deliver them through your SMTP service, and review delivery, participant interactions, and reported messages in one place.
+Ruphish helps teams run phishing simulations, send personalized campaigns through their mail service, and understand the results.
 
 **[Try the demo](https://demo.ruphish.com/)** with username `demo` and password `demodemo`.
 
-Ruphish is a successor to Gophish with its own API, a new interface, persistent campaign drafts, verified domains, richer analysis, and explicit delivery recovery. Supported Gophish SQLite and MySQL databases migrate directly to Ruphish, preserving supported data and authored Go-template behavior. Adapt automation to the documented Ruphish API and review the [documented differences](https://ruphish.com/docs/migration/changes-to-review-before-migrating/) before migrating.
-
 ![Ruphish dashboard showing campaign outcomes, recent campaigns, and deliveries needing review.](assets/dashboard.png)
+
+## About
+
+Ruphish is a successor to Gophish with a new interface and API. You can migrate supported Gophish SQLite and MySQL databases; review the [migration guide](https://ruphish.com/docs/migration/) before moving your data or adapting an integration.
 
 ## What you can do
 
@@ -32,7 +34,7 @@ Participant tracking is designed around interaction events and optional presence
 
 | Your goal | Guide |
 | --- | --- |
-| Try a contained exercise with a local inbox | [Your first campaign](https://ruphish.com/docs/getting-started/run-your-first-campaign/) |
+| Try and run a local campaign | [Your first campaign](https://ruphish.com/docs/getting-started/run-your-first-campaign/) |
 | Install a release binary or run the Docker image | [Installation](https://ruphish.com/docs/getting-started/install-ruphish/) |
 | Run campaigns and understand results | [User guide](https://ruphish.com/docs/user-guide/) |
 | Configure databases, TLS, accounts, or recovery | [Administration](https://ruphish.com/docs/administration/) |
@@ -41,13 +43,15 @@ Participant tracking is designed around interaction events and optional presence
 | Change code, translations, or documentation | [Contributing](CONTRIBUTING.md) |
 | Report a suspected security vulnerability | [Security policy](SECURITY.md) |
 
-The HTTP interface separates `/api/` for public automation, `/auth/` for browser authentication/session data, and `/internal/` for browser-specific operations. See the [API overview](https://ruphish.com/docs/api/) before choosing an endpoint for an integration.
+For your own application or automation, use an API key and follow the [HTTP API reference](https://ruphish.com/docs/api/) for endpoints, request and response examples, and permissions.
 
 ## Installation
 
-Native installers download a release binary with the administration interface included. By default, they select the latest full release.
+Choose a native binary or Docker. Both include the server and browser interface and use SQLite by default.
 
-> The website installer URLs below are pending deployment and verification. Published archives are available from [GitHub Releases](https://github.com/srothgan/ruphish/releases).
+### Native binary
+
+The installer selects the latest full release and installs it for your user account.
 
 Linux or macOS:
 
@@ -61,22 +65,40 @@ Windows PowerShell:
 irm https://www.ruphish.com/install.ps1 | iex
 ```
 
-To include development previews alongside full releases, use:
+### Docker
+
+With Docker running in Linux-container mode, save this as `compose.yaml` in a new installation folder:
+
+```yaml
+services:
+  ruphish:
+    image: ghcr.io/srothgan/ruphish:latest
+    restart: unless-stopped
+    stop_grace_period: 30s
+    ports:
+      - "127.0.0.1:3333:3333"
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - ruphish-data:/var/lib/ruphish
+volumes:
+  ruphish-data:
+```
+
+Run these commands from that folder:
 
 ```sh
-curl -fsSL https://www.ruphish.com/install.sh | RUPHISH_INCLUDE_PREVIEWS=1 sh
+docker compose pull
+docker compose up -d --wait
+docker compose logs ruphish
 ```
 
-```powershell
-$env:RUPHISH_INCLUDE_PREVIEWS = '1'
-irm https://www.ruphish.com/install.ps1 | iex
-```
+Open **http://127.0.0.1:3333**. This setup is accessible only from your computer and keeps its data in a persistent volume.
 
-Until a full release is published, use the preview option; the default reports that no full release is available. Previews are intended for disposable installations, and upgrades are not guaranteed.
+### Installation guides
 
-The PowerShell setting lasts for the current session; clear it with `Remove-Item Env:RUPHISH_INCLUDE_PREVIEWS` to return to full-release selection. See the [installer options](https://www.ruphish.com/docs/getting-started/install-ruphish/#installer-options-and-environment) for environment settings and explicit overrides.
-
-The installer prints the installed executable's path and does not start the server automatically. See the [installation guide](https://ruphish.com/docs/getting-started/install-ruphish/) for supported platforms, first startup, Docker, updates, and removal. SQLite is the default database; see [database administration](https://ruphish.com/docs/administration/hosting-and-maintenance/databases/) for MySQL and PostgreSQL requirements.
+- [Install Ruphish](https://ruphish.com/docs/getting-started/install-ruphish/) covers supported platforms, first startup, sign-in, and stopping or restarting.
+- [Native installer reference](https://ruphish.com/docs/administration/hosting-and-maintenance/native-installer-reference/) covers development previews, exact versions, directories, PATH settings, updates, and removal.
+- [Hosting and maintenance](https://ruphish.com/docs/administration/hosting-and-maintenance/) covers services, network access, HTTPS, databases, backups, and upgrades.
 
 For development, follow [contributing](CONTRIBUTING.md) for setup, architecture, and validation.
 

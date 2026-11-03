@@ -20,6 +20,7 @@ For a first trial on your own computer, use [Install Ruphish](../../getting-star
 
 | Task | Guide |
 | --- | --- |
+| Select a binary release, customize installation, or remove program files | [Native installer reference](native-installer-reference.md) |
 | Change ports, file locations, environment values, or other process settings | [Configuration reference](configuration-reference.md) |
 | Allow connections to an internal mail server or integration | [Internal services](connect-to-internal-services.md) |
 | Select listeners or disable campaign sending in a process | [Command-line reference](command-line-reference.md) |

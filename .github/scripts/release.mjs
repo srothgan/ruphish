@@ -82,20 +82,37 @@ export function releaseNotes(version, changelog, repository, previous) {
     assert.equal(matches.length, 1, `Expected one dated changelog entry for ${version}`);
     notes = matches[0][2].trim();
     assert(notes && !/\bTODO\b/.test(notes), 'Final release notes must be complete');
-  } else {
-    notes = `Development preview ${parsed.number} for Ruphish ${parsed.base}.\n\nFor testing and disposable installations. Upgrades between development previews or to the final release are not guaranteed.`;
+    return `${notes}\n`;
   }
+  notes = `Development preview ${parsed.number} for Ruphish ${parsed.base}.\n\nFor testing and disposable installations. Upgrades between development previews or to the final release are not guaranteed.`;
   const image = repository.toLowerCase();
   const packageName = image.split('/')[1];
   notes += `\n\n**Docker:** [Container image and pull command](https://github.com/${repository}/pkgs/container/${packageName})\n\n\`\`\`sh\ndocker pull ghcr.io/${image}:${version}\n\`\`\``;
-  if (parsed.channel !== 'final') {
-    notes += `\n\n**Changelog:** [Planned changes for ${parsed.base}](https://github.com/${repository}/blob/v${version}/CHANGELOG.md)`;
-  }
+  notes += `\n\n**Changelog:** [Planned changes for ${parsed.base}](https://github.com/${repository}/blob/v${version}/CHANGELOG.md)`;
   if (previous) {
     assert(compareVersions(previous, version) < 0, 'Comparison baseline must precede the release');
     notes += `\n\n[Changes since ${previous}](https://github.com/${repository}/compare/v${previous}...v${version}).`;
   }
-  return `${notes}\n\n**Native binaries:** Download the archive for your platform from **Assets** below. Archives are unsigned, and macOS binaries are not notarized.\n\n**Verification:** SHA-256 checksums and GitHub build provenance are included in **Assets**.\n`;
+  return `${notes}
+
+**Native binaries:** Install this release using the script for your platform.
+
+Linux or macOS:
+
+\`\`\`sh
+curl -fsSL https://www.ruphish.com/install.sh | sh -s -- --version ${version}
+\`\`\`
+
+Windows PowerShell:
+
+\`\`\`powershell
+& ([scriptblock]::Create((irm https://www.ruphish.com/install.ps1))) -Version '${version}'
+\`\`\`
+
+See the [native installer reference](https://www.ruphish.com/docs/administration/hosting-and-maintenance/native-installer-reference/) for requirements and options.
+
+**Verification:** SHA-256 checksums and GitHub build provenance are included in **Assets**. Binaries are unsigned, and macOS binaries are not notarized.
+`;
 }
 
 export function metadata(env = process.env) {

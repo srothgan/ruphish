@@ -2,7 +2,7 @@
 title: Health and logs
 description: Check whether Ruphish is ready, inspect service output, and manage log retention.
 sidebar:
-  order: 33
+  order: 34
 ---
 
 Use health probes to check whether Ruphish is responding and ready to serve requests. Use logs and the relevant campaign or integration page to find out why something failed.

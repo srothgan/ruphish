@@ -73,8 +73,8 @@ test('prerelease notes stay short and point to the tagged changelog', () => {
 test('final notes require exactly one complete dated version section', () => {
   const changelog =
     '# Changelog\n\n## Unreleased\nFuture change.\n\n## 0.1.0 - 2026-10-30\n\nInitial release.\n\n## 0.0.1 - 2026-01-01\nOld change.\n';
-  const notes = releaseNotes('0.1.0', changelog, 'example/ruphish');
-  assert.match(notes, /^Initial release\./);
+  const notes = releaseNotes('0.1.0', changelog, 'example/ruphish', '0.0.1');
+  assert.equal(notes, 'Initial release.\n');
   assert(!notes.includes('Future change'));
   assert(!notes.includes('Old change'));
   assert.throws(() => releaseNotes('0.2.0', changelog, 'example/ruphish'), /dated changelog/);
@@ -87,6 +87,39 @@ test('final notes require exactly one complete dated version section', () => {
     () => releaseNotes('0.1.0', '## 0.1.0 - 2026-10-30\nTODO\n', 'example/ruphish'),
     /complete/,
   );
+});
+
+test('native installation commands pin the exact development preview', () => {
+  const cases = [
+    {
+      version: '0.1.0-dev.2',
+      shell: 'curl -fsSL https://www.ruphish.com/install.sh | sh -s -- --version 0.1.0-dev.2',
+      powershell:
+        "& ([scriptblock]::Create((irm https://www.ruphish.com/install.ps1))) -Version '0.1.0-dev.2'",
+    },
+    {
+      version: '0.2.0-dev.12',
+      shell: 'curl -fsSL https://www.ruphish.com/install.sh | sh -s -- --version 0.2.0-dev.12',
+      powershell:
+        "& ([scriptblock]::Create((irm https://www.ruphish.com/install.ps1))) -Version '0.2.0-dev.12'",
+    },
+  ];
+  for (const { version, shell, powershell } of cases) {
+    const notes = releaseNotes(version, '', 'srothgan/ruphish');
+    const blocks = [...notes.matchAll(/```(\w+)\n([\s\S]*?)\n```/g)];
+    assert.deepEqual(
+      blocks.slice(1).map(([, language, command]) => ({ language, command })),
+      [
+        { language: 'sh', command: shell },
+        { language: 'powershell', command: powershell },
+      ],
+    );
+    assert(!notes.includes('Download the archive'));
+    assert(!notes.includes('--include-previews'));
+    assert(
+      notes.includes('/docs/administration/hosting-and-maintenance/native-installer-reference/'),
+    );
+  }
 });
 
 test('metadata checks real Git tag identity, main ancestry and manual non-publication', (t) => {

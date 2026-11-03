@@ -2,7 +2,7 @@
 title: Network access and HTTPS
 description: Give colleagues and campaign recipients working HTTPS addresses with the correct routing.
 sidebar:
-  order: 23
+  order: 24
 ---
 
 Ruphish serves two kinds of traffic. Keep their addresses separate so campaign recipients reach campaign pages rather than the sign-in screen.

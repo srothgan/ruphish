@@ -2,7 +2,7 @@
 title: Back up and restore
 description: Preserve database and configuration state, restore a separate copy, and check it before returning to service.
 sidebar:
-  order: 31
+  order: 32
 ---
 
 A usable backup contains your database and the settings needed to run it. Take backups regularly and before upgrades or storage changes. Keep copies outside the Ruphish host so a lost disk or deleted volume does not remove both the installation and its backup.

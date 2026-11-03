@@ -2,7 +2,7 @@
 title: Command-line reference
 description: Select configuration and listeners, control the campaign worker, and inspect command help.
 sidebar:
-  order: 30
+  order: 31
 ---
 
 Run the installed `ruphish` binary without arguments to use or create your [default configuration](configuration-reference.md#default-locations-and-explicit-configuration):

@@ -24,6 +24,8 @@ git push origin v0.1.1
 
 These commands publish a release through CI. Substitute the prepared version; do not recreate or move an existing release tag. Supported identities are `MAJOR.MINOR.PATCH` and numbered development previews such as `0.2.0-dev.1`. Development previews are for disposable installations and do not promise upgrade compatibility between previews or to the final release.
 
+The metadata step generates release notes through `.github/scripts/release.mjs`. Final releases contain only the matching dated changelog entry. Development previews include a short preview notice, a link to the tagged changelog, a Docker pull command, and native installer commands pinned to that preview's exact version. Copying a command from an older preview therefore installs that preview rather than the current latest version. The native archives, checksums, and provenance remain attached as release assets; the installer downloads the archive for the user's platform.
+
 ## What the workflow verifies
 
 | Stage | Result |

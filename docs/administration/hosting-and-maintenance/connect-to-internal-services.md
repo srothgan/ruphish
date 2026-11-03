@@ -2,7 +2,7 @@
 title: Connect to internal services
 description: Allow Ruphish to reach selected internal mail servers, webhook receivers, and campaign domains.
 sidebar:
-  order: 28
+  order: 29
 ---
 
 Ruphish checks the destination before contacting mail servers, webhook receivers, imported websites, and campaign-verification endpoints. Public services normally need no private-network exception. An internal service may be blocked until the host explicitly allows its address.

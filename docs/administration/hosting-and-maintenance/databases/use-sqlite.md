@@ -2,7 +2,7 @@
 title: Use SQLite
 description: Locate the default database, choose a persistent path, and preserve the file during maintenance.
 sidebar:
-  order: 25
+  order: 26
 ---
 
 SQLite is the default database. It runs inside Ruphish, so you do not need a database server, database password, or separate connection setup.

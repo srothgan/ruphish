@@ -2,7 +2,7 @@
 title: Upgrade Ruphish
 description: Replace the released application, let startup apply supported schema updates, and verify the installation.
 sidebar:
-  order: 32
+  order: 33
 ---
 
 An upgrade replaces the Ruphish binary or Docker image while keeping the existing database and configuration. Supported database changes run automatically at startup; there is no separate migration command or directory to copy.
@@ -17,7 +17,7 @@ For an existing Gophish installation, use [Migration from Gophish](../../migrati
 4. Stop every application process using the database, including separate administration or campaign processes.
 5. Take and check a [backup](back-up-and-restore.md) of the database, configuration, and required secrets.
 
-Do not run old and new versions against the same database during the upgrade.
+Do not run old and new versions against the same database during the upgrade. For native binaries, the [installer reference](native-installer-reference.md) explains how to select an exact version and reuse a custom program directory.
 
 ## Upgrade Docker
 
