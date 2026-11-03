@@ -30,6 +30,8 @@ Markdown follows a separate rule: one source line per paragraph or list item, wi
 
 Maintained JavaScript uses the root `package.json` and lockfile for pinned Prettier and ESLint tools. The root configurations support editor integration, two-space indentation, single quotes, LF line endings and a 100-column formatting target. Generated bundles, dependencies and independent content fixtures are excluded. These tools are separate from the browser build dependencies in `crates/ruphish-ui/web/`; see [JavaScript formatting and linting](testing/validation.md#javascript-formatting-and-linting) for the direct installation, check and formatting commands.
 
+The root npm manifest overrides `minimatch` to 11.0.1 within ESLint's dependency tree to address [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249). ESLint 10.14.0 and its configuration loader still require 10.x. Remove the override once their dependency ranges resolve to a patched version, then regenerate the lockfile and verify linting and `npm audit`.
+
 ## Build and run
 
 `trunk build --locked` builds the WASM interface and its generated browser assets. Then build/run the native `ruphish` package with the prepared configuration. Use the native admin listener to exercise authentication and API-backed pages; standalone `trunk serve` is not configured as a replacement for that application flow.

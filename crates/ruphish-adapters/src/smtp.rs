@@ -123,7 +123,16 @@ impl Sender for Smtp {
             )?,
             text: parsed.body_text(0).unwrap_or_default().into_owned(),
             transport_sender: mail.from,
-            visible_sender: parsed.header_raw("From").unwrap_or_default().trim().into(),
+            visible_sender: std::str::from_utf8(
+                parsed
+                    .headers()
+                    .get("From")
+                    .ok_or(Error::Internal)?
+                    .raw_value(),
+            )
+            .map_err(|_| Error::Internal)?
+            .trim()
+            .into(),
         })
     }
     fn compose(&self, request: &MessageInput) -> Result<PreparedMail, Error> {

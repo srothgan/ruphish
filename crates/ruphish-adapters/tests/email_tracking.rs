@@ -42,13 +42,11 @@ fn composed_html(input: &MessageInput) -> String {
     assert_eq!(parsed.body_text(0).unwrap().trim(), "Plain alternative");
     // mail-parser's body_html convenience accessor synthesizes HTML for plain text.
     parsed
-        .parts
-        .iter()
-        .find_map(|part| match &part.body {
-            mail_parser::PartType::Html(html) => Some(html.to_string()),
-            _ => None,
-        })
+        .parts()
+        .find(|part| matches!(part.kind(), mail_parser::PartKind::Html))
+        .and_then(|part| part.text())
         .unwrap_or_default()
+        .into_owned()
 }
 
 #[test]

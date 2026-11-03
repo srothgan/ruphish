@@ -355,9 +355,22 @@ fn inherited_email_generation_cases_decode_to_the_expected_mime_and_envelope() {
                 .count(),
             1
         );
-        assert_eq!(parsed.header_raw("X-Mailer").unwrap().trim(), "gophish");
         assert_eq!(
-            parsed.header_raw("X-Gophish-Contact").unwrap().trim(),
+            parsed
+                .headers()
+                .get("X-Mailer")
+                .map(|header| std::str::from_utf8(header.raw_value()).unwrap())
+                .unwrap()
+                .trim(),
+            "gophish"
+        );
+        assert_eq!(
+            parsed
+                .headers()
+                .get("X-Gophish-Contact")
+                .map(|header| std::str::from_utf8(header.raw_value()).unwrap())
+                .unwrap()
+                .trim(),
             "test@test.com"
         );
     }
@@ -675,7 +688,6 @@ fn destination_policy_cannot_be_bypassed_with_mapped_ipv4() {
 
 #[test]
 fn campaign_mime_preserves_address_headers_and_inline_attachment_contracts() {
-    use mail_parser::MimeHeaders;
     use ruphish_application::{
         delivery::{MessageInput, Sender},
         resources::{Header, Profile, Recipient, Template},
@@ -763,11 +775,18 @@ fn campaign_mime_preserves_address_headers_and_inline_attachment_contracts() {
             let parsed = mail_parser::MessageParser::default()
                 .parse(&mail.bytes)
                 .unwrap();
-            assert!(parsed.header_raw("From").unwrap().contains(if named {
-                "visible@example.test"
-            } else {
-                "override@example.test"
-            }));
+            assert!(
+                parsed
+                    .headers()
+                    .get("From")
+                    .map(|header| std::str::from_utf8(header.raw_value()).unwrap())
+                    .unwrap()
+                    .contains(if named {
+                        "visible@example.test"
+                    } else {
+                        "override@example.test"
+                    })
+            );
             let review = sender.review(&request).unwrap();
             assert_eq!(review.transport_sender, "transport@example.test");
             assert!(review.visible_sender.contains(if named {
@@ -789,13 +808,31 @@ fn campaign_mime_preserves_address_headers_and_inline_attachment_contracts() {
                     .collect::<String>(),
                 "fixture-rid - HTML"
             );
-            assert_eq!(parsed.header_raw("To").unwrap().contains("John Doe"), named);
             assert_eq!(
-                parsed.header_raw("X-Mailer").unwrap().trim(),
+                parsed
+                    .headers()
+                    .get("To")
+                    .map(|header| std::str::from_utf8(header.raw_value()).unwrap())
+                    .unwrap()
+                    .contains("John Doe"),
+                named
+            );
+            assert_eq!(
+                parsed
+                    .headers()
+                    .get("X-Mailer")
+                    .map(|header| std::str::from_utf8(header.raw_value()).unwrap())
+                    .unwrap()
+                    .trim(),
                 if named { "gophish" } else { "" }
             );
             assert_eq!(
-                parsed.header_raw("X-Gophish-Contact").unwrap().trim(),
+                parsed
+                    .headers()
+                    .get("X-Gophish-Contact")
+                    .map(|header| std::str::from_utf8(header.raw_value()).unwrap())
+                    .unwrap()
+                    .trim(),
                 if named { "contact@example.test" } else { "" }
             );
             let part = parsed.attachments().next().unwrap();
@@ -805,7 +842,7 @@ fn campaign_mime_preserves_address_headers_and_inline_attachment_contracts() {
                 "{name}"
             );
             if name != ".docx" {
-                assert_eq!(part.contents(), payload);
+                assert_eq!(part.decoded().as_ref(), payload);
             }
         }
     }

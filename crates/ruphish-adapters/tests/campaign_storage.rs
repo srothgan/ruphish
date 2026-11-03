@@ -865,7 +865,9 @@ async fn ten_campaigns_keep_resources_and_credentials_isolated_under_bounded_fai
             );
             assert!(
                 parsed
-                    .header_raw("From")
+                    .headers()
+                    .get("From")
+                    .map(|header| std::str::from_utf8(header.raw_value()).unwrap())
                     .unwrap()
                     .contains("visible@example.test")
             );

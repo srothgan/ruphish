@@ -111,7 +111,7 @@ pub(super) async fn exercise(
         .unwrap();
     assert!(!parsed.body_html(0).unwrap().contains("Replacement mail"));
     assert_eq!(
-        parsed.attachment_count(),
+        parsed.attachments().len(),
         expected_template.attachments.len()
     );
     let interactions::Output::Html { html, .. } = db
