@@ -364,12 +364,19 @@ fn progression_is_shared_across_summaries_without_inventing_recorded_events() {
         assert_eq!(unsent["stats"]["sent"], 0);
         assert_eq!(unsent["stats"]["opened"], 1);
         assert_eq!(unsent["stats"]["clicked"], 1);
+        let before = ruphish_application::datetime::now().as_second();
         let other = read(&base, "/api/campaigns/1/results", Some("other-key"));
         assert_eq!(other.status(), 200);
-        assert_eq!(
-            other.json::<Value>().unwrap(),
-            fetch("/api/campaigns/1/results")
-        );
+        let mut other = other.json::<Value>().unwrap();
+        let mut own = fetch("/api/campaigns/1/results");
+        let after = ruphish_application::datetime::now().as_second();
+        // Each request captures its own clock. Validate that metadata separately
+        // while retaining exact equality for every shared campaign field.
+        for response in [&mut other, &mut own] {
+            let as_of = response.as_object_mut().unwrap().remove("as_of").unwrap();
+            assert!((before..=after).contains(&as_of.as_i64().unwrap()));
+        }
+        assert_eq!(other, own);
         let csv = read(
             &base,
             "/api/campaigns/1/export?format=csv&scope=events",

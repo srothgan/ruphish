@@ -268,6 +268,80 @@ async fn postgres_facade_retains_busy_across_capabilities() {
 }
 
 #[tokio::test]
+#[ignore = "Requires canonical MySQL fixture and RUPHISH_MYSQL_TEST_PORT"]
+async fn mysql_cancelled_work_releases_pool_capacity_before_external_locks() {
+    let (mut inspector, mut config) = fixture().await;
+    config.max_connections = 1;
+    config.acquire_timeout_seconds = 2;
+    config.lock_timeout_seconds = 60;
+    let db = database::open(Config::MySql(config.clone()), Policy::default())
+        .await
+        .unwrap();
+    let (actor, original) = replacement_fixture(&db).await;
+    let mut held = inspector.begin().await.unwrap();
+    sqlx::query("SELECT id FROM users WHERE id=? FOR UPDATE")
+        .bind(actor.id)
+        .fetch_one(&mut *held)
+        .await
+        .unwrap();
+    let resources = db.resources();
+    let mut edit = original.clone();
+    edit.name = "Cancelled replacement".into();
+    let pending = tokio::spawn(async move {
+        resources
+            .save(
+                actor,
+                edit.clone().into(),
+                Some(edit.id),
+                Some(edit.revision.to_string()),
+            )
+            .await
+    });
+    // Observe the actual server lock wait before cancelling; scheduling or a
+    // sleep cannot establish that the operation acquired the pool connection.
+    loop {
+        assert!(
+            !pending.is_finished(),
+            "write ended before the lock barrier"
+        );
+        let waiting: i64 = sqlx::query_scalar("SELECT count(*) FROM performance_schema.data_lock_waits w JOIN performance_schema.data_locks l ON l.ENGINE_LOCK_ID=w.REQUESTING_ENGINE_LOCK_ID AND l.ENGINE=w.ENGINE WHERE l.OBJECT_SCHEMA=?")
+            .bind(&config.database)
+            .fetch_one(&mut *held)
+            .await
+            .unwrap();
+        if waiting > 0 {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    pending.abort();
+    assert!(matches!(pending.await, Err(error) if error.is_cancelled()));
+    // The external lock stays held. A replacement connection can still read
+    // committed state; cancellation must not strand the sole pool permit.
+    let recovered = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            if db.health().check().await.is_ok() {
+                break;
+            }
+        }
+    })
+    .await;
+    held.rollback().await.unwrap();
+    let unchanged = db.resources().get(actor, Kind::Template, original.id).await;
+    let closed = tokio::time::timeout(std::time::Duration::from_secs(10), db.close()).await;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE `{}`",
+        config.database
+    )))
+    .execute(&mut inspector)
+    .await
+    .unwrap();
+    recovered.expect("cancelled MySQL work retained pool capacity behind an external lock");
+    assert!(unchanged.unwrap() == original);
+    closed.expect("cancelled MySQL work prevented pool shutdown");
+}
+
+#[tokio::test]
 async fn sqlite_facade_retains_busy_across_capabilities() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("busy.db");

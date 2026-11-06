@@ -148,9 +148,14 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
     tokio::time::timeout(DRAIN_TIMEOUT, database.close())
         .await
         .map_err(|_| {
-            std::io::Error::new(std::io::ErrorKind::TimedOut, "Database shutdown timed out")
+            context(
+                "Drain database connections",
+                std::io::Error::new(std::io::ErrorKind::TimedOut, "Database shutdown timed out"),
+            )
         })?;
-    result
+    result?;
+    tracing::info!("shutdown_complete");
+    Ok(())
 }
 
 fn environment(name: &str) -> Result<Option<String>, Error> {
@@ -348,7 +353,7 @@ async fn supervise(
             .into());
         }
     }
-    tracing::info!("shutdown_complete");
+    tracing::info!("listeners_and_workers_stopped");
     result
 }
 
