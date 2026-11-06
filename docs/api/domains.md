@@ -69,6 +69,8 @@ Creator/editor fields follow [attribution](conventions.md#attribution). Unix tim
 
 Use `eligible` to determine whether the domain is currently selectable. The top-level `status` describes historical verification independently of enablement and current policy.
 
+Verification checks both IPv4 and IPv6 without a caller-selected address family. DNS control and the destination policy must pass before any HTTPS probe. At least one permitted address must pass both TLS validation and the exact private instance proof. Connection failures on other addresses do not invalidate that success. If another endpoint fails TLS validation or does not return the complete proof, `code` is `verified_with_endpoint_errors`, the run still has `state: "passed"`, and the domain remains verified. A clean success uses `verified`. Consumers must use the status and eligibility fields rather than treating `code == "verified"` as the only successful outcome.
+
 ### Verification run
 
 | Attribute | Type | Contract |

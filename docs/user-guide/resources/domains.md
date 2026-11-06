@@ -44,6 +44,10 @@ Required verification supports DNS hostnames over HTTPS. A local HTTP address or
 
 The checks cover DNS ownership, address resolution, HTTPS, and routing to the right Ruphish installation. Keep the TXT record published for later checks. **Refresh status** reads the current result; **Verify domain** starts a check.
 
+Ruphish checks IPv4 and IPv6 automatically. Every resolved address must satisfy the installation's destination policy, and at least one address must serve a valid HTTPS certificate and this installation's exact verification proof. An unavailable address or address family does not prevent another address from passing. Verification confirms a working path from this server; it does not guarantee that every recipient can reach every advertised address.
+
+If one address passes but another has a TLS error or fails to return the complete proof, the domain remains verified and the completed check reports the endpoint discrepancy. Review DNS, certificates and reverse proxy routing before sending. A later clean check clears the current warning; previous results remain in verification history.
+
 ## Read the status
 
 | Status or condition | What to do |

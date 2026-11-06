@@ -417,8 +417,8 @@ impl Repository for Domains {
             } else {
                 retry_delay(failures as u32)
             };
-        sqlx::query("UPDATE ruphish_domains SET checked_at=$1,verified_until=CASE WHEN $2 THEN $3 ELSE 0 END,control=$4,dns=$5,routing=$6,tls=$7,code=$8,lease_until=0,routing_proof='',due=$9,failures=$10,challenge_expires=CASE WHEN $11 THEN $12 ELSE challenge_expires END WHERE id=$13").bind(now).bind(success).bind(now+policy.verification_validity_seconds).bind(o.control).bind(o.dns).bind(o.routing).bind(o.tls).bind(if success{"verified"}else{o.code}).bind(due).bind(failures).bind(success).bind(now+CHALLENGE_LIFETIME).bind(check.domain.id).execute(&mut *tx).await.map_err(storage)?;
-        sqlx::query("UPDATE ruphish_domain_checks SET finished_at=$1,outcome=$2,code=$3 WHERE domain_id=$4 AND finished_at IS NULL").bind(now).bind(if success {"passed"}else if o.code=="domain_check_timeout" {"timed_out"}else{"failed"}).bind(if success {"verified"}else{o.code}).bind(check.domain.id).execute(&mut *tx).await.map_err(storage)?;
+        sqlx::query("UPDATE ruphish_domains SET checked_at=$1,verified_until=CASE WHEN $2 THEN $3 ELSE 0 END,control=$4,dns=$5,routing=$6,tls=$7,code=$8,lease_until=0,routing_proof='',due=$9,failures=$10,challenge_expires=CASE WHEN $11 THEN $12 ELSE challenge_expires END WHERE id=$13").bind(now).bind(success).bind(now+policy.verification_validity_seconds).bind(o.control).bind(o.dns).bind(o.routing).bind(o.tls).bind(o.code).bind(due).bind(failures).bind(success).bind(now+CHALLENGE_LIFETIME).bind(check.domain.id).execute(&mut *tx).await.map_err(storage)?;
+        sqlx::query("UPDATE ruphish_domain_checks SET finished_at=$1,outcome=$2,code=$3 WHERE domain_id=$4 AND finished_at IS NULL").bind(now).bind(if success {"passed"}else if o.code=="domain_check_timeout" {"timed_out"}else{"failed"}).bind(o.code).bind(check.domain.id).execute(&mut *tx).await.map_err(storage)?;
         prune(&mut tx, check.domain.id).await?;
         tx.commit()
             .await

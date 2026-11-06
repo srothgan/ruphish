@@ -1255,13 +1255,39 @@ async fn workflows_with_commit_fault(db: &Database, fault: Option<&std::sync::at
                 dns: true,
                 routing: true,
                 tls: true,
+                code: "verified_with_endpoint_errors",
+            },
+            now,
+        )
+        .await
+        .unwrap();
+    let observed = domains.get(actor, domain.id).await.unwrap();
+    assert!(observed.verified_until > now);
+    assert_eq!(observed.code, "verified_with_endpoint_errors");
+    assert_eq!(observed.history[0].state, "passed");
+    assert_eq!(observed.history[0].code, "verified_with_endpoint_errors");
+    assert!(domains.serves(&observed.origin).await.unwrap());
+    now += 31;
+    domains.request_check(actor, domain.id, now).await.unwrap();
+    let recheck = domains.claim(now).await.unwrap().unwrap();
+    domains
+        .finish(
+            &recheck,
+            domains::Observation {
+                control: true,
+                dns: true,
+                routing: true,
+                tls: true,
                 code: "verified",
             },
             now,
         )
         .await
         .unwrap();
-    assert!(domains.get(actor, domain.id).await.unwrap().verified_until > now);
+    let recovered = domains.get(actor, domain.id).await.unwrap();
+    assert_eq!(recovered.code, "verified");
+    assert_eq!(recovered.history[0].code, "verified");
+    assert_eq!(recovered.history[1].code, "verified_with_endpoint_errors");
     let selection = |r: &Resource| campaign::Selection {
         id: r.id,
         revision: Some(r.revision.to_string()),

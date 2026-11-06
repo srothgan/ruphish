@@ -1,7 +1,8 @@
 //! DNS control proof and pinned, bounded HTTPS instance verification.
+use futures_util::{StreamExt, stream::FuturesUnordered};
 use hickory_resolver::{
     Resolver, TokioResolver,
-    config::{NameServerConfig, ResolverConfig},
+    config::{LookupIpStrategy, NameServerConfig, ResolverConfig},
     net::runtime::TokioRuntimeProvider,
 };
 use ruphish_application::{domains::*, resources::Error};
@@ -30,6 +31,49 @@ pub struct DnsHttps {
     config: Config,
     ca: Option<reqwest::Certificate>,
 }
+
+// Ordered by diagnostic priority, so DNS order and completion order cannot hide
+// an invalid proof behind a less informative connection failure.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum ProbeFailure {
+    HttpsUnavailable,
+    HttpsInvalid,
+    RoutingUnavailable,
+    RoutingMismatch,
+    Configuration,
+}
+impl ProbeFailure {
+    fn code(self) -> &'static str {
+        match self {
+            Self::HttpsUnavailable | Self::HttpsInvalid => "domain_https_unavailable",
+            Self::RoutingUnavailable => "domain_routing_unavailable",
+            Self::RoutingMismatch => "domain_routing_mismatch",
+            Self::Configuration => "domain_probe_configuration_invalid",
+        }
+    }
+    fn from_request(error: &reqwest::Error) -> Self {
+        let mut source: Option<&(dyn std::error::Error + 'static)> = Some(error);
+        while let Some(error) = source {
+            if error.is::<tokio_rustls::rustls::Error>() {
+                return Self::HttpsInvalid;
+            }
+            // Connectors can nest io::Error wrappers. Follow their payloads:
+            // io::Error::source can skip the wrapped TLS error itself.
+            source = match error
+                .downcast_ref::<std::io::Error>()
+                .and_then(|io| io.get_ref())
+            {
+                Some(inner) => Some(inner),
+                None => error.source(),
+            };
+        }
+        if error.is_connect() || error.is_timeout() {
+            Self::HttpsUnavailable
+        } else {
+            Self::RoutingUnavailable
+        }
+    }
+}
 impl DnsHttps {
     /// Build the resolver and optional private CA trust from installation settings.
     pub fn new(config: Config) -> Result<Self, Error> {
@@ -56,6 +100,7 @@ impl DnsHttps {
         };
         builder.options_mut().timeout = Duration::from_secs(3);
         builder.options_mut().attempts = 2;
+        builder.options_mut().ip_strategy = LookupIpStrategy::Ipv6AndIpv4;
         let resolver = builder
             .build()
             .map_err(|_| Error::Invalid("domain_resolver_configuration_invalid".into()))?;
@@ -125,7 +170,11 @@ impl DnsHttps {
         .iter()
         .any(|n| n.parse::<ipnet::IpNet>().is_ok_and(|n| n.contains(&ip)))
     }
-    async fn check(&self, check: &Check, o: &mut Observation) -> Result<(), &'static str> {
+    async fn check(
+        &self,
+        check: &Check,
+        o: &mut Observation,
+    ) -> Result<&'static str, &'static str> {
         let now = check.started_at;
         if check.domain.challenge_expires <= now {
             return Err("domain_challenge_expired");
@@ -159,7 +208,7 @@ impl DnsHttps {
             .lookup_ip(format!("{}.", origin.host))
             .await
             .map_err(|_| "domain_dns_unavailable")?;
-        let addresses: Vec<_> = addresses.iter().collect();
+        let mut addresses: Vec<_> = addresses.iter().collect();
         if addresses.is_empty() || addresses.len() > 16 {
             return Err("domain_dns_address_limit");
         }
@@ -167,50 +216,86 @@ impl DnsHttps {
             return Err("domain_destination_denied");
         }
         o.dns = true;
-        for address in addresses {
-            let mut builder = reqwest::Client::builder()
-                .no_proxy()
-                .redirect(reqwest::redirect::Policy::none())
-                .timeout(Duration::from_secs(4))
-                .resolve_to_addrs(&origin.host, &[SocketAddr::new(address, origin.port)]);
-            if let Some(ca) = &self.ca {
-                builder = builder.add_root_certificate(ca.clone());
-            }
-            let client = builder
-                .build()
-                .map_err(|_| "domain_probe_configuration_invalid")?;
-            let response = client
-                .get(format!(
-                    "{}/.well-known/ruphish/{}",
-                    origin.value, check.domain.challenge
-                ))
-                .send()
-                .await
-                .map_err(|_| "domain_https_unavailable")?;
-            if !response.status().is_success() {
-                return Err("domain_routing_mismatch");
-            }
-            if response.content_length().is_some_and(|n| n > 128) {
-                return Err("domain_routing_mismatch");
-            }
-            let mut response = response;
-            let mut body = Vec::new();
-            while let Some(chunk) = response
-                .chunk()
-                .await
-                .map_err(|_| "domain_routing_unavailable")?
-            {
-                if body.len() + chunk.len() > 128 {
-                    return Err("domain_routing_mismatch");
+        addresses.sort_unstable();
+        addresses.dedup();
+        // At most 16 probes, each bounded to four seconds. Poll both families
+        // concurrently so an unavailable family cannot starve a usable path.
+        // These futures are owned here and dropped on cancellation/timeout.
+        let mut probes: FuturesUnordered<_> = addresses
+            .into_iter()
+            .map(|address| self.probe(check, &origin, address))
+            .collect();
+        let mut passed = false;
+        let mut failure = None;
+        while let Some(result) = probes.next().await {
+            match result {
+                Ok(()) => passed = true,
+                Err(error) => {
+                    failure = Some(failure.map_or(error, |old| std::cmp::max(old, error)))
                 }
-                body.extend_from_slice(&chunk);
             }
-            if body != check.routing_proof.as_bytes() {
-                return Err("domain_routing_mismatch");
-            }
+        }
+        if failure == Some(ProbeFailure::Configuration) {
+            return Err(ProbeFailure::Configuration.code());
+        }
+        if !passed {
+            return Err(failure.unwrap_or(ProbeFailure::HttpsUnavailable).code());
         }
         o.tls = true;
         o.routing = true;
+        Ok(
+            if failure.is_some_and(|error| error != ProbeFailure::HttpsUnavailable) {
+                "verified_with_endpoint_errors"
+            } else {
+                "verified"
+            },
+        )
+    }
+
+    async fn probe(
+        &self,
+        check: &Check,
+        origin: &Origin,
+        address: IpAddr,
+    ) -> Result<(), ProbeFailure> {
+        let mut builder = reqwest::Client::builder()
+            .no_proxy()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_secs(4))
+            .resolve_to_addrs(&origin.host, &[SocketAddr::new(address, origin.port)]);
+        if let Some(ca) = &self.ca {
+            builder = builder.add_root_certificate(ca.clone());
+        }
+        let client = builder.build().map_err(|_| ProbeFailure::Configuration)?;
+        let response = client
+            .get(format!(
+                "{}/.well-known/ruphish/{}",
+                origin.value, check.domain.challenge
+            ))
+            .send()
+            .await
+            .map_err(|error| ProbeFailure::from_request(&error))?;
+        if !response.status().is_success() {
+            return Err(ProbeFailure::RoutingMismatch);
+        }
+        if response.content_length().is_some_and(|n| n > 128) {
+            return Err(ProbeFailure::RoutingMismatch);
+        }
+        let mut response = response;
+        let mut body = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| ProbeFailure::RoutingUnavailable)?
+        {
+            if body.len() + chunk.len() > 128 {
+                return Err(ProbeFailure::RoutingMismatch);
+            }
+            body.extend_from_slice(&chunk);
+        }
+        if body != check.routing_proof.as_bytes() {
+            return Err(ProbeFailure::RoutingMismatch);
+        }
         Ok(())
     }
 }
@@ -222,8 +307,7 @@ impl Verifier for DnsHttps {
             match tokio::time::timeout(Duration::from_secs(45), self.check(check, &mut result))
                 .await
             {
-                Ok(Ok(())) => "verified",
-                Ok(Err(code)) => code,
+                Ok(Ok(code) | Err(code)) => code,
                 Err(_) => "domain_check_timeout",
             };
         result

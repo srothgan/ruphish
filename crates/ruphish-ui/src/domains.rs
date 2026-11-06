@@ -1127,6 +1127,9 @@ fn check_explanation(code: &str) -> &'static str {
 
     match code {
         "verified" => leptos_i18n::t_string!(i18n, ui.control_dns_routing_and_https_passed),
+        "verified_with_endpoint_errors" => {
+            leptos_i18n::t_string!(i18n, ui.domain_verified_with_endpoint_errors)
+        }
         "domain_txt_unavailable" => {
             leptos_i18n::t_string!(
                 i18n,
@@ -1164,10 +1167,7 @@ fn check_explanation(code: &str) -> &'static str {
             )
         }
         "domain_dns_unavailable" | "domain_dns_address_limit" => {
-            leptos_i18n::t_string!(
-                i18n,
-                ui.check_the_hostname_s_a_and_aaaa_records_every_address_must_be_reachable_and_perm
-            )
+            leptos_i18n::t_string!(i18n, ui.check_domain_address_records)
         }
         "domain_worker_timeout" => {
             leptos_i18n::t_string!(
