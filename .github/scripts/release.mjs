@@ -15,6 +15,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { github } from './github.mjs';
 
 export const targets = [
   'x86_64-pc-windows-msvc',
@@ -67,55 +68,233 @@ export function compareVersions(a, b) {
   return 0;
 }
 
-export function releaseNotes(version, changelog, repository, previous) {
+const changeGroups = new Map([
+  ['feat', 'Features'],
+  ['fix', 'Fixes'],
+  ['perf', 'Performance'],
+  ['docs', 'Documentation'],
+  ['refactor', 'Refactoring'],
+  ['style', 'Code style'],
+  ['test', 'Tests'],
+  ['ci', 'CI'],
+  ['chore', 'Maintenance'],
+  ['revert', 'Reverts'],
+]);
+
+export function selectBaseline(version, commit, options = {}) {
+  const current = parseVersion(version);
+  const candidates = run('git', ['tag', '--merged', commit], options)
+    .split(/\r?\n/)
+    .flatMap((tag) => {
+      if (!tag.startsWith('v')) {
+        return [];
+      }
+      try {
+        return [parseVersion(tag.slice(1))];
+      } catch {
+        return [];
+      }
+    })
+    .filter((tag) => compareVersions(tag.version, version) < 0)
+    .sort((a, b) => compareVersions(b.version, a.version));
+  const previous =
+    candidates.find(
+      (tag) => current.channel === 'dev' && tag.channel === 'dev' && tag.base === current.base,
+    ) ?? candidates.find((tag) => tag.channel === 'final');
+  return previous
+    ? {
+        version: previous.version,
+        commit: run('git', ['rev-parse', `refs/tags/v${previous.version}^{commit}`], options),
+      }
+    : null;
+}
+
+export function readHistory(commit, baseline, options = {}) {
+  const output = run(
+    'git',
+    [
+      'log',
+      '--no-merges',
+      '--reverse',
+      '--topo-order',
+      '--encoding=UTF-8',
+      '-z',
+      '--format=%H%x00%s',
+      baseline ? `${baseline.commit}..${commit}` : commit,
+      '--',
+    ],
+    options,
+  );
+  if (!output) {
+    return [];
+  }
+  const fields = output.split('\0');
+  assert.equal(fields.pop(), '', 'Git history must end with a record delimiter');
+  assert.equal(fields.length % 2, 0, 'Git history must contain commit/subject pairs');
+  const changes = [];
+  for (let i = 0; i < fields.length; i += 2) {
+    assert(/^[a-f0-9]{40}$/.test(fields[i]), 'Invalid Git history commit');
+    changes.push({ commit: fields[i], subject: fields[i + 1] });
+  }
+  return changes;
+}
+
+export function parseSubject(subject) {
+  const match = /^([a-z]+)(?:\(([^()]+)\))?(!)?:\s+(.+)$/.exec(subject);
+  return match
+    ? {
+        type: match[1],
+        scope: match[2] ?? null,
+        breaking: Boolean(match[3]),
+        description: match[4],
+      }
+    : { type: null, scope: null, breaking: false, description: subject };
+}
+
+function escapeMarkdown(text) {
+  // Keep authored #123 references available to GitHub's issue/PR autolinker.
+  return text.replaceAll('&', '&amp;').replace(/[\\`*_{}[\]()<>!|~+.-]|#(?!\d)/g, '\\$&');
+}
+
+export async function enrichChanges(changes, repository, api) {
+  const enriched = [];
+  for (const change of changes) {
+    const [details, firstPage] = await Promise.all([
+      api(`/commits/${change.commit}`),
+      api(`/commits/${change.commit}/pulls?per_page=100&page=1`),
+    ]);
+    assert.equal(details.sha, change.commit, 'GitHub returned a different commit');
+    const pulls = new Set();
+    let batch = firstPage;
+    for (let page = 1; ; page++) {
+      assert(Array.isArray(batch), 'Expected GitHub pull request list');
+      for (const pull of batch) {
+        if (pull.merged_at && pull.base?.repo?.full_name === repository) {
+          assert(Number.isSafeInteger(pull.number) && pull.number > 0, 'Invalid PR number');
+          pulls.add(pull.number);
+        }
+      }
+      if (batch.length < 100) {
+        break;
+      }
+      batch = await api(`/commits/${change.commit}/pulls?per_page=100&page=${page + 1}`);
+    }
+    const author = details.author?.login
+      ? { login: details.author.login, url: details.author.html_url }
+      : { name: details.commit?.author?.name };
+    enriched.push({ ...change, pulls: [...pulls.values()].sort((a, b) => a - b), author });
+  }
+  return enriched;
+}
+
+function linkedDescription(text, repository, pulls) {
+  let rendered = '';
+  let offset = 0;
+  for (const match of text.matchAll(/(?<![\w/#])#([1-9]\d*)\b/g)) {
+    rendered += escapeMarkdown(text.slice(offset, match.index));
+    const number = Number(match[1]);
+    rendered += pulls.includes(number)
+      ? `[#${number}](https://github.com/${repository}/pull/${number})`
+      : match[0];
+    offset = match.index + match[0].length;
+  }
+  return rendered + escapeMarkdown(text.slice(offset));
+}
+
+export function groupedChanges(repository, changes) {
+  const groups = new Map([...changeGroups.values(), 'Other changes'].map((name) => [name, []]));
+  for (const change of changes) {
+    const subject = parseSubject(change.subject);
+    const group = changeGroups.get(subject.type);
+    const text = group ? subject.description : change.subject;
+    const breaking = group && subject.breaking ? '**Breaking change:** ' : '';
+    const pulls = change.pulls ?? [];
+    const references = new Set(
+      [...text.matchAll(/(?<![\w/#])#([1-9]\d*)\b/g)].map((m) => Number(m[1])),
+    );
+    const links = [
+      ...pulls
+        .filter((number) => !references.has(number))
+        .map((number) => `[#${number}](https://github.com/${repository}/pull/${number})`),
+      `[${change.commit.slice(0, 7)}](https://github.com/${repository}/commit/${change.commit})`,
+    ];
+    let credit = '';
+    if (change.author?.login) {
+      assert(
+        /^https:\/\/github\.com\/[\w[\]/.-]+$/.test(change.author.url),
+        'Invalid contributor URL',
+      );
+      credit = ` by [@${escapeMarkdown(change.author.login)}](${change.author.url})`;
+    } else if (change.author?.name) {
+      credit = ` by ${escapeMarkdown(change.author.name)}`;
+    }
+    groups
+      .get(group ?? 'Other changes')
+      .push(
+        `- ${breaking}${linkedDescription(text || '(no subject)', repository, pulls)} (${links.join(', ')})${credit}`,
+      );
+  }
+  return [...groups]
+    .filter(([, entries]) => entries.length)
+    .map(([name, entries]) => `### ${name}\n\n${entries.join('\n')}`)
+    .join('\n\n');
+}
+
+function developmentNotes(parsed, repository, { changes }) {
+  return [
+    '> [!WARNING]',
+    `> **Development preview ${parsed.number} for Ruphish ${parsed.base} - testing only.**`,
+    '> Use a disposable installation. Upgrades between previews or to the final release are not guaranteed; a fresh installation may be required.',
+    '',
+    groupedChanges(repository, changes),
+    '',
+  ].join('\n');
+}
+
+function notesApi(repository, env) {
+  return github(repository, env.GH_TOKEN || env.GITHUB_TOKEN || run('gh', ['auth', 'token']));
+}
+
+export async function generateNotes(version, repository, ref = 'HEAD', api, options = {}) {
   const parsed = parseVersion(version);
-  let notes;
+  const commit = run(
+    'git',
+    ['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`],
+    options,
+  );
+  assert(/^[a-f0-9]{40}$/.test(commit), 'Invalid release commit');
+  const baseline = selectBaseline(version, commit, options);
+  const changes = await enrichChanges(
+    readHistory(commit, baseline, options),
+    repository,
+    api ?? notesApi(repository, process.env),
+  );
+  return parsed.channel === 'dev'
+    ? developmentNotes(parsed, repository, { changes })
+    : `${groupedChanges(repository, changes)}\n`;
+}
+
+export function releaseNotes(version, changelog, repository, history) {
+  const parsed = parseVersion(version);
   if (parsed.channel === 'final') {
     const sections = [
       ...changelog.replaceAll('\r\n', '\n').matchAll(/^## (.+)\n([\s\S]*?)(?=^## |$(?![\s\S]))/gm),
     ];
     const matches = sections.filter(
       (section) =>
-        section[1].match(/^(?:\[)?([0-9]+\.[0-9]+\.[0-9]+)(?:\])? - \d{4}-\d{2}-\d{2}$/)?.[1] ===
-        version,
+        section[1].match(
+          /^(?:\[)?([0-9]+\.[0-9]+\.[0-9]+)(?:\])? - \d{4}-\d{2}-\d{2}(?:[ \t]+.+)?$/,
+        )?.[1] === version,
     );
     assert.equal(matches.length, 1, `Expected one dated changelog entry for ${version}`);
-    notes = matches[0][2].trim();
+    const notes = matches[0][2].trim();
     assert(notes && !/\bTODO\b/.test(notes), 'Final release notes must be complete');
     return `${notes}\n`;
   }
-  notes = `Development preview ${parsed.number} for Ruphish ${parsed.base}.\n\nFor testing and disposable installations. Upgrades between development previews or to the final release are not guaranteed.`;
-  const image = repository.toLowerCase();
-  const packageName = image.split('/')[1];
-  notes += `\n\n**Docker:** [Container image and pull command](https://github.com/${repository}/pkgs/container/${packageName})\n\n\`\`\`sh\ndocker pull ghcr.io/${image}:${version}\n\`\`\``;
-  notes += `\n\n**Changelog:** [Planned changes for ${parsed.base}](https://github.com/${repository}/blob/v${version}/CHANGELOG.md)`;
-  if (previous) {
-    assert(compareVersions(previous, version) < 0, 'Comparison baseline must precede the release');
-    notes += `\n\n[Changes since ${previous}](https://github.com/${repository}/compare/v${previous}...v${version}).`;
-  }
-  return `${notes}
-
-**Native binaries:** Install this release using the script for your platform.
-
-Linux or macOS:
-
-\`\`\`sh
-curl -fsSL https://www.ruphish.com/install.sh | sh -s -- --version ${version}
-\`\`\`
-
-Windows PowerShell:
-
-\`\`\`powershell
-& ([scriptblock]::Create((irm https://www.ruphish.com/install.ps1))) -Version '${version}'
-\`\`\`
-
-See the [native installer reference](https://www.ruphish.com/docs/administration/hosting-and-maintenance/native-installer-reference/) for requirements and options.
-
-**Verification:** SHA-256 checksums and GitHub build provenance are included in **Assets**. Binaries are unsigned, and macOS binaries are not notarized.
-`;
+  return developmentNotes(parsed, repository, history);
 }
 
-export function metadata(env = process.env) {
+export async function metadata(env = process.env, api) {
   const manifest = readFileSync('Cargo.toml', 'utf8');
   const version = manifest.match(/\[workspace.package\]\s+version = "([^"]+)"/)[1];
   const parsed = parseVersion(version);
@@ -141,19 +320,15 @@ export function metadata(env = process.env) {
     run('git', ['merge-base', '--is-ancestor', commit, 'refs/remotes/origin/main']);
   }
   assert(/^[\w.-]+\/[\w.-]+$/.test(env.GITHUB_REPOSITORY), 'Invalid repository');
-  const tags = run('git', ['tag', '--merged', commit])
-    .split('\n')
-    .flatMap((tag) => {
-      try {
-        const v = parseVersion(tag.slice(1));
-        return tag.startsWith('v') && compareVersions(v.version, version) < 0 ? [v] : [];
-      } catch {
-        return [];
-      }
-    });
-  const previous = tags
-    .filter((v) => (parsed.channel === 'final' ? v.channel === 'final' : v.base === parsed.base))
-    .sort((a, b) => compareVersions(b.version, a.version))[0]?.version;
+  const notes =
+    parsed.channel === 'dev'
+      ? await generateNotes(
+          version,
+          env.GITHUB_REPOSITORY,
+          commit,
+          api ?? notesApi(env.GITHUB_REPOSITORY, env),
+        )
+      : releaseNotes(version, readFileSync('CHANGELOG.md', 'utf8'), env.GITHUB_REPOSITORY);
   const result = {
     ...parsed,
     commit,
@@ -164,10 +339,7 @@ export function metadata(env = process.env) {
   };
   mkdirSync('target/release-metadata', { recursive: true });
   writeJson('target/release-metadata/release.json', result);
-  writeFileSync(
-    'target/release-metadata/notes.md',
-    releaseNotes(version, readFileSync('CHANGELOG.md', 'utf8'), result.repository, previous),
-  );
+  writeFileSync('target/release-metadata/notes.md', notes);
   if (env.GITHUB_OUTPUT) {
     for (const [key, value] of Object.entries(result)) {
       appendFileSync(env.GITHUB_OUTPUT, `${key}=${value}\n`);
@@ -319,7 +491,13 @@ export function assemble() {
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const [command, ...args] = process.argv.slice(2);
   if (command === 'metadata') {
-    metadata();
+    await metadata();
+  } else if (command === 'notes') {
+    assert(
+      args.length >= 2 && args.length <= 3,
+      'Usage: release.mjs notes VERSION OWNER/REPO [COMMIT]',
+    );
+    process.stdout.write(await generateNotes(...args));
   } else if (command === 'package') {
     packageBinary(...args);
   } else if (command === 'assemble') {
