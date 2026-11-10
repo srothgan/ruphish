@@ -2799,10 +2799,7 @@ if (scenario === 'new') {
   process.exit(0);
 }
 if (scenario === 'sort-directory') {
-  const preset = () =>
-    [...document.querySelectorAll('button')].find(
-      (b) => b.textContent.trim() === 'Recent work (drafts first)',
-    );
+  const nameHeader = () => document.querySelector('.management-table th:has(.table-sort)');
   const firstLink = () =>
     document.querySelector('.management-table tbody th a')?.getAttribute('href');
   const rowLinks = () =>
@@ -2814,12 +2811,11 @@ if (scenario === 'sort-directory') {
       requests.filter((r) => r.startsWith('/api/campaigns/directory?')).at(-1),
       'https://fixture.test',
     );
-  await until(() => preset() && settled());
-  assert.equal(preset().getAttribute('aria-pressed'), 'true');
+  await until(() => firstLink() && settled());
+  assert.equal(document.querySelector('.management-table-wrap > .management-toolbar'), null);
   assert.equal(lastRequest().searchParams.get('sort'), 'recent');
   assert.equal(lastRequest().searchParams.get('order'), 'desc');
   assert.match(firstLink(), /^\/campaigns\/drafts\//);
-  const recentFirstPage = rowLinks();
   [...document.querySelectorAll('button')]
     .find((b) => b.textContent.trim() === 'Next page')
     .click();
@@ -2829,32 +2825,34 @@ if (scenario === 'sort-directory') {
   assert.ok(!lastRequest().searchParams.get('after'), 'header sorting resets pagination');
   assert.equal(firstLink(), '/campaigns/1/results');
   const nameFirstPage = rowLinks();
-  assert.equal(preset().getAttribute('aria-pressed'), 'false');
   [...document.querySelectorAll('button')]
     .find((b) => b.textContent.trim() === 'Next page')
     .click();
   await until(() => lastRequest().searchParams.get('after') && settled());
-  preset().click();
+  nameHeader().querySelector('button').click();
+  await until(
+    () =>
+      nameHeader().getAttribute('aria-sort') === 'descending' &&
+      lastRequest().searchParams.get('order') === 'desc' &&
+      settled(),
+  );
+  assert.ok(!lastRequest().searchParams.get('after'), 'changing direction resets pagination');
+  nameHeader().querySelector('button').click();
   // Returning to a cached selection need not make another HTTP request.
   await until(
     () =>
-      preset().getAttribute('aria-pressed') === 'true' &&
-      firstLink() === recentFirstPage[0] &&
+      nameHeader().getAttribute('aria-sort') === 'ascending' &&
+      firstLink() === '/campaigns/1/results' &&
       settled(),
   );
-  assert.deepEqual(rowLinks(), recentFirstPage, 'restoring workflow order returns its first page');
-  assert.match(firstLink(), /^\/campaigns\/drafts\//);
-  assert.equal(preset().getAttribute('aria-pressed'), 'true');
-  // A manually selected order persists across route navigation.
-  document.querySelector('.management-table th .table-sort').click();
-  await until(() => firstLink() === '/campaigns/1/results' && settled());
   assert.deepEqual(rowLinks(), nameFirstPage, 'cached column sorting returns its first page');
+  // A manually selected order persists across route navigation.
   document.querySelector('.management-table tbody th a').click();
   await until(() => win.location.pathname === '/campaigns/1/results' && settled());
   document.querySelector('.admin-nav a[href="/campaigns"]').click();
-  await until(() => win.location.pathname === '/campaigns' && preset() && settled());
+  await until(() => win.location.pathname === '/campaigns' && firstLink() && settled());
   assert.equal(firstLink(), '/campaigns/1/results');
-  assert.equal(preset().getAttribute('aria-pressed'), 'false');
+  assert.equal(nameHeader().getAttribute('aria-sort'), 'ascending');
   process.exit(0);
 }
 if (['dashboard', 'directory'].includes(scenario)) {

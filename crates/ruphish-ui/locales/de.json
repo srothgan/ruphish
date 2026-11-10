@@ -22,10 +22,6 @@
     "native_name": "Deutsch"
   },
   "ui": {
-    "sort_recent_work": "Zuletzt bearbeitet (Entwürfe zuerst)",
-    "sort_attention": "Handlungsbedarf zuerst",
-    "sort_newest": "Neueste zuerst",
-    "sort_setup": "Einrichtungsreihenfolge",
     "delete_conflict_help": "Diese Löschung wurde nicht ausgeführt. Schließen Sie diesen Dialog und aktualisieren Sie diese Seite. Prüfen Sie die aktuelle Ressource vor einer erneuten Bestätigung; sie wurde möglicherweise bereits gelöscht.",
     "write_conflict_help": "Dieser Speicherversuch wurde nicht ausgeführt. Ihre Eingaben sind noch vorhanden. Prüfen Sie die gespeicherte Version in einem neuen Tab, bevor Sie entscheiden, welche Änderungen Sie behalten.",
     "write_deleted_help": "Diese Ressource existiert nicht mehr. Ihre ungespeicherten Eingaben sind noch vorhanden; kopieren oder exportieren Sie benötigte Inhalte vor dem Verlassen. Speichern erstellt die Ressource nicht erneut.",
@@ -275,7 +271,6 @@
     "complete_campaign": "Kampagne abschließen",
     "delete": "Löschen",
     "delivery_processing_is_disabled_in_this_process": "Die Versandverarbeitung ist in diesem Prozess deaktiviert.",
-    "acceptance_means_the_smtp_server_accepted_the_message_participant_credentials_ar": "Gesendet bedeutet, dass der Mailserver die E-Mail angenommen hat. Die Zustellung im Posteingang ist nicht bestätigt.",
     "campaign_delivery": "Kampagnenversand",
     "recent_activity": "Letzte Aktivitäten",
     "latest_50_campaign_events_expand_a_recipient_above_for_their_timeline_and_earlie": "Die letzten 50 Kampagnenereignisse. Öffnen Sie einen Empfänger oben, um dessen Zeitleiste und frühere Einträge anzuzeigen.",

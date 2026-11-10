@@ -942,11 +942,6 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                                             label=trs!(ui.domain_verification)
                                             class="domain-verification"
                                             sorting=checks_sort
-                                            default_sort=(
-                                                "setup",
-                                                SortDirection::Asc,
-                                                trs!(ui.sort_setup),
-                                            )
                                             columns=vec!["name", "result", "help"]
                                             headers=vec![
                                                 trs!(ui.check),

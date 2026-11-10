@@ -77,7 +77,6 @@ fn snapshot_sections(
                 </div>
                 <DataTable
                     sorting=sorting
-                    default_sort=("recent", SortDirection::Desc, trs!(ui.sort_newest))
                     columns=vec!["name", "recipients", "clicked", "reported", ""]
                     label=trs!(ui.recent_campaigns)
                     headers=vec![

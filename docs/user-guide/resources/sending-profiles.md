@@ -62,6 +62,6 @@ Connection, password, and certificate settings can help recover sending for exis
 | Certificate error | Check the hostname, port, certificate, and trusted roots. Keep certificate checking enabled for your provider. |
 | Authentication failed | Check the account's credentials and whether SMTP access or an app password must be enabled with the provider. |
 | Sender rejected | Check that the provider allows the sender address and any template override. |
-| Test accepted, but no message in the inbox | Check spam filtering and the provider's delivery logs. SMTP acceptance does not confirm inbox delivery. |
+| Test accepted, but no message in the inbox | Check spam filtering, the sending mailbox for a bounce, and the provider's delivery logs. See [delivery failures after sending](../campaigns/monitor-sending.md#delivery-failures-after-sending). |
 
 A sending profile cannot be deleted while an unfinished campaign uses it.

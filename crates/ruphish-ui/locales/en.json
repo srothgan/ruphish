@@ -22,10 +22,6 @@
     "native_name": "English"
   },
   "ui": {
-    "sort_recent_work": "Recent work (drafts first)",
-    "sort_attention": "Needs attention first",
-    "sort_newest": "Newest first",
-    "sort_setup": "Setup order",
     "delete_conflict_help": "This deletion was not applied. Close this dialog and refresh this page. Review the current resource before confirming deletion again; it may already have been deleted.",
     "write_conflict_help": "This save was not applied. Your input is still here. Review the saved version in a new tab before deciding which changes to keep.",
     "write_deleted_help": "This resource no longer exists. Your unsaved input is still here; copy or export anything you need before leaving. Saving will not recreate the resource.",
@@ -275,7 +271,6 @@
     "complete_campaign": "Complete campaign",
     "delete": "Delete",
     "delivery_processing_is_disabled_in_this_process": "Delivery processing is disabled in this process.",
-    "acceptance_means_the_smtp_server_accepted_the_message_participant_credentials_ar": "Sent means the mail server accepted the email. Inbox delivery is not confirmed.",
     "campaign_delivery": "Campaign delivery",
     "recent_activity": "Recent activity",
     "latest_50_campaign_events_expand_a_recipient_above_for_their_timeline_and_earlie": "Latest 50 campaign events. Expand a recipient above for their timeline and earlier history.",

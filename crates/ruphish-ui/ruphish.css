@@ -837,8 +837,6 @@
 .refresh-indicator.is-fetching { animation: refresh-turn .9s linear infinite; }
 @keyframes refresh-turn { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .refresh-indicator.is-fetching { animation: none; } }
-.campaign-heading-facts { display: flex; flex-wrap: wrap; gap: .5rem 2rem; color: var(--muted); margin: -.5rem 0 1.5rem; }
-.campaign-heading-facts strong { font-weight: var(--fw-semibold); }
 .timeline-labels { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .35rem; font-size: .8rem; color: var(--muted); }
 .timeline-labels span { background: var(--canvas); padding: .15rem .45rem; border-radius: .25rem; }
 .event-edit-dialog { width: min(72rem, calc(100vw - 3rem)); max-width: 72rem; }
