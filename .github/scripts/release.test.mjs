@@ -17,12 +17,20 @@ import {
   parseSubject,
   readHistory,
   selectBaseline,
+  selectRelease,
+  workspaceVersion,
   readJson,
   releaseNotes,
   run,
   writeJson,
 } from './release.mjs';
-import { listReleases, publishRelease, seal } from './release-publish.mjs';
+import {
+  listReleases,
+  publishRelease,
+  releaseTags,
+  seal,
+  validatePublicationSource,
+} from './release-publish.mjs';
 import { github } from './github.mjs';
 
 function temporary(t) {
@@ -618,35 +626,205 @@ test('manual metadata generates linked notes without publishing before the prosp
   assert.ok(!repo.notes().includes('/blob/'));
 });
 
-test('metadata checks real Git tag identity, main ancestry and manual non-publication', (t) => {
-  const repo = gitFixture(t, '0.1.0-dev.1');
-  const { directory, git, commit: createCommit } = repo;
-  createCommit('Fixture');
-  const commit = git('rev-parse', 'HEAD');
-  git('update-ref', 'refs/remotes/origin/main', commit);
-  git('tag', '-a', 'v0.1.0-dev.1', '-m', 'Preview');
-  const invoke = (overrides = {}) =>
-    repo.invoke({
-      GITHUB_EVENT_NAME: 'push',
-      GITHUB_SHA: commit,
-      GITHUB_REF: 'refs/tags/v0.1.0-dev.1',
-      ...overrides,
-    });
-  assert.equal(invoke().status, 0);
-  assert.equal(readJson(join(directory, 'target/release-metadata/release.json')).publish, true);
-  assert.notEqual(invoke({ GITHUB_REF: 'refs/tags/v0.2.0' }).status, 0);
-  assert.notEqual(invoke({ GITHUB_EVENT_NAME: 'pull_request' }).status, 0);
-  assert.equal(
-    invoke({ GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF: 'refs/heads/main' }).status,
-    0,
+function versionPush(t, previous = '1.0.0-dev.1', next = '1.0.0-dev.2') {
+  const repo = gitFixture(t, previous);
+  const before = repo.commit('chore: before the push');
+  writeFileSync(
+    join(repo.directory, 'Cargo.toml'),
+    `[workspace.package]\nversion = "${next}"\n# Changed manifest\n`,
   );
-  assert.equal(readJson(join(directory, 'target/release-metadata/release.json')).publish, false);
-  writeFileSync(join(directory, 'later'), 'not merged');
-  git('add', 'later');
-  git('commit', '-m', 'Unmerged');
-  git('tag', '-d', 'v0.1.0-dev.1');
-  git('tag', '-a', 'v0.1.0-dev.1', '-m', 'Unmerged preview');
-  assert.notEqual(invoke({ GITHUB_SHA: git('rev-parse', 'HEAD') }).status, 0);
+  const commit = repo.commit('chore: prepare release');
+  repo.git('update-ref', 'refs/remotes/origin/main', commit);
+  const event = join(repo.directory, 'target/push.json');
+  writeJson(event, { before });
+  const env = {
+    GITHUB_EVENT_NAME: 'push',
+    GITHUB_REF: 'refs/heads/main',
+    GITHUB_SHA: commit,
+    GITHUB_EVENT_PATH: event,
+    GITHUB_REPOSITORY: 'example/ruphish',
+  };
+  return { repo, before, commit, env, options: { cwd: repo.directory } };
+}
+
+test('workspace version detection ignores other version fields and accepts the manifest section format', () => {
+  const manifest =
+    '[package]\nversion = "9.9.9"\n\n[workspace.package]\n# Release identity\nversion = "1.2.3-dev.4" # Preview\n\n[dependencies]\nversion = "8.8.8"\n';
+  assert.equal(workspaceVersion(manifest).version, '1.2.3-dev.4');
+  assert.equal(workspaceVersion(manifest.replaceAll('\n', '\r\n')).version, '1.2.3-dev.4');
+  assert.throws(
+    () => workspaceVersion('[package]\nversion = "1.0.0"\n'),
+    /workspace package version/,
+  );
+  assert.throws(
+    () => workspaceVersion('[workspace.package]\nversion = "invalid"\n'),
+    /Unsupported/,
+  );
+});
+
+test('main version bumps select the exact push commit without requiring or creating a tag', (t) => {
+  const { repo, before, commit, env, options } = versionPush(t);
+  assert.deepEqual(selectRelease(env, options), {
+    version: '1.0.0-dev.2',
+    base: '1.0.0',
+    channel: 'dev',
+    number: '2',
+    commit,
+    before,
+    selected: true,
+    publish: true,
+  });
+  const result = repo.invoke(env);
+  assert.equal(result.status, 0, result.stderr);
+  const meta = readJson(join(repo.directory, 'target/release-metadata/release.json'));
+  assert.equal(meta.publish, true);
+  assert.equal(meta.selected, true);
+  assert.equal(meta.commit, commit);
+  assert.equal(meta.before, before);
+  assert.equal(meta.tag, 'v1.0.0-dev.2');
+  assert.equal(repo.git('tag', '--list'), '');
+  writeFileSync(join(repo.directory, 'Cargo.toml'), '[workspace.package]\nversion = "9.9.9"\n');
+  assert.equal(selectRelease(env, options).version, '1.0.0-dev.2');
+});
+
+test('unchanged workspace versions skip notes, API calls and artifacts even for final versions', (t) => {
+  const { repo, env, options } = versionPush(t, '1.0.0', '1.0.0');
+  assert.equal(selectRelease(env, options).selected, false);
+  writeFileSync(
+    repo.preload,
+    'globalThis.fetch = () => { throw new Error("Unchanged versions must not call GitHub"); };',
+  );
+  const output = join(repo.directory, 'target/outputs');
+  const result = repo.invoke({ ...env, GITHUB_OUTPUT: output });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(readFileSync(output, 'utf8'), /^selected=false$/m);
+  assert.match(readFileSync(output, 'utf8'), /^publish=false$/m);
+  assert.ok(!existsSync(join(repo.directory, 'target/release-metadata')));
+  assert.equal(repo.git('tag', '--list'), '');
+});
+
+test('decreases, unsupported events, tag pushes and other branches cannot select publication', (t) => {
+  const lower = versionPush(t, '1.0.0-dev.3', '1.0.0-dev.2');
+  const result = lower.repo.invoke(lower.env);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Release version must increase/);
+  assert.ok(!existsSync(join(lower.repo.directory, 'target/release-metadata')));
+  const { repo, before, env, options } = versionPush(t);
+  for (const ref of ['refs/tags/v1.0.0-dev.2', 'refs/heads/feature']) {
+    assert.throws(
+      () => selectRelease({ ...env, GITHUB_REF: ref }, options),
+      /Only main version bumps/,
+    );
+  }
+  assert.throws(
+    () => selectRelease({ ...env, GITHUB_EVENT_NAME: 'pull_request' }, options),
+    /Unsupported release event/,
+  );
+  assert.throws(
+    () => selectRelease({ ...env, GITHUB_SHA: 'a'.repeat(40) }, options),
+    /selected source/,
+  );
+  assert.throws(
+    () => selectRelease({ ...env, GITHUB_SHA: 'invalid' }, options),
+    /Invalid selected source/,
+  );
+  for (const before of ['0'.repeat(40), undefined, 'invalid', 'a'.repeat(40)]) {
+    writeJson(env.GITHUB_EVENT_PATH, { before });
+    assert.throws(() => selectRelease(env, options), /previous main commit|git failed/);
+  }
+  writeJson(env.GITHUB_EVENT_PATH, { before });
+  repo.git('update-ref', 'refs/remotes/origin/main', before);
+  assert.throws(() => selectRelease(env, options), /git failed/);
+  assert.equal(repo.git('tag', '--list'), '');
+});
+
+test('selection compares push snapshots rather than the last parent or a later main head', (t) => {
+  const { repo, before, env, options } = versionPush(t);
+  const selected = repo.commit('docs: another commit in the same push');
+  repo.git('update-ref', 'refs/remotes/origin/main', selected);
+  const source = selectRelease({ ...env, GITHUB_SHA: selected }, options);
+  assert.equal(source.publish, true);
+  assert.equal(source.before, before);
+  assert.equal(source.commit, selected);
+  const later = repo.commit('feat: later work on main');
+  repo.git('update-ref', 'refs/remotes/origin/main', later);
+  repo.git('checkout', '--detach', selected);
+  assert.deepEqual(selectRelease({ ...env, GITHUB_SHA: selected }, options), source);
+  writeJson(env.GITHUB_EVENT_PATH, { before: later });
+  assert.throws(() => selectRelease({ ...env, GITHUB_SHA: selected }, options), /git failed/);
+});
+
+test('manual validation remains selected but non-publishing on branches and tags', (t) => {
+  const { repo, env, options } = versionPush(t);
+  for (const ref of ['refs/heads/main', 'refs/heads/feature', 'refs/tags/v1.0.0-dev.2']) {
+    const manual = {
+      ...env,
+      GITHUB_EVENT_NAME: 'workflow_dispatch',
+      GITHUB_REF: ref,
+      GITHUB_EVENT_PATH: '',
+    };
+    const selection = selectRelease(manual, options);
+    assert.equal(selection.selected, true);
+    assert.equal(selection.publish, false);
+    const result = repo.invoke(manual);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(
+      readJson(join(repo.directory, 'target/release-metadata/release.json')).publish,
+      false,
+    );
+  }
+  assert.equal(repo.git('tag', '--list'), '');
+});
+
+test('final version bumps require the matching complete changelog body before any publication', (t) => {
+  const { repo, env } = versionPush(t, '1.0.0-dev.2', '1.0.0');
+  let result = repo.invoke(env);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /dated changelog/);
+  assert.ok(!existsSync(join(repo.directory, 'target/release-metadata')));
+  const body = '- Final change by [@alice](https://github.com/alice).';
+  writeFileSync(
+    join(repo.directory, 'CHANGELOG.md'),
+    `## [1.0.0] - 2026-11-10 Release\n\n${body}\n`,
+  );
+  const commit = repo.commit('docs: complete final notes');
+  repo.git('update-ref', 'refs/remotes/origin/main', commit);
+  result = repo.invoke({ ...env, GITHUB_SHA: commit });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(repo.notes(), `${body}\n`);
+  assert.equal(repo.git('tag', '--list'), '');
+});
+
+test('publication validates retained metadata against the original main version-bump event', (t) => {
+  const { repo, before, commit, env, options } = versionPush(t);
+  const manifest = { commit, before, version: '1.0.0-dev.2', repository: 'example/ruphish' };
+  validatePublicationSource(manifest, env, options);
+  for (const key of ['commit', 'before', 'version', 'repository']) {
+    assert.throws(() =>
+      validatePublicationSource({ ...manifest, [key]: 'different' }, env, options),
+    );
+  }
+  assert.throws(
+    () =>
+      validatePublicationSource(
+        manifest,
+        { ...env, GITHUB_EVENT_NAME: 'workflow_dispatch' },
+        options,
+      ),
+    /Only main version bumps/,
+  );
+  assert.throws(
+    () =>
+      validatePublicationSource(
+        manifest,
+        { ...env, GITHUB_REF: 'refs/tags/v1.0.0-dev.2' },
+        options,
+      ),
+    /Only main version bumps/,
+  );
+  const later = repo.commit('feat: a later source commit');
+  repo.git('update-ref', 'refs/remotes/origin/main', later);
+  assert.throws(() => validatePublicationSource(manifest, env, options), /selected source/);
 });
 
 function oci(directory, architecture) {
@@ -791,7 +969,15 @@ function publication(version = '0.1.0-dev.1', notes = 'Release notes') {
     'release-manifest.json': Buffer.from(JSON.stringify(manifest)),
     'package.zip': Buffer.from('verified archive'),
   };
-  const state = { release: null, assets: {}, image: null, events: [], finals: [], fail: null };
+  const state = {
+    tag: null,
+    release: null,
+    assets: {},
+    image: null,
+    events: [],
+    finals: [],
+    fail: null,
+  };
   const event = (name) => {
     state.events.push(name);
     if (state.fail === name) {
@@ -799,7 +985,11 @@ function publication(version = '0.1.0-dev.1', notes = 'Release notes') {
     }
   };
   const remote = {
-    tagCommit: async () => 'abc',
+    tagCommit: async () => state.tag,
+    createTag: async (meta) => {
+      event('tag');
+      state.tag = meta.commit;
+    },
     findRelease: async () => state.release,
     asset: async (_release, name) => state.assets[name] ?? null,
     imageDigest: async () => state.image,
@@ -845,6 +1035,88 @@ function publication(version = '0.1.0-dev.1', notes = 'Release notes') {
   };
 }
 
+test('the GitHub tag adapter creates an annotated tag on the verified commit and never changes source', async (t) => {
+  const repo = gitFixture(t);
+  const commit = repo.commit('feat: verified release source');
+  const requests = [];
+  const api = async (path, options = {}) => {
+    requests.push({ path, ...options });
+    if (path === '/git/tags') {
+      assert.equal(options.method, 'POST');
+      assert.deepEqual(options.body, {
+        tag: 'v1.0.0-dev.3',
+        message: 'Release 1.0.0-dev.3',
+        object: commit,
+        type: 'commit',
+      });
+      const input = `object ${options.body.object}\ntype commit\ntag ${options.body.tag}\ntagger Release fixture <fixture@example.test> 1700000000 +0000\n\n${options.body.message}\n`;
+      return { sha: run('git', ['mktag'], { cwd: repo.directory, input }) };
+    }
+    if (path === '/git/refs') {
+      assert.equal(options.method, 'POST');
+      assert.equal(options.body.ref, 'refs/tags/v1.0.0-dev.3');
+      repo.git('update-ref', options.body.ref, options.body.sha, '0'.repeat(40));
+      return {};
+    }
+    if (path.startsWith('/git/ref/tags/')) {
+      const name = path.slice('/git/ref/tags/'.length);
+      const ref = repo.git(
+        'for-each-ref',
+        '--format=%(objectname) %(objecttype)',
+        `refs/tags/${name}`,
+      );
+      if (!ref) {
+        assert.equal(options.missing, true);
+        return null;
+      }
+      const [sha, type] = ref.split(' ');
+      return { object: { sha, type } };
+    }
+    assert.ok(path.startsWith('/git/tags/'));
+    const body = repo.git('cat-file', '-p', path.slice('/git/tags/'.length));
+    return {
+      tag: body.match(/^tag (.+)$/m)[1],
+      object: { type: body.match(/^type (.+)$/m)[1], sha: body.match(/^object (.+)$/m)[1] },
+    };
+  };
+  const tags = releaseTags(api);
+  assert.equal(await tags.tagCommit('v1.0.0-dev.3'), null);
+  await tags.createTag({ tag: 'v1.0.0-dev.3', version: '1.0.0-dev.3', commit });
+  assert.equal(await tags.tagCommit('v1.0.0-dev.3'), commit);
+  assert.equal(repo.git('cat-file', '-t', 'refs/tags/v1.0.0-dev.3'), 'tag');
+  assert.equal(repo.git('rev-parse', 'v1.0.0-dev.3^{commit}'), commit);
+  assert.equal(repo.git('rev-parse', 'HEAD'), commit);
+  assert.equal(repo.git('status', '--porcelain'), '');
+  assert.deepEqual(
+    requests.filter((request) => request.method === 'POST').map((request) => request.path),
+    ['/git/tags', '/git/refs'],
+  );
+  repo.git('tag', 'lightweight');
+  await assert.rejects(tags.tagCommit('lightweight'), /must be annotated/);
+});
+
+test('tag creation failures stop before release uploads and retries preserve an existing matching tag', async () => {
+  const p = publication();
+  p.state.fail = 'tag';
+  await assert.rejects(p.execute(), /Interrupted tag/);
+  assert.equal(p.state.tag, null);
+  assert.equal(p.state.release, null);
+  assert.deepEqual(p.state.assets, {});
+  assert.equal(p.state.image, null);
+  p.state.fail = null;
+  p.state.events = [];
+  await p.execute();
+  assert.equal(p.state.tag, p.manifest.commit);
+  assert.equal(p.state.events[0], 'tag');
+  p.state.events = [];
+  await p.execute();
+  assert.ok(!p.state.events.includes('tag'));
+  const missing = publication();
+  missing.remote.createTag = async () => {};
+  await assert.rejects(missing.execute(), /Tag moved after verification/);
+  assert.equal(missing.state.release, null);
+});
+
 test('publication retains the generated preview and authored final bodies unchanged', async () => {
   const final = releaseNotes(
     '1.0.0',
@@ -868,6 +1140,7 @@ test('development releases publish all artifacts before release visibility and n
   const p = publication('0.1.0-dev.1');
   await p.execute();
   assert.deepEqual(p.state.events, [
+    'tag',
     'draft',
     'upload:release-manifest.json',
     'upload:package.zip',
@@ -956,18 +1229,28 @@ test('conflicting artifacts, missing published bytes, changed tags and manual ru
   image.state.image = 'sha256:different';
   await assert.rejects(image.execute(), /different content/);
   assert.deepEqual(image.state.events, []);
+  const orphan = publication();
+  orphan.state.image = orphan.manifest.image_digest;
+  await assert.rejects(orphan.execute(), /Published image without matching draft/);
+  assert.deepEqual(orphan.state.events, []);
+  const lostTag = publication();
+  await lostTag.execute();
+  lostTag.state.tag = null;
+  lostTag.state.events = [];
+  await assert.rejects(lostTag.execute(), /Existing release has lost its tag/);
+  assert.deepEqual(lostTag.state.events, []);
   const manual = publication();
   manual.manifest.publish = false;
   await assert.rejects(manual.execute(), /Manual runs/);
   assert.deepEqual(manual.state.events, []);
   const moved = publication();
   moved.remote.tagCommit = async () => 'def';
-  await assert.rejects(moved.execute(), /Tag moved/);
+  await assert.rejects(moved.execute(), /Existing tag points to a different commit/);
   assert.deepEqual(moved.state.events, []);
 });
 
-test('lost acknowledgements do not duplicate completed uploads, image pushes or publication', async () => {
-  for (const operation of ['upload', 'pushImage', 'publish']) {
+test('lost acknowledgements do not duplicate completed tags, uploads, image pushes or publication', async () => {
+  for (const operation of ['createTag', 'upload', 'pushImage', 'publish']) {
     const p = publication('0.1.0');
     const original = p.remote[operation];
     p.remote[operation] = async (...args) => {
@@ -979,6 +1262,7 @@ test('lost acknowledgements do not duplicate completed uploads, image pushes or 
     await p.execute();
     assert.equal(p.state.release.draft, false);
     assert.equal(p.state.events.filter((event) => event === 'draft').length, 1);
+    assert.equal(p.state.events.filter((event) => event === 'tag').length, 1);
     assert.equal(
       p.state.events.filter((event) => event === 'upload:release-manifest.json').length,
       1,
@@ -1006,22 +1290,66 @@ test('release gate rejects missing, failed, cancelled and skipped dependencies',
   }
 });
 
-test('actual publication condition excludes manual runs, branch pushes and failed gates', () => {
+test('actual publication condition permits only selected main pushes after successful gates', () => {
   const workflow = readFileSync(new URL('../workflows/release.yml', import.meta.url), 'utf8');
   const condition = workflow.split('\n  publish:')[1].match(/\n {4}if: (.+)/)[1];
   const allowed = (event, ref, publish, gate) =>
     runInNewContext(condition, {
       github: { event_name: event, ref },
       needs: { metadata: { outputs: { publish } }, gate: { result: gate } },
-      startsWith: (value, prefix) => value.startsWith(prefix),
     });
-  assert.equal(allowed('push', 'refs/tags/v0.1.0-dev.1', 'true', 'success'), true);
+  assert.equal(allowed('push', 'refs/heads/main', 'true', 'success'), true);
   assert.equal(allowed('workflow_dispatch', 'refs/tags/v0.1.0', 'true', 'success'), false);
-  assert.equal(allowed('push', 'refs/heads/main', 'true', 'success'), false);
+  assert.equal(allowed('workflow_dispatch', 'refs/heads/main', 'true', 'success'), false);
+  assert.equal(allowed('push', 'refs/heads/feature', 'true', 'success'), false);
+  assert.equal(allowed('push', 'refs/tags/v0.1.0', 'true', 'success'), false);
   assert.equal(allowed('push', 'refs/tags/v0.1.0', 'false', 'success'), false);
+  assert.equal(allowed('push', 'refs/heads/main', 'false', 'success'), false);
   for (const result of ['failure', 'skipped', 'cancelled']) {
-    assert.equal(allowed('push', 'refs/tags/v0.1.0', 'true', result), false);
+    assert.equal(allowed('push', 'refs/heads/main', 'true', result), false);
   }
+});
+
+test('workflow selection skips unchanged versions without hiding failed or incomplete validation', () => {
+  const workflow = readFileSync(
+    new URL('../workflows/release.yml', import.meta.url),
+    'utf8',
+  ).replaceAll('\r\n', '\n');
+  const trigger = workflow.split('\npermissions:')[0];
+  assert.match(trigger, /push:\n {4}branches: \[main\]\n {4}paths: \['Cargo\.toml'\]/);
+  assert.doesNotMatch(trigger, /tags:/);
+  assert.match(workflow, /group: release-\$\{\{ github.sha \}\}/);
+  assert.match(
+    workflow,
+    /group: release-publication\n {6}queue: max\n {6}cancel-in-progress: false/,
+  );
+  const jobs = Object.fromEntries(
+    [...workflow.matchAll(/^ {2}([\w-]+):\n([\s\S]*?)(?=^ {2}[\w-]+:|$(?![\s\S]))/gm)].map(
+      ([, name, body]) => [name, body],
+    ),
+  );
+  const condition = (job) => jobs[job].match(/^ {4}if: (.+)$/m)[1];
+  const evaluate = (job, selected, result = 'success') =>
+    runInNewContext(condition(job), {
+      always: () => true,
+      needs: { metadata: { result, outputs: { selected } } },
+    });
+  for (const job of ['source', 'security']) {
+    assert.equal(evaluate(job, 'true'), true);
+    assert.equal(evaluate(job, 'false'), false);
+    assert.equal(evaluate(job, undefined), false);
+  }
+  assert.equal(evaluate('gate', 'false'), false);
+  for (const result of ['failure', 'cancelled', 'skipped', undefined]) {
+    assert.equal(evaluate('gate', undefined, result), true);
+  }
+  assert.equal(evaluate('gate', 'true'), true);
+  assert.equal(evaluate('gate', undefined), true);
+  assert.equal(
+    (jobs.metadata.match(/if: steps.release.outputs.selected == 'true'/g) ?? []).length,
+    2,
+  );
+  assert.match(jobs.publish, /ref: \$\{\{ needs.metadata.outputs.commit \}\}\n {10}fetch-depth: 0/);
 });
 
 test('release lookup paginates and retains draft entries for resumption', async () => {

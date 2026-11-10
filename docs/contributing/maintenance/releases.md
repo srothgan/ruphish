@@ -5,21 +5,17 @@ sidebar:
   order: 420
 ---
 
-Releases are published by pushing an annotated version tag. Development notes are generated automatically; final notes come from `CHANGELOG.md`. Run commands from the repository root using the [pinned tools](../development-setup/index.md).
+Merging a workspace version increase into `main` requests a release. The workflow validates that exact commit, builds the artifacts, and creates its annotated tag and release after all checks pass. Development notes are generated automatically; final notes come from `CHANGELOG.md`. Run commands from the repository root using the [pinned tools](../development-setup/index.md).
 
 ## Publish a development preview
 
 1. Set `[workspace.package].version` in `Cargo.toml` to the intended preview, for example `0.1.0-dev.4`, and run `cargo update --workspace` to update `Cargo.lock`.
-2. Merge the release changes into `main` through the normal contribution process. Development previews do not need a changelog entry.
-3. Run `gh workflow run release.yml --ref main` to validate the intended source without publishing. Wait for the **Release** workflow to finish successfully and inspect its results in Actions.
-4. From the exact commit that passed validation, create and push the matching annotated tag:
+2. Open a PR with the version update and release changes. Development previews do not need a changelog entry. If you want to validate before merging, run **Release** manually against the PR branch; manual runs do not publish.
+3. Merge the PR into `main` when you are ready to publish. This starts the **Release** workflow; follow its progress in Actions.
 
-```sh
-git tag -a v0.1.0-dev.4 -m "Release 0.1.0-dev.4"
-git push origin v0.1.0-dev.4
-```
+The workflow creates `v0.1.0-dev.4` automatically after validation succeeds, then publishes the verified artifacts. Preview notes start with a warning that they are for disposable installations and upgrades are not guaranteed, followed by grouped changes with commit, PR, and contributor links. Previews never become the latest stable release.
 
-The tag push runs release validation again and publishes after all required jobs pass. Preview releases start with a warning that they are for disposable installations and upgrades are not guaranteed, followed by grouped changes with commit, PR, and contributor links. They never become the latest stable release.
+Other edits to `Cargo.toml` skip the release jobs when the workspace version is unchanged. Version decreases fail validation. Tag pushes do not trigger this workflow.
 
 ## Prepare final notes
 
@@ -29,14 +25,7 @@ Write the entry yourself or [generate a draft](#optionally-generate-a-draft), pa
 
 The leading version selects the entry; an optional title or link after the date is allowed. The final release publishes only that entry's body, up to the next `##` heading. It adds no warning, footer, or regenerated content. Missing, duplicate, empty, or unfinished entries containing TODOs block the release.
 
-Merge the version update and completed notes into `main`, review [migration requirements](../testing/database-provider-tests.md), and validate with `gh workflow run release.yml --ref main`. From the exact validated commit, publish the matching final tag:
-
-```sh
-git tag -a v0.1.0 -m "Release 0.1.0"
-git push origin v0.1.0
-```
-
-Use your actual release version in the tag commands. Tags must match the workspace version, and the tagged commit must be on `main`'s history. An existing release tag must never be moved or reused.
+Review [migration requirements](../testing/database-provider-tests.md) and merge the version update and completed notes together when ready to publish. The workflow checks the matching changelog entry, builds and validates the release, then creates the version tag and publishes. You do not create or push a tag yourself.
 
 ## Optionally generate a draft
 
@@ -62,7 +51,7 @@ Baselines must have an older version and be reachable from the selected commit. 
 
 The shared renderer groups known types in this order: **Features** (`feat`), **Fixes** (`fix`), **Performance** (`perf`), **Documentation** (`docs`), **Refactoring** (`refactor`), **Code style** (`style`), **Tests** (`test`), **CI** (`ci`), **Maintenance** (`chore`), and **Reverts** (`revert`). Empty groups disappear; historical or unrecognized subjects appear under **Other changes**. Known type/scope prefixes are hidden, while explicit breaking markers remain visible. Neither generated style includes a comparison link.
 
-Commit links come from Git history. GitHub supplies verified merged PR references and contributor accounts, including bots. Direct commits do not receive invented PR links; unlinked authors retain their recorded name. Git or API failures stop generation. The release workflow uses its built-in read-only token; no additional App or stored secret is needed.
+Commit links come from Git history. GitHub supplies verified merged PR references and contributor accounts, including bots. Direct commits do not receive invented PR links; unlinked authors retain their recorded name. Git or API failures stop generation. Note generation uses the workflow's built-in read-only token; no additional App or stored secret is needed.
 
 ## Recover a failed publication
 
@@ -70,17 +59,18 @@ Open the failed **Release** run in Actions and inspect the failed job before ret
 
 | Failure | Next action |
 | --- | --- |
-| Source checks, build, or artifact verification failed | Fix the source and prepare a new release version; do not move the existing tag. |
+| Source checks, build, or artifact verification failed | No release tag has been created. Fix source problems in a new version-bump PR; for an external or transient failure, rerun the failed jobs of the original run. |
+| Tag creation failed | Fix the permission or external issue, then rerun the original publication job. An existing tag must be annotated and point to the same verified commit. |
 | Publication failed after uploads started | Keep the original run and its `verified-release-bundle`. Fix the external issue, then rerun only the failed publication job. |
 | Anonymous GHCR pull failed because the package is private | Set the package visibility to Public, then rerun the original publication job. |
 
-Publication reuses the retained artifacts and resumes only a matching draft release. It checks the tag, release notes, uploaded files, and image digests before continuing. Conflicting content stops the retry; do not rebuild or replace artifacts under the same published version. The release stays a draft until uploads and anonymous image verification succeed.
+Publication reuses the retained artifacts and resumes only a matching draft release. It checks the original version-bump event, tag, release notes, uploaded files, and image digests before continuing. A matching existing tag is retained; conflicting tags are never moved or overwritten. Do not rebuild or replace artifacts under the same published version. The release stays a draft until uploads and anonymous image verification succeed.
 
 ## What the workflow verifies
 
-The [release workflow](../../../.github/workflows/release.yml) checks source identity and notes, runs full source acceptance, root/browser npm audits and Cargo advisory policy, then builds and tests the embedded administration UI, native archives, and Docker images. It assembles checksums and build provenance, and every required stage must pass before publication. The retained `notes.md` body is uploaded unchanged.
+The [release workflow](../../../.github/workflows/release.yml) compares the workspace version before and after a push to `main`. An increase selects the pushed commit for release, including when the push contains several commits. It checks source identity and notes, runs full source acceptance, root/browser npm audits and Cargo advisory policy, then builds and tests the embedded administration UI, native archives, and Docker images. It assembles checksums and build provenance, and every required stage must pass before tag creation or publication. The retained `notes.md` body is uploaded unchanged.
 
-Native targets are Linux x86-64/ARM64, Windows x86-64/ARM64, and macOS ARM64; Docker targets are Linux amd64/arm64. Archives are unsigned and macOS executables are not notarized. Final releases can advance GitHub and Docker `latest` without replacing a newer final release; previews cannot. Manual workflow runs validate and retain artifacts without publishing.
+Native targets are Linux x86-64/ARM64, Windows x86-64/ARM64, and macOS ARM64; Docker targets are Linux amd64/arm64. Archives are unsigned and macOS executables are not notarized. Final releases can advance GitHub and Docker `latest` without replacing a newer final release; previews cannot. Publication is serialized, with completed builds queued for publication. Manual workflow runs validate and retain artifacts without creating tags or publishing.
 
 Installation instructions belong in [Getting started](../../getting-started/index.md). Installer release selection is documented in the [website implementation](../../../website/README.md#native-installers-and-release-discovery).
 

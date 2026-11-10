@@ -294,57 +294,80 @@ export function releaseNotes(version, changelog, repository, history) {
   return developmentNotes(parsed, repository, history);
 }
 
-export async function metadata(env = process.env, api) {
-  const manifest = readFileSync('Cargo.toml', 'utf8');
-  const version = manifest.match(/\[workspace.package\]\s+version = "([^"]+)"/)[1];
-  const parsed = parseVersion(version);
-  const commit = run('git', ['rev-parse', 'HEAD']);
-  assert(/^[a-f0-9]{40}$/.test(commit));
+export function workspaceVersion(manifest) {
+  const section = manifest
+    .replaceAll('\r\n', '\n')
+    .match(/^\[workspace\.package\][ \t]*\n([\s\S]*?)(?=^\[|$(?![\s\S]))/m)?.[1];
+  const version = section?.match(/^version[ \t]*=[ \t]*"([^"]+)"[ \t]*(?:#.*)?$/m)?.[1];
+  assert(version, 'Missing workspace package version');
+  return parseVersion(version);
+}
+
+export function selectRelease(env = process.env, options = {}) {
   assert(
     ['push', 'workflow_dispatch'].includes(env.GITHUB_EVENT_NAME),
     'Unsupported release event',
   );
-  assert.equal(
-    commit,
-    run('git', ['rev-parse', `${env.GITHUB_SHA}^{commit}`]),
-    'Checkout must match the selected source',
-  );
-  const publish = env.GITHUB_EVENT_NAME === 'push';
-  if (publish) {
-    assert.equal(env.GITHUB_REF, `refs/tags/v${version}`, 'Tag and Cargo version must agree');
-    assert.equal(
-      run('git', ['cat-file', '-t', env.GITHUB_REF]),
-      'tag',
-      'Use an annotated release tag',
-    );
-    run('git', ['merge-base', '--is-ancestor', commit, 'refs/remotes/origin/main']);
+  const commit = run('git', ['rev-parse', 'HEAD'], options);
+  assert(/^[a-f0-9]{40}$/.test(env.GITHUB_SHA), 'Invalid selected source commit');
+  assert.equal(commit, env.GITHUB_SHA, 'Checkout must match the selected source');
+  const parsed = workspaceVersion(run('git', ['show', `${commit}:Cargo.toml`], options));
+  if (env.GITHUB_EVENT_NAME === 'workflow_dispatch') {
+    return { ...parsed, commit, before: null, selected: true, publish: false };
   }
+  assert.equal(env.GITHUB_REF, 'refs/heads/main', 'Only main version bumps may publish');
+  const { before } = readJson(env.GITHUB_EVENT_PATH);
+  assert(
+    /^[a-f0-9]{40}$/.test(before) && !/^0+$/.test(before),
+    'Version-bump releases require a previous main commit',
+  );
+  run('git', ['merge-base', '--is-ancestor', before, commit], options);
+  run('git', ['merge-base', '--is-ancestor', commit, 'refs/remotes/origin/main'], options);
+  const previous = workspaceVersion(run('git', ['show', `${before}:Cargo.toml`], options));
+  const comparison = compareVersions(parsed.version, previous.version);
+  assert(comparison >= 0, 'Release version must increase');
+  return { ...parsed, commit, before, selected: comparison > 0, publish: comparison > 0 };
+}
+
+function writeOutputs(result, env) {
+  if (env.GITHUB_OUTPUT) {
+    for (const [key, value] of Object.entries(result)) {
+      appendFileSync(env.GITHUB_OUTPUT, `${key}=${value ?? ''}\n`);
+    }
+  }
+}
+
+export async function metadata(env = process.env, api) {
+  const selection = selectRelease(env);
+  if (!selection.selected) {
+    writeOutputs(selection, env);
+    return selection;
+  }
+  const { version, channel, commit } = selection;
   assert(/^[\w.-]+\/[\w.-]+$/.test(env.GITHUB_REPOSITORY), 'Invalid repository');
   const notes =
-    parsed.channel === 'dev'
+    channel === 'dev'
       ? await generateNotes(
           version,
           env.GITHUB_REPOSITORY,
           commit,
           api ?? notesApi(env.GITHUB_REPOSITORY, env),
         )
-      : releaseNotes(version, readFileSync('CHANGELOG.md', 'utf8'), env.GITHUB_REPOSITORY);
+      : releaseNotes(
+          version,
+          run('git', ['show', `${commit}:CHANGELOG.md`]),
+          env.GITHUB_REPOSITORY,
+        );
   const result = {
-    ...parsed,
-    commit,
+    ...selection,
     tag: `v${version}`,
     repository: env.GITHUB_REPOSITORY,
     image: `ghcr.io/${env.GITHUB_REPOSITORY.toLowerCase()}`,
-    publish,
   };
   mkdirSync('target/release-metadata', { recursive: true });
   writeJson('target/release-metadata/release.json', result);
   writeFileSync('target/release-metadata/notes.md', notes);
-  if (env.GITHUB_OUTPUT) {
-    for (const [key, value] of Object.entries(result)) {
-      appendFileSync(env.GITHUB_OUTPUT, `${key}=${value}\n`);
-    }
-  }
+  writeOutputs(result, env);
   return result;
 }
 
