@@ -1031,6 +1031,8 @@
     "could_not_open_the_content_editor_arg0": "Could not open the content editor: {{ arg0 }}",
     "could_not_load_the_document_arg0": "Could not load the document: {{ arg0 }}",
     "create_arg0": "Create {{ arg0 }}",
+    "view_arg0": "View {{ arg0 }}",
+    "edit_arg0": "Edit {{ arg0 }}",
     "loading_arg0": "Loading {{ arg0 }}…",
     "arg0_arg1_compared_with_the_previous_period": "{{ arg0 }}: {{ arg1 }} compared with the previous period",
     "arg0_of_emails_sent": "{{ arg0 }} of emails sent",

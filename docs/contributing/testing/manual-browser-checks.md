@@ -17,6 +17,7 @@ Automated mounted-UI tests complement this review but do not implement browser l
 ## Admin workflows
 
 - Check sign-in, required password change, account preferences, API-key reveal/copy, and sign-out with unsaved work.
+- On the dashboard, switch between **Needs attention** and **Drafts** with pointer and keyboard input. Check long draft names with **View** and **Edit** links underneath, a narrow viewport, empty drafts, and draft-read retry without losing the attention content or selected tab. Confirm the bottom drafts card is gone.
 - Inspect the centered session card on the unchanged net background before sign-in, after successful sign-in/sign-out, on session expiry, and after access changes. Check readable titles/subtitles, translucent surfaces, narrow layouts, reduced-motion progress, the slow-loading message, and keyboard access to **Try again** or **Continue** after a failed read or stalled transition.
 - Create, edit, import, preview, and delete resources. Inspect empty, loading, failed, stale, and permission-limited states.
 - Exercise source and visual editors, attachments, keyboard focus, dialogs, and content preservation between modes.

@@ -3,20 +3,20 @@ use crate::{
     overview_queries::OverviewQueries, shared::components::*, time_display::instant as minute,
 };
 use leptos::prelude::*;
-use ruphish_contracts::overview::Snapshot;
+use ruphish_contracts::{campaign_reads::Directory, overview::Snapshot};
 use ruphish_domain::reporting::SortDirection;
-use ruphish_ui::overview_state::percentage;
+use ruphish_ui::{overview_state::percentage, query::QueryView};
 use ruphish_ui::{tr, trs};
 
 pub(super) fn page() -> impl IntoView {
     let queries = expect_context::<OverviewQueries>();
     let snapshot = queries.snapshot.observe(|| ());
     let snapshot_data = snapshot.data;
+    let selected_work = RwSignal::new(0);
     let drafts = expect_context::<crate::campaign_queries::CampaignQueries>()
         .directory
         .observe(|| ("drafts".into(), String::new(), "name".into(), "asc".into()));
-    let can_create =
-        use_context::<crate::resources::ResourceAccess>().is_some_and(|access| access.0);
+    let can_create = crate::campaigns::editable();
     view! {
         <ManagementPage>
             <PageHeader title=trs!(ui.dashboard)>
@@ -43,62 +43,9 @@ pub(super) fn page() -> impl IntoView {
                     refresh=snapshot.refresh
                 >
                     <div class="dashboard-stack">
-                        {move || snapshot_data.get().map(snapshot_sections)}
-                        <Show when=move || {
-                            drafts.error.get().is_some()
-                                || drafts
-                                    .data
-                                    .with(|v| v.as_ref().is_some_and(|v| !v.items.is_empty()))
-                        }>
-                            <Card label=trs!(ui.drafts)>
-                                <h2>{tr!(ui.drafts)}</h2>
-                                <QueryBoundary
-                                    fetching=drafts.fetching
-                                    has_data=Signal::derive(move || {
-                                        drafts.data.with(Option::is_some)
-                                    })
-                                    error=drafts.error
-                                    noun=trs!(ui.drafts)
-                                    refresh=drafts.refresh
-                                >
-                                    <ul>
-                                        {move || {
-                                            drafts
-                                                .data
-                                                .get()
-                                                .map(|page| {
-                                                    page.items
-                                                        .into_iter()
-                                                        .take(5)
-                                                        .map(|draft| {
-                                                            view! {
-                                                                <li>
-                                                                    <a href=format!(
-                                                                        "/campaigns/drafts/{}",
-                                                                        draft.id,
-                                                                    )>{draft.name}</a>
-                                                                </li>
-                                                            }
-                                                        })
-                                                        .collect_view()
-                                                })
-                                        }}
-                                    </ul>
-                                    <Show when=move || {
-                                        drafts
-                                            .data
-                                            .with(|page| {
-                                                page.as_ref().is_some_and(|page| page.items.is_empty())
-                                            })
-                                    }>
-                                        <p>{tr!(ui.no_drafts)}</p>
-                                    </Show>
-                                    <ActionLink href="/campaigns?filter=drafts">
-                                        {tr!(ui.campaigns)}
-                                    </ActionLink>
-                                </QueryBoundary>
-                            </Card>
-                        </Show>
+                        {move || {
+                            snapshot_data.get().map(|s| snapshot_sections(s, drafts, selected_work))
+                        }}
                     </div>
                 </QueryBoundary>
             </div>
@@ -106,10 +53,15 @@ pub(super) fn page() -> impl IntoView {
     }
 }
 
-fn snapshot_sections(s: Snapshot) -> impl IntoView {
+fn snapshot_sections(
+    s: Snapshot,
+    drafts: QueryView<Directory>,
+    selected_work: RwSignal<usize>,
+) -> impl IntoView {
     let sorting = TableSorting::new("recent-campaigns", "recent", SortDirection::Desc);
     let api = expect_context::<crate::client::Api>();
     let i18n = ruphish_ui::localization::use_i18n();
+    let can_edit = crate::campaigns::editable();
 
     let no_campaigns = s.recent.is_empty();
     let inventory = s.inventory;
@@ -215,72 +167,164 @@ fn snapshot_sections(s: Snapshot) -> impl IntoView {
                 </p>
             </Card>
             <Card class="dashboard-attention">
-                <h2>{tr!(ui.needs_attention)}</h2>
-                {clear
-                    .then(|| {
-                        view! {
-                            <p>
-                                {tr!(ui.no_domain_verification_or_delivery_issues_need_attention)}
-                            </p>
-                        }
-                    })}
-                <ul class="dashboard-attention-list">
-                    {(attention.unverified_enabled_domains > 0)
+                <Tabs
+                    label=trs!(ui.campaigns)
+                    selected=selected_work
+                    tabs=vec![
+                        Tab {
+                            id: "dashboard-attention",
+                            label: trs!(ui.needs_attention),
+                            disabled: Signal::stored(false),
+                        },
+                        Tab {
+                            id: "dashboard-drafts",
+                            label: trs!(ui.drafts),
+                            disabled: Signal::stored(false),
+                        },
+                    ]
+                />
+                <TabPanel
+                    id="dashboard-attention"
+                    selected=Signal::derive(move || selected_work.get() == 0)
+                >
+                    {clear
                         .then(|| {
                             view! {
-                                <li>
-                                    <StatusBadge tone=StatusTone::Warning>
-                                        {tr!(ui.verification_needed)}
-                                    </StatusBadge>
-                                    <p>
-                                        {leptos_i18n::t!(
-                                            i18n, messages.arg0_enabled_domains_are_not_verified, arg0 = (attention.unverified_enabled_domains).to_string()
-                                        )}
-                                    </p>
-                                    <a href="/domains">{tr!(ui.review_domains)}</a>
-                                </li>
+                                <p>
+                                    {tr!(
+                                        ui.no_domain_verification_or_delivery_issues_need_attention
+                                    )}
+                                </p>
                             }
                         })}
-                    {(attention.delivery_problems > 0)
-                        .then(|| {
+                    <ul class="dashboard-attention-list">
+                        {(attention.unverified_enabled_domains > 0)
+                            .then(|| {
+                                view! {
+                                    <li>
+                                        <StatusBadge tone=StatusTone::Warning>
+                                            {tr!(ui.verification_needed)}
+                                        </StatusBadge>
+                                        <p>
+                                            {leptos_i18n::t!(
+                                                i18n, messages.arg0_enabled_domains_are_not_verified, arg0 = (attention.unverified_enabled_domains).to_string()
+                                            )}
+                                        </p>
+                                        <a href="/domains">{tr!(ui.review_domains)}</a>
+                                    </li>
+                                }
+                            })}
+                        {(attention.delivery_problems > 0)
+                            .then(|| {
+                                view! {
+                                    <li>
+                                        <StatusBadge tone=StatusTone::Warning>
+                                            {tr!(ui.delivery_needs_review)}
+                                        </StatusBadge>
+                                        <p>
+                                            {leptos_i18n::t!(
+                                                i18n, messages.arg0_failed_blocked_or_uncertain_deliveries_in_unfinished_campaigns, arg0 = (attention.delivery_problems).to_string()
+                                            )}
+                                        </p>
+                                        {attention
+                                            .campaign_ids
+                                            .iter()
+                                            .copied()
+                                            .map(|id| {
+                                                view! {
+                                                    <a href=format!(
+                                                        "/campaigns/{id}/delivery",
+                                                    )>{tr!(ui.campaign)}" #"{id}</a>
+                                                }
+                                            })
+                                            .collect_view()}
+                                        <a href="/campaigns">{tr!(ui.review_campaigns)}</a>
+                                    </li>
+                                }
+                            })}
+                    </ul>
+                    {attention
+                        .next_launch
+                        .map(|n| {
                             view! {
-                                <li>
-                                    <StatusBadge tone=StatusTone::Warning>
-                                        {tr!(ui.delivery_needs_review)}
-                                    </StatusBadge>
-                                    <p>
-                                        {leptos_i18n::t!(
-                                            i18n, messages.arg0_failed_blocked_or_uncertain_deliveries_in_unfinished_campaigns, arg0 = (attention.delivery_problems).to_string()
-                                        )}
-                                    </p>
-                                    {attention
-                                        .campaign_ids
-                                        .iter()
-                                        .copied()
-                                        .map(|id| {
-                                            view! {
-                                                <a href=format!(
-                                                    "/campaigns/{id}/delivery",
-                                                )>{tr!(ui.campaign)}" #"{id}</a>
-                                            }
-                                        })
-                                        .collect_view()}
-                                    <a href="/campaigns">{tr!(ui.review_campaigns)}</a>
-                                </li>
+                                <div class="dashboard-next">
+                                    <h3>{tr!(ui.next_scheduled_launch)}</h3>
+                                    <a href=format!("/campaigns/{}/delivery", n.id)>{n.name}</a>
+                                    <p>{minute(&n.launch.into())}</p>
+                                </div>
                             }
                         })}
-                </ul>
-                {attention
-                    .next_launch
-                    .map(|n| {
-                        view! {
-                            <div class="dashboard-next">
-                                <h3>{tr!(ui.next_scheduled_launch)}</h3>
-                                <a href=format!("/campaigns/{}/delivery", n.id)>{n.name}</a>
-                                <p>{minute(&n.launch.into())}</p>
-                            </div>
-                        }
-                    })}
+                </TabPanel>
+                <TabPanel
+                    id="dashboard-drafts"
+                    selected=Signal::derive(move || selected_work.get() == 1)
+                >
+                    <QueryBoundary
+                        fetching=drafts.fetching
+                        has_data=Signal::derive(move || drafts.data.with(Option::is_some))
+                        error=drafts.error
+                        noun=trs!(ui.drafts)
+                        refresh=drafts.refresh
+                    >
+                        <ul class="dashboard-drafts">
+                            {move || {
+                                drafts
+                                    .data
+                                    .get()
+                                    .map(|page| {
+                                        page.items
+                                            .into_iter()
+                                            .map(|draft| {
+                                                let href = format!("/campaigns/drafts/{}", draft.id);
+                                                let edit_href = format!("{href}/edit");
+                                                let name = if draft.name.is_empty() {
+                                                    leptos_i18n::t_string!(i18n, ui.untitled_campaign)
+                                                        .to_owned()
+                                                } else {
+                                                    draft.name
+                                                };
+                                                let view_label = leptos_i18n::t_string!(
+                                                    i18n, messages.view_arg0, arg0 = name.clone()
+                                                )
+                                                    .to_owned();
+                                                let edit_label = leptos_i18n::t_string!(
+                                                    i18n, messages.edit_arg0, arg0 = name.clone()
+                                                )
+                                                    .to_owned();
+                                                view! {
+                                                    <li>
+                                                        <span class="dashboard-draft-name">{name}</span>
+                                                        <div class="dashboard-draft-actions">
+                                                            <a href=href aria-label=view_label>
+                                                                {tr!(ui.view)}
+                                                            </a>
+                                                            {can_edit
+                                                                .then(|| {
+                                                                    view! {
+                                                                        <a href=edit_href aria-label=edit_label>
+                                                                            {tr!(ui.edit)}
+                                                                        </a>
+                                                                    }
+                                                                })}
+                                                        </div>
+                                                    </li>
+                                                }
+                                            })
+                                            .collect_view()
+                                    })
+                            }}
+                        </ul>
+                        <Show when=move || {
+                            drafts
+                                .data
+                                .with(|page| {
+                                    page.as_ref().is_some_and(|page| page.items.is_empty())
+                                })
+                        }>
+                            <p>{tr!(ui.no_drafts)}</p>
+                        </Show>
+                    </QueryBoundary>
+                </TabPanel>
             </Card>
         </div>
         <Card class="dashboard-resources">

@@ -8,6 +8,9 @@ import { createDemoApi, preferences } from '../../demo-api.mjs';
 import { dataset } from '../../../../../assets/website-demo/dataset.mjs';
 
 const scenario = process.argv[2];
+const dashboardTabs = scenario.startsWith('dashboard-');
+const longDraftName =
+  'Quarterly security awareness follow-up for colleagues joining the international customer support and operations teams';
 const settingsHidden = scenario.startsWith('settings-hidden-');
 const recipientEditor = ['recipient-editor', 'recipient-create', 'recipient-duplicate'].includes(
   scenario,
@@ -112,7 +115,7 @@ const path =
     'sort-directory': '/campaigns',
     invalid: '/campaigns/not-an-id',
     new: '/campaigns/new',
-  }[scenario] ?? '/campaigns/2';
+  }[scenario] ?? (dashboardTabs ? '/' : '/campaigns/2');
 const dom = new JSDOM('<!doctype html><html><body></body></html>', {
   url: `https://admin.example.test${path}`,
   pretendToBeVisual: true,
@@ -173,6 +176,7 @@ win.Response = globalThis.Response;
 Object.assign(preferences, { language: 'de', format_locale: 'de-DE', time_zone: 'Europe/Berlin' });
 if (
   scenario.startsWith('auth-') ||
+  dashboardTabs ||
   settingsHidden ||
   scenario.startsWith('form-') ||
   scenario.startsWith('detail-') ||
@@ -202,6 +206,27 @@ class FixtureDate extends NativeDate {
 }
 globalThis.Date = win.Date = FixtureDate;
 const data = dataset(now);
+if (dashboardTabs) {
+  const draft = data.drafts[0];
+  data.drafts = Array.from({ length: scenario === 'dashboard-drafts-empty' ? 0 : 7 }, (_, i) => ({
+    ...structuredClone(draft),
+    id: i + 1,
+    configuration: {
+      ...structuredClone(draft.configuration),
+      name: i === 0 ? '' : i === 6 ? longDraftName : `Dashboard draft ${i + 1}`,
+    },
+  }));
+  if (scenario === 'dashboard-attention-clear') {
+    for (const domain of data.domains) {
+      domain.eligible = true;
+    }
+    for (const campaign of data.campaigns) {
+      for (const recipient of campaign.results) {
+        recipient.state = 'sent';
+      }
+    }
+  }
+}
 if (recipientEditor) {
   data.groups[0].targets = ['z', 'a', 'b'].map((name) => ({
     email: `${name}@example.test`,
@@ -376,6 +401,9 @@ let authLoginStatus = 200;
 let authSessionFinished = 0;
 let authLoginCount = 0;
 let authLogoutStatus = 503;
+let dashboardDraftFailure = scenario === 'dashboard-drafts-retry';
+let holdDashboardDrafts = scenario === 'dashboard-drafts-late';
+let releaseDashboardDrafts;
 let authAccessChanged = false;
 let authSessionFailure = {
   'auth-session-retry': 'unavailable',
@@ -403,6 +431,22 @@ let releaseRecoveryRead;
 globalThis.fetch = async (request, options) => {
   const url = new URL(request.url);
   requests.push(url.pathname + url.search);
+  if (
+    dashboardTabs &&
+    url.pathname === '/api/campaigns/directory' &&
+    url.searchParams.get('filter') === 'drafts'
+  ) {
+    if (dashboardDraftFailure) {
+      return new Response(JSON.stringify({ success: false, code: 'SERVICE_BUSY' }), {
+        status: 503,
+      });
+    }
+    if (holdDashboardDrafts) {
+      await new Promise((resolve) => {
+        releaseDashboardDrafts = resolve;
+      });
+    }
+  }
   if (settingsHidden && url.pathname === '/api/settings' && request.method === 'GET') {
     const response = await api.execute(request, options);
     const value = await response.json();
@@ -610,6 +654,20 @@ globalThis.fetch = async (request, options) => {
     const response = await api.execute(request, options);
     const value = await response.json();
     value.features = { ...value.features, ...featureOverrides };
+    if (scenario === 'dashboard-drafts-readonly') {
+      value.user.role = {
+        slug: 'custom-viewer',
+        name: 'Custom viewer',
+        description: 'View shared campaigns',
+      };
+      value.user.permissions = ['view_objects'];
+      value.actor = null;
+    }
+    if (scenario === 'dashboard-drafts-user') {
+      value.user.role = { slug: 'user', name: 'User', description: 'Regular user' };
+      value.user.permissions = ['view_objects', 'modify_objects'];
+      value.actor = null;
+    }
     if (
       ['form-webhook', 'form-mailbox'].includes(scenario) ||
       scenario.startsWith('integration-')
@@ -740,6 +798,7 @@ async function until(condition) {
   while (!condition()) {
     if (
       (scenario.startsWith('auth-') ||
+        dashboardTabs ||
         settingsHidden ||
         scenario === 'campaign-wizard' ||
         scenario === 'sort-directory' ||
@@ -771,6 +830,197 @@ const settled = () =>
   regions().length > 0 &&
   regions().every((e) => e.dataset.ready === 'true' && e.getAttribute('aria-busy') === 'false');
 const resultsPath = '/campaigns/2/results';
+
+if (dashboardTabs) {
+  const card = () => document.querySelector('.dashboard-attention');
+  const attention = () => document.getElementById('dashboard-attention-panel');
+  const drafts = () => document.getElementById('dashboard-drafts-panel');
+  const tab = (name) =>
+    [...card().querySelectorAll('[role="tab"]')].find((node) => node.textContent === name);
+  const draftRows = () => [...drafts().querySelectorAll('.dashboard-drafts li')];
+  const draftRequests = () =>
+    requests.filter((path) => path.startsWith('/api/campaigns/directory?'));
+  const overviewRequests = () => requests.filter((path) => path === '/api/overview');
+  await until(() => card()?.querySelectorAll('[role="tab"]').length === 2);
+  assert.deepEqual(
+    [...card().querySelectorAll('[role="tab"]')].map((node) => node.textContent),
+    ['Needs attention', 'Drafts'],
+  );
+  assert.equal(tab('Needs attention').getAttribute('aria-selected'), 'true');
+  assert.equal(tab('Drafts').getAttribute('tabindex'), '-1');
+  assert.equal(attention().hidden, false);
+  assert.equal(drafts().hidden, true);
+  assert.equal(document.querySelectorAll('.dashboard-work > .card').length, 2);
+  assert.equal(
+    document.querySelectorAll('.dashboard-stack > .card').length,
+    1,
+    'only Resources remains below the campaign row',
+  );
+  assert.equal(
+    document.querySelector('.card[aria-label="Drafts"]'),
+    null,
+    'the old standalone drafts card is removed',
+  );
+  assert.ok(attention().querySelector('.dashboard-next a[href="/campaigns/4/delivery"]'));
+  if (scenario === 'dashboard-attention-clear') {
+    assert.ok(
+      attention().textContent.includes('No domain verification or delivery issues need attention.'),
+    );
+    assert.equal(attention().querySelector('.dashboard-attention-list li'), null);
+  } else {
+    assert.deepEqual(
+      [...attention().querySelectorAll('a')].map((link) => link.getAttribute('href')),
+      ['/domains', '/campaigns/3/delivery', '/campaigns', '/campaigns/4/delivery'],
+    );
+    assert.equal(attention().querySelectorAll('.dashboard-attention-list li').length, 2);
+  }
+  const attentionContent = attention().textContent;
+  const reads = requests.length;
+  tab('Needs attention').focus();
+  tab('Needs attention').dispatchEvent(
+    new win.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }),
+  );
+  await until(() => !drafts().hidden);
+  assert.equal(document.activeElement, tab('Drafts'));
+  assert.equal(tab('Drafts').getAttribute('aria-selected'), 'true');
+  assert.equal(tab('Drafts').getAttribute('aria-controls'), drafts().id);
+  assert.equal(drafts().getAttribute('aria-labelledby'), tab('Drafts').id);
+  assert.equal(attention().hidden, true);
+  assert.equal(requests.length, reads, 'switching tabs reuses existing reads');
+  if (scenario === 'dashboard-drafts-late') {
+    await until(() => releaseDashboardDrafts);
+    assert.ok(drafts().querySelector('.loading-spinner'));
+    tab('Needs attention').click();
+    await until(() => !attention().hidden);
+    assert.equal(
+      attention().textContent,
+      attentionContent,
+      'pending drafts do not replace attention content',
+    );
+    tab('Drafts').click();
+    holdDashboardDrafts = false;
+    releaseDashboardDrafts();
+  }
+  if (scenario === 'dashboard-drafts-retry') {
+    await until(() => drafts().querySelector('[role="alert"]'));
+    assert.equal(
+      drafts().querySelector('[role="alert"]').textContent,
+      'SERVICE_BUSY - The service is busy. Try again shortly.',
+    );
+    tab('Needs attention').click();
+    await until(() => !attention().hidden);
+    assert.equal(
+      attention().textContent,
+      attentionContent,
+      'failed drafts do not replace attention content',
+    );
+    tab('Drafts').click();
+    const overviewReads = overviewRequests().length;
+    const failedReads = draftRequests().length;
+    dashboardDraftFailure = false;
+    drafts().querySelector('.query-failure button').click();
+    await until(() => draftRows().length === 7);
+    assert.equal(draftRequests().length, failedReads + 1);
+    assert.equal(
+      overviewRequests().length,
+      overviewReads,
+      'draft retry is independent of the overview',
+    );
+  }
+  await until(() => drafts().querySelector('.query-region[data-ready="true"][aria-busy="false"]'));
+  assert.equal(
+    drafts().querySelector('button, a.button'),
+    null,
+    'draft entries have no action buttons',
+  );
+  assert.equal(drafts().querySelector('a[href="/campaigns?filter=drafts"]'), null);
+  if (scenario === 'dashboard-drafts-empty') {
+    assert.equal(draftRows().length, 0);
+    assert.ok(drafts().textContent.includes('No saved drafts'));
+    assert.equal(
+      card().querySelectorAll('[role="tab"]').length,
+      2,
+      'both tabs remain available when drafts are empty',
+    );
+  } else {
+    assert.deepEqual(
+      draftRows().map((row) => row.querySelector('.dashboard-draft-name').textContent),
+      [
+        'Untitled campaign',
+        ...Array.from({ length: 5 }, (_, i) => `Dashboard draft ${i + 2}`),
+        longDraftName,
+      ],
+    );
+    for (const [index, row] of draftRows().entries()) {
+      const name = row.querySelector('.dashboard-draft-name').textContent;
+      const id = index + 1;
+      assert.equal(row.querySelector('.dashboard-draft-name a'), null, 'names are plain text');
+      const actions = [...row.querySelectorAll('a')];
+      assert.deepEqual(
+        actions.map((link) => [
+          link.textContent,
+          link.getAttribute('href'),
+          link.getAttribute('aria-label'),
+        ]),
+        [
+          ['View', `/campaigns/drafts/${id}`, `View ${name}`],
+          ...(scenario === 'dashboard-drafts-readonly'
+            ? []
+            : [['Edit', `/campaigns/drafts/${id}/edit`, `Edit ${name}`]]),
+        ],
+      );
+    }
+    const selection = new URL(draftRequests()[0], win.location.href).searchParams;
+    assert.equal(selection.get('filter'), 'drafts');
+    assert.equal(selection.get('sort'), 'name');
+    assert.equal(selection.get('order'), 'asc');
+  }
+  tab('Drafts').dispatchEvent(
+    new win.KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }),
+  );
+  await until(() => !attention().hidden);
+  assert.equal(document.activeElement, tab('Needs attention'));
+  assert.equal(attention().textContent, attentionContent);
+  tab('Drafts').click();
+  await until(() => !drafts().hidden);
+  if (scenario === 'dashboard-tabs') {
+    const beforeRefresh = overviewRequests().length;
+    data.campaigns[3].header.name = 'Updated upcoming campaign';
+    document.querySelector('.management-heading button').click();
+    await until(
+      () =>
+        overviewRequests().length > beforeRefresh &&
+        attention().querySelector('.dashboard-next a').textContent === 'Updated upcoming campaign',
+    );
+    assert.equal(drafts().hidden, false, 'refreshing the snapshot preserves the selected tab');
+    assert.equal(tab('Drafts').getAttribute('aria-selected'), 'true');
+    drafts().querySelector('a[href="/campaigns/drafts/7"]').click();
+    await until(
+      () =>
+        win.location.pathname === '/campaigns/drafts/7' &&
+        document.querySelector('a[href="/campaigns/drafts/7/edit"]'),
+    );
+    assert.equal(document.querySelector('h1').textContent, longDraftName);
+  }
+  if (scenario === 'dashboard-drafts-edit') {
+    drafts().querySelector('a[href="/campaigns/drafts/7/edit"]').click();
+    const nameInput = () =>
+      [...document.querySelectorAll('.admin-content input')].find(
+        (input) => input.value === longDraftName,
+      );
+    await until(
+      () =>
+        win.location.pathname === '/campaigns/drafts/7/edit' &&
+        document.querySelector('.step-navigation') &&
+        nameInput() &&
+        !nameInput().disabled,
+    );
+    assert.equal(nameInput().disabled, false);
+    assert.equal(document.querySelector('h1').textContent, 'Edit campaign draft');
+    assert.ok(requests.includes('/api/campaign-drafts/7'));
+  }
+  process.exit(0);
+}
 
 if (scenario.startsWith('auth-')) {
   const sessionCard = () => document.querySelector('.session-card');

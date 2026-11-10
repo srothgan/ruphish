@@ -1031,6 +1031,8 @@
     "could_not_open_the_content_editor_arg0": "Der Inhaltseditor konnte nicht geöffnet werden: {{ arg0 }}",
     "could_not_load_the_document_arg0": "Das Dokument konnte nicht geladen werden: {{ arg0 }}",
     "create_arg0": "{{ arg0 }} erstellen",
+    "view_arg0": "{{ arg0 }} ansehen",
+    "edit_arg0": "{{ arg0 }} bearbeiten",
     "loading_arg0": "{{ arg0 }} werden geladen…",
     "arg0_arg1_compared_with_the_previous_period": "{{ arg0 }}: {{ arg1 }} gegenüber dem vorherigen Zeitraum",
     "arg0_of_emails_sent": "{{ arg0 }} der gesendeten E-Mails",

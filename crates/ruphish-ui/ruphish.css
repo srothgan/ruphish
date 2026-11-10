@@ -744,6 +744,14 @@
   .dashboard-campaign-meta { display: block; margin-top: var(--s1); color: var(--muted); font-size: var(--fs-sm); font-weight: var(--fw-regular); }
   .dashboard-attention-list { display: grid; gap: var(--s5); list-style: none; padding: 0; margin: 0; }
   .dashboard-attention-list p { margin: var(--s2) 0; }
+  .dashboard-attention > .content-tabs { flex-wrap: wrap; margin-bottom: var(--s5); }
+  .dashboard-drafts { list-style: none; margin: 0; padding: 0; }
+  .dashboard-drafts li { padding-block: var(--s4); overflow-wrap: anywhere; }
+  .dashboard-drafts li + li { border-top: 1px solid var(--line); }
+  .dashboard-drafts li:first-child { padding-top: 0; }
+  .dashboard-drafts li:last-child { padding-bottom: 0; }
+  .dashboard-draft-name { display: block; font-weight: var(--fw-medium); }
+  .dashboard-draft-actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s4); margin-top: var(--s2); }
   .dashboard-next { margin-top: var(--s5); }
   .dashboard-next h3 { font-size: var(--fs-base); margin: 0 0 var(--s2); }
   .dashboard-next a { overflow-wrap: anywhere; }
