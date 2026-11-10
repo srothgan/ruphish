@@ -70,7 +70,7 @@ Browser dependency notices are preserved in [web/THIRD-PARTY-NOTICES.txt](crates
 
 HTML rewriting uses lol_html and its unmodified selector/CSS parser dependencies. MPL-2.0 is accepted only for the crate names listed in `deny.toml`; the general allowlist remains unchanged. These exceptions apply across versions, while the notices below identify the reviewed source versions. License texts and upstream source locations are retained here. Distribution remains deferred and must include the applicable notices and source availability for covered dependencies. No upstream dependency source was modified.
 
-- `lol_html-3.0.2`: [LICENSE](#lol_html-302-license); unmodified upstream source: https://docs.rs/crate/lol_html/3.0.2/source/.
+- `lol_html-3.0.3`: [LICENSE](#lol_html-303-license); unmodified upstream source: https://docs.rs/crate/lol_html/3.0.3/source/.
 - `cssparser-0.36.0`: [LICENSE](#cssparser-0360-license); unmodified upstream source: https://docs.rs/crate/cssparser/0.36.0/source/.
 - `cssparser-macros-0.6.1`: [LICENSE](#cssparser-0360-license); unmodified upstream source: https://docs.rs/crate/cssparser-macros/0.6.1/source/.
 - `dtoa-short-0.3.5`: [LICENSE](#cssparser-0380-license); unmodified upstream source: https://docs.rs/crate/dtoa-short/0.3.5/source/.
@@ -1122,9 +1122,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### lol_html-3.0.2-LICENSE
+### lol_html-3.0.3-LICENSE
 
-Preserved from `lol_html-3.0.2-LICENSE.txt`.
+Preserved from the `LICENSE` file in `lol_html` 3.0.3; byte-identical to the previously retained 3.0.2 license.
 
 ```text
 Copyright (C) 2019, Cloudflare, Inc.
