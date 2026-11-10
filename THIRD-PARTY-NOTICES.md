@@ -33,6 +33,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 The temporary `sqlx-core` 0.9.0 backport is documented in [vendor/sqlx-core/README.ruphish.md](vendor/sqlx-core/README.ruphish.md), including its upstream source, patch and removal instructions. SQLx is licensed under MIT OR Apache-2.0; the MIT notice is reproduced here for distributions containing the executable.
 
+The unmodified `sqlx-sqlite` driver is temporarily pinned to upstream revision [`10462fa4414c6c7f1ed1d39bb31678e3b726878c`](https://github.com/transact-rs/sqlx/tree/10462fa4414c6c7f1ed1d39bb31678e3b726878c/sqlx-sqlite), which includes [SQLx PR #4502](https://github.com/transact-rs/sqlx/pull/4502) and permits the patched `libsqlite3-sys` 0.39.1 bundled SQLite engine for RUSTSEC-2026-0459. The driver uses the same vendored `sqlx-core` as the registry SQLx crates through a Git-source patch. When a compatible published SQLx driver includes this fix, remove the driver Git pin, its Git-source core patch and the corresponding source allowance in `deny.toml`, update the lockfile through Cargo, and rerun dependency-policy and SQLite persistence/migration checks. This does not remove the separate connection-pool patch.
+
 ```text
 Copyright (C) SQLx Contributors
 Portions of this work Copyright (C) LaunchBadge, LLC
