@@ -167,7 +167,7 @@ pub(crate) fn DataTable(
     headers: Vec<Signal<String>>,
     /// Empty keys identify action-only columns.
     columns: Vec<&'static str>,
-    sorting: TableSorting,
+    #[prop(optional)] sorting: Option<TableSorting>,
     /// Named workflow order, restored without toggling a column or discarding pagination resets.
     #[prop(optional)]
     default_sort: Option<(
@@ -189,7 +189,8 @@ pub(crate) fn DataTable(
         </div>
         <div class="management-table-wrap" hidden=move || empty.get()>
             {default_sort
-                .map(|(column, order, label)| {
+                .zip(sorting)
+                .map(|((column, order, label), sorting)| {
                     let selected = Signal::derive(move || {
                         sorting.current.with(|sort| sort.column == column && sort.order == order)
                     });
@@ -225,9 +226,7 @@ pub(crate) fn DataTable(
                             .into_iter()
                             .zip(columns)
                             .map(|(name, key)| {
-                                if key.is_empty() {
-                                    view! { <th scope="col">{move || name.get()}</th> }.into_any()
-                                } else {
+                                if let Some(sorting) = sorting.filter(|_| !key.is_empty()) {
                                     view! {
                                         <th
                                             scope="col"
@@ -256,6 +255,8 @@ pub(crate) fn DataTable(
                                         </th>
                                     }
                                         .into_any()
+                                } else {
+                                    view! { <th scope="col">{move || name.get()}</th> }.into_any()
                                 }
                             })
                             .collect_view()}

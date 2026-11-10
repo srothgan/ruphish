@@ -414,6 +414,16 @@ pub fn delivery_failure_label(context: leptos_i18n::I18nContext<Locale>, code: &
         }
         "smtp_permanent_rejection" => leptos_i18n::t_string!(context, ui.delivery_error_rejected),
         "smtp_profile_blocked" => leptos_i18n::t_string!(context, ui.delivery_error_profile),
+        "smtp_configuration_invalid" => {
+            leptos_i18n::t_string!(context, ui.delivery_error_configuration)
+        }
+        "smtp_dns_unavailable" => leptos_i18n::t_string!(context, ui.delivery_error_dns),
+        "smtp_destination_denied" => leptos_i18n::t_string!(context, ui.delivery_error_destination),
+        "smtp_connect_unavailable" => leptos_i18n::t_string!(context, ui.delivery_error_connect),
+        "smtp_tls_failed" => leptos_i18n::t_string!(context, ui.delivery_error_tls),
+        "smtp_authentication_failed" => {
+            leptos_i18n::t_string!(context, ui.delivery_error_authentication)
+        }
         "smtp_temporary_rejection" => leptos_i18n::t_string!(context, ui.delivery_error_temporary),
         "delivery_retry_exhausted" => leptos_i18n::t_string!(context, ui.delivery_error_exhausted),
         "campaign_resource_missing" => leptos_i18n::t_string!(context, ui.delivery_error_resource),

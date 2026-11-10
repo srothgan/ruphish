@@ -10,6 +10,12 @@ pub struct FormState {
     server: Vec<Issue>,
 }
 impl FormState {
+    /// A replacement draft discards diagnostics and invalidates outstanding responses.
+    pub fn reset(&mut self) {
+        self.touched.clear();
+        self.server.clear();
+        self.generation = self.generation.wrapping_add(1);
+    }
     /// Expose all applicable local errors after an attempted action.
     pub fn submit(&mut self, issues: &[Issue]) {
         // A deliberate retry must not keep an obsolete server verdict while revalidating.

@@ -46,11 +46,15 @@ else
         -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=critical,keyCertSign,cRLSign'
     openssl req -newkey rsa:2048 -nodes -keyout server.key -out server.csr \
         -subj '/CN=good.ruphish.test'
-    printf '%s\n' 'subjectAltName=DNS:good.ruphish.test,DNS:bad.ruphish.test' \
+    printf '%s\n' 'subjectAltName=DNS:good.ruphish.test,DNS:bad.ruphish.test,IP:172.30.53.20' \
         'basicConstraints=critical,CA:FALSE' 'keyUsage=critical,digitalSignature,keyEncipherment' \
         'extendedKeyUsage=serverAuth' > server.ext
     openssl x509 -req -in server.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
         -out server.pem -days 365 -sha256 -extfile server.ext
+fi
+if ! openssl verify -CAfile ca.pem -verify_ip 172.30.53.20 server.pem; then
+    echo 'The lab certificate must include IP:172.30.53.20 for SMTP. Existing files were kept; use a fresh RUPHISH_ACCEPTANCE_DATA_DIRECTORY or reissue the lab server certificate.' >&2
+    exit 1
 fi
 cd /workspace
 # Host-side HTTPS clients need the public certificates, never the private keys.

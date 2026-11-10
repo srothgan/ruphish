@@ -17,6 +17,7 @@ pub struct Policy {
 pub(crate) enum ResolveFailure {
     Unavailable,
     Denied,
+    TooMany,
 }
 impl Policy {
     /// Reject invalid configured CIDRs rather than silently dropping policy entries.
@@ -34,31 +35,8 @@ impl Policy {
     }
     /// Normalize mapped IPv4 before applying rules so IPv6 cannot bypass a deny.
     pub fn permits(&self, address: IpAddr) -> bool {
-        let ip = match address {
-            IpAddr::V6(v) => v.to_ipv4_mapped().map(IpAddr::V4).unwrap_or(address),
-            _ => address,
-        };
-        if self.allowed.iter().any(|n| n.contains(&ip)) {
-            return true;
-        }
-        let denied: &[&str] = &[
-            "0.0.0.0/8",
-            "127.0.0.0/8",
-            "10.0.0.0/8",
-            "100.64.0.0/10",
-            "172.16.0.0/12",
-            "169.254.0.0/16",
-            "192.88.99.0/24",
-            "192.168.0.0/16",
-            "198.51.100.0/24",
-            "203.0.113.0/24",
-            "224.0.0.0/4",
-            "240.0.0.0/4",
-            "::/0",
-        ];
-        !denied
-            .iter()
-            .any(|n| n.parse::<IpNet>().is_ok_and(|n| n.contains(&ip)))
+        let ip = canonical_ip(address);
+        self.allowed.iter().any(|n| n.contains(&ip)) || public_ip(ip)
     }
     /// Resolve once with a deadline and return only addresses authorized for connection.
     pub async fn resolve(&self, host: &str, port: u16) -> Result<Vec<SocketAddr>, Error> {
@@ -66,6 +44,7 @@ impl Policy {
             invalid(match error {
                 ResolveFailure::Unavailable => "DNS lookup failed or returned no addresses",
                 ResolveFailure::Denied => "Upstream connection denied to internal host",
+                ResolveFailure::TooMany => "DNS lookup returned too many addresses",
             })
         })
     }
@@ -81,6 +60,13 @@ impl Policy {
         .await
         .map_err(|_| ResolveFailure::Unavailable)?
         .map_err(|_| ResolveFailure::Unavailable)?;
+        self.check_addresses(addresses)
+    }
+
+    fn check_addresses(
+        &self,
+        addresses: impl IntoIterator<Item = SocketAddr>,
+    ) -> Result<Vec<SocketAddr>, ResolveFailure> {
         let mut checked = Vec::new();
         for addr in addresses {
             if !self.permits(addr.ip()) {
@@ -88,6 +74,9 @@ impl Policy {
             }
             if !checked.contains(&addr) {
                 checked.push(addr);
+                if checked.len() > 16 {
+                    return Err(ResolveFailure::TooMany);
+                }
             }
         }
         if checked.is_empty() {
@@ -174,3 +163,56 @@ impl Policy {
         .map_err(|_| invalid("Site import timed out"))?
     }
 }
+
+/// Canonical form for both public classification and installation allowlists.
+pub(crate) fn canonical_ip(address: IpAddr) -> IpAddr {
+    match address {
+        IpAddr::V6(v) => v.to_ipv4_mapped().map(IpAddr::V4).unwrap_or(address),
+        _ => address,
+    }
+}
+
+/// Public destination classification shared by outbound transports and domain probes.
+/// Callers own their explicit internal-network exceptions.
+pub(crate) fn public_ip(address: IpAddr) -> bool {
+    let ip = canonical_ip(address);
+    // Only allocated global-unicast IPv6 space is a default outbound target.
+    // Translation, discard-only and other special-purpose ranges need explicit
+    // installation policy instead of inheriting broad public-network access.
+    if let IpAddr::V6(value) = ip
+        && value.segments()[0] & 0xe000 != 0x2000
+    {
+        return false;
+    }
+    ![
+        "0.0.0.0/8",
+        "169.254.0.0/16",
+        "127.0.0.0/8",
+        "10.0.0.0/8",
+        "100.64.0.0/10",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "192.0.0.0/24",
+        "192.0.2.0/24",
+        "192.88.99.0/24",
+        "198.18.0.0/15",
+        "198.51.100.0/24",
+        "203.0.113.0/24",
+        "224.0.0.0/4",
+        "240.0.0.0/4",
+        "::1/128",
+        "fc00::/7",
+        "ff00::/8",
+        "2001:db8::/32",
+        "2001::/23",
+        "3fff::/20",
+        "64:ff9b::/96",
+        "2002::/16",
+    ]
+    .iter()
+    .any(|n| n.parse::<ipnet::IpNet>().is_ok_and(|n| n.contains(&ip)))
+}
+
+#[cfg(test)]
+#[path = "tests/outbound.rs"]
+mod tests;

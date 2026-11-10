@@ -5,13 +5,13 @@ use hickory_proto::{
     op::{Message, OpCode},
     rr::{
         RData, Record, RecordType,
-        rdata::{A, TXT},
+        rdata::{A, AAAA, TXT},
     },
 };
 use std::{
     collections::HashMap,
     io::{Read, Write},
-    net::{SocketAddr, TcpListener, TcpStream, UdpSocket},
+    net::{IpAddr, SocketAddr, TcpListener, TcpStream, UdpSocket},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -23,6 +23,7 @@ pub struct Network {
     pub address: SocketAddr,
     pub certificate: String,
     pub records: Arc<Mutex<HashMap<String, String>>>,
+    addresses: Arc<Mutex<Vec<IpAddr>>>,
     stop: Arc<AtomicBool>,
     threads: Vec<std::thread::JoinHandle<()>>,
     connections: super::connection::Connections,
@@ -35,14 +36,22 @@ impl Network {
         status: u16,
         handler: impl Fn(&str, &str) -> Option<String> + Send + Sync + 'static,
     ) -> Self {
-        let _ = rustls::crypto::ring::default_provider().install_default();
         // Keep this listener for the entire test, including application restarts.
         // No privileged ports or platform-specific loopback aliases are needed.
         let listener = TcpListener::bind("127.0.0.1:0")
             .map_err(|error| format!("Bind domain HTTPS fixture: {error}"))
             .unwrap();
-        let address = listener.local_addr().unwrap();
         let material = tls_fixture::server_certificate(&["training.example.test", "example.test"]);
+        Self::with_listener(listener, &material, status, handler)
+    }
+    pub fn with_listener(
+        listener: TcpListener,
+        material: &rcgen::CertifiedKey<rcgen::KeyPair>,
+        status: u16,
+        handler: impl Fn(&str, &str) -> Option<String> + Send + Sync + 'static,
+    ) -> Self {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let address = listener.local_addr().unwrap();
         let certificate = material.cert.pem();
         let key = rustls::pki_types::PrivatePkcs8KeyDer::from(material.signing_key.serialize_der());
         let config = Arc::new(
@@ -112,6 +121,8 @@ impl Network {
         let resolver = socket.local_addr().unwrap();
         let records = Arc::new(Mutex::new(HashMap::<String, String>::new()));
         let values = records.clone();
+        let addresses = Arc::new(Mutex::new(Vec::new()));
+        let resolved = addresses.clone();
         let stopping = stop.clone();
         let dns = std::thread::spawn(move || {
             let mut bytes = [0; 4096];
@@ -140,13 +151,14 @@ impl Network {
                                 ));
                             }
                         }
-                        RecordType::A => {
-                            if let std::net::IpAddr::V4(ip) = address.ip() {
-                                answer.add_answer(Record::from_rdata(
-                                    q.name.clone(),
-                                    0,
-                                    RData::A(A(ip)),
-                                ));
+                        RecordType::A | RecordType::AAAA => {
+                            for address in resolved.lock().unwrap().iter() {
+                                let data = match (q.query_type, address) {
+                                    (RecordType::A, IpAddr::V4(ip)) => RData::A(A(*ip)),
+                                    (RecordType::AAAA, IpAddr::V6(ip)) => RData::AAAA(AAAA(*ip)),
+                                    _ => continue,
+                                };
+                                answer.add_answer(Record::from_rdata(q.name.clone(), 0, data));
                             }
                         }
                         _ => {}
@@ -155,15 +167,18 @@ impl Network {
                 let _ = socket.send_to(&answer.to_vec().unwrap(), peer);
             }
         });
-        Self {
+        let network = Self {
             resolver,
             address,
             certificate,
             records,
+            addresses,
             stop,
             connections,
             threads: vec![https, dns],
-        }
+        };
+        network.resolve_to(vec![address.ip()]);
+        network
     }
     pub fn origin(&self, host: &str) -> String {
         format!("https://{host}:{}", self.address.port())
@@ -173,6 +188,9 @@ impl Network {
             format!("_ruphish-verify.{hostname}."),
             format!("ruphish-verification={challenge}"),
         );
+    }
+    pub fn resolve_to(&self, addresses: Vec<IpAddr>) {
+        *self.addresses.lock().unwrap() = addresses;
     }
 }
 impl Drop for Network {

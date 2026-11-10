@@ -1,5 +1,6 @@
 [workspace]
 resolver = "3"
+exclude = ["vendor/sqlx-core"]
 members = [
     "crates/ruphish-domain",
     "crates/ruphish-contracts",
@@ -19,7 +20,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.1.0-dev.2"
+version = "0.1.0-dev.3"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT"
@@ -46,3 +47,10 @@ dbg_macro = "deny"
 [profile.release]
 lto = "thin"
 codegen-units = 1
+
+[patch.crates-io]
+# WARNING: Temporary vendored SQLx fix from an unmerged upstream PR.
+# TODO: Once https://github.com/transact-rs/sqlx/pull/4350 is merged, replace this
+# path patch with an exact upstream Git revision containing the fix, validate it,
+# and remove vendor/sqlx-core and its workspace exclusion. See its README.ruphish.md.
+sqlx-core = { path = "vendor/sqlx-core" }

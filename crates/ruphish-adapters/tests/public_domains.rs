@@ -585,6 +585,8 @@ fn final_html_preserves_authored_execution_and_assets_inside_managed_form_sandbo
 mod connection;
 #[path = "../../../tests/support/domain_network.rs"]
 mod domain_network;
+#[path = "support/domain_verification.rs"]
+mod domain_verification;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn actual_dns_and_https_require_exact_control_trust_routing_and_permitted_destinations() {

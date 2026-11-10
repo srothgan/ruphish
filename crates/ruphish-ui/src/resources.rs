@@ -6,9 +6,7 @@ use crate::shared::components::*;
 use leptos::{html, prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use ruphish_contracts::resources::request as input;
 use ruphish_domain::reporting::SortDirection;
-use ruphish_ui::table_state::{
-    Value as SortValue, scalar as sort_scalar, timestamp as sort_timestamp,
-};
+use ruphish_ui::table_state::{Value as SortValue, timestamp as sort_timestamp};
 use ruphish_ui::{
     import_drafts::{ImportDrafts, ImportedDraft},
     import_state::{ImportError, ImportReview},
@@ -485,6 +483,7 @@ struct Editor {
     write_error: RwSignal<Option<ruphish_ui::api_error::ApiError>>,
     validation: FormValidation,
     draft: RwSignal<ResourceDraft>,
+    group: Option<ruphish_ui::group_draft::GroupDraft>,
     message: Message,
     epoch: RwSignal<u64>,
     busy: RwSignal<bool>,
@@ -503,11 +502,29 @@ struct Editor {
     import_review: Option<RwSignal<ImportReview>>,
 }
 impl Editor {
+    fn dirty(self) -> bool {
+        self.group.map_or_else(
+            || self.draft.with(ResourceDraft::dirty),
+            |group| group.dirty(),
+        )
+    }
     fn text(self, key: &str) -> String {
+        if key == "name"
+            && let Some(group) = self.group
+        {
+            return group.name.get();
+        }
         self.draft
             .with(|d| d.value()[key].as_str().unwrap_or("").to_owned())
     }
     fn set(self, key: &str, value: Value) {
+        if key == "name"
+            && let Some(group) = self.group
+        {
+            self.validation.edited(key);
+            group.name.set(value.as_str().unwrap_or("").to_owned());
+            return;
+        }
         if key == "html" {
             self.html_revision.update_value(|revision| *revision += 1);
             self.diagnostics.set(None);
@@ -567,13 +584,32 @@ fn edit(
     let draft = imported
         .map(|i| RwSignal::from(i.draft))
         .unwrap_or_else(|| RwSignal::new(ResourceDraft::new(family.empty())));
+    let group = (family == Family::Groups).then(ruphish_ui::group_draft::GroupDraft::new);
+    if let Some(group) = group
+        && draft.with_untracked(|draft| group.load(draft)).is_err()
+    {
+        load_error.set(Some(api.invalid_read_err()));
+    }
     let validation = FormValidation::new(move || {
-        draft.with(|d| ruphish_ui::form_validation::resource(d.value(), family.route()))
+        if let Some(group) = group {
+            group.name.with(|name| {
+                group.rows.with(|rows| {
+                    ruphish_domain::resources::Fields::Group {
+                        name,
+                        count: rows.len(),
+                    }
+                    .validate()
+                })
+            })
+        } else {
+            draft.with(|d| ruphish_ui::form_validation::resource(d.value(), family.route()))
+        }
     });
     let editor = Editor {
         write_error: RwSignal::new(None),
         validation,
         draft,
+        group,
         import_review,
         message: Message::new(String::new()),
         epoch: RwSignal::new(0),
@@ -639,7 +675,15 @@ fn edit(
                         editor
                             .diagnostics
                             .set(loaded.confirmed().and_then(warnings_for_record));
+                        if let Some(group) = editor.group
+                            && group.load(&loaded).is_err()
+                        {
+                            load_error.set(Some(api.invalid_read_err()));
+                            loading.set(false);
+                            return;
+                        }
                         editor.draft.set(loaded);
+                        editor.validation.reset();
                         editor.epoch.update(|v| *v += 1);
                     }
                     Err(e) => {
@@ -651,7 +695,7 @@ fn edit(
         });
     });
     crate::navigation::protect_draft(move || {
-        editor.draft.with(ResourceDraft::dirty) || editor.visual_pending.get() || editor.busy.get()
+        editor.dirty() || editor.visual_pending.get() || editor.busy.get()
     });
     let save = move |_| {
         spawn_local(async move {
@@ -660,8 +704,31 @@ fn edit(
             }
         });
     };
+    let save_button = move || {
+        view! {
+            <SaveButton
+                disabled=Signal::derive(move || {
+                    loading.get() || load_failed.get() || editor.readonly || editor.busy.get()
+                        || editor.visual_pending.get()
+                        || editor.import_review.is_some_and(|r| !r.with(ImportReview::ready))
+                })
+                on_click=Callback::new(save)
+                label=Signal::derive(move || {
+                    if editor.draft.with(|d| d.value()["id"].as_i64().unwrap_or(0) == 0) {
+                        leptos_i18n::t_string!(
+                            i18n, messages.create_arg0, arg0 = (family.singular()).to_string()
+                        )
+                    } else {
+                        leptos_i18n::t_string!(i18n, ui.save_changes).into()
+                    }
+                })
+            />
+        }
+    };
     let content = match family {
-        Family::Groups => group_fields(editor).into_any(),
+        Family::Groups => group
+            .map(|group| group_fields(editor, group, save_button()))
+            .into_any(),
         Family::Templates | Family::Pages | Family::LearningPages => {
             content_fields(api, token, editor, family).into_any()
         }
@@ -687,7 +754,7 @@ fn edit(
                         leptos_i18n::t_string!(i18n, ui.read_only_access)
                     } else if editor.visual_pending.get() {
                         leptos_i18n::t_string!(i18n, ui.visual_editor_not_ready)
-                    } else if editor.draft.with(ResourceDraft::dirty) {
+                    } else if editor.dirty() {
                         leptos_i18n::t_string!(i18n, ui.unsaved_changes)
                     } else if editor.draft.with(|d| d.value()["id"].as_i64().unwrap_or(0) == 0) {
                         leptos_i18n::t_string!(i18n, ui.not_saved_yet)
@@ -769,6 +836,12 @@ fn edit(
                         })
                         on_click=move |_| {
                             editor.draft.update(ResourceDraft::cancel);
+                            if let Some(group) = editor.group
+                                && editor.draft.with_untracked(|draft| group.load(draft)).is_err()
+                            {
+                                editor.message.error(api.invalid_read_err().message);
+                                return;
+                            }
                             editor.epoch.update(|v| *v += 1);
                             let id = editor
                                 .draft
@@ -786,25 +859,7 @@ fn edit(
                     >
                         {tr!(ui.cancel_changes)}
                     </ActionButton>
-                    <SaveButton
-                        disabled=Signal::derive(move || {
-                            loading.get() || load_failed.get() || editor.readonly
-                                || editor.busy.get() || editor.visual_pending.get()
-                                || editor
-                                    .import_review
-                                    .is_some_and(|r| !r.with(ImportReview::ready))
-                        })
-                        on_click=Callback::new(save)
-                        label=Signal::derive(move || {
-                            if editor.draft.with(|d| d.value()["id"].as_i64().unwrap_or(0) == 0) {
-                                leptos_i18n::t_string!(
-                                    i18n, messages.create_arg0, arg0 = (family.singular()).to_string()
-                                )
-                            } else {
-                                leptos_i18n::t_string!(i18n, ui.save_changes).into()
-                            }
-                        })
-                    />
+                    {save_button()}
                 </FormFooter>
                 {move || {
                     test_open
@@ -828,7 +883,11 @@ fn edit(
     }
 }
 fn finish_edit(editor: Editor, family: Family) {
-    if let Some(id) = editor.draft.with_untracked(ResourceDraft::completed_id) {
+    if !editor.dirty()
+        && let Some(id) = editor
+            .draft
+            .with_untracked(|draft| draft.confirmed().map(|record| record.metadata.id))
+    {
         editor.replace_url.run(format!("/{}/{id}", family.route()));
     }
 }
@@ -853,7 +912,21 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
     editor.busy.set(true);
     editor.message.clear();
     let current = editor.draft.get_untracked();
-    let submitted = current.value().clone();
+    let group_submission = editor
+        .group
+        .map(|group| group.submission(current.value()["id"].as_i64().unwrap_or(0)));
+    let submitted = if let Some(group) = &group_submission {
+        match serde_json::to_value(&group.value) {
+            Ok(value) => value,
+            Err(_) => {
+                editor.busy.set(false);
+                editor.message.error(api.invalid_read_err().message);
+                return false;
+            }
+        }
+    } else {
+        current.value().clone()
+    };
     let request = match ruphish_contracts::resources::request::decode(
         family.detail_kind(),
         submitted.clone(),
@@ -885,11 +958,23 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
         .and_then(|(value, revision)| {
             let resource =
                 ResourceQueries::decode_detail(api, family, value, (id != 0).then_some(id))?;
-            Confirmed::new(resource, revision).map_err(|_| api.invalid_read_err())
+            let confirmed =
+                Confirmed::new(resource, revision).map_err(|_| api.invalid_read_err())?;
+            let returned_group = if let Some(submitted) = &group_submission {
+                let returned: input::Group = serde_json::from_value(confirmed.fields_for_edit())
+                    .map_err(|_| api.invalid_read_err())?;
+                if returned.targets.len() != submitted.rows.len() {
+                    return Err(api.invalid_read_err());
+                }
+                Some(returned)
+            } else {
+                None
+            };
+            Ok((confirmed, returned_group))
         });
     editor.busy.set(false);
     match result {
-        Ok(confirmed) => {
+        Ok((confirmed, returned_group)) => {
             #[cfg(feature = "demo")]
             api.notifications.show(if id == 0 {
                 DemoNotice::Created
@@ -901,10 +986,17 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
                 .diagnostics
                 .set(warnings_for_record(confirmed.record()));
             queries.saved(family, confirmed.record());
-            editor.draft.update(|d| d.saved(&submitted, confirmed));
+            if let (Some(group), Some(snapshot), Some(returned)) =
+                (editor.group, group_submission.as_ref(), returned_group)
+            {
+                group.saved(snapshot, returned);
+                editor.draft.set(ResourceDraft::loaded(confirmed));
+            } else {
+                editor.draft.update(|d| d.saved(&submitted, confirmed));
+            }
             editor.epoch.update(|v| *v += 1);
             editor.message.status(
-                if editor.draft.with_untracked(ResourceDraft::dirty) {
+                if editor.dirty() {
                     leptos_i18n::t_string!(
                         i18n,
                         ui.saved_the_submitted_version_newer_changes_remain_unsaved
@@ -917,7 +1009,13 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
             true
         }
         Err(e) => {
-            if editor.draft.with_untracked(|d| d.value() == &submitted) {
+            if let Some(snapshot) = group_submission {
+                let mut diagnostic = e.clone();
+                if let Some(report) = &mut diagnostic.validation {
+                    snapshot.map_validation(report);
+                }
+                editor.validation.server(ticket, &diagnostic);
+            } else if editor.draft.with_untracked(|d| d.value() == &submitted) {
                 editor.validation.server(ticket, &e);
             }
             editor.write_error.set(Some(e.clone()));
@@ -926,42 +1024,33 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
         }
     }
 }
-fn group_fields(editor: Editor) -> impl IntoView {
-    let sorting = TableSorting::new("group-editor", "email", SortDirection::Asc);
+fn group_fields(
+    editor: Editor,
+    group: ruphish_ui::group_draft::GroupDraft,
+    save_button: impl IntoView,
+) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
     view! {
         <section class="resource-section">
             <div class="management-heading">
                 <h2>{tr!(ui.recipients)}</h2>
-                <ActionButton
-                    kind="button"
-                    on_click=move |_| {
-                        editor
-                            .draft
-                            .update(|d| {
-                                d.edit(|v| {
-                                    editor.validation.edited("targets");
-                                    if let Some(rows) = v["targets"].as_array_mut() {
-                                        rows.push(
-                                            json!(
-                                                {"email":"","first_name":"","last_name":"","position":""}
-                                            ),
-                                        );
-                                    }
-                                })
-                            })
-                    }
-                >
-                    {tr!(ui.add_recipient)}
-                </ActionButton>
+                <div class="management-actions">
+                    <ActionButton
+                        kind="button"
+                        on_click=move |_| {
+                            editor.validation.edited("targets");
+                            group.prepend();
+                        }
+                    >
+                        {tr!(ui.add_recipient)}
+                    </ActionButton>
+                    {save_button}
+                </div>
             </div>
             <ValidationAnchor field="targets" />
             <DataTable
-                empty=Signal::derive(move || {
-                    editor.draft.with(|d| d.value()["targets"].as_array().is_none_or(Vec::is_empty))
-                })
-                sorting=sorting
+                empty=Signal::derive(move || { group.rows.with(Vec::is_empty) })
                 columns=vec!["email", "first_name", "last_name", "position", ""]
                 label=trs!(ui.recipients)
                 headers=vec![
@@ -978,55 +1067,52 @@ fn group_fields(editor: Editor) -> impl IntoView {
                 </TableEmpty>
 
                 <For
-                    each=move || {
-                        editor
-                            .draft
-                            .with(|draft| {
-                                let rows = draft
-                                    .value()["targets"]
-                                    .as_array()
-                                    .cloned()
-                                    .unwrap_or_default();
-                                sorting
-                                    .rows(
-                                        (0..rows.len()).collect(),
-                                        |index, key| sort_scalar(&rows[*index][key]),
-                                        |index| (*index).into(),
-                                    )
-                            })
-                    }
-                    key=|i| *i
-                    children=move |index| {
+                    each=move || group.rows.get()
+                    key=|row| row.id
+                    children=move |row| {
+                        let id = row.id;
+                        let remove_id = id;
+                        let fields = row.draft;
                         view! {
                             <tr>
                                 {["email", "first_name", "last_name", "position"]
                                     .into_iter()
                                     .map(move |key| {
+                                        let value = fields.clone();
+                                        let editable = fields.clone();
                                         view! {
                                             <td>
                                                 <TextInput
-                                                    validation_field=format!("targets.{index}.{key}")
-                                                    aria_label=leptos_i18n::t_string!(
-                                                        i18n, messages.recipient_arg0_arg1, arg0 = (index+1).to_string(), arg1 = match key { "email" => leptos_i18n::t_string!(i18n, ui.email), "first_name" => leptos_i18n::t_string!(i18n, ui.first_name), "last_name" => leptos_i18n::t_string!(i18n, ui.last_name), _ => leptos_i18n::t_string!(i18n, ui.position) }
-                                                    )
+                                                    validation_field=format!("targets.row-{id}.{key}")
+                                                    aria_label=Signal::derive(move || {
+                                                        leptos_i18n::t_string!(
+                                                            i18n, messages.recipient_arg0_arg1, arg0 = (id+1).to_string(), arg1 = match key { "email" => leptos_i18n::t_string!(i18n, ui.email), "first_name" => leptos_i18n::t_string!(i18n, ui.first_name), "last_name" => leptos_i18n::t_string!(i18n, ui.last_name), _ => leptos_i18n::t_string!(i18n, ui.position) }
+                                                        )
+                                                            .to_string()
+                                                    })
                                                     value=Signal::derive(move || {
-                                                        editor
-                                                            .draft
-                                                            .with(|d| {
-                                                                d.value()["targets"][index][key]
-                                                                    .as_str()
-                                                                    .unwrap_or("")
-                                                                    .to_owned()
+                                                        value
+                                                            .with(|draft| match key {
+                                                                "email" => draft.value.email.clone(),
+                                                                "first_name" => draft.value.first_name.clone(),
+                                                                "last_name" => draft.value.last_name.clone(),
+                                                                _ => draft.value.position.clone(),
                                                             })
                                                     })
-                                                    on_input=move |e| {
-                                                        editor
-                                                            .draft
-                                                            .update(|d| {
-                                                                d.edit(|v| {
-                                                                    v["targets"][index][key] = json!(event_target_value(&e));
-                                                                })
-                                                            })
+                                                    on_input=move |event| {
+                                                        group
+                                                            .edit(
+                                                                &editable,
+                                                                |recipient| {
+                                                                    let value = event_target_value(&event);
+                                                                    match key {
+                                                                        "email" => recipient.email = value,
+                                                                        "first_name" => recipient.first_name = value,
+                                                                        "last_name" => recipient.last_name = value,
+                                                                        _ => recipient.position = value,
+                                                                    }
+                                                                },
+                                                            )
                                                     }
                                                 />
                                             </td>
@@ -1036,18 +1122,8 @@ fn group_fields(editor: Editor) -> impl IntoView {
                                     <ActionButton
                                         kind="button"
                                         on_click=move |_| {
-                                            editor
-                                                .draft
-                                                .update(|d| {
-                                                    d.edit(|v| {
-                                                        editor.validation.edited("targets");
-                                                        if let Some(rows) = v["targets"].as_array_mut()
-                                                            && index < rows.len()
-                                                        {
-                                                            rows.remove(index);
-                                                        }
-                                                    })
-                                                })
+                                            editor.validation.edited("targets");
+                                            group.remove(remove_id);
                                         }
                                     >
                                         {tr!(ui.remove)}
@@ -2406,7 +2482,7 @@ fn test_panel(
                 {move || {
                     if busy.get() {
                         leptos_i18n::t_string!(i18n, ui.working)
-                    } else if editor.draft.with(ResourceDraft::dirty)
+                    } else if editor.dirty()
                         || editor.draft.with(|d| d.value()["id"].as_i64().unwrap_or(0) == 0)
                     {
                         leptos_i18n::t_string!(i18n, ui.save_and_send_test)

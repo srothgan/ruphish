@@ -229,3 +229,26 @@ async fn unreachable_transport_is_retryable_without_retaining_host_diagnostics()
     assert_eq!(error.stage, Stage::Connect);
     assert!(error.smtp_code.is_none());
 }
+
+#[tokio::test]
+async fn destination_denial_is_reported_before_any_socket_or_authentication() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let smtp = Smtp::new(Policy::default(), String::new());
+    let profile = Profile {
+        host: listener.local_addr().unwrap().to_string(),
+        username: "fixture-user".into(),
+        password: "fixture-secret".into(),
+        ..Default::default()
+    };
+    let failure = smtp.prepare(&profile, mail()).await.err().unwrap();
+    assert_eq!(failure.kind, FailureKind::Blocked);
+    assert_eq!(failure.stage, Stage::DestinationPolicy);
+    assert_eq!(failure.diagnostic_code(), "smtp_destination_denied");
+    assert!(failure.smtp_code.is_none());
+    assert!(!failure.to_string().contains("fixture-secret"));
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(50), listener.accept())
+            .await
+            .is_err()
+    );
+}

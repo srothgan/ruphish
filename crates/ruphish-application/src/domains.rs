@@ -138,7 +138,8 @@ pub trait Repository: Send + Sync {
 #[async_trait::async_trait]
 /// Bounded external observation boundary.
 pub trait Verifier: Send + Sync {
-    /// Query control proof and check every permitted HTTPS destination.
+    /// Require DNS control and permitted destinations, then accept at least one
+    /// complete HTTPS instance proof. Retain endpoint discrepancies in the code.
     async fn verify(&self, check: &Check) -> Observation;
 }
 

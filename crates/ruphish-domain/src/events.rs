@@ -136,6 +136,18 @@ pub enum DeliveryCode {
     SmtpPermanentRejection,
     /// Operator action required.
     SmtpProfileBlocked,
+    /// Invalid SMTP endpoint configuration or excessive DNS answers.
+    SmtpConfigurationInvalid,
+    /// DNS lookup failed before connecting.
+    SmtpDnsUnavailable,
+    /// Resolved destination is prohibited by installation policy.
+    SmtpDestinationDenied,
+    /// Connection or greeting could not be established.
+    SmtpConnectUnavailable,
+    /// TLS unavailable, rejected or invalid.
+    SmtpTlsFailed,
+    /// Authentication rejected or unavailable.
+    SmtpAuthenticationFailed,
     /// Temporary SMTP refusal.
     SmtpTemporaryRejection,
     /// No retries remain.

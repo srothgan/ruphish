@@ -5,12 +5,15 @@
 
 [![Version](https://img.shields.io/github/v/release/srothgan/ruphish?label=version&color=blue)](https://github.com/srothgan/ruphish/releases/latest)
 [![CI](https://github.com/srothgan/ruphish/actions/workflows/pr.yml/badge.svg?branch=main&event=push)](https://github.com/srothgan/ruphish/actions/workflows/pr.yml?query=branch%3Amain+event%3Apush)
-[![Docs](https://img.shields.io/badge/docs-website-blueviolet)](https://ruphish.com/docs/)
+[![CodeQL](https://github.com/srothgan/ruphish/actions/workflows/codeql.yml/badge.svg?branch=main&event=push)](https://github.com/srothgan/ruphish/actions/workflows/codeql.yml?query=branch%3Amain+event%3Apush)
 [![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/srothgan/ruphish/blob/main/LICENSE)
+[![Container: GHCR](https://img.shields.io/badge/container-GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/srothgan/ruphish/pkgs/container/ruphish)
+
+[Website](https://ruphish.com/) · [Live demo](https://demo.ruphish.com/) · [Documentation](https://ruphish.com/docs/) · [Installation](https://ruphish.com/docs/getting-started/install-ruphish/) · [Contributing](CONTRIBUTING.md)
 
 Ruphish helps teams run phishing simulations, send personalized campaigns through their mail service, and understand the results.
 
-**[Try the demo](https://demo.ruphish.com/)** with username `demo` and password `demodemo`.
+Demo credentials: username `demo` and password `demodemo`.
 
 ![Ruphish dashboard showing campaign outcomes, recent campaigns, and deliveries needing review.](assets/dashboard.png)
 
@@ -103,6 +106,12 @@ Open **http://127.0.0.1:3333**. This setup is accessible only from your computer
 For development, follow [contributing](CONTRIBUTING.md) for setup, architecture, and validation.
 
 Read the [changelog](CHANGELOG.md) for user-visible changes and the [Code of Conduct](CODE_OF_CONDUCT.md) for community expectations and private conduct reporting.
+
+<!--
+## Support Ruphish
+
+If your organization benefits from Ruphish, please consider contributing to its continued development. Giving your team time to contribute fixes, documentation, translations, or testing helps maintain and improve the project for everyone. See [Contributing](CONTRIBUTING.md) to get involved.
+-->
 
 ## License and attribution
 

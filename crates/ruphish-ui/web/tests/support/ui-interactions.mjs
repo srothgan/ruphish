@@ -8,6 +8,10 @@ import { createDemoApi, preferences } from '../../demo-api.mjs';
 import { dataset } from '../../../../../assets/website-demo/dataset.mjs';
 
 const scenario = process.argv[2];
+const settingsHidden = scenario.startsWith('settings-hidden-');
+const recipientEditor = ['recipient-editor', 'recipient-create', 'recipient-duplicate'].includes(
+  scenario,
+);
 const returnOrigin =
   '/campaigns/2/results?source=public&event=link_clicked&from=0&until=1999999999&sort=name&order=desc&offset=1&limit=25';
 const path =
@@ -61,6 +65,9 @@ const path =
     'form-mailbox': '/reporting-mailboxes/new',
     'form-filters': returnOrigin,
     'form-group': '/groups/new',
+    'recipient-editor': '/groups/1/edit',
+    'recipient-create': '/groups/new',
+    'recipient-duplicate': '/groups/new?duplicate=1',
     'form-email': '/templates/new',
     'form-page': '/pages/new',
     'form-learning': '/learning-pages/new',
@@ -71,6 +78,8 @@ const path =
     'form-password': '/user/password',
     'form-preferences': '/user/settings',
     'form-settings': '/settings',
+    'settings-hidden-validity': '/settings',
+    'settings-hidden-recheck': '/settings',
     'form-campaign': '/campaigns/new',
     'campaign-wizard': '/campaigns/new',
     'form-draft': '/campaigns/drafts/1/edit',
@@ -151,6 +160,7 @@ win.Response = globalThis.Response;
 Object.assign(preferences, { language: 'de', format_locale: 'de-DE', time_zone: 'Europe/Berlin' });
 if (
   scenario.startsWith('auth-') ||
+  settingsHidden ||
   scenario.startsWith('form-') ||
   scenario.startsWith('detail-') ||
   scenario.startsWith('empty-') ||
@@ -159,6 +169,7 @@ if (
   scenario.startsWith('integration-') ||
   scenario === 'campaign-wizard' ||
   scenario === 'sort-directory' ||
+  recipientEditor ||
   scenario.endsWith('-attribution') ||
   scenario.startsWith('conflict-') ||
   scenario === 'deleted-group' ||
@@ -178,6 +189,14 @@ class FixtureDate extends NativeDate {
 }
 globalThis.Date = win.Date = FixtureDate;
 const data = dataset(now);
+if (recipientEditor) {
+  data.groups[0].targets = ['z', 'a', 'b'].map((name) => ({
+    email: `${name}@example.test`,
+    first_name: name,
+    last_name: '',
+    position: '',
+  }));
+}
 if (scenario === 'empty-inventory') {
   data.groups = [];
 }
@@ -362,6 +381,75 @@ let releaseRecoveryRead;
 globalThis.fetch = async (request, options) => {
   const url = new URL(request.url);
   requests.push(url.pathname + url.search);
+  if (settingsHidden && url.pathname === '/api/settings' && request.method === 'GET') {
+    const response = await api.execute(request, options);
+    const value = await response.json();
+    value.policy.verification_enabled = false;
+    return new Response(JSON.stringify(value), {
+      status: response.status,
+      headers: response.headers,
+    });
+  }
+  if (
+    recipientEditor &&
+    /^\/api\/groups\/(?:1)?$/.test(url.pathname) &&
+    ['PUT', 'POST'].includes(request.method)
+  ) {
+    const body = await request.clone().json();
+    writes.push(body);
+    if (failSave) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          code: 'VALIDATION_FAILED',
+          validation: {
+            issues: [
+              {
+                field: `targets.${body.targets.findIndex((row) => row.email === 'd@example.test')}.email`,
+                code: 'invalid',
+              },
+            ],
+          },
+        }),
+        { status: 400 },
+      );
+    }
+    // The public demo intentionally discards resource writes. Editor regressions need
+    // committed fixture state, while retaining its request/revision checks and read contract.
+    const accepted = await api.execute(request, options);
+    if (!accepted.ok) {
+      return accepted;
+    }
+    const creating = request.method === 'POST';
+    const previous = creating
+      ? null
+      : data.groups.find((row) => row.id === Number(url.pathname.split('/').at(-1)));
+    assert.ok(creating || previous, 'an accepted update must have an existing group');
+    const savedAt = new Date().toISOString();
+    const saved = {
+      ...structuredClone(previous ?? data.groups[0]),
+      id: creating ? Math.max(0, ...data.groups.map((row) => row.id)) + 1 : previous.id,
+      name: body.name,
+      targets: structuredClone(body.targets),
+      revision: creating ? 1 : previous.revision + 1,
+      modified_date: savedAt,
+      created_at: creating ? savedAt : previous.created_at,
+      created_by: creating ? 1 : previous.created_by,
+      edited_at: savedAt,
+      edited_by: 1,
+    };
+    if (creating) {
+      data.groups.push(saved);
+    } else {
+      data.groups[data.groups.indexOf(previous)] = saved;
+    }
+    const response = await api.execute(new Request(new URL(`/api/groups/${saved.id}`, url)));
+    assert.equal(response.status, 200, 'the saved group must be readable');
+    return new Response(await response.text(), {
+      status: creating ? 201 : 200,
+      headers: response.headers,
+    });
+  }
   if (scenario.startsWith('auth-') && url.pathname === '/auth/login') {
     authLoginCount += 1;
     const fields = new URLSearchParams(await request.text());
@@ -604,8 +692,10 @@ async function until(condition) {
   while (!condition()) {
     if (
       (scenario.startsWith('auth-') ||
+        settingsHidden ||
         scenario === 'campaign-wizard' ||
         scenario === 'sort-directory' ||
+        recipientEditor ||
         recoveryPath ||
         scenario.startsWith('delete-conflict') ||
         scenario.startsWith('empty-') ||
@@ -1199,6 +1289,244 @@ if (scenario.startsWith('integration-readonly')) {
   process.exit(0);
 }
 
+if (recipientEditor) {
+  const originalGroups = structuredClone(data.groups);
+  const editing = scenario === 'recipient-editor';
+  const populated = scenario !== 'recipient-create';
+  const rows = () => [...document.querySelectorAll('.recipient-table tbody tr')];
+  const email = (row) => row.querySelector('input');
+  const values = () => rows().map((row) => email(row).value);
+  const assertRows = (expected) => {
+    assert.equal(rows().length, expected.length);
+    expected.forEach((row, index) => assert.equal(rows()[index], row));
+  };
+  const add = () =>
+    [...document.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Add recipient',
+    );
+  const enter = async (input, value) => {
+    input.focus();
+    input.value = value;
+    input.dispatchEvent(new win.Event('input', { bubbles: true }));
+    await nextTurn();
+  };
+  await until(() => settled() && add() && !add().disabled && rows().length === (populated ? 3 : 0));
+  const table = document.querySelector('.recipient-table');
+  assert.equal(table.querySelectorAll('thead button, th[aria-sort]').length, 0);
+  const initial = rows();
+  if (populated) {
+    assert.deepEqual(values(), ['a@example.test', 'b@example.test', 'z@example.test']);
+    if (editing) {
+      assert.ok(document.body.textContent.includes('No unsaved changes'));
+      await enter(email(initial[0]), 'changed@example.test');
+      await enter(email(initial[0]), 'a@example.test');
+      await until(() => document.body.textContent.includes('No unsaved changes'));
+    }
+    await enter(email(initial[0]), 'zz@example.test');
+    email(initial[0]).blur();
+    await nextTurn();
+    assertRows(initial);
+  } else {
+    const name = document.querySelector('#name');
+    await enter(name, 'Stable recipient order');
+    add().click();
+    await until(() => rows().length === 1);
+    rows()[0].querySelector('button').click();
+    await until(() => rows().length === 0);
+  }
+  add().click();
+  await until(() => rows().length === initial.length + 1);
+  const first = rows()[0];
+  assert.equal(email(first).value, '');
+  assertRows([first, ...initial]);
+  for (const value of ['D', 'd@', 'd@example.test']) {
+    await enter(email(first), value);
+    assert.equal(rows()[0], first);
+    assert.equal(document.activeElement, email(first));
+    assertRows([first, ...initial]);
+  }
+  email(first).focus();
+  for (const value of ['typing', 'without', 'waiting', 'd@example.test']) {
+    email(first).value = value;
+    email(first).dispatchEvent(new win.Event('input', { bubbles: true }));
+  }
+  await nextTurn();
+  assert.equal(email(first).value, 'd@example.test', 'a burst of input retains the latest text');
+  assert.equal(document.activeElement, email(first));
+  assertRows([first, ...initial]);
+  add().click();
+  await until(() => rows().length === initial.length + 2);
+  const second = rows()[0];
+  assert.equal(rows()[1], first);
+  const fields = [...first.querySelectorAll('input')];
+  for (const [index, value] of [
+    [1, 'Dana'],
+    [2, 'Example'],
+    [3, 'Analyst'],
+  ]) {
+    await enter(fields[index], value);
+    fields[index].blur();
+    await nextTurn();
+    assertRows([second, first, ...initial]);
+  }
+  await enter(email(second), 'e@example.test');
+  const save = () =>
+    [...document.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === (editing ? 'Save changes' : 'Create group'),
+    );
+  failSave = true;
+  save().click();
+  await until(
+    () => writes.length === 1 && !save().disabled && document.activeElement === email(first),
+  );
+  assert.equal(email(first).getAttribute('aria-invalid'), 'true');
+  assert.deepEqual(data.groups, originalGroups, 'a rejected save must not mutate stored groups');
+  const errorId = email(first).getAttribute('aria-describedby');
+  const removed = populated ? initial[0] : second;
+  removed.querySelector('button').click();
+  await until(() => rows().length === initial.length + 1);
+  assert.ok(rows().includes(first), 'deletion preserves the surviving input element');
+  assert.notEqual(
+    email(first).getAttribute('aria-invalid'),
+    'true',
+    'structural edits invalidate old server diagnostics',
+  );
+  await enter(email(first), 'd@example.test');
+  email(first).blur();
+  await until(() => email(first).getAttribute('aria-invalid') !== 'true');
+  const beforeSave = rows();
+  const expected = populated
+    ? ['e@example.test', 'd@example.test', 'b@example.test', 'z@example.test']
+    : ['d@example.test'];
+  assert.deepEqual(values(), expected);
+  save().click();
+  await until(() => writes.length === 2 && !save().disabled);
+  assertRows(beforeSave);
+  assert.deepEqual(values(), expected);
+  await until(() => document.activeElement === email(first));
+  assert.equal(
+    email(first).getAttribute('aria-describedby'),
+    errorId,
+    'validation stays bound to the same input',
+  );
+  assert.equal(
+    email(first).getAttribute('aria-invalid'),
+    'true',
+    'server diagnostics use the surviving recipient index',
+  );
+  assert.deepEqual(
+    writes[1].targets.map((row) => row.email),
+    expected,
+    'save uses the displayed order',
+  );
+  assert.deepEqual(
+    writes[1].targets.find((row) => row.email === 'd@example.test'),
+    { email: 'd@example.test', first_name: 'Dana', last_name: 'Example', position: 'Analyst' },
+  );
+  assert.deepEqual(data.groups, originalGroups, 'a rejected retry must not mutate stored groups');
+  failSave = false;
+  save().click();
+  await until(() => writes.length === 3 && /^\/groups\/\d+$/.test(win.location.pathname));
+  assert.deepEqual(writes[2].targets, writes[1].targets);
+  const savedId = Number(win.location.pathname.split('/').at(-1));
+  const stored = data.groups.find((group) => group.id === savedId);
+  assert.ok(stored, 'navigation opens the committed group identity');
+  assert.deepEqual(stored.targets, writes[2].targets);
+  assert.equal(stored.name, writes[2].name);
+  if (editing) {
+    assert.equal(savedId, 1);
+    assert.equal(stored.revision, originalGroups.find((group) => group.id === 1).revision + 1);
+  } else {
+    assert.ok(!originalGroups.some((group) => group.id === savedId));
+    assert.equal(stored.revision, 1);
+    assert.deepEqual(
+      data.groups.filter((group) => group.id !== savedId),
+      originalGroups,
+    );
+  }
+  const emailHeader = () =>
+    [...document.querySelectorAll('button.table-sort')].find(
+      (button) => button.textContent.trim() === 'Email',
+    );
+  await until(() => emailHeader());
+  const savedTable = emailHeader().closest('table');
+  const savedEmails = () =>
+    [...savedTable.querySelectorAll('tbody tr')].map((row) =>
+      row.firstElementChild.textContent.trim(),
+    );
+  assert.deepEqual(
+    savedEmails(),
+    [...expected].sort(),
+    'read-only view keeps normal email sorting',
+  );
+  emailHeader().click();
+  await nextTurn();
+  assert.deepEqual(savedEmails(), [...expected].sort().reverse());
+  process.exit(0);
+}
+
+if (settingsHidden) {
+  const field = (label) =>
+    [...document.querySelectorAll('label')]
+      .find((element) => element.textContent.includes(label))
+      ?.querySelector('input');
+  const enabled = () => field('Require domain verification');
+  const validity = () => field('Valid for (seconds)');
+  const recheck = () => field('Recheck interval (seconds)');
+  const target = scenario === 'settings-hidden-validity' ? validity : recheck;
+  const other = scenario === 'settings-hidden-validity' ? recheck : validity;
+  const corrected = scenario === 'settings-hidden-validity' ? '172800' : '10800';
+  const save = () => document.querySelector('form button[type="submit"]');
+  const enter = async (input, value) => {
+    input.value = value;
+    input.dispatchEvent(new win.Event('input', { bubbles: true }));
+    await nextTurn();
+  };
+  await until(() => settled() && enabled() && save());
+  assert.equal(enabled().checked, false);
+  assert.equal(validity(), undefined);
+  assert.equal(recheck(), undefined);
+  enabled().click();
+  await until(() => target());
+  // An unfinished value can remain when its section is hidden before blur.
+  await enter(target(), '0');
+  assert.notEqual(target().getAttribute('aria-invalid'), 'true');
+  enabled().click();
+  await until(() => !target());
+  assert.equal(save().disabled, false);
+  const requestsBefore = requests.filter((path) => path === '/api/settings').length;
+  save().click();
+  await until(() => target() && document.activeElement === target());
+  assert.equal(enabled().checked, false, 'an error reveals the section without changing policy');
+  assert.equal(target().value, '0');
+  assert.equal(target().getAttribute('aria-invalid'), 'true');
+  const errorId = target().getAttribute('aria-describedby');
+  assert.ok(errorId && document.getElementById(errorId)?.textContent.trim());
+  assert.notEqual(other().getAttribute('aria-invalid'), 'true');
+  assert.equal(
+    document.querySelector('dialog[open]'),
+    null,
+    'invalid settings cannot reach confirmation',
+  );
+  assert.equal(requests.filter((path) => path === '/api/settings').length, requestsBefore);
+  await enter(target(), corrected);
+  await until(() => !target());
+  assert.equal(document.getElementById(errorId), null);
+  assert.equal(document.querySelector('input[aria-invalid="true"]'), null);
+  assert.equal(document.querySelector('.validation-summary li'), null);
+  enabled().click();
+  await until(() => target());
+  assert.equal(target().value, corrected, 'remounting preserves the corrected draft');
+  assert.notEqual(target().getAttribute('aria-invalid'), 'true');
+  enabled().click();
+  await until(() => !target());
+  save().click();
+  await until(() => document.querySelector('dialog[open]'));
+  assert.equal(document.querySelector('input[aria-invalid="true"]'), null);
+  assert.equal(requests.filter((path) => path === '/api/settings').length, requestsBefore);
+  process.exit(0);
+}
+
 if (scenario.startsWith('form-')) {
   const selector =
     scenario === 'form-import'
@@ -1221,7 +1549,7 @@ if (scenario.startsWith('form-')) {
     input.closest('.management-page');
   const authored =
     scenario === 'form-import'
-      ? 'Mailadresse,First Name,Last Name,Position\nalice@example.test,Alice,Example,Analyst\n'
+      ? 'Mailadresse,First Name,Last Name,Position\nz@example.test,Zoe,Example,Analyst\nalice@example.test,Alice,Example,Analyst\nb@example.test,Bob,Example,Analyst\n'
       : scenario === 'form-filters'
         ? '2026-10-20T12:00'
         : scenario === 'form-preferences'
@@ -1353,6 +1681,27 @@ if (scenario.startsWith('form-')) {
       'Last Name',
       'Position',
     ]);
+    const recipientRows = () => [...document.querySelectorAll('.recipient-table tbody tr')];
+    const loaded = recipientRows();
+    assert.deepEqual(
+      loaded.map((row) => row.querySelector('input').value),
+      ['alice@example.test', 'b@example.test', 'z@example.test'],
+    );
+    assert.equal(document.querySelectorAll('.recipient-table thead button').length, 0);
+    // The preference-refresh loop above deliberately leaves the interface in German.
+    const addRecipient = [...document.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Empf\u00e4nger hinzuf\u00fcgen',
+    );
+    assert.ok(addRecipient, 'the imported editor exposes the translated add action');
+    addRecipient.click();
+    await until(() => recipientRows().length === 4);
+    const added = recipientRows()[0];
+    const address = added.querySelector('input');
+    address.value = 'zz@example.test';
+    address.dispatchEvent(new win.Event('input', { bubbles: true }));
+    await nextTurn();
+    assert.equal(recipientRows()[0], added);
+    loaded.forEach((row, index) => assert.equal(recipientRows()[index + 1], row));
   }
   if (scenario === 'form-filters') {
     assert.ok(
@@ -1685,7 +2034,7 @@ if (scenario === 'results-refresh') {
   process.exit(0);
 }
 
-if (scenario.startsWith('recipient-')) {
+if (scenario.startsWith('recipient-') && !recipientEditor) {
   if (scenario === 'recipient-return') {
     await until(() => settled() && document.querySelector('.recipient-outcome a'));
     const link = document.querySelector('.recipient-outcome a');
@@ -2155,4 +2504,5 @@ for (const source of ['operator', 'public', scenario === 'bookmark' ? 'legacy' :
   release = null;
   await until(settled);
 }
+
 process.exit(0);

@@ -641,6 +641,35 @@ fn delivery_diagnostics_keep_codes_and_switch_language_without_inventing_causes(
         assert!(english.starts_with("smtp_profile_blocked - "));
         assert!(english.contains("sending profile"));
         assert_ne!(english, german);
+        for (code, english_cause, german_cause) in [
+            (
+                "smtp_configuration_invalid",
+                "configuration",
+                "Konfiguration",
+            ),
+            ("smtp_dns_unavailable", "DNS", "DNS"),
+            (
+                "smtp_destination_denied",
+                "outbound policy",
+                "Netzwerkrichtlinie",
+            ),
+            ("smtp_connect_unavailable", "connection", "Verbindung"),
+            ("smtp_tls_failed", "TLS", "TLS"),
+            ("smtp_authentication_failed", "authentication", "Anmeldung"),
+        ] {
+            context.set_locale(Locale::en);
+            let english = localization::delivery_failure_label(context, code);
+            assert!(english.starts_with(&format!("{code} - ")));
+            assert!(english.contains(english_cause), "{english}");
+            context.set_locale(Locale::de);
+            let german = localization::delivery_failure_label(context, code);
+            assert!(german.starts_with(&format!("{code} - ")));
+            assert!(
+                german.to_lowercase().contains(&german_cause.to_lowercase()),
+                "{german}"
+            );
+            assert_ne!(english, german);
+        }
         assert!(
             localization::delivery_failure_label(context, "future_delivery_code")
                 .starts_with("future_delivery_code - ")

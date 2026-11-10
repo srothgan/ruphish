@@ -4620,7 +4620,7 @@ dependencies = [
 
 [[package]]
 name = "ruphish"
-version = "0.1.0-dev.2"
+version = "0.1.0-dev.3"
 dependencies = [
  "axum",
  "axum-server",
@@ -4659,7 +4659,7 @@ dependencies = [
 
 [[package]]
 name = "ruphish-adapters"
-version = "0.1.0-dev.2"
+version = "0.1.0-dev.3"
 dependencies = [
  "ammonia",
  "argon2",
@@ -4710,7 +4710,7 @@ dependencies = [
 
 [[package]]
 name = "ruphish-application"
-version = "0.1.0-dev.2"
+version = "0.1.0-dev.3"
 dependencies = [
  "async-trait",
  "ruphish-domain",
@@ -4720,7 +4720,7 @@ dependencies = [
 
 [[package]]
 name = "ruphish-contracts"
-version = "0.1.0-dev.2"
+version = "0.1.0-dev.3"
 dependencies = [
  "ruphish-domain",
  "serde",
@@ -4729,7 +4729,7 @@ dependencies = [
 
 [[package]]
 name = "ruphish-domain"
-version = "0.1.0-dev.2"
+version = "0.1.0-dev.3"
 dependencies = [
  "jiff",
  "language-tags",
@@ -4740,7 +4740,7 @@ dependencies = [
 
 [[package]]
 name = "ruphish-http"
-version = "0.1.0-dev.2"
+version = "0.1.0-dev.3"
 dependencies = [
  "async-trait",
  "axum",
@@ -4770,7 +4770,7 @@ dependencies = [
 
 [[package]]
 name = "ruphish-ui"
-version = "0.1.0-dev.2"
+version = "0.1.0-dev.3"
 dependencies = [
  "any_spawner",
  "base64 0.23.1",
@@ -5430,8 +5430,6 @@ dependencies = [
 [[package]]
 name = "sqlx-core"
 version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05b44e85bf579a8eeb4ceaa77a3a523baf2bf0e9bac7e40f405d537b5d2d5ccb"
 dependencies = [
  "base64 0.22.1",
  "bytes",

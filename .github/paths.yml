@@ -5,6 +5,7 @@ product:
   - &build_inputs
     - '**/Cargo.toml'
     - 'Cargo.lock'
+    - 'vendor/**'
     - 'rust-toolchain.toml'
     - '.cargo/**'
     - 'Trunk.toml'
