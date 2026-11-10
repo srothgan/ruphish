@@ -4,11 +4,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { request } from 'node:https';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, X509Certificate } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve, sep } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
+import { until, fetchJson, deliveryAccepted, deliverySummary } from './wait.mjs';
 
 const data = process.env.RUPHISH_ACCEPTANCE_DATA_DIRECTORY
   ? pathToFileURL(resolve(process.env.RUPHISH_ACCEPTANCE_DATA_DIRECTORY) + sep)
@@ -24,17 +24,16 @@ const admin = process.env.RUPHISH_ACCEPTANCE_ADMIN ?? 'http://127.0.0.1:3334';
 const inboxBase = process.env.RUPHISH_ACCEPTANCE_INBOX ?? 'http://127.0.0.1:8026';
 const publicIp = process.env.RUPHISH_ACCEPTANCE_PUBLIC_IP ?? '127.0.0.1';
 const origin = 'https://good.ruphish.test:8443';
-async function api(path, method = 'GET', body) {
-  const response = await fetch(`${admin}${path}`, {
+async function api(path, method = 'GET', body, signal) {
+  return fetchJson(`${admin}${path}`, {
     method,
+    signal,
     headers: {
       Authorization: `Bearer ${env.GOPHISH_INITIAL_ADMIN_API_TOKEN}`,
       'Content-Type': 'application/json',
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
-  assert.equal(response.ok, true, `${method} ${path}: ${response.status}`);
-  return response.json();
 }
 function publicRequest(
   path,
@@ -54,6 +53,7 @@ function publicRequest(
             : callback(null, publicIp, 4),
         method: body === undefined ? 'GET' : 'POST',
         agent: false,
+        signal: AbortSignal.timeout(10_000),
         headers: { Host: host, 'Content-Type': contentType },
       },
       (response) => {
@@ -73,18 +73,8 @@ function publicRequest(
     req.end(body);
   });
 }
-async function until(observe, predicate) {
-  while (true) {
-    const value = await observe();
-    if (predicate(value)) {
-      return value;
-    }
-    await delay(100);
-  }
-}
-
 function docker(args) {
-  const result = spawnSync('docker', args, { encoding: 'utf8' });
+  const result = spawnSync('docker', args, { encoding: 'utf8', timeout: 120_000 });
   assert.ifError(result.error);
   return result;
 }
@@ -105,7 +95,7 @@ test('runtime image exposes health on HTTP and verified HTTPS and rejects failed
     ['/health/live', 'live'],
     ['/health/ready', 'ready'],
   ]) {
-    const response = await fetch(`${admin}${path}`, {});
+    const response = await fetch(`${admin}${path}`, { signal: AbortSignal.timeout(10_000) });
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.deepEqual(response.headers.getSetCookie(), []);
@@ -174,6 +164,12 @@ test('runtime image exposes health on HTTP and verified HTTPS and rejects failed
 });
 
 test('verified domain -> SMTP inbox -> public events -> completion, without participant values', async () => {
+  const certificate = new X509Certificate(await readFile(new URL('server.pem', data)));
+  assert.equal(
+    certificate.checkIP('172.30.53.20'),
+    '172.30.53.20',
+    'The SMTP fixture certificate must match its IP; ignoring certificate trust does not disable hostname validation',
+  );
   // The user may repair the demonstration's bad domain. Keep rejection coverage
   // independent of that mutable example; lab.mjs demo owns wrong-TXT acceptance.
   const unregistered = `unregistered-${randomUUID()}.ruphish.test`;
@@ -193,6 +189,16 @@ test('verified domain -> SMTP inbox -> public events -> completion, without part
     profiles.find((item) => item.name === 'Local inbox only')?.ignore_cert_errors,
     true,
     'The isolated STARTTLS inbox uses the lab private certificate',
+  );
+
+  // The seed uses the same profile. Surface its failure before a profile block
+  // can leave this test's new recipient queued without an attempt of its own.
+  const seeded = JSON.parse(await readFile(new URL('manual-campaign.json', data), 'utf8'));
+  await until(
+    (signal) => api(`/api/campaigns/${seeded.id}/delivery`, 'GET', undefined, signal),
+    deliveryAccepted,
+    'seed campaign SMTP acceptance',
+    { describe: deliverySummary },
   );
 
   const run = randomUUID();
@@ -219,21 +225,19 @@ test('verified domain -> SMTP inbox -> public events -> completion, without part
   const campaignPath = `/api/campaigns/${campaign.id}`;
   const rid = campaign.results[0].id;
   await until(
-    () => api(`${campaignPath}/delivery`),
-    (value) => value.counts.accepted === 1,
+    (signal) => api(`${campaignPath}/delivery`, 'GET', undefined, signal),
+    deliveryAccepted,
     'SMTP acceptance',
+    { describe: deliverySummary },
   );
   const inbox = await until(
-    async () => {
-      const response = await fetch(`${inboxBase}/api/v1/messages`, {});
-      assert.equal(response.ok, true);
-      return response.json();
-    },
+    (signal) => fetchJson(`${inboxBase}/api/v1/messages`, { signal }),
     (value) => value.messages.some((message) => message.To.some((to) => to.Address === email)),
     'matching inbox message',
+    { describe: (value) => `${value.messages.length} inbox messages; expected recipient absent` },
   );
   const message = inbox.messages.find((item) => item.To.some((to) => to.Address === email));
-  const received = await (await fetch(`${inboxBase}/api/v1/message/${message.ID}`, {})).json();
+  const received = await fetchJson(`${inboxBase}/api/v1/message/${message.ID}`);
   assert(
     received.HTML.includes(`${origin}?rid=${rid}`),
     'SMTP content must bind the recipient link',
@@ -331,7 +335,7 @@ test('verified domain -> SMTP inbox -> public events -> completion, without part
           canary,
           `/lab/data/${file}`,
         ],
-        { encoding: 'utf8' },
+        { encoding: 'utf8', timeout: 30_000 },
       );
       // Only grep's "absent" result succeeds; read and Docker errors fail.
       assert.equal(

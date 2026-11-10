@@ -41,7 +41,7 @@ jobs:
       - name: Lint maintained JavaScript
         run: npx --no-install eslint . --max-warnings=0
       - name: Check gate behavior and fixture initialization
-        run: node --test .github/scripts/*.test.mjs demo/tests/vercel-output.test.mjs tests/acceptance/init.test.mjs
+        run: node --test .github/scripts/*.test.mjs demo/tests/vercel-output.test.mjs tests/acceptance/init.test.mjs tests/acceptance/wait.test.mjs
       - name: Lint workflows
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck="" -pyflakes=""
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -299,6 +299,12 @@ jobs:
           node --test --test-name-pattern='^postgres ' tests/acceptance/database-image.test.mjs
           docker compose -f tests/acceptance/compose.yaml stop postgres
           docker compose -f tests/acceptance/compose.yaml rm -f postgres
+      - name: Report public fixture failure
+        if: failure()
+        timeout-minutes: 2
+        run: |
+          docker compose -f tests/acceptance/compose.yaml ps -a
+          docker compose -f tests/acceptance/compose.yaml logs --no-color --tail=200 app dns inbox
       - name: Stop fixture without deleting persistent application data
         if: always()
         run: docker compose -f tests/acceptance/compose.yaml stop app dns inbox mysql postgres
