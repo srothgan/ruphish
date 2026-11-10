@@ -18,6 +18,8 @@ Create groups that make campaign selection easy, such as a department or a train
 
 Open the saved group and check its recipients before using it. To change the list later, choose **Edit**, add or remove recipients, and save.
 
+The create and edit forms load existing recipients in ascending email order once. Each new recipient appears at the top and stays there while you edit. These forms have no sorting controls and do not reorder rows while typing, leaving fields, or saving. The saved group's read-only view remains sortable.
+
 ## Import a CSV file
 
 1. From **Recipient groups**, choose **Import**.
