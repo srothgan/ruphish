@@ -199,7 +199,7 @@ jobs:
       - name: Build OCI archive from the verified native package
         run: |
           sudo apt-get update
-          sudo apt-get install -y skopeo
+          sudo apt-get install -y skopeo=1.13.3+ds1-2ubuntu0.24.04.3
           node tests/acceptance/lab.mjs init
           tar -xzf "target/native-archive/ruphish-$VERSION-$TARGET.tar.gz" -C target/native-archive
           cp "target/native-archive/ruphish-$VERSION-$TARGET/ruphish" target/docker/ruphish
@@ -313,6 +313,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '26.8.1'
+          package-manager-cache: false
       - env:
           RESULTS: ${{ toJSON(needs) }}
         run: |
@@ -348,7 +352,7 @@ jobs:
         with:
           name: verified-release-bundle
           path: target/release-bundle
-      - run: sudo apt-get update && sudo apt-get install -y skopeo
+      - run: sudo apt-get update && sudo apt-get install -y skopeo=1.13.3+ds1-2ubuntu0.24.04.3
       - name: Resume matching draft or publish new version without rebuilding
         env:
           GH_TOKEN: ${{ github.token }}

@@ -12,43 +12,45 @@ allow = ["MIT", "Apache-2.0", "ISC", "Zlib", "Unicode-3.0"]
 confidence-threshold = 0.93
 include-dev = true
 
-# Leptos WASM split macro helper; reviewed LICENSE-CC0 in this exact crate.
+# Exceptions pair a crate name with reviewed licenses across versions.
+# Restrict versions only when approval depends on release-specific licensing.
+# Leptos WASM split macro helper; reviewed LICENSE-CC0.
 [[licenses.exceptions]]
-crate = "base16@=0.2.1"
+crate = "base16"
 allow = ["CC0-1.0"]
 
 # Leptos/server_fn hashing dependency; reviewed the bundled Boost license.
 [[licenses.exceptions]]
-crate = "xxhash-rust@=0.8.19"
+crate = "xxhash-rust"
 allow = ["BSL-1.0"]
 
 # Axum route matcher; reviewed LICENSE and LICENSE.router (MIT AND BSD).
 [[licenses.exceptions]]
-crate = "matchit@=0.8.4"
+crate = "matchit"
 allow = ["BSD-3-Clause"]
 
 # Build-only asset compressor; reviewed LICENSE.BSD-3-Clause and LICENSE.MIT.
 [[licenses.exceptions]]
-crate = "brotli@=9.1.1"
+crate = "brotli"
 allow = ["BSD-3-Clause"]
 
-# Brotli's build/test allocators; same upstream BSD license, exact versions only.
+# Brotli's build/test allocators; same upstream BSD license.
 [[licenses.exceptions]]
-crate = "alloc-no-stdlib@=3.0.0"
+crate = "alloc-no-stdlib"
 allow = ["BSD-3-Clause"]
 [[licenses.exceptions]]
-crate = "alloc-stdlib@=0.3.0"
+crate = "alloc-stdlib"
 allow = ["BSD-3-Clause"]
 
 # bcrypt constant-time primitives; reviewed the bundled BSD license.
 [[licenses.exceptions]]
-crate = "subtle@=2.6.1"
+crate = "subtle"
 allow = ["BSD-3-Clause"]
 
 # Reqwest platform verifier trust data; reviewed bundled LICENSE.
 # Sharing this data requires retaining the agreement; no copyleft on code/results.
 [[licenses.exceptions]]
-crate = "webpki-root-certs@=1.0.10"
+crate = "webpki-root-certs"
 allow = ["CDLA-Permissive-2.0"]
 
 [bans]
@@ -61,44 +63,30 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 
-# Resource parser and MIME/TLS dependencies, reviewed at these exact releases.
+# Resource parser and MIME/TLS dependencies with reviewed licenses.
 # Unmodified MPL parser dependencies retain their upstream notices and source links.
+# Shared CSS crates cover HTML rewriting, sanitization and scraper diagnostics.
 [[licenses.exceptions]]
-crate = "cssparser@=0.36.0"
+crate = "cssparser"
 allow = ["MPL-2.0"]
 [[licenses.exceptions]]
-crate = "cssparser-macros@=0.6.1"
+crate = "cssparser-macros"
 allow = ["MPL-2.0"]
 [[licenses.exceptions]]
-crate = "dtoa-short@=0.3.5"
+crate = "dtoa-short"
 allow = ["MPL-2.0"]
 [[licenses.exceptions]]
-crate = "selectors@=0.37.0"
+crate = "selectors"
 allow = ["MPL-2.0"]
 [[licenses.exceptions]]
-crate = "lol_html@=3.0.3"
+crate = "lol_html"
 allow = ["BSD-3-Clause"]
 [[licenses.exceptions]]
-crate = "encoding_rs@=0.8.42"
+crate = "encoding_rs"
 allow = ["BSD-3-Clause"]
 [[licenses.exceptions]]
-crate = "quoted_printable@=0.5.2"
+crate = "quoted_printable"
 allow = ["0BSD"]
 [[licenses.exceptions]]
-crate = "webpki-roots@=1.0.11"
+crate = "webpki-roots"
 allow = ["CDLA-Permissive-2.0"]
-
-# Ammonia final-document sanitizer and scraper diagnostics; unchanged upstream CSS parser
-# and retained notice.
-[[licenses.exceptions]]
-crate = "cssparser@=0.38.0"
-allow = ["MPL-2.0"]
-
-# Unmodified scraper diagnostics dependencies. The bundled CSS macro license is byte-identical
-# to the retained MPL text; selectors retains its upstream file notices/source link.
-[[licenses.exceptions]]
-crate = "cssparser-macros@=0.7.1"
-allow = ["MPL-2.0"]
-[[licenses.exceptions]]
-crate = "selectors@=0.41.0"
-allow = ["MPL-2.0"]

@@ -49,6 +49,10 @@ jobs:
     outputs:
       demo_changed: ${{ needs.demo-read.outputs.demo_changed || needs.demo-main.outputs.demo_changed }}
     steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '26.8.1'
+          package-manager-cache: false
       - env:
           RESULTS: ${{ toJSON(needs) }}
         run: |
@@ -64,6 +68,10 @@ jobs:
     timeout-minutes: 5
     cache-mode: none
     steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '26.8.1'
+          package-manager-cache: false
       - env:
           RESULT: ${{ needs.checks.result }}
           MAIN_RESULT: ${{ needs.checks-main.result }}
