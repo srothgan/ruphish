@@ -226,7 +226,7 @@ impl<DB: Database> PoolInner<DB> {
     ) -> Result<DecrementSizeGuard<DB>, AsyncSemaphoreReleaser<'a>> {
         let result = self
             .size
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |size| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |size| {
                 if self.is_closed() {
                     return None;
                 }
