@@ -704,8 +704,31 @@ fn edit(
             }
         });
     };
+    let save_button = move || {
+        view! {
+            <SaveButton
+                disabled=Signal::derive(move || {
+                    loading.get() || load_failed.get() || editor.readonly || editor.busy.get()
+                        || editor.visual_pending.get()
+                        || editor.import_review.is_some_and(|r| !r.with(ImportReview::ready))
+                })
+                on_click=Callback::new(save)
+                label=Signal::derive(move || {
+                    if editor.draft.with(|d| d.value()["id"].as_i64().unwrap_or(0) == 0) {
+                        leptos_i18n::t_string!(
+                            i18n, messages.create_arg0, arg0 = (family.singular()).to_string()
+                        )
+                    } else {
+                        leptos_i18n::t_string!(i18n, ui.save_changes).into()
+                    }
+                })
+            />
+        }
+    };
     let content = match family {
-        Family::Groups => group.map(|group| group_fields(editor, group)).into_any(),
+        Family::Groups => group
+            .map(|group| group_fields(editor, group, save_button()))
+            .into_any(),
         Family::Templates | Family::Pages | Family::LearningPages => {
             content_fields(api, token, editor, family).into_any()
         }
@@ -836,25 +859,7 @@ fn edit(
                     >
                         {tr!(ui.cancel_changes)}
                     </ActionButton>
-                    <SaveButton
-                        disabled=Signal::derive(move || {
-                            loading.get() || load_failed.get() || editor.readonly
-                                || editor.busy.get() || editor.visual_pending.get()
-                                || editor
-                                    .import_review
-                                    .is_some_and(|r| !r.with(ImportReview::ready))
-                        })
-                        on_click=Callback::new(save)
-                        label=Signal::derive(move || {
-                            if editor.draft.with(|d| d.value()["id"].as_i64().unwrap_or(0) == 0) {
-                                leptos_i18n::t_string!(
-                                    i18n, messages.create_arg0, arg0 = (family.singular()).to_string()
-                                )
-                            } else {
-                                leptos_i18n::t_string!(i18n, ui.save_changes).into()
-                            }
-                        })
-                    />
+                    {save_button()}
                 </FormFooter>
                 {move || {
                     test_open
@@ -1019,22 +1024,29 @@ async fn save_draft(api: Api, token: String, family: Family, editor: Editor) -> 
         }
     }
 }
-fn group_fields(editor: Editor, group: ruphish_ui::group_draft::GroupDraft) -> impl IntoView {
+fn group_fields(
+    editor: Editor,
+    group: ruphish_ui::group_draft::GroupDraft,
+    save_button: impl IntoView,
+) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
     view! {
         <section class="resource-section">
             <div class="management-heading">
                 <h2>{tr!(ui.recipients)}</h2>
-                <ActionButton
-                    kind="button"
-                    on_click=move |_| {
-                        editor.validation.edited("targets");
-                        group.prepend();
-                    }
-                >
-                    {tr!(ui.add_recipient)}
-                </ActionButton>
+                <div class="management-actions">
+                    <ActionButton
+                        kind="button"
+                        on_click=move |_| {
+                            editor.validation.edited("targets");
+                            group.prepend();
+                        }
+                    >
+                        {tr!(ui.add_recipient)}
+                    </ActionButton>
+                    {save_button}
+                </div>
             </div>
             <ValidationAnchor field="targets" />
             <DataTable
