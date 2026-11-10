@@ -30,7 +30,7 @@ These instructions are for coding agents. The human contribution process lives i
 
 ## Tools and formatting
 
-- **Use the pinned toolchain.** Follow [development setup](docs/contributing/development-setup/index.md). Use Cargo/rustup commands for crate, dependency, and tool changes; let the CLI write dependency versions and lockfiles. Configuration remains directly editable. Keep dependency exceptions narrow and preserve source/license notices.
+- **Use the pinned toolchain.** Follow [development setup](docs/contributing/development-setup/index.md). Use Cargo/rustup commands for crate, dependency, and tool changes; let the CLI write dependency versions and lockfiles. Configuration remains directly editable. Scope license exceptions to crate names and reviewed licenses; restrict versions only for release-specific licensing reasons, following [dependency license policy](docs/contributing/development-guides/code-conventions.md#dependency-license-policy). Preserve source/license notices.
 - **Keep commands direct.** Do not add test-runner wrappers, Cargo aliases, or npm wrappers. Keep CI path groups in `.github/paths.yml` and fixed commands in workflow jobs; never construct commands from changed paths.
 - **Respect generated assets.** Run `npm ci` for fresh installs or changed dependency inputs; reuse assets only with unchanged inputs. Let Trunk generate its inputs and prepare them separately when standalone WASM checks need them. Use development builds unless a release task is requested; retain `dist/.stage` staging and `dist/admin` output without hand-editing generated files or weakening manifest/path checks.
 

@@ -4,7 +4,7 @@ Run commands from this product directory. rust-toolchain.toml selects Rust 1.99.
 
 ## Direct checks
 
-[Validation](validation.md) owns the change-specific catalog, direct commands, CI selection and nightly/release policy. [AGENTS.md](../AGENTS.md) provides completion rules. Run relevant commands directly; no local task runner is required. Node/npm are browser build/test tools, not server runtime dependencies.
+[Validation](validation.md) owns the change-specific catalog, direct commands, CI selection and nightly/release policy. [AGENTS.md](../../AGENTS.md) provides completion rules. Run relevant commands directly; no local task runner is required. Node/npm are browser build/test tools, not server runtime dependencies.
 
 ## Formatting and editor setup
 
@@ -56,7 +56,7 @@ Trunk 0.21.14 parses NO_COLOR as a boolean in both root and subcommand options, 
 
 deny.toml evaluates Windows/Linux/macOS native and browser graphs, explicitly allows reviewed permissive licenses and crates.io, rejects unknown registry/Git sources, and checks advisories/yanked packages. Duplicate versions are reported for review rather than globally denied because third-party version splits do not necessarily imply an actionable conflict. Avoid broad suppressions. No advisory ignore entries are configured. Network access is required for initial dependency/tool downloads and current advisory information; a network failure is a failed/unavailable check, not a clean audit.
 
-Exact-version license exceptions in deny.toml identify the reviewed dependencies and reasons; do not broaden the general allowlist to silence a finding. TLS trust-data agreements and resource-parser notices are retained in [resource dependency notices](resource-dependencies.md). CodeMirror and Jodit runtime packages are MIT; their notices are preserved in the browser output. cargo-deny does not inspect npm dependencies; npm audit checks their advisory graph separately.
+Crate-name license exceptions in deny.toml identify the reviewed dependencies and licenses across versions; follow the current [dependency license policy](../contributing/development-guides/code-conventions.md#dependency-license-policy) and do not broaden the general allowlist to silence a finding. TLS trust-data agreements and resource-parser notices are retained in [resource dependency notices](resource-dependencies.md). CodeMirror and Jodit runtime packages are MIT; their notices are preserved in the browser output. cargo-deny does not inspect npm dependencies; npm audit checks their advisory graph separately.
 
 GitHub actions/state, releases, publishing, distribution packaging, and deployment are deferred. Completing local checks does not authorize any of those actions.
 

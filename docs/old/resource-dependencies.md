@@ -1,6 +1,6 @@
 # Resource dependency notices
 
-The HTML rewriting proof uses lol_html and its unmodified selector/CSS parser dependencies. MPL-2.0 is accepted only for the exact versions listed in deny.toml; the general allowlist remains unchanged. License files and upstream source locations are retained here. Distribution remains deferred and must include the applicable notices and source availability for covered dependencies. No upstream dependency source was modified.
+The HTML rewriting proof uses lol_html and its unmodified selector/CSS parser dependencies. MPL-2.0 is accepted only for the crate names listed in deny.toml, following the current [dependency license policy](../contributing/development-guides/code-conventions.md#dependency-license-policy); the general allowlist remains unchanged. License files and upstream source locations are retained here for the historical source versions below. Distribution remains deferred and must include the applicable notices and source availability for covered dependencies. No upstream dependency source was modified.
 
 - `lol_html-3.0.1`: [LICENSE](licenses/lol_html-3.0.1-LICENSE.txt); unmodified upstream source: https://docs.rs/crate/lol_html/3.0.1/source/.
 - `cssparser-0.36.0`: [LICENSE](licenses/cssparser-0.36.0-LICENSE.txt); unmodified upstream source: https://docs.rs/crate/cssparser/0.36.0/source/.

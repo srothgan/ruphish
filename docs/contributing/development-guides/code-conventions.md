@@ -39,6 +39,16 @@ Keep test-only Clippy exemptions limited to assertions and fixture setup that mu
 
 Use the [pinned toolchain](../development-setup/index.md) and checked-in lockfiles. Let Cargo/rustup and npm update dependency/tool inputs rather than manually inventing lockfile entries. Keep dependency exceptions narrow, and retain attribution and license notices for reused material.
 
+### Dependency license policy
+
+In `deny.toml`, license exceptions pair a crate name with explicitly reviewed licenses across versions. For example, `crate = "lol_html"` with `allow = ["BSD-3-Clause"]` permits that license for updates of `lol_html` without permitting it for unrelated crates. Keep one exception per crate; restrict its version only when approval depends on release-specific licensing, and document that reason beside the exception.
+
+Cargo-deny evaluates SPDX license expressions against the global allowlist and matching crate exceptions. A change to an unapproved license fails unless the expression offers an approved alternative; a change to a globally approved license can pass. Do not broaden the global allowlist to silence a dependency update. Review licensing changes and keep [third-party notices](../../../THIRD-PARTY-NOTICES.md) accurate for the versions actually distributed. License exceptions do not bypass advisory, yanked-package or source checks.
+
+Run `cargo deny check bans licenses sources` after policy changes. Run the separate advisory check required by [release validation](../maintenance/releases.md#what-the-workflow-verifies) before publication.
+
+### Commands and generated assets
+
 Run documented commands directly. Do not add test-runner wrappers, Cargo aliases, or npm wrappers around existing checks. CI uses fixed commands and shared path groups; see [CI workflows](../maintenance/ci-workflows.md).
 
 Run `npm ci` for a fresh dependency installation or changed dependency inputs. Reuse generated assets only when their inputs match. Let Trunk generate its inputs and publish through `dist/.stage/` to `dist/admin/`; do not edit generated output or weaken manifest checks. Use development builds for ordinary work and optimized builds for release validation.

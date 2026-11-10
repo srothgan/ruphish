@@ -68,7 +68,7 @@ Browser dependency notices are preserved in [web/THIRD-PARTY-NOTICES.txt](crates
 
 ## Resource and transport dependencies
 
-HTML rewriting uses lol_html and its unmodified selector/CSS parser dependencies. MPL-2.0 is accepted only for the exact versions listed in `deny.toml`; the general allowlist remains unchanged. License texts and upstream source locations are retained here. Distribution remains deferred and must include the applicable notices and source availability for covered dependencies. No upstream dependency source was modified.
+HTML rewriting uses lol_html and its unmodified selector/CSS parser dependencies. MPL-2.0 is accepted only for the crate names listed in `deny.toml`; the general allowlist remains unchanged. These exceptions apply across versions, while the notices below identify the reviewed source versions. License texts and upstream source locations are retained here. Distribution remains deferred and must include the applicable notices and source availability for covered dependencies. No upstream dependency source was modified.
 
 - `lol_html-3.0.2`: [LICENSE](#lol_html-302-license); unmodified upstream source: https://docs.rs/crate/lol_html/3.0.2/source/.
 - `cssparser-0.36.0`: [LICENSE](#cssparser-0360-license); unmodified upstream source: https://docs.rs/crate/cssparser/0.36.0/source/.
