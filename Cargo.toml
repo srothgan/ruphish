@@ -54,3 +54,12 @@ codegen-units = 1
 # path patch with an exact upstream Git revision containing the fix, validate it,
 # and remove vendor/sqlx-core and its workspace exclusion. See its README.ruphish.md.
 sqlx-core = { path = "vendor/sqlx-core" }
+# Git pin: released sqlx-sqlite 0.9.0 excludes patched SQLite (RUSTSEC-2026-0459);
+# upstream PR #4502 permits it but is not yet released.
+# TODO: Return to a compatible crates.io release containing #4502, then remove
+# this pin, the Git-source patch below and the SQLx Git allowance in deny.toml.
+sqlx-sqlite = { git = "https://github.com/transact-rs/sqlx", rev = "10462fa4414c6c7f1ed1d39bb31678e3b726878c" }
+
+# The Git driver's workspace dependency must share our existing pool fix.
+[patch."https://github.com/transact-rs/sqlx"]
+sqlx-core = { path = "vendor/sqlx-core" }

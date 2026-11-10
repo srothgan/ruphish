@@ -26,12 +26,13 @@ CI starts even for documentation and housekeeping changes so its final gate can 
 | Product | Crates, product tests, demo data, runtime image files, shared build inputs | Browser checks/build, native Clippy/tests and executable workflows, Windows x64 and macOS ARM64 acceptance |
 | Persistence | Domain/application/adapter crates, tests, migrations, shared build inputs | Both supported MySQL and PostgreSQL versions, histories, schema recovery, and provider executable scenarios |
 | Public | Acceptance fixture, runtime configuration and Docker inputs, shared build inputs | Packaged image and controlled DNS/HTTPS/SMTP/privacy scenarios |
-| Dependencies | Shared build inputs | Rust license, source, and banned-dependency policy |
 | Demo | UI/domain/contracts, starter content, demo data, build/deployment inputs | Demo contracts, browser checks, optimized build, and static deployment artifact |
 
 Shared build inputs include manifests, lockfile, toolchain, formatter/dependency policy, Trunk configuration, workflow/action implementations, and release scripts. The YAML file is authoritative. Add new source/build locations there when required; do not construct commands dynamically from changed filenames.
 
 The always-run quality job installs root npm tools, checks formatting/lint, runs workflow/fixture-initialization script tests, and lints workflows. Changes limited to script test files still exercise these checks without selecting product builds. Issue templates, CODEOWNERS, and Dependabot configuration do not select product acceptance by themselves.
+
+The Rust dependency policy job also runs on every validation, independently of changed paths. It runs `cargo deny check advisories bans licenses sources`, so newly reported vulnerabilities are checked even when a PR does not change its dependencies. The validation gate requires this job to succeed; a failed, cancelled, missing or skipped dependency check blocks the PR gate.
 
 The pinned path-filter action compares PR merge commits with their base using Git. Push selection uses changes since the prior main revision. Full checkout history supports deleted paths and both sides of renames. Nightly, release, and manual full runs bypass filtering.
 
@@ -69,7 +70,7 @@ Nightly and release do not deploy the demo. Releases have their own gate and pub
 
 ## Dependencies and workflow changes
 
-Dependabot's checked-in configuration schedules updates. Maintainers must separately verify alerts/security-update settings in GitHub. PR/nightly source checks retain dependency license/source/bans policy; release additionally runs root/browser npm audits and Cargo advisory checks before optimized builds.
+Dependabot's checked-in configuration schedules updates. Maintainers must separately verify alerts/security-update settings in GitHub. Every PR, main, nightly and release source validation runs Rust advisory, license, source and bans checks. Release additionally runs root/browser npm audits and repeats Cargo advisory checks before optimized builds. Advisory checks detect known reported dependency vulnerabilities; they do not prove that all code is secure, and a new advisory requires a new check run to be detected.
 
 CI shell commands use Node 26.8.1, including result and gate jobs. Workflow lint installs Go 1.26.10 explicitly and sets `GOTOOLCHAIN=local`, so a tool requiring a newer compiler fails instead of downloading a different Go release. Release jobs install Skopeo package `1.13.3+ds1-2ubuntu0.24.04.3` explicitly. Update these pins deliberately when upgrading tools.
 
