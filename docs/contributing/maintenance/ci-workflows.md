@@ -71,11 +71,15 @@ Nightly and release do not deploy the demo. Releases have their own gate and pub
 
 Dependabot's checked-in configuration schedules updates. Maintainers must separately verify alerts/security-update settings in GitHub. PR/nightly source checks retain dependency license/source/bans policy; release additionally runs root/browser npm audits and Cargo advisory checks before optimized builds.
 
-Run these commands from the repository root with the product Node version and Go installed for pinned actionlint:
+CI shell commands use Node 26.8.1, including result and gate jobs. Workflow lint installs Go 1.26.10 explicitly and sets `GOTOOLCHAIN=local`, so a tool requiring a newer compiler fails instead of downloading a different Go release. Release jobs install Skopeo package `1.13.3+ds1-2ubuntu0.24.04.3` explicitly. Update these pins deliberately when upgrading tools.
+
+Rust and its components are pinned in `rust-toolchain.toml`; Trunk, WASM tooling, the formatter, cargo-deny, actionlint, and the deployment CLI also have explicit versions. External GitHub Actions use commit SHAs and database images use digests. Hosted runner images and their system utilities still receive GitHub updates; these tool pins do not freeze the entire operating system.
+
+Run these commands from the repository root with Node 26.8.1 and Go 1.26.10 installed:
 
 ```sh
 node --test .github/scripts/*.test.mjs demo/tests/vercel-output.test.mjs tests/acceptance/init.test.mjs
-go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck="" -pyflakes=""
+GOTOOLCHAIN=local go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck="" -pyflakes=""
 ```
 
 Gate tests execute failure and skip handling; lint checks workflow syntax and expressions. Neither proves every path pattern selects the intended suite. For path-group changes, inspect representative documentation, UI, shared Rust, persistence, build, test-helper, and renamed/deleted paths with the pinned filter action. Run affected workflow stages when their behavior changes.
