@@ -19,7 +19,9 @@ Before you begin, get the SMTP hostname, port, username, password or supported a
 6. Leave **Ignore SMTP certificate errors** off.
 7. Choose **Create**.
 
-Port 465 uses an encrypted connection from the start. Other ports use STARTTLS when the server offers it. For a provider account, use a service that supports encrypted SMTP authentication. Ruphish does not provide an OAuth account-connection flow.
+Port 465 uses an encrypted connection from the start. Other ports require STARTTLS before authentication or message submission. An explicitly allowed loopback relay can still operate without TLS for local testing; allowing an internal network does not disable TLS for remote servers. Ruphish does not provide an OAuth account-connection flow.
+
+IPv4 and IPv6 are selected automatically. Ruphish checks the resolved destinations before connecting, tries alternative approved addresses when a connection is unavailable, and authenticates and submits through one selected connection. You do not need to choose an address family. Keep the provider's hostname in the profile so TLS can verify its identity.
 
 There is no separate Ruphish verification approval required before a profile can send. Your provider may require verification of a sender address or domain; complete that in the provider's service.
 

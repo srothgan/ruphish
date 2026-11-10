@@ -70,6 +70,14 @@ services:
         ipv4_address: 172.30.53.53
   inbox:
     image: axllent/mailpit@sha256:23fe39e81bde596a918000b3135c0f85dc8bb4c9ea6be274b051143f3e300387
+    user: "10001:10001"
+    environment:
+      MP_SMTP_TLS_CERT: /tls/server.pem
+      MP_SMTP_TLS_KEY: /tls/server.key
+      MP_SMTP_REQUIRE_STARTTLS: "true"
+    volumes:
+      - ${RUPHISH_ACCEPTANCE_DATA_DIRECTORY:-./data}/server.pem:/tls/server.pem:ro
+      - ${RUPHISH_ACCEPTANCE_DATA_DIRECTORY:-./data}/server.key:/tls/server.key:ro
     ports:
       - "127.0.0.1:8026:8025"
     networks:

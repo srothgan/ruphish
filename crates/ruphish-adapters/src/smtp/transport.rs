@@ -5,7 +5,7 @@ use lettre::{
     address::Envelope,
     transport::smtp::{
         Error as SmtpError,
-        client::{AsyncSmtpConnection, TlsParameters},
+        client::AsyncSmtpConnection,
         commands::{Data, Mail, Rcpt},
         extension::{ClientId, Extension, MailBodyParameter, MailParameter},
     },
@@ -19,6 +19,13 @@ use std::time::Duration;
 use tokio::time::timeout;
 
 pub(super) fn failure(error: SmtpError, stage: Stage) -> DeliveryFailure {
+    // Lettre's async implicit-TLS handshake wraps rustls failures in connection
+    // errors. Classify their typed causes rather than relying on the outer kind.
+    let stage = if stage == Stage::Connect && tls_error(&error) {
+        Stage::Tls
+    } else {
+        stage
+    };
     let code = error.status().and_then(|c| c.to_string().parse().ok());
     let kind = if error.is_transient() {
         FailureKind::Retryable
@@ -33,7 +40,30 @@ pub(super) fn failure(error: SmtpError, stage: Stage) -> DeliveryFailure {
     };
     DeliveryFailure::new(kind, stage, code)
 }
-fn timed_out(stage: Stage) -> DeliveryFailure {
+
+fn tls_error(error: &SmtpError) -> bool {
+    let mut source: Option<&(dyn std::error::Error + 'static)> = Some(error);
+    while let Some(error) = source {
+        if error.is::<tokio_rustls::rustls::Error>()
+            || error
+                .downcast_ref::<SmtpError>()
+                .is_some_and(SmtpError::is_tls)
+        {
+            return true;
+        }
+        // io::Error::source can skip the wrapped error itself. Inspect its
+        // payload so certificate errors remain visible through nested wrappers.
+        source = match error
+            .downcast_ref::<std::io::Error>()
+            .and_then(std::io::Error::get_ref)
+        {
+            Some(inner) => Some(inner),
+            None => error.source(),
+        };
+    }
+    false
+}
+pub(super) fn timed_out(stage: Stage) -> DeliveryFailure {
     DeliveryFailure::new(
         if stage == Stage::Acceptance {
             FailureKind::Unknown
@@ -57,7 +87,10 @@ pub(super) fn public_failure(error: DeliveryFailure) -> Error {
     };
     let stage = match error.stage {
         Stage::Capacity => "local sending capacity",
-        Stage::Connect => "connection or DNS lookup",
+        Stage::Configuration => "SMTP configuration",
+        Stage::Dns => "DNS lookup",
+        Stage::DestinationPolicy => "destination policy",
+        Stage::Connect => "connection or SMTP greeting",
         Stage::Tls => "TLS negotiation/certificate validation",
         Stage::Authentication => "authentication",
         Stage::Envelope => "sender/recipient acceptance",
@@ -77,43 +110,20 @@ impl Smtp {
         profile: &Profile,
     ) -> Result<AsyncSmtpConnection, DeliveryFailure> {
         let blocked = |stage| DeliveryFailure::new(FailureKind::Blocked, stage, None);
-        let (host, port) = smtp_address(&profile.host).map_err(|_| blocked(Stage::Connect))?;
+        let (host, port) =
+            smtp_address(&profile.host).map_err(|_| blocked(Stage::Configuration))?;
         let addresses =
             self.policy
                 .resolve_checked(&host, port)
                 .await
                 .map_err(|error| match error {
-                    crate::outbound::ResolveFailure::Denied => blocked(Stage::Connect),
-                    crate::outbound::ResolveFailure::Unavailable => timed_out(Stage::Connect),
+                    crate::outbound::ResolveFailure::Denied => blocked(Stage::DestinationPolicy),
+                    crate::outbound::ResolveFailure::Unavailable => timed_out(Stage::Dns),
+                    crate::outbound::ResolveFailure::TooMany => blocked(Stage::Configuration),
                 })?;
-        let tls = TlsParameters::builder(host)
-            .dangerous_accept_invalid_certs(profile.ignore_cert_errors)
-            .build()
-            .map_err(|_| blocked(Stage::Tls))?;
         let hello = ClientId::Domain("ruphish.local".into());
-        let mut connection = timeout(
-            Duration::from_secs(300),
-            AsyncSmtpConnection::connect_tokio1(
-                addresses.as_slice(),
-                Some(Duration::from_secs(10)),
-                &hello,
-                if port == 465 { Some(tls.clone()) } else { None },
-                None,
-            ),
-        )
-        .await
-        .map_err(|_| timed_out(Stage::Connect))?
-        .map_err(|e| failure(e, Stage::Connect))?;
-        if connection.can_starttls() {
-            timeout(Duration::from_secs(300), connection.starttls(tls, &hello))
-                .await
-                .map_err(|_| timed_out(Stage::Tls))?
-                .map_err(|e| failure(e, Stage::Tls))?;
-        }
+        let mut connection = super::connection::connect(addresses, host, port, profile).await?;
         if !profile.username.is_empty() {
-            if !connection.is_encrypted() && !addresses.iter().all(|a| a.ip().is_loopback()) {
-                return Err(blocked(Stage::Authentication));
-            }
             timeout(
                 Duration::from_secs(300),
                 super::authentication::authenticate(&mut connection, &hello, profile),

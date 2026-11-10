@@ -277,6 +277,9 @@ async function seed() {
         name: 'Local inbox only',
         host: '172.30.53.20:1025',
         from_address: 'Training <training@example.test>',
+        // This isolated inbox uses the lab's private certificate. Certificate
+        // validation is exercised separately by the SMTP protocol regressions.
+        ignore_cert_errors: true,
       },
     ],
   ]) {
@@ -288,11 +291,12 @@ async function seed() {
   const group = (await api('/api/groups/')).find((item) => item.name === 'Local browser audience');
   if (
     profile?.host !== '172.30.53.20:1025' ||
+    profile.ignore_cert_errors !== true ||
     group?.targets?.length !== 1 ||
     group.targets[0].email !== 'browser@example.test'
   ) {
     throw new Error(
-      'Fixture profile/audience was edited. Restore the local inbox and synthetic browser recipient before seeding. No campaign was launched.',
+      'Fixture profile/audience differs from this lab version. Restore the local inbox (including its private-certificate exception) and synthetic browser recipient before seeding. No campaign was launched.',
     );
   }
   const template = (await api('/api/templates/')).find(

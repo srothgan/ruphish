@@ -32,7 +32,7 @@ environment:
 
 Run `docker compose up -d --wait` to apply it. Keep the hostname supplied by your mail or integration provider in the resource's connection settings so certificate validation can match that name.
 
-The allowlist accepts exact IP addresses and CIDRs, not hostnames. IPv6 integration destinations also need an explicit allowance under the current destination policy. Site imports recheck each resolved address and redirect; allowing one service does not allow unrelated redirect targets.
+The allowlist accepts exact IP addresses and CIDRs, not hostnames. Public IPv4 and IPv6 destinations need no exception. Private, loopback and special-purpose destinations require an explicit allowance. Every returned address must be permitted; a hostname resolving to both public and unauthorized internal addresses is rejected. Up to 16 distinct addresses are accepted per lookup. Site imports recheck each resolved address and redirect; allowing one service does not allow unrelated redirect targets.
 
 ## Verify a privately hosted campaign domain
 

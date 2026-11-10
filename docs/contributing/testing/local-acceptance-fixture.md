@@ -9,6 +9,8 @@ This is the single Docker test environment for domain verification, public inter
 
 This fixture runs a separate Ruphish installation, authoritative test DNS, trusted test HTTPS and a Mailpit inbox. It uses only `*.test` recipients. The seeded SMTP profile points only at the local inbox, SMTP has no host port or relay configuration, and web ports bind to host loopback. The bridge network is not an outbound firewall; keep these fixture resources pointed at the supplied test services. No host DNS, certificate store or production database is changed.
 
+The inbox requires STARTTLS and uses the generated lab server certificate. Only the synthetic **Local inbox only** sending profile enables **Ignore SMTP certificate errors**, because this isolated inbox uses a private lab certificate. SMTP protocol regressions separately verify certificate trust, hostname and expiry checks. For an existing lab created before STARTTLS support, recreate the inbox container with Compose and enable that exception on this named fixture profile before running `seed`; the seeder preserves existing resources and reports incompatible settings instead of changing them.
+
 ## Start the fixture
 
 Requirements: Docker with Linux containers and Compose v2, the product Node version from development setup, and the [development toolchain](../development-setup/index.md). Run commands from the product root. Build the admin distribution first if `dist/admin/` is absent or stale: `npm ci --prefix crates/ruphish-ui/web`, then `trunk build --locked` (PowerShell: set `$env:NO_COLOR = 'true'` first).

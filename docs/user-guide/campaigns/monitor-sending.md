@@ -13,7 +13,7 @@ Open a launched campaign's **Sending** tab to see delivery progress. Each recipi
 
 | State | Meaning and next step |
 | --- | --- |
-| Scheduled or queued | Waiting for the due time, capacity, or domain readiness. Check the schedule and any displayed reason. |
+| Scheduled or queued | Waiting for the due time, capacity, domain readiness, or sending-profile recovery. Check the schedule and any displayed reason. |
 | Preparing email | Ruphish is preparing an attempt. |
 | Sending email | Submission is in progress; acceptance is not yet confirmed. |
 | Email sent | The mail server accepted the email. Investigate with the provider if it is missing from the inbox. |
@@ -35,11 +35,15 @@ The default **Needs attention first** order brings problems to the top. The prog
 
 An application error code and an SMTP response number describe different things. Keep both when asking your mail or Ruphish operator to investigate.
 
+Attempt details distinguish `Configuration`, `Dns`, `DestinationPolicy`, `Connect`, `Tls`, and `Authentication`. For example, `smtp_destination_denied` means the server's outbound policy rejected the resolved address; it does not mean that the provider rejected your password. See [sending-profile troubleshooting](../resources/sending-profiles.md#resolve-a-failed-test).
+
 Connection, credential, and certificate changes in the [sending profile](../resources/sending-profiles.md) can help existing campaigns. Editing the source email or landing page does not replace a launched campaign's saved content.
 
 ## Let temporary failures retry
 
 Retryable failures allow up to eight retries after the initial attempt, with increasing delays. Permanent rejection is not retried automatically.
+
+A blocked sending profile holds other queued recipients using that profile, including recipients in other campaigns. Other profiles can continue. Saving corrected profile settings allows ordinary queued work to resume automatically; the recipient already marked **Action required** still needs **Retry**. Restarting the server does not clear the block.
 
 Expired domain verification can pause sending without using SMTP retries. Correct the [domain problem](../resources/domains.md), then check whether work resumes.
 

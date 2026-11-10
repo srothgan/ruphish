@@ -120,56 +120,21 @@ impl DnsHttps {
             ca,
         })
     }
-    /// Strict public destination policy, independent of legacy import/SMTP behavior.
+    /// Public destination classification with verification-specific internal exceptions.
     pub fn permits(&self, address: IpAddr) -> bool {
-        let ip = match address {
-            IpAddr::V6(v) => v.to_ipv4_mapped().map(IpAddr::V4).unwrap_or(address),
-            _ => address,
-        };
-        // Metadata/link-local and unspecified destinations are never probe targets.
+        let ip = crate::outbound::canonical_ip(address);
+        // Verification never probes metadata/link-local or unspecified targets,
+        // even when the installation explicitly allows an internal network.
         if ["169.254.0.0/16", "fe80::/10", "0.0.0.0/8", "::/128"]
             .iter()
             .any(|n| n.parse::<ipnet::IpNet>().is_ok_and(|n| n.contains(&ip)))
         {
             return false;
         }
-        if self.config.allowed_networks.iter().any(|n| n.contains(&ip)) {
-            return true;
-        }
-        // Only allocated global-unicast IPv6 space is a default outbound target.
-        // Translation, discard-only and other special-purpose ranges need explicit
-        // installation policy instead of inheriting broad public-network access.
-        if let IpAddr::V6(value) = ip
-            && value.segments()[0] & 0xe000 != 0x2000
-        {
-            return false;
-        }
-        ![
-            "127.0.0.0/8",
-            "10.0.0.0/8",
-            "100.64.0.0/10",
-            "172.16.0.0/12",
-            "192.168.0.0/16",
-            "192.0.0.0/24",
-            "192.0.2.0/24",
-            "192.88.99.0/24",
-            "198.18.0.0/15",
-            "198.51.100.0/24",
-            "203.0.113.0/24",
-            "224.0.0.0/4",
-            "240.0.0.0/4",
-            "::1/128",
-            "fc00::/7",
-            "ff00::/8",
-            "2001:db8::/32",
-            "2001::/23",
-            "3fff::/20",
-            "64:ff9b::/96",
-            "2002::/16",
-        ]
-        .iter()
-        .any(|n| n.parse::<ipnet::IpNet>().is_ok_and(|n| n.contains(&ip)))
+        self.config.allowed_networks.iter().any(|n| n.contains(&ip))
+            || crate::outbound::public_ip(ip)
     }
+
     async fn check(
         &self,
         check: &Check,

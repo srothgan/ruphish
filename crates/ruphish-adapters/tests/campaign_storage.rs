@@ -478,6 +478,135 @@ async fn competing_claims_recover_preparation_but_never_resend_expired_submissio
     second.close().await;
     db.close().await;
 }
+
+#[tokio::test]
+async fn smtp_profile_block_survives_restart_is_scoped_and_recovers_after_profile_edit() {
+    use ruphish_application::resources::{Content, Kind};
+    let now = 1_900_000_000;
+    let (fixture, path) = fixture().await;
+    let db = prepared_database(&path, &fixture).await;
+    let store = db.campaigns();
+    for existing in store.list(caller()).await.unwrap() {
+        if existing.status != ruphish_domain::campaign::CampaignStatus::Completed {
+            store.complete(caller(), existing.id, now).await.unwrap();
+        }
+    }
+    let campaign = store.create(caller(), input(&fixture), now).await.unwrap();
+    let blocked = store.claim(now).await.unwrap().unwrap();
+    assert_eq!(blocked.campaign_id, campaign.id);
+    store
+        .finish(
+            &blocked,
+            Err(DeliveryFailure::new(
+                FailureKind::Blocked,
+                Stage::DestinationPolicy,
+                None,
+            )),
+            now + 1,
+        )
+        .await
+        .unwrap();
+    assert!(store.claim(now + 2).await.unwrap().is_none());
+    let states: Vec<String> = sqlx::query_scalar(
+        "SELECT state FROM ruphish_delivery WHERE campaign_id=? AND result_id!=?",
+    )
+    .bind(campaign.id)
+    .bind(blocked.result_id)
+    .fetch_all(&db.inspection_pool())
+    .await
+    .unwrap();
+    assert!(!states.is_empty());
+    assert!(
+        states.iter().all(|s| s == "ready"),
+        "unattempted recipients stay queued"
+    );
+    let history = store
+        .recipient_history(caller(), campaign.id, blocked.result_id, None, None)
+        .await
+        .unwrap();
+    assert_eq!(history.attempts[0].stage, "DestinationPolicy");
+    assert!(
+        history
+            .events
+            .iter()
+            .any(|event| event.details.contains("smtp_destination_denied"))
+    );
+
+    // A different profile must continue even while the first profile is blocked.
+    let mut other = db
+        .resources()
+        .get(caller(), Kind::Profile, 1)
+        .await
+        .unwrap();
+    other.name = "Independent SMTP profile".into();
+    let other = db
+        .resources()
+        .save(caller(), other.into(), None, None)
+        .await
+        .unwrap();
+    let mut request = input(&fixture);
+    request.profile.id = other.id;
+    let independent = store.create(caller(), request, now + 2).await.unwrap();
+    let claim = store.claim(now + 2).await.unwrap().unwrap();
+    assert_eq!(claim.campaign_id, independent.id);
+    store
+        .complete(caller(), independent.id, now + 3)
+        .await
+        .unwrap();
+    drop(store);
+    db.close().await;
+
+    let db = prepared_database(&path, &fixture).await;
+    let store = db.campaigns();
+    assert!(
+        store.claim(now + 4).await.unwrap().is_none(),
+        "restart must retain profile block"
+    );
+    let mut profile = db
+        .resources()
+        .get(caller(), Kind::Profile, 1)
+        .await
+        .unwrap();
+    let revision = profile.revision;
+    if let Content::Profile(value) = &mut profile.content {
+        value.password = "corrected-fixture-password".into();
+    }
+    db.resources()
+        .save(
+            caller(),
+            profile.into(),
+            Some(1),
+            Some(revision.to_string()),
+        )
+        .await
+        .unwrap();
+    let resumed = store.claim(now + 5).await.unwrap().unwrap();
+    assert_eq!(resumed.campaign_id, campaign.id);
+    assert_ne!(
+        resumed.result_id, blocked.result_id,
+        "blocked recipient requires explicit retry"
+    );
+    assert!(store.arm(&resumed, now + 5).await.unwrap());
+    store.finish(&resumed, Ok(()), now + 6).await.unwrap();
+    store
+        .resolve(
+            caller(),
+            campaign.id,
+            blocked.result_id,
+            blocked.generation,
+            "retry",
+            now + 7,
+        )
+        .await
+        .unwrap();
+    let state: String = sqlx::query_scalar("SELECT state FROM ruphish_delivery WHERE result_id=?")
+        .bind(blocked.result_id)
+        .fetch_one(&db.inspection_pool())
+        .await
+        .unwrap();
+    assert_eq!(state, "ready");
+    db.close().await;
+}
 #[tokio::test]
 async fn retries_use_failure_time_and_failed_outcome_commit_never_changes_queue_partially() {
     let (fixture, path) = fixture().await;

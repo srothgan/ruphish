@@ -19,7 +19,13 @@ pub enum FailureKind {
 pub enum Stage {
     /// Local bounded transport capacity.
     Capacity,
-    /// Checked address resolution, connection and greeting.
+    /// Invalid local SMTP configuration.
+    Configuration,
+    /// Address resolution before connecting.
+    Dns,
+    /// Authorization of resolved destinations before connecting.
+    DestinationPolicy,
+    /// Connection and SMTP greeting.
     Connect,
     /// Transport encryption and certificate validation.
     Tls,
@@ -46,6 +52,19 @@ pub struct DeliveryFailure {
     pub smtp_code: Option<u16>,
 }
 impl DeliveryFailure {
+    /// Sanitized actionable diagnostics, independent of provider response text.
+    pub fn diagnostic_code(&self) -> &'static str {
+        match self.stage {
+            Stage::Configuration => "smtp_configuration_invalid",
+            Stage::Dns => "smtp_dns_unavailable",
+            Stage::DestinationPolicy => "smtp_destination_denied",
+            Stage::Connect => "smtp_connect_unavailable",
+            Stage::Tls => "smtp_tls_failed",
+            Stage::Authentication => "smtp_authentication_failed",
+            _ if self.kind == FailureKind::Blocked => "smtp_profile_blocked",
+            _ => "smtp_temporary_rejection",
+        }
+    }
     /// Construct a failure without retaining untrusted server diagnostics.
     pub fn new(kind: FailureKind, stage: Stage, smtp_code: Option<u16>) -> Self {
         Self {
@@ -154,7 +173,7 @@ pub fn delivery_update(
                     DeliveryState::Failed
                 }
                 FailureKind::Blocked => {
-                    code = "smtp_profile_blocked";
+                    code = e.diagnostic_code();
                     DeliveryState::Blocked
                 }
                 FailureKind::Retryable if completed => DeliveryState::Cancelled,
@@ -162,7 +181,7 @@ pub fn delivery_update(
                     if let Some(delay) = retry_delay(retries, jitter) {
                         next = now.saturating_add(delay);
                         count += 1;
-                        code = "smtp_temporary_rejection";
+                        code = e.diagnostic_code();
                         DeliveryState::Retry
                     } else {
                         code = "delivery_retry_exhausted";
@@ -175,7 +194,10 @@ pub fn delivery_update(
     let cooldown = state == DeliveryState::Blocked
         || (state == DeliveryState::Retry
             && outcome.as_ref().err().is_some_and(|e| {
-                matches!(e.stage, Stage::Connect | Stage::Tls | Stage::Authentication)
+                matches!(
+                    e.stage,
+                    Stage::Dns | Stage::Connect | Stage::Tls | Stage::Authentication
+                )
             }));
     let status = match state {
         DeliveryState::Accepted => "Email Sent",

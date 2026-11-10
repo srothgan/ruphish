@@ -189,6 +189,11 @@ test('verified domain -> SMTP inbox -> public events -> completion, without part
     '172.30.53.20:1025',
     'Fixture SMTP must still target the local inbox',
   );
+  assert.equal(
+    profiles.find((item) => item.name === 'Local inbox only')?.ignore_cert_errors,
+    true,
+    'The isolated STARTTLS inbox uses the lab private certificate',
+  );
 
   const run = randomUUID();
   const email = `protocol-${run}@example.test`;
