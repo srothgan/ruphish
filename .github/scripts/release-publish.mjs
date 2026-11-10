@@ -215,7 +215,7 @@ async function adapters(manifest, directory) {
         body: {
           tag_name: meta.tag,
           target_commitish: meta.commit,
-          name: `Ruphish ${meta.version}`,
+          name: `${meta.version}`,
           body: notes,
           draft: true,
           prerelease: meta.channel !== 'final',
