@@ -9,6 +9,12 @@ Open your username at the bottom of the sidebar to find **My account**, **Settin
 
 Your account's role and permissions control what you can do. Resources and campaigns are shared according to those permissions.
 
+## Opening Ruphish
+
+Ruphish shows a loading card while checking your session or moving between your workspace and sign-in. If this takes longer than usual, the card updates its message.
+
+If the session check fails, choose **Try again** to repeat the check. If a page transition stalls, choose **Continue** when it appears. These actions do not resubmit your password or repeat sign-out. An expired session returns you to sign-in with your destination preserved.
+
 ## Change your password
 
 1. Open **My account** and choose **Change password**.

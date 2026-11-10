@@ -24,6 +24,13 @@ const path =
     'auth-login-stale': '/login?next=/campaigns',
     'auth-login-late': '/login?next=/campaigns',
     'auth-login-retry': '/login?next=/campaigns',
+    'auth-session-retry': '/login?next=/campaigns',
+    'auth-session-invalid': '/login?next=/campaigns',
+    'auth-session-timeout': '/login?next=/campaigns',
+    'auth-logout': '/campaigns',
+    'auth-expired': '/campaigns',
+    'auth-reload': '/campaigns',
+    'auth-navigation-failed': '/login?next=/campaigns',
     'conflict-draft': '/campaigns/drafts/1/edit',
     'conflict-group': '/groups/1/edit',
     'deleted-group': '/groups/1/edit',
@@ -113,9 +120,15 @@ const dom = new JSDOM('<!doctype html><html><body></body></html>', {
 const win = dom.window;
 // JSDOM cannot load a new document. Observe the actual Location boundary instead.
 const authNavigations = [];
+let authNavigationFailure = scenario === 'auth-navigation-failed';
+let authNavigationAttempts = 0;
 if (scenario.startsWith('auth-')) {
   const location = jsdomUtils.implForWrapper(win.location);
   location._locationObjectNavigate = (url, options = {}) => {
+    authNavigationAttempts += 1;
+    if (authNavigationFailure) {
+      throw new Error('Synthetic navigation failure');
+    }
     authNavigations.push({
       url: whatwgURL.serializeURL(url),
       replacement: options.replacement === true,
@@ -355,11 +368,20 @@ let releaseHistory;
 let holdSession = false;
 let releaseSession;
 let sessionExpired = false;
-let authSignedIn = scenario.startsWith('auth-existing');
+let authSignedIn =
+  scenario.startsWith('auth-existing') ||
+  ['auth-logout', 'auth-expired', 'auth-reload'].includes(scenario);
 let authLoginRelease;
 let authLoginStatus = 200;
 let authSessionFinished = 0;
 let authLoginCount = 0;
+let authLogoutStatus = 503;
+let authAccessChanged = false;
+let authSessionFailure = {
+  'auth-session-retry': 'unavailable',
+  'auth-session-invalid': 'invalid',
+  'auth-session-timeout': 'timeout',
+}[scenario];
 let releaseValidation;
 const featureOverrides = { webhooks_enabled: true, reporting_mailboxes_enabled: true };
 let failSave = false;
@@ -449,6 +471,14 @@ globalThis.fetch = async (request, options) => {
       status: creating ? 201 : 200,
       headers: response.headers,
     });
+  }
+  if (scenario === 'auth-logout' && url.pathname === '/auth/logout') {
+    if (authLogoutStatus !== 200) {
+      return new Response(JSON.stringify({ success: false, code: 'SERVICE_BUSY' }), {
+        status: authLogoutStatus,
+      });
+    }
+    return new Response(JSON.stringify({ success: true, data: '/login' }));
   }
   if (scenario.startsWith('auth-') && url.pathname === '/auth/login') {
     authLoginCount += 1;
@@ -556,6 +586,21 @@ globalThis.fetch = async (request, options) => {
     }
   }
   if (url.pathname === '/auth/session') {
+    if (authSessionFailure === 'timeout') {
+      await new Promise((resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(new Error('Aborted')), {
+          once: true,
+        });
+      });
+    }
+    if (authSessionFailure === 'unavailable') {
+      return new Response(JSON.stringify({ success: false, code: 'SERVICE_BUSY' }), {
+        status: 503,
+      });
+    }
+    if (authSessionFailure === 'invalid') {
+      return new Response('{}');
+    }
     const authSnapshot = authSignedIn;
     if (holdSession) {
       await new Promise((resolve) => {
@@ -577,6 +622,9 @@ globalThis.fetch = async (request, options) => {
     }
     if (sessionExpired) {
       value.user = null;
+    }
+    if (authAccessChanged) {
+      value.user.permissions = ['view_objects'];
     }
     if (scenario.startsWith('auth-')) {
       if (scenario === 'auth-existing-reset') {
@@ -725,6 +773,112 @@ const settled = () =>
 const resultsPath = '/campaigns/2/results';
 
 if (scenario.startsWith('auth-')) {
+  const sessionCard = () => document.querySelector('.session-card');
+  const sessionReads = () => requests.filter((request) => request === '/auth/session').length;
+  const expectTransition = async (title, subtitle) => {
+    await until(() => sessionCard()?.querySelector('h1')?.textContent === title);
+    assert.equal(sessionCard().querySelector('.session-subtitle').textContent, subtitle);
+    assert.ok(sessionCard().querySelector('.loading-spinner'));
+    assert.equal(
+      sessionCard().querySelector('.loading-spinner').getAttribute('aria-hidden'),
+      'true',
+    );
+    assert.equal(
+      sessionCard().querySelector('[role="status"]').getAttribute('aria-atomic'),
+      'true',
+    );
+    assert.equal(sessionCard().querySelector('button, a'), null);
+    assert.equal(document.querySelector('.admin-shell, .login-form'), null);
+  };
+  if (scenario.startsWith('auth-session-')) {
+    if (scenario === 'auth-session-timeout') {
+      await expectTransition('Opening Ruphish…', 'Checking your session.');
+      await until(
+        () =>
+          sessionCard().querySelector('.session-subtitle').textContent ===
+          'This is taking longer than usual.',
+      );
+      assert.ok(sessionCard().querySelector('.loading-spinner'));
+      assert.equal(sessionCard().querySelector('button'), null, 'do not retry a pending read');
+    }
+    await until(() => sessionCard()?.querySelector('[role="alert"]'));
+    assert.equal(sessionCard().querySelector('h1').textContent, 'Could not open Ruphish');
+    assert.equal(
+      sessionCard().querySelector('.session-subtitle').textContent,
+      {
+        'auth-session-retry': 'SERVICE_BUSY - The service is busy. Try again shortly.',
+        'auth-session-invalid': 'Invalid session response',
+        'auth-session-timeout': 'The request failed or timed out. Try again.',
+      }[scenario],
+    );
+    assert.equal(sessionCard().querySelector('.loading-spinner'), null);
+    assert.equal(sessionReads(), 1, 'failures do not automatically repeat the read');
+    assert.equal(authNavigations.length, 0);
+    const retry = sessionCard().querySelector('button');
+    assert.equal(retry.textContent, 'Try again');
+    authSessionFailure = null;
+    holdSession = true;
+    retry.click();
+    retry.click();
+    await until(() => releaseSession);
+    await expectTransition('Opening Ruphish…', 'Checking your session.');
+    assert.equal(sessionReads(), 2, 'repeated clicks start only one retry');
+    if (scenario === 'auth-session-retry') {
+      await until(
+        () =>
+          sessionCard().querySelector('.session-subtitle').textContent ===
+          'This is taking longer than usual.',
+      );
+      assert.equal(sessionCard().querySelector('button'), null);
+    }
+    holdSession = false;
+    releaseSession();
+    await until(() => document.querySelector('.login-form form'));
+    assert.equal(sessionCard(), null);
+    assert.equal(win.location.search, '?next=/campaigns');
+    assert.equal(authLoginCount, 0, 'retrying a session read never submits credentials');
+    process.exit(0);
+  }
+  if (['auth-logout', 'auth-expired', 'auth-reload'].includes(scenario)) {
+    await until(() => document.querySelector('.admin-shell'));
+    if (scenario === 'auth-logout') {
+      document.querySelector('.account-trigger').click();
+      const signOut = [...document.querySelectorAll('.account-popover button')].find(
+        (button) => button.textContent.trim() === 'Sign out',
+      );
+      signOut.click();
+      await until(() => requests.includes('/auth/logout') && !signOut.disabled);
+      assert.ok(document.querySelector('.account-popover .form-message.error'));
+      assert.ok(document.querySelector('.admin-shell'), 'failed logout preserves the session');
+      assert.equal(sessionCard(), null);
+      authLogoutStatus = 200;
+      signOut.click();
+      await until(() => authNavigations.length > 0);
+      await expectTransition('You’re signed out', 'Returning to the sign-in page.');
+      assert.deepEqual(authNavigations, [
+        { url: 'https://admin.example.test/login', replacement: true },
+      ]);
+    } else {
+      sessionExpired = scenario === 'auth-expired';
+      authSignedIn = !sessionExpired;
+      authAccessChanged = scenario === 'auth-reload';
+      win.dispatchEvent(new win.Event('focus'));
+      await until(() => authNavigations.length > 0);
+      if (sessionExpired) {
+        await expectTransition('Your session ended.', 'Taking you to sign-in to continue.');
+        assert.deepEqual(authNavigations, [
+          {
+            url: 'https://admin.example.test/login?next=%2Fcampaigns&reason=session-ended',
+            replacement: true,
+          },
+        ]);
+      } else {
+        await expectTransition('Refreshing your session…', 'Updating your account and access.');
+        assert.deepEqual(authNavigations, [{ reload: true }]);
+      }
+    }
+    process.exit(0);
+  }
   if (scenario.startsWith('auth-existing')) {
     const destination = scenario === 'auth-existing-reset' ? '/reset_password' : '/';
     await until(
@@ -790,6 +944,19 @@ if (scenario.startsWith('auth-')) {
       assert.equal(authNavigations.length, 0, 'refresh must not preempt login navigation');
     }
     authLoginRelease();
+    if (scenario === 'auth-navigation-failed') {
+      await until(() => sessionCard()?.querySelector('[role="alert"]'));
+      assert.equal(sessionCard().querySelector('h1').textContent, 'Could not continue');
+      assert.equal(
+        sessionCard().querySelector('.session-subtitle').textContent,
+        'The next page could not be opened. Try continuing again.',
+      );
+      assert.equal(sessionCard().querySelector('.loading-spinner'), null);
+      assert.equal(authNavigations.length, 0);
+      assert.equal(authNavigationAttempts, 1);
+      authNavigationFailure = false;
+      sessionCard().querySelector('button').click();
+    }
     await until(() => authNavigations.length > 0);
     if (scenario === 'auth-login-late') {
       const reads = authSessionFinished;
@@ -810,6 +977,22 @@ if (scenario.startsWith('auth-')) {
     null,
     'old identity is not displayed during navigation',
   );
+  await expectTransition('Opening Ruphish…', 'Taking you to your workspace.');
+  if (scenario === 'auth-login-refresh') {
+    await until(() => sessionCard().querySelector('button'));
+    assert.equal(
+      sessionCard().querySelector('.session-subtitle').textContent,
+      'This is taking longer than usual.',
+    );
+    const loginCount = authLoginCount;
+    const destination = authNavigations[0];
+    const proceed = sessionCard().querySelector('button');
+    assert.equal(proceed.textContent, 'Continue');
+    proceed.click();
+    await until(() => authNavigations.length === 2);
+    assert.deepEqual(authNavigations[1], destination);
+    assert.equal(authLoginCount, loginCount, 'continuing navigation never repeats login');
+  }
   process.exit(0);
 }
 

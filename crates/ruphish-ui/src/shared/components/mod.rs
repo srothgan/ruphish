@@ -40,6 +40,8 @@ pub(crate) use steps::*;
 
 mod query_boundary;
 pub(crate) use query_boundary::*;
+mod session_screen;
+pub(crate) use session_screen::*;
 
 mod observations;
 pub(crate) use observations::*;

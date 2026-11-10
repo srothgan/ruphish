@@ -17,6 +17,7 @@ Automated mounted-UI tests complement this review but do not implement browser l
 ## Admin workflows
 
 - Check sign-in, required password change, account preferences, API-key reveal/copy, and sign-out with unsaved work.
+- Inspect the centered session card on the unchanged net background before sign-in, after successful sign-in/sign-out, on session expiry, and after access changes. Check readable titles/subtitles, translucent surfaces, narrow layouts, reduced-motion progress, the slow-loading message, and keyboard access to **Try again** or **Continue** after a failed read or stalled transition.
 - Create, edit, import, preview, and delete resources. Inspect empty, loading, failed, stale, and permission-limited states.
 - Exercise source and visual editors, attachments, keyboard focus, dialogs, and content preservation between modes.
 - Save a campaign draft, reload it, review recipients, schedule or launch it, inspect delivery, and resolve a controlled uncertain outcome.
