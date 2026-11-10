@@ -20,7 +20,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.1.0-dev.2"
+version = "0.1.0-dev.3"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT"
