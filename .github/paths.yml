@@ -71,6 +71,3 @@ public:
   - 'LICENSE'
   - 'THIRD-PARTY-NOTICES.md'
   - 'tests/acceptance/**'
-
-dependencies:
-  - *build_inputs

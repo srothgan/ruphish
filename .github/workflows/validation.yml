@@ -24,7 +24,6 @@ jobs:
       product: ${{ inputs.full && 'true' || steps.paths.outputs.product }}
       persistence: ${{ inputs.full && 'true' || steps.paths.outputs.persistence }}
       public: ${{ inputs.full && 'true' || steps.paths.outputs.public }}
-      dependencies: ${{ inputs.full && 'true' || steps.paths.outputs.dependencies }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -252,8 +251,6 @@ jobs:
 
   dependencies:
     name: Rust dependency policy
-    needs: changes
-    if: needs.changes.outputs.dependencies == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -263,7 +260,7 @@ jobs:
       - uses: ./.github/actions/toolchain
         with:
           dependencies: 'true'
-      - run: cargo deny check bans licenses sources
+      - run: cargo deny check advisories bans licenses sources
 
   public:
     name: Docker DNS TLS SMTP acceptance
@@ -336,7 +333,7 @@ jobs:
           const jobs = JSON.parse(process.env.RESULTS);
           if (jobs.changes.result !== 'success') throw new Error('Path checks failed or were cancelled');
           const groups = jobs.changes.outputs;
-          for (const group of ['product', 'persistence', 'dependencies', 'public']) {
+          for (const group of ['product', 'persistence', 'public']) {
             if (!['true', 'false'].includes(groups[group])) throw new Error('Missing path group: ' + group);
           }
           const required = {
@@ -344,7 +341,7 @@ jobs:
             native: groups.product,
             platforms: groups.product,
             database: groups.persistence,
-            dependencies: groups.dependencies,
+            dependencies: 'true',
             public: groups.public,
           };
           for (const [job, selected] of Object.entries(required)) {
