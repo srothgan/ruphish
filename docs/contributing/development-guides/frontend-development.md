@@ -13,7 +13,7 @@ The administration interface uses Leptos, browser-safe HTTP contracts, and share
 2. Reuse the shared layout and controls under `shared/components/`. Keep permissions, API calls, and feature-specific fields with the feature.
 3. Add or change text in both locale catalogs. Use the shared [localization](localization.md) and date/time helpers.
 4. Update validation and request projection at their existing owners. A response field must not become writable just because it appears in editable JSON.
-5. Add the relevant state/request regression, build the distribution, and review the changed interaction in a browser.
+5. Select validation for the changed guarantee using the [validation guide](../testing/validation-commands.md#frontend-and-browser-code). Add a focused state/request regression when it verifies meaningful behavior. Build the normal distribution when needed for use or manual review; the user owns visual/interaction review during agent-assisted work.
 
 ## Reuse presentation and assets
 
@@ -80,6 +80,6 @@ Campaign drafts can save incomplete configuration. Continue validates the curren
 
 ## Verify the change
 
-Use [frontend validation](../testing/validation-commands.md#frontend-and-browser-code) for formatting, native UI tests, and WASM checks. Use [mounted UI regressions](../testing/validation-commands.md#mounted-ui-regressions) after building changed output. Shared transport changes also need the normal Fetch path, even when the demo passes.
+Choose from [frontend validation](../testing/validation-commands.md#frontend-and-browser-code) according to the changed guarantee. Native logic tests, WASM contract tests, and [named mounted UI scenarios](../testing/validation-commands.md#mounted-ui-regressions) provide different evidence; a frontend change does not automatically need all three. A shared component alone is not a reason to run every consumer scenario. For transport changes, select checks that exercise the affected normal Fetch contract; a passing simulated demo cannot establish that contract.
 
-Select [manual browser checks](../testing/manual-browser-checks.md) for keyboard operation, focus, narrow layouts, editor behavior, and recovery. A compiled bundle or a Node-hosted WASM test does not prove those visual and browser guarantees.
+Build into `dist/admin/` when the user needs to try the frontend, and reuse the completed build for any selected mounted scenarios. An isolated validation distribution does not update the normally served application. [Manual browser checks](../testing/manual-browser-checks.md) describe keyboard operation, focus, narrow layouts, editor behavior, and recovery; the user owns this review during agent-assisted work. A compiled bundle or a Node-hosted WASM test does not prove those visual and browser guarantees.
