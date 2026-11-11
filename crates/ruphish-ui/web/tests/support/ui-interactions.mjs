@@ -8,6 +8,9 @@ import { createDemoApi, preferences } from '../../demo-api.mjs';
 import { dataset } from '../../../../../assets/website-demo/dataset.mjs';
 
 const scenario = process.argv[2];
+const dashboardTabs = scenario.startsWith('dashboard-');
+const longDraftName =
+  'Quarterly security awareness follow-up for colleagues joining the international customer support and operations teams';
 const settingsHidden = scenario.startsWith('settings-hidden-');
 const recipientEditor = ['recipient-editor', 'recipient-create', 'recipient-duplicate'].includes(
   scenario,
@@ -24,6 +27,13 @@ const path =
     'auth-login-stale': '/login?next=/campaigns',
     'auth-login-late': '/login?next=/campaigns',
     'auth-login-retry': '/login?next=/campaigns',
+    'auth-session-retry': '/login?next=/campaigns',
+    'auth-session-invalid': '/login?next=/campaigns',
+    'auth-session-timeout': '/login?next=/campaigns',
+    'auth-logout': '/campaigns',
+    'auth-expired': '/campaigns',
+    'auth-reload': '/campaigns',
+    'auth-navigation-failed': '/login?next=/campaigns',
     'conflict-draft': '/campaigns/drafts/1/edit',
     'conflict-group': '/groups/1/edit',
     'deleted-group': '/groups/1/edit',
@@ -105,7 +115,7 @@ const path =
     'sort-directory': '/campaigns',
     invalid: '/campaigns/not-an-id',
     new: '/campaigns/new',
-  }[scenario] ?? '/campaigns/2';
+  }[scenario] ?? (dashboardTabs ? '/' : '/campaigns/2');
 const dom = new JSDOM('<!doctype html><html><body></body></html>', {
   url: `https://admin.example.test${path}`,
   pretendToBeVisual: true,
@@ -113,9 +123,15 @@ const dom = new JSDOM('<!doctype html><html><body></body></html>', {
 const win = dom.window;
 // JSDOM cannot load a new document. Observe the actual Location boundary instead.
 const authNavigations = [];
+let authNavigationFailure = scenario === 'auth-navigation-failed';
+let authNavigationAttempts = 0;
 if (scenario.startsWith('auth-')) {
   const location = jsdomUtils.implForWrapper(win.location);
   location._locationObjectNavigate = (url, options = {}) => {
+    authNavigationAttempts += 1;
+    if (authNavigationFailure) {
+      throw new Error('Synthetic navigation failure');
+    }
     authNavigations.push({
       url: whatwgURL.serializeURL(url),
       replacement: options.replacement === true,
@@ -160,6 +176,7 @@ win.Response = globalThis.Response;
 Object.assign(preferences, { language: 'de', format_locale: 'de-DE', time_zone: 'Europe/Berlin' });
 if (
   scenario.startsWith('auth-') ||
+  dashboardTabs ||
   settingsHidden ||
   scenario.startsWith('form-') ||
   scenario.startsWith('detail-') ||
@@ -189,6 +206,27 @@ class FixtureDate extends NativeDate {
 }
 globalThis.Date = win.Date = FixtureDate;
 const data = dataset(now);
+if (dashboardTabs) {
+  const draft = data.drafts[0];
+  data.drafts = Array.from({ length: scenario === 'dashboard-drafts-empty' ? 0 : 7 }, (_, i) => ({
+    ...structuredClone(draft),
+    id: i + 1,
+    configuration: {
+      ...structuredClone(draft.configuration),
+      name: i === 0 ? '' : i === 6 ? longDraftName : `Dashboard draft ${i + 1}`,
+    },
+  }));
+  if (scenario === 'dashboard-attention-clear') {
+    for (const domain of data.domains) {
+      domain.eligible = true;
+    }
+    for (const campaign of data.campaigns) {
+      for (const recipient of campaign.results) {
+        recipient.state = 'sent';
+      }
+    }
+  }
+}
 if (recipientEditor) {
   data.groups[0].targets = ['z', 'a', 'b'].map((name) => ({
     email: `${name}@example.test`,
@@ -355,11 +393,23 @@ let releaseHistory;
 let holdSession = false;
 let releaseSession;
 let sessionExpired = false;
-let authSignedIn = scenario.startsWith('auth-existing');
+let authSignedIn =
+  scenario.startsWith('auth-existing') ||
+  ['auth-logout', 'auth-expired', 'auth-reload'].includes(scenario);
 let authLoginRelease;
 let authLoginStatus = 200;
 let authSessionFinished = 0;
 let authLoginCount = 0;
+let authLogoutStatus = 503;
+let dashboardDraftFailure = scenario === 'dashboard-drafts-retry';
+let holdDashboardDrafts = scenario === 'dashboard-drafts-late';
+let releaseDashboardDrafts;
+let authAccessChanged = false;
+let authSessionFailure = {
+  'auth-session-retry': 'unavailable',
+  'auth-session-invalid': 'invalid',
+  'auth-session-timeout': 'timeout',
+}[scenario];
 let releaseValidation;
 const featureOverrides = { webhooks_enabled: true, reporting_mailboxes_enabled: true };
 let failSave = false;
@@ -381,6 +431,22 @@ let releaseRecoveryRead;
 globalThis.fetch = async (request, options) => {
   const url = new URL(request.url);
   requests.push(url.pathname + url.search);
+  if (
+    dashboardTabs &&
+    url.pathname === '/api/campaigns/directory' &&
+    url.searchParams.get('filter') === 'drafts'
+  ) {
+    if (dashboardDraftFailure) {
+      return new Response(JSON.stringify({ success: false, code: 'SERVICE_BUSY' }), {
+        status: 503,
+      });
+    }
+    if (holdDashboardDrafts) {
+      await new Promise((resolve) => {
+        releaseDashboardDrafts = resolve;
+      });
+    }
+  }
   if (settingsHidden && url.pathname === '/api/settings' && request.method === 'GET') {
     const response = await api.execute(request, options);
     const value = await response.json();
@@ -449,6 +515,14 @@ globalThis.fetch = async (request, options) => {
       status: creating ? 201 : 200,
       headers: response.headers,
     });
+  }
+  if (scenario === 'auth-logout' && url.pathname === '/auth/logout') {
+    if (authLogoutStatus !== 200) {
+      return new Response(JSON.stringify({ success: false, code: 'SERVICE_BUSY' }), {
+        status: authLogoutStatus,
+      });
+    }
+    return new Response(JSON.stringify({ success: true, data: '/login' }));
   }
   if (scenario.startsWith('auth-') && url.pathname === '/auth/login') {
     authLoginCount += 1;
@@ -556,6 +630,21 @@ globalThis.fetch = async (request, options) => {
     }
   }
   if (url.pathname === '/auth/session') {
+    if (authSessionFailure === 'timeout') {
+      await new Promise((resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(new Error('Aborted')), {
+          once: true,
+        });
+      });
+    }
+    if (authSessionFailure === 'unavailable') {
+      return new Response(JSON.stringify({ success: false, code: 'SERVICE_BUSY' }), {
+        status: 503,
+      });
+    }
+    if (authSessionFailure === 'invalid') {
+      return new Response('{}');
+    }
     const authSnapshot = authSignedIn;
     if (holdSession) {
       await new Promise((resolve) => {
@@ -565,6 +654,20 @@ globalThis.fetch = async (request, options) => {
     const response = await api.execute(request, options);
     const value = await response.json();
     value.features = { ...value.features, ...featureOverrides };
+    if (scenario === 'dashboard-drafts-readonly') {
+      value.user.role = {
+        slug: 'custom-viewer',
+        name: 'Custom viewer',
+        description: 'View shared campaigns',
+      };
+      value.user.permissions = ['view_objects'];
+      value.actor = null;
+    }
+    if (scenario === 'dashboard-drafts-user') {
+      value.user.role = { slug: 'user', name: 'User', description: 'Regular user' };
+      value.user.permissions = ['view_objects', 'modify_objects'];
+      value.actor = null;
+    }
     if (
       ['form-webhook', 'form-mailbox'].includes(scenario) ||
       scenario.startsWith('integration-')
@@ -577,6 +680,9 @@ globalThis.fetch = async (request, options) => {
     }
     if (sessionExpired) {
       value.user = null;
+    }
+    if (authAccessChanged) {
+      value.user.permissions = ['view_objects'];
     }
     if (scenario.startsWith('auth-')) {
       if (scenario === 'auth-existing-reset') {
@@ -692,6 +798,7 @@ async function until(condition) {
   while (!condition()) {
     if (
       (scenario.startsWith('auth-') ||
+        dashboardTabs ||
         settingsHidden ||
         scenario === 'campaign-wizard' ||
         scenario === 'sort-directory' ||
@@ -724,7 +831,304 @@ const settled = () =>
   regions().every((e) => e.dataset.ready === 'true' && e.getAttribute('aria-busy') === 'false');
 const resultsPath = '/campaigns/2/results';
 
+if (dashboardTabs) {
+  const card = () => document.querySelector('.dashboard-attention');
+  const attention = () => document.getElementById('dashboard-attention-panel');
+  const drafts = () => document.getElementById('dashboard-drafts-panel');
+  const tab = (name) =>
+    [...card().querySelectorAll('[role="tab"]')].find((node) => node.textContent === name);
+  const draftRows = () => [...drafts().querySelectorAll('.dashboard-drafts li')];
+  const draftRequests = () =>
+    requests.filter((path) => path.startsWith('/api/campaigns/directory?'));
+  const overviewRequests = () => requests.filter((path) => path === '/api/overview');
+  await until(() => card()?.querySelectorAll('[role="tab"]').length === 2);
+  assert.deepEqual(
+    [...card().querySelectorAll('[role="tab"]')].map((node) => node.textContent),
+    ['Needs attention', 'Drafts'],
+  );
+  assert.equal(tab('Needs attention').getAttribute('aria-selected'), 'true');
+  assert.equal(tab('Drafts').getAttribute('tabindex'), '-1');
+  assert.equal(attention().hidden, false);
+  assert.equal(drafts().hidden, true);
+  assert.equal(document.querySelectorAll('.dashboard-work > .card').length, 2);
+  assert.equal(
+    document.querySelectorAll('.dashboard-stack > .card').length,
+    1,
+    'only Resources remains below the campaign row',
+  );
+  assert.equal(
+    document.querySelector('.card[aria-label="Drafts"]'),
+    null,
+    'the old standalone drafts card is removed',
+  );
+  assert.ok(attention().querySelector('.dashboard-next a[href="/campaigns/4/delivery"]'));
+  if (scenario === 'dashboard-attention-clear') {
+    assert.ok(
+      attention().textContent.includes('No domain verification or delivery issues need attention.'),
+    );
+    assert.equal(attention().querySelector('.dashboard-attention-list li'), null);
+  } else {
+    assert.deepEqual(
+      [...attention().querySelectorAll('a')].map((link) => link.getAttribute('href')),
+      ['/domains', '/campaigns/3/delivery', '/campaigns', '/campaigns/4/delivery'],
+    );
+    assert.equal(attention().querySelectorAll('.dashboard-attention-list li').length, 2);
+  }
+  const attentionContent = attention().textContent;
+  const reads = requests.length;
+  tab('Needs attention').focus();
+  tab('Needs attention').dispatchEvent(
+    new win.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }),
+  );
+  await until(() => !drafts().hidden);
+  assert.equal(document.activeElement, tab('Drafts'));
+  assert.equal(tab('Drafts').getAttribute('aria-selected'), 'true');
+  assert.equal(tab('Drafts').getAttribute('aria-controls'), drafts().id);
+  assert.equal(drafts().getAttribute('aria-labelledby'), tab('Drafts').id);
+  assert.equal(attention().hidden, true);
+  assert.equal(requests.length, reads, 'switching tabs reuses existing reads');
+  if (scenario === 'dashboard-drafts-late') {
+    await until(() => releaseDashboardDrafts);
+    assert.ok(drafts().querySelector('.loading-spinner'));
+    tab('Needs attention').click();
+    await until(() => !attention().hidden);
+    assert.equal(
+      attention().textContent,
+      attentionContent,
+      'pending drafts do not replace attention content',
+    );
+    tab('Drafts').click();
+    holdDashboardDrafts = false;
+    releaseDashboardDrafts();
+  }
+  if (scenario === 'dashboard-drafts-retry') {
+    await until(() => drafts().querySelector('[role="alert"]'));
+    assert.equal(
+      drafts().querySelector('[role="alert"]').textContent,
+      'SERVICE_BUSY - The service is busy. Try again shortly.',
+    );
+    tab('Needs attention').click();
+    await until(() => !attention().hidden);
+    assert.equal(
+      attention().textContent,
+      attentionContent,
+      'failed drafts do not replace attention content',
+    );
+    tab('Drafts').click();
+    const overviewReads = overviewRequests().length;
+    const failedReads = draftRequests().length;
+    dashboardDraftFailure = false;
+    drafts().querySelector('.query-failure button').click();
+    await until(() => draftRows().length === 7);
+    assert.equal(draftRequests().length, failedReads + 1);
+    assert.equal(
+      overviewRequests().length,
+      overviewReads,
+      'draft retry is independent of the overview',
+    );
+  }
+  await until(() => drafts().querySelector('.query-region[data-ready="true"][aria-busy="false"]'));
+  assert.equal(
+    drafts().querySelector('button, a.button'),
+    null,
+    'draft entries have no action buttons',
+  );
+  assert.equal(drafts().querySelector('a[href="/campaigns?filter=drafts"]'), null);
+  if (scenario === 'dashboard-drafts-empty') {
+    assert.equal(draftRows().length, 0);
+    assert.ok(drafts().textContent.includes('No saved drafts'));
+    assert.equal(
+      card().querySelectorAll('[role="tab"]').length,
+      2,
+      'both tabs remain available when drafts are empty',
+    );
+  } else {
+    assert.deepEqual(
+      draftRows().map((row) => row.querySelector('.dashboard-draft-name').textContent),
+      [
+        'Untitled campaign',
+        ...Array.from({ length: 5 }, (_, i) => `Dashboard draft ${i + 2}`),
+        longDraftName,
+      ],
+    );
+    for (const [index, row] of draftRows().entries()) {
+      const name = row.querySelector('.dashboard-draft-name').textContent;
+      const id = index + 1;
+      assert.equal(row.querySelector('.dashboard-draft-name a'), null, 'names are plain text');
+      const actions = [...row.querySelectorAll('a')];
+      assert.deepEqual(
+        actions.map((link) => [
+          link.textContent,
+          link.getAttribute('href'),
+          link.getAttribute('aria-label'),
+        ]),
+        [
+          ['View', `/campaigns/drafts/${id}`, `View ${name}`],
+          ...(scenario === 'dashboard-drafts-readonly'
+            ? []
+            : [['Edit', `/campaigns/drafts/${id}/edit`, `Edit ${name}`]]),
+        ],
+      );
+    }
+    const selection = new URL(draftRequests()[0], win.location.href).searchParams;
+    assert.equal(selection.get('filter'), 'drafts');
+    assert.equal(selection.get('sort'), 'name');
+    assert.equal(selection.get('order'), 'asc');
+  }
+  tab('Drafts').dispatchEvent(
+    new win.KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }),
+  );
+  await until(() => !attention().hidden);
+  assert.equal(document.activeElement, tab('Needs attention'));
+  assert.equal(attention().textContent, attentionContent);
+  tab('Drafts').click();
+  await until(() => !drafts().hidden);
+  if (scenario === 'dashboard-tabs') {
+    const beforeRefresh = overviewRequests().length;
+    data.campaigns[3].header.name = 'Updated upcoming campaign';
+    document.querySelector('.management-heading button').click();
+    await until(
+      () =>
+        overviewRequests().length > beforeRefresh &&
+        attention().querySelector('.dashboard-next a').textContent === 'Updated upcoming campaign',
+    );
+    assert.equal(drafts().hidden, false, 'refreshing the snapshot preserves the selected tab');
+    assert.equal(tab('Drafts').getAttribute('aria-selected'), 'true');
+    drafts().querySelector('a[href="/campaigns/drafts/7"]').click();
+    await until(
+      () =>
+        win.location.pathname === '/campaigns/drafts/7' &&
+        document.querySelector('a[href="/campaigns/drafts/7/edit"]'),
+    );
+    assert.equal(document.querySelector('h1').textContent, longDraftName);
+  }
+  if (scenario === 'dashboard-drafts-edit') {
+    drafts().querySelector('a[href="/campaigns/drafts/7/edit"]').click();
+    const nameInput = () =>
+      [...document.querySelectorAll('.admin-content input')].find(
+        (input) => input.value === longDraftName,
+      );
+    await until(
+      () =>
+        win.location.pathname === '/campaigns/drafts/7/edit' &&
+        document.querySelector('.step-navigation') &&
+        nameInput() &&
+        !nameInput().disabled,
+    );
+    assert.equal(nameInput().disabled, false);
+    assert.equal(document.querySelector('h1').textContent, 'Edit campaign draft');
+    assert.ok(requests.includes('/api/campaign-drafts/7'));
+  }
+  process.exit(0);
+}
+
 if (scenario.startsWith('auth-')) {
+  const sessionCard = () => document.querySelector('.session-card');
+  const sessionReads = () => requests.filter((request) => request === '/auth/session').length;
+  const expectTransition = async (title, subtitle) => {
+    await until(() => sessionCard()?.querySelector('h1')?.textContent === title);
+    assert.equal(sessionCard().querySelector('.session-subtitle').textContent, subtitle);
+    assert.ok(sessionCard().querySelector('.loading-spinner'));
+    assert.equal(
+      sessionCard().querySelector('.loading-spinner').getAttribute('aria-hidden'),
+      'true',
+    );
+    assert.equal(
+      sessionCard().querySelector('[role="status"]').getAttribute('aria-atomic'),
+      'true',
+    );
+    assert.equal(sessionCard().querySelector('button, a'), null);
+    assert.equal(document.querySelector('.admin-shell, .login-form'), null);
+  };
+  if (scenario.startsWith('auth-session-')) {
+    if (scenario === 'auth-session-timeout') {
+      await expectTransition('Opening Ruphish…', 'Checking your session.');
+      await until(
+        () =>
+          sessionCard().querySelector('.session-subtitle').textContent ===
+          'This is taking longer than usual.',
+      );
+      assert.ok(sessionCard().querySelector('.loading-spinner'));
+      assert.equal(sessionCard().querySelector('button'), null, 'do not retry a pending read');
+    }
+    await until(() => sessionCard()?.querySelector('[role="alert"]'));
+    assert.equal(sessionCard().querySelector('h1').textContent, 'Could not open Ruphish');
+    assert.equal(
+      sessionCard().querySelector('.session-subtitle').textContent,
+      {
+        'auth-session-retry': 'SERVICE_BUSY - The service is busy. Try again shortly.',
+        'auth-session-invalid': 'Invalid session response',
+        'auth-session-timeout': 'The request failed or timed out. Try again.',
+      }[scenario],
+    );
+    assert.equal(sessionCard().querySelector('.loading-spinner'), null);
+    assert.equal(sessionReads(), 1, 'failures do not automatically repeat the read');
+    assert.equal(authNavigations.length, 0);
+    const retry = sessionCard().querySelector('button');
+    assert.equal(retry.textContent, 'Try again');
+    authSessionFailure = null;
+    holdSession = true;
+    retry.click();
+    retry.click();
+    await until(() => releaseSession);
+    await expectTransition('Opening Ruphish…', 'Checking your session.');
+    assert.equal(sessionReads(), 2, 'repeated clicks start only one retry');
+    if (scenario === 'auth-session-retry') {
+      await until(
+        () =>
+          sessionCard().querySelector('.session-subtitle').textContent ===
+          'This is taking longer than usual.',
+      );
+      assert.equal(sessionCard().querySelector('button'), null);
+    }
+    holdSession = false;
+    releaseSession();
+    await until(() => document.querySelector('.login-form form'));
+    assert.equal(sessionCard(), null);
+    assert.equal(win.location.search, '?next=/campaigns');
+    assert.equal(authLoginCount, 0, 'retrying a session read never submits credentials');
+    process.exit(0);
+  }
+  if (['auth-logout', 'auth-expired', 'auth-reload'].includes(scenario)) {
+    await until(() => document.querySelector('.admin-shell'));
+    if (scenario === 'auth-logout') {
+      document.querySelector('.account-trigger').click();
+      const signOut = [...document.querySelectorAll('.account-popover button')].find(
+        (button) => button.textContent.trim() === 'Sign out',
+      );
+      signOut.click();
+      await until(() => requests.includes('/auth/logout') && !signOut.disabled);
+      assert.ok(document.querySelector('.account-popover .form-message.error'));
+      assert.ok(document.querySelector('.admin-shell'), 'failed logout preserves the session');
+      assert.equal(sessionCard(), null);
+      authLogoutStatus = 200;
+      signOut.click();
+      await until(() => authNavigations.length > 0);
+      await expectTransition('You’re signed out', 'Returning to the sign-in page.');
+      assert.deepEqual(authNavigations, [
+        { url: 'https://admin.example.test/login', replacement: true },
+      ]);
+    } else {
+      sessionExpired = scenario === 'auth-expired';
+      authSignedIn = !sessionExpired;
+      authAccessChanged = scenario === 'auth-reload';
+      win.dispatchEvent(new win.Event('focus'));
+      await until(() => authNavigations.length > 0);
+      if (sessionExpired) {
+        await expectTransition('Your session ended.', 'Taking you to sign-in to continue.');
+        assert.deepEqual(authNavigations, [
+          {
+            url: 'https://admin.example.test/login?next=%2Fcampaigns&reason=session-ended',
+            replacement: true,
+          },
+        ]);
+      } else {
+        await expectTransition('Refreshing your session…', 'Updating your account and access.');
+        assert.deepEqual(authNavigations, [{ reload: true }]);
+      }
+    }
+    process.exit(0);
+  }
   if (scenario.startsWith('auth-existing')) {
     const destination = scenario === 'auth-existing-reset' ? '/reset_password' : '/';
     await until(
@@ -790,6 +1194,19 @@ if (scenario.startsWith('auth-')) {
       assert.equal(authNavigations.length, 0, 'refresh must not preempt login navigation');
     }
     authLoginRelease();
+    if (scenario === 'auth-navigation-failed') {
+      await until(() => sessionCard()?.querySelector('[role="alert"]'));
+      assert.equal(sessionCard().querySelector('h1').textContent, 'Could not continue');
+      assert.equal(
+        sessionCard().querySelector('.session-subtitle').textContent,
+        'The next page could not be opened. Try continuing again.',
+      );
+      assert.equal(sessionCard().querySelector('.loading-spinner'), null);
+      assert.equal(authNavigations.length, 0);
+      assert.equal(authNavigationAttempts, 1);
+      authNavigationFailure = false;
+      sessionCard().querySelector('button').click();
+    }
     await until(() => authNavigations.length > 0);
     if (scenario === 'auth-login-late') {
       const reads = authSessionFinished;
@@ -810,6 +1227,22 @@ if (scenario.startsWith('auth-')) {
     null,
     'old identity is not displayed during navigation',
   );
+  await expectTransition('Opening Ruphish…', 'Taking you to your workspace.');
+  if (scenario === 'auth-login-refresh') {
+    await until(() => sessionCard().querySelector('button'));
+    assert.equal(
+      sessionCard().querySelector('.session-subtitle').textContent,
+      'This is taking longer than usual.',
+    );
+    const loginCount = authLoginCount;
+    const destination = authNavigations[0];
+    const proceed = sessionCard().querySelector('button');
+    assert.equal(proceed.textContent, 'Continue');
+    proceed.click();
+    await until(() => authNavigations.length === 2);
+    assert.deepEqual(authNavigations[1], destination);
+    assert.equal(authLoginCount, loginCount, 'continuing navigation never repeats login');
+  }
   process.exit(0);
 }
 
@@ -2366,10 +2799,7 @@ if (scenario === 'new') {
   process.exit(0);
 }
 if (scenario === 'sort-directory') {
-  const preset = () =>
-    [...document.querySelectorAll('button')].find(
-      (b) => b.textContent.trim() === 'Recent work (drafts first)',
-    );
+  const nameHeader = () => document.querySelector('.management-table th:has(.table-sort)');
   const firstLink = () =>
     document.querySelector('.management-table tbody th a')?.getAttribute('href');
   const rowLinks = () =>
@@ -2381,12 +2811,11 @@ if (scenario === 'sort-directory') {
       requests.filter((r) => r.startsWith('/api/campaigns/directory?')).at(-1),
       'https://fixture.test',
     );
-  await until(() => preset() && settled());
-  assert.equal(preset().getAttribute('aria-pressed'), 'true');
+  await until(() => firstLink() && settled());
+  assert.equal(document.querySelector('.management-table-wrap > .management-toolbar'), null);
   assert.equal(lastRequest().searchParams.get('sort'), 'recent');
   assert.equal(lastRequest().searchParams.get('order'), 'desc');
   assert.match(firstLink(), /^\/campaigns\/drafts\//);
-  const recentFirstPage = rowLinks();
   [...document.querySelectorAll('button')]
     .find((b) => b.textContent.trim() === 'Next page')
     .click();
@@ -2396,32 +2825,34 @@ if (scenario === 'sort-directory') {
   assert.ok(!lastRequest().searchParams.get('after'), 'header sorting resets pagination');
   assert.equal(firstLink(), '/campaigns/1/results');
   const nameFirstPage = rowLinks();
-  assert.equal(preset().getAttribute('aria-pressed'), 'false');
   [...document.querySelectorAll('button')]
     .find((b) => b.textContent.trim() === 'Next page')
     .click();
   await until(() => lastRequest().searchParams.get('after') && settled());
-  preset().click();
+  nameHeader().querySelector('button').click();
+  await until(
+    () =>
+      nameHeader().getAttribute('aria-sort') === 'descending' &&
+      lastRequest().searchParams.get('order') === 'desc' &&
+      settled(),
+  );
+  assert.ok(!lastRequest().searchParams.get('after'), 'changing direction resets pagination');
+  nameHeader().querySelector('button').click();
   // Returning to a cached selection need not make another HTTP request.
   await until(
     () =>
-      preset().getAttribute('aria-pressed') === 'true' &&
-      firstLink() === recentFirstPage[0] &&
+      nameHeader().getAttribute('aria-sort') === 'ascending' &&
+      firstLink() === '/campaigns/1/results' &&
       settled(),
   );
-  assert.deepEqual(rowLinks(), recentFirstPage, 'restoring workflow order returns its first page');
-  assert.match(firstLink(), /^\/campaigns\/drafts\//);
-  assert.equal(preset().getAttribute('aria-pressed'), 'true');
-  // A manually selected order persists across route navigation.
-  document.querySelector('.management-table th .table-sort').click();
-  await until(() => firstLink() === '/campaigns/1/results' && settled());
   assert.deepEqual(rowLinks(), nameFirstPage, 'cached column sorting returns its first page');
+  // A manually selected order persists across route navigation.
   document.querySelector('.management-table tbody th a').click();
   await until(() => win.location.pathname === '/campaigns/1/results' && settled());
   document.querySelector('.admin-nav a[href="/campaigns"]').click();
-  await until(() => win.location.pathname === '/campaigns' && preset() && settled());
+  await until(() => win.location.pathname === '/campaigns' && firstLink() && settled());
   assert.equal(firstLink(), '/campaigns/1/results');
-  assert.equal(preset().getAttribute('aria-pressed'), 'false');
+  assert.equal(nameHeader().getAttribute('aria-sort'), 'ascending');
   process.exit(0);
 }
 if (['dashboard', 'directory'].includes(scenario)) {

@@ -1,4 +1,4 @@
-use super::{ActionButton, Card, EmptyState};
+use super::{ActionButton, Card, EmptyState, LoadingSpinner};
 use leptos::prelude::*;
 use ruphish_ui::{read_state::ReadState, tr, trs};
 use wasm_bindgen::prelude::*;
@@ -68,7 +68,7 @@ pub(crate) fn QueryBoundary(
         >
             <Show when=move || state.get() == ReadState::Loading>
                 <Card class="query-placeholder">
-                    <span class="query-loading-mark" aria-hidden="true"></span>
+                    <LoadingSpinner />
                     <span role="status">
                         {move || {
                             leptos_i18n::t_string!(i18n, messages.loading_arg0, arg0=noun.get())

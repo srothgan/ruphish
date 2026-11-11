@@ -11,7 +11,7 @@ Ruphish records delivery and interaction events, then summarizes them for differ
 
 | Observation | What Ruphish recorded | What it does not prove |
 | --- | --- | --- |
-| Email sent | The SMTP server accepted the message, or an operator confirmed acceptance. | Arrival in the inbox or a person reading it. |
+| Email sent | The SMTP server accepted the message, or an operator confirmed acceptance. [Later bounces do not update this count](../campaigns/monitor-sending.md#delivery-failures-after-sending). | Arrival in the inbox or a person reading it. |
 | Opened | A request for the email's tracking image. | A human deliberately reading the message. |
 | Clicked | A visit to the campaign landing page. | A deliberate human click rather than scanning or automation. |
 | Submitted | A supported form-submission event. | Valid credentials or successful sign-in. |

@@ -168,13 +168,6 @@ pub(crate) fn DataTable(
     /// Empty keys identify action-only columns.
     columns: Vec<&'static str>,
     #[prop(optional)] sorting: Option<TableSorting>,
-    /// Named workflow order, restored without toggling a column or discarding pagination resets.
-    #[prop(optional)]
-    default_sort: Option<(
-        &'static str,
-        ruphish_domain::reporting::SortDirection,
-        Signal<String>,
-    )>,
     children: Children,
     #[prop(default = "")] class: &'static str,
     #[prop(default = false)] compact: bool,
@@ -188,33 +181,6 @@ pub(crate) fn DataTable(
             {(empty_content.children)()}
         </div>
         <div class="management-table-wrap" hidden=move || empty.get()>
-            {default_sort
-                .zip(sorting)
-                .map(|((column, order, label), sorting)| {
-                    let selected = Signal::derive(move || {
-                        sorting.current.with(|sort| sort.column == column && sort.order == order)
-                    });
-                    view! {
-                        <div class="management-toolbar">
-                            <ActionButton
-                                size=super::ControlSize::Small
-                                pressed=Signal::derive(move || selected.get().to_string())
-                                on_click=move |_| {
-                                    if !selected.get_untracked() {
-                                        sorting
-                                            .change
-                                            .run(ruphish_ui::table_state::Sort {
-                                                column: column.into(),
-                                                order,
-                                            });
-                                    }
-                                }
-                            >
-                                {move || label.get()}
-                            </ActionButton>
-                        </div>
-                    }
-                })}
             <table
                 class=format!("management-table {class}")
                 class:compact=compact

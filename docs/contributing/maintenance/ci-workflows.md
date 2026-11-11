@@ -15,7 +15,7 @@ The [shared validation workflow](../../../.github/workflows/validation.yml) owns
 | `pr-title.yml` | PR opened, edited, synchronized, or reopened against main | Checks the conventional title format |
 | `nightly.yml` | Daily at 02:23 UTC or manual dispatch | Runs full source acceptance, including server versions and bounded measurement |
 | `codeql.yml` | Pull request to main, push to main, Monday at 04:27 UTC, manual dispatch | Runs default CodeQL security queries for Rust, JavaScript/TypeScript, and GitHub Actions, excluding test-only files |
-| `release.yml` | Version tag push or manual dispatch | Full source checks, dependency security, optimized builds, and artifact verification; only matching tag pushes publish |
+| `release.yml` | Push to main changing `Cargo.toml`, or manual dispatch | A workspace version increase selects full release validation, then creates the tag and publishes; unchanged versions skip release jobs and manual runs never publish |
 
 CI starts even for documentation and housekeeping changes so its final gate can report a result. A documentation-only change does not select product acceptance unless it also changes a broader input. Website checks and deployment follow the website's separate Vercel configuration.
 

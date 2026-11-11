@@ -2,7 +2,16 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { compareVersions, hash, parseVersion, readJson, run, writeJson } from './release.mjs';
+import {
+  compareVersions,
+  hash,
+  parseVersion,
+  readJson,
+  run,
+  selectRelease,
+  writeJson,
+} from './release.mjs';
+import { github } from './github.mjs';
 
 export function seal(directory) {
   const assets = join(directory, 'assets');
@@ -27,12 +36,10 @@ export async function publishRelease(manifest, notes, files, remote) {
   assert.equal(manifest.tag, `v${manifest.version}`);
   const version = parseVersion(manifest.version);
   assert.equal(manifest.channel, version.channel);
-  assert.equal(
-    await remote.tagCommit(manifest.tag),
-    manifest.commit,
-    'Tag moved after verification',
-  );
+  const tag = await remote.tagCommit(manifest.tag);
+  assert(!tag || tag === manifest.commit, 'Existing tag points to a different commit');
   let release = await remote.findRelease(manifest.tag);
+  assert(tag || !release, 'Existing release has lost its tag; inspect before retrying');
   if (release) {
     assert.equal(release.body, notes, 'Existing release notes differ');
     const saved = await remote.asset(release, 'release-manifest.json');
@@ -50,6 +57,16 @@ export async function publishRelease(manifest, notes, files, remote) {
   );
   if (!release) {
     assert(!current, 'Published image without matching draft; inspect before retrying');
+  }
+  if (!tag) {
+    await remote.createTag(manifest);
+  }
+  assert.equal(
+    await remote.tagCommit(manifest.tag),
+    manifest.commit,
+    'Tag moved after verification',
+  );
+  if (!release) {
     release = await remote.createDraft(manifest, notes);
   }
   // Manifest first: subsequent retries must prove ownership before uploading anything.
@@ -105,34 +122,6 @@ export async function publishRelease(manifest, notes, files, remote) {
   }
 }
 
-export function github(repository, token) {
-  assert(/^[\w.-]+\/[\w.-]+$/.test(repository));
-  return async function request(
-    path,
-    { method = 'GET', body, bytes = false, missing = false } = {},
-  ) {
-    const response = await fetch(`https://api.github.com/repos/${repository}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: bytes ? 'application/octet-stream' : 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(120_000),
-    });
-    if (missing && response.status === 404) {
-      return null;
-    }
-    assert(response.ok, `GitHub ${method} ${path}: HTTP ${response.status}`);
-    if (response.status === 204) {
-      return null;
-    }
-    return bytes ? Buffer.from(await response.arrayBuffer()) : response.json();
-  };
-}
-
 export async function listReleases(api) {
   const releases = [];
   for (let page = 1; ; page++) {
@@ -142,6 +131,51 @@ export async function listReleases(api) {
       return releases;
     }
   }
+}
+
+export function releaseTags(api) {
+  return {
+    tagCommit: async (tag) => {
+      const ref = await api(`/git/ref/tags/${tag}`, { missing: true });
+      if (!ref) {
+        return null;
+      }
+      assert.equal(ref.object.type, 'tag', 'Release tag must be annotated');
+      const object = await api(`/git/tags/${ref.object.sha}`);
+      assert.equal(object.tag, tag, 'Release tag name differs');
+      assert.equal(object.object.type, 'commit', 'Release tag must identify a commit');
+      return object.object.sha;
+    },
+    createTag: async (manifest) => {
+      const object = await api('/git/tags', {
+        method: 'POST',
+        body: {
+          tag: manifest.tag,
+          message: `Release ${manifest.version}`,
+          object: manifest.commit,
+          type: 'commit',
+        },
+      });
+      assert(/^[a-f0-9]{40}$/.test(object.sha), 'Invalid GitHub tag object');
+      await api('/git/refs', {
+        method: 'POST',
+        body: { ref: `refs/tags/${manifest.tag}`, sha: object.sha },
+      });
+    },
+  };
+}
+
+export function validatePublicationSource(manifest, env = process.env, options = {}) {
+  const selection = selectRelease(env, options);
+  assert(selection.publish, 'Only main version bumps may publish');
+  for (const key of ['commit', 'version', 'before']) {
+    assert.equal(
+      manifest[key],
+      selection[key],
+      `Retained release ${key} differs from the triggering push`,
+    );
+  }
+  assert.equal(manifest.repository, env.GITHUB_REPOSITORY);
 }
 
 async function adapters(manifest, directory) {
@@ -188,7 +222,7 @@ async function adapters(manifest, directory) {
       { stdio: ['ignore', 'inherit', 'pipe'] },
     );
   return {
-    tagCommit: async (tag) => (await api(`/commits/${tag}`)).sha,
+    ...releaseTags(api),
     // The by-tag endpoint only returns published releases. Listing includes drafts
     // for the publisher, allowing partial uploads to resume instead of duplicating them.
     findRelease: async (tag) => {
@@ -278,11 +312,8 @@ async function adapters(manifest, directory) {
 }
 
 async function publish(directory) {
-  assert.equal(process.env.GITHUB_EVENT_NAME, 'push', 'Only tag pushes may publish');
   const manifest = readJson(join(directory, 'assets/release-manifest.json'));
-  assert.equal(process.env.GITHUB_REF, `refs/tags/${manifest.tag}`);
-  assert.equal(process.env.GITHUB_REPOSITORY, manifest.repository);
-  assert.equal(run('git', ['rev-parse', 'HEAD']), manifest.commit);
+  validatePublicationSource(manifest);
   const files = Object.fromEntries(
     readdirSync(join(directory, 'assets')).map((name) => [
       name,
@@ -330,10 +361,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   } else if (command === 'preflight') {
     const meta = readJson('target/release-metadata/release.json');
     if (meta.publish) {
-      const release = await github(meta.repository, process.env.GH_TOKEN)(
-        `/releases/tags/${meta.tag}`,
-        { missing: true },
-      );
+      const api = github(meta.repository, process.env.GH_TOKEN);
+      const tag = await releaseTags(api).tagCommit(meta.tag);
+      assert(!tag || tag === meta.commit, 'Existing tag points to a different commit');
+      const release = await api(`/releases/tags/${meta.tag}`, { missing: true });
       assert(
         !release || release.draft,
         'Version is already published; rerun only the original publication job to repair a partial publication',

@@ -1,6 +1,9 @@
-# actionlint 1.7.12 predates GitHub's cache-mode key. Keep this exception limited
-# to that key at workflow/job scope; cache-policy.test.mjs checks the policy.
+# actionlint 1.7.12 predates these GitHub keys. Keep exceptions limited to
+# the declared sections; cache-policy.test.mjs and release.test.mjs check them.
 paths:
   .github/workflows/*.yml:
     ignore:
       - '^unexpected key "cache-mode" for "(workflow|job)" section\.'
+  .github/workflows/release.yml:
+    ignore:
+      - '^unexpected key "queue" for "concurrency" section\.'

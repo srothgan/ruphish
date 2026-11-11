@@ -16,6 +16,8 @@ A campaign brings together recipients, content, a sending profile, and a campaig
 
 ## Find your work
 
+On the dashboard at **/**, the right-hand card has **Needs attention** and **Drafts** tabs. **Needs attention** shows domain verification, delivery issues, and the next scheduled launch. In **Drafts**, each campaign name has **View** and **Edit** links underneath. **View** opens the saved draft; **Edit** resumes its campaign editor and appears when your account can modify campaigns.
+
 Open **Campaigns** to see shared drafts and launched campaigns. The default order puts recently edited drafts first, followed by launched campaigns. Use the search, lifecycle filter, or column sorting to find the item you need.
 
 A draft does not send messages, even if its proposed launch time passes. A scheduled campaign has already been launched and has work waiting for its due time.

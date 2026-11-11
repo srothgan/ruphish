@@ -178,7 +178,6 @@ pub(super) fn list(api: Api, token: String) -> impl IntoView {
                 </QueryControls>
                 <DataTable
                     sorting=sorting
-                    default_sort=("recent", SortDirection::Desc, trs!(ui.sort_recent_work))
                     columns=vec!["name", "status", "total", "launch", ""]
                     label=trs!(ui.campaigns)
                     empty=Signal::derive(move || rows.get().is_empty())
@@ -2188,26 +2187,6 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
                     </ActionMenu>
                 </Show>
             </PageHeader>
-            <AttributionInfo value=Signal::derive(move || {
-                context.data.get().map(|c| c.attribution).unwrap_or_default()
-            }) />
-            <div class="campaign-heading-facts" hidden=move || !confirmed.get()>
-                <span>
-                    {tr!(ui.scheduled_launch)}": "
-                    {move || {
-                        context
-                            .data
-                            .with(|c| instant(
-                                &c.as_ref().and_then(|c| c.launch_date.clone()).into(),
-                            ))
-                    }}
-                </span>
-                <span>
-                    <strong>{tr!(ui.recipients)}":"</strong>
-                    " "
-                    {move || context.data.with(|c| c.as_ref().map(|c| c.total))}
-                </span>
-            </div>
             <nav class="campaign-sections" aria-label=move || trs!(ui.campaign).get()>
                 {[
                     (Section::Setup, trs!(ui.setup)),
@@ -2259,11 +2238,6 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
                                             {tr!(ui.delivery_processing_is_disabled_in_this_process)}
                                         </p>
                                     </Show>
-                                    <p>
-                                        {tr!(
-                                            ui.acceptance_means_the_smtp_server_accepted_the_message_participant_credentials_ar
-                                        )}
-                                    </p>
                                     <Show when=move || { confirmed.get() }>
                                         <Show when=move || selected_recipient.get().is_some()>
                                             <BackLink href=format!(
@@ -2277,11 +2251,6 @@ fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView 
                                                 data.with(|p| p.as_ref().is_none_or(|p| p.items.is_empty()))
                                             })
                                             sorting=sorting
-                                            default_sort=(
-                                                "priority",
-                                                SortDirection::Asc,
-                                                trs!(ui.sort_attention),
-                                            )
                                             columns=vec!["", "email", "state", "due", "attempt_count"]
                                             label=trs!(ui.campaign_delivery)
                                             headers=vec![
@@ -2730,6 +2699,7 @@ fn campaign_setup(c: &reads::Header) -> impl IntoView + use<> {
                     <dd>{c.url.clone()}</dd>
                 </div>
             </dl>
+            <AttributionInfo value=Signal::stored(c.attribution.clone()) />
         </Card>
     }
 }

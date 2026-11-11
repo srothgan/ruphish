@@ -97,6 +97,86 @@ fn decode_session(value: serde_json::Value) -> Result<BrowserSession, ()> {
     Ok(session)
 }
 
+async fn read_session(api: Api) -> Result<BrowserSession, String> {
+    let value = api.get("/auth/session").await.map_err(|e| e.message)?;
+    decode_session(value)
+        .map_err(|_| leptos_i18n::t_string!(api.i18n, ui.invalid_session_response).into())
+}
+
+/// A confirmed session transition may retry navigation, never the authentication write.
+#[component]
+fn SessionTransition(action: Memo<SessionAction>) -> impl IntoView {
+    let i18n = ruphish_ui::localization::use_i18n();
+    let failed = RwSignal::new(false);
+    let proceed = Callback::new(move |()| {
+        let result = (|| {
+            let window = web_sys::window().ok_or(())?;
+            match action.get_untracked() {
+                SessionAction::Redirect(destination) => window.location().replace(&destination),
+                SessionAction::SignedOut => window.location().replace("/login"),
+                SessionAction::SignIn => {
+                    let next = location();
+                    let query = serde_urlencoded::to_string([
+                        ("next", next.as_str()),
+                        ("reason", "session-ended"),
+                    ])
+                    .map_err(|_| ())?;
+                    window.location().replace(&format!("/login?{query}"))
+                }
+                SessionAction::Reload => window.location().reload(),
+                SessionAction::Continue | SessionAction::SigningIn => return Err(()),
+            }
+            .map_err(|_| ())
+        })();
+        failed.set(result.is_err());
+    });
+    Effect::new(move |_| {
+        action.track();
+        proceed.run(());
+    });
+    let title = Signal::derive(move || {
+        if failed.get() {
+            return leptos_i18n::t_string!(i18n, ui.session_navigation_failed).to_owned();
+        }
+        match action.get() {
+            SessionAction::SignedOut => leptos_i18n::t_string!(i18n, ui.session_signed_out),
+            SessionAction::SignIn => leptos_i18n::t_string!(i18n, ui.your_session_ended),
+            SessionAction::Reload => leptos_i18n::t_string!(i18n, ui.refreshing_your_session),
+            _ => leptos_i18n::t_string!(i18n, ui.opening_ruphish),
+        }
+        .to_owned()
+    });
+    let subtitle = Signal::derive(move || {
+        if failed.get() {
+            return leptos_i18n::t_string!(i18n, ui.session_navigation_failed_body).to_owned();
+        }
+        match action.get() {
+            SessionAction::SignedOut => leptos_i18n::t_string!(i18n, ui.session_returning_to_login),
+            SessionAction::SignIn => leptos_i18n::t_string!(i18n, ui.session_sign_in_to_continue),
+            SessionAction::Reload => leptos_i18n::t_string!(i18n, ui.session_updating_access),
+            _ => leptos_i18n::t_string!(i18n, ui.session_opening_workspace),
+        }
+        .to_owned()
+    });
+    let state = Signal::derive(move || {
+        if failed.get() {
+            SessionScreenState::Failed
+        } else {
+            SessionScreenState::Loading
+        }
+    });
+    view! {
+        <SessionScreen
+            title=title
+            subtitle=subtitle
+            state=state
+            recovery_label=trs!(ui.session_continue)
+            recover=proceed
+            recover_when_slow=true
+        />
+    }
+}
+
 pub(super) fn app() -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
     ruphish_ui::query::provide_client();
@@ -104,31 +184,44 @@ pub(super) fn app() -> impl IntoView {
     let preferences = ruphish_ui::display_preferences::DisplayPreferences::provide();
     let session = RwSignal::new(None::<Result<BrowserSession, String>>);
     let api = Api::new(i18n);
-    spawn_local(async move {
-        let loaded = api
-            .get("/auth/session")
-            .await
-            .map_err(|e| e.message)
-            .and_then(|v| {
-                decode_session(v)
-                    .map_err(|_| leptos_i18n::t_string!(i18n, ui.invalid_session_response).into())
-            });
-        if let Ok(value) = &loaded {
-            if let Some(features) = value.features {
-                api.set_features(features);
+    let owner = StoredValue::new(Owner::current());
+    let load_session = move || {
+        session.set(None);
+        let generation = api.session_generation();
+        // Retrying replaces the failure card; the request belongs to the app, not that card.
+        owner.with_value(|owner| {
+            if let Some(owner) = owner {
+                owner.with(|| {
+                    spawn_local(async move {
+                        let loaded = read_session(api).await;
+                        if !api.accepts_session_read(generation) {
+                            return;
+                        }
+                        if let Ok(value) = &loaded {
+                            if let Some(features) = value.features {
+                                api.set_features(features);
+                            }
+                            preferences.apply(value.preferences.clone(), i18n);
+                            api.observe_session(value, &requested_next());
+                        }
+                        session.set(Some(loaded));
+                    });
+                });
             }
-            preferences.apply(value.preferences.clone(), i18n);
-            api.observe_session(value, &requested_next());
+        });
+    };
+    load_session();
+    let retry_session = Callback::new(move |()| {
+        if session.with_untracked(|value| matches!(value, Some(Err(_)))) {
+            load_session();
         }
-        session.set(Some(loaded));
     });
     let navigation_guard = crate::navigation::install_guard(move || api.active());
     let checking = RwSignal::new(false);
-    let owner = StoredValue::new(Owner::current());
     let revalidate = move || {
         let generation = api.session_generation();
         if !api.accepts_session_read(generation)
-            || session.get_untracked().is_none()
+            || !session.with_untracked(|value| matches!(value, Some(Ok(_))))
             || checking.get_untracked()
         {
             return;
@@ -141,15 +234,7 @@ pub(super) fn app() -> impl IntoView {
             if let Some(owner) = owner {
                 owner.with(|| {
                     spawn_local(async move {
-                        let loaded = api
-                            .get("/auth/session")
-                            .await
-                            .map_err(|e| e.message)
-                            .and_then(|v| {
-                                decode_session(v).map_err(|_| {
-                                    leptos_i18n::t_string!(i18n, ui.invalid_session_response).into()
-                                })
-                            });
+                        let loaded = read_session(api).await;
                         if !api.accepts_session_read(generation) {
                             checking.set(false);
                             return;
@@ -208,32 +293,6 @@ pub(super) fn app() -> impl IntoView {
     let action = Memo::new(move |_| api.session_action());
     // Starting/finishing a failed login must not remount and cancel the form's task.
     let active = Memo::new(move |_| action.get().active());
-    Effect::new(move |_| {
-        let action = action.get();
-        if let Some(window) = web_sys::window() {
-            match action {
-                SessionAction::Continue | SessionAction::SigningIn => {}
-                SessionAction::Redirect(destination) => {
-                    let _ = window.location().replace(&destination);
-                }
-                SessionAction::SignedOut => {
-                    let _ = window.location().replace("/login");
-                }
-                SessionAction::SignIn => {
-                    let next = location();
-                    let query = serde_urlencoded::to_string([
-                        ("next", next.as_str()),
-                        ("reason", "session-ended"),
-                    ])
-                    .unwrap_or_default();
-                    let _ = window.location().replace(&format!("/login?{query}"));
-                }
-                SessionAction::Reload => {
-                    let _ = window.location().reload();
-                }
-            }
-        }
-    });
     view! {
         <div class="account-app">
             {#[cfg(feature = "demo")]
@@ -245,36 +304,29 @@ pub(super) fn app() -> impl IntoView {
             }} {navigation_guard}
             {move || {
                 if !active.get() {
-                    view! {
-                        <main class="login-screen">
-                            <p role="status">{tr!(ui.refreshing_your_session)}</p>
-                            <a rel="external" href="/login">
-                                {tr!(ui.sign_in_again)}
-                            </a>
-                        </main>
-                    }
-                        .into_any()
+                    view! { <SessionTransition action=action /> }.into_any()
                 } else {
                     match session.get() {
                         None => {
                             view! {
-                                <main class="login-screen">
-                                    <p role="status">{tr!(ui.opening_ruphish)}</p>
-                                </main>
+                                <SessionScreen
+                                    title=trs!(ui.opening_ruphish)
+                                    subtitle=trs!(ui.session_checking)
+                                    recovery_label=trs!(ui.session_try_again)
+                                    recover=retry_session
+                                />
                             }
                                 .into_any()
                         }
                         Some(Err(error)) => {
                             view! {
-                                <main class="login-screen">
-                                    <h1>{tr!(ui.ruphish)}</h1>
-                                    <p class="form-message error" role="alert">
-                                        {error}
-                                    </p>
-                                    <a rel="external" href="/login">
-                                        {tr!(ui.try_signing_in_again)}
-                                    </a>
-                                </main>
+                                <SessionScreen
+                                    title=trs!(ui.session_open_failed)
+                                    subtitle=error
+                                    state=SessionScreenState::Failed
+                                    recovery_label=trs!(ui.session_try_again)
+                                    recover=retry_session
+                                />
                             }
                                 .into_any()
                         }

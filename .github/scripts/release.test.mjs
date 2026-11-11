@@ -1,21 +1,37 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { runInNewContext } from 'node:vm';
+import { pathToFileURL } from 'node:url';
 import {
   combineImages,
   compareVersions,
+  enrichChanges,
+  generateNotes,
+  groupedChanges,
   hash,
   parseVersion,
+  parseSubject,
+  readHistory,
+  selectBaseline,
+  selectRelease,
+  workspaceVersion,
   readJson,
   releaseNotes,
   run,
   writeJson,
 } from './release.mjs';
-import { listReleases, publishRelease, seal } from './release-publish.mjs';
+import {
+  listReleases,
+  publishRelease,
+  releaseTags,
+  seal,
+  validatePublicationSource,
+} from './release-publish.mjs';
+import { github } from './github.mjs';
 
 function temporary(t) {
   const root = mkdtempSync(join(tmpdir(), 'ruphish-release-test-'));
@@ -45,36 +61,119 @@ test('only numbered development versions and final versions are publishable', ()
   assert(compareVersions('0.10.0', '0.9.9') > 0);
 });
 
-test('prerelease notes stay short and point to the tagged changelog', () => {
-  const dev = releaseNotes('0.1.0-dev.1', '## Unreleased\nDraft changes.', 'example/ruphish');
-  assert.match(dev, /Development preview 1 for Ruphish 0\.1\.0/);
-  assert(
-    dev.includes(
-      '**Changelog:** [Planned changes for 0.1.0](https://github.com/example/ruphish/blob/v0.1.0-dev.1/CHANGELOG.md)',
+const expectedGroups = [
+  ['feat', 'Features'],
+  ['fix', 'Fixes'],
+  ['perf', 'Performance'],
+  ['docs', 'Documentation'],
+  ['refactor', 'Refactoring'],
+  ['style', 'Code style'],
+  ['test', 'Tests'],
+  ['ci', 'CI'],
+  ['chore', 'Maintenance'],
+  ['revert', 'Reverts'],
+];
+
+function preview(changes, baseline = null, commit = 'f'.repeat(40)) {
+  return releaseNotes('1.0.0-dev.3', '', 'example/ruphish', { commit, baseline, changes });
+}
+
+test('preview notes start with a warning, group every type and omit comparison and installation boilerplate', () => {
+  const workflow = readFileSync(new URL('../workflows/pr-title.yml', import.meta.url), 'utf8');
+  const types = workflow
+    .match(/types: \|\r?\n([\s\S]*?)\r?\n\s+requireScope:/)[1]
+    .trim()
+    .split(/\s+/);
+  assert.deepEqual(types.sort(), expectedGroups.map(([type]) => type).sort());
+  const changes = [...expectedGroups].reverse().map(([type, name], i) => ({
+    commit: (i + 1).toString(16).repeat(40),
+    subject: `${type}: ${name} example (#${i + 1})`,
+  }));
+  const notes = preview(changes, { version: '1.0.0-dev.2', commit: 'e'.repeat(40) });
+  assert.deepEqual(
+    [...notes.matchAll(/^### (.+)$/gm)].map((match) => match[1]),
+    expectedGroups.map(([, name]) => name),
+  );
+  for (const [i, [, name]] of [...expectedGroups].reverse().entries()) {
+    const entry = notes.trimEnd().split(`### ${name}\n\n`)[1].split('\n\n')[0];
+    const commit = (i + 1).toString(16).repeat(40);
+    assert.equal(
+      entry,
+      `- ${name} example \\(#${i + 1}\\) ([${commit.slice(0, 7)}](https://github.com/example/ruphish/commit/${commit}))`,
+    );
+  }
+  assert.ok(
+    notes.startsWith(
+      '> [!WARNING]\n> **Development preview 3 for Ruphish 1.0.0 - testing only.**\n> Use a disposable installation.',
     ),
   );
-  assert(
-    dev.includes(
-      '**Docker:** [Container image and pull command](https://github.com/example/ruphish/pkgs/container/ruphish)',
+  assert.ok(
+    notes.includes(
+      'Upgrades between previews or to the final release are not guaranteed; a fresh installation may be required.',
     ),
   );
-  assert(dev.includes('```sh\ndocker pull ghcr.io/example/ruphish:0.1.0-dev.1\n```'));
-  assert(dev.includes('**Native binaries:**'));
-  assert(dev.includes('**Verification:**'));
-  assert.match(dev, /not guaranteed/);
-  assert(!dev.includes('Changes since'));
-  assert(!dev.includes('Draft changes.'));
-  const next = releaseNotes('0.1.0-dev.2', '', 'example/ruphish', '0.1.0-dev.1');
-  assert.match(next, /Development preview 2/);
-  assert.match(next, /compare\/v0.1.0-dev.1\.\.\.v0.1.0-dev.2/);
-  assert.throws(() => releaseNotes('0.1.0', '', 'example/ruphish', '0.2.0'));
+  assert.ok(notes.indexOf('> [!WARNING]') < notes.indexOf('### Features'));
+  assert.equal(
+    notes.slice(notes.indexOf('### Features')),
+    `${groupedChanges('example/ruphish', changes)}\n`,
+  );
+  assert.doesNotMatch(
+    notes,
+    /```|docker pull|install\.sh|install\.ps1|Planned changes|CHANGELOG|Verification|Native binaries|\/compare\/|Changes since|installer reference/,
+  );
+});
+
+test('subjects omit displayed scopes and retain breaking markers, Unicode, Markdown and historical references', () => {
+  assert.deepEqual(parseSubject('feat(api)!: Rename endpoint (#42)'), {
+    type: 'feat',
+    scope: 'api',
+    breaking: true,
+    description: 'Rename endpoint (#42)',
+  });
+  assert.deepEqual(parseSubject('fix!: Reject invalid data'), {
+    type: 'fix',
+    scope: null,
+    breaking: true,
+    description: 'Reject invalid data',
+  });
+  const notes = preview([
+    {
+      commit: '1'.repeat(40),
+      subject: 'fix(ui): Übergrößen & <script> *bold* `code` [link](url) #42',
+    },
+    { commit: '2'.repeat(40), subject: 'feat(api)!: Rename endpoint (#43)' },
+    { commit: '3'.repeat(40), subject: 'Fix historical subjects (#44)' },
+    { commit: '4'.repeat(40), subject: 'build(deps): refresh dependencies' },
+    { commit: '5'.repeat(40), subject: '### heading | ~strike~ \\path' },
+  ]);
+  assert.deepEqual(
+    [...notes.matchAll(/^### (.+)$/gm)].map((match) => match[1]),
+    ['Features', 'Fixes', 'Other changes'],
+  );
+  assert.ok(notes.includes('**Breaking change:** Rename endpoint \\(#43\\)'));
+  assert.doesNotMatch(notes, /\*\*api:|\*\*ui:|fix\(ui\)|feat\(api\)/);
+  assert.ok(
+    notes.includes('Übergrößen &amp; \\<script\\> \\*bold\\* \\`code\\` \\[link\\]\\(url\\) #42'),
+  );
+  assert.ok(notes.includes('Fix historical subjects \\(#44\\)'));
+  assert.ok(notes.includes('build\\(deps\\): refresh dependencies'));
+  assert.ok(notes.includes('\\#\\#\\# heading \\| \\~strike\\~ \\\\path'));
+  assert.ok(!notes.includes('### Performance'));
+  assert.ok(!notes.includes('Changes since'));
+  assert.ok(!notes.includes('<script>'));
+  assert.deepEqual([...preview([]).matchAll(/^### (.+)$/gm)], []);
 });
 
 test('final notes require exactly one complete dated version section', () => {
-  const changelog =
-    '# Changelog\n\n## Unreleased\nFuture change.\n\n## 0.1.0 - 2026-10-30\n\nInitial release.\n\n## 0.0.1 - 2026-01-01\nOld change.\n';
-  const notes = releaseNotes('0.1.0', changelog, 'example/ruphish', '0.0.1');
-  assert.equal(notes, 'Initial release.\n');
+  const body =
+    '### Features\n\n- Add shared resources ([#42](https://github.com/example/ruphish/pull/42)), by @alice.\n\nThanks to @alice and @bob for testing.';
+  const changelog = `# Changelog\n\n## Unreleased\nFuture change.\n\n## [0.1.0] - 2026-10-30\n\n${body}\n\n## 0.0.1 - 2026-01-01\nOld change.\n`;
+  const notes = releaseNotes('0.1.0', changelog, 'example/ruphish');
+  assert.equal(notes, `${body}\n`);
+  assert.equal(
+    releaseNotes('0.1.0', changelog.replaceAll('\n', '\r\n'), 'example/ruphish'),
+    `${body}\n`,
+  );
   assert(!notes.includes('Future change'));
   assert(!notes.includes('Old change'));
   assert.throws(() => releaseNotes('0.2.0', changelog, 'example/ruphish'), /dated changelog/);
@@ -83,88 +182,649 @@ test('final notes require exactly one complete dated version section', () => {
       releaseNotes('0.1.0', changelog + '\n## 0.1.0 - 2026-10-30\nDuplicate.', 'example/ruphish'),
     /dated changelog/,
   );
-  assert.throws(
-    () => releaseNotes('0.1.0', '## 0.1.0 - 2026-10-30\nTODO\n', 'example/ruphish'),
-    /complete/,
-  );
-});
-
-test('native installation commands pin the exact development preview', () => {
-  const cases = [
-    {
-      version: '0.1.0-dev.2',
-      shell: 'curl -fsSL https://www.ruphish.com/install.sh | sh -s -- --version 0.1.0-dev.2',
-      powershell:
-        "& ([scriptblock]::Create((irm https://www.ruphish.com/install.ps1))) -Version '0.1.0-dev.2'",
-    },
-    {
-      version: '0.2.0-dev.12',
-      shell: 'curl -fsSL https://www.ruphish.com/install.sh | sh -s -- --version 0.2.0-dev.12',
-      powershell:
-        "& ([scriptblock]::Create((irm https://www.ruphish.com/install.ps1))) -Version '0.2.0-dev.12'",
-    },
-  ];
-  for (const { version, shell, powershell } of cases) {
-    const notes = releaseNotes(version, '', 'srothgan/ruphish');
-    const blocks = [...notes.matchAll(/```(\w+)\n([\s\S]*?)\n```/g)];
-    assert.deepEqual(
-      blocks.slice(1).map(([, language, command]) => ({ language, command })),
-      [
-        { language: 'sh', command: shell },
-        { language: 'powershell', command: powershell },
-      ],
-    );
-    assert(!notes.includes('Download the archive'));
-    assert(!notes.includes('--include-previews'));
-    assert(
-      notes.includes('/docs/administration/hosting-and-maintenance/native-installer-reference/'),
+  for (const entry of ['', '   \n', 'TODO', '- TODO: describe the change']) {
+    assert.throws(
+      () => releaseNotes('0.1.0', `## 0.1.0 - 2026-10-30\n${entry}\n`, 'example/ruphish'),
+      /complete/,
     );
   }
 });
 
-test('metadata checks real Git tag identity, main ancestry and manual non-publication', (t) => {
+test('final extraction matches the heading version and allows a trailing Changes link or title', () => {
+  const body = '### Features\n\n- Authored change by [@alice](https://github.com/alice).';
+  const changelog = `# Changelog\n\n## [0.1.0] - 2026-10-27 [Changes][v0.16.2]\n\n${body}\n\n## Unreleased\nDo not publish this.\n`;
+  assert.equal(releaseNotes('0.1.0', changelog, 'example/ruphish'), `${body}\n`);
+  assert.throws(() => releaseNotes('0.16.2', changelog, 'example/ruphish'), /dated changelog/);
+  assert.throws(
+    () =>
+      releaseNotes(
+        '0.1.0',
+        changelog + '\n## 0.1.0 - 2026-11-10 Final release\nDuplicate.\n',
+        'example/ruphish',
+      ),
+    /dated changelog/,
+  );
+  assert.throws(
+    () =>
+      releaseNotes(
+        '0.1.0',
+        '## [0.1.0] - 2026-10-27 [Changes][v0.16.2]\n\n## Unreleased\nOther text.\n',
+        'example/ruphish',
+      ),
+    /complete/,
+  );
+});
+
+test('GitHub enrichment links associated merged PRs and verified contributors without guessing', async () => {
+  const commit = 'a'.repeat(40);
+  const pull = (number, extra = {}) => ({
+    number,
+    merged_at: '2026-11-10T10:00:00Z',
+    base: { repo: { full_name: 'example/ruphish' } },
+    ...extra,
+  });
+  const calls = [];
+  const [change] = await enrichChanges(
+    [{ commit, subject: 'fix(ui): resolve conflict (#42), see #99' }],
+    'example/ruphish',
+    async (path) => {
+      calls.push(path);
+      if (path === `/commits/${commit}`) {
+        return {
+          sha: commit,
+          author: { login: 'srothgan', html_url: 'https://github.com/srothgan' },
+        };
+      }
+      if (path.endsWith('page=1')) {
+        return [pull(42), ...Array.from({ length: 99 }, () => pull(90, { merged_at: null }))];
+      }
+      assert.equal(path, `/commits/${commit}/pulls?per_page=100&page=2`);
+      return [pull(43), pull(42), pull(91, { base: { repo: { full_name: 'other/repo' } } })];
+    },
+  );
+  assert.equal(calls.length, 3);
+  assert.deepEqual(change.pulls, [42, 43]);
+  assert.equal(
+    groupedChanges('example/ruphish', [change]),
+    `### Fixes\n\n- resolve conflict \\([#42](https://github.com/example/ruphish/pull/42)\\), see #99 ([#43](https://github.com/example/ruphish/pull/43), [aaaaaaa](https://github.com/example/ruphish/commit/${commit})) by [@srothgan](https://github.com/srothgan)`,
+  );
+});
+
+test('direct commits, bots and unlinked authors receive accurate credits and no invented PRs', async () => {
+  const changes = ['1', '2', '3'].map((digit) => ({
+    commit: digit.repeat(40),
+    subject: 'chore(deps): update dependency',
+  }));
+  const details = [
+    { author: { login: 'alice', html_url: 'https://github.com/alice' } },
+    { author: { login: 'dependabot[bot]', html_url: 'https://github.com/apps/dependabot' } },
+    { author: null, commit: { author: { name: 'Contributor *Name*' } } },
+  ];
+  const enriched = await enrichChanges(changes, 'example/ruphish', async (path) => {
+    if (path.includes('/pulls?')) {
+      return [];
+    }
+    const index = changes.findIndex((change) => path === `/commits/${change.commit}`);
+    return { sha: changes[index].commit, ...details[index] };
+  });
+  const notes = groupedChanges('example/ruphish', enriched);
+  assert.ok(notes.includes('by [@alice](https://github.com/alice)'));
+  assert.ok(notes.includes('by [@dependabot\\[bot\\]](https://github.com/apps/dependabot)'));
+  assert.ok(notes.includes('by Contributor \\*Name\\*'));
+  assert.doesNotMatch(notes, /\/pull\/|\(deps\)|@Contributor/);
+});
+
+test('GitHub failures stop generation rather than silently losing PRs or attribution', async (t) => {
+  const commit = 'a'.repeat(40);
+  const changes = [{ commit, subject: 'feat: new feature' }];
+  await assert.rejects(
+    enrichChanges(changes, 'example/ruphish', async () => {
+      throw new Error('API unavailable');
+    }),
+    /API unavailable/,
+  );
+  await assert.rejects(
+    enrichChanges(changes, 'example/ruphish', async (path) =>
+      path.includes('/pulls?') ? [] : { sha: 'b'.repeat(40) },
+    ),
+    /different commit/,
+  );
+  const fetch = t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(url, `https://api.github.com/repos/example/ruphish/commits/${commit}`);
+    assert.equal(options.headers.Authorization, 'Bearer fixture-token');
+    return new Response('{}', { status: 403 });
+  });
+  await assert.rejects(
+    github('example/ruphish', 'fixture-token')(`/commits/${commit}`),
+    /GitHub GET .* HTTP 403/,
+  );
+  fetch.mock.restore();
+});
+
+function gitFixture(t, version = '1.0.0-dev.3') {
   const directory = temporary(t);
   const git = (...args) => run('git', args, { cwd: directory });
   git('init', '-b', 'main');
   git('config', 'user.name', 'Release fixture');
   git('config', 'user.email', 'fixture@example.test');
-  writeFileSync(join(directory, 'Cargo.toml'), '[workspace.package]\nversion = "0.1.0-dev.1"\n');
-  writeFileSync(join(directory, 'CHANGELOG.md'), '## Unreleased\nInitial release.\n');
-  git('add', '.');
-  git('commit', '-m', 'Fixture');
-  const commit = git('rev-parse', 'HEAD');
-  git('update-ref', 'refs/remotes/origin/main', commit);
-  git('tag', '-a', 'v0.1.0-dev.1', '-m', 'Preview');
-  const script = resolve('.github/scripts/release.mjs');
-  const invoke = (overrides = {}) =>
-    spawnSync(process.execPath, [script, 'metadata'], {
-      cwd: directory,
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        GITHUB_EVENT_NAME: 'push',
-        GITHUB_SHA: commit,
-        GITHUB_REF: 'refs/tags/v0.1.0-dev.1',
-        GITHUB_REPOSITORY: 'example/ruphish',
-        GITHUB_OUTPUT: '',
-        ...overrides,
-      },
-    });
-  assert.equal(invoke().status, 0);
-  assert.equal(readJson(join(directory, 'target/release-metadata/release.json')).publish, true);
-  assert.notEqual(invoke({ GITHUB_REF: 'refs/tags/v0.2.0' }).status, 0);
-  assert.notEqual(invoke({ GITHUB_EVENT_NAME: 'pull_request' }).status, 0);
-  assert.equal(
-    invoke({ GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF: 'refs/heads/main' }).status,
-    0,
+  git('config', 'commit.gpgsign', 'false');
+  git('config', 'tag.gpgsign', 'false');
+  git('config', 'core.autocrlf', 'false');
+  git('config', 'core.hooksPath', join(directory, 'empty-hooks'));
+  writeFileSync(join(directory, '.gitignore'), 'target/\n');
+  writeFileSync(join(directory, 'Cargo.toml'), `[workspace.package]\nversion = "${version}"\n`);
+  writeFileSync(join(directory, 'CHANGELOG.md'), '## Unreleased\nPlanned final changes.\n');
+  mkdirSync(join(directory, 'target'));
+  const preload = join(directory, 'target/mock-github.mjs');
+  writeFileSync(
+    preload,
+    `
+    globalThis.fetch = async (url) => {
+      const match = /^https:\\/\\/api.github.com\\/repos\\/example\\/ruphish\\/commits\\/([a-f0-9]{40})(\\/pulls\\?per_page=100&page=1)?$/.exec(url);
+      if (!match) throw new Error('Unexpected fixture API request: ' + url);
+      const body = match[2] ? [] : {
+        sha: match[1], author: { login: 'alice', html_url: 'https://github.com/alice' }
+      };
+      return new Response(JSON.stringify(body), { status: 200 });
+    };
+  `,
   );
-  assert.equal(readJson(join(directory, 'target/release-metadata/release.json')).publish, false);
-  writeFileSync(join(directory, 'later'), 'not merged');
-  git('add', 'later');
-  git('commit', '-m', 'Unmerged');
-  git('tag', '-d', 'v0.1.0-dev.1');
-  git('tag', '-a', 'v0.1.0-dev.1', '-m', 'Unmerged preview');
-  assert.notEqual(invoke({ GITHUB_SHA: git('rev-parse', 'HEAD') }).status, 0);
+  const commit = (subject) => {
+    git('add', '--all');
+    git('commit', '--allow-empty', '-m', subject);
+    return git('rev-parse', 'HEAD');
+  };
+  const notes = () => readFileSync(join(directory, 'target/release-metadata/notes.md'), 'utf8');
+  const invoke = (overrides = {}) =>
+    spawnSync(
+      process.execPath,
+      ['--import', pathToFileURL(preload).href, resolve('.github/scripts/release.mjs'), 'metadata'],
+      {
+        cwd: directory,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          GITHUB_EVENT_NAME: 'workflow_dispatch',
+          GITHUB_SHA: git('rev-parse', 'HEAD'),
+          GITHUB_REF: 'refs/heads/main',
+          GITHUB_REPOSITORY: 'example/ruphish',
+          GITHUB_OUTPUT: '',
+          GH_TOKEN: 'fixture-token',
+          ...overrides,
+        },
+      },
+    );
+  return { directory, git, commit, notes, invoke, preload };
+}
+
+test('final drafts span the previous final, share preview formatting and never change the repository', async (t) => {
+  const repo = gitFixture(t);
+  const previous = repo.commit('chore: previous final');
+  repo.git('tag', 'v0.9.0');
+  const feature = repo.commit('feat(ui): first preview feature');
+  repo.git('tag', 'v1.0.0-dev.1');
+  repo.git('tag', 'v1.0.0-dev.2');
+  const selected = repo.commit('fix(api): selected correction');
+  repo.commit('feat: later work');
+  assert.deepEqual(selectBaseline('1.0.0', selected, { cwd: repo.directory }), {
+    version: '0.9.0',
+    commit: previous,
+  });
+  const before = {
+    changelog: readFileSync(join(repo.directory, 'CHANGELOG.md'), 'utf8'),
+    manifest: readFileSync(join(repo.directory, 'Cargo.toml'), 'utf8'),
+    refs: repo.git('show-ref'),
+    status: repo.git('status', '--porcelain'),
+  };
+  const result = spawnSync(
+    process.execPath,
+    [
+      '--import',
+      pathToFileURL(repo.preload).href,
+      resolve('.github/scripts/release.mjs'),
+      'notes',
+      '1.0.0',
+      'example/ruphish',
+      selected,
+    ],
+    { cwd: repo.directory, encoding: 'utf8', env: { ...process.env, GH_TOKEN: 'fixture-token' } },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    result.stdout,
+    `### Features\n\n- first preview feature ([${feature.slice(0, 7)}](https://github.com/example/ruphish/commit/${feature})) by [@alice](https://github.com/alice)\n\n### Fixes\n\n- selected correction ([${selected.slice(0, 7)}](https://github.com/example/ruphish/commit/${selected})) by [@alice](https://github.com/alice)\n`,
+  );
+  const api = async (path) =>
+    path.includes('/pulls?')
+      ? []
+      : {
+          sha: path.split('/').at(-1),
+          author: { login: 'alice', html_url: 'https://github.com/alice' },
+        };
+  const dev = await generateNotes('1.0.0-dev.3', 'example/ruphish', selected, api, {
+    cwd: repo.directory,
+  });
+  assert.ok(dev.startsWith('> [!WARNING]'));
+  assert.ok(dev.endsWith(result.stdout.split('### Fixes')[1]));
+  assert.ok(!dev.includes('first preview feature'));
+  assert.doesNotMatch(
+    result.stdout,
+    /WARNING|\/compare\/|later work|previous final|\(ui\)|\(api\)/,
+  );
+  assert.equal(readFileSync(join(repo.directory, 'CHANGELOG.md'), 'utf8'), before.changelog);
+  assert.equal(readFileSync(join(repo.directory, 'Cargo.toml'), 'utf8'), before.manifest);
+  assert.equal(repo.git('show-ref'), before.refs);
+  assert.equal(repo.git('status', '--porcelain'), before.status);
+  assert.ok(!existsSync(join(repo.directory, 'target/release-metadata')));
+});
+
+test('final metadata publishes the titled changelog entry exactly without GitHub enrichment', (t) => {
+  const repo = gitFixture(t, '1.0.0');
+  const body =
+    '- Handwritten [#42](https://github.com/example/ruphish/pull/42) by @alice.\n\nCustom upgrade instructions.';
+  writeFileSync(
+    join(repo.directory, 'CHANGELOG.md'),
+    `## [1.0.0] - 2026-11-10 [Changes][v0.16.2]\n\n${body}\n\n## Unreleased\nFuture work.\n`,
+  );
+  repo.commit('chore: prepare final release');
+  writeFileSync(
+    repo.preload,
+    'globalThis.fetch = () => { throw new Error("Final extraction must not call GitHub"); };',
+  );
+  const result = repo.invoke();
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(repo.notes(), `${body}\n`);
+  assert.equal(
+    readJson(join(repo.directory, 'target/release-metadata/release.json')).publish,
+    false,
+  );
+});
+
+test('metadata and draft CLI surface API errors without writing partial output', (t) => {
+  const repo = gitFixture(t);
+  repo.commit('feat: fixture feature');
+  writeFileSync(
+    repo.preload,
+    'globalThis.fetch = async () => new Response("{}", { status: 503 });',
+  );
+  const metadata = repo.invoke();
+  assert.notEqual(metadata.status, 0);
+  assert.match(metadata.stderr, /GitHub GET .* HTTP 503/);
+  assert.ok(!existsSync(join(repo.directory, 'target/release-metadata')));
+  const draft = spawnSync(
+    process.execPath,
+    [
+      '--import',
+      pathToFileURL(repo.preload).href,
+      resolve('.github/scripts/release.mjs'),
+      'notes',
+      '1.0.0',
+      'example/ruphish',
+    ],
+    { cwd: repo.directory, encoding: 'utf8', env: { ...process.env, GH_TOKEN: 'fixture-token' } },
+  );
+  assert.notEqual(draft.status, 0);
+  assert.match(draft.stderr, /GitHub GET .* HTTP 503/);
+  assert.equal(draft.stdout, '');
+  assert.equal(repo.git('status', '--porcelain'), '');
+});
+
+test('the preceding reachable preview wins and history ends at the selected commit rather than HEAD', (t) => {
+  const repo = gitFixture(t);
+  repo.commit('chore: initialize');
+  repo.git('tag', 'v0.9.0');
+  repo.commit('feat: first preview');
+  repo.git('tag', 'v1.0.0-dev.1');
+  const previous = repo.commit('fix: previous preview');
+  repo.git('tag', '-a', 'v1.0.0-dev.2', '-m', 'Previous preview');
+  const selected = repo.commit('perf: selected preview');
+  repo.git('tag', 'v1.0.0-dev.3');
+  repo.commit('feat: later branch work');
+  repo.git('tag', 'v1.0.0-dev.4');
+  const baseline = selectBaseline('1.0.0-dev.3', selected, { cwd: repo.directory });
+  assert.deepEqual(baseline, { version: '1.0.0-dev.2', commit: previous });
+  assert.deepEqual(readHistory(selected, baseline, { cwd: repo.directory }), [
+    { commit: selected, subject: 'perf: selected preview' },
+  ]);
+  assert.deepEqual(
+    readHistory(selected, baseline, { cwd: repo.directory }),
+    readHistory(selected, baseline, { cwd: repo.directory }),
+  );
+});
+
+test('unreachable, unrelated, current, invalid and newer tags cannot replace the final fallback', (t) => {
+  const repo = gitFixture(t);
+  const root = repo.commit('chore: initial release');
+  repo.git('tag', 'v0.8.0');
+  repo.git('tag', 'v0.9.0');
+  for (const tag of [
+    'v0.9.1-dev.99',
+    'v1.0.0-dev.3',
+    'v1.0.0-dev.4',
+    'v1.0.0',
+    'v2.0.0',
+    'v1.0.0-beta.1',
+    'v1.0.0-dev.02',
+    'latest',
+    'release-v1.0.0-dev.2',
+  ]) {
+    repo.git('tag', tag);
+  }
+  repo.git('checkout', '--orphan', 'unrelated');
+  repo.commit('feat: unrelated history');
+  repo.git('tag', 'v1.0.0-dev.2');
+  repo.git('tag', 'v0.9.9');
+  repo.git('checkout', 'main');
+  const selected = repo.commit('fix: first preview after the final release');
+  const baseline = selectBaseline('1.0.0-dev.3', selected, { cwd: repo.directory });
+  assert.deepEqual(baseline, { version: '0.9.0', commit: root });
+  assert.deepEqual(readHistory(selected, baseline, { cwd: repo.directory }), [
+    { commit: selected, subject: 'fix: first preview after the final release' },
+  ]);
+});
+
+test('initial previews include all reachable non-merge history through the selected commit', (t) => {
+  const repo = gitFixture(t, '1.0.0-dev.1');
+  const first = repo.commit('Initial repository');
+  repo.git('tag', 'v0.9.0-dev.5');
+  const selected = repo.commit('feat(ui): Übergrößen (#13)');
+  repo.commit('fix: after the selected commit');
+  const baseline = selectBaseline('1.0.0-dev.1', selected, { cwd: repo.directory });
+  assert.equal(baseline, null);
+  const changes = readHistory(selected, baseline, { cwd: repo.directory });
+  assert.deepEqual(changes, [
+    { commit: first, subject: 'Initial repository' },
+    { commit: selected, subject: 'feat(ui): Übergrößen (#13)' },
+  ]);
+  const notes = releaseNotes('1.0.0-dev.1', '', 'example/ruphish', {
+    commit: selected,
+    baseline,
+    changes,
+  });
+  assert.ok(notes.includes('Initial repository'));
+  assert.ok(notes.includes('Übergrößen \\(#13\\)'));
+  assert.ok(!notes.includes('Changes since'));
+  assert.ok(!notes.includes('after the selected commit'));
+});
+
+test('history includes direct and squashed PR commits and reverts without duplicating structural merges', (t) => {
+  const repo = gitFixture(t);
+  const initial = repo.commit('chore: initial release');
+  repo.git('tag', 'v1.0.0-dev.2');
+  writeFileSync(join(repo.directory, 'direct'), 'direct change');
+  const direct = repo.commit('fix: direct change');
+  repo.git('checkout', '-b', 'feature');
+  const feature = repo.commit('feat(api): merged feature (#40)');
+  repo.git('checkout', 'main');
+  const docs = repo.commit('docs: clarify the feature');
+  repo.git('merge', '--no-ff', 'feature', '-m', 'Merge pull request #40 from feature');
+  const structural = repo.git('rev-parse', 'HEAD');
+  repo.git('checkout', '-b', 'squashed');
+  writeFileSync(join(repo.directory, 'squashed'), 'squashed change');
+  const unsquashed = repo.commit('internal development commit');
+  repo.git('checkout', 'main');
+  repo.git('merge', '--squash', 'squashed');
+  const squash = repo.commit('feat(ui)!: squashed PR (#41)');
+  repo.git('revert', '--no-edit', direct);
+  const reverted = repo.git('rev-parse', 'HEAD');
+  const baseline = selectBaseline('1.0.0-dev.3', reverted, { cwd: repo.directory });
+  assert.deepEqual(baseline, { version: '1.0.0-dev.2', commit: initial });
+  const changes = readHistory(reverted, baseline, { cwd: repo.directory });
+  assert.deepEqual(
+    changes.map((change) => change.commit).sort(),
+    [direct, feature, docs, squash, reverted].sort(),
+  );
+  assert.ok(!changes.some((change) => [structural, unsquashed].includes(change.commit)));
+  assert.equal(changes.filter((change) => change.subject.includes('#40')).length, 1);
+  assert.ok(changes.some((change) => change.subject.startsWith('Revert "fix: direct change"')));
+  const notes = preview(changes, baseline, reverted);
+  assert.ok(notes.includes('#40'));
+  assert.ok(notes.includes('#41'));
+  assert.ok(notes.includes('Revert "fix: direct change"'));
+  assert.ok(!notes.includes('Merge pull request'));
+});
+
+test('Git failures abort history generation visibly', (t) => {
+  const directory = temporary(t);
+  assert.throws(
+    () => selectBaseline('1.0.0-dev.1', 'a'.repeat(40), { cwd: directory }),
+    /git failed:/,
+  );
+  const repo = gitFixture(t);
+  const commit = repo.commit('Initial repository');
+  assert.throws(() => readHistory('missing-commit', null, { cwd: repo.directory }), /git failed:/);
+  assert.throws(
+    () => readHistory(commit, { commit: 'missing-baseline' }, { cwd: repo.directory }),
+    /git failed:/,
+  );
+  writeFileSync(join(directory, 'Cargo.toml'), '[workspace.package]\nversion = "1.0.0-dev.1"\n');
+  const result = spawnSync(process.execPath, [resolve('.github/scripts/release.mjs'), 'metadata'], {
+    cwd: directory,
+    encoding: 'utf8',
+    env: { ...process.env, GITHUB_EVENT_NAME: 'workflow_dispatch' },
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /git failed:/);
+});
+
+test('manual metadata generates linked notes without publishing before the prospective tag exists', (t) => {
+  const repo = gitFixture(t, '1.0.0-dev.1');
+  repo.commit('chore: initial final release');
+  repo.git('tag', 'v0.9.0');
+  const selected = repo.commit('feat: preview work (#52)');
+  assert.equal(repo.git('tag', '--list', 'v1.0.0-dev.1'), '');
+  const result = repo.invoke();
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    readJson(join(repo.directory, 'target/release-metadata/release.json')).publish,
+    false,
+  );
+  assert.ok(repo.notes().includes(`/commit/${selected}`));
+  assert.ok(repo.notes().includes('by [@alice](https://github.com/alice)'));
+  assert.ok(!repo.notes().includes('/compare/'));
+  assert.ok(repo.notes().includes('preview work \\(#52\\)'));
+  assert.ok(!repo.notes().includes('/blob/'));
+});
+
+function versionPush(t, previous = '1.0.0-dev.1', next = '1.0.0-dev.2') {
+  const repo = gitFixture(t, previous);
+  const before = repo.commit('chore: before the push');
+  writeFileSync(
+    join(repo.directory, 'Cargo.toml'),
+    `[workspace.package]\nversion = "${next}"\n# Changed manifest\n`,
+  );
+  const commit = repo.commit('chore: prepare release');
+  repo.git('update-ref', 'refs/remotes/origin/main', commit);
+  const event = join(repo.directory, 'target/push.json');
+  writeJson(event, { before });
+  const env = {
+    GITHUB_EVENT_NAME: 'push',
+    GITHUB_REF: 'refs/heads/main',
+    GITHUB_SHA: commit,
+    GITHUB_EVENT_PATH: event,
+    GITHUB_REPOSITORY: 'example/ruphish',
+  };
+  return { repo, before, commit, env, options: { cwd: repo.directory } };
+}
+
+test('workspace version detection ignores other version fields and accepts the manifest section format', () => {
+  const manifest =
+    '[package]\nversion = "9.9.9"\n\n[workspace.package]\n# Release identity\nversion = "1.2.3-dev.4" # Preview\n\n[dependencies]\nversion = "8.8.8"\n';
+  assert.equal(workspaceVersion(manifest).version, '1.2.3-dev.4');
+  assert.equal(workspaceVersion(manifest.replaceAll('\n', '\r\n')).version, '1.2.3-dev.4');
+  assert.throws(
+    () => workspaceVersion('[package]\nversion = "1.0.0"\n'),
+    /workspace package version/,
+  );
+  assert.throws(
+    () => workspaceVersion('[workspace.package]\nversion = "invalid"\n'),
+    /Unsupported/,
+  );
+});
+
+test('main version bumps select the exact push commit without requiring or creating a tag', (t) => {
+  const { repo, before, commit, env, options } = versionPush(t);
+  assert.deepEqual(selectRelease(env, options), {
+    version: '1.0.0-dev.2',
+    base: '1.0.0',
+    channel: 'dev',
+    number: '2',
+    commit,
+    before,
+    selected: true,
+    publish: true,
+  });
+  const result = repo.invoke(env);
+  assert.equal(result.status, 0, result.stderr);
+  const meta = readJson(join(repo.directory, 'target/release-metadata/release.json'));
+  assert.equal(meta.publish, true);
+  assert.equal(meta.selected, true);
+  assert.equal(meta.commit, commit);
+  assert.equal(meta.before, before);
+  assert.equal(meta.tag, 'v1.0.0-dev.2');
+  assert.equal(repo.git('tag', '--list'), '');
+  writeFileSync(join(repo.directory, 'Cargo.toml'), '[workspace.package]\nversion = "9.9.9"\n');
+  assert.equal(selectRelease(env, options).version, '1.0.0-dev.2');
+});
+
+test('unchanged workspace versions skip notes, API calls and artifacts even for final versions', (t) => {
+  const { repo, env, options } = versionPush(t, '1.0.0', '1.0.0');
+  assert.equal(selectRelease(env, options).selected, false);
+  writeFileSync(
+    repo.preload,
+    'globalThis.fetch = () => { throw new Error("Unchanged versions must not call GitHub"); };',
+  );
+  const output = join(repo.directory, 'target/outputs');
+  const result = repo.invoke({ ...env, GITHUB_OUTPUT: output });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(readFileSync(output, 'utf8'), /^selected=false$/m);
+  assert.match(readFileSync(output, 'utf8'), /^publish=false$/m);
+  assert.ok(!existsSync(join(repo.directory, 'target/release-metadata')));
+  assert.equal(repo.git('tag', '--list'), '');
+});
+
+test('decreases, unsupported events, tag pushes and other branches cannot select publication', (t) => {
+  const lower = versionPush(t, '1.0.0-dev.3', '1.0.0-dev.2');
+  const result = lower.repo.invoke(lower.env);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Release version must increase/);
+  assert.ok(!existsSync(join(lower.repo.directory, 'target/release-metadata')));
+  const { repo, before, env, options } = versionPush(t);
+  for (const ref of ['refs/tags/v1.0.0-dev.2', 'refs/heads/feature']) {
+    assert.throws(
+      () => selectRelease({ ...env, GITHUB_REF: ref }, options),
+      /Only main version bumps/,
+    );
+  }
+  assert.throws(
+    () => selectRelease({ ...env, GITHUB_EVENT_NAME: 'pull_request' }, options),
+    /Unsupported release event/,
+  );
+  assert.throws(
+    () => selectRelease({ ...env, GITHUB_SHA: 'a'.repeat(40) }, options),
+    /selected source/,
+  );
+  assert.throws(
+    () => selectRelease({ ...env, GITHUB_SHA: 'invalid' }, options),
+    /Invalid selected source/,
+  );
+  for (const before of ['0'.repeat(40), undefined, 'invalid', 'a'.repeat(40)]) {
+    writeJson(env.GITHUB_EVENT_PATH, { before });
+    assert.throws(() => selectRelease(env, options), /previous main commit|git failed/);
+  }
+  writeJson(env.GITHUB_EVENT_PATH, { before });
+  repo.git('update-ref', 'refs/remotes/origin/main', before);
+  assert.throws(() => selectRelease(env, options), /git failed/);
+  assert.equal(repo.git('tag', '--list'), '');
+});
+
+test('selection compares push snapshots rather than the last parent or a later main head', (t) => {
+  const { repo, before, env, options } = versionPush(t);
+  const selected = repo.commit('docs: another commit in the same push');
+  repo.git('update-ref', 'refs/remotes/origin/main', selected);
+  const source = selectRelease({ ...env, GITHUB_SHA: selected }, options);
+  assert.equal(source.publish, true);
+  assert.equal(source.before, before);
+  assert.equal(source.commit, selected);
+  const later = repo.commit('feat: later work on main');
+  repo.git('update-ref', 'refs/remotes/origin/main', later);
+  repo.git('checkout', '--detach', selected);
+  assert.deepEqual(selectRelease({ ...env, GITHUB_SHA: selected }, options), source);
+  writeJson(env.GITHUB_EVENT_PATH, { before: later });
+  assert.throws(() => selectRelease({ ...env, GITHUB_SHA: selected }, options), /git failed/);
+});
+
+test('manual validation remains selected but non-publishing on branches and tags', (t) => {
+  const { repo, env, options } = versionPush(t);
+  for (const ref of ['refs/heads/main', 'refs/heads/feature', 'refs/tags/v1.0.0-dev.2']) {
+    const manual = {
+      ...env,
+      GITHUB_EVENT_NAME: 'workflow_dispatch',
+      GITHUB_REF: ref,
+      GITHUB_EVENT_PATH: '',
+    };
+    const selection = selectRelease(manual, options);
+    assert.equal(selection.selected, true);
+    assert.equal(selection.publish, false);
+    const result = repo.invoke(manual);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(
+      readJson(join(repo.directory, 'target/release-metadata/release.json')).publish,
+      false,
+    );
+  }
+  assert.equal(repo.git('tag', '--list'), '');
+});
+
+test('final version bumps require the matching complete changelog body before any publication', (t) => {
+  const { repo, env } = versionPush(t, '1.0.0-dev.2', '1.0.0');
+  let result = repo.invoke(env);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /dated changelog/);
+  assert.ok(!existsSync(join(repo.directory, 'target/release-metadata')));
+  const body = '- Final change by [@alice](https://github.com/alice).';
+  writeFileSync(
+    join(repo.directory, 'CHANGELOG.md'),
+    `## [1.0.0] - 2026-11-10 Release\n\n${body}\n`,
+  );
+  const commit = repo.commit('docs: complete final notes');
+  repo.git('update-ref', 'refs/remotes/origin/main', commit);
+  result = repo.invoke({ ...env, GITHUB_SHA: commit });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(repo.notes(), `${body}\n`);
+  assert.equal(repo.git('tag', '--list'), '');
+});
+
+test('publication validates retained metadata against the original main version-bump event', (t) => {
+  const { repo, before, commit, env, options } = versionPush(t);
+  const manifest = { commit, before, version: '1.0.0-dev.2', repository: 'example/ruphish' };
+  validatePublicationSource(manifest, env, options);
+  for (const key of ['commit', 'before', 'version', 'repository']) {
+    assert.throws(() =>
+      validatePublicationSource({ ...manifest, [key]: 'different' }, env, options),
+    );
+  }
+  assert.throws(
+    () =>
+      validatePublicationSource(
+        manifest,
+        { ...env, GITHUB_EVENT_NAME: 'workflow_dispatch' },
+        options,
+      ),
+    /Only main version bumps/,
+  );
+  assert.throws(
+    () =>
+      validatePublicationSource(
+        manifest,
+        { ...env, GITHUB_REF: 'refs/tags/v1.0.0-dev.2' },
+        options,
+      ),
+    /Only main version bumps/,
+  );
+  const later = repo.commit('feat: a later source commit');
+  repo.git('update-ref', 'refs/remotes/origin/main', later);
+  assert.throws(() => validatePublicationSource(manifest, env, options), /selected source/);
 });
 
 function oci(directory, architecture) {
@@ -296,7 +956,7 @@ test('archive packaging round-trips executable, notices and build identity with 
   );
 });
 
-function publication(version = '0.1.0-dev.1') {
+function publication(version = '0.1.0-dev.1', notes = 'Release notes') {
   const manifest = {
     ...parseVersion(version),
     tag: `v${version}`,
@@ -309,7 +969,15 @@ function publication(version = '0.1.0-dev.1') {
     'release-manifest.json': Buffer.from(JSON.stringify(manifest)),
     'package.zip': Buffer.from('verified archive'),
   };
-  const state = { release: null, assets: {}, image: null, events: [], finals: [], fail: null };
+  const state = {
+    tag: null,
+    release: null,
+    assets: {},
+    image: null,
+    events: [],
+    finals: [],
+    fail: null,
+  };
   const event = (name) => {
     state.events.push(name);
     if (state.fail === name) {
@@ -317,7 +985,11 @@ function publication(version = '0.1.0-dev.1') {
     }
   };
   const remote = {
-    tagCommit: async () => 'abc',
+    tagCommit: async () => state.tag,
+    createTag: async (meta) => {
+      event('tag');
+      state.tag = meta.commit;
+    },
     findRelease: async () => state.release,
     asset: async (_release, name) => state.assets[name] ?? null,
     imageDigest: async () => state.image,
@@ -359,14 +1031,116 @@ function publication(version = '0.1.0-dev.1') {
     files,
     state,
     remote,
-    execute: () => publishRelease(manifest, 'Release notes', files, remote),
+    execute: () => publishRelease(manifest, notes, files, remote),
   };
 }
+
+test('the GitHub tag adapter creates an annotated tag on the verified commit and never changes source', async (t) => {
+  const repo = gitFixture(t);
+  const commit = repo.commit('feat: verified release source');
+  const requests = [];
+  const api = async (path, options = {}) => {
+    requests.push({ path, ...options });
+    if (path === '/git/tags') {
+      assert.equal(options.method, 'POST');
+      assert.deepEqual(options.body, {
+        tag: 'v1.0.0-dev.3',
+        message: 'Release 1.0.0-dev.3',
+        object: commit,
+        type: 'commit',
+      });
+      const input = `object ${options.body.object}\ntype commit\ntag ${options.body.tag}\ntagger Release fixture <fixture@example.test> 1700000000 +0000\n\n${options.body.message}\n`;
+      return { sha: run('git', ['mktag'], { cwd: repo.directory, input }) };
+    }
+    if (path === '/git/refs') {
+      assert.equal(options.method, 'POST');
+      assert.equal(options.body.ref, 'refs/tags/v1.0.0-dev.3');
+      repo.git('update-ref', options.body.ref, options.body.sha, '0'.repeat(40));
+      return {};
+    }
+    if (path.startsWith('/git/ref/tags/')) {
+      const name = path.slice('/git/ref/tags/'.length);
+      const ref = repo.git(
+        'for-each-ref',
+        '--format=%(objectname) %(objecttype)',
+        `refs/tags/${name}`,
+      );
+      if (!ref) {
+        assert.equal(options.missing, true);
+        return null;
+      }
+      const [sha, type] = ref.split(' ');
+      return { object: { sha, type } };
+    }
+    assert.ok(path.startsWith('/git/tags/'));
+    const body = repo.git('cat-file', '-p', path.slice('/git/tags/'.length));
+    return {
+      tag: body.match(/^tag (.+)$/m)[1],
+      object: { type: body.match(/^type (.+)$/m)[1], sha: body.match(/^object (.+)$/m)[1] },
+    };
+  };
+  const tags = releaseTags(api);
+  assert.equal(await tags.tagCommit('v1.0.0-dev.3'), null);
+  await tags.createTag({ tag: 'v1.0.0-dev.3', version: '1.0.0-dev.3', commit });
+  assert.equal(await tags.tagCommit('v1.0.0-dev.3'), commit);
+  assert.equal(repo.git('cat-file', '-t', 'refs/tags/v1.0.0-dev.3'), 'tag');
+  assert.equal(repo.git('rev-parse', 'v1.0.0-dev.3^{commit}'), commit);
+  assert.equal(repo.git('rev-parse', 'HEAD'), commit);
+  assert.equal(repo.git('status', '--porcelain'), '');
+  assert.deepEqual(
+    requests.filter((request) => request.method === 'POST').map((request) => request.path),
+    ['/git/tags', '/git/refs'],
+  );
+  repo.git('tag', 'lightweight');
+  await assert.rejects(tags.tagCommit('lightweight'), /must be annotated/);
+});
+
+test('tag creation failures stop before release uploads and retries preserve an existing matching tag', async () => {
+  const p = publication();
+  p.state.fail = 'tag';
+  await assert.rejects(p.execute(), /Interrupted tag/);
+  assert.equal(p.state.tag, null);
+  assert.equal(p.state.release, null);
+  assert.deepEqual(p.state.assets, {});
+  assert.equal(p.state.image, null);
+  p.state.fail = null;
+  p.state.events = [];
+  await p.execute();
+  assert.equal(p.state.tag, p.manifest.commit);
+  assert.equal(p.state.events[0], 'tag');
+  p.state.events = [];
+  await p.execute();
+  assert.ok(!p.state.events.includes('tag'));
+  const missing = publication();
+  missing.remote.createTag = async () => {};
+  await assert.rejects(missing.execute(), /Tag moved after verification/);
+  assert.equal(missing.state.release, null);
+});
+
+test('publication retains the generated preview and authored final bodies unchanged', async () => {
+  const final = releaseNotes(
+    '1.0.0',
+    '## 1.0.0 - 2026-11-10\n\n- Preserve [#42](https://github.com/example/ruphish/pull/42) by @alice.\n',
+    'example/ruphish',
+  );
+  const development = preview([
+    { commit: 'a'.repeat(40), subject: 'fix: preview correction (#43)' },
+  ]);
+  for (const [version, notes] of [
+    ['1.0.0', final],
+    ['1.0.0-dev.3', development],
+  ]) {
+    const p = publication(version, notes);
+    await p.execute();
+    assert.equal(p.state.release.body, notes);
+  }
+});
 
 test('development releases publish all artifacts before release visibility and never advance latest', async () => {
   const p = publication('0.1.0-dev.1');
   await p.execute();
   assert.deepEqual(p.state.events, [
+    'tag',
     'draft',
     'upload:release-manifest.json',
     'upload:package.zip',
@@ -455,18 +1229,28 @@ test('conflicting artifacts, missing published bytes, changed tags and manual ru
   image.state.image = 'sha256:different';
   await assert.rejects(image.execute(), /different content/);
   assert.deepEqual(image.state.events, []);
+  const orphan = publication();
+  orphan.state.image = orphan.manifest.image_digest;
+  await assert.rejects(orphan.execute(), /Published image without matching draft/);
+  assert.deepEqual(orphan.state.events, []);
+  const lostTag = publication();
+  await lostTag.execute();
+  lostTag.state.tag = null;
+  lostTag.state.events = [];
+  await assert.rejects(lostTag.execute(), /Existing release has lost its tag/);
+  assert.deepEqual(lostTag.state.events, []);
   const manual = publication();
   manual.manifest.publish = false;
   await assert.rejects(manual.execute(), /Manual runs/);
   assert.deepEqual(manual.state.events, []);
   const moved = publication();
   moved.remote.tagCommit = async () => 'def';
-  await assert.rejects(moved.execute(), /Tag moved/);
+  await assert.rejects(moved.execute(), /Existing tag points to a different commit/);
   assert.deepEqual(moved.state.events, []);
 });
 
-test('lost acknowledgements do not duplicate completed uploads, image pushes or publication', async () => {
-  for (const operation of ['upload', 'pushImage', 'publish']) {
+test('lost acknowledgements do not duplicate completed tags, uploads, image pushes or publication', async () => {
+  for (const operation of ['createTag', 'upload', 'pushImage', 'publish']) {
     const p = publication('0.1.0');
     const original = p.remote[operation];
     p.remote[operation] = async (...args) => {
@@ -478,6 +1262,7 @@ test('lost acknowledgements do not duplicate completed uploads, image pushes or 
     await p.execute();
     assert.equal(p.state.release.draft, false);
     assert.equal(p.state.events.filter((event) => event === 'draft').length, 1);
+    assert.equal(p.state.events.filter((event) => event === 'tag').length, 1);
     assert.equal(
       p.state.events.filter((event) => event === 'upload:release-manifest.json').length,
       1,
@@ -505,22 +1290,66 @@ test('release gate rejects missing, failed, cancelled and skipped dependencies',
   }
 });
 
-test('actual publication condition excludes manual runs, branch pushes and failed gates', () => {
+test('actual publication condition permits only selected main pushes after successful gates', () => {
   const workflow = readFileSync(new URL('../workflows/release.yml', import.meta.url), 'utf8');
   const condition = workflow.split('\n  publish:')[1].match(/\n {4}if: (.+)/)[1];
   const allowed = (event, ref, publish, gate) =>
     runInNewContext(condition, {
       github: { event_name: event, ref },
       needs: { metadata: { outputs: { publish } }, gate: { result: gate } },
-      startsWith: (value, prefix) => value.startsWith(prefix),
     });
-  assert.equal(allowed('push', 'refs/tags/v0.1.0-dev.1', 'true', 'success'), true);
+  assert.equal(allowed('push', 'refs/heads/main', 'true', 'success'), true);
   assert.equal(allowed('workflow_dispatch', 'refs/tags/v0.1.0', 'true', 'success'), false);
-  assert.equal(allowed('push', 'refs/heads/main', 'true', 'success'), false);
+  assert.equal(allowed('workflow_dispatch', 'refs/heads/main', 'true', 'success'), false);
+  assert.equal(allowed('push', 'refs/heads/feature', 'true', 'success'), false);
+  assert.equal(allowed('push', 'refs/tags/v0.1.0', 'true', 'success'), false);
   assert.equal(allowed('push', 'refs/tags/v0.1.0', 'false', 'success'), false);
+  assert.equal(allowed('push', 'refs/heads/main', 'false', 'success'), false);
   for (const result of ['failure', 'skipped', 'cancelled']) {
-    assert.equal(allowed('push', 'refs/tags/v0.1.0', 'true', result), false);
+    assert.equal(allowed('push', 'refs/heads/main', 'true', result), false);
   }
+});
+
+test('workflow selection skips unchanged versions without hiding failed or incomplete validation', () => {
+  const workflow = readFileSync(
+    new URL('../workflows/release.yml', import.meta.url),
+    'utf8',
+  ).replaceAll('\r\n', '\n');
+  const trigger = workflow.split('\npermissions:')[0];
+  assert.match(trigger, /push:\n {4}branches: \[main\]\n {4}paths: \['Cargo\.toml'\]/);
+  assert.doesNotMatch(trigger, /tags:/);
+  assert.match(workflow, /group: release-\$\{\{ github.sha \}\}/);
+  assert.match(
+    workflow,
+    /group: release-publication\n {6}queue: max\n {6}cancel-in-progress: false/,
+  );
+  const jobs = Object.fromEntries(
+    [...workflow.matchAll(/^ {2}([\w-]+):\n([\s\S]*?)(?=^ {2}[\w-]+:|$(?![\s\S]))/gm)].map(
+      ([, name, body]) => [name, body],
+    ),
+  );
+  const condition = (job) => jobs[job].match(/^ {4}if: (.+)$/m)[1];
+  const evaluate = (job, selected, result = 'success') =>
+    runInNewContext(condition(job), {
+      always: () => true,
+      needs: { metadata: { result, outputs: { selected } } },
+    });
+  for (const job of ['source', 'security']) {
+    assert.equal(evaluate(job, 'true'), true);
+    assert.equal(evaluate(job, 'false'), false);
+    assert.equal(evaluate(job, undefined), false);
+  }
+  assert.equal(evaluate('gate', 'false'), false);
+  for (const result of ['failure', 'cancelled', 'skipped', undefined]) {
+    assert.equal(evaluate('gate', undefined, result), true);
+  }
+  assert.equal(evaluate('gate', 'true'), true);
+  assert.equal(evaluate('gate', undefined), true);
+  assert.equal(
+    (jobs.metadata.match(/if: steps.release.outputs.selected == 'true'/g) ?? []).length,
+    2,
+  );
+  assert.match(jobs.publish, /ref: \$\{\{ needs.metadata.outputs.commit \}\}\n {10}fetch-depth: 0/);
 });
 
 test('release lookup paginates and retains draft entries for resumption', async () => {

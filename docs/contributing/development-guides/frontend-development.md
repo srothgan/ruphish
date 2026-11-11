@@ -62,6 +62,8 @@ Campaign presentation snapshots belong to one campaign view. They may keep old c
 
 Login follows the session monitor's transition and shared destination policy. An obsolete refresh must not replace an in-progress login. Failed login retains the form; confirmed login replaces its history entry. Keep authentication-page loops and required password setup within that existing destination policy.
 
+Use the shared `SessionScreen` for initial session loading, session transitions, and their failures on the net background. The account feature supplies the title, subtitle, loading/failure state, and recovery callback; the screen owns only presentation and its five-second slow-loading timer. Session reads retain the shared transport deadline and can be retried after failure. Transition recovery repeats only the intended navigation, never login or logout. Initial reads and retries belong to the app owner so replacing the card cannot cancel them. Routine session checks preserve mounted content, and rejected login/logout requests keep their existing inline errors.
+
 ## Validate forms
 
 Domain validators own reusable rules. `form_validation.rs` projects browser values into them. Use `FormValidation`, `validation_field` for nested paths, and `ValidationAnchor` for grouped or JavaScript-owned inputs. Shared controls associate diagnostics with fields and focus the first failing control.

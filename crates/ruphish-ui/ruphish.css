@@ -409,6 +409,7 @@
   .login-form > p { color: var(--muted); margin-bottom: var(--s5); }
   .login-form form { display: grid; gap: var(--s5); }
   .login-form button { margin-top: var(--s2); width: 100%; }
+  .login-screen.session-screen { display: grid; place-items: center; min-height: 100vh; min-height: 100dvh; max-width: none; margin: 0; padding: var(--s5); }
 
   /* App shell + sidebar — deep teal-ink, a filled active pill (no left border). */
   .admin-shell { display: grid; grid-template-columns: 244px minmax(0,1fr); min-height: 100vh; transition: grid-template-columns .2s ease; }
@@ -743,6 +744,14 @@
   .dashboard-campaign-meta { display: block; margin-top: var(--s1); color: var(--muted); font-size: var(--fs-sm); font-weight: var(--fw-regular); }
   .dashboard-attention-list { display: grid; gap: var(--s5); list-style: none; padding: 0; margin: 0; }
   .dashboard-attention-list p { margin: var(--s2) 0; }
+  .dashboard-attention > .content-tabs { flex-wrap: wrap; margin-bottom: var(--s5); }
+  .dashboard-drafts { list-style: none; margin: 0; padding: 0; }
+  .dashboard-drafts li { padding-block: var(--s4); overflow-wrap: anywhere; }
+  .dashboard-drafts li + li { border-top: 1px solid var(--line); }
+  .dashboard-drafts li:first-child { padding-top: 0; }
+  .dashboard-drafts li:last-child { padding-bottom: 0; }
+  .dashboard-draft-name { display: block; font-weight: var(--fw-medium); }
+  .dashboard-draft-actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s4); margin-top: var(--s2); }
   .dashboard-next { margin-top: var(--s5); }
   .dashboard-next h3 { font-size: var(--fs-base); margin: 0 0 var(--s2); }
   .dashboard-next a { overflow-wrap: anywhere; }
@@ -828,8 +837,6 @@
 .refresh-indicator.is-fetching { animation: refresh-turn .9s linear infinite; }
 @keyframes refresh-turn { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .refresh-indicator.is-fetching { animation: none; } }
-.campaign-heading-facts { display: flex; flex-wrap: wrap; gap: .5rem 2rem; color: var(--muted); margin: -.5rem 0 1.5rem; }
-.campaign-heading-facts strong { font-weight: var(--fw-semibold); }
 .timeline-labels { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .35rem; font-size: .8rem; color: var(--muted); }
 .timeline-labels span { background: var(--canvas); padding: .15rem .45rem; border-radius: .25rem; }
 .event-edit-dialog { width: min(72rem, calc(100vw - 3rem)); max-width: 72rem; }
@@ -902,7 +909,11 @@
   .query-region { position: relative; min-width: 0; }
   .query-region[data-ready="false"] { min-height: max(12rem, var(--query-content-height, 0px)); }
   .query-placeholder { min-height: inherit; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s4); color: var(--muted); }
-  .query-loading-mark { width: 1.5rem; height: 1.5rem; border: 2px solid var(--line); border-top-color: var(--teal-600); border-radius: 50%; animation: query-spin 1s linear infinite; }
+  .loading-spinner { display: block; width: 1.5rem; height: 1.5rem; border: 2px solid var(--line); border-top-color: var(--teal-600); border-radius: 50%; animation: query-spin 1s linear infinite; }
+  .session-card { display: grid; justify-items: center; gap: var(--s5); width: min(100%, 25rem); padding: var(--s6); text-align: center; background: color-mix(in srgb, var(--paper) 94%, transparent); box-shadow: var(--shadow-pop); }
+  .session-card .loading-spinner { width: 2rem; height: 2rem; border-width: 3px; }
+  .session-card h1 { font-size: var(--fs-lg); }
+  .session-card .session-subtitle { margin: var(--s3) 0 0; color: var(--muted); overflow-wrap: anywhere; }
   .query-content { min-width: 0; display: flow-root; }
   .query-controls { min-width: 0; }
   .button-progress { display: inline-grid; place-items: center; }
@@ -915,7 +926,7 @@
   .query-refresh-error summary { cursor: pointer; padding: var(--s2) var(--s3); }
   .query-refresh-error > div { padding: 0 var(--s4) var(--s4); }
   @keyframes query-spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) { .query-loading-mark { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .loading-spinner { animation: none; } }
 }
 
 @layer primitives {

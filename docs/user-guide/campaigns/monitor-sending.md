@@ -11,6 +11,8 @@ Open a launched campaign's **Sending** tab to see delivery progress. Each recipi
 
 ## Understand the states
 
+The default order brings recipients needing attention to the top. The progress chart counts each recipient once by their current state; repeated attempts do not add recipients.
+
 | State | Meaning and next step |
 | --- | --- |
 | Scheduled or queued | Waiting for the due time, capacity, domain readiness, or sending-profile recovery. Check the schedule and any displayed reason. |
@@ -23,7 +25,11 @@ Open a launched campaign's **Sending** tab to see delivery progress. Each recipi
 | Sending unconfirmed | The message may have been accepted. Check the provider before choosing a recovery action. |
 | Cancelled | Pending work was cancelled. Previously submitted messages cannot be recalled. |
 
-The default **Needs attention first** order brings problems to the top. The progress chart counts each recipient once by their current state; repeated attempts do not add recipients.
+### Delivery failures after sending
+
+A mail server can accept an email and fail to deliver it later, for example because the recipient address does not exist. It may send a delivery-failure notice (bounce) to the sender. Ruphish does not process these later bounces, so a bounce does not change the **Email sent** status or sent counts.
+
+Check the sending mailbox for a failure notice and the provider's delivery logs, using the attempt's Message-ID where available. A rejection during the original SMTP submission is handled by Ruphish's sending-failure or retry logic instead.
 
 ## Investigate a problem
 
