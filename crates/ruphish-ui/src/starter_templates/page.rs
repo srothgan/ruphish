@@ -780,20 +780,14 @@ fn preview_panel(
                 <Show when=move || preview.with(|p| p.loading)>
                     <p role="status">{tr!(ui.starter_preview_loading)}</p>
                 </Show>
-                {move || {
-                    preview
-                        .with(|p| p.error.clone())
-                        .map(|error| {
-                            view! {
-                                <p class="form-message error has-content" role="alert">
-                                    {error}
-                                </p>
-                                <ActionButton on_click=move |_| {
-                                    retry.update(|v| *v += 1)
-                                }>{tr!(ui.starter_retry_preview)}</ActionButton>
-                            }
-                        })
-                }}
+                <crate::shared::feedback::FeedbackRegion text=Signal::derive(move || {
+                    preview.with(|p| p.error.clone().unwrap_or_default())
+                }) />
+                <Show when=move || preview.with(|p| p.error.is_some())>
+                    <ActionButton on_click=move |_| {
+                        retry.update(|v| *v += 1)
+                    }>{tr!(ui.starter_retry_preview)}</ActionButton>
+                </Show>
                 {move || {
                     preview
                         .with(|p| p.html.clone())

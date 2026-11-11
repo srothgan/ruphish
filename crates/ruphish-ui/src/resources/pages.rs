@@ -1310,24 +1310,14 @@ fn content_workspace(
                 <Show when=move || preview.with(|p| p.loading)>
                     <p role="status">{tr!(ui.rendering_preview)}</p>
                 </Show>
-                {move || {
-                    preview
-                        .get()
-                        .error
-                        .map(|error| {
-                            view! {
-                                <p class="form-message error" role="alert">
-                                    {error}
-                                </p>
-                                <ActionButton
-                                    kind="button"
-                                    on_click=move |_| retry.update(|v| *v += 1)
-                                >
-                                    {tr!(ui.retry_preview)}
-                                </ActionButton>
-                            }
-                        })
-                }}
+                <crate::shared::feedback::FeedbackRegion text=Signal::derive(move || {
+                    preview.with(|p| p.error.clone().unwrap_or_default())
+                }) />
+                <Show when=move || preview.with(|p| p.error.is_some())>
+                    <ActionButton kind="button" on_click=move |_| retry.update(|v| *v += 1)>
+                        {tr!(ui.retry_preview)}
+                    </ActionButton>
+                </Show>
                 {move || {
                     preview
                         .get()
@@ -2476,10 +2466,18 @@ pub(crate) fn page_warnings(
     warnings: Signal<Vec<ruphish_contracts::resources::details::PageWarning>>,
 ) -> impl IntoView {
     let i18n = crate::localization::use_i18n();
+    let dismissed = RwSignal::new(false);
+    Effect::new(move |_| {
+        warnings.track();
+        dismissed.set(false);
+    });
     view! {
-        <Show when=move || !warnings.get().is_empty()>
-            <div class="form-message" role="status">
-                <p>{tr!(ui.landing_page_warnings)}</p>
+        <Show when=move || !warnings.get().is_empty() && !dismissed.get()>
+            <crate::shared::feedback::FeedbackRegion
+                text=trs!(ui.landing_page_warnings)
+                tone=crate::shared::feedback::FeedbackTone::Warning
+                on_dismiss=Callback::new(move |()| dismissed.set(true))
+            >
                 <ul>
                     {move || {
                         warnings
@@ -2527,7 +2525,7 @@ pub(crate) fn page_warnings(
                             .collect_view()
                     }}
                 </ul>
-            </div>
+            </crate::shared::feedback::FeedbackRegion>
         </Show>
     }
 }

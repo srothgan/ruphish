@@ -64,6 +64,10 @@ Login follows the session monitor's transition and shared destination policy. An
 
 Use the shared `SessionScreen` for initial session loading, session transitions, and their failures on the net background. The account feature supplies the title, subtitle, loading/failure state, and recovery callback; the screen owns only presentation and its five-second slow-loading timer. Session reads retain the shared transport deadline and can be retried after failure. Transition recovery repeats only the intended navigation, never login or logout. Initial reads and retries belong to the app owner so replacing the card cannot cancel them. Routine session checks preserve mounted content, and rejected login/logout requests keep their existing inline errors.
 
+`shared::feedback::Message` owns operation-message dismissal and five-second success expiry, including cancellation of obsolete timers and cleanup when its owner ends. Keep it with the operation owner rather than creating another copy for a confirmation dialog. Use `FeedbackRegion` when typed feature state already owns a failure, and dismiss only its displayed diagnostic. Preserve pending requests, retries, drafts, and recovery controls independently of notification visibility. See the [feedback policy](design-system.md#state-feedback-and-accessibility).
+
+Capture `shared::tasks::ViewTasks` at the page boundary for requests that must survive a confirmation dialog closing. Spawning a cancellable task under the dialog's owner would cancel the operation as soon as confirmation closes. Page-owned tasks still cancel when the page is removed.
+
 ## Validate forms
 
 Domain validators own reusable rules. `form_validation.rs` projects browser values into them. Use `FormValidation`, `validation_field` for nested paths, and `ValidationAnchor` for grouped or JavaScript-owned inputs. Shared controls associate diagnostics with fields and focus the first failing control.

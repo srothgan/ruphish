@@ -14,6 +14,7 @@ const dashboardTabs = scenario.startsWith('dashboard-');
 const longDraftName =
   'Quarterly security awareness follow-up for colleagues joining the international customer support and operations teams';
 const settingsHidden = scenario.startsWith('settings-hidden-');
+const settingsFeedback = scenario === 'settings-feedback';
 const recipientEditor = ['recipient-editor', 'recipient-create', 'recipient-duplicate'].includes(
   scenario,
 );
@@ -96,6 +97,7 @@ const path =
     'form-password': '/user/password',
     'form-preferences': '/user/settings',
     'form-settings': '/settings',
+    'settings-feedback': '/settings',
     'settings-hidden-validity': '/settings',
     'settings-hidden-recheck': '/settings',
     'form-campaign': '/campaigns/new',
@@ -186,6 +188,7 @@ if (
   scenario.startsWith('auth-') ||
   dashboardTabs ||
   settingsHidden ||
+  settingsFeedback ||
   scenario.startsWith('form-') ||
   scenario.startsWith('detail-') ||
   scenario.startsWith('profile-test-') ||
@@ -436,6 +439,8 @@ let authSessionFailure = {
 let releaseValidation;
 const featureOverrides = { webhooks_enabled: true, reporting_mailboxes_enabled: true };
 let failSave = false;
+let holdSettingsSave = false;
+let releaseSettingsSave;
 const writes = [];
 const recoveryPath = {
   'conflict-draft': '/api/campaign-drafts/1',
@@ -456,6 +461,20 @@ let releaseRecoveryRead;
 globalThis.fetch = async (request, options) => {
   const url = new URL(request.url);
   requests.push(url.pathname + url.search);
+  if (settingsFeedback && url.pathname === '/api/settings' && request.method === 'PUT') {
+    writes.push({ body: await request.clone().json(), revision: request.headers.get('if-match') });
+    if (holdSettingsSave) {
+      await new Promise((resolve) => {
+        releaseSettingsSave = resolve;
+      });
+    }
+    if (failSave) {
+      return new Response(JSON.stringify({ success: false, code: 'SERVICE_BUSY' }), {
+        status: 503,
+      });
+    }
+    return api.execute(request, options);
+  }
   if (
     scenario.startsWith('profile-test-') &&
     /^\/api\/smtp\/\d+\/tests$/u.test(url.pathname) &&
@@ -845,6 +864,7 @@ async function until(condition) {
       (scenario.startsWith('auth-') ||
         dashboardTabs ||
         settingsHidden ||
+        settingsFeedback ||
         scenario === 'campaign-wizard' ||
         scenario === 'sort-directory' ||
         recipientEditor ||
@@ -877,11 +897,140 @@ const settled = () =>
   regions().every((e) => e.dataset.ready === 'true' && e.getAttribute('aria-busy') === 'false');
 const resultsPath = '/campaigns/2/results';
 
+if (settingsFeedback) {
+  assert.equal(demo, false, 'settings feedback regressions need the normal WASM bundle');
+  const form = () => document.querySelector('.settings-stack form');
+  const submit = () => form().querySelector('button[type="submit"]');
+  const checkbox = () =>
+    [...form().querySelectorAll('label')]
+      .find((label) => label.textContent.includes('Require successful sending-profile test'))
+      .querySelector('input');
+  const dialog = () => document.querySelector('dialog[open]');
+  const success = () => document.querySelector('.form-message.success.has-content');
+  const error = () => document.querySelector('.form-message.error.has-content');
+  const button = (parent, label) =>
+    [...parent.querySelectorAll('button')].find((node) => node.textContent.trim() === label);
+  const savedSettings = async () =>
+    (await api.execute(new Request('https://admin.example.test/api/settings'))).json();
+  const openConfirmation = async () => {
+    await until(() => !submit().disabled);
+    submit().click();
+    await until(dialog);
+    assert.equal(
+      dialog().querySelector('.feedback-region'),
+      null,
+      'confirmation owns no result feedback',
+    );
+  };
+  const save = async () => {
+    await openConfirmation();
+    button(dialog(), 'Save changes').click();
+    await until(() => !dialog() && success());
+    assert.equal(error(), null);
+    assert.equal(submit().disabled, true, 'confirmed response establishes the saved baseline');
+    assert.equal((await savedSettings()).policy.sending_profile_test_required, checkbox().checked);
+  };
+  const dismiss = async (message) => {
+    const close = message.querySelector('button[aria-label="Dismiss message"]');
+    assert.ok(close, 'feedback has an accessible close control');
+    close.click();
+    await until(() => !message.classList.contains('has-content'));
+  };
+  await until(() => settled() && form() && checkbox());
+  assert.equal(success(), null, 'reading settings never reports a save');
+  assert.equal(submit().disabled, true);
+  const initial = checkbox().checked;
+  checkbox().click();
+  await openConfirmation();
+  assert.equal(writes.length, 0, 'opening confirmation cannot save');
+  button(dialog(), 'Cancel').click();
+  await until(() => !dialog());
+  assert.equal(writes.length, 0, 'cancelling cannot save');
+  assert.equal(checkbox().checked, !initial, 'cancelling preserves the unsaved draft');
+  assert.equal((await savedSettings()).policy.sending_profile_test_required, initial);
+
+  holdSettingsSave = true;
+  await openConfirmation();
+  const confirm = button(dialog(), 'Save changes');
+  confirm.click();
+  confirm.click();
+  await until(() => writes.length === 1 && releaseSettingsSave && !dialog());
+  assert.equal(success(), null, 'approval is not a successful save');
+  assert.equal(error(), null);
+  assert.ok(
+    [...document.querySelectorAll('[role="status"]')].some(
+      (node) => node.textContent === 'Saving…',
+    ),
+  );
+  assert.equal(form().querySelector('fieldset').disabled, true);
+  form().dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
+  await nextTurn();
+  assert.equal(writes.length, 1, 'pending saves cannot be duplicated');
+  holdSettingsSave = false;
+  releaseSettingsSave();
+  await until(success);
+  assert.match(success().textContent, /Company settings saved\./);
+  assert.equal(writes[0].body.policy.sending_profile_test_required, !initial);
+  await dismiss(success());
+  assert.equal(success(), null, 'success can be dismissed before its timeout');
+
+  checkbox().click();
+  await save();
+  const started = performance.now();
+  await new Promise((resolve) => setTimeout(resolve, 4500));
+  assert.ok(success(), 'success remains visible before five seconds');
+  await until(() => !success());
+  assert.ok(performance.now() - started >= 4900, 'success expires after five seconds');
+
+  checkbox().click();
+  await save();
+  checkbox().click();
+  await until(() => !success());
+  assert.equal(submit().disabled, false, 'new edits invalidate the previous success');
+  failSave = true;
+  await openConfirmation();
+  assert.equal(success(), null);
+  button(dialog(), 'Save changes').click();
+  await until(() => !dialog() && error());
+  assert.match(error().textContent, /SERVICE_BUSY/);
+  assert.equal(checkbox().checked, initial, 'failed save preserves the draft');
+  assert.equal((await savedSettings()).policy.sending_profile_test_required, !initial);
+  await new Promise((resolve) => setTimeout(resolve, 5200));
+  assert.ok(
+    error(),
+    'failures persist past five seconds and cannot be cleared by an old success timer',
+  );
+  await dismiss(error());
+  assert.equal(submit().disabled, false, 'dismissing feedback cannot mark the draft saved');
+
+  await openConfirmation();
+  button(dialog(), 'Save changes').click();
+  await until(error);
+  failSave = false;
+  await openConfirmation();
+  assert.equal(error(), null, 'a new attempt supersedes the previous failure');
+  button(dialog(), 'Save changes').click();
+  await until(success);
+  assert.equal((await savedSettings()).policy.sending_profile_test_required, initial);
+  assert.equal(submit().disabled, true);
+  assert.deepEqual(
+    writes.map((write) => write.revision?.replaceAll('"', '')),
+    ['1', '2', '3', '4', '4', '4'],
+  );
+  const lateErrors = [];
+  win.addEventListener('error', (event) => lateErrors.push(event.error ?? event.message));
+  document.querySelector('.admin-nav a[href="/campaigns"]').click();
+  await until(() => win.location.pathname === '/campaigns' && settled());
+  await new Promise((resolve) => setTimeout(resolve, 5200));
+  assert.deepEqual(lateErrors, [], 'leaving the page cancels its success timer');
+  process.exit(0);
+}
+
 if (scenario.startsWith('profile-test-')) {
   const button = (label) =>
     [...document.querySelectorAll('button')].find((node) => node.textContent.trim() === label);
   const german = scenario === 'profile-test-german';
-  const menuLabel = german ? 'Prüfen & testen' : 'Check & test';
+  const menuLabel = 'Tests';
   const menu = () => document.querySelector(`.action-menu-panel[aria-label="${menuLabel}"]`);
   const results = () =>
     document.querySelector(
@@ -902,15 +1051,30 @@ if (scenario.startsWith('profile-test-')) {
   assert.equal(menu().hidden, true, 'Testing options are grouped behind one trigger');
   assert.deepEqual(
     [...menu().querySelectorAll('button')].map((node) => node.textContent.trim()),
-    german ? ['Verbindung prüfen', 'Test-E-Mail senden'] : ['Test connection', 'Send test email'],
+    german ? ['Verbindung testen', 'Test-E-Mail senden'] : ['Test connection', 'Send test email'],
   );
   if (german) {
+    await choose('Verbindung testen');
+    await until(
+      () =>
+        !button(menuLabel).disabled && document.querySelector('.form-message.success.has-content'),
+    );
+    assert.match(
+      document.querySelector('.form-message.success.has-content').textContent,
+      /Verbindungstest erfolgreich\. Keine E-Mail gesendet\./,
+    );
+    assert.equal(profileTestWrites.length, 1);
+    assert.equal(profileTestWrites[0].kind, 'connection');
     await choose('Test-E-Mail senden');
     await until(() => document.querySelector('#profile-test-email'));
     const panel = document.querySelector('#profile-test-email');
     assert.equal(panel.querySelector('h2').textContent, 'Test-E-Mail senden');
     assert.ok(panel.closest('.card'));
-    assert.equal(profileTestWrites.length, 0, 'Opening the recipient card sends no email');
+    assert.equal(
+      profileTestWrites.filter((request) => request.kind === 'email').length,
+      0,
+      'Opening the recipient card sends no email',
+    );
     process.exit(0);
   }
   assert.equal(document.querySelector('dialog[open]'), null);
@@ -941,6 +1105,10 @@ if (scenario.startsWith('profile-test-')) {
   if (scenario === 'profile-test-happy') {
     await choose('Test connection');
     await until(() => results().textContent.includes('Passed') && !button(menuLabel).disabled);
+    assert.match(
+      document.querySelector('.form-message.success.has-content').textContent,
+      /Connection test passed\. No email sent\./,
+    );
     assert.equal(
       document.querySelector('#profile-test-email'),
       null,
@@ -1662,6 +1830,36 @@ if (scenario.startsWith('detail-')) {
       'empty history hides its table and sorting controls',
     );
     assert.match(history.textContent, /No verification history available/);
+  }
+  if (scenario === 'detail-mailbox' || scenario === 'detail-webhook') {
+    const mailbox = scenario === 'detail-mailbox';
+    const label = mailbox ? 'Test connection' : 'Validate connection';
+    const action = () =>
+      [...document.querySelectorAll('button')].find((node) => node.textContent.trim() === label);
+    await until(() => action() && !action().disabled);
+    assert.equal(
+      [...document.querySelectorAll('button')].some(
+        (node) => node.textContent.trim() === (mailbox ? 'Validate connection' : 'Test connection'),
+      ),
+      false,
+    );
+    action().click();
+    await until(() => document.querySelector('.form-message.success.has-content'));
+    assert.equal(
+      document.querySelector('.form-message.success.has-content .form-message-text').textContent,
+      mailbox
+        ? 'Connection test passed. Authentication and folder access checked. No reports imported.'
+        : 'Connection validated successfully.',
+    );
+    assert.ok(
+      requests.includes(
+        mailbox ? '/api/reporting-mailboxes/1/validate' : '/api/webhooks/1/validate',
+      ),
+    );
+    assert.ok(
+      !requests.includes('/api/reporting-mailboxes/1/check'),
+      'Connection testing cannot queue report processing',
+    );
   }
   process.exit(0);
 }
@@ -2425,6 +2623,18 @@ if (scenario.startsWith('form-')) {
     await until(() => results().querySelector('li'));
     assert.ok(results().querySelector('li').textContent.includes('Passwortfeld ist deaktiviert'));
     assert.equal(results().textContent.includes('Keine Warnungen'), false);
+    results().querySelector('.form-message.warning button[aria-label="Meldung schließen"]').click();
+    await until(() => !results().querySelector('.form-message.warning.has-content'));
+    assert.equal(
+      results().textContent.includes('Keine Warnungen'),
+      false,
+      'dismissal cannot report a clean document',
+    );
+    assert.ok(editor.state.sliceDoc().includes('Changed again while checking'));
+    check.click();
+    await until(() => releaseValidation);
+    releaseValidation([{ code: 'password_disabled', control: 1 }]);
+    await until(() => results().querySelector('.form-message.warning.has-content li'));
     const modeButtons = form.querySelectorAll('.editor-mode button');
     modeButtons[1].click();
     await until(() => check.disabled);

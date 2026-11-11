@@ -877,7 +877,11 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                     api.notifications.show(DemoNotice::External);
                     message.status(
                         if operation == "validate" {
-                            leptos_i18n::t_string!(i18n, ui.connection_validated_successfully)
+                            if kind.webhook() {
+                                leptos_i18n::t_string!(i18n, ui.connection_validated_successfully)
+                            } else {
+                                leptos_i18n::t_string!(i18n, ui.mailbox_connection_test_passed)
+                            }
                         } else {
                             leptos_i18n::t_string!(
                                 i18n,
@@ -913,8 +917,10 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                                 {move || {
                                     if busy.get() {
                                         leptos_i18n::t_string!(i18n, ui.working)
-                                    } else {
+                                    } else if kind.webhook() {
                                         leptos_i18n::t_string!(i18n, ui.validate_connection)
+                                    } else {
+                                        leptos_i18n::t_string!(i18n, ui.test_connection)
                                     }
                                 }}
                             </ActionButton>

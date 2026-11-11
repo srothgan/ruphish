@@ -158,6 +158,12 @@ Show progress where work is happening. Distinguish a queued or running operation
 
 Errors identify what failed and how to recover. Place field errors near their fields and use a broader message for page-level failures. Preserve the user's entered values. Announce significant errors and results accessibly without relying on color alone.
 
+Use shared feedback for operation results. Success messages have a close control and disappear after five seconds; publishing another result replaces the old message and cancels its timer. Failures and nonblocking warnings have the same close control and remain until dismissed or superseded. Dismissal hides feedback without changing the operation's outcome; preview retry controls remain available, and dismissing document warnings does not report a clean document. Keep field validation, failed-load recovery, and ongoing blocking conditions visible according to their underlying state.
+
+Confirmation dialogs collect approval, not results from earlier operations. Company settings closes its policy confirmation when approved and presents saving progress and the eventual result on the page. New edits clear an earlier save success.
+
+Use `BackLink` for parent navigation. It is a secondary link control with a left arrow, normal control sizing, and an explicit destination label. Preserve the destination and draft-navigation protection.
+
 Keep focus visible, labels associated with controls and reading order consistent with visual order. Floating panels support predictable dismissal. Respect reduced-motion preferences; animation should clarify a response or ongoing activity.
 
 ## Charts and data presentation

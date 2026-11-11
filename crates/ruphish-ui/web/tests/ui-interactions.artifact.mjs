@@ -84,6 +84,7 @@ for (const scenario of [
   'form-password',
   'form-preferences',
   'form-settings',
+  'settings-feedback',
   'settings-hidden-validity',
   'settings-hidden-recheck',
   'form-campaign',

@@ -28,8 +28,8 @@ Your administrator can require a successful profile test before new campaigns la
 ## Check the connection and send a test
 
 1. Open the saved profile's view. Testing is available here, without entering **Edit**.
-2. Open **Check & test** and choose **Test connection** to check connectivity and authentication immediately, without sending a message.
-3. Open **Check & test** and choose **Send test email** to reveal its separate recipient card above the profile settings.
+2. Open **Tests** and choose **Test connection** to check connectivity and any configured authentication immediately, without sending a message.
+3. Open **Tests** and choose **Send test email** to reveal its separate recipient card above the profile settings.
 4. Enter an inbox you control and choose **Send test email**. Ruphish sends a fixed plain-text message; no template, landing page, URL, or personal details are required.
 
 A successful connection check does not test whether the provider accepts your message or sender. A test email checks submission, but the final check is finding it in the recipient inbox.

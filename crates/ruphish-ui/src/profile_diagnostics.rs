@@ -120,11 +120,7 @@ impl Testing {
                                 });
                             #[cfg(not(feature = "demo"))]
                             self.message.status(if attempt.kind == Kind::Connection {
-                                leptos_i18n::t_string!(
-                                    i18n,
-                                    ui.connection_and_authentication_verified_no_email_sent
-                                )
-                                .into()
+                                leptos_i18n::t_string!(i18n, ui.smtp_connection_test_passed).into()
                             } else {
                                 leptos_i18n::t_string!(
                                     i18n,
@@ -169,9 +165,7 @@ impl Testing {
                             if self.pending.with(Option::is_some) {
                                 leptos_i18n::t_string!(self.api.i18n, ui.profile_test_check_result)
                             } else {
-                                leptos_i18n::t_string!(
-                                    self.api.i18n, ui.profile_test_check_connection
-                                )
+                                leptos_i18n::t_string!(self.api.i18n, ui.test_connection)
                             }
                         }}
                     </ActionButton>

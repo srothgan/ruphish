@@ -6,9 +6,18 @@ use crate::shared::components::*;
 use crate::shared::feedback::Message;
 use crate::tr;
 use crate::trs;
-use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
+use leptos::prelude::*;
 use ruphish_contracts::settings::{ClosurePreview, ClosureResult, Features, Settings};
 use serde_json::json;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Activity {
+    Idle,
+    ConfirmingPolicy,
+    SavingPolicy,
+    PreviewingClosure,
+    ClosingCampaigns,
+}
 
 pub(crate) fn disabled(admin: bool) -> impl IntoView {
     view! {
@@ -39,9 +48,15 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
         draft.with(|d| d.as_ref().map(|d| d.recheck.clone()).unwrap_or_default())
     });
     let token = StoredValue::new(token);
-    let busy = RwSignal::new(false);
+    let tasks = crate::shared::tasks::ViewTasks::default();
+    let activity = RwSignal::new(Activity::Idle);
+    let busy = Signal::derive(move || {
+        matches!(
+            activity.get(),
+            Activity::SavingPolicy | Activity::PreviewingClosure | Activity::ClosingCampaigns
+        )
+    });
     let message = Message::new(String::new());
-    let confirming_policy = RwSignal::new(false);
     let closure = RwSignal::new(None::<ClosurePreview>);
     let confirmation = RwSignal::new(String::new());
     let closure_message = Message::new(String::new());
@@ -93,7 +108,7 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
         report
     });
     let save = Callback::new(move |()| {
-        if busy.get_untracked() || conflict() {
+        if activity.get_untracked() != Activity::ConfirmingPolicy || !dirty() || conflict() {
             return;
         }
         if !validation.check() {
@@ -103,8 +118,9 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
             return;
         };
         let ticket = validation.ticket();
-        busy.set(true);
-        spawn_local(async move {
+        message.clear();
+        activity.set(Activity::SavingPolicy);
+        tasks.spawn(async move {
             let result = api
                 .resource_response(
                     "PUT",
@@ -125,7 +141,6 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                     draft.set(Some(Draft::from_saved(saved.clone())));
                     queries.settings.confirmed((), |value| *value = saved);
                     queries.policy_changed();
-                    confirming_policy.set(false);
                     message.status(leptos_i18n::t_string!(i18n, ui.settings_saved).to_owned());
                 }
                 Err(error) => {
@@ -133,15 +148,17 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                     message.error(error.message);
                 }
             }
-            busy.set(false);
+            activity.set(Activity::Idle);
         });
     });
     let preview = move |_| {
         if busy.get_untracked() {
             return;
         }
-        busy.set(true);
-        spawn_local(async move {
+        message.clear();
+        closure_message.clear();
+        activity.set(Activity::PreviewingClosure);
+        tasks.spawn(async move {
             match api
                 .resource(
                     "POST",
@@ -160,7 +177,7 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                 }
                 Err(error) => message.error(error),
             }
-            busy.set(false);
+            activity.set(Activity::Idle);
         });
     };
     let close = Callback::new(move |()| {
@@ -170,8 +187,9 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
         let Some(review) = closure.get_untracked() else {
             return;
         };
-        busy.set(true);
-        spawn_local(async move {
+        closure_message.clear();
+        activity.set(Activity::ClosingCampaigns);
+        tasks.spawn(async move {
             match api
                 .resource(
                     "POST",
@@ -194,7 +212,7 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                 }
                 Err(error) => closure_message.error(error),
             }
-            busy.set(false);
+            activity.set(Activity::Idle);
         });
     });
     view! {
@@ -203,6 +221,9 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                 <RefreshButton fetching=read.fetching on_refresh=read.refresh disabled=busy />
             </PageHeader>
             {message.view()}
+            <Show when=move || activity.get() == Activity::SavingPolicy>
+                <p role="status">{tr!(ui.saving)}</p>
+            </Show>
             <ValidationSummary form=validation />
             <QueryBoundary
                 fetching=read.fetching
@@ -214,10 +235,16 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                 <div class="settings-stack">
                     <form
                         novalidate
+                        on:input=move |_| message.clear_status()
+                        on:change=move |_| message.clear_status()
                         on:submit=move |event: leptos::ev::SubmitEvent| {
                             event.prevent_default();
-                            if !conflict() && validation.check() {
-                                confirming_policy.set(true);
+                            if activity.get_untracked() == Activity::Idle && dirty() && !conflict()
+                            {
+                                message.clear();
+                                if validation.check() {
+                                    activity.set(Activity::ConfirmingPolicy);
+                                }
                             }
                         }
                     >
@@ -380,14 +407,17 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                                     <ActionButton
                                         kind="submit"
                                         style=ButtonStyle::Primary
-                                        disabled=Signal::derive(move || !dirty() || conflict())
+                                        disabled=Signal::derive(move || {
+                                            busy.get() || !dirty() || conflict()
+                                        })
                                     >
                                         {tr!(ui.save_changes)}
                                     </ActionButton>
                                     <ActionButton on_click=move |_| {
                                         if let Some(saved) = read.data.get_untracked() {
                                             draft.set(Some(Draft::from_saved(saved)));
-                                            confirming_policy.set(false);
+                                            activity.set(Activity::Idle);
+                                            message.clear();
                                         }
                                     }>{tr!(ui.settings_discard)}</ActionButton>
                                 </div>
@@ -409,19 +439,18 @@ pub(crate) fn page(api: Api, token: String) -> impl IntoView {
                         </ActionButton>
                     </Card>
                 </div>
-                <Show when=move || confirming_policy.get()>
+                <Show when=move || activity.get() == Activity::ConfirmingPolicy>
                     <Dialog
                         title=trs!(ui.settings_confirm_title)
                         busy=busy
-                        on_cancel=Callback::new(move |()| confirming_policy.set(false))
+                        on_cancel=Callback::new(move |()| activity.set(Activity::Idle))
                     >
                         <h2>{tr!(ui.settings_confirm_title)}</h2>
                         <p>{tr!(ui.settings_confirm_description)}</p>
-                        {message.view()}
                         <div class="confirmation-actions">
                             <ActionButton
                                 disabled=busy
-                                on_click=move |_| confirming_policy.set(false)
+                                on_click=move |_| activity.set(Activity::Idle)
                             >
                                 {tr!(ui.cancel)}
                             </ActionButton>
