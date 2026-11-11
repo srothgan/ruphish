@@ -1,8 +1,8 @@
 //! Production leptos-fetch adapter under controlled request completion order.
 use leptos::prelude::*;
 use leptos_fetch::{QueryClient, QueryOptions};
-use ruphish_ui::api_error::ApiError;
-use ruphish_ui::query::Query;
+use ruphish_ui::api::error::ApiError;
+use ruphish_ui::api::query::Query;
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -299,7 +299,7 @@ async fn missing_and_forbidden_refreshes_remove_stale_records_and_recover_on_suc
         let query = Query::new(client(), move |key: u8| {
             let status = if key == 1 { status.get() } else { 200 };
             async move {
-                ruphish_ui::api_error::response(
+                ruphish_ui::api::error::response(
                     status,
                     if status == 200 {
                         Ok(serde_json::json!({"id":key,"name":"saved"}))
@@ -582,8 +582,10 @@ async fn deleted_detail_is_not_reused_when_reconciliation_fails() {
 
 #[wasm_bindgen_test]
 async fn confirmed_resource_saves_survive_late_reads_and_failed_refreshes() {
-    use ruphish_contracts::resource_details::{Kind, decode};
-    use ruphish_ui::resource_inventory::{SummaryRow, saved};
+    use ruphish_contracts::resources::details::Kind;
+    use ruphish_contracts::resources::details::decode;
+    use ruphish_ui::resources::inventory::SummaryRow;
+    use ruphish_ui::resources::inventory::saved;
     use serde_json::json;
 
     super::locale_window::install();
@@ -989,8 +991,8 @@ async fn refresh_indicator_tracks_every_held_request_without_clearing_confirmed_
             }
         });
         let view = query.observe(|| 1);
-        let group = ruphish_ui::query::RefreshState::provide();
-        ruphish_ui::query::RefreshState::register(view.fetching);
+        let group = ruphish_ui::api::query::RefreshState::provide();
+        ruphish_ui::api::query::RefreshState::register(view.fetching);
         let fetching = group.fetching();
         let indicator = RwSignal::new(false);
         Effect::new(move |_| indicator.set(fetching.get()));
@@ -1031,7 +1033,8 @@ async fn refresh_indicator_tracks_every_held_request_without_clearing_confirmed_
 
 #[wasm_bindgen_test]
 async fn presentation_and_export_readiness_follow_current_filter_without_discarding_refresh_data() {
-    use ruphish_ui::{query::RefreshState, read_state::ReadState};
+    use ruphish_ui::api::query::RefreshState;
+    use ruphish_ui::api::read_state::ReadState;
     super::locale_window::install();
     let _ = any_spawner::Executor::init_wasm_bindgen();
     let owner = Owner::new();
@@ -1293,7 +1296,7 @@ async fn unknown_campaign_state_waits_for_explicit_retry_and_completed_state_nev
 #[wasm_bindgen_test]
 async fn settings_drafts_recover_across_sessions_refresh_failures_and_late_reads() {
     use ruphish_contracts::settings::{Policy, Settings};
-    use ruphish_ui::settings_state::Draft;
+    use ruphish_ui::settings::draft::Draft;
     super::locale_window::install();
     let _ = any_spawner::Executor::init_wasm_bindgen();
     let owner = Owner::new();

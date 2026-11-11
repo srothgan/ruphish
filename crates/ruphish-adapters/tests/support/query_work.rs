@@ -7,18 +7,18 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
-#[path = "../../src/mysql/worker_sql.rs"]
+#[path = "../../src/database/mysql/worker_sql.rs"]
 mod mysql_worker;
-#[path = "../../src/postgres/worker_sql.rs"]
+#[path = "../../src/database/postgres/worker_sql.rs"]
 mod postgres_worker;
-#[path = "../../src/sqlite/worker_sql.rs"]
+#[path = "../../src/database/sqlite/worker_sql.rs"]
 mod sqlite_worker;
 
-#[path = "../../src/mysql/inventory_sql.rs"]
+#[path = "../../src/database/mysql/inventory_sql.rs"]
 mod mysql_inventory;
-#[path = "../../src/postgres/inventory_sql.rs"]
+#[path = "../../src/database/postgres/inventory_sql.rs"]
 mod postgres_inventory;
-#[path = "../../src/sqlite/inventory_sql.rs"]
+#[path = "../../src/database/sqlite/inventory_sql.rs"]
 mod sqlite_inventory;
 
 // These connections inspect real engines; no query or transaction is mocked.
@@ -573,7 +573,7 @@ async fn fairness(inspect: &mut Inspector) {
     }
 }
 
-#[path = "../../src/resource_summaries.rs"]
+#[path = "../../src/resources/summaries.rs"]
 mod summary_sql;
 
 #[tokio::test]

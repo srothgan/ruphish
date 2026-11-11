@@ -23,6 +23,14 @@ The administration browser calls HTTP endpoints; it never connects directly to a
 
 `tests/workspace.rs` verifies permitted direct workspace dependencies. Keep business rules in the domain, use cases and provider interfaces in the application layer, and external-system details in adapters. The executable wires these pieces together and owns their lifetime.
 
+## Module organization
+
+Related modules live under their owning feature or responsibility. Campaign contracts, for example, group commands, requests, details, workflow responses, and reads under `ruphish-contracts/src/campaign/`. Database providers are private children of `ruphish-adapters/src/database/`; each provider groups startup/schema preparation, campaigns, and integration workers without exposing its pool through the facade.
+
+The UI library owns both browser views and the state exercised by native tests. Feature folders such as `campaigns/`, `resources/`, and `overview/` keep their queries and state beside their views. Browser-only modules are gated to `wasm32`; the binary only calls the library's mounting entry point. Shared controls remain under `shared/components/`, with shared forms, dates, navigation, and state under `shared/` and transport/query infrastructure under `api/`.
+
+Editable recipient-group rows belong to `resources/recipients/`. Campaign recipient analysis and delivery history belong to `campaigns/results/` and `campaigns/delivery/`. Saved sender-profile connection checks and test emails use production `profile_diagnostics` modules; automated regressions remain in test modules and test targets.
+
 ## Follow a resource edit
 
 1. The UI loads a browser-safe response and keeps the editable form separate from the confirmed record.

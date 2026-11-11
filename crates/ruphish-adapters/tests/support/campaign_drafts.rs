@@ -1,7 +1,9 @@
 //! Shared real-provider workflows, with independent expected state and competing writers.
 use super::*;
 use ruphish_application::campaign::drafts::Configuration;
-use ruphish_domain::campaign_draft::{Policy as DraftPolicy, Reference, Selections};
+use ruphish_domain::campaign::draft::Policy as DraftPolicy;
+use ruphish_domain::campaign::draft::Reference;
+use ruphish_domain::campaign::draft::Selections;
 
 pub(super) async fn exercise(
     db: &Database,

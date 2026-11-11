@@ -1,4 +1,4 @@
-import { TemplateVault } from './template-html.mjs';
+import { TemplateVault } from './editor/template-html.mjs';
 
 // Transform a copy only. No repository marker or new template syntax survives import.
 export function preparePage(source, prefill, brandingJson, logo, staticContent = false) {

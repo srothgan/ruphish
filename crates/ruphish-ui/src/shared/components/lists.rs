@@ -1,7 +1,8 @@
 use super::TextInput;
 use super::{ActionButton, EmptyState, Field, FormFooter};
+use crate::tr;
+use crate::trs;
 use leptos::prelude::*;
-use ruphish_ui::{tr, trs};
 
 /// One toolbar for resources, integrations and account management.
 #[component]
@@ -57,7 +58,7 @@ pub(crate) fn ListEmptyState(
     #[prop(into, default = trs!(ui.no_resources_found))] title: Signal<String>,
     #[prop(into, default = trs!(ui.create_a_resource_to_get_started))] guidance: Signal<String>,
 ) -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
 
     view! {
         <Show when=move || ready.get() && count.get() == 0>
@@ -85,7 +86,7 @@ pub(crate) fn ListEmptyState(
 /// Session-local sort preferences survive route navigation without persisting resource data.
 #[derive(Clone, Copy)]
 pub(crate) struct TablePreferences(
-    RwSignal<std::collections::HashMap<String, ruphish_ui::table_state::Sort>>,
+    RwSignal<std::collections::HashMap<String, crate::shared::table_sort::Sort>>,
 );
 impl TablePreferences {
     pub fn provide() {
@@ -95,8 +96,8 @@ impl TablePreferences {
 
 #[derive(Clone, Copy)]
 pub(crate) struct TableSorting {
-    pub current: Signal<ruphish_ui::table_state::Sort>,
-    pub change: Callback<ruphish_ui::table_state::Sort>,
+    pub current: Signal<crate::shared::table_sort::Sort>,
+    pub change: Callback<crate::shared::table_sort::Sort>,
 }
 impl TableSorting {
     pub fn new(
@@ -105,7 +106,7 @@ impl TableSorting {
         order: ruphish_domain::reporting::SortDirection,
     ) -> Self {
         let name = StoredValue::new(name.into());
-        let initial = StoredValue::new(ruphish_ui::table_state::Sort {
+        let initial = StoredValue::new(crate::shared::table_sort::Sort {
             column: column.into(),
             order,
         });
@@ -135,8 +136,8 @@ impl TableSorting {
     pub fn rows<T>(
         &self,
         rows: Vec<T>,
-        value: impl Fn(&T, &str) -> ruphish_ui::table_state::Value,
-        identity: impl Fn(&T) -> ruphish_ui::table_state::Value,
+        value: impl Fn(&T, &str) -> crate::shared::table_sort::Value,
+        identity: impl Fn(&T) -> crate::shared::table_sort::Value,
     ) -> Vec<T> {
         self.current.get().rows(rows, value, identity)
     }
@@ -145,12 +146,12 @@ impl TableSorting {
             rows,
             |row, column| {
                 if dates.contains(&column) {
-                    ruphish_ui::table_state::timestamp(row[column].as_str().unwrap_or_default())
+                    crate::shared::table_sort::timestamp(row[column].as_str().unwrap_or_default())
                 } else {
-                    ruphish_ui::table_state::scalar(&row[column])
+                    crate::shared::table_sort::scalar(&row[column])
                 }
             },
-            |row| ruphish_ui::table_state::scalar(&row["id"]),
+            |row| crate::shared::table_sort::scalar(&row["id"]),
         )
     }
 }

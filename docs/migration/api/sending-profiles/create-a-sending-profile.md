@@ -13,7 +13,7 @@ Create a shared sending profile and retain the returned revision.
 | --- | --- | --- |
 | Operation | `POST /api/smtp/` | `POST /api/smtp/` |
 | Success | `201 Created` | `201 Created` |
-| Response type | `models.SMTP` | `resource_details::Resource<resource_details::Profile>` |
+| Response type | `models.SMTP` | `resources::details::Resource<resources::details::Profile>` |
 
 Use a Bearer API key. The [common changes](../common-contract-changes.md) explain shared access, error handling, metadata, and example conventions.
 

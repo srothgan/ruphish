@@ -4,11 +4,11 @@ import { readFile, readdir } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import { preparePage } from '../starter-templates.mjs';
 const messages = await readFile(
-  new URL('../../../ruphish-adapters/src/landing-locales.json', import.meta.url),
+  new URL('../../../ruphish-adapters/src/landing/locales.json', import.meta.url),
   'utf8',
 );
 const source = await readFile(
-  new URL('../../../ruphish-adapters/src/landing-collector.js', import.meta.url),
+  new URL('../../../ruphish-adapters/src/landing/collector.js', import.meta.url),
   'utf8',
 );
 const starterInteraction = await readFile(

@@ -1,10 +1,9 @@
 //! Regression workflows for audit findings, with synthetic state and loopback only.
 #![allow(clippy::unwrap_used, reason = "Isolated fixture setup and assertions")]
-use crate::{
-    database::{self, Config},
-    outbound::Policy,
-    sqlite::integrations::Integrations,
-};
+use crate::database;
+use crate::database::Config;
+use crate::database::sqlite::integrations::Integrations;
+use crate::outbound::Policy;
 use ruphish_application::{
     auth::{Edit, Identity, Service},
     integrations::{MailboxEdit, Repository, WebhookEdit, work::*},
@@ -244,7 +243,7 @@ async fn deleted_webhooks_do_not_connect_after_claiming() {
         id: hook.id,
         revision: hook.revision,
     };
-    crate::integration_work::webhooks(&queue, &policy)
+    crate::integrations::webhooks(&queue, &policy)
         .await
         .unwrap();
     assert!(

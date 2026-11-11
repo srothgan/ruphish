@@ -1,14 +1,12 @@
 //! Native application composition and process lifecycle.
 
-mod campaign_worker;
+use crate::config::installation;
 mod cli;
 mod config;
 mod diagnostics;
-mod domain_worker;
-mod installation;
 mod logging;
 mod runtime;
-mod worker_backoff;
+pub(crate) mod workers;
 
 /// Execute informational CLI commands or run the configured application.
 pub fn entry() -> std::process::ExitCode {

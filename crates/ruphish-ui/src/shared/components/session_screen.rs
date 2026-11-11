@@ -23,7 +23,7 @@ pub(crate) fn SessionScreen(
     recover: Callback<()>,
     #[prop(default = false)] recover_when_slow: bool,
 ) -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
     let slow = RwSignal::new(false);
     Effect::new(move |_| {
         slow.set(false);

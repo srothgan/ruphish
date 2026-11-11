@@ -1,6 +1,6 @@
 //! Shared presence and activity indicators; unknown evidence is never absence.
+use crate::trs;
 use leptos::prelude::*;
-use ruphish_ui::trs;
 
 #[component]
 pub(crate) fn SubmissionFields(
@@ -17,7 +17,7 @@ pub(crate) fn SubmissionFields(
 
 #[component]
 fn FieldPresence(label: Signal<String>, value: Signal<Option<bool>>) -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
     let state = Signal::derive(move || match value.get() {
         Some(true) => leptos_i18n::t_string!(i18n, ui.event_present).to_string(),
         Some(false) => leptos_i18n::t_string!(i18n, ui.event_absent).to_string(),
@@ -43,7 +43,7 @@ fn FieldPresence(label: Signal<String>, value: Signal<Option<bool>>) -> impl Int
 
 #[component]
 pub(crate) fn ActivityIndicator(recorded: Signal<bool>) -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
     let description = Signal::derive(move || {
         if recorded.get() {
             leptos_i18n::t_string!(i18n, ui.activity_recorded).to_string()
@@ -67,14 +67,14 @@ pub(crate) fn ActivityIndicator(recorded: Signal<bool>) -> impl IntoView {
 /// Request metadata belongs to the observation, never to a recipient-wide device profile.
 #[component]
 pub(crate) fn ClientObservation(
-    client: Signal<Option<ruphish_domain::client::Info>>,
+    client: Signal<Option<ruphish_domain::events::client_info::Info>>,
     kind: Signal<Option<ruphish_domain::events::Kind>>,
 ) -> impl IntoView {
-    use ruphish_domain::{
-        client::{Browser, Device, OperatingSystem},
-        events::Kind,
-    };
-    let i18n = ruphish_ui::localization::use_i18n();
+    use ruphish_domain::events::Kind;
+    use ruphish_domain::events::client_info::Browser;
+    use ruphish_domain::events::client_info::Device;
+    use ruphish_domain::events::client_info::OperatingSystem;
+    let i18n = crate::localization::use_i18n();
     let unknown = move || leptos_i18n::t_string!(i18n, ui.unknown).to_string();
     view! {
         <Show when=move || {
@@ -87,15 +87,14 @@ pub(crate) fn ClientObservation(
                     fallback=move || {
                         view! {
                             <small>
-                                {ruphish_ui::tr!(ui.client_information)}": "
-                                {ruphish_ui::tr!(ui.unavailable)}
+                                {crate::tr!(ui.client_information)}": " {crate::tr!(ui.unavailable)}
                             </small>
                         }
                     }
                 >
                     <dl>
                         <div>
-                            <dt>{ruphish_ui::tr!(ui.client_browser)}</dt>
+                            <dt>{crate::tr!(ui.client_browser)}</dt>
                             <dd>
                                 {move || match client.get().map(|c| c.browser).unwrap_or_default() {
                                     Browser::Chrome => "Chrome".into(),
@@ -110,7 +109,7 @@ pub(crate) fn ClientObservation(
                             </dd>
                         </div>
                         <div>
-                            <dt>{ruphish_ui::tr!(ui.client_os)}</dt>
+                            <dt>{crate::tr!(ui.client_os)}</dt>
                             <dd>
                                 {move || match client.get().map(|c| c.os).unwrap_or_default() {
                                     OperatingSystem::Windows => "Windows".into(),
@@ -124,7 +123,7 @@ pub(crate) fn ClientObservation(
                             </dd>
                         </div>
                         <div>
-                            <dt>{ruphish_ui::tr!(ui.client_device)}</dt>
+                            <dt>{crate::tr!(ui.client_device)}</dt>
                             <dd>
                                 {move || match client.get().map(|c| c.device).unwrap_or_default() {
                                     Device::Desktop => {

@@ -1,7 +1,8 @@
 //! Searchable single selection using native radio keyboard behavior and shared panels.
 use super::{ActionButton, EmptyState, Field, TextInput, ValidationBinding, info::anchored_nodes};
+use crate::tr;
+use crate::trs;
 use leptos::prelude::*;
-use ruphish_ui::{tr, trs};
 
 #[component]
 pub(crate) fn SearchSelect(

@@ -119,7 +119,7 @@ fn embed_admin() -> Result<(), Box<dyn Error>> {
         let representation = |path: &std::path::Path, bytes: &[u8]| {
             use sha2::{Digest, Sha256};
             format!(
-                "crate::static_asset::Representation {{ bytes: axum::body::Bytes::from_static(include_bytes!({path:?})), etag: {:?}.into() }}",
+                "crate::assets::Representation {{ bytes: axum::body::Bytes::from_static(include_bytes!({path:?})), etag: {:?}.into() }}",
                 format!("\"{}\"", hex::encode(Sha256::digest(bytes)))
             )
         };

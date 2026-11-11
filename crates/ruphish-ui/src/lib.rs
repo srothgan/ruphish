@@ -1,40 +1,23 @@
-//! Editing state shared by the browser component and native workflow tests.
+//! Administration features shared by the browser and native workflow tests.
 
+pub mod account;
+pub mod api;
+pub mod campaigns;
+#[cfg(target_arch = "wasm32")]
+pub(crate) mod domains;
+#[cfg(target_arch = "wasm32")]
+pub(crate) mod integrations;
 #[cfg(target_arch = "wasm32")]
 pub mod localization;
-
-pub mod campaign_state;
-pub mod deletion_state;
 #[cfg(target_arch = "wasm32")]
-pub mod group_draft;
+pub(crate) mod management_queries;
+pub mod overview;
 #[cfg(target_arch = "wasm32")]
-pub mod import_drafts;
-pub mod import_state;
-pub mod preference_state;
-pub mod preview_state;
-pub mod read_state;
-pub mod recipient_editor;
-pub mod recipient_history;
-pub mod resource_inventory;
-pub mod resource_state;
-pub mod results_state;
-pub mod select_options;
-pub mod session;
-pub mod table_state;
-
-#[cfg(target_arch = "wasm32")]
-pub mod browser_http;
-
-#[cfg(target_arch = "wasm32")]
-pub mod view_tasks;
-
-#[cfg(target_arch = "wasm32")]
-pub mod query;
-
-pub mod api_error;
-pub mod form_state;
-pub mod form_validation;
-pub mod settings_state;
+pub(crate) mod profile_diagnostics;
+pub mod resources;
+pub mod settings;
+pub mod shared;
+pub mod starter_templates;
 
 /// Build an isolated preview document without changing the stored source.
 ///
@@ -59,21 +42,23 @@ pub fn landing_preview_document(source: &str) -> String {
 #[path = "../../../tests/editor_workflow.rs"]
 mod editor_workflow;
 
-pub mod tabs;
-
-pub mod overview_state;
-
-pub mod datetime;
-
+/// Mount the browser administration interface.
 #[cfg(target_arch = "wasm32")]
-pub mod browser_datetime;
-
-#[cfg(target_arch = "wasm32")]
-pub mod display_preferences;
-
-#[cfg(target_arch = "wasm32")]
-pub mod local_storage;
-pub mod starter_names;
-pub mod starter_selection;
-
-pub mod event_editor;
+pub fn mount() {
+    use leptos::prelude::*;
+    use leptos_router::components::Router;
+    leptos::mount::mount_to_body(|| {
+        use leptos_i18n::Locale as _;
+        let context = crate::localization::provide(crate::localization::browser_locale());
+        Effect::new(move |_| {
+            let locale = context.get_locale();
+            if let Some(document) = web_sys::window().and_then(|window| window.document())
+                && let Some(html) = document.document_element()
+            {
+                let _ = html.set_attribute("lang", locale.as_str());
+            }
+        });
+        shared::components::TablePreferences::provide();
+        view! { <Router>{account::pages::app}</Router> }
+    });
+}

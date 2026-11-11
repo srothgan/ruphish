@@ -13,7 +13,7 @@ Adapt this operation to shared resources and the current landing page contract.
 | --- | --- | --- |
 | Operation | `GET /api/pages/` | `GET /api/pages/` |
 | Success | `200 OK` | `200 OK` |
-| Response type | `[]models.Page` | `Vec<resource_details::Resource<resource_details::Page>>` |
+| Response type | `[]models.Page` | `Vec<resources::details::Resource<resources::details::Page>>` |
 
 Use a Bearer API key. The [common changes](../common-contract-changes.md) explain shared access, error handling, metadata, and example conventions.
 

@@ -9,7 +9,7 @@ The administration interface uses Leptos, browser-safe HTTP contracts, and share
 
 ## Extend an existing feature
 
-1. Find the feature under `crates/ruphish-ui/src/` and trace its route, contract mapping, query, and form state. Resource editing uses `resources.rs`, `resource_state.rs`, and the resource query/inventory modules.
+1. Find the feature under `crates/ruphish-ui/src/` and trace its route, contract mapping, query, and form state. Resource editing uses `resources/pages.rs`, `resources/draft.rs`, `resources/queries.rs`, and `resources/inventory.rs`. Recipient-group drafts and rows live under `resources/recipients/`; campaign recipient analysis and history stay with campaign results and delivery.
 2. Reuse the shared layout and controls under `shared/components/`. Keep permissions, API calls, and feature-specific fields with the feature.
 3. Add or change text in both locale catalogs. Use the shared [localization](localization.md) and date/time helpers.
 4. Update validation and request projection at their existing owners. A response field must not become writable just because it appears in editable JSON.

@@ -75,7 +75,7 @@ impl Default for Filter {
 #[derive(Clone)]
 pub struct Event {
     /// Immutable coarse request categories; absent for historical or non-client observations.
-    pub client: Option<ruphish_domain::client::Info>,
+    pub client: Option<ruphish_domain::events::client_info::Info>,
     /// Whether an operator has changed the event values since creation.
     pub edited: bool,
     /// Durable event identity.

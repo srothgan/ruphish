@@ -1,20 +1,22 @@
 //! Domain management uses the shared resource shell, forms and confirmation dialog.
-use crate::{
-    client::Api, feedback::Message, management_queries::ManagementQueries,
-    resources::ResourceAccess, shared::components::*,
-};
+use crate::api::client::Api;
+use crate::management_queries::ManagementQueries;
+use crate::resources::pages::ResourceAccess;
+use crate::shared::components::*;
+use crate::shared::feedback::Message;
+use crate::shared::table_sort::Value as SortValue;
+use crate::tr;
+use crate::trs;
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use ruphish_contracts::domains::{Domain, Edit};
 use ruphish_domain::reporting::SortDirection;
-use ruphish_ui::table_state::Value as SortValue;
-use ruphish_ui::{tr, trs};
 use serde_json::json;
 
 fn editable() -> bool {
     use_context::<ResourceAccess>().is_some_and(|v| v.0)
 }
 fn state(d: &Domain) -> &'static str {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
 
     match d.verification.status.as_str() {
         "unsupported" => leptos_i18n::t_string!(i18n, ui.unavailable),
@@ -34,16 +36,16 @@ fn status_tone(status: &str) -> StatusTone {
     }
 }
 fn instant(seconds: i64) -> String {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
 
     if seconds == 0 {
         leptos_i18n::t_string!(i18n, ui.not_recorded).into()
     } else {
-        crate::time_display::instant(&json!(seconds))
+        crate::shared::datetime::display::instant(&json!(seconds))
     }
 }
 fn outcome(value: &str) -> &'static str {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
 
     match value {
         "passed" => leptos_i18n::t_string!(i18n, ui.passed),
@@ -53,7 +55,7 @@ fn outcome(value: &str) -> &'static str {
     }
 }
 fn check_result(d: &Domain, kind: &str, passed: bool) -> &'static str {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
 
     if d.checked_at == 0 {
         return leptos_i18n::t_string!(i18n, ui.not_checked);
@@ -92,7 +94,7 @@ fn check_result(d: &Domain, kind: &str, passed: bool) -> &'static str {
 }
 pub(super) fn list(api: Api, token: String) -> impl IntoView {
     let sorting = TableSorting::new("domains", "name", SortDirection::Asc);
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
 
     let queries = expect_context::<ManagementQueries>();
     let list = queries.domains.observe(|| ());
@@ -277,7 +279,7 @@ pub(super) fn detail(api: Api, token: String, editing: bool) -> impl IntoView {
     }
 }
 fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
 
     let queries = expect_context::<ManagementQueries>();
     let name = RwSignal::new(String::new());
@@ -288,15 +290,15 @@ fn form(api: Api, token: String, id: Option<i64>) -> impl IntoView {
     let loaded = RwSignal::new(id.is_none());
     let busy = RwSignal::new(false);
     let message = Message::new(String::new());
-    let write_error = RwSignal::new(None::<ruphish_ui::api_error::ApiError>);
+    let write_error = RwSignal::new(None::<crate::api::error::ApiError>);
     let token = StoredValue::new(token);
     let can_edit = editable();
     let dirty = Memo::new(move |_| {
         loaded.get() && baseline.get() != (name.get(), origin.get(), enabled.get())
     });
-    crate::navigation::protect_draft(move || dirty.get() || busy.get());
+    crate::shared::navigation::protect_draft(move || dirty.get() || busy.get());
     let reload = RwSignal::new(0u64);
-    let load_error = RwSignal::new(None::<ruphish_ui::api_error::ApiError>);
+    let load_error = RwSignal::new(None::<crate::api::error::ApiError>);
     let loading = RwSignal::new(id.is_some());
     let blocked = Signal::derive(move || busy.get() || loading.get() || !loaded.get() || !can_edit);
     if let Some(id) = id {
@@ -505,12 +507,12 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
     let history_sort = TableSorting::new("domain-history", "finished", SortDirection::Desc);
     let checks_sort = TableSorting::new("domain-checks", "setup", SortDirection::Asc);
 
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
 
     let queries = expect_context::<ManagementQueries>();
     let read = queries.domain.observe(move || id);
     let domain = read.data;
-    let tasks = ruphish_ui::view_tasks::ViewTasks::default();
+    let tasks = crate::shared::tasks::ViewTasks::default();
     let mutation = RwSignal::new(false);
     let deletion = ResourceDeletion::new();
     let busy = Signal::derive(move || deletion.busy.get() || mutation.get());
@@ -575,9 +577,9 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
                     #[cfg(feature = "demo")]
                     api.notifications.show(DemoNotice::External);
                 }
-                Err(error) => message.error(ruphish_ui::localization::verification_error(
-                    i18n, &error, true,
-                )),
+                Err(error) => {
+                    message.error(crate::localization::verification_error(i18n, &error, true))
+                }
             }
             mutation.set(false);
         });
@@ -1118,7 +1120,7 @@ fn show(api: Api, token: String, id: i64) -> impl IntoView {
 }
 
 fn check_explanation(code: &str) -> &'static str {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
 
     match code {
         "verified" => leptos_i18n::t_string!(i18n, ui.control_dns_routing_and_https_passed),

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 #[serde(deny_unknown_fields)]
 pub struct DraftCreate {
     /// Editable draft configuration.
-    pub configuration: ruphish_domain::campaign_draft::Configuration,
+    pub configuration: ruphish_domain::campaign::draft::Configuration,
     /// Current editing step.
     pub step: i64,
 }
@@ -18,7 +18,7 @@ pub struct DraftWrite {
     /// Expected saved revision; missing revisions are rejected.
     pub revision: Option<i64>,
     /// Editable draft configuration.
-    pub configuration: ruphish_domain::campaign_draft::Configuration,
+    pub configuration: ruphish_domain::campaign::draft::Configuration,
     /// Current editing step.
     pub step: i64,
 }

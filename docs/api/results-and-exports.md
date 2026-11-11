@@ -11,7 +11,7 @@ These endpoints require `view_objects`. Results distinguish observed event total
 
 Read filtered counts, recipient rows, events, and time buckets.
 
-**Request:** Query: reporting::Filter. **Response:** `200 OK`, `campaign_reads::Results` as `application/json`.
+**Request:** Query: reporting::Filter. **Response:** `200 OK`, `campaign::reads::Results` as `application/json`.
 
 This independent example shows an active campaign with one public click. The source filter excludes SMTP and campaign-lifecycle events from the observed counts; delivery state remains visible on the recipient row.
 

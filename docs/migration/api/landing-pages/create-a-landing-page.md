@@ -13,7 +13,7 @@ Create a shared landing page and retain the returned revision.
 | --- | --- | --- |
 | Operation | `POST /api/pages/` | `POST /api/pages/` |
 | Success | `201 Created` | `201 Created` |
-| Response type | `models.Page` | `resource_details::Resource<resource_details::Page>` |
+| Response type | `models.Page` | `resources::details::Resource<resources::details::Page>` |
 
 Use a Bearer API key. The [common changes](../common-contract-changes.md) explain shared access, error handling, metadata, and example conventions.
 

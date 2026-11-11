@@ -167,7 +167,7 @@ impl AttemptState {
 #[serde(tag = "kind", content = "status", rename_all = "snake_case")]
 pub enum DirectoryState {
     /// Saved draft state, separate from execution.
-    Draft(crate::campaign_draft::Status),
+    Draft(crate::campaign::draft::Status),
     /// Launched campaign lifecycle.
     Campaign(CampaignStatus),
 }

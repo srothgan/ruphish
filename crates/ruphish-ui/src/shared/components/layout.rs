@@ -1,6 +1,8 @@
 use super::{ActionButton, ActionLink, ButtonStyle, Card};
+use crate::api::error::ApiError;
+use crate::tr;
+use crate::trs;
 use leptos::prelude::*;
-use ruphish_ui::{api_error::ApiError, tr, trs};
 
 #[component]
 pub(crate) fn ManagementPage(children: Children) -> impl IntoView {
@@ -113,7 +115,7 @@ pub(crate) fn ReadBoundary(
     #[prop(into)] back_label: Signal<String>,
     children: Children,
 ) -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
     let blocked = Signal::derive(move || {
         failure.with(|error| {
             error

@@ -1,4 +1,10 @@
 //! Compatibility authentication on the existing Lettre connection; never log exchanges.
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, reason = "Independent RFC vector assertions")]
+#[path = "tests/authentication.rs"]
+pub(crate) mod tests;
+
 use base64::{Engine, prelude::BASE64_STANDARD};
 use hmac::{Hmac, KeyInit, Mac};
 use lettre::transport::smtp::{
@@ -108,8 +114,3 @@ fn cram_response(username: &str, password: &str, encoded: &str) -> Result<String
     let digest = hex::encode(mac.finalize().into_bytes());
     Ok(BASE64_STANDARD.encode(format!("{username} {digest}")))
 }
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "Independent RFC vector assertions")]
-#[path = "tests/authentication.rs"]
-mod tests;

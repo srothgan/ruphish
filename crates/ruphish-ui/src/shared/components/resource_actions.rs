@@ -1,12 +1,14 @@
 use super::{
     ActionButton, ActionLink, ButtonStyle, ControlSize, DeleteConfirmation, DeleteRecovery,
 };
-use crate::{client::Api, feedback::Message};
+use crate::api::client::Api;
+pub(crate) use crate::shared::deletion::DeleteTarget;
+use crate::shared::deletion::Deletion;
+use crate::shared::feedback::Message;
+use crate::shared::tasks::ViewTasks;
+use crate::tr;
+use crate::trs;
 use leptos::prelude::*;
-pub(crate) use ruphish_ui::deletion_state::DeleteTarget;
-use ruphish_ui::deletion_state::Deletion;
-use ruphish_ui::view_tasks::ViewTasks;
-use ruphish_ui::{tr, trs};
 
 /// Common resource actions. Feature-specific actions remain explicit children.
 #[component]
@@ -56,7 +58,7 @@ pub(crate) struct ResourceDeletion {
     state: RwSignal<Deletion>,
     pub busy: Signal<bool>,
     message: Message,
-    error: RwSignal<Option<ruphish_ui::api_error::ApiError>>,
+    error: RwSignal<Option<crate::api::error::ApiError>>,
     tasks: ViewTasks,
 }
 impl ResourceDeletion {
@@ -86,14 +88,14 @@ pub(crate) fn ResourceDeleteDialog(
     token: String,
     on_deleted: Callback<i64>,
 ) -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
 
     let token = StoredValue::new(token);
     let target = Memo::new(move |_| deletion.state.with(|state| state.target().cloned()));
     let needs_review = Signal::derive(move || {
         deletion.error.with(|e| {
             e.as_ref()
-                .is_some_and(ruphish_ui::api_error::ApiError::needs_write_recovery)
+                .is_some_and(crate::api::error::ApiError::needs_write_recovery)
         })
     });
     let confirm = Callback::new(move |()| {

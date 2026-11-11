@@ -1,6 +1,6 @@
 //! Administration asset routers, admission control and request logging.
 
-use crate::static_asset::Asset;
+use crate::assets::Asset;
 use axum::{
     Router,
     body::Body,

@@ -1,15 +1,19 @@
 //! Webhook and reporting mailbox resources share presentation primitives.
-use crate::{
-    campaigns::text, client::Api, feedback::Message, management_queries::ManagementQueries,
-    resources::ResourceAccess, shared::components::*, time_display::instant,
-};
+use crate::api::client::Api;
+use crate::campaigns::pages::text;
+use crate::management_queries::ManagementQueries;
+use crate::resources::pages::ResourceAccess;
+use crate::shared::components::*;
+use crate::shared::datetime::display::instant;
+use crate::shared::feedback::Message;
+use crate::shared::table_sort::Value as SortValue;
+use crate::shared::tasks::ViewTasks;
+use crate::tr;
+use crate::trs;
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation as spawn_local};
 use leptos_router::hooks::{use_navigate, use_params_map};
 use ruphish_contracts::integrations::request::{MailboxWrite, WebhookWrite};
 use ruphish_domain::reporting::SortDirection;
-use ruphish_ui::table_state::Value as SortValue;
-use ruphish_ui::view_tasks::ViewTasks;
-use ruphish_ui::{tr, trs};
 use serde_json::{Value, json};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -19,7 +23,7 @@ pub(super) enum Kind {
 }
 impl Kind {
     fn back_label(self) -> &'static str {
-        let i18n = ruphish_ui::localization::use_i18n();
+        let i18n = crate::localization::use_i18n();
         match self {
             Self::Webhook => leptos_i18n::t_string!(i18n, ui.back_to_webhooks),
             Self::Mailbox => leptos_i18n::t_string!(i18n, ui.back_to_mailboxes),
@@ -32,7 +36,7 @@ impl Kind {
         }
     }
     fn title(self) -> &'static str {
-        let i18n = ruphish_ui::localization::use_i18n();
+        let i18n = crate::localization::use_i18n();
 
         match self {
             Self::Webhook => leptos_i18n::t_string!(i18n, ui.webhooks),
@@ -40,7 +44,7 @@ impl Kind {
         }
     }
     fn singular(self) -> &'static str {
-        let i18n = ruphish_ui::localization::use_i18n();
+        let i18n = crate::localization::use_i18n();
 
         match self {
             Self::Webhook => leptos_i18n::t_string!(i18n, ui.webhook),
@@ -48,7 +52,7 @@ impl Kind {
         }
     }
     fn plural(self) -> &'static str {
-        let i18n = ruphish_ui::localization::use_i18n();
+        let i18n = crate::localization::use_i18n();
 
         match self {
             Self::Webhook => leptos_i18n::t_string!(i18n, ui.webhooks),
@@ -56,7 +60,7 @@ impl Kind {
         }
     }
     fn empty_title(self) -> &'static str {
-        let i18n = ruphish_ui::localization::use_i18n();
+        let i18n = crate::localization::use_i18n();
 
         match self {
             Self::Webhook => leptos_i18n::t_string!(i18n, ui.no_webhooks_yet),
@@ -64,7 +68,7 @@ impl Kind {
         }
     }
     fn empty_guidance(self) -> &'static str {
-        let i18n = ruphish_ui::localization::use_i18n();
+        let i18n = crate::localization::use_i18n();
 
         match self {
             Self::Webhook => leptos_i18n::t_string!(
@@ -170,7 +174,7 @@ pub(super) fn list(api: Api, token: String, kind: Kind) -> impl IntoView {
         "name",
         SortDirection::Asc,
     );
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
 
     let queries = expect_context::<ManagementQueries>();
     let list = queries.integrations.observe(move || kind);
@@ -416,7 +420,7 @@ fn checkbox(draft: RwSignal<Value>, key: &'static str, label: Signal<String>) ->
 }
 
 fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
 
     let queries = expect_context::<ManagementQueries>();
     let initial = if kind.webhook() {
@@ -447,20 +451,20 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
     let draft = RwSignal::new(initial.clone());
     let baseline = RwSignal::new(initial);
     let loaded = RwSignal::new(id.is_none());
-    let load_error = RwSignal::new(None::<ruphish_ui::api_error::ApiError>);
+    let load_error = RwSignal::new(None::<crate::api::error::ApiError>);
     let loading = RwSignal::new(id.is_some());
     let load_failed = Signal::derive(move || load_error.get().is_some());
     let has_saved_secret = RwSignal::new(false);
     let busy = RwSignal::new(false);
     let refresh = RwSignal::new(0u64);
     let message = Message::new(String::new());
-    let write_error = RwSignal::new(None::<ruphish_ui::api_error::ApiError>);
+    let write_error = RwSignal::new(None::<crate::api::error::ApiError>);
     let tasks = ViewTasks::default();
     let token = StoredValue::new(token);
     let navigate = StoredValue::new(use_navigate());
     let editable = use_context::<ResourceAccess>().is_some_and(|access| access.0);
     let blocked = Signal::derive(move || busy.get() || loading.get() || !loaded.get() || !editable);
-    crate::navigation::protect_draft(move || {
+    crate::shared::navigation::protect_draft(move || {
         loaded.get() && draft.get() != baseline.get() || busy.get()
     });
     if let Some(id) = id {
@@ -495,7 +499,7 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
         });
     }
     let validation = FormValidation::new(move || {
-        ruphish_ui::form_validation::integration(
+        crate::shared::forms::validation::integration(
             &draft.get(),
             kind.webhook(),
             has_saved_secret.get(),
@@ -787,7 +791,7 @@ fn form(api: Api, token: String, kind: Kind, id: Option<i64>) -> impl IntoView {
 }
 
 fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
 
     let queries = expect_context::<ManagementQueries>();
     let read = queries.integration.observe(move || (kind, id));

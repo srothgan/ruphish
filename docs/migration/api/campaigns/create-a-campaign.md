@@ -13,7 +13,7 @@ Replace name-based resource selections with reviewed IDs before creating a campa
 | --- | --- | --- |
 | Operation | `POST /api/campaigns/` | `POST /api/campaigns/` |
 | Success | `201 Created` | `201 Created` |
-| Response type | `models.Campaign` | `campaign_details::Campaign` |
+| Response type | `models.Campaign` | `campaign::details::Campaign` |
 
 Use a Bearer API key. The [common changes](../common-contract-changes.md) explain shared access, error handling, metadata, and example conventions.
 

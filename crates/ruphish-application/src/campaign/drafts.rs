@@ -1,6 +1,7 @@
 //! Durable drafts and the single transition into campaign execution.
 use crate::{auth::Identity, campaign::Create, resources::Error};
-pub use ruphish_domain::campaign_draft::{Configuration, Status};
+pub use ruphish_domain::campaign::draft::Configuration;
+pub use ruphish_domain::campaign::draft::Status;
 
 /// A saved draft; a campaign reference fences all subsequent edits and launches.
 #[derive(Clone)]
@@ -88,7 +89,7 @@ pub fn validate_launch(
         ));
     }
     let c = &draft.configuration;
-    let resolve = |value: &Option<ruphish_domain::campaign_draft::LocalTime>| {
+    let resolve = |value: &Option<ruphish_domain::campaign::draft::LocalTime>| {
         value
             .as_ref()
             .map(|value| {

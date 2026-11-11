@@ -13,7 +13,7 @@ Read the current revision before replacing the group. A blind Gophish write no l
 | --- | --- | --- |
 | Operation | `PUT /api/groups/{id}` | `PUT /api/groups/{id}` |
 | Success | `200 OK` | `200 OK` |
-| Response type | `models.Group` | `resource_details::Resource<resource_details::Group>` |
+| Response type | `models.Group` | `resources::details::Resource<resources::details::Group>` |
 
 Use a Bearer API key. The [common changes](../common-contract-changes.md) explain shared access, error handling, metadata, and example conventions.
 

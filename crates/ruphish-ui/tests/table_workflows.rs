@@ -2,10 +2,11 @@
 #![allow(clippy::unwrap_used, reason = "Functional fixtures and assertions")]
 use ruphish_contracts::reporting::Filter;
 use ruphish_domain::reporting::{RecipientSort, SortDirection};
-use ruphish_ui::{
-    results_state,
-    table_state::{Sort, Value, ratio, timestamp},
-};
+use ruphish_ui::campaigns::results::state as results_state;
+use ruphish_ui::shared::table_sort::Sort;
+use ruphish_ui::shared::table_sort::Value;
+use ruphish_ui::shared::table_sort::ratio;
+use ruphish_ui::shared::table_sort::timestamp;
 
 #[test]
 fn table_sort_and_page_bookmarks_survive_refresh_and_download_without_page_truncation() {
@@ -101,7 +102,7 @@ fn histories_and_rates_sort_actual_values_with_absence_unicode_and_stable_ties()
 #[test]
 fn recent_campaign_window_stays_latest_three_when_sorting_and_refreshing() {
     use ruphish_contracts::overview::{Posture, RecentCampaign};
-    use ruphish_ui::overview_state::recent_campaigns;
+    use ruphish_ui::overview::state::recent_campaigns;
     let row = |id, name: &str, count| RecentCampaign {
         id,
         name: name.into(),

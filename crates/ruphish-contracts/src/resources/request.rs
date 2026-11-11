@@ -191,10 +191,10 @@ pub enum Resource {
 /// Project JSON draft/import fields into the authoritative writable contract.
 /// Unknown response metadata is intentionally discarded; it can never be submitted by this projection.
 pub fn decode(
-    kind: crate::resource_details::Kind,
+    kind: crate::resources::details::Kind,
     value: serde_json::Value,
 ) -> Result<Resource, serde_json::Error> {
-    use crate::resource_details::Kind;
+    use crate::resources::details::Kind;
     match kind {
         Kind::Group => serde_json::from_value(value).map(Resource::Group),
         Kind::Template => serde_json::from_value(value).map(Resource::Template),
@@ -207,7 +207,7 @@ pub fn decode(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resource_details::Kind;
+    use crate::resources::details::Kind;
     use serde_json::{Value, json};
 
     #[test]

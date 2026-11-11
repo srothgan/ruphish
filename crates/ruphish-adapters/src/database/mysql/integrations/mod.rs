@@ -1,0 +1,644 @@
+//! Transactional integration resources; secrets stay inside adapter-owned records.
+
+pub(crate) mod mailbox;
+pub(crate) mod webhook;
+
+use crate::database::mysql::InsertId;
+use crate::outbound::Policy;
+use ruphish_application::{auth::Identity, integrations::*, resources::Error};
+use sqlx::{MySqlPool, Row, mysql::MySqlRow};
+
+#[derive(Clone)]
+/// Integration configuration and bounded external operations.
+pub struct Integrations {
+    pub(super) pool: MySqlPool,
+    pub(super) policy: Policy,
+}
+impl Integrations {
+    /// Attach the startup pool and shared destination policy.
+    pub fn new(pool: MySqlPool, policy: Policy) -> Self {
+        Self { pool, policy }
+    }
+}
+pub(super) fn db(error: sqlx::Error) -> Error {
+    crate::database::mysql::resource_error(error)
+}
+pub(super) fn invalid(code: &str) -> Error {
+    Error::Invalid(code.into())
+}
+pub(super) fn now() -> i64 {
+    ruphish_application::datetime::now().as_second()
+}
+pub(super) fn text(r: &MySqlRow, key: &str) -> Result<String, Error> {
+    Ok(r.try_get::<Option<String>, _>(key)
+        .map_err(db)?
+        .unwrap_or_default())
+}
+fn webhook_row(r: MySqlRow) -> Result<Webhook, Error> {
+    Ok(Webhook {
+        attribution: crate::database::mysql::attribution::read(&r, "owner_id")?,
+        id: r.try_get("id").map_err(db)?,
+        name: text(&r, "name")?,
+        url: text(&r, "url")?,
+        active: r.try_get("is_active").map_err(db)?,
+        revision: r.try_get("revision").map_err(db)?,
+        has_secret: !text(&r, "secret")?.is_empty(),
+        history: vec![],
+    })
+}
+fn mailbox_row(r: MySqlRow) -> Result<Mailbox, Error> {
+    Ok(Mailbox {
+        attribution: crate::database::mysql::attribution::read(&r, "owner_id")?,
+        id: r.try_get("id").map_err(db)?,
+        name: text(&r, "name")?,
+        enabled: r.try_get("enabled").map_err(db)?,
+        host: text(&r, "host")?,
+        port: r.try_get::<i64, _>("port").map_err(db)? as u16,
+        username: text(&r, "username")?,
+        has_password: !text(&r, "password")?.is_empty(),
+        tls: r.try_get("tls").map_err(db)?,
+        ignore_cert_errors: r.try_get("ignore_cert_errors").map_err(db)?,
+        folder: text(&r, "folder")?,
+        restrict_domain: text(&r, "restrict_domain")?,
+        delete_reported: r.try_get("delete_reported").map_err(db)?,
+        frequency: r.try_get::<i64, _>("frequency").map_err(db)? as u32,
+        revision: r.try_get("revision").map_err(db)?,
+        last_check: r.try_get("last_check").map_err(db)?,
+        last_success: r.try_get("last_success").map_err(db)?,
+        modified_date: text(&r, "modified_date")?.replacen(' ', "T", 1),
+        last_login: text(&r, "last_login")?.replacen(' ', "T", 1),
+        next_check: r.try_get("next_check").map_err(db)?,
+        running: r.try_get::<i64, _>("lease").map_err(db)? > now(),
+        code: text(&r, "code")?,
+        history: vec![],
+    })
+}
+#[async_trait::async_trait]
+impl Repository for Integrations {
+    async fn webhooks(&self, who: Identity) -> Result<Vec<Webhook>, Error> {
+        let mut tx = crate::database::mysql::locks::snapshot(&self.pool)
+            .await
+            .map_err(db)?;
+        crate::database::mysql::resources::authorize(&mut tx, who, false).await?;
+        sqlx::query(
+            r#"
+                SELECT w.*,s.revision,s.owner_id,s.created_at,s.edited_by,s.edited_at
+                FROM webhooks w
+                JOIN ruphish_webhook_state s ON s.webhook_id=w.id
+
+                ORDER BY w.name,w.id
+            "#,
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(db)?
+        .into_iter()
+        .map(webhook_row)
+        .collect()
+    }
+    async fn webhook(&self, who: Identity, id: i64) -> Result<Webhook, Error> {
+        let mut tx = crate::database::mysql::locks::snapshot(&self.pool)
+            .await
+            .map_err(db)?;
+        crate::database::mysql::resources::authorize(&mut tx, who, false).await?;
+        load_webhook(&mut tx, id).await
+    }
+    async fn save_webhook(
+        &self,
+        who: Identity,
+        id: Option<i64>,
+        e: WebhookEdit,
+    ) -> Result<ruphish_application::attribution::Saved<Webhook>, Error> {
+        e.validation().finish().map_err(Error::Validation)?;
+        let mut tx = crate::database::mysql::locks::write(&self.pool)
+            .await
+            .map_err(db)?;
+        crate::database::mysql::resources::authorize(&mut tx, who, true).await?;
+        crate::database::mysql::settings::require_integration(&mut tx, false).await?;
+        let id = if let Some(id) = id {
+            let r = sqlx::query(
+                r#"
+                SELECT secret,revision
+                FROM webhooks w
+                JOIN ruphish_webhook_state s ON s.webhook_id=w.id
+                WHERE w.id=?  FOR UPDATE
+            "#,
+            )
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(db)?
+            .ok_or(Error::NotFound("Webhook"))?;
+            ruphish_application::resources::require_revision(
+                r.try_get("revision").map_err(db)?,
+                e.revision,
+            )?;
+            let secret = e.secret.unwrap_or(text(&r, "secret")?);
+            if secret.is_empty() {
+                return Err(invalid("webhook_secret_required"));
+            }
+            sqlx::query("UPDATE webhooks SET name=?,url=?,secret=?,is_active=? WHERE id=?")
+                .bind(&e.name)
+                .bind(&e.url)
+                .bind(secret)
+                .bind(e.active)
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .map_err(db)?;
+            sqlx::query("UPDATE ruphish_webhook_state SET revision=revision+1 WHERE webhook_id=?")
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .map_err(db)?;
+            sqlx::query(
+                r#"
+                UPDATE ruphish_webhook_jobs
+                SET state='cancelled',code='configuration_changed'
+                WHERE webhook_id=?
+                AND state IN ('queued','retry','running')
+            "#,
+            )
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(db)?;
+            id
+        } else {
+            let secret = e.secret.ok_or_else(|| invalid("webhook_secret_required"))?;
+            let id = sqlx::query("INSERT INTO webhooks(name,url,secret,is_active) VALUES(?,?,?,?)")
+                .bind(&e.name)
+                .bind(&e.url)
+                .bind(secret)
+                .bind(e.active)
+                .execute(&mut *tx)
+                .await
+                .map_err(db)?
+                .insert_id()
+                .map_err(db)?;
+            sqlx::query(
+                "INSERT INTO ruphish_webhook_state(webhook_id,revision,owner_id,created_at) VALUES(?,1,?,?)",
+            )
+            .bind(id)
+            .bind(who.id)
+            .bind(ruphish_application::datetime::utc(ruphish_application::datetime::now()))
+            .execute(&mut *tx)
+            .await
+            .map_err(db)?;
+            id
+        };
+        sqlx::query("UPDATE ruphish_webhook_state SET edited_by=?,edited_at=? WHERE webhook_id=?")
+            .bind(who.id)
+            .bind(ruphish_application::datetime::utc(
+                ruphish_application::datetime::now(),
+            ))
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(db)?;
+        let saved = load_webhook(&mut tx, id).await?;
+        let saved = crate::database::mysql::attribution::saved(&mut tx, saved).await?;
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::mysql::commit_error(e)))?;
+        Ok(saved)
+    }
+    async fn delete_webhook(
+        &self,
+        who: Identity,
+        id: i64,
+        revision: Option<i64>,
+    ) -> Result<(), Error> {
+        let mut tx = crate::database::mysql::locks::write(&self.pool)
+            .await
+            .map_err(db)?;
+        crate::database::mysql::resources::authorize(&mut tx, who, true).await?;
+        sqlx::query("SELECT id FROM webhooks WHERE id=? FOR UPDATE")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(db)?;
+        let current: i64 = sqlx::query_scalar("SELECT s.revision FROM webhooks w JOIN ruphish_webhook_state s ON s.webhook_id=w.id WHERE w.id=?  FOR UPDATE")
+            .bind(id).fetch_optional(&mut *tx).await.map_err(db)?
+            .ok_or(Error::NotFound("Webhook"))?;
+        ruphish_application::resources::require_revision(current, revision)?;
+        remove_webhook(&mut tx, id).await.map_err(db)?;
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::mysql::commit_error(e)))
+    }
+    async fn validate_webhook(&self, who: Identity, id: i64) -> Result<(), Error> {
+        let mut tx = crate::database::mysql::locks::write(&self.pool)
+            .await
+            .map_err(db)?;
+        crate::database::mysql::resources::authorize(&mut tx, who, true).await?;
+        crate::database::mysql::settings::require_integration(&mut tx, false).await?;
+        let r = sqlx::query("SELECT w.url,w.secret FROM webhooks w JOIN ruphish_webhook_state s ON s.webhook_id=w.id WHERE w.id=? ")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(db)?
+            .ok_or(Error::NotFound("Webhook"))?;
+        let url = text(&r, "url")?;
+        let secret = text(&r, "secret")?;
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::mysql::commit_error(e)))?;
+        crate::integrations::validate_webhook(&self.policy, &url, &secret).await
+    }
+
+    async fn mailboxes(&self, who: Identity) -> Result<Vec<Mailbox>, Error> {
+        let mut tx = crate::database::mysql::locks::snapshot(&self.pool)
+            .await
+            .map_err(db)?;
+        crate::database::mysql::resources::authorize(&mut tx, who, false).await?;
+        sqlx::query("SELECT * FROM ruphish_mailboxes  ORDER BY name,id")
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(db)?
+            .into_iter()
+            .map(mailbox_row)
+            .collect()
+    }
+    async fn mailbox(&self, who: Identity, id: i64) -> Result<Mailbox, Error> {
+        let mut tx = crate::database::mysql::locks::snapshot(&self.pool)
+            .await
+            .map_err(db)?;
+        crate::database::mysql::resources::authorize(&mut tx, who, false).await?;
+        load_mailbox(&mut tx, id).await
+    }
+    async fn save_mailbox(
+        &self,
+        who: Identity,
+        id: Option<i64>,
+        e: MailboxEdit,
+    ) -> Result<ruphish_application::attribution::Saved<Mailbox>, Error> {
+        e.validation().finish().map_err(Error::Validation)?;
+        let mut tx = crate::database::mysql::locks::write(&self.pool)
+            .await
+            .map_err(db)?;
+        crate::database::mysql::resources::authorize(&mut tx, who, true).await?;
+        crate::database::mysql::settings::require_integration(&mut tx, true).await?;
+        let duplicate: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM ruphish_mailboxes WHERE name=? AND id!=?)",
+        )
+        .bind(&e.name)
+        .bind(id.unwrap_or(0))
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(db)?;
+        if duplicate {
+            return Err(invalid("mailbox_name_exists"));
+        }
+        let id = if let Some(id) = id {
+            let r = sqlx::query("SELECT * FROM ruphish_mailboxes WHERE id=?  FOR UPDATE")
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(db)?
+                .ok_or(Error::NotFound("Reporting mailbox"))?;
+            ruphish_application::resources::require_revision(
+                r.try_get("revision").map_err(db)?,
+                e.revision,
+            )?;
+            let changed = e.resets_checkpoint(
+                &text(&r, "host")?,
+                r.try_get("port").map_err(db)?,
+                &text(&r, "username")?,
+                &text(&r, "folder")?,
+            );
+            let password = e.password.unwrap_or(text(&r, "password")?);
+            if password.is_empty() {
+                return Err(invalid("mailbox_password_required"));
+            }
+            sqlx::query(
+                r#"
+                UPDATE ruphish_mailboxes
+                SET name=?,enabled=?,host=?,port=?,username=?,password=?,tls=?,ignore_cert_errors=?,folder=?,
+                    restrict_domain=?,delete_reported=?,frequency=?,revision=revision+1,
+                    lease=0,next_check=0,failures=0,code='',modified_date=DATE_FORMAT(UTC_TIMESTAMP(6),'%Y-%m-%dT%H:%i:%s.%fZ'),
+                    initial_since=CASE WHEN ? THEN NULL ELSE initial_since END,
+                    initialized=CASE WHEN ? THEN 0 ELSE initialized END,
+                    uidvalidity=CASE WHEN ? THEN 0 ELSE uidvalidity END,
+                    last_uid=CASE WHEN ? THEN 0 ELSE last_uid END
+                WHERE id=?
+            "#,
+            )
+            .bind(&e.name)
+            .bind(e.enabled)
+            .bind(&e.host)
+            .bind(i64::from(e.port))
+            .bind(&e.username)
+            .bind(password)
+            .bind(e.tls)
+            .bind(e.ignore_cert_errors)
+            .bind(&e.folder)
+            .bind(&e.restrict_domain)
+            .bind(e.delete_reported)
+            .bind(i64::from(e.frequency))
+            .bind(changed)
+            .bind(changed)
+            .bind(changed)
+            .bind(changed)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(db)?;
+            if changed {
+                sqlx::query("DELETE FROM ruphish_mailbox_messages WHERE mailbox_id=?")
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(db)?;
+            }
+            id
+        } else {
+            let password = e
+                .password
+                .ok_or_else(|| invalid("mailbox_password_required"))?;
+            let initial_since: Option<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(
+                crate::integrations::initial_mailbox_boundary_sql("mysql"),
+            ))
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(db)?;
+            sqlx::query(r#"
+                INSERT INTO ruphish_mailboxes(owner_id,name,enabled,host,port,username,password,tls,folder,restrict_domain,delete_reported,frequency,ignore_cert_errors,initial_since,created_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            "#)
+.bind(who.id)
+.bind(&e.name)
+.bind(e.enabled)
+.bind(&e.host)
+.bind(i64::from(e.port))
+.bind(&e.username)
+.bind(password)
+.bind(e.tls)
+.bind(&e.folder)
+.bind(&e.restrict_domain)
+.bind(e.delete_reported)
+.bind(i64::from(e.frequency))
+.bind(e.ignore_cert_errors)
+.bind(initial_since.map(|stamp| format!("{stamp}Z")))
+.bind(ruphish_application::datetime::utc(ruphish_application::datetime::now()))
+.execute(&mut *tx)
+.await
+.map_err(db)?
+.insert_id().map_err(db)?
+        };
+        crate::database::mysql::attribution::edit(
+            &mut tx,
+            "ruphish_mailboxes",
+            id,
+            who.id,
+            &ruphish_application::datetime::utc(ruphish_application::datetime::now()),
+        )
+        .await?;
+        let saved = load_mailbox(&mut tx, id).await?;
+        let saved = crate::database::mysql::attribution::saved(&mut tx, saved).await?;
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::mysql::commit_error(e)))?;
+        Ok(saved)
+    }
+    async fn delete_mailbox(
+        &self,
+        who: Identity,
+        id: i64,
+        revision: Option<i64>,
+    ) -> Result<(), Error> {
+        let mut tx = crate::database::mysql::locks::write(&self.pool)
+            .await
+            .map_err(db)?;
+        crate::database::mysql::resources::authorize(&mut tx, who, true).await?;
+        let current =
+            sqlx::query_scalar::<_, i64>("SELECT revision FROM ruphish_mailboxes WHERE id=? ")
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(db)?
+                .ok_or(Error::NotFound("Reporting mailbox"))?;
+        ruphish_application::resources::require_revision(current, revision)?;
+        let revision = current;
+        if sqlx::query("DELETE FROM ruphish_mailboxes WHERE id=?  AND revision=?")
+            .bind(id)
+            .bind(revision)
+            .execute(&mut *tx)
+            .await
+            .map_err(db)?
+            .rows_affected()
+            != 1
+        {
+            let exists: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ruphish_mailboxes WHERE id=? )")
+                    .bind(id)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(db)?;
+            return Err(if exists {
+                Error::Changed
+            } else {
+                Error::NotFound("Reporting mailbox")
+            });
+        }
+        for table in ["ruphish_mailbox_messages", "ruphish_mailbox_runs"] {
+            sqlx::query(sqlx::AssertSqlSafe(format!(
+                "DELETE FROM {table} WHERE mailbox_id=?"
+            )))
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(db)?;
+        }
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::mysql::commit_error(e)))
+    }
+    async fn validate_mailbox(&self, who: Identity, id: i64) -> Result<(), Error> {
+        let mut tx = crate::database::mysql::locks::write(&self.pool)
+            .await
+            .map_err(db)?;
+        crate::database::mysql::resources::authorize(&mut tx, who, true).await?;
+        crate::database::mysql::settings::require_integration(&mut tx, true).await?;
+        let r = sqlx::query("SELECT * FROM ruphish_mailboxes WHERE id=?  FOR UPDATE")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(db)?
+            .ok_or(Error::NotFound("Reporting mailbox"))?;
+        let config = crate::database::mysql::integrations::mailbox::config(&r)?;
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::mysql::commit_error(e)))?;
+        crate::integrations::validate_mailbox(&self.policy, &config).await
+    }
+    async fn resume_mailbox(
+        &self,
+        who: Identity,
+        id: i64,
+        revision: i64,
+    ) -> Result<ruphish_application::attribution::Saved<Mailbox>, Error> {
+        let mut tx = crate::database::mysql::locks::write(&self.pool)
+            .await
+            .map_err(db)?;
+        crate::database::mysql::resources::authorize(&mut tx, who, true).await?;
+        crate::database::mysql::settings::require_integration(&mut tx, true).await?;
+        let changed = sqlx::query(r#"
+                UPDATE ruphish_mailboxes
+                SET initial_since=NULL,initialized=0,uidvalidity=0,last_uid=0,next_check=0,lease=0,revision=revision+1,code=''
+                WHERE id=?
+
+                AND revision=?
+                AND code='mailbox_uidvalidity_changed'
+            "#)
+            .bind(id).bind(revision).execute(&mut *tx).await.map_err(db)?.rows_affected();
+        if changed != 1 {
+            return Err(Error::Changed);
+        }
+        sqlx::query("DELETE FROM ruphish_mailbox_messages WHERE mailbox_id=?")
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(db)?;
+        let record = load_mailbox(&mut tx, id).await?;
+        let saved = crate::database::mysql::attribution::saved(&mut tx, record).await?;
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::mysql::commit_error(e)))?;
+        Ok(saved)
+    }
+    async fn check_mailbox(
+        &self,
+        who: Identity,
+        id: i64,
+    ) -> Result<ruphish_application::attribution::Saved<Mailbox>, Error> {
+        let mut tx = crate::database::mysql::locks::write(&self.pool)
+            .await
+            .map_err(db)?;
+        crate::database::mysql::resources::authorize(&mut tx, who, true).await?;
+        crate::database::mysql::settings::require_integration(&mut tx, true).await?;
+        let row = sqlx::query("SELECT enabled FROM ruphish_mailboxes WHERE id=? ")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(db)?
+            .ok_or(Error::NotFound("Reporting mailbox"))?;
+        if !row.try_get::<bool, _>("enabled").map_err(db)? {
+            return Err(invalid("mailbox_disabled"));
+        }
+        sqlx::query("UPDATE ruphish_mailboxes SET next_check=0 WHERE id=? AND lease<=?")
+            .bind(id)
+            .bind(now())
+            .execute(&mut *tx)
+            .await
+            .map_err(db)?;
+        let record = load_mailbox(&mut tx, id).await?;
+        let saved = crate::database::mysql::attribution::saved(&mut tx, record).await?;
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::mysql::commit_error(e)))?;
+        Ok(saved)
+    }
+}
+
+/// Remove an endpoint and its work after the caller has authorized and locked it.
+pub(super) async fn remove_webhook(
+    c: &mut sqlx::MySqlConnection,
+    id: i64,
+) -> Result<(), sqlx::Error> {
+    // Delivery completion locks jobs before attempts; deletion must use that order too.
+    sqlx::query("SELECT id FROM ruphish_webhook_jobs WHERE webhook_id=? ORDER BY id FOR UPDATE")
+        .bind(id)
+        .fetch_all(&mut *c)
+        .await?;
+    for statement in [
+        "DELETE FROM ruphish_webhook_attempts WHERE job_id IN (SELECT id FROM ruphish_webhook_jobs WHERE webhook_id=?)",
+        "DELETE FROM ruphish_webhook_jobs WHERE webhook_id=?",
+        "DELETE FROM ruphish_webhook_state WHERE webhook_id=?",
+        "DELETE FROM webhooks WHERE id=?",
+    ] {
+        sqlx::query(statement).bind(id).execute(&mut *c).await?;
+    }
+    Ok(())
+}
+
+async fn load_webhook(
+    tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
+    id: i64,
+) -> Result<Webhook, Error> {
+    let mut value = webhook_row(
+        sqlx::query(
+            r#"
+                SELECT w.*,s.revision,s.owner_id,s.created_at,s.edited_by,s.edited_at
+                FROM webhooks w
+                JOIN ruphish_webhook_state s ON s.webhook_id=w.id
+                WHERE w.id=?
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(db)?
+        .ok_or(Error::NotFound("Webhook"))?,
+    )?;
+    for r in sqlx::query(
+        r#"
+                SELECT a.*,j.event_id
+                FROM ruphish_webhook_attempts a
+                JOIN ruphish_webhook_jobs j ON j.id=a.job_id
+                WHERE j.webhook_id=?
+                ORDER BY a.id DESC LIMIT 30
+            "#,
+    )
+    .bind(id)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(db)?
+    {
+        value.history.push(Run {
+            event_id: r.try_get("event_id").map_err(db)?,
+            attempt: r.try_get("attempt").map_err(db)?,
+            id: r.try_get("id").map_err(db)?,
+            started: r.try_get("started").map_err(db)?,
+            finished: r.try_get("finished").map_err(db)?,
+            status: r.try_get("status").map_err(db)?,
+            code: text(&r, "code")?,
+            matched: 0,
+            rejected: 0,
+        });
+    }
+    Ok(value)
+}
+
+async fn load_mailbox(
+    tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
+    id: i64,
+) -> Result<Mailbox, Error> {
+    let mut value = mailbox_row(
+        sqlx::query("SELECT * FROM ruphish_mailboxes WHERE id=? ")
+            .bind(id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(db)?
+            .ok_or(Error::NotFound("Reporting mailbox"))?,
+    )?;
+    for r in sqlx::query(crate::database::mysql::worker_sql::MAILBOX_HISTORY)
+        .bind(id)
+        .fetch_all(&mut **tx)
+        .await
+        .map_err(db)?
+    {
+        value.history.push(Run {
+            event_id: None,
+            attempt: None,
+            id: r.try_get("id").map_err(db)?,
+            started: r.try_get("started").map_err(db)?,
+            finished: r.try_get("finished").map_err(db)?,
+            status: None,
+            code: text(&r, "code")?,
+            matched: r.try_get("matched").map_err(db)?,
+            rejected: r.try_get("rejected").map_err(db)?,
+        });
+    }
+    Ok(value)
+}

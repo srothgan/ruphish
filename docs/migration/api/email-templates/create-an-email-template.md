@@ -13,7 +13,7 @@ Create a shared email template and retain the returned revision.
 | --- | --- | --- |
 | Operation | `POST /api/templates/` | `POST /api/templates/` |
 | Success | `201 Created` | `201 Created` |
-| Response type | `models.Template` | `resource_details::Resource<resource_details::Template>` |
+| Response type | `models.Template` | `resources::details::Resource<resources::details::Template>` |
 
 Use a Bearer API key. The [common changes](../common-contract-changes.md) explain shared access, error handling, metadata, and example conventions.
 

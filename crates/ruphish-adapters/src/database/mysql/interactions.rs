@@ -1,0 +1,221 @@
+//! Host-bound landing rendering and atomic engagement observations.
+use crate::database::mysql::InsertId;
+use ruphish_application::datetime;
+use ruphish_application::{
+    delivery::MessageInput,
+    interactions::*,
+    resources::{Content, Error, Profile, Recipient, Template},
+};
+use sqlx::{MySqlPool, Row};
+
+pub struct Interactions {
+    pool: MySqlPool,
+}
+impl Interactions {
+    pub fn new(pool: MySqlPool) -> Self {
+        Self { pool }
+    }
+}
+fn storage(error: sqlx::Error) -> Error {
+    crate::database::mysql::resource_error(error)
+}
+fn missing() -> Error {
+    Error::NotFound("Interaction")
+}
+#[async_trait::async_trait]
+impl Persistence for Interactions {
+    async fn learning_page(&self, origin: &str, public_id: &str) -> Result<String, Error> {
+        let frozen: Option<String> = sqlx::query_scalar("SELECT c.frozen_content FROM campaigns c JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id JOIN ruphish_domain_policy dp ON dp.id=d.id WHERE c.learning_public_id=? AND d.origin=? AND d.enabled=1 AND dp.serves").bind(public_id).bind(origin).fetch_optional(&self.pool).await.map_err(storage)?;
+        if let Some(frozen) = frozen {
+            return crate::campaigns::snapshot::Snapshot::decode(&frozen)?
+                .learning_html
+                .ok_or_else(missing);
+        }
+        sqlx::query_scalar("SELECT p.html FROM ruphish_learning_pages p WHERE p.public_id=? AND EXISTS(SELECT 1 FROM ruphish_domains d JOIN ruphish_domain_policy dp ON dp.id=d.id WHERE d.origin=? AND d.enabled=TRUE AND dp.serves)")
+            .bind(public_id).bind(origin).fetch_optional(&self.pool).await.map_err(storage)?.ok_or_else(missing)
+    }
+    async fn snapshot(&self, origin: &str, rid: &str, action: &Action) -> Result<Snapshot, Error> {
+        let mut tx = crate::database::mysql::locks::snapshot(&self.pool)
+            .await
+            .map_err(storage)?;
+        let row=sqlx::query("SELECT r.id AS result_id,r.campaign_id,r.user_id,r.email,r.first_name,r.last_name,r.position,r.send_date,c.url,c.page_id,c.smtp_id,c.template_id,cp.redirect_url,cp.learning_page_id,cp.track_opens,c.learning_public_id FROM results r JOIN campaigns c ON c.id=r.campaign_id AND c.user_id=r.user_id JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id JOIN ruphish_campaign_policy cp ON cp.campaign_id=c.id WHERE r.r_id=? AND c.status!='Completed' AND d.origin=? AND d.enabled=1 AND (SELECT serves FROM ruphish_domain_policy WHERE id=d.id)").bind(rid).bind(origin).fetch_all(&mut *tx).await.map_err(storage)?;
+        if row.len() != 1 {
+            return Err(missing());
+        }
+        let row = &row[0];
+        let result_id: i64 = row.try_get("result_id").map_err(storage)?;
+        let campaign_id: i64 = row.try_get("campaign_id").map_err(storage)?;
+        let text = |key: &str| {
+            row.try_get::<Option<String>, _>(key)
+                .map(|v| v.unwrap_or_default())
+                .map_err(storage)
+        };
+        let email = text("email")?;
+        let mut rendering = None;
+        if matches!(action, Action::View { .. } | Action::Submit { .. }) {
+            let frozen = crate::database::mysql::campaigns::snapshot(&mut tx, campaign_id).await?;
+            let resource = frozen.page();
+            if resource.id == 0 {
+                return Err(missing());
+            }
+            let Content::Page(page) = resource.content else {
+                return Err(Error::Internal);
+            };
+            let message = MessageInput {
+                track_opens: row.try_get("track_opens").map_err(storage)?,
+                message_id: None,
+                recipient: Recipient {
+                    email: email.clone(),
+                    first_name: text("first_name")?,
+                    last_name: text("last_name")?,
+                    position: text("position")?,
+                },
+                template: Template {
+                    envelope_sender: frozen.template.content.envelope_sender,
+                    ..Default::default()
+                },
+                template_id: 0,
+                page_id: resource.id,
+                profile: Profile {
+                    from_address: frozen.sender.content.from_address,
+                    ..Default::default()
+                },
+                url: text("url")?,
+                rid: rid.into(),
+            };
+            rendering = Some(RenderInput {
+                message,
+                redirect: if row
+                    .try_get::<Option<i64>, _>("learning_page_id")
+                    .map_err(storage)?
+                    .is_some()
+                {
+                    let public_id = text("learning_public_id")?;
+                    format!("/learn/{public_id}")
+                } else {
+                    text("redirect_url")?
+                },
+                source: matches!(action, Action::View { .. }).then_some(page.html),
+            });
+        }
+        let send_date = text("send_date")?;
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::mysql::commit_error(e)))?;
+        Ok(Snapshot {
+            result_id,
+            campaign_id,
+            email,
+            send_date,
+            rendering,
+        })
+    }
+    async fn record(
+        &self,
+        snapshot: &Snapshot,
+        origin: &str,
+        action: &Action,
+        now: i64,
+    ) -> Result<(), Error> {
+        let Snapshot {
+            result_id,
+            campaign_id,
+            email,
+            ..
+        } = snapshot;
+        let (result_id, campaign_id) = (*result_id, *campaign_id);
+        let mut tx = crate::database::mysql::locks::write(&self.pool)
+            .await
+            .map_err(storage)?;
+        if !crate::database::mysql::locks::campaign(&mut tx, campaign_id, false)
+            .await
+            .map_err(storage)?
+        {
+            return Err(missing());
+        }
+        sqlx::query("SELECT c.id,d.id FROM campaigns c JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id WHERE c.id=? FOR SHARE")
+            .bind(campaign_id).fetch_optional(&mut *tx).await.map_err(storage)?;
+        sqlx::query("SELECT id FROM results WHERE id=? FOR UPDATE")
+            .bind(result_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(storage)?;
+        // Completion and disabling must win over a render that started earlier.
+        let active:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM campaigns c JOIN ruphish_campaign_domains cd ON cd.campaign_id=c.id JOIN ruphish_domains d ON d.id=cd.domain_id WHERE c.id=? AND c.status!='Completed' AND d.enabled=1 AND (SELECT serves FROM ruphish_domain_policy WHERE id=d.id) AND d.origin=?)").bind(campaign_id).bind(origin).fetch_one(&mut *tx).await.map_err(storage)?;
+        if !active {
+            return Err(missing());
+        }
+        if matches!(action, Action::Open) {
+            let track_opens: bool = sqlx::query_scalar(
+                "SELECT track_opens FROM ruphish_campaign_policy WHERE campaign_id=?",
+            )
+            .bind(campaign_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(storage)?;
+            if !track_opens {
+                return Ok(());
+            }
+        }
+        let Some(kind) = action.kind() else {
+            return Ok(());
+        };
+        let message = kind.label();
+        let request_id = match action {
+            Action::Submit { event_id, .. } => Some(event_id.as_str()),
+            _ => None,
+        };
+        if let Some(request_id) = request_id {
+            let duplicate: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ruphish_event_receipts WHERE result_id=? AND request_id=?)")
+                .bind(result_id).bind(request_id).fetch_one(&mut *tx).await.map_err(storage)?;
+            if duplicate {
+                return Ok(());
+            }
+        }
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM events WHERE recipient_id=?")
+            .bind(result_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(storage)?;
+        check_event_capacity(count, false)?;
+        let details = match action {
+            Action::Submit {
+                password_present, ..
+            } => serde_json::to_string(&ruphish_domain::events::Metadata {
+                password_present: Some(*password_present),
+                ..Default::default()
+            })
+            .map_err(|_| Error::Internal)?,
+            _ => String::new(),
+        };
+        let client = action
+            .client()
+            .map(|v| serde_json::to_string(&v))
+            .transpose()
+            .map_err(|_| Error::Internal)?;
+        let stamp = datetime::utc_seconds(now).map_err(|_| Error::Internal)?;
+        let inserted = sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id,source,client) VALUES(?,?,?,?,?,?,'public',?)")
+            .bind(campaign_id).bind(email).bind(&stamp).bind(kind.key()).bind(details).bind(result_id).bind(client)
+            .execute(&mut *tx).await.map_err(storage)?;
+        let event_id = inserted.insert_id().map_err(storage)?;
+        crate::database::mysql::events::publish(&mut tx, event_id, "public")
+            .await
+            .map_err(storage)?;
+        if let Some(request_id) = request_id {
+            sqlx::query(
+                "INSERT INTO ruphish_event_receipts(result_id,request_id,event_id) VALUES(?,?,?)",
+            )
+            .bind(result_id)
+            .bind(request_id)
+            .bind(event_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+        }
+        sqlx::query("UPDATE results SET reported=CASE WHEN ?='Email Reported' THEN 1 ELSE reported END,status=CASE WHEN ?='Email Reported' THEN status WHEN status='Submitted Data' THEN status WHEN ?='Submitted Data' THEN ? WHEN status='Clicked Link' THEN status ELSE ? END,modified_date=? WHERE id=?").bind(message).bind(message).bind(message).bind(message).bind(message).bind(stamp).bind(result_id).execute(&mut *tx).await.map_err(storage)?;
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::mysql::commit_error(e)))?;
+        Ok(())
+    }
+}

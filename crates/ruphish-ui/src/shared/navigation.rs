@@ -1,0 +1,346 @@
+//! Shared navigation with stable sections, visible labels and decorative inline SVGs.
+use crate::shared::components::Dialog;
+use crate::tr;
+use crate::trs;
+use leptos::prelude::*;
+use wasm_bindgen::{JsCast, closure::Closure, prelude::*};
+
+/// `local_storage` keys for each collapsible group's open/closed state.
+const CAMPAIGNS_GROUP_KEY: &str = "nav-group-campaigns";
+const RESOURCES_GROUP_KEY: &str = "nav-group-resources";
+const ADMIN_GROUP_KEY: &str = "nav-group-admin";
+
+#[wasm_bindgen(module = "/web/navigation.mjs")]
+extern "C" {
+    #[wasm_bindgen(js_name = installNavigationGuard)]
+    fn install_navigation_guard(
+        dirty: &js_sys::Function,
+        dialog: &web_sys::HtmlDialogElement,
+    ) -> js_sys::Function;
+    #[wasm_bindgen(catch, js_name = confirmDiscard)]
+    async fn confirm_discard(dirty: bool) -> Result<bool, JsValue>;
+}
+
+#[derive(Clone, Copy)]
+struct DraftGuard(RwSignal<Option<Memo<bool>>>);
+
+/// Capture the shared guard while mounted, for actions such as direct sign-out.
+pub(crate) fn confirm_leave_action() -> impl AsyncFn() -> bool + Copy {
+    let guard = use_context::<DraftGuard>();
+    async move || {
+        let dirty = guard
+            .and_then(|g| g.0.get_untracked())
+            .is_some_and(|d| d.get_untracked());
+        confirm_discard(dirty).await.unwrap_or(false)
+    }
+}
+
+/// One browser adapter guards links, history traversal and document unloads.
+/// A terminal session invalidation bypasses it so stale authenticated content clears.
+pub(crate) fn install_guard(active: impl Fn() -> bool + 'static) -> impl IntoView {
+    let guard = DraftGuard(RwSignal::new(None));
+    provide_context(guard);
+    let dirty = Closure::<dyn Fn() -> bool>::new(move || {
+        active()
+            && guard
+                .0
+                .get_untracked()
+                .is_some_and(|dirty| dirty.get_untracked())
+    });
+    let dialog = NodeRef::<leptos::html::Dialog>::new();
+    let callbacks = StoredValue::new_local((dirty, None::<js_sys::Function>));
+    Effect::new(move |_| {
+        if let Some(dialog) = dialog.get() {
+            callbacks.update_value(|(dirty, remove)| {
+                *remove = Some(install_navigation_guard(
+                    dirty.as_ref().unchecked_ref(),
+                    &dialog,
+                ));
+            });
+        }
+    });
+    on_cleanup(move || {
+        callbacks.with_value(|(_, remove)| {
+            if let Some(remove) = remove {
+                let _ = remove.call0(&JsValue::NULL);
+            }
+        })
+    });
+    view! {
+        <Dialog node=dialog title=trs!(ui.discard_unsaved_changes) compact=true open_on_mount=false>
+            <h2 id="discard-heading">{tr!(ui.discard_unsaved_changes)}</h2>
+            <p id="discard-description">
+                {tr!(ui.your_changes_have_not_been_saved_leaving_this_page_will_discard_them)}
+            </p>
+            <div class="confirmation-actions">
+                <button type="button" data-discard="cancel" autofocus>
+                    {tr!(ui.keep_editing)}
+                </button>
+                <button type="button" class="danger" data-discard="confirm">
+                    {tr!(ui.discard_and_continue)}
+                </button>
+            </div>
+        </Dialog>
+    }
+}
+
+pub(crate) fn protect_draft(dirty: impl Fn() -> bool + Send + Sync + 'static) {
+    if let Some(guard) = use_context::<DraftGuard>() {
+        let dirty = Memo::new(move |_| dirty());
+        guard.0.set(Some(dirty));
+        on_cleanup(move || {
+            guard.0.try_update(|current| {
+                if *current == Some(dirty) {
+                    *current = None;
+                }
+            });
+        });
+    }
+}
+
+fn icon(path: &'static str) -> impl IntoView + use<> {
+    view! {
+        <svg
+            class="nav-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            focusable="false"
+        >
+            <path d=path />
+        </svg>
+    }
+}
+fn link(
+    path: Memo<String>,
+    href: &'static str,
+    label: Signal<String>,
+    drawing: &'static str,
+) -> impl IntoView + use<> {
+    let active = move || {
+        let path = path.get();
+        path == href
+            || path
+                .strip_prefix(href)
+                .is_some_and(|tail| tail.starts_with('/'))
+    };
+    view! {
+        <a
+            class="nav-link"
+            href=href
+            aria-current=move || active().then_some("page")
+            title=move || label.get()
+            aria-label=move || label.get()
+        >
+            {icon(drawing)}
+            <span>{move || label.get()}</span>
+        </a>
+    }
+}
+/// A sidebar link to an off-site page: the section icon and label match the normal
+/// links, with a trailing external-link icon marking the new-tab destination. It
+/// stays outside the SPA router and draft guard via its other origin and
+/// `rel="external"`.
+fn external_link(
+    href: &'static str,
+    label: Signal<String>,
+    drawing: &'static str,
+) -> impl IntoView + use<> {
+    view! {
+        <a
+            class="nav-external"
+            href=href
+            target="_blank"
+            rel="noopener noreferrer external"
+            title=move || label.get()
+            aria-label=move || label.get()
+        >
+            {icon(drawing)}
+            <span>{move || label.get()}</span>
+            <svg
+                class="nav-external-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                focusable="false"
+            >
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6 M15 3h6v6 M10 14 21 3" />
+            </svg>
+        </a>
+    }
+}
+/// The disclosure chevron: points down when its group is open, right when closed
+/// (the closed state is driven from CSS via the section's `data-collapsed`).
+fn group_chevron() -> impl IntoView + use<> {
+    view! {
+        <svg
+            class="nav-group-chevron"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            focusable="false"
+        >
+            <path d="M6 9 12 15 18 9" />
+        </svg>
+    }
+}
+/// A collapsible sidebar group: a heading button with a trailing chevron toggles the
+/// list of links. The open state lives in one signal, persisted per group under
+/// `storage_key` so a reload restores the user's choice; it is mirrored to
+/// `aria-expanded` for assistive tech and to `data-collapsed` for styling. In the
+/// collapsed icon-rail the heading hides and CSS always shows the links, so no
+/// destination becomes unreachable.
+fn nav_group<C: IntoView + 'static>(
+    heading_id: &'static str,
+    storage_key: &'static str,
+    heading: Signal<String>,
+    default_open: bool,
+    children: C,
+) -> impl IntoView + use<C> {
+    let open = crate::shared::local_storage::persistent(storage_key, default_open);
+    view! {
+        <section
+            class="nav-section"
+            aria-labelledby=heading_id
+            data-collapsed=move || (!open.get()).then_some("")
+        >
+            <h2 class="nav-group-heading">
+                <button
+                    type="button"
+                    id=heading_id
+                    class="nav-group-toggle"
+                    aria-expanded=move || if open.get() { "true" } else { "false" }
+                    on:click=move |_| open.update(|value| *value = !*value)
+                >
+                    <span>{move || heading.get()}</span>
+                    {group_chevron()}
+                </button>
+            </h2>
+            <div class="nav-group-body">{children}</div>
+        </section>
+    }
+}
+pub(crate) fn sections(path: Memo<String>, admin: bool) -> impl IntoView + use<> {
+    let api = expect_context::<crate::api::client::Api>();
+    view! {
+        {link(
+            path,
+            "/",
+            trs!(ui.dashboard),
+            "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
+        )}
+        {nav_group(
+            "nav-campaigns",
+            CAMPAIGNS_GROUP_KEY,
+            trs!(ui.campaigns),
+            true,
+            view! {
+                {link(
+                    path,
+                    "/campaigns",
+                    trs!(ui.campaigns),
+                    "M4 21V3 M4 4c5-4 10 4 16 0v10c-6 4-11-4-16 0",
+                )}
+            },
+        )}
+        {nav_group(
+            "nav-resources",
+            RESOURCES_GROUP_KEY,
+            trs!(ui.resources),
+            true,
+            view! {
+                {link(
+                    path,
+                    "/domains",
+                    trs!(ui.domains),
+                    "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M3 12h18 M12 3c5 5 5 13 0 18-5-5-5-13 0-18",
+                )}
+                {link(path, "/templates", trs!(ui.email_templates), "M3 5h18v14H3z M3 5l9 7 9-7")}
+                {link(
+                    path,
+                    "/pages",
+                    trs!(ui.landing_pages),
+                    "M3 3h18v18H3z M3 8h18 M7 5.5h.01 M11 5.5h.01 M7 12h10 M7 16h6",
+                )}
+                {link(
+                    path,
+                    "/learning-pages",
+                    trs!(ui.learning_pages),
+                    "M4 3h7v18H4z M11 3h9v18h-9 M14 7h3 M14 11h3",
+                )}
+                {link(
+                    path,
+                    "/groups",
+                    trs!(ui.recipient_groups),
+                    "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75 M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0",
+                )}
+                <Show when=move || {
+                    api.features.get().reporting_mailboxes_enabled
+                }>
+                    {link(
+                        path,
+                        "/reporting-mailboxes",
+                        trs!(ui.reporting_mailboxes),
+                        "M3 5h18v14H3z M3 5l9 7 9-7 M9 16h6",
+                    )}
+                </Show>
+                {link(
+                    path,
+                    "/smtp",
+                    trs!(ui.sending_profiles),
+                    "M22 2 9 15 M22 2l-7 20-4-9-9-4 20-7",
+                )}
+                <Show when=move || {
+                    api.features.get().webhooks_enabled
+                }>
+                    {link(
+                        path,
+                        "/webhooks",
+                        trs!(ui.webhooks),
+                        "M7 12a4 4 0 1 1 0-8 M17 12a4 4 0 1 1 0 8 M7 8l10 8 M7 16a4 4 0 1 1 0 4 M7 16h10",
+                    )}
+                </Show>
+            },
+        )}
+        {external_link(
+            "https://ruphish.com/docs/",
+            trs!(ui.documentation),
+            "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 0 3-3h7z",
+        )}
+        {admin
+            .then(|| {
+                nav_group(
+                    "nav-admin",
+                    ADMIN_GROUP_KEY,
+                    trs!(ui.administration),
+                    false,
+                    view! {
+                        {link(
+                            path,
+                            "/settings",
+                            trs!(ui.company_settings),
+                            "M4 4h16v16H4z M8 4v16 M8 9h12 M8 15h12",
+                        )}
+                        {link(
+                            path,
+                            "/users",
+                            trs!(ui.users),
+                            "M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7l-9-4 M9 12l2 2 4-4",
+                        )}
+                    },
+                )
+            })}
+    }
+}

@@ -2,7 +2,8 @@
 
 mod support;
 use ruphish_adapters::password_worker as password;
-use ruphish_domain::password::{PasswordError, validate};
+use ruphish_domain::account::password::PasswordError;
+use ruphish_domain::account::password::validate;
 use serde_json::Value;
 use support::DatabaseFixture;
 

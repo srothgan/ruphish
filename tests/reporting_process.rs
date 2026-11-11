@@ -22,7 +22,7 @@ fn get(client: &reqwest::blocking::Client, base: &str, path: &str) -> Value {
     assert_eq!(response.status(), 200, "{}", response.text().unwrap());
     let value: Value = response.json().unwrap();
     if path.split('?').next().unwrap_or(path).ends_with("/results") {
-        let snapshot: ruphish_contracts::campaign_reads::Results =
+        let snapshot: ruphish_contracts::campaign::reads::Results =
             serde_json::from_value(value.clone()).unwrap();
         assert_eq!(serde_json::to_value(snapshot).unwrap(), value);
     }

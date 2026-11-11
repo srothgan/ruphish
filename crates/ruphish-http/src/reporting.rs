@@ -11,8 +11,9 @@ use axum::{
     routing::get,
 };
 use ruphish_application::reporting as app;
+use ruphish_contracts::campaign::reads;
+use ruphish_contracts::errors::ErrorCode;
 use ruphish_contracts::reporting::Filter;
-use ruphish_contracts::{campaign_reads as reads, errors::ErrorCode};
 fn filter(f: &Filter) -> Result<app::Filter, Rejection> {
     let recipients = if f.recipients.is_empty() {
         Vec::new()

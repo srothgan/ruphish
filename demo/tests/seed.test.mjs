@@ -9,7 +9,7 @@ import { createServer } from 'node:net';
 import { DatabaseSync } from 'node:sqlite';
 import { dataset } from '../../assets/website-demo/dataset.mjs';
 import { seed } from '../../assets/website-demo/seed.mjs';
-import { createDemoApi } from '../../crates/ruphish-ui/web/demo-api.mjs';
+import { createDemoApi } from '../../crates/ruphish-ui/web/demo/api.mjs';
 
 test('the sole dataset seeds installed SQLite schema, survives reopen, and disables outbound integrations', async () => {
   const state = await mkdtemp(join(tmpdir(), 'ruphish-demo-seed-'));

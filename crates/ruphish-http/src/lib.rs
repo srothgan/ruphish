@@ -3,27 +3,23 @@
 //! Handlers coordinate application operations; executable composition supplies
 //! concrete adapters.
 
+pub mod assets;
 mod attribution;
 pub mod auth;
 mod campaigns;
 mod domains;
+mod event_edit;
 pub mod health;
 mod integrations;
 pub mod interactions;
 mod overview;
-pub mod public_assets;
-mod rate;
 mod reporting;
 mod resources;
 pub mod response;
 mod revision;
 pub mod server;
-mod starter_templates;
-
 mod settings;
-
-mod event_edit;
+mod starter_templates;
 
 #[path = "../asset_distribution.rs"]
 mod asset_distribution;
-mod static_asset;

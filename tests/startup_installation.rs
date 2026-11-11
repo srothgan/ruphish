@@ -1,5 +1,5 @@
 //! Persisted first-run settings, no-clobber publication and path semantics.
-use super::*;
+use crate::config::installation::*;
 use serde_json::json;
 
 fn locations(root: &Path) -> Locations {

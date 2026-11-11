@@ -13,7 +13,7 @@ Create a shared group and retain the returned revision.
 | --- | --- | --- |
 | Operation | `POST /api/groups/` | `POST /api/groups/` |
 | Success | `201 Created` | `201 Created` |
-| Response type | `models.Group` | `resource_details::Resource<resource_details::Group>` |
+| Response type | `models.Group` | `resources::details::Resource<resources::details::Group>` |
 
 Use a Bearer API key. The [common changes](../common-contract-changes.md) explain shared access, error handling, metadata, and example conventions.
 

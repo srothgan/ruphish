@@ -80,6 +80,8 @@ node --test crates/ruphish-ui/web/tests/ui-interactions.artifact.mjs
 
 This harness uses the real WASM bundle with synthetic responses. It checks state retention, navigation, and error recovery without contacting a real installation. It does not verify layout, the operating-system file picker, or sandbox enforcement. Select applicable [manual checks](manual-browser-checks.md) as well.
 
+To preserve a running local server's distribution, build to a separate directory with `trunk build --locked --dist target/ui-validation/dist`. Set `RUPHISH_UI_DIST` to `target/ui-validation/dist/admin` before running the same mounted test command; the fixture resolves this path from the repository working directory. Unset the variable afterward. The default remains `dist/admin/`, and isolated builds retain Trunk's `.stage/` staging and the completed `admin/` subtree.
+
 ## JavaScript
 
 Install root tooling with `npm ci --ignore-scripts` on a fresh checkout or after its dependency inputs change. Then:

@@ -13,7 +13,7 @@ Replace the results response parser. The route remains, but it now returns filte
 | --- | --- | --- |
 | Operation | `GET /api/campaigns/{id}/results` | `GET /api/campaigns/{id}/results` |
 | Success | `200 OK` | `200 OK` |
-| Response type | `models.CampaignResults` | `campaign_reads::Results` |
+| Response type | `models.CampaignResults` | `campaign::reads::Results` |
 
 Use a Bearer API key. The [common changes](../common-contract-changes.md) explain shared access, error handling, metadata, and example conventions.
 

@@ -1,4 +1,4 @@
-use crate::feedback::Message;
+use crate::shared::feedback::Message;
 use leptos::prelude::*;
 
 #[derive(Clone, Copy, Default)]
@@ -132,7 +132,7 @@ pub(crate) fn ActionLink(
 /// Copy a value without placing long verification tokens into the page layout.
 #[component]
 pub(crate) fn CopyButton(label: Signal<String>, value: String, message: Message) -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
 
     use leptos::leptos_dom::helpers::{TimeoutHandle, set_timeout_with_handle};
     let copied = RwSignal::new(false);
@@ -167,7 +167,7 @@ pub(crate) fn CopyButton(label: Signal<String>, value: String, message: Message)
                 copying.set(true);
                 let value = value.clone();
                 leptos::task::spawn_local_scoped_with_cancellation(async move {
-                    if crate::account::copy_text(&value).await.is_ok() {
+                    if crate::account::pages::copy_text(&value).await.is_ok() {
                         copied.set(true);
                         reset
                             .set_value(
@@ -254,7 +254,7 @@ pub(crate) fn SaveButton(
 #[component]
 pub(crate) fn RefreshButton(
     fetching: Signal<bool>,
-    #[prop(into, default = ruphish_ui::trs!(ui.refresh))] label: Signal<String>,
+    #[prop(into, default = crate::trs!(ui.refresh))] label: Signal<String>,
     #[prop(into, optional)] disabled: Signal<bool>,
     on_refresh: Callback<()>,
 ) -> impl IntoView {

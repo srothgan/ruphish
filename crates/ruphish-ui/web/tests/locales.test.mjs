@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import en from '../../locales/en.json' with { type: 'json' };
 import de from '../../locales/de.json' with { type: 'json' };
-import { editorText } from '../editor-i18n.mjs';
+import { editorText } from '../editor/localization.mjs';
 
 test('the shipped catalogs cover the same UI text and interpolation arguments', () => {
   function compare(english, german, path = '') {

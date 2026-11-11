@@ -13,7 +13,7 @@ Read the current revision before replacing the sending profile. A blind Gophish 
 | --- | --- | --- |
 | Operation | `PUT /api/smtp/{id}` | `PUT /api/smtp/{id}` |
 | Success | `200 OK` | `200 OK` |
-| Response type | `models.SMTP` | `resource_details::Resource<resource_details::Profile>` |
+| Response type | `models.SMTP` | `resources::details::Resource<resources::details::Profile>` |
 
 Use a Bearer API key. The [common changes](../common-contract-changes.md) explain shared access, error handling, metadata, and example conventions.
 

@@ -2,15 +2,20 @@
 //!
 //! Use cases coordinate the domain without concrete HTTP handlers, database
 //! drivers, delivery clients, or the admin UI.
+
+/// Persisted attribution shared by application resources and transport projections.
+pub mod attribution;
 pub mod auth;
 pub mod campaign;
 pub mod content_work;
 pub mod delivery;
 pub mod domains;
+pub mod event_edit;
 pub mod health;
 pub mod integrations;
 pub mod interactions;
 pub mod overview;
+pub mod profile_diagnostics;
 pub mod reporting;
 pub mod resources;
 pub mod settings;
@@ -24,10 +29,3 @@ pub use ruphish_domain::validation;
 
 /// Shared sorted-continuation rules used by transport and storage adapters.
 pub use ruphish_domain::pagination;
-
-pub mod event_edit;
-
-/// Persisted attribution shared by application resources and transport projections.
-pub mod attribution;
-
-pub mod profile_tests;

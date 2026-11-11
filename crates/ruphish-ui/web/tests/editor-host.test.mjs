@@ -33,7 +33,7 @@ test('HTML and visual modes share edits, retain line numbers and reject stale se
   }
   let editor;
   try {
-    const { mountEditor } = await import('../editor.mjs');
+    const { mountEditor } = await import('../editor/index.mjs');
     const { EditorView } = await import('@codemirror/view');
     const host = window.document.querySelector('#host');
     const toolbar = window.document.createElement('div');

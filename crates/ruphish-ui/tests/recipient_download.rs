@@ -59,7 +59,7 @@ extern "C" {
 #[wasm_bindgen_test]
 async fn recipient_template_downloads_exact_importable_bytes_and_reports_browser_failure() {
     install_download();
-    ruphish_ui::browser_http::download_recipient_template().unwrap();
+    ruphish_ui::api::transport::download_recipient_template().unwrap();
     let text = downloaded_text().await.as_string().unwrap();
     assert_eq!(text, include_str!("../assets/recipient-template.csv"));
     assert_eq!(
@@ -71,7 +71,7 @@ async fn recipient_template_downloads_exact_importable_bytes_and_reports_browser
         ]
     );
     break_download();
-    let error = ruphish_ui::browser_http::download_recipient_template().unwrap_err();
+    let error = ruphish_ui::api::transport::download_recipient_template().unwrap_err();
     assert!(!error.is_empty());
     assert!(!error.contains("private platform diagnostic"));
     assert_eq!(failed_download_released().await.as_bool(), Some(true));

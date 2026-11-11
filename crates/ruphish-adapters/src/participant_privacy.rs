@@ -33,7 +33,8 @@ pub(crate) fn details(source: &str) -> String {
 /// Decode only the closed request categories, independently of editable event metadata.
 pub(crate) fn client(
     source: Option<&str>,
-) -> Result<Option<ruphish_domain::client::Info>, ruphish_application::resources::Error> {
+) -> Result<Option<ruphish_domain::events::client_info::Info>, ruphish_application::resources::Error>
+{
     source
         .map(serde_json::from_str)
         .transpose()

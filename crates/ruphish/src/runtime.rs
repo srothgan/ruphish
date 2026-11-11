@@ -52,7 +52,7 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
         None
     };
     let public_assets = if arguments.mode.phish() {
-        ruphish_http::public_assets::Assets::load(Path::new("static/endpoint"))
+        ruphish_http::assets::public::Assets::load(Path::new("static/endpoint"))
             .map_err(|error| context("Load public assets", error))?
     } else {
         Default::default()
@@ -121,9 +121,9 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
         let integrations=database.integrations();
         let campaigns=database.campaigns();
         let domains=database.domains();
-        let domain_worker=crate::domain_worker::Worker { domains:domains.clone(),verifier:std::sync::Arc::new(domain_verifier) };
+        let domain_worker=crate::workers::domain_verification::Worker { domains:domains.clone(),verifier:std::sync::Arc::new(domain_verifier) };
         let smtp=std::sync::Arc::new(ruphish_adapters::smtp::Smtp::new(policy.clone(),config.contact_address.clone()));
-        let worker=if arguments.mode.admin() && !arguments.disable_mailer {Some(crate::campaign_worker::Worker {queue:campaigns.clone(),smtp:smtp.clone()})} else {None};
+        let worker=if arguments.mode.admin() && !arguments.disable_mailer {Some(crate::workers::delivery::Worker {queue:campaigns.clone(),smtp:smtp.clone()})} else {None};
         tracing::info!(mailer_requested = worker.is_some(), "campaign_worker_configured");
         let previews: std::sync::Arc<dyn ruphish_application::delivery::Previews> = database.previews();
         let public_router = ruphish_http::interactions::router(ruphish_http::interactions::Services{assets:public_assets,domains:domains.clone(),interactions:database.interactions(),previews:previews.clone(),tls:config.phish.use_tls,trusted_proxies:config.domain_verification.trusted_proxies.clone(),contact:config.contact_address.clone()});
@@ -136,7 +136,7 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
                 std::sync::Arc::new(ruphish_adapters::password_worker::PasswordWorker::default()),
             );
             let resources = ruphish_application::resources::Service::new(database.resources(), std::sync::Arc::new(ruphish_adapters::resources::Validate), std::sync::Arc::new(ruphish_adapters::imports::Tools {policy:policy.clone()}), database.content_work());
-            let profile_tests = ruphish_application::profile_tests::Service::new(database.profile_tests(),smtp.clone(),smtp.clone(),smtp.clone(),database.content_work());
+            let profile_tests = ruphish_application::profile_diagnostics::Service::new(database.profile_tests(),smtp.clone(),smtp.clone(),smtp.clone(),database.content_work());
             let delivery = ruphish_application::delivery::Service::new(service.clone(),resources.clone(),smtp,previews);
             Some(ruphish_http::auth::router(assets, ruphish_http::auth::Services {settings:database.settings(),integrations:integrations.clone(),reporting:database.reporting(),overview:database.overview(),accounts:service,resources,delivery,profile_tests,campaigns,domains,mailer_enabled:!arguments.disable_mailer}, sessions, &key, config.admin.use_tls, config.admin.trusted_origins.clone(), config.admin.csrf_key.clone()))
         } else { None };
@@ -239,8 +239,8 @@ async fn prepare_tls(server: &Server) -> Result<Option<RustlsConfig>, Error> {
 struct RuntimeServices {
     admin: Option<axum::Router>,
     public: axum::Router,
-    mailer: Option<crate::campaign_worker::Worker>,
-    domains: crate::domain_worker::Worker,
+    mailer: Option<crate::workers::delivery::Worker>,
+    domains: crate::workers::domain_verification::Worker,
     integrations: std::sync::Arc<dyn ruphish_application::integrations::Worker>,
     health: ruphish_application::health::Service,
 }

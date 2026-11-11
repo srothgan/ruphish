@@ -1,16 +1,16 @@
 //! Read-only attribution; resource editors never own these values.
 use super::{DetailField, DetailGrid, DetailSection};
+use crate::trs;
 use leptos::prelude::*;
 use ruphish_contracts::attribution::{Attribution, UserReference};
-use ruphish_ui::trs;
 
 #[component]
 pub(crate) fn AttributionInfo(#[prop(into)] value: Signal<Attribution>) -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
     let timestamp = move |at: Option<String>| {
         at.map_or_else(
             || leptos_i18n::t_string!(i18n, ui.unknown).to_owned(),
-            |at| crate::time_display::instant(&serde_json::json!(at)),
+            |at| crate::shared::datetime::display::instant(&serde_json::json!(at)),
         )
     };
     view! {
@@ -34,7 +34,7 @@ pub(crate) fn AttributionInfo(#[prop(into)] value: Signal<Attribution>) -> impl 
 }
 
 pub(crate) fn identity_name(user: Option<UserReference>) -> String {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
     let Some(user) = user else {
         return leptos_i18n::t_string!(i18n, ui.unknown).into();
     };

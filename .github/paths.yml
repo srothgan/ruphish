@@ -64,8 +64,7 @@ persistence:
 
 public:
   - *build_inputs
-  - 'crates/ruphish/src/config*.rs'
-  - 'crates/ruphish/src/installation.rs'
+  - 'crates/ruphish/src/config/**'
   - 'Dockerfile'
   - 'compose.yaml'
   - '.dockerignore'

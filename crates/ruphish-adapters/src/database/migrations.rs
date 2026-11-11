@@ -38,7 +38,7 @@ pub enum MySqlSchema {
 /// This reads metadata/history only: it does not initialize, migrate or bootstrap.
 /// Use this for source assessment; ordinary startup initializes/upgrades through `database::open`.
 pub async fn inspect_mysql(config: &super::MySqlConfig) -> Result<MySqlInspection, Error> {
-    crate::mysql::inspect(config).await
+    crate::database::mysql::inspect(config).await
 }
 /// Latest supported Goose schema version, not a Ruphish schema version.
 pub const LATEST_LEGACY_VERSION: i64 = sqlite::LATEST_LEGACY_VERSION;

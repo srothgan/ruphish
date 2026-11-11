@@ -1,7 +1,7 @@
 //! Consistent read-only presentation; features retain their data and actions.
 use super::Card;
+use crate::trs;
 use leptos::prelude::*;
-use ruphish_ui::trs;
 
 #[component]
 pub(crate) fn DetailCard(children: Children) -> impl IntoView {

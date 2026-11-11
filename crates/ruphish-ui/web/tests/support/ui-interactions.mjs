@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { setImmediate as nextTurn } from 'node:timers/promises';
+import { pathToFileURL } from 'node:url';
 import { JSDOM } from 'jsdom';
 import jsdomUtils from 'jsdom/lib/generated/idl/utils.js';
 import whatwgURL from 'whatwg-url';
-import { createDemoApi, preferences } from '../../demo-api.mjs';
+import { createDemoApi, preferences } from '../../demo/api.mjs';
 import { dataset } from '../../../../../assets/website-demo/dataset.mjs';
 
 const scenario = process.argv[2];
@@ -813,7 +815,9 @@ globalThis.fetch = async (request, options) => {
   return api.execute(request, options);
 };
 win.fetch = globalThis.fetch;
-const dist = new URL('../../../../../dist/admin/', import.meta.url);
+const dist = process.env.RUPHISH_UI_DIST
+  ? pathToFileURL(`${resolve(process.env.RUPHISH_UI_DIST)}/`)
+  : new URL('../../../../../dist/admin/', import.meta.url);
 const html = readFileSync(new URL('index.html', dist), 'utf8');
 const demo = html.includes('<title>Ruphish Demo</title>');
 if (scenario.startsWith('auth-')) {

@@ -55,7 +55,7 @@ Absolute schedule fields accept RFC 3339 strings with an offset. Local schedule 
 
 Resolve selections, deduplicate the audience, validate the destination, and render a sample without creating an execution.
 
-**Request:** campaign::Create. **Response:** `200 OK`, `campaign_workflow::Review` as `application/json`.
+**Request:** campaign::Create. **Response:** `200 OK`, `campaign::workflow::Review` as `application/json`.
 
 Request body (`request.json`):
 
@@ -157,7 +157,7 @@ Example response:
 | Attribute | Type | Contract |
 | --- | --- | --- |
 | `learning_revision` | `string or null` | Learning-page revision included in the reviewed launch. |
-| `warnings` | `resource_details::PageWarning[]` | Advisory findings on the processed landing page. |
+| `warnings` | `resources::details::PageWarning[]` | Advisory findings on the processed landing page. |
 | `total` | `integer` | Number of unique recipients. |
 | `duplicate_count` | `integer` | Number of discarded duplicate entries. |
 | `launch_date` | `integer` | Resolved launch time in UTC seconds. |
@@ -191,7 +191,7 @@ The audience is deduplicated by email, retaining the first occurrence in group a
 
 Create an execution using the reviewed resource selections.
 
-**Request:** campaign::Create. **Response:** `201 Created`, `campaign_details::Campaign` as `application/json`.
+**Request:** campaign::Create. **Response:** `201 Created`, `campaign::details::Campaign` as `application/json`.
 
 Use a fresh key for each intended execution. Reuse the same key and typed request after an uncertain response; a different request with the same key conflicts. Keys are nonempty and at most 128 bytes. The header is optional for direct creation, but omitting it removes this retry protection.
 
@@ -441,7 +441,7 @@ Recipient rows also contain `email`, `first_name`, `last_name`, and `position`. 
 
 List complete execution records. Prefer overview or directory when full content and timelines are unnecessary.
 
-**Request:** No body. **Response:** `200 OK`, `Vec<campaign_details::Campaign>` as `application/json`.
+**Request:** No body. **Response:** `200 OK`, `Vec<campaign::details::Campaign>` as `application/json`.
 
 ```sh
 curl --request GET "$RUPHISH_URL/api/campaigns/" \
@@ -576,7 +576,7 @@ Example response:
 
 Read one execution and its recorded audience and timeline.
 
-**Request:** No body. **Response:** `200 OK`, `campaign_details::Campaign` as `application/json`.
+**Request:** No body. **Response:** `200 OK`, `campaign::details::Campaign` as `application/json`.
 
 ```sh
 curl --request GET "$RUPHISH_URL/api/campaigns/1" \
@@ -709,7 +709,7 @@ Example response:
 
 Read operational context without full content or recipient history.
 
-**Request:** No body. **Response:** `200 OK`, `campaign_reads::Header` as `application/json`.
+**Request:** No body. **Response:** `200 OK`, `campaign::reads::Header` as `application/json`.
 
 ```sh
 curl --request GET "$RUPHISH_URL/api/campaigns/1/context" \
@@ -790,7 +790,7 @@ Resource references contain numeric `id` and nullable `name`. `policy` contains 
 
 Read a bounded page of execution contexts.
 
-**Request:** Query: campaign::request::OverviewPage. **Response:** `200 OK`, `campaign_reads::Overview` as `application/json`.
+**Request:** Query: campaign::request::OverviewPage. **Response:** `200 OK`, `campaign::reads::Overview` as `application/json`.
 
 ```sh
 curl --request GET "$RUPHISH_URL/api/campaigns/overview?after=0&limit=50" \
@@ -862,7 +862,7 @@ Pass `next_after` as the next request’s `after`; null ends traversal. `complet
 
 List saved drafts and executions in one bounded directory.
 
-**Request:** Query: campaign::request::DirectoryPage. **Response:** `200 OK`, `campaign_reads::Directory` as `application/json`.
+**Request:** Query: campaign::request::DirectoryPage. **Response:** `200 OK`, `campaign::reads::Directory` as `application/json`.
 
 ```sh
 curl --request GET "$RUPHISH_URL/api/campaigns/directory?filter=all&sort=name&order=asc" \
@@ -901,7 +901,7 @@ Directory items contain a string `id`, `name`, nullable draft `revision`, `kind`
 
 List execution metadata and progression counts.
 
-**Request:** No body. **Response:** `200 OK`, `campaign_details::Summaries` as `application/json`.
+**Request:** No body. **Response:** `200 OK`, `campaign::details::Summaries` as `application/json`.
 
 ```sh
 curl --request GET "$RUPHISH_URL/api/campaigns/summary" \
@@ -953,7 +953,7 @@ Example response:
 
 Read metadata and progression counts for one execution.
 
-**Request:** No body. **Response:** `200 OK`, `campaign_details::Summary` as `application/json`.
+**Request:** No body. **Response:** `200 OK`, `campaign::details::Summary` as `application/json`.
 
 ```sh
 curl --request GET "$RUPHISH_URL/api/campaigns/1/summary" \
@@ -1012,7 +1012,7 @@ These summary counts represent recipient progression: a submission contributes t
 
 Return editable duplication input without persisting a saved draft.
 
-**Request:** No body. **Response:** `200 OK`, `campaign_workflow::Duplicate` as `application/json`.
+**Request:** No body. **Response:** `200 OK`, `campaign::workflow::Duplicate` as `application/json`.
 
 ```sh
 curl --request GET "$RUPHISH_URL/api/campaigns/1/draft" \

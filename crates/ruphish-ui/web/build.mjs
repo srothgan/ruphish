@@ -70,7 +70,7 @@ if (process.argv[2] === 'manifest') {
     }),
     build({
       ...common,
-      entryPoints: [path.join(web, 'editor.mjs')],
+      entryPoints: [path.join(web, 'editor/index.mjs')],
       format: 'esm',
       outfile: path.join(web, 'generated/editor.js'),
     }),
@@ -88,7 +88,7 @@ if (process.argv[2] === 'manifest') {
     }),
     build({
       ...common,
-      entryPoints: [path.join(web, 'visual-frame.mjs')],
+      entryPoints: [path.join(web, 'editor/visual/frame.mjs')],
       format: 'iife',
       loader: { '.svg': 'text', '.less': 'empty' },
       outfile: path.join(web, 'generated/visual-frame.js'),

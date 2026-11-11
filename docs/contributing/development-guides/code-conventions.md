@@ -21,6 +21,10 @@ When changing a contract, update its types, callers, persistence, tests, and doc
 
 Remove a repeated check only after establishing which type, earlier validation, or invariant guarantees the condition and whether that guarantee still holds where the check runs. Preserve validation at trust boundaries, authorization checks, and checks needed after concurrent state changes. A similar check elsewhere does not by itself make one redundant.
 
+## Organize modules by responsibility
+
+Group related files under the feature or responsibility that owns them. Use the containing folder as context instead of repeating it in every filename, such as `campaigns/queries.rs`. Keep independent modules as individual files; do not create single-file folders solely for symmetry. Use `mod.rs` as the entry point for grouped modules, preserve visibility at the owning boundary, and update imports, embedded assets, tests, build inputs, and documentation when moving files. Operational product checks belong in diagnostics modules, while test modules contain automated regressions.
+
 ## Model state and outcomes explicitly
 
 Give mutable state one owner and derive dependent values. Represent mutually exclusive states directly rather than maintaining several booleans that can contradict each other. Separate an editable draft from confirmed data, and define how necessary caches become invalid.

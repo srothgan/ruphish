@@ -3,14 +3,16 @@
 
 #![allow(clippy::unwrap_used)]
 
-use crate::resource_state::{ResourceDraft, import_resource};
+use crate::resources::draft::ResourceDraft;
+use crate::resources::draft::import_resource;
 
 fn checkpoint(
     family: &str,
     mut value: serde_json::Value,
     revision: &str,
-) -> crate::resource_state::Confirmed {
-    use ruphish_contracts::resource_details::{self, Kind};
+) -> crate::resources::draft::Confirmed {
+    use ruphish_contracts::resources::details as resource_details;
+    use ruphish_contracts::resources::details::Kind;
     use serde_json::json;
     value["revision"] = json!(1);
     value["modified_date"] = json!("2026-10-25T12:00:00Z");
@@ -29,7 +31,7 @@ fn checkpoint(
         }
         _ => Kind::LearningPage,
     };
-    crate::resource_state::Confirmed::new(
+    crate::resources::draft::Confirmed::new(
         resource_details::decode(kind, value).unwrap(),
         Some(revision.into()),
     )
@@ -202,7 +204,7 @@ fn malformed_import_does_not_replace_the_open_document_and_source_survives_adver
 
 #[test]
 fn imported_resources_keep_supported_fields_but_never_inherit_identity() {
-    use crate::import_state::prepare_creation;
+    use crate::resources::imports::preparation::prepare_creation;
     use serde_json::json;
     let cases = [
         (
@@ -244,7 +246,7 @@ fn imported_resources_keep_supported_fields_but_never_inherit_identity() {
                 assert!(child.get("user_id").is_none());
             }
         }
-        let mut draft = crate::resource_state::ResourceDraft::new(json!({"id":0,"name":""}));
+        let mut draft = crate::resources::draft::ResourceDraft::new(json!({"id":0,"name":""}));
         draft.merge_import(&imported.fields, family).unwrap();
         assert!(draft.dirty());
         assert_eq!(draft.completed_id(), None);
@@ -262,7 +264,7 @@ fn imported_resources_keep_supported_fields_but_never_inherit_identity() {
 
 #[test]
 fn csv_import_requires_review_of_omissions_and_retains_the_error_report() {
-    use crate::import_state::prepare_creation;
+    use crate::resources::imports::preparation::prepare_creation;
     use serde_json::json;
     let error = json!({"row":4,"message":"Email is required"});
     let mut imported = prepare_creation(
@@ -300,7 +302,7 @@ fn csv_import_requires_review_of_omissions_and_retains_the_error_report() {
 
 #[test]
 fn incomplete_content_imports_remain_drafts_and_invalid_imports_are_rejected() {
-    use crate::import_state::prepare_creation;
+    use crate::resources::imports::preparation::prepare_creation;
     use serde_json::json;
     let mail = prepare_creation(
         "templates",
@@ -311,12 +313,10 @@ fn incomplete_content_imports_remain_drafts_and_invalid_imports_are_rejected() {
     assert_eq!(mail.fields["name"], "");
     assert_eq!(mail.fields["envelope_sender"], "");
     assert_eq!(mail.fields["attachments"], json!([]));
-    assert!(
-        mail.review
-            .notes
-            .iter()
-            .any(|note| matches!(note, crate::import_state::ImportNote::Email))
-    );
+    assert!(mail.review.notes.iter().any(|note| matches!(
+        note,
+        crate::resources::imports::preparation::ImportNote::Email
+    )));
     let page = prepare_creation(
         "pages",
         "html",
@@ -338,7 +338,9 @@ fn incomplete_content_imports_remain_drafts_and_invalid_imports_are_rejected() {
 
 #[test]
 fn import_failures_report_stable_codes_without_echoing_sensitive_input() {
-    use crate::import_state::{ImportError, parse_json, prepare_creation};
+    use crate::resources::imports::preparation::ImportError;
+    use crate::resources::imports::preparation::parse_json;
+    use crate::resources::imports::preparation::prepare_creation;
     use serde_json::json;
     let secret = "synthetic-secret-never-echo";
     let invalid = parse_json(&format!("{{\"password\":\"{secret}\"")).unwrap_err();
@@ -377,7 +379,9 @@ fn import_failures_report_stable_codes_without_echoing_sensitive_input() {
 
 #[test]
 fn batch_email_json_is_rejected_as_a_whole_while_group_recipient_arrays_are_supported() {
-    use crate::import_state::{ImportError, parse_json, prepare_creation};
+    use crate::resources::imports::preparation::ImportError;
+    use crate::resources::imports::preparation::parse_json;
+    use crate::resources::imports::preparation::prepare_creation;
     use serde_json::json;
     for source in [
         r#"[{"name":"First","subject":"One","html":"<p>one</p>"},{"name":"Second","subject":"Two","html":"<p>two</p>"}]"#,
@@ -415,7 +419,8 @@ fn batch_email_json_is_rejected_as_a_whole_while_group_recipient_arrays_are_supp
 
 #[test]
 fn every_resource_import_rejects_batches_but_accepts_nested_collection_fields() {
-    use crate::import_state::{ImportError, prepare_creation};
+    use crate::resources::imports::preparation::ImportError;
+    use crate::resources::imports::preparation::prepare_creation;
     use serde_json::json;
     for (family, singular, resource) in [
         (

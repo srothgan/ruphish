@@ -1358,7 +1358,8 @@ fn independent_go_resource_observations_run_against_the_executable() {
         );
         let mut observed: Value = response.json().unwrap();
         if (200..300).contains(&expected_status) {
-            use ruphish_contracts::{resource_details as wire, resources as summaries};
+            use ruphish_contracts::resources as summaries;
+            use ruphish_contracts::resources::details as wire;
             let path = case["path"].as_str().unwrap();
             let family = path.split('/').nth(2).unwrap();
             let kind = match family {

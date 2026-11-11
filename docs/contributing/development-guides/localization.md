@@ -16,7 +16,7 @@ Ruphish currently provides English and German interface text. Translation catalo
 
 Backend error codes remain stable machine identifiers. Translate them in the response handler instead of localizing server contracts. Already displayed error strings do not automatically change when the interface language changes.
 
-Editor text uses `crates/ruphish-ui/web/editor-i18n.mjs`; update it when changing editor-specific labels. Run the focused translation check from the repository root:
+Editor text uses `crates/ruphish-ui/web/editor/localization.mjs`; update it when changing editor-specific labels. Run the focused translation check from the repository root:
 
 ```sh
 node --test crates/ruphish-ui/web/tests/locales.test.mjs

@@ -13,7 +13,7 @@ Retain the import operation while adapting validation and response handling.
 | --- | --- | --- |
 | Operation | `POST /api/import/group` | `POST /api/import/group` |
 | Success | `200 OK` | `200 OK` |
-| Response type | `[]models.Target` | `Vec<resource_details::Recipient>` |
+| Response type | `[]models.Target` | `Vec<resources::details::Recipient>` |
 
 Use a Bearer API key. The [common changes](../common-contract-changes.md) explain shared access, error handling, metadata, and example conventions.
 

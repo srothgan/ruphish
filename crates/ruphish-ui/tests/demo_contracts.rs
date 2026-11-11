@@ -2,10 +2,16 @@
 #![cfg(all(feature = "demo", not(target_arch = "wasm32")))]
 #![allow(clippy::expect_used, reason = "Test setup and contract assertions")]
 
-use ruphish_contracts::{
-    auth, campaign_reads, campaign_workflow, domains, integrations, overview, resource_details,
-    resources, settings, starter_templates,
-};
+use ruphish_contracts::auth;
+use ruphish_contracts::campaign::reads as campaign_reads;
+use ruphish_contracts::campaign::workflow as campaign_workflow;
+use ruphish_contracts::domains;
+use ruphish_contracts::integrations;
+use ruphish_contracts::overview;
+use ruphish_contracts::resources;
+use ruphish_contracts::resources::details as resource_details;
+use ruphish_contracts::settings;
+use ruphish_contracts::starter_templates;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
@@ -33,7 +39,9 @@ fn demo_responses_decode_through_the_existing_contracts() {
     );
     let values: Value = serde_json::from_slice(&output.stdout).expect("synthetic responses");
     // Follow the initial format through demo CSV review into the real creation draft.
-    use ruphish_ui::import_state::{ImportError, initial_format, prepare_creation};
+    use ruphish_ui::resources::imports::preparation::ImportError;
+    use ruphish_ui::resources::imports::preparation::initial_format;
+    use ruphish_ui::resources::imports::preparation::prepare_creation;
     let reviews = values["csv_reviews"]
         .as_array()
         .expect("CSV workflow responses");
@@ -75,7 +83,7 @@ fn demo_responses_decode_through_the_existing_contracts() {
         assert!(prepare_creation(family, initial_format(family), reviews[0].clone()).is_err());
     }
     decode::<auth::BrowserSession>(&values, "/auth/session");
-    decode::<ruphish_contracts::profile_tests::History>(&values, "/api/smtp/1/tests");
+    decode::<ruphish_contracts::profile_diagnostics::History>(&values, "/api/smtp/1/tests");
     decode::<overview::Snapshot>(&values, "/api/overview");
     decode::<overview::PostureResponse>(&values, "/api/overview/posture?window=30d");
     decode::<campaign_reads::Directory>(&values, "/api/campaigns/directory");

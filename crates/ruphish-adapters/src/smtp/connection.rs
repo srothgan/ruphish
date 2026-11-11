@@ -1,4 +1,9 @@
 //! Bounded address fallback ends before AUTH or any mail transaction.
+
+#[cfg(test)]
+#[path = "tests/connection.rs"]
+pub(crate) mod tests;
+
 use super::transport::{failure, timed_out};
 use futures_util::{StreamExt, stream::FuturesUnordered};
 use lettre::transport::smtp::{
@@ -134,7 +139,3 @@ async fn endpoint(
     }
     Ok(connection)
 }
-
-#[cfg(test)]
-#[path = "tests/connection.rs"]
-mod tests;
