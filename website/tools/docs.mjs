@@ -13,7 +13,7 @@ const slash = (value) => value.split(sep).join('/');
 export const isPublished = (path) =>
   !slash(path)
     .split('/')
-    .some((part) => part === 'old' || part.startsWith('.') || part.startsWith('_'));
+    .some((part) => part.startsWith('.') || part.startsWith('_'));
 
 export function filesBelow(root) {
   return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
