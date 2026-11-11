@@ -279,7 +279,16 @@ impl Repository for Integrations {
                 &text(&r, "username")?,
                 &text(&r, "folder")?,
             );
-            let password = e.password.unwrap_or(text(&r, "password")?);
+            let password = e.resolve_password(
+                ruphish_domain::mail_credentials::Connection {
+                    host: &text(&r, "host")?,
+                    port: r.try_get::<i64, _>("port").map_err(db)? as u16,
+                    username: &text(&r, "username")?,
+                    implicit_tls: r.try_get("tls").map_err(db)?,
+                    ignore_cert_errors: r.try_get("ignore_cert_errors").map_err(db)?,
+                },
+                &text(&r, "password")?,
+            )?;
             if password.is_empty() {
                 return Err(invalid("mailbox_password_required"));
             }

@@ -17,11 +17,13 @@ Sending profiles are shared installation resources. Reads require `view_objects`
 | host | string | SMTP hostname with optional port, such as `smtp.example.com:587`. |
 | from_address | string | SMTP envelope sender and default visible From address. |
 | username | string | SMTP authentication username; empty when authentication is not configured. |
-| password | string or null | Write-only secret. On update, omission or null preserves the saved password, an empty string clears it, and a nonempty string replaces it. |
+| password | string or null | Write-only secret. Omission or null preserves it only within the saved connection settings described below; an empty string clears it, and a nonempty string replaces it. |
 | ignore_cert_errors | boolean | Whether to bypass certificate verification. Defaults to false. |
 | headers | Header[] | Additional message headers. Each item has string `key` and `value`; CR, LF, and NUL are rejected, and the key must not be empty. |
 
 PUT replaces the editable fields; it is not a partial update. Omitted strings default to empty, arrays to empty arrays, and booleans to false. Unknown JSON fields are ignored. Send only writable fields.
+
+When a password is stored, changing the host, port, or username, or enabling `ignore_cert_errors`, requires an explicit replacement password (or an empty password to clear authentication credentials). Otherwise saves and draft connection/email tests return `400` with validation issue `password: credential_reentry_required`, before connecting or changing the saved record. Equivalent host casing, equivalent IPv6 spelling, and omitted versus explicit default port 25 do not change the destination. Renaming, changing message fields, and restoring certificate verification preserve the saved password. This intentionally tightens the previous credential-retention contract; integrations changing connection settings must now supply the password. No database migration is required.
 
 ## Response fields
 

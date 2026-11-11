@@ -32,7 +32,7 @@ pub struct MailboxWrite {
     pub port: u16,
     /// Service login name.
     pub username: String,
-    /// Replacement credential; omission preserves the saved credential.
+    /// Replacement credential; omission preserves it only within its saved connection boundary.
     pub password: Option<String>,
     /// Use implicit TLS; false requests STARTTLS.
     pub tls: bool,

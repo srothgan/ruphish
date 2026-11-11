@@ -106,6 +106,31 @@ async fn contract(config: Config, inspect: &mut Inspector) {
         .await
         .unwrap();
     assert_eq!(inspect.scalar("SELECT count(*) FROM ruphish_mailboxes WHERE initial_since='2026-10-10T07:00:00.000000000Z'").await, 1);
+    for field in ["host", "port", "username", "tls"] {
+        let mut changed = edit(peer.address.port(), Some(saved.revision));
+        changed.password = None;
+        match field {
+            "host" => changed.host = "other.example.test".into(),
+            "port" => changed.port = if peer.address.port() == 993 { 143 } else { 993 },
+            "username" => changed.username = "other-service".into(),
+            _ => changed.tls = false,
+        }
+        let error = repo
+            .save_mailbox(COLLEAGUE, Some(saved.id), changed)
+            .await
+            .err()
+            .unwrap();
+        assert!(
+            matches!(error, Error::Validation(report) if report.issues()[0].field == "password" && report.issues()[0].code == ruphish_domain::validation::Code::CredentialReentryRequired)
+        );
+        let current = repo.mailbox(ADMIN, saved.id).await.unwrap();
+        assert_eq!(current.revision, saved.revision);
+        assert_eq!(current.host, "127.0.0.1");
+        assert_eq!(current.port, peer.address.port());
+        assert_eq!(current.username, "service");
+        assert!(current.tls);
+        assert_eq!(inspect.scalar("SELECT count(*) FROM ruphish_mailboxes WHERE password='MAILBOX-SECRET-CANARY' AND initialized=FALSE AND initial_since='2026-10-10T07:00:00.000000000Z'").await, 1);
+    }
     assert!(matches!(
         repo.save_mailbox(COLLEAGUE, Some(saved.id), edit(peer.address.port(), None))
             .await,

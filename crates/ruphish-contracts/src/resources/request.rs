@@ -29,7 +29,7 @@ pub struct Group {
 
 pub use super::fields::{Attachment, Header};
 
-/// Sending-profile write fields; omission keeps the password and an empty password clears it.
+/// Sending-profile writes; omission retains a password within its connection boundary, empty clears it.
 #[derive(Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct SendingProfile {
@@ -44,7 +44,7 @@ pub struct SendingProfile {
     /// SMTP login name.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub username: String,
-    /// New SMTP credential; omitted or null retains the saved value. Empty explicitly clears it.
+    /// Omitted or null retains the saved credential only within its connection boundary; empty clears it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub password: Option<String>,
     /// Sender mailbox.

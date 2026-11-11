@@ -10,6 +10,7 @@ pub mod domains;
 pub mod events;
 pub mod integrations;
 pub mod landing;
+pub mod mail_credentials;
 pub mod navigation;
 pub mod pagination;
 pub mod profile_diagnostics;

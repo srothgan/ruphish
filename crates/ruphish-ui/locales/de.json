@@ -1238,6 +1238,7 @@
     "draft_schedule_past": "Die gespeicherte Startzeit liegt in der Vergangenheit. Wählen Sie eine zukünftige Zeit oder entfernen Sie sie für einen sofortigen Start."
   },
   "validation": {
+    "credential_reentry_required": "Die Verbindungseinstellungen wurden geändert. Gib das Passwort erneut ein.",
     "scheduled_help": "Wähle ein lokales Datum, eine Uhrzeit und eine Zeitzone. Zeitumstellungen werden automatisch berücksichtigt.",
     "summary": "Bitte prüfe die markierten Felder, bevor du fortfährst.",
     "required": "Dieses Feld ist erforderlich.",

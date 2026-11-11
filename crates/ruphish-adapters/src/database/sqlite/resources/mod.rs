@@ -337,7 +337,7 @@ impl Repository for Resources {
         };
         let mut value = Resource {
             name: value.name.clone(),
-            content: value.resolve_content(old.as_ref()),
+            content: value.resolve_content(old.as_ref())?,
             id: existing.unwrap_or_default(),
             revision: 0,
             modified_date: String::new(),

@@ -24,7 +24,7 @@ pub struct MailboxEdit {
     pub port: u16,
     /// Configured service account.
     pub username: String,
-    /// None preserves existing password.
+    /// None preserves the password only within its existing connection boundary.
     pub password: Option<String>,
     /// Implicit TLS; false requires STARTTLS.
     pub tls: bool,
@@ -43,6 +43,25 @@ pub struct MailboxEdit {
 }
 
 impl MailboxEdit {
+    /// Resolve an omitted password without allowing a connection change to disclose it.
+    pub fn resolve_password(
+        &self,
+        previous: crate::mail_credentials::Connection<'_>,
+        password: &str,
+    ) -> Result<String, crate::validation::Report> {
+        if let Some(password) = &self.password {
+            return Ok(password.clone());
+        }
+        crate::mail_credentials::Connection {
+            host: &self.host,
+            port: self.port,
+            username: &self.username,
+            implicit_tls: self.tls,
+            ignore_cert_errors: self.ignore_cert_errors,
+        }
+        .retain_password(&previous, password)
+    }
+
     /// Only a change of mailbox identity invalidates saved UID progress.
     pub fn resets_checkpoint(&self, host: &str, port: i64, username: &str, folder: &str) -> bool {
         self.host != host
@@ -96,7 +115,7 @@ fn label(s: &str) -> bool {
     !s.trim().is_empty() && s.len() <= 255 && !s.chars().any(char::is_control)
 }
 impl MailboxEdit {
-    /// All independent configuration failures; omitted credentials remain unchanged.
+    /// Independent configuration failures; saved-credential binding is checked during resolution.
     pub fn validation(&self) -> crate::validation::Report {
         use crate::validation::{Code, Report};
         let mut report = Report::default();

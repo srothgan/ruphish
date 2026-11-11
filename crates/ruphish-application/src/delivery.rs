@@ -28,11 +28,11 @@ pub trait Transport: Send + Sync {
 pub enum ProfileSelection {
     /// Load the complete shared profile, including its backend-only credential.
     Saved(i64),
-    /// Use unsaved settings; an existing identity permits retaining its saved credential.
+    /// Use unsaved settings; retain an existing credential only within its connection boundary.
     Draft {
         /// Existing profile identity, absent for a new profile.
         id: Option<i64>,
-        /// Draft SMTP settings; an omitted password retains the saved value.
+        /// Draft SMTP settings; connection changes require an explicit replacement password.
         profile: Profile<Option<String>>,
     },
 }
@@ -241,7 +241,7 @@ impl Service {
                     content: Content::Profile(profile),
                 };
                 let (validated, _) = self.resources.validate(draft).await?;
-                return match validated.resolve_content(previous.as_ref()) {
+                return match validated.resolve_content(previous.as_ref())? {
                     Content::Profile(profile) => Ok(profile),
                     _ => Err(Error::Internal),
                 };

@@ -382,6 +382,9 @@ pub fn validation_label(
             leptos_i18n::t_string!(context, validation.password_short).to_owned()
         }
         Code::PasswordLong => leptos_i18n::t_string!(context, validation.password_long).to_owned(),
+        Code::CredentialReentryRequired => {
+            leptos_i18n::t_string!(context, validation.credential_reentry_required).to_owned()
+        }
         Code::PasswordMismatch => {
             leptos_i18n::t_string!(context, validation.password_mismatch).to_owned()
         }
