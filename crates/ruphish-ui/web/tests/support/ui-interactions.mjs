@@ -1993,7 +1993,12 @@ if (scenario === 'campaign-wizard') {
   assert.ok(document.body.textContent.includes('Temporary wizard campaign'));
   if (demo) {
     assert.match(document.querySelector('.demo-toast').textContent, /Draft kept temporarily/);
-    button('Dismiss').click();
+    const dismiss = document.querySelector(
+      '.demo-toast.has-content button[aria-label="Dismiss message"]',
+    );
+    assert.ok(dismiss, 'The demo notification has an accessible dismiss control');
+    dismiss.click();
+    await until(() => !document.querySelector('.demo-toast.has-content'));
   }
   link('/campaigns');
   await until(
