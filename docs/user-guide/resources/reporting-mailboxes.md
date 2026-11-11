@@ -22,10 +22,10 @@ Prepare a dedicated account or folder and obtain its IMAP hostname, port, userna
 3. Use the provider's TLS settings. Keep certificate verification enabled.
 4. Enter the service account username and password.
 5. Enter the folder to monitor, such as `INBOX`, and a check interval of at least 30 seconds.
-6. Clear **Enabled** while you check the setup, save the configuration, and choose **Validate connection**.
-7. After validation succeeds, edit the mailbox, select **Enabled**, save, and choose **Check mailbox now**.
+6. Clear **Enabled** while you check the setup, save the configuration, and choose **Test connection**.
+7. After the connection test succeeds, edit the mailbox, select **Enabled**, save, and choose **Check mailbox now**.
 
-Validation checks the connection, authentication, and folder access without importing reports. A queued check still needs to finish: inspect the last outcome, last successful check, and history.
+The connection test checks connectivity, authentication, and folder access without importing reports. **Check mailbox now** queues report processing; inspect the last outcome, last successful check, and history after it finishes.
 
 If a private mail server uses a private certificate authority, ask the installation operator to configure trust. **Skip certificate verification** keeps encryption but stops checking the server's identity.
 
@@ -55,7 +55,7 @@ If you enable **Delete successfully matched messages after processing**, matched
 
 | Problem | Next step |
 | --- | --- |
-| Connection validation fails | Check IMAP access, credentials, folder name, port, and certificate settings. |
+| Connection test fails | Check IMAP access, credentials, folder name, port, and certificate settings. |
 | A report is ambiguous | Forward each original message separately, without quoted campaign messages for other recipients. |
 | No match is found | Check that the original campaign link survived forwarding and belongs to this installation. |
 | The campaign is completed | Its results are closed to new mailbox reports. |

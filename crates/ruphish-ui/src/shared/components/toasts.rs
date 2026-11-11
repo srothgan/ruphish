@@ -1,5 +1,6 @@
 //! Route-independent demo feedback. Payloads contain message kinds only.
 use super::{ActionButton, ButtonStyle, ControlSize};
+use crate::shared::feedback::Message;
 use crate::tr;
 use crate::trs;
 use leptos::prelude::*;
@@ -58,6 +59,7 @@ impl DemoNotifications {
 pub(crate) fn DemoToastHost(notifications: DemoNotifications) -> impl IntoView {
     let i18n = crate::localization::use_i18n();
     let notice = notifications.0;
+    let message = Message::new(String::new());
     let text = move || {
         notice.get().map(|value| {
             match value {
@@ -73,34 +75,13 @@ pub(crate) fn DemoToastHost(notifications: DemoNotifications) -> impl IntoView {
         })
     };
     Effect::new(move |_| {
-        if notice.get().is_some() {
-            let timer = set_timeout_with_handle(
-                move || notice.set(None),
-                std::time::Duration::from_secs(10),
-            )
-            .ok();
-            on_cleanup(move || {
-                if let Some(timer) = timer {
-                    timer.clear();
-                }
-            });
+        if let Some(text) = text() {
+            message.local_status(text);
         }
     });
     view! {
-        <aside class="demo-toast" class:has-content=move || notice.get().is_some()>
-            <p role="status" aria-live="polite" aria-atomic="true">
-                {text}
-            </p>
-            <Show when=move || notice.get().is_some()>
-                <ActionButton
-                    style=ButtonStyle::Ghost
-                    size=ControlSize::Small
-                    title=trs!(demo.dismiss)
-                    on_click=move |_| notice.set(None)
-                >
-                    {tr!(demo.dismiss)}
-                </ActionButton>
-            </Show>
+        <aside class="demo-toast" class:has-content=move || !message.is_empty()>
+            {message.view()}
         </aside>
     }
 }

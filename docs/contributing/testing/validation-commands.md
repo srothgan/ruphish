@@ -5,31 +5,36 @@ sidebar:
   order: 310
 ---
 
-Run commands from the repository root unless a section says otherwise. Install the relevant tools through [development setup](../development-setup/index.md#install-tools-for-your-change). Select checks by behavior and affected consumers; a small change does not automatically require full acceptance.
+This page is a catalog of checks, their coverage, and command examples for contributors and coding agents. Its command blocks are not an execution checklist. Run commands from the repository root unless a section says otherwise. Install only the tools needed for the selected work through [development setup](../development-setup/index.md#install-tools-for-your-change).
 
 ## Select your checks
 
-| Changed area | Start with | Add when affected |
+Select a check when it can detect a plausible defect introduced by the change and adds useful evidence beyond completed checks. Choose the smallest test target, module, or named scenario that covers that guarantee. A shared helper or component does not by itself justify every consumer's suite. Unrelated, redundant, or disproportionate checks can be omitted; document the actual verification and material limits. Ordinary edits, commits, and frontend builds do not select full acceptance.
+
+| Changed guarantee | Useful evidence | Selection boundary |
 | --- | --- | --- |
-| Domain or contract | Rust formatting, crate Clippy, crate tests | HTTP, UI/WASM, provider, or process consumers |
-| HTTP/application behavior | Focused crate and process tests | Authentication, persistence, external protocols, and recovery |
-| SQL, locking, or migration | Provider regression and relevant SQLite tests | Both supported server versions, history conversion, process restart |
-| UI Rust or browser-shared rules | UI formatting, native tests, WASM checks | Development distribution and mounted/manual UI scenarios |
-| JavaScript or build tooling | Prettier, ESLint, affected functional tests | Regenerate/build output when generated behavior changes |
-| Docs | Links, examples, rendered navigation | Website checks; no Rust build for prose alone |
-| CI/release implementation | Script tests and workflow lint | The affected workflow's actual acceptance stages |
+| Domain rule or serialized contract | Relevant Rust formatting/lint and focused rule or serialization regressions | Consumer tests when the changed contract affects their behavior |
+| HTTP/application behavior | A focused request or process regression | The affected authorization, persistence, protocol, or recovery boundary |
+| SQL, locking, or migration | A focused adapter/provider regression | Relevant providers and versions; expand only for the database guarantees changed |
+| UI state or browser-shared rule | Formatting and a relevant target-specific lint/compilation check; a focused logic or mounted regression | Native logic, a browser contract, or a named workflow according to what changed |
+| UI appearance or assets | Development output for manual review | Appearance alone does not select state/request suites; the user owns manual review during agent-assisted work |
+| JavaScript or build tooling | Relevant formatting/lint and selected functional tests | The changed module or generated-output contract |
+| Documentation | Relevant links, examples, and consistency checks | Site checks for changed rendering, navigation, or generation behavior; no product build for prose alone |
+| CI/release implementation | Affected script tests or workflow lint | The workflow behavior changed; editing it does not automatically select every acceptance stage |
+
+After edits settle, reuse successful results unless a later change affects their evidence. A development build already checks compilation of its target; an additional `cargo check` does not add that evidence again. Clippy adds lint coverage and tests add their asserted behavior, so select them for those purposes. Avoid competing Cargo operations against one output directory and rebuild only when changed inputs or the requested artifact require it.
 
 ## Rust
 
-For a domain change, for example:
+For a domain settings rule, these commands offer formatting, library lint, and the focused settings integration target. Select the evidence needed for the particular change:
 
 ```sh
 cargo fmt --all -- --check
-cargo clippy -p ruphish-domain --all-targets --locked -- -D warnings
-cargo test -p ruphish-domain --locked
+cargo clippy -p ruphish-domain --lib --locked -- -D warnings
+cargo test -p ruphish-domain --test settings --locked
 ```
 
-Replace the crate with the affected crate and add relevant consumers. To apply formatting, run `cargo fmt --all`. `cargo check` is useful during iteration; do not repeat it after Clippy has already checked the same target without a new reason.
+Choose the crate and test target for the changed rule; use a module or test-name filter when it narrows a larger target meaningfully. To apply Rust formatting, run `cargo fmt --all`. `cargo check` can provide compilation evidence during iteration when a build or Clippy has not already checked that target.
 
 ## Executable workflows
 
@@ -47,58 +52,68 @@ Focused API/lifecycle cases use synthetic assets; distribution-serving cases and
 
 ## Frontend and browser code
 
-Format Leptos markup as well as Rust:
+For changed Leptos markup, select the changed file or files for markup formatting as well as Rust formatting. For example:
 
 ```sh
-leptosfmt crates/ruphish-ui/src crates/ruphish-ui/tests
-cargo fmt --all
-leptosfmt --check crates/ruphish-ui/src crates/ruphish-ui/tests
+leptosfmt --check crates/ruphish-ui/src/settings/page.rs
 cargo fmt --all -- --check
 ```
 
-For direct WASM checks without a Trunk build, prepare imported modules first. Then run the applicable native/browser checks:
+To apply markup formatting, omit `--check`; to apply Rust formatting, use `cargo fmt --all`. Replace the example file with the files changed.
 
-```sh
-node crates/ruphish-ui/web/build.mjs
-cargo test -p ruphish-ui --lib --tests --locked
-cargo clippy -p ruphish-ui --lib --locked -- -D warnings
-cargo test -p ruphish-ui --test '*' --target wasm32-unknown-unknown --locked
-cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --locked -- -D warnings
-cargo clippy -p ruphish-ui --tests --target wasm32-unknown-unknown --locked -- -D warnings
-```
+The following are separate checks with different coverage, not consecutive steps:
+
+| Check | When it adds relevant evidence | Example command |
+| --- | --- | --- |
+| Native UI logic tests | A platform-independent state or transformation rule changed; choose its test target and filter | `cargo test -p ruphish-ui --test form_workflows --locked` |
+| Native UI library Clippy | Code compiled into the native UI library changed | `cargo clippy -p ruphish-ui --lib --locked -- -D warnings` |
+| Browser-target Clippy | Browser-only Rust or shared code needs WASM lint/compilation evidence | `cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --locked -- -D warnings` |
+| A WASM contract target | The browser contract asserted by that test target changed; this example covers requests | `cargo test -p ruphish-ui --test browser_requests --target wasm32-unknown-unknown --locked` |
+| WASM test Clippy | WASM test code changed and needs lint coverage | `cargo clippy -p ruphish-ui --test browser_requests --target wasm32-unknown-unknown --locked -- -D warnings` |
+
+Native tests do not exercise browser-only Rust, and passing native tests is not a reason to run every WASM target. For a selected standalone WASM check, prepare missing or stale imported modules with `node crates/ruphish-ui/web/build.mjs`. Trunk performs that generation itself; an additional generator run is unnecessary for the same build inputs.
 
 `.cargo/config.toml` selects `wasm-bindgen-test-runner`. These Node-hosted WASM tests check their implemented browser contracts; use manual review for actual browser interaction.
 
-### Mounted UI regressions
+### Development output
 
-When changing forms, route owners, filters, or browser output, build the development distribution and exercise the mounted application:
+Build when a runnable artifact is needed, including when the user needs to try frontend changes. After implementation edits settle, the normal development build is:
 
 ```sh
 trunk build --locked
-node --test crates/ruphish-ui/web/tests/ui-interactions.artifact.mjs
 ```
 
-This harness uses the real WASM bundle with synthetic responses. It checks state retention, navigation, and error recovery without contacting a real installation. It does not verify layout, the operating-system file picker, or sandbox enforcement. Select applicable [manual checks](manual-browser-checks.md) as well.
+The completed application is `dist/admin/`. Reuse that output for selected mounted checks while its inputs remain unchanged. Building an artifact does not select additional test suites. During agent-assisted work, manual visual/interaction review belongs to the user.
 
-To preserve a running local server's distribution, build to a separate directory with `trunk build --locked --dist target/ui-validation/dist`. Set `RUPHISH_UI_DIST` to `target/ui-validation/dist/admin` before running the same mounted test command; the fixture resolves this path from the repository working directory. Unset the variable afterward. The default remains `dist/admin/`, and isolated builds retain Trunk's `.stage/` staging and the completed `admin/` subtree.
+### Mounted UI regressions
+
+A named mounted scenario can verify a changed workflow such as confirmation, draft retention, navigation, or recovery. Choose the scenario that asserts the changed guarantee. Browser output changes alone do not require the mounted suite. With a current development build, this example selects the company-settings feedback workflow:
+
+```sh
+node --test --test-name-pattern=settings-feedback crates/ruphish-ui/web/tests/ui-interactions.artifact.mjs
+```
+
+Replace the example pattern with the relevant named scenarios. The harness uses the real WASM bundle with synthetic responses without contacting a real installation. It does not verify layout, the operating-system file picker, or sandbox enforcement; [manual checks](manual-browser-checks.md) describe those boundaries. The unfiltered suite is documented under [full source acceptance](#full-source-acceptance).
+
+An isolated build can intentionally preserve a running local server's distribution: use `trunk build --locked --dist target/ui-validation/dist` and set `RUPHISH_UI_DIST` to `target/ui-validation/dist/admin` for the selected mounted command. The fixture resolves this path from the repository working directory; unset the variable afterward. This does not update the user's normally served frontend and does not replace delivering `dist/admin/` when they need to try the changes. Isolated builds retain Trunk's `.stage/` staging and the completed `admin/` subtree.
 
 ## JavaScript
 
-Install root tooling with `npm ci --ignore-scripts` on a fresh checkout or after its dependency inputs change. Then:
+Install root tooling with `npm ci --ignore-scripts` on a fresh checkout or after its dependency inputs change. Formatting/lint of the changed module and its focused regression are separate choices. For a navigation-module change, examples are:
 
 ```sh
-npx --no-install prettier . --check
-npx --no-install eslint . --max-warnings=0
-node --test crates/ruphish-ui/web/tests/*.test.mjs
+npx --no-install prettier crates/ruphish-ui/web/navigation.mjs --check
+npx --no-install eslint crates/ruphish-ui/web/navigation.mjs --max-warnings=0
+node --test crates/ruphish-ui/web/tests/navigation.test.mjs
 ```
 
-Choose affected functional tests locally instead of always running the entire browser directory. To deliberately apply formatting, use `npx --no-install prettier . --write`. `.prettierignore` limits this command to maintained JavaScript; it does not reformat Markdown, Rust, JSON, or YAML. ESLint already parses these files, so a separate syntax-only check is unnecessary.
+Substitute the changed files and relevant test files rather than running the entire browser directory. To apply formatting, use `--write` for the selected files. `.prettierignore` limits formatting to maintained JavaScript; it does not reformat Markdown, Rust, JSON, or YAML. ESLint already parses these files, so a separate syntax-only check is unnecessary.
 
 The root npm manifest pins a `minimatch` override within ESLint's dependency tree. When updating that dependency, inspect whether the override is still necessary, regenerate the lockfile through npm, and validate the resulting tool installation and lint behavior.
 
 ## Starter templates
 
-Use functional content tests and the native catalog workflow when changing bundled content:
+For changed bundled content, select the functional content tests that cover its controls or behavior. Select the native catalog or process target when its preparation, persistence, or serving contract changed. Available examples are:
 
 ```sh
 node --test crates/ruphish-ui/web/tests/interactive-starters.test.mjs crates/ruphish-ui/web/tests/learning-starters.test.mjs
@@ -106,11 +121,11 @@ cargo test -p ruphish --test startup_process starter_templates_process:: --locke
 cargo test -p ruphish --test startup_process public_process::learning_pages:: --locked -- --nocapture
 ```
 
-Inspect the rendered prepared preview after rebuilding the server. See [starter-template development](../development-guides/starter-templates.md) for content and attribution requirements.
+Manual inspection of prepared previews can establish rendering behavior when that is the changed guarantee; a content edit alone does not require rebuilding the server or running every catalog workflow. See [starter-template development](../development-guides/starter-templates.md) for content and attribution requirements.
 
 ## Public demo
 
-For synthetic data and simulated responses:
+Choose checks for the demo boundary changed. These examples cover simulated API/data behavior and demo contract code; they are not required merely because shared UI code changed:
 
 ```sh
 node --test demo/tests/api.test.mjs demo/tests/sorting.test.mjs demo/tests/preview.test.mjs
@@ -118,7 +133,7 @@ cargo test -p ruphish-ui --test demo_contracts --features demo --locked
 cargo clippy -p ruphish-ui --test demo_contracts --features demo --locked -- -D warnings
 ```
 
-The disposable SQLite seeder test needs the real normal distribution and executable, and Node 26 for `node:sqlite`:
+When the disposable SQLite seeder's behavior needs verification, its test needs the real normal distribution and executable, and Node 26 for `node:sqlite`. Reuse current artifacts; build missing or stale ones:
 
 ```sh
 trunk build --locked
@@ -126,17 +141,17 @@ cargo build -p ruphish --locked
 node --test demo/tests/seed.test.mjs
 ```
 
-For demo browser output:
+For demo browser output, select from these commands according to the output or contract needed:
 
-```sh
-node crates/ruphish-ui/web/build-demo.mjs
-node --test demo/tests/bundle.test.mjs
-trunk build --locked --features demo crates/ruphish-ui/web/generated/index.html
-node --test --test-name-pattern=campaign-wizard crates/ruphish-ui/web/tests/ui-interactions.artifact.mjs
-cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --features demo --locked -- -D warnings
-```
+| Purpose | Command |
+| --- | --- |
+| Generate the demo entry and imported assets | `node crates/ruphish-ui/web/build-demo.mjs` |
+| Verify the generated demo bundle contract | `node --test demo/tests/bundle.test.mjs` |
+| Build a runnable demo distribution | `trunk build --locked --features demo crates/ruphish-ui/web/generated/index.html` |
+| Exercise the mounted demo campaign wizard | `node --test --test-name-pattern=campaign-wizard crates/ruphish-ui/web/tests/ui-interactions.artifact.mjs` |
+| Lint changed demo-feature Rust on its actual target | `cargo clippy -p ruphish-ui --target wasm32-unknown-unknown --features demo --locked -- -D warnings` |
 
-Rebuild the normal distribution before using `dist/admin/` for the real server. When changing shared transport, also run the normal Fetch tests:
+Rebuild the normal distribution before using `dist/admin/` for the real server after a demo build. For changed transport, normal Fetch tests provide evidence that simulated demo responses cannot supply. Choose the target that covers the changed boundary:
 
 ```sh
 node --test crates/ruphish-ui/web/tests/http.test.mjs
@@ -149,11 +164,11 @@ Use [database-provider tests](database-provider-tests.md) for service preparatio
 
 ## Documentation and website
 
-Use the [documentation workflow](../development-guides/documentation-and-website.md#verify-a-documentation-change). Select Node 24.x and run website commands from `website/`. Root JavaScript checks still apply when changing maintained website scripts. A prose-only contribution does not require a product build.
+For prose changes, inspect relevant links, examples, and consistency against their source. The [documentation workflow](../development-guides/documentation-and-website.md#verify-a-documentation-change) also documents site checks for rendering, navigation, or generation changes; it is not a requirement to run the website suite for every text edit. For a selected website check, use Node 24.x and run its commands from `website/`. Select root JavaScript checks when maintained website scripts change. Prose-only changes do not require a product build or test suite.
 
 ## Full source acceptance
 
-Use this broader set for an explicitly selected acceptance run. Prepare all relevant tools and browser dependencies, then:
+The following broad recipes document acceptance coverage. Use them for an explicitly selected acceptance task, not as follow-up steps for ordinary edits, commits, or development builds. Prepare the tools and dependencies for that selected coverage:
 
 ```sh
 trunk build --locked

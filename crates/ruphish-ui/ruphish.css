@@ -135,9 +135,7 @@
   .account-app .demo-notice button.control-sm { display: inline-flex; align-items: center; justify-content: center; width: var(--control-h-sm); height: var(--control-h-sm); padding: 0; font-size: var(--fs-lg); }
   .demo-credentials { padding: var(--s3); background: var(--teal-50); border-radius: var(--r-sm); }
   .demo-toast { position: fixed; right: var(--s5); bottom: var(--s5); z-index: 100; max-width: min(30rem, calc(100vw - 2 * var(--s5))); display: flex; align-items: start; gap: var(--s3); pointer-events: none; }
-  .demo-toast.has-content { padding: var(--s4); background: var(--paper); color: var(--ink); border: 1px solid var(--teal-600); border-radius: var(--r-md); box-shadow: 0 8px 32px #0c2f2b24; pointer-events: auto; }
-  .demo-toast p { margin: 0; }
-  .demo-toast button { flex-shrink: 0; }
+  .demo-toast.has-content { border-radius: var(--r-sm); box-shadow: 0 8px 32px #0c2f2b24; pointer-events: auto; }
   .account-app h1 { margin: 0; font-size: var(--fs-lg); line-height: 1.15; font-weight: var(--fw-semibold); letter-spacing: -.01em; color: var(--ink); }
   .account-app h2 { font-size: var(--fs-md); font-weight: var(--fw-semibold); }
   .account-app p { max-width: 80ch; line-height: 1.6; }
@@ -173,13 +171,19 @@
 
   .account-app .form-message { display: flex; gap: var(--s2); align-items: flex-start; padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--paper); overflow-wrap: anywhere; }
   .account-app .feedback-region:not(.has-content) { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); border: 0; white-space: nowrap; }
-  .account-app .form-message-icon { flex: 0 0 auto; display: inline-flex; margin-top: 1px; color: var(--muted); }
+  .account-app .form-message-icon { flex: 0 0 auto; display: inline-flex; align-items: center; min-height: var(--control-h-sm); color: var(--muted); }
   .account-app .form-message-icon svg { display: block; }
-  .account-app .form-message-text { min-width: 0; }
+  .account-app .form-message-text { min-width: 0; flex: 1; }
+  .account-app .feedback-region { margin: 1em 0; line-height: var(--control-h-sm); }
+  .account-app .feedback-region .form-message-text > div { line-height: 1.6; }
+  .account-app .feedback-region > button { flex: 0 0 auto; min-width: var(--control-h-sm); padding: 0; line-height: 1; }
+  .demo-toast .feedback-region { margin: 0; }
   .account-app .form-message.success { border-color: var(--teal-600); background: var(--teal-50); }
   .account-app .form-message.success .form-message-icon { color: var(--teal-600); }
   .account-app .form-message.error { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
   .account-app .form-message.error .form-message-icon { color: var(--danger); }
+  .account-app .form-message.warning { border-color: var(--amber); background: var(--amber-soft); color: var(--warning-ink); }
+  .account-app .form-message.warning .form-message-icon { color: var(--warning-ink); }
   .account-app .content-editor [role=alert] { color: var(--danger); }
 }
 
@@ -287,7 +291,9 @@
   .management-toolbar--filters h2 { margin: 0; }
   .management-toolbar--filters .form-field { width: min(16rem, 100%); margin-inline-start: auto; }
 
-  .management-page > .breadcrumb { display: inline-block; margin-bottom: var(--s5); font-size: var(--fs-sm); }
+  .account-app .breadcrumb { justify-content: flex-start; white-space: normal; }
+  .breadcrumb svg { flex: 0 0 auto; }
+  .management-page > .breadcrumb { margin-bottom: var(--s5); }
   .management-page .save-state { font-size: var(--fs-sm); }
 
   /* All data tables keep a readable width and scroll inside their container on small screens. */
@@ -504,7 +510,7 @@
   .account-app .key-visibility { display: inline-flex; align-items: center; justify-content: center; width: var(--control-h); height: var(--control-h); flex: 0 0 var(--control-h); padding: var(--s2); }
   .key-visibility svg { width: 20px; height: 20px; }
   .key-visibility .hidden-eye { display: none; }
-  .password-page > .breadcrumb { display: inline-block; margin-bottom: var(--s5); }
+  .password-page > .breadcrumb { margin-bottom: var(--s5); }
   .secret-value { font-family: var(--font-mono); font-size: var(--fs-sm) !important; }
   .account-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: var(--s4); }
   .confirmation { margin: var(--s5) 0; border: 1px solid var(--danger); border-radius: var(--r-md); padding: var(--s5); background: var(--paper); }

@@ -4,6 +4,9 @@ Development previews have short notes on GitHub Releases. This changelog records
 
 ## Unreleased
 
+- Dismiss operation feedback with a close control; successful messages disappear after five seconds. Keep company-settings approval separate from save progress and results, and make back navigation more prominent.
+- Use consistent English and German connection-test wording for sending profiles and reporting mailboxes, with a clearer **Tests** menu for sending profiles.
+
 - Check saved sending-profile connections and send fixed-content test emails from a grouped testing menu. Keep durable results and history, and optionally require a successful test of current settings before new campaigns launch.
 
 - Require numeric revisions for shared-resource updates and deletions; reject stale writes atomically and keep unsaved editor input with explicit conflict recovery.

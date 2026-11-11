@@ -9,6 +9,8 @@ Open **Administration → Company settings** with an Administrator account. Thes
 
 Change the settings you need, choose **Save changes**, and review the confirmation before applying them. If another administrator has saved changes first, refresh and review the current settings. Use **Discard edits** when you want to replace your unsaved changes with the saved version.
 
+Confirming closes the dialog and starts saving. The page shows progress, then reports success only after the server confirms the save. Success feedback can be dismissed and disappears after five seconds; editing again clears it immediately. A failed save keeps your edits and shows a dismissible error so you can review and retry. Cancelling confirmation does not save anything.
+
 ## Require a successful sending-profile test
 
 **Require successful sending-profile test** defaults to off. Enable it to require an accepted fixed-content email test using a sending profile's current configuration before a new campaign can launch, including a campaign scheduled for future delivery. Drafts can still be saved before the profile qualifies. Use the profile view's **Send test email** action to obtain qualifying evidence; a connection-only check or a template/campaign test does not qualify.

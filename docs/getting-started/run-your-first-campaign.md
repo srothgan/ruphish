@@ -32,13 +32,13 @@ A **sending profile** stores the settings Ruphish uses to send email through you
 
 Keep **Ignore SMTP certificate errors** off and use the host and port specified by your provider. The [sending-profile guide](../user-guide/resources/sending-profiles.md) explains connection security if you need more detail.
 
-Save the profile. On its view, open **Check & test** and choose **Test connection**. This immediately checks whether Ruphish can connect and sign in to your mail service, without sending a message.
+Save the profile. On its view, open **Tests** and choose **Test connection**. This immediately checks whether Ruphish can connect and, when credentials are configured, sign in to your mail service without sending a message.
 
 If sign-in fails, check the SMTP username and password and whether SMTP access is enabled for the account. For a connection or certificate error, check the hostname, port, and provider's instructions. If you use an internal company mail server, the person managing Ruphish may need to [allow connections to it](../administration/hosting-and-maintenance/connect-to-internal-services.md).
 
 ## 2. Send yourself a test message
 
-On the saved profile's view, open **Check & test** and choose **Send test email** to reveal its recipient card. Enter your own inbox address under **Recipient email**, then choose **Send test email**. Ruphish sends a fixed plain-text message before you've created campaign content and records the result in the profile's test history.
+On the saved profile's view, open **Tests** and choose **Send test email** to reveal its recipient card. Enter your own inbox address under **Recipient email**, then choose **Send test email**. Ruphish sends a fixed plain-text message before you've created campaign content and records the result in the profile's test history.
 
 Check your inbox and junk folder. Confirm that the message arrived and shows the expected sender address. If Ruphish says the mail server accepted it but it doesn't arrive, check your provider's delivery logs or filtering before retrying.
 

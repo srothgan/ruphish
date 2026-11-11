@@ -4,6 +4,7 @@ use crate::campaigns::delivery::history::History;
 use crate::campaigns::events::edit_state::Editor;
 use crate::shared::components::*;
 use crate::shared::datetime::display::instant;
+use crate::shared::feedback::FeedbackRegion;
 use crate::tr;
 use crate::trs;
 use leptos::prelude::*;
@@ -312,11 +313,10 @@ pub(crate) fn table(
                 }>
                     <p>{tr!(ui.event_delete_explanation)}</p>
                 </Show>
-                <Show when=move || editor.with(|s| !s.error.is_empty())>
-                    <p role="alert" class="form-message error has-content">
-                        {move || editor.with(|s| s.error.clone())}
-                    </p>
-                </Show>
+                <FeedbackRegion
+                    text=Signal::derive(move || editor.with(|s| s.error.clone()))
+                    on_dismiss=Callback::new(move |()| editor.update(|s| s.error.clear()))
+                />
                 <Show when=move || editor.with(|s| s.pending.is_some() && !s.busy)>
                     <p>{tr!(ui.event_retry_unknown)}</p>
                 </Show>
@@ -370,11 +370,10 @@ pub(crate) fn table(
                     {tr!(ui.event_add)}
                 </ActionButton>
             </Show>
-            <Show when=move || editor.with(|s| !s.error.is_empty())>
-                <p role="alert" class="form-message error has-content">
-                    {move || editor.with(|s| s.error.clone())}
-                </p>
-            </Show>
+            <FeedbackRegion
+                text=Signal::derive(move || editor.with(|s| s.error.clone()))
+                on_dismiss=Callback::new(move |()| editor.update(|s| s.error.clear()))
+            />
             <DataTable
                 empty=Signal::derive(move || history.with(|h| h.events.is_empty()))
                 label=trs!(ui.recipient_events)
