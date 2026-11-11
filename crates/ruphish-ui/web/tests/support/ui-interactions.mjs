@@ -850,6 +850,13 @@ const demo = html.includes('<title>Ruphish Demo</title>');
 if (scenario.startsWith('auth-')) {
   assert.equal(demo, false, 'auth regressions need the normal WASM bundle');
 }
+if (scenario === 'campaign-wizard-empty-uncertain') {
+  assert.equal(
+    demo,
+    false,
+    'lost-response regressions need the normal WASM bundle and HTTP fixture',
+  );
+}
 if (
   (scenario.startsWith('campaign-wizard') ||
     ['profile-test-happy', 'profile-test-failure', 'profile-test-settings'].includes(scenario)) &&
