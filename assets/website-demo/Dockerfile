@@ -14,6 +14,7 @@ COPY .cargo/ .cargo/
 COPY crates/ crates/
 RUN npm ci --no-audit --no-fund --prefix crates/ruphish-ui/web
 COPY config.example.json ./
+COPY vendor/sqlx-core/ vendor/sqlx-core/
 RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/source/target \
     cargo build -p ruphish --locked && mkdir /built && cp target/debug/ruphish /built/ruphish
 RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/source/target \
@@ -28,5 +29,6 @@ COPY --from=build /built/ruphish /app/ruphish
 COPY --from=build /source/dist/admin/ /app/dist/admin/
 COPY assets/website-demo/*.mjs ./
 COPY assets/website-demo/data.json ./
+COPY crates/ruphish-http/src/starter_templates/ /crates/ruphish-http/src/starter_templates/
 COPY crates/ruphish-http/starter-templates/ /crates/ruphish-http/starter-templates/
 ENTRYPOINT ["node", "/recorder/record.mjs"]

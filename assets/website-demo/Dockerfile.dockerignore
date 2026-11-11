@@ -9,6 +9,9 @@
 !.cargo/config.toml
 !crates/
 !crates/**
+!vendor/
+!vendor/sqlx-core/
+!vendor/sqlx-core/**
 !assets/
 !assets/website-demo/
 !assets/website-demo/**
