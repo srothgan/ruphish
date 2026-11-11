@@ -3833,3 +3833,6 @@ async fn mysql_legacy_deleted_creator_preserves_shared_resources_and_queue() {
     .await
     .unwrap();
 }
+
+#[path = "support/profile_tests.rs"]
+mod profile_tests;

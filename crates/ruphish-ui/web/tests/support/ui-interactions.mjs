@@ -61,6 +61,12 @@ const path =
     'detail-page': '/pages/1',
     'detail-learning': '/learning-pages/1',
     'detail-smtp': '/smtp/1',
+    'profile-test-happy': '/smtp/4',
+    'profile-test-german': '/smtp/4',
+    'profile-test-uncertain': '/smtp/4',
+    'profile-test-failure': '/smtp/2',
+    'profile-test-temporary': '/smtp/2',
+    'profile-test-settings': '/smtp/5',
     'detail-domain': '/domains/1',
     'detail-webhook': '/webhooks/1',
     'detail-mailbox': '/reporting-mailboxes/1',
@@ -180,6 +186,7 @@ if (
   settingsHidden ||
   scenario.startsWith('form-') ||
   scenario.startsWith('detail-') ||
+  scenario.startsWith('profile-test-') ||
   scenario.startsWith('empty-') ||
   scenario.startsWith('missing-') ||
   scenario === 'history-domain' ||
@@ -194,6 +201,9 @@ if (
 ) {
   preferences.language = 'en';
 }
+if (scenario === 'profile-test-german') {
+  preferences.language = 'de';
+}
 const now = 1793016000;
 const NativeDate = Date;
 class FixtureDate extends NativeDate {
@@ -206,6 +216,17 @@ class FixtureDate extends NativeDate {
 }
 globalThis.Date = win.Date = FixtureDate;
 const data = dataset(now);
+if (scenario === 'profile-test-temporary') {
+  Object.assign(
+    data.profile_tests.find((r) => r.profile_id === 2 && r.outcome === 'failed'),
+    {
+      kind: 'email',
+      email: 'operator@example.test',
+      code: 'smtp_temporary_rejection',
+      smtp_code: 451,
+    },
+  );
+}
 if (dashboardTabs) {
   const draft = data.drafts[0];
   data.drafts = Array.from({ length: scenario === 'dashboard-drafts-empty' ? 0 : 7 }, (_, i) => ({
@@ -423,6 +444,8 @@ const recoveryPath = {
   'conflict-mailbox': '/api/reporting-mailboxes/1',
 }[scenario];
 let recoveryAttempted = false;
+let profileTestLostResponse = false;
+const profileTestWrites = [];
 let recoveryAccepted = false;
 let recoveryRevision;
 let holdRecoveryRead = false;
@@ -431,6 +454,20 @@ let releaseRecoveryRead;
 globalThis.fetch = async (request, options) => {
   const url = new URL(request.url);
   requests.push(url.pathname + url.search);
+  if (
+    scenario.startsWith('profile-test-') &&
+    /^\/api\/smtp\/\d+\/tests$/u.test(url.pathname) &&
+    request.method === 'POST'
+  ) {
+    profileTestWrites.push(await request.clone().json());
+    const accepted = await api.execute(request, options);
+    if (scenario === 'profile-test-uncertain' && !profileTestLostResponse) {
+      profileTestLostResponse = true;
+      throw new TypeError('Synthetic lost acknowledgement');
+    }
+    return accepted;
+  }
+
   if (
     dashboardTabs &&
     url.pathname === '/api/campaigns/directory' &&
@@ -782,7 +819,11 @@ const demo = html.includes('<title>Ruphish Demo</title>');
 if (scenario.startsWith('auth-')) {
   assert.equal(demo, false, 'auth regressions need the normal WASM bundle');
 }
-if (scenario === 'campaign-wizard' && demo) {
+if (
+  (scenario === 'campaign-wizard' ||
+    ['profile-test-happy', 'profile-test-failure', 'profile-test-settings'].includes(scenario)) &&
+  demo
+) {
   win.sessionStorage.setItem('ruphish-demo-session-v1', '1');
   win.sessionStorage.setItem('ruphish-demo-time-v1', String(now));
   globalThis.fetch = win.fetch = () => {
@@ -808,6 +849,7 @@ async function until(condition) {
         scenario.startsWith('empty-') ||
         scenario.startsWith('missing-') ||
         scenario.startsWith('detail-') ||
+        scenario.startsWith('profile-test-') ||
         scenario === 'history-domain') &&
       performance.now() > deadline
     ) {
@@ -830,6 +872,147 @@ const settled = () =>
   regions().length > 0 &&
   regions().every((e) => e.dataset.ready === 'true' && e.getAttribute('aria-busy') === 'false');
 const resultsPath = '/campaigns/2/results';
+
+if (scenario.startsWith('profile-test-')) {
+  const button = (label) =>
+    [...document.querySelectorAll('button')].find((node) => node.textContent.trim() === label);
+  const german = scenario === 'profile-test-german';
+  const menuLabel = german ? 'Prüfen & testen' : 'Check & test';
+  const menu = () => document.querySelector(`.action-menu-panel[aria-label="${menuLabel}"]`);
+  const results = () =>
+    document.querySelector(
+      `section[aria-label="${german ? 'Profiltestergebnisse' : 'Profile test results'}"]`,
+    );
+  await until(() => results() && button(menuLabel) && !button(menuLabel).disabled);
+  const choose = async (label) => {
+    button(menuLabel).click();
+    await until(() => !menu().hidden);
+    const action = [...menu().querySelectorAll('button')].find(
+      (node) => node.textContent.trim() === label,
+    );
+    assert.ok(action, `Missing test option: ${label}`);
+    assert.equal(action.disabled, false);
+    action.click();
+    await until(() => menu().hidden);
+  };
+  assert.equal(menu().hidden, true, 'Testing options are grouped behind one trigger');
+  assert.deepEqual(
+    [...menu().querySelectorAll('button')].map((node) => node.textContent.trim()),
+    german ? ['Verbindung prüfen', 'Test-E-Mail senden'] : ['Test connection', 'Send test email'],
+  );
+  if (german) {
+    await choose('Test-E-Mail senden');
+    await until(() => document.querySelector('#profile-test-email'));
+    const panel = document.querySelector('#profile-test-email');
+    assert.equal(panel.querySelector('h2').textContent, 'Test-E-Mail senden');
+    assert.ok(panel.closest('.card'));
+    assert.equal(profileTestWrites.length, 0, 'Opening the recipient card sends no email');
+    process.exit(0);
+  }
+  assert.equal(document.querySelector('dialog[open]'), null);
+  assert.equal(document.querySelector('#profile-test-email'), null);
+  if (scenario === 'profile-test-settings') {
+    assert.match(results().textContent, /Settings changed/);
+    assert.match(results().textContent, /required before campaign launch/);
+    process.exit(0);
+  }
+  if (scenario === 'profile-test-temporary') {
+    const details = document.querySelector('section[aria-label="Test history"]').textContent;
+    assert.match(details, /No automatic retry is scheduled/);
+    assert.doesNotMatch(
+      details,
+      /Another attempt is scheduled|delivery will retry|holds queued recipients/,
+    );
+    process.exit(0);
+  }
+  if (scenario === 'profile-test-failure') {
+    assert.match(results().textContent, /Failed/);
+    assert.match(
+      document.querySelector('section[aria-label="Test history"]').textContent,
+      /authentication/i,
+    );
+    assert.match(results().textContent, /required before campaign launch/);
+    process.exit(0);
+  }
+  if (scenario === 'profile-test-happy') {
+    await choose('Test connection');
+    await until(() => results().textContent.includes('Passed') && !button(menuLabel).disabled);
+    assert.equal(
+      document.querySelector('#profile-test-email'),
+      null,
+      'Connection checks need no input section',
+    );
+    assert.match(
+      results().textContent,
+      /required before campaign launch/,
+      'Connection success cannot qualify',
+    );
+  }
+  const writesBeforeOpening = profileTestWrites.length;
+  await choose('Send test email');
+  await until(() => document.querySelector('#profile-test-email input[type="email"]'));
+  const panel = document.querySelector('#profile-test-email');
+  assert.equal(panel.querySelectorAll('input,select,textarea').length, 1);
+  assert.equal(button('Send test email').getAttribute('aria-expanded'), 'true');
+  const emailCard = panel.closest('.card');
+  assert.ok(emailCard, 'The email form has its own padded card');
+  assert.equal(panel.querySelector('h2').textContent, 'Send test email');
+  const cards = [...emailCard.parentElement.children].filter((node) =>
+    node.classList.contains('card'),
+  );
+  assert.equal(cards.length, 2);
+  assert.equal(cards[0], emailCard);
+  assert.ok(cards[1].contains(results()), 'Profile settings and history remain in a separate card');
+  assert.ok(
+    emailCard.parentElement.classList.contains('settings-stack'),
+    'Shared card spacing separates the email form from settings',
+  );
+  assert.equal(
+    profileTestWrites.length,
+    writesBeforeOpening,
+    'Opening the card does not submit a message',
+  );
+  const input = panel.querySelector('input');
+  input.value = 'operator@example.test';
+  input.dispatchEvent(new win.Event('input', { bubbles: true }));
+  await until(() => !panel.querySelector('button[type="submit"]').disabled);
+  panel
+    .querySelector('form')
+    .dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
+  if (scenario === 'profile-test-uncertain') {
+    await until(() => button('Check result') && !button(menuLabel).disabled);
+    assert.equal(input.disabled, true, 'Uncertain request keeps the original payload stable');
+    assert.equal(
+      button('Send test email').disabled,
+      true,
+      'An uncertain send must be reconciled before another send',
+    );
+    await choose('Check result');
+    await until(() => button('Test connection') && !button(menuLabel).disabled);
+    assert.equal(profileTestWrites.length, 2);
+    assert.deepEqual(
+      profileTestWrites[0],
+      profileTestWrites[1],
+      'Reconciliation reuses the operation identity and payload',
+    );
+  }
+  await until(() => results().textContent.includes('Accepted by SMTP server'));
+  assert.match(results().textContent, /meets the company test requirement/);
+  const history = document.querySelector('section[aria-label="Test history"]');
+  assert.match(history.textContent, /operator@example.test/);
+  assert.equal(
+    history.querySelectorAll('tbody tr').length,
+    scenario === 'profile-test-happy' ? 2 : 1,
+  );
+  panel.querySelectorAll('button')[1].click();
+  await until(() => !document.querySelector('#profile-test-email'));
+  assert.match(
+    history.textContent,
+    /operator@example.test/,
+    'Collapsing the input does not discard recorded results',
+  );
+  process.exit(0);
+}
 
 if (dashboardTabs) {
   const card = () => document.querySelector('.dashboard-attention');

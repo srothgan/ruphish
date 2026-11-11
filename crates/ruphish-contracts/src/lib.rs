@@ -32,3 +32,5 @@ where
     serde::Deserialize::deserialize(deserializer)
 }
 pub use ruphish_domain::landing;
+
+pub mod profile_tests;

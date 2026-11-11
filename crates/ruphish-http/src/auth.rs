@@ -36,6 +36,7 @@ pub(crate) struct AuthState {
     service: Service,
     resources: ruphish_application::resources::Service,
     delivery: ruphish_application::delivery::Service,
+    profile_tests: ruphish_application::profile_tests::Service,
     campaigns: Arc<dyn ruphish_application::campaign::Repository>,
     campaign_list_slots: Arc<tokio::sync::Semaphore>,
     domains: Arc<dyn ruphish_application::domains::Repository>,
@@ -70,6 +71,7 @@ pub fn router<S: SessionStore + Clone>(
         service: services.accounts,
         resources: services.resources,
         delivery: services.delivery,
+        profile_tests: services.profile_tests,
         campaigns: services.campaigns,
         campaign_list_slots: Arc::new(tokio::sync::Semaphore::new(2)),
         domains: services.domains,
@@ -329,6 +331,9 @@ impl Context {
                 serde_urlencoded::from_str::<HashMap<String, String>>(q)
                     .is_ok_and(|q| q.contains_key("api_key"))
             })
+    }
+    pub(crate) fn profile_tests(&self) -> &ruphish_application::profile_tests::Service {
+        &self.state.profile_tests
     }
     pub(crate) fn delivery(&self) -> &ruphish_application::delivery::Service {
         &self.state.delivery
@@ -618,6 +623,8 @@ pub struct Services {
     pub resources: ruphish_application::resources::Service,
     /// Synchronous test-email and preview use cases.
     pub delivery: ruphish_application::delivery::Service,
+    /// Durable profile diagnostics and history.
+    pub profile_tests: ruphish_application::profile_tests::Service,
     /// Shared campaign operations and durable delivery metadata.
     pub campaigns: Arc<dyn ruphish_application::campaign::Repository>,
     /// Whether this process runs campaign delivery workers.

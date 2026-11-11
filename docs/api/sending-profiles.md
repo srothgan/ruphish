@@ -310,3 +310,41 @@ Example response:
 ## Related operations
 
 [Test SMTP connectivity or send a test message](imports-previews-and-test-sends.md). Saving a profile does not send mail or verify account ownership.
+
+## Saved profile tests
+
+### GET `/api/smtp/{id}/tests`
+
+Requires permission to view resources. Returns `profile_tests::History`: the current sending-configuration `generation`, company-policy `required` flag, derived `eligible` state, optional `active` attempt, latest completed `connection` and `email` attempts, the latest ten completed attempts in `history`, and batched current/deleted `operators`. Missing profiles return `404`. Reading also finalizes expired attempts conservatively; it never resubmits them.
+
+Attempts contain `id`, `generation`, `kind`, `operator`, nullable `email`, `started_at`, nullable `finished_at`, `outcome`, safe `code`, and nullable numeric `smtp_code`. Times are UTC Unix seconds. Outcomes are `running`, `submitting`, `passed`, `accepted`, `failed`, `interrupted`, and `unknown`. A connection check produces no email. Only an `accepted` fixed-content email test on the current generation supplies qualifying campaign-launch evidence.
+
+### POST `/api/smtp/{id}/tests`
+
+Requires permission to modify resources and the normal API-key or browser session/CSRF authorization. Supply a unique 16–64 character ASCII alphanumeric/hyphen operation `id` and the numeric profile `revision` you reviewed. Reuse the same identity and payload to reconcile a lost response; an existing operation is returned without repeating SMTP effects, including after profile edits. A changed payload under the same identity returns `412`. Overlapping operations for the same profile return `409` with `PROFILE_TEST_BUSY`; stale revisions return `412`.
+
+Connection-only request:
+
+```json
+{
+  "id": "33f2d178-6db4-45de-b2d0-40e71dd76543",
+  "revision": 1,
+  "kind": "connection",
+  "email": null
+}
+```
+
+Fixed-content email request:
+
+```json
+{
+  "id": "fa3735e4-b139-4336-8e02-93912bb08dc1",
+  "revision": 1,
+  "kind": "email",
+  "email": "operator@example.test"
+}
+```
+
+The recipient is limited to 320 UTF-8 bytes. Invalid input returns `400` before a test attempt is recorded. SMTP results return `200` with the persisted attempt, including failed or unknown outcomes; inspect `outcome` instead of treating HTTP success as SMTP acceptance. The message has subject `Ruphish sending profile test`, fixed plain-text content, and no tracking links or preview identity. Template and campaign testing remain separate operations and do not qualify the profile.
+
+Execution records its submission boundary before transmitting content. Expired checks become `interrupted`; submissions whose acceptance cannot be established become `unknown`. A later failed, interrupted, or unknown test revokes earlier readiness. Profile tests do not automatically retry, expire successful evidence, or create campaign events. Sending-configuration changes invalidate evidence through a new generation; metadata-only changes do not. The optional [company policy](company-settings.md) is rechecked at campaign launch and does not pause already-launched campaigns.

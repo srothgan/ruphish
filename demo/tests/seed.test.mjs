@@ -158,6 +158,36 @@ test('the sole dataset seeds installed SQLite schema, survives reopen, and disab
       (await post('/auth/login', { username: 'demo', password: 'demodemo' })).status,
       200,
     );
+    for (const id of [1, 2, 3, 4, 5]) {
+      const path = `/api/smtp/${id}/tests`;
+      const actual = await fetch(`http://127.0.0.1:${port}${path}`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      assert.equal(actual.status, 200);
+      const seeded = await actual.json();
+      const simulated = await (
+        await demo.execute(new Request(`https://demo.example.test${path}`))
+      ).json();
+      for (const key of [
+        'generation',
+        'required',
+        'eligible',
+        'active',
+        'connection',
+        'email',
+        'history',
+      ]) {
+        const stripProfileId = (value) =>
+          JSON.parse(
+            JSON.stringify(value, (key, field) => (key === 'profile_id' ? undefined : field)),
+          );
+        assert.deepEqual(
+          stripProfileId(seeded[key]),
+          stripProfileId(simulated[key]),
+          `${path}: ${key}`,
+        );
+      }
+    }
     for (const recipient of [20001, 20010, 20024, 20028]) {
       const path = `/api/campaigns/2/results?recipients=${recipient}`;
       const live = await fetch(`http://127.0.0.1:${port}${path}`, {

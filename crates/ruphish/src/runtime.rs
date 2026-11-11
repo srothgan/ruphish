@@ -136,8 +136,9 @@ async fn start(arguments: Arguments, config: Config) -> Result<(), Error> {
                 std::sync::Arc::new(ruphish_adapters::password_worker::PasswordWorker::default()),
             );
             let resources = ruphish_application::resources::Service::new(database.resources(), std::sync::Arc::new(ruphish_adapters::resources::Validate), std::sync::Arc::new(ruphish_adapters::imports::Tools {policy:policy.clone()}), database.content_work());
+            let profile_tests = ruphish_application::profile_tests::Service::new(database.profile_tests(),smtp.clone(),smtp.clone(),smtp.clone(),database.content_work());
             let delivery = ruphish_application::delivery::Service::new(service.clone(),resources.clone(),smtp,previews);
-            Some(ruphish_http::auth::router(assets, ruphish_http::auth::Services {settings:database.settings(),integrations:integrations.clone(),reporting:database.reporting(),overview:database.overview(),accounts:service,resources,delivery,campaigns,domains,mailer_enabled:!arguments.disable_mailer}, sessions, &key, config.admin.use_tls, config.admin.trusted_origins.clone(), config.admin.csrf_key.clone()))
+            Some(ruphish_http::auth::router(assets, ruphish_http::auth::Services {settings:database.settings(),integrations:integrations.clone(),reporting:database.reporting(),overview:database.overview(),accounts:service,resources,delivery,profile_tests,campaigns,domains,mailer_enabled:!arguments.disable_mailer}, sessions, &key, config.admin.use_tls, config.admin.trusted_origins.clone(), config.admin.csrf_key.clone()))
         } else { None };
         let probes = ruphish_http::health::router(health.clone());
         let admin_router = admin_router.map(|router| router.merge(probes.clone()));

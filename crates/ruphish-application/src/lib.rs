@@ -29,3 +29,5 @@ pub mod event_edit;
 
 /// Persisted attribution shared by application resources and transport projections.
 pub mod attribution;
+
+pub mod profile_tests;

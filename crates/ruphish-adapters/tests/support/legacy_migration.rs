@@ -217,6 +217,18 @@ pub async fn contract(db: &Database) {
             ],
         }
     );
+    let evidence = db
+        .profile_tests()
+        .read(OWNER, 67, 1_900_000_000)
+        .await
+        .unwrap();
+    assert_eq!(evidence.generation, 1);
+    assert!(!evidence.required);
+    assert!(evidence.history.is_empty());
+    assert!(
+        evidence.connection.is_none() && evidence.email.is_none(),
+        "Legacy campaigns and previews must not manufacture profile-test evidence"
+    );
     let Content::Profile(profile) = resources
         .get(OWNER, Kind::Profile, 67)
         .await

@@ -152,3 +152,5 @@ mod inventory_sql;
 mod worker_sql;
 
 mod attribution;
+
+pub mod profile_tests;

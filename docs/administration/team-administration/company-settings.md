@@ -9,6 +9,14 @@ Open **Administration → Company settings** with an Administrator account. Thes
 
 Change the settings you need, choose **Save changes**, and review the confirmation before applying them. If another administrator has saved changes first, refresh and review the current settings. Use **Discard edits** when you want to replace your unsaved changes with the saved version.
 
+## Require a successful sending-profile test
+
+**Require successful sending-profile test** defaults to off. Enable it to require an accepted fixed-content email test using a sending profile's current configuration before a new campaign can launch, including a campaign scheduled for future delivery. Drafts can still be saved before the profile qualifies. Use the profile view's **Send test email** action to obtain qualifying evidence; a connection-only check or a template/campaign test does not qualify.
+
+Changing SMTP settings, credentials, sender address, certificate policy, or additional headers requires a new successful test. Renaming a profile does not. A later failed, interrupted, or unknown operational test revokes readiness until a new profile email test succeeds. An active test also holds new launches until its result is known. Tests have no automatic expiry or scheduled rechecks.
+
+This policy governs new launches. Changing the policy or later test results does not pause campaigns already launched. SMTP acceptance does not verify sender ownership or inbox delivery; inspect the test recipient's inbox separately. See [sending profiles](../../user-guide/resources/sending-profiles.md#check-the-connection-and-send-a-test) for the actions, result badges, and history.
+
 ## Require domain verification
 
 Domain verification checks that a registered campaign hostname is under your control and reaches this Ruphish installation over HTTPS. Enable it when your team uses hosted campaign domains. Leave it off for the local getting-started setup, which uses an HTTP address on your own computer.

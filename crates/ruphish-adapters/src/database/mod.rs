@@ -54,6 +54,7 @@ pub struct Database {
     backend: Backend,
     health: Arc<dyn app::health::Storage>,
     settings: Arc<dyn app::settings::Repository>,
+    profile_tests: Arc<dyn app::profile_tests::Repository>,
     rendering: Arc<tokio::sync::Semaphore>,
     sessions: Arc<dyn app::storage::Sessions>,
     accounts: Arc<dyn app::auth::Repository>,
@@ -86,6 +87,7 @@ pub async fn open(config: Config, policy: Policy) -> Result<Database, Error> {
             Ok(Database {
                 health: Arc::new(health::Probe::Sqlite(pool.clone())),
                 settings: Arc::new(sqlite::settings::SettingsStore::new(pool.clone())),
+                profile_tests: Arc::new(sqlite::profile_tests::Tests::new(pool.clone())),
                 sessions: Arc::new(sqlite::sessions::Sessions::new(pool.clone())),
                 accounts: Arc::new(sqlite::accounts::Accounts::new(pool.clone())),
                 resources: Arc::new(sqlite::resources::Resources::new(pool.clone())),
@@ -121,6 +123,7 @@ pub async fn open(config: Config, policy: Policy) -> Result<Database, Error> {
             Ok(Database {
                 health: Arc::new(health::Probe::MySql(pool.clone())),
                 settings: Arc::new(mysql::settings::SettingsStore::new(pool.clone())),
+                profile_tests: Arc::new(mysql::profile_tests::Tests::new(pool.clone())),
                 sessions: Arc::new(mysql::sessions::Sessions::new(pool.clone())),
                 accounts: Arc::new(mysql::accounts::Accounts::new(pool.clone())),
                 resources: Arc::new(mysql::resources::Resources::new(pool.clone())),
@@ -156,6 +159,7 @@ pub async fn open(config: Config, policy: Policy) -> Result<Database, Error> {
             Ok(Database {
                 health: Arc::new(health::Probe::Postgres(pool.clone())),
                 settings: Arc::new(postgres::settings::SettingsStore::new(pool.clone())),
+                profile_tests: Arc::new(postgres::profile_tests::Tests::new(pool.clone())),
                 sessions: Arc::new(postgres::sessions::Sessions::new(pool.clone())),
                 accounts: Arc::new(postgres::accounts::Accounts::new(pool.clone())),
                 resources: Arc::new(postgres::resources::Resources::new(pool.clone())),
@@ -195,6 +199,11 @@ impl Database {
     /// Read-only readiness capability; callers use the application's bounded health service.
     pub fn health(&self) -> Arc<dyn app::health::Storage> {
         self.health.clone()
+    }
+
+    /// Durable saved-profile tests.
+    pub fn profile_tests(&self) -> Arc<dyn app::profile_tests::Repository> {
+        self.profile_tests.clone()
     }
 
     /// Installation policy and administrator campaign closure.

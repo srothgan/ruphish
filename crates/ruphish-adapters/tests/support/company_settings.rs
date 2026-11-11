@@ -1,7 +1,7 @@
 //! One policy workflow exercised through each real provider's production facade.
 use super::*;
 
-async fn account(db: &Database) -> auth::Account {
+pub(super) async fn account(db: &Database) -> auth::Account {
     db.bootstrap(
         Some("Settings fixture password 42!".into()),
         Some("settings-fixture-key".into()),
@@ -22,7 +22,7 @@ async fn account(db: &Database) -> auth::Account {
         .unwrap()
 }
 
-async fn input(db: &Database, actor: auth::Identity, origin: &str) -> campaign::Create {
+pub(super) async fn input(db: &Database, actor: auth::Identity, origin: &str) -> campaign::Create {
     let resources = db.resources();
     let group = resources
         .save(

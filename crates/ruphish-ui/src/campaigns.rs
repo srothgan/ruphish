@@ -1316,8 +1316,17 @@ pub(super) fn CreateCampaign(
                         <h2>{tr!(ui.content_and_destination)}</h2>
                         <div class="resource-columns">
                             {selector(draft, resources, "template", trs!(ui.email_template))}
-                            {selector(draft, resources, "smtp", trs!(ui.sending_profile))}
-                            {page_selector(tasks, api, draft, resources, message)}
+                            <div>
+                                {selector(draft, resources, "smtp", trs!(ui.sending_profile))}
+                                {crate::profile_tests::campaign_readiness(
+                                    Signal::derive(move || {
+                                        draft
+                                            .with(|d| {
+                                                d.value["selection"]["smtp"]["id"].as_i64().unwrap_or(0)
+                                            })
+                                    }),
+                                )}
+                            </div> {page_selector(tasks, api, draft, resources, message)}
                             {domain_selector(draft, resources)}
                         </div>
                         <ul

@@ -413,6 +413,13 @@ impl Repository for Resources {
             page.public_id = hex::encode(bytes);
         }
         let id = value.id;
+        if kind == Kind::Profile && old.as_ref().is_some_and(|old| old.content != value.content) {
+            sqlx::query("UPDATE smtp SET test_generation=test_generation+1 WHERE id=?")
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .map_err(storage)?;
+        }
         match &value.content {
             Content::Group(targets) => {
                 for t in targets {
@@ -532,6 +539,13 @@ impl Repository for Resources {
         condition(&old, expected.as_deref())?;
         if usage(&mut tx, kind, id).await? > 0 {
             return Err(Error::InUse);
+        }
+        if kind == Kind::Profile {
+            sqlx::query("DELETE FROM ruphish_profile_tests WHERE profile_id=?")
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .map_err(storage)?;
         }
         clear_children(&mut tx, kind, id).await?;
         sqlx::query(sqlx::AssertSqlSafe(format!(

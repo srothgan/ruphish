@@ -38,6 +38,12 @@ pub enum Error {
     /// A saved schedule must be corrected before launching a draft.
     #[error("Draft schedule is in the past")]
     DraftSchedulePast,
+    /// Company policy requires accepted evidence for the current sender configuration.
+    #[error("Test this sending profile successfully before launching the campaign")]
+    ProfileTestRequired,
+    /// Another operational test currently owns this profile.
+    #[error("A profile test is already running. Wait for its result.")]
+    ProfileTestBusy,
     #[error("{0}")]
     /// A synchronous external delivery failure, including an ambiguous outcome.
     Delivery(String),
