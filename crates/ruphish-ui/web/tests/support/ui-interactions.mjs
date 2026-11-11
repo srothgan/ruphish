@@ -81,6 +81,7 @@ const path =
     'form-webhook': '/webhooks/new',
     'integration-readonly-webhook': '/webhooks/new',
     'integration-readonly-mailbox': '/reporting-mailboxes/new',
+    'integration-mailbox-reset': '/reporting-mailboxes/1',
     'form-mailbox': '/reporting-mailboxes/new',
     'form-filters': returnOrigin,
     'form-group': '/groups/new',
@@ -102,6 +103,7 @@ const path =
     'settings-hidden-recheck': '/settings',
     'form-campaign': '/campaigns/new',
     'campaign-wizard': '/campaigns/new',
+    'campaign-wizard-empty-uncertain': '/campaigns/new',
     'form-draft': '/campaigns/drafts/1/edit',
     'form-session': '/groups/new',
     'results-chart': '/campaigns/2/results',
@@ -196,7 +198,7 @@ if (
   scenario.startsWith('missing-') ||
   scenario === 'history-domain' ||
   scenario.startsWith('integration-') ||
-  scenario === 'campaign-wizard' ||
+  scenario.startsWith('campaign-wizard') ||
   scenario === 'sort-directory' ||
   recipientEditor ||
   scenario.endsWith('-attribution') ||
@@ -221,6 +223,12 @@ class FixtureDate extends NativeDate {
 }
 globalThis.Date = win.Date = FixtureDate;
 const data = dataset(now);
+if (scenario === 'integration-mailbox-reset') {
+  Object.assign(data['reporting-mailboxes'][0], {
+    reset_required: true,
+    code: 'mailbox_authentication_failed',
+  });
+}
 if (scenario === 'profile-test-temporary') {
   Object.assign(
     data.profile_tests.find((r) => r.profile_id === 2 && r.outcome === 'failed'),
@@ -655,7 +663,7 @@ globalThis.fetch = async (request, options) => {
   }
 
   if (
-    (scenario.startsWith('form-') || scenario === 'campaign-wizard') &&
+    (scenario.startsWith('form-') || scenario.startsWith('campaign-wizard')) &&
     ['POST', 'PUT'].includes(request.method)
   ) {
     writes.push({
@@ -664,7 +672,7 @@ globalThis.fetch = async (request, options) => {
       key: request.headers.get('idempotency-key'),
     });
     if (failSave) {
-      if (scenario === 'campaign-wizard' && url.pathname === '/api/campaign-drafts') {
+      if (scenario.startsWith('campaign-wizard') && url.pathname === '/api/campaign-drafts') {
         const accepted = await api.execute(request.clone(), options);
         assert.equal(accepted.status, 201, 'creation persisted before losing its acknowledgement');
       }
@@ -842,8 +850,15 @@ const demo = html.includes('<title>Ruphish Demo</title>');
 if (scenario.startsWith('auth-')) {
   assert.equal(demo, false, 'auth regressions need the normal WASM bundle');
 }
+if (scenario === 'campaign-wizard-empty-uncertain') {
+  assert.equal(
+    demo,
+    false,
+    'lost-response regressions need the normal WASM bundle and HTTP fixture',
+  );
+}
 if (
-  (scenario === 'campaign-wizard' ||
+  (scenario.startsWith('campaign-wizard') ||
     ['profile-test-happy', 'profile-test-failure', 'profile-test-settings'].includes(scenario)) &&
   demo
 ) {
@@ -865,7 +880,7 @@ async function until(condition) {
         dashboardTabs ||
         settingsHidden ||
         settingsFeedback ||
-        scenario === 'campaign-wizard' ||
+        scenario.startsWith('campaign-wizard') ||
         scenario === 'sort-directory' ||
         recipientEditor ||
         recoveryPath ||
@@ -1902,7 +1917,7 @@ if (scenario.endsWith('-attribution')) {
   process.exit(0);
 }
 
-if (scenario === 'campaign-wizard') {
+if (scenario.startsWith('campaign-wizard')) {
   const button = (text) =>
     [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === text);
   const step = () =>
@@ -1941,6 +1956,25 @@ if (scenario === 'campaign-wizard') {
     anchor.click();
   };
   await until(() => settled() && button('Continue') && !button('Continue').disabled);
+  if (scenario === 'campaign-wizard-empty-uncertain') {
+    failSave = true;
+    button('Save as draft').click();
+    await until(() => writes.length === 1 && !button('Save as draft').disabled);
+    const unload = new win.Event('beforeunload', { cancelable: true });
+    win.dispatchEvent(unload);
+    assert.equal(
+      unload.defaultPrevented,
+      true,
+      'an uncertain creation protects navigation even without local edits',
+    );
+    failSave = false;
+    button('Save as draft').click();
+    await until(() => /^\/campaigns\/drafts\/[1-9][0-9]*$/.test(win.location.pathname));
+    const creates = writes.filter((w) => w.path === '/api/campaign-drafts');
+    assert.equal(creates.length, 2);
+    assert.deepEqual(creates[1], creates[0], 'reconciliation keeps the original creation identity');
+    process.exit(0);
+  }
   button('Continue').click();
   await nextTurn();
   assert.equal(step(), 0, 'invalid audience stays on its phase');
@@ -2100,6 +2134,17 @@ if (scenario === 'domain-unsupported') {
   assert.ok(verify);
   assert.ok(verify.disabled, 'unsupported origin cannot queue verification');
   assert.ok(!document.body.textContent.includes('_ruphish-verify'));
+  process.exit(0);
+}
+
+if (scenario === 'integration-mailbox-reset') {
+  const button = (label) =>
+    [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === label);
+  await until(() => button('Resume with new arrivals'));
+  assert.ok(!button('Resume with new arrivals').disabled);
+  assert.ok(
+    document.body.textContent.includes('Processing is paused to protect existing report history.'),
+  );
   process.exit(0);
 }
 

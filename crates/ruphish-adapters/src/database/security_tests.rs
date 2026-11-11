@@ -88,12 +88,21 @@ async fn mailbox_certificate_edits_fence_claims_without_resetting_receipts() {
     assert!(!updated.ignore_cert_errors);
     assert!(worker.mailbox_current(&claim.config).await.is_err());
     worker
-        .finish_mailbox(&claim, "passed", 1_800_000_100, 1_800_000_001)
+        .finish_mailbox(
+            &claim,
+            "mailbox_uidvalidity_changed",
+            1_800_000_100,
+            1_800_000_001,
+        )
         .await
         .unwrap();
     let next = worker.claim_mailbox(1_800_000_002).await.unwrap().unwrap();
     assert!(!next.config.ignore_cert_errors);
     assert!(next.config.initialized);
+    assert!(
+        !next.config.reset_required,
+        "a stale claim cannot require recovery for the edited mailbox"
+    );
     assert_eq!((next.config.validity, next.config.last), (41, 12));
     assert_eq!(
         worker

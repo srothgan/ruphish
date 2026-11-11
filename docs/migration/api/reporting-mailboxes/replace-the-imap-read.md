@@ -31,6 +31,7 @@ Use a Bearer API key. The [common changes](../common-contract-changes.md) explai
 | `enabled`, `host`, `username`, `folder`, `restrict_domain`, `ignore_cert_errors` | Boolean/string connection fields. | Names/types retained; current connection and validation rules apply. |
 | `last_login`, `modified_date` | RFC 3339 strings in legacy configuration. | Use attribution timestamps and operational `last_check`, `last_success`, `next_check` Unix-second integers; these are different observations, not simple renames. |
 | `revision`, attribution, `history`, `running`, `code` | Absent. | Added concurrency, attribution, operational history, boolean running state, and diagnostic code. |
+| `reset_required` | Absent. | Read-only boolean; checkpoint recovery remains required even if the latest `code` changes. |
 
 ## Gophish request
 
@@ -103,6 +104,7 @@ curl --request GET "$RUPHISH_URL/api/reporting-mailboxes/" \
     "last_success": 0,
     "next_check": 0,
     "running": false,
+    "reset_required": false,
     "code": ""
   }
 ]
@@ -111,6 +113,8 @@ curl --request GET "$RUPHISH_URL/api/reporting-mailboxes/" \
 ## Behavior and verification
 
 The old `/api/imap/` route is not retained. The replacement is an array, not a single object; zero, one, or multiple mailboxes are valid. Reads require `view_objects` and remain available when the feature is disabled. Imported names and IDs come from conversion; do not select an arbitrary first item.
+
+Use `reset_required` to offer checkpoint recovery; do not infer it from `code`. A later authentication failure can replace the diagnostic while recovery remains required. The explicit resume action requires the current revision.
 
 Verify selection with two mailboxes and an empty list. Use `GET /api/reporting-mailboxes/{id}` for the chosen configuration and operational history.
 

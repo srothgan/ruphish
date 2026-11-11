@@ -358,6 +358,7 @@ CREATE TABLE "ruphish_mailboxes" (
   code TEXT NOT NULL DEFAULT '',
   ignore_cert_errors INTEGER NOT NULL DEFAULT 0 CHECK(ignore_cert_errors IN (0,1)),
   initial_since VARCHAR(40),
+  reset_required INTEGER NOT NULL DEFAULT 0,
   UNIQUE(owner_id,name)
 );
 

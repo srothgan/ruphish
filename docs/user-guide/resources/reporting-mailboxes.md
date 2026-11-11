@@ -62,6 +62,8 @@ If you enable **Delete successfully matched messages after processing**, matched
 | Mailbox identifiers changed | Use **Resume with new arrivals** after reviewing the message. Existing messages will not be reprocessed. |
 | A check failed temporarily | Inspect the history and next check time. Failed checks retry with increasing delays. |
 
+The identifier-change warning and **Resume with new arrivals** action remain available if a later check fails to log in. Replacing the password or restarting Ruphish does not clear the reset requirement. Review it and resume explicitly before processing new reports.
+
 ## Edit, disable, or delete a mailbox
 
 Leave the password blank during an edit to retain it. Enter a new password to replace it.

@@ -69,6 +69,8 @@ pub struct Mailbox {
     pub next_check: i64,
     /// Current activity.
     pub running: bool,
+    /// The checkpoint must be explicitly reset before reports can be processed.
+    pub reset_required: bool,
     /// Closed outcome code.
     pub code: String,
     /// Recent checks.

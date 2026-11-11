@@ -437,6 +437,7 @@ CREATE TABLE ruphish_mailboxes (
   code VARCHAR(255) COLLATE "C" NOT NULL DEFAULT '',
   ignore_cert_errors BOOLEAN NOT NULL DEFAULT FALSE,
   initial_since VARCHAR(40) COLLATE "C",
+  reset_required BOOLEAN NOT NULL DEFAULT FALSE,
   PRIMARY KEY (id),
   CONSTRAINT mailbox_name UNIQUE (owner_id,name),
   CHECK (port BETWEEN 1 AND 65535)

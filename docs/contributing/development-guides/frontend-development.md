@@ -39,6 +39,8 @@ Mount forms through stable components keyed by record identity or explicit open 
 
 Recipient-group drafts use typed, independently reactive rows and stable editor identities. Sort once on load; keep display and submission order identical afterward. Serialize at save and retain the submitted row identities to translate indexed server diagnostics. Typing must not notify the collection or unrelated rows. Shared form validation publishes changed field errors to registered controls; touched state and request generations do not broadcast to every input.
 
+Campaign draft persistence owns creation identity and the complete confirmed checkpoint together. An unresolved creation protects navigation even if the form has never been edited. Retry the frozen creation key and body; a returned identity alone does not authorize adopting another editor's revision. Explicit reload and confirmed saves advance revision, attribution, modification time, and saved generation atomically.
+
 A successful save updates the confirmed checkpoint and revision together while preserving newer local edits. A stale-revision failure preserves the draft for review against current server data. An uncertain result is not a confirmed save and must not promote submitted values into the inventory.
 
 After a confirmed resource save, reconcile returned metadata into the inventory query before refreshing. Cancel obsolete reads so a pre-save response cannot restore stale metadata. Where the save response lacks a count, retain a previously confirmed count or show it as unknown until a successful summary read; do not invent a value.

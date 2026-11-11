@@ -15,37 +15,69 @@ use serde_json::{Value, json};
 #[derive(Clone, Copy)]
 pub(crate) struct Persistence {
     queries: CampaignQueries,
-    pub id: RwSignal<String>,
-    creation: RwSignal<Option<(String, Value)>>,
-    pub revision: RwSignal<Option<i64>>,
-    pub saved_generation: RwSignal<u64>,
-    pub modified: RwSignal<Value>,
-    pub attribution: RwSignal<ruphish_contracts::attribution::Attribution>,
+    state: RwSignal<super::persistence_state::PersistenceState>,
+    pub id: Signal<String>,
+    pub revision: Signal<Option<i64>>,
+    pub saved_generation: Signal<u64>,
+    pub modified: Signal<Value>,
+    pub attribution: Signal<ruphish_contracts::attribution::Attribution>,
+    pub unconfirmed: Signal<bool>,
     pub saving: RwSignal<bool>,
     pub write_error: RwSignal<Option<crate::api::error::ApiError>>,
 }
 impl Persistence {
-    pub fn new(saved: Option<&Value>) -> Self {
-        Self {
+    pub fn new(api: Api, saved: Option<&Value>) -> Result<Self, String> {
+        use super::persistence_state::PersistenceState;
+        let initial = match saved {
+            Some(saved) => {
+                let parsed =
+                    serde_json::from_value(saved.clone()).map_err(|_| api.invalid_read())?;
+                PersistenceState::loaded(parsed).ok_or_else(|| api.invalid_read())?
+            }
+            None => PersistenceState::default(),
+        };
+        let state = RwSignal::new(initial);
+        Ok(Self {
             queries: expect_context::<CampaignQueries>(),
+            state,
+            id: Signal::derive(move || {
+                state.with(|s| s.id().map(|id| id.to_string()).unwrap_or_default())
+            }),
+            revision: Signal::derive(move || state.with(PersistenceState::revision)),
+            saved_generation: Signal::derive(move || {
+                state.with(PersistenceState::saved_generation)
+            }),
+            modified: Signal::derive(move || {
+                state.with(|s| json!(s.confirmed().and_then(|r| r.modified.clone())))
+            }),
+            attribution: Signal::derive(move || {
+                state.with(|s| {
+                    s.confirmed()
+                        .map(|r| r.attribution.clone())
+                        .unwrap_or_default()
+                })
+            }),
+            unconfirmed: Signal::derive(move || state.with(PersistenceState::unconfirmed)),
             saving: RwSignal::new(false),
-            attribution: RwSignal::new(
-                saved
-                    .and_then(|v| serde_json::from_value(v.clone()).ok())
-                    .unwrap_or_default(),
-            ),
             write_error: RwSignal::new(None),
-            id: RwSignal::new(
-                saved
-                    .and_then(|s| s["id"].as_i64())
-                    .map(|id| id.to_string())
-                    .unwrap_or_default(),
-            ),
-            creation: RwSignal::new(None),
-            revision: RwSignal::new(saved.and_then(|s| s["revision"].as_i64())),
-            saved_generation: RwSignal::new(0),
-            modified: RwSignal::new(saved.map(|s| s["modified"].clone()).unwrap_or(Value::Null)),
+        })
+    }
+    pub fn accept(
+        self,
+        api: Api,
+        saved: &Value,
+        generation: u64,
+    ) -> Result<(), crate::api::error::ApiError> {
+        let record = serde_json::from_value(saved.clone()).map_err(|_| api.invalid_read_err())?;
+        if !self
+            .state
+            .try_update(|s| s.accept(record, generation))
+            .unwrap_or(false)
+        {
+            return Err(api.invalid_read_err());
         }
+        self.write_error.set(None);
+        Ok(())
     }
     pub async fn save(
         self,
@@ -61,31 +93,31 @@ impl Persistence {
             step: i64::try_from(step).map_err(|_| api.invalid_read())?,
         })
         .map_err(|_| api.invalid_read())?;
-        if self.id.get_untracked().is_empty() && self.creation.get_untracked().is_none() {
+        if self.state.with_untracked(|s| s.is_new()) {
             let key = crate::campaigns::pages::random_key()
                 .map_err(|_| crate::tr!(ui.cannot_generate_a_secure_launch_key)())?;
-            self.creation.set(Some((key, create.clone())));
+            self.state.update(|s| s.begin_creation(key, create.clone()));
         }
         self.saving.set(true);
         let result = async {
-            if let Some((key, body)) = self.creation.get_untracked() {
+            if let Some((key, body)) = self.state.with_untracked(|s| s.creation()) {
                 let saved = api
                     .create_response("/api/campaign-drafts", token, &key, &body)
                     .await?;
                 let parsed: ruphish_contracts::campaign::reads::Draft =
                     serde_json::from_value(saved.clone()).map_err(|_| api.invalid_read_err())?;
-                if parsed.id <= 0 {
+                if !self
+                    .state
+                    .try_update(|s| s.created(parsed.id))
+                    .unwrap_or(false)
+                {
                     return Err(api.invalid_read_err());
                 }
-                self.id.set(parsed.id.to_string());
-                // Never silently adopt intervening edits after an uncertain creation.
-                self.revision.set(Some(1));
-                self.creation.set(None);
                 if saved["configuration"] == create["configuration"]
                     && saved["step"] == create["step"]
                     && parsed.campaign_id.is_none()
                 {
-                    return Ok((saved, None));
+                    return Ok(saved);
                 }
             }
             let mut body = create;
@@ -98,27 +130,22 @@ impl Persistence {
                 None,
             )
             .await
+            .map(|(saved, _)| saved)
         }
-        .await;
+        .await
+        .and_then(|saved| {
+            self.accept(api, &saved, state.generation)?;
+            Ok(saved)
+        });
         self.saving.set(false);
-        let (saved, _) = result.map_err(|error| {
+        let saved = result.map_err(|error| {
             if matches!(error.status, 400 | 401 | 403 | 422) {
-                self.creation.set(None);
+                self.state.update(|s| s.rejected());
             }
             self.write_error.set(Some(error.clone()));
             error.message
         })?;
-        self.write_error.set(None);
-        let parsed: ruphish_contracts::campaign::reads::Draft =
-            serde_json::from_value(saved.clone()).map_err(|_| api.invalid_read())?;
-        if parsed.id.to_string() != self.id.get_untracked() {
-            return Err(api.invalid_read());
-        }
-        self.queries.draft_saved(&parsed.id.to_string());
-        self.revision.set(saved["revision"].as_i64());
-        self.saved_generation.set(state.generation);
-        self.modified.set(saved["modified"].clone());
-        self.attribution.set(parsed.attribution);
+        self.queries.draft_saved(&self.id.get_untracked());
         Ok(saved)
     }
 }

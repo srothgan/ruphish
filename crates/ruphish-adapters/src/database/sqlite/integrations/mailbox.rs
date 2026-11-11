@@ -20,6 +20,7 @@ pub(in crate::database::sqlite) fn config(r: &SqliteRow) -> Result<Config, Error
         folder: text(r, "folder")?,
         restrict: text(r, "restrict_domain")?,
         delete: r.try_get("delete_reported").map_err(db)?,
+        reset_required: r.try_get("reset_required").map_err(db)?,
         validity: r.try_get("uidvalidity").map_err(db)?,
         last: r.try_get::<i64, _>("last_uid").map_err(db)? as u32,
         initialized: r.try_get("initialized").map_err(db)?,
@@ -98,6 +99,7 @@ impl MailboxQueue for Integrations {
                 SET lease=0,last_check=?,
                     last_success=CASE WHEN ?='passed' THEN ? ELSE last_success END,
                     code=?,failures=CASE WHEN ?='passed' THEN 0 ELSE failures+1 END,
+                    reset_required=reset_required OR ?='mailbox_uidvalidity_changed',
                     next_check=?
                 WHERE id=?
                 AND revision=?
@@ -107,6 +109,7 @@ impl MailboxQueue for Integrations {
         .bind(done)
         .bind(code)
         .bind(done)
+        .bind(code)
         .bind(code)
         .bind(code)
         .bind(next_check)

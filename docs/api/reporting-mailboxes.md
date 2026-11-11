@@ -49,6 +49,7 @@ Unknown fields are rejected. Omit `revision` on creation; supply it on updates. 
 | `last_success` | `integer` | Last successful check in UTC Unix seconds. |
 | `next_check` | `integer` | Next scheduled check in UTC Unix seconds. |
 | `running` | `boolean` | Whether a worker currently owns a check. |
+| `reset_required` | `boolean` | Whether the saved UID checkpoint requires explicit reset, independently of the latest check outcome. |
 | `code` | `string` | Application-owned outcome code. |
 | `history` | `Run[]` | Recent processing attempts. |
 
@@ -135,6 +136,7 @@ Example response:
   "last_success": 0,
   "next_check": 0,
   "running": false,
+  "reset_required": false,
   "code": ""
 }
 ```
@@ -186,6 +188,7 @@ Example response:
     "last_success": 0,
     "next_check": 0,
     "running": false,
+    "reset_required": false,
     "code": ""
   }
 ]
@@ -237,6 +240,7 @@ Example response:
   "last_success": 0,
   "next_check": 0,
   "running": false,
+  "reset_required": false,
   "code": ""
 }
 ```
@@ -308,6 +312,7 @@ Example response:
   "last_success": 0,
   "next_check": 0,
   "running": false,
+  "reset_required": false,
   "code": ""
 }
 ```
@@ -360,6 +365,7 @@ Example response:
   "last_success": 0,
   "next_check": 0,
   "running": false,
+  "reset_required": false,
   "code": ""
 }
 ```
@@ -412,6 +418,7 @@ Example response:
   "last_success": 0,
   "next_check": 0,
   "running": false,
+  "reset_required": false,
   "code": ""
 }
 ```
@@ -422,7 +429,7 @@ Resume a mailbox paused by a UIDVALIDITY change at the expected revision.
 
 **Request:** common::Revision. **Response:** `200 OK`, `integrations::Mailbox` as `application/json`.
 
-This independent example assumes the saved mailbox has code `mailbox_uidvalidity_changed`. Resume resets the UID checkpoint and increments the configuration revision; other states return a conflict.
+This independent example assumes the saved mailbox has `reset_required: true`. Resume resets the UID checkpoint and increments the configuration revision; other states return a conflict. The reset requirement survives later connection failures, restarts, and edits that do not change mailbox identity. Changing the host, port, username, or folder starts a new checkpoint and clears the requirement.
 
 Request body (`request.json`):
 
@@ -474,6 +481,7 @@ Example response:
   "last_success": 0,
   "next_check": 0,
   "running": false,
+  "reset_required": false,
   "code": ""
 }
 ```

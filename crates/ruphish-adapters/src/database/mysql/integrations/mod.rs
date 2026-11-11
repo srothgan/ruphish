@@ -68,6 +68,7 @@ fn mailbox_row(r: MySqlRow) -> Result<Mailbox, Error> {
         modified_date: text(&r, "modified_date")?.replacen(' ', "T", 1),
         last_login: text(&r, "last_login")?.replacen(' ', "T", 1),
         next_check: r.try_get("next_check").map_err(db)?,
+        reset_required: r.try_get("reset_required").map_err(db)?,
         running: r.try_get::<i64, _>("lease").map_err(db)? > now(),
         code: text(&r, "code")?,
         history: vec![],
@@ -317,6 +318,7 @@ impl Repository for Integrations {
                 SET name=?,enabled=?,host=?,port=?,username=?,password=?,tls=?,ignore_cert_errors=?,folder=?,
                     restrict_domain=?,delete_reported=?,frequency=?,revision=revision+1,
                     lease=0,next_check=0,failures=0,code='',modified_date=DATE_FORMAT(UTC_TIMESTAMP(6),'%Y-%m-%dT%H:%i:%s.%fZ'),
+                    reset_required=CASE WHEN ? THEN FALSE ELSE reset_required END,
                     initial_since=CASE WHEN ? THEN NULL ELSE initial_since END,
                     initialized=CASE WHEN ? THEN 0 ELSE initialized END,
                     uidvalidity=CASE WHEN ? THEN 0 ELSE uidvalidity END,
@@ -336,6 +338,7 @@ impl Repository for Integrations {
             .bind(&e.restrict_domain)
             .bind(e.delete_reported)
             .bind(i64::from(e.frequency))
+            .bind(changed)
             .bind(changed)
             .bind(changed)
             .bind(changed)
@@ -485,11 +488,11 @@ impl Repository for Integrations {
         crate::database::mysql::settings::require_integration(&mut tx, true).await?;
         let changed = sqlx::query(r#"
                 UPDATE ruphish_mailboxes
-                SET initial_since=NULL,initialized=0,uidvalidity=0,last_uid=0,next_check=0,lease=0,revision=revision+1,code=''
+                SET reset_required=FALSE,initial_since=NULL,initialized=0,uidvalidity=0,last_uid=0,next_check=0,lease=0,revision=revision+1,code=''
                 WHERE id=?
 
                 AND revision=?
-                AND code='mailbox_uidvalidity_changed'
+                AND reset_required=TRUE
             "#)
             .bind(id).bind(revision).execute(&mut *tx).await.map_err(db)?.rows_affected();
         if changed != 1 {

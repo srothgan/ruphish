@@ -64,6 +64,7 @@ fn mailbox(mailbox: app::Mailbox, lookup: &Lookup) -> wire::Mailbox {
         last_success: mailbox.last_success,
         next_check: mailbox.next_check,
         running: mailbox.running,
+        reset_required: mailbox.reset_required,
         code: mailbox.code,
         history: runs(mailbox.history),
     }

@@ -21,6 +21,7 @@ pub(in crate::database::postgres) fn config(r: &PgRow) -> Result<Config, Error> 
         folder: text(r, "folder")?,
         restrict: text(r, "restrict_domain")?,
         delete: r.try_get("delete_reported").map_err(db)?,
+        reset_required: r.try_get("reset_required").map_err(db)?,
         validity: r.try_get("uidvalidity").map_err(db)?,
         last: r.try_get::<i64, _>("last_uid").map_err(db)? as u32,
         initialized: r.try_get("initialized").map_err(db)?,
@@ -110,6 +111,7 @@ impl MailboxQueue for Integrations {
                 SET lease=0,last_check=$1,
                     last_success=CASE WHEN $2='passed' THEN $3 ELSE last_success END,
                     code=$4,failures=CASE WHEN $5='passed' THEN 0 ELSE failures+1 END,
+                    reset_required=reset_required OR $4='mailbox_uidvalidity_changed',
                     next_check=$6
                 WHERE id=$7
                 AND revision=$8

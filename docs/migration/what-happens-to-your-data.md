@@ -59,6 +59,8 @@ When verification is required, an eligible origin must use HTTPS and a DNS hostn
 
 Imports supply bounded defaults where legacy values are missing or invalid: port `993`, folder `INBOX`, and frequency `60` seconds. A frequency already in the supported `30-31540000` range is retained. A missing host, username, or password, an invalid port, or an unresolved creator disables the imported mailbox for review. Enablement does not prove that its credentials or connection work. Positive historical creator IDs remain attribution; invalid IDs become unknown.
 
+Imported mailboxes start with `reset_required: false`; conversion has not observed a UIDVALIDITY change. If a later check detects changed message identifiers, recovery remains required across restarts and subsequent connection failures until an explicit reset or mailbox-identity change.
+
 Conversion removes these rows from active legacy `imap` storage after creating the mailbox resources. Their originals remain in the SQLite recovery snapshot or MySQL `rp_original_imap`, as well as your own backup.
 
 The initial processing boundary considers the earliest actual Ruphish send in active campaigns across creators; without an eligible send, polling starts with new arrivals. Do not assume the first poll replays the entire historical inbox. One report must identify a single distinct recipient-ID/origin pair; ambiguous bundled reports are rejected. Reports received after campaign completion do not change its results. See [Reporting mailboxes](../user-guide/resources/reporting-mailboxes.md).

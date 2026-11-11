@@ -56,6 +56,8 @@ pub struct MailboxConfig {
     pub restrict: String,
     /// Whether acknowledged messages are removed.
     pub delete: bool,
+    /// The checkpoint must be explicitly reset before reports can be processed.
+    pub reset_required: bool,
     /// Saved UIDVALIDITY.
     pub validity: i64,
     /// Saved UID checkpoint.

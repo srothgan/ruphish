@@ -68,6 +68,7 @@ fn mailbox_row(r: PgRow) -> Result<Mailbox, Error> {
         modified_date: text(&r, "modified_date")?.replacen(' ', "T", 1),
         last_login: text(&r, "last_login")?.replacen(' ', "T", 1),
         next_check: r.try_get("next_check").map_err(db)?,
+        reset_required: r.try_get("reset_required").map_err(db)?,
         running: r.try_get::<i64, _>("lease").map_err(db)? > now(),
         code: text(&r, "code")?,
         history: vec![],
@@ -321,6 +322,7 @@ impl Repository for Integrations {
                 SET ignore_cert_errors=$16,name=$1,enabled=$2,host=$3,port=$4,username=$5,password=$6,tls=$7,folder=$8,
                     restrict_domain=$9,delete_reported=$10,frequency=$11,revision=revision+1,
                     lease=0,next_check=0,failures=0,code='',modified_date=to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+                    reset_required=CASE WHEN $12 THEN FALSE ELSE reset_required END,
                     initial_since=CASE WHEN $12 THEN NULL ELSE initial_since END,
                     initialized=CASE WHEN $12 THEN FALSE ELSE initialized END,
                     uidvalidity=CASE WHEN $13 THEN 0 ELSE uidvalidity END,
@@ -487,11 +489,11 @@ impl Repository for Integrations {
         crate::database::postgres::settings::require_integration(&mut tx, true).await?;
         let changed = sqlx::query(r#"
                 UPDATE ruphish_mailboxes
-                SET initial_since=NULL,initialized=FALSE,uidvalidity=0,last_uid=0,next_check=0,lease=0,revision=revision+1,code=''
+                SET reset_required=FALSE,initial_since=NULL,initialized=FALSE,uidvalidity=0,last_uid=0,next_check=0,lease=0,revision=revision+1,code=''
                 WHERE id=$1
 
                 AND revision=$2
-                AND code='mailbox_uidvalidity_changed'
+                AND reset_required=TRUE
             "#)
             .bind(id).bind(revision).execute(&mut *tx).await.map_err(db)?.rows_affected();
         if changed != 1 {
