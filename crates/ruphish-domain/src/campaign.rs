@@ -54,6 +54,18 @@ pub struct DeliveryFailure {
 impl DeliveryFailure {
     /// Sanitized actionable diagnostics, independent of provider response text.
     pub fn diagnostic_code(&self) -> &'static str {
+        if self.stage == Stage::Content {
+            return "delivery_content_invalid";
+        }
+        if self.stage == Stage::Capacity {
+            return "smtp_capacity_unavailable";
+        }
+        if self.kind == FailureKind::Unknown {
+            return "delivery_outcome_unknown";
+        }
+        if self.kind == FailureKind::Permanent {
+            return "smtp_permanent_rejection";
+        }
         match self.stage {
             Stage::Configuration => "smtp_configuration_invalid",
             Stage::Dns => "smtp_dns_unavailable",

@@ -275,3 +275,30 @@ impl Sender for Smtp {
             .map_err(public_failure)
     }
 }
+
+#[async_trait::async_trait]
+impl ruphish_application::profile_tests::Connector for Smtp {
+    fn validate_recipient(&self, email: &str) -> Result<(), Error> {
+        crate::resources::mailbox(email).map(|_| ())
+    }
+    async fn test_connection(
+        &self,
+        profile: &ruphish_application::resources::Profile,
+    ) -> Result<(), ruphish_domain::campaign::DeliveryFailure> {
+        use ruphish_domain::campaign::{DeliveryFailure, FailureKind, Stage};
+        let _slot = self
+            .slots
+            .try_acquire()
+            .map_err(|_| DeliveryFailure::new(FailureKind::Retryable, Stage::Capacity, None))?;
+        let mut connection = self.connection(profile).await?;
+        if !connection.test_connected().await {
+            return Err(DeliveryFailure::new(
+                FailureKind::Retryable,
+                Stage::Connect,
+                None,
+            ));
+        }
+        let _ = connection.quit().await;
+        Ok(())
+    }
+}

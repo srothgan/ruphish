@@ -380,6 +380,7 @@ CREATE TABLE ruphish_sessions (
 );
 
 CREATE TABLE ruphish_settings (
+  sending_profile_test_required INTEGER NOT NULL DEFAULT 0 CHECK(sending_profile_test_required IN (0,1)),
   id INTEGER NOT NULL PRIMARY KEY CHECK (id=1),
   revision INTEGER NOT NULL,
   verification_enabled INTEGER NOT NULL,
@@ -433,6 +434,7 @@ CREATE TABLE ruphish_webhook_state (
 );
 
 CREATE TABLE smtp (
+  test_generation BIGINT NOT NULL DEFAULT 1,
   created_at VARCHAR(40),
   revision BIGINT NOT NULL DEFAULT 1,
   edited_by BIGINT,
@@ -553,6 +555,26 @@ CREATE INDEX ruphish_webhook_due ON ruphish_webhook_jobs(state,due,lease);
 
 CREATE UNIQUE INDEX campaigns_learning_public_id ON campaigns(learning_public_id);
 
+CREATE TABLE ruphish_profile_tests (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  id VARCHAR(64) NOT NULL UNIQUE,
+  profile_id BIGINT NOT NULL,
+  generation BIGINT NOT NULL,
+  profile_revision BIGINT NOT NULL,
+  kind VARCHAR(16) NOT NULL CHECK(kind IN ('connection','email')),
+  operator BIGINT NOT NULL,
+  email VARCHAR(320),
+  started_at BIGINT NOT NULL,
+  finished_at BIGINT,
+  deadline BIGINT NOT NULL,
+  outcome VARCHAR(16) NOT NULL CHECK(outcome IN ('running','submitting','passed','accepted','failed','interrupted','unknown')),
+  code VARCHAR(64) NOT NULL DEFAULT '',
+  smtp_code INTEGER,
+  CHECK((finished_at IS NULL AND outcome IN ('running','submitting')) OR (finished_at IS NOT NULL AND outcome NOT IN ('running','submitting')))
+);
+CREATE INDEX ruphish_profile_tests_history ON ruphish_profile_tests(profile_id,sequence);
+CREATE INDEX ruphish_profile_tests_evidence ON ruphish_profile_tests(profile_id,generation,sequence);
+
 CREATE VIEW event_history AS SELECT id,campaign_id,email,time,CASE kind WHEN 'campaign_created' THEN 'Campaign Created' WHEN 'email_sent' THEN 'Email Sent' WHEN 'email_error' THEN 'Error Sending Email' WHEN 'email_opened' THEN 'Email Opened' WHEN 'link_clicked' THEN 'Clicked Link' WHEN 'form_submitted' THEN 'Submitted Data' WHEN 'email_reported' THEN 'Email Reported' WHEN 'delivery_reconciled' THEN 'Delivery reconciled' ELSE kind END AS message,metadata AS details,recipient_id,source,edited,revision,client FROM events;
 
 CREATE VIEW ruphish_domain_policy AS
@@ -586,6 +608,6 @@ INSERT INTO role_permissions VALUES (2,1);
 INSERT INTO role_permissions VALUES (1,2);
 INSERT INTO role_permissions VALUES (2,2);
 INSERT INTO role_permissions VALUES (1,3);
-INSERT INTO ruphish_settings VALUES (1,1,0,1,86400,21600,0,0,0,NULL);
+INSERT INTO ruphish_settings (id,revision,verification_enabled,verification_expires,verification_validity_seconds,verification_recheck_seconds,reporting_mailboxes_enabled,webhooks_enabled,updated_at,updated_by) VALUES (1,1,0,1,86400,21600,0,0,0,NULL);
 
 CREATE INDEX ruphish_webhook_state_owner ON ruphish_webhook_state(owner_id);

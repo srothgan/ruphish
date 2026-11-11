@@ -193,6 +193,7 @@
   .status-badge.negative { background: var(--danger-soft); color: var(--danger); }
   .status-badge.warning { background: var(--amber-soft); color: var(--warning-ink); }
   .status-badge.active { color: var(--info); }
+  .status-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2); }
   .data-value, .account-app time, .account-app code { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
   .text-input:disabled { opacity: .65; cursor: not-allowed; }
   .text-input[readonly] { background: var(--canvas); }
@@ -589,6 +590,7 @@
   .detail-card .resource-facts + .saved-content-preview { margin-top: var(--s5); }
   .detail-card .detail-section + .detail-section,
   .detail-card .resource-section + .detail-section,
+  .detail-card .query-region + .detail-section,
   .detail-card .detail-section + .resource-section { margin-top: var(--s6); }
   .detail-card .detail-section > h2 { margin: 0 0 var(--s4); font-size: var(--fs-md); }
   .detail-card .resource-section + .resource-section { padding-top: 0; border: 0; }
@@ -771,8 +773,11 @@
   .settings-section { min-width: 0; }
   .settings-section > h2 { margin: 0 0 var(--s4); }
   .settings-section > p { color: var(--muted); max-width: 70ch; }
-  .settings-fields { display: flex; flex-wrap: wrap; gap: var(--s4); align-items: end; }
-  .settings-fields > .form-field { flex: 0 1 14rem; min-width: 0; margin: 0; }
+  .settings-fields, .input-actions { display: flex; flex-wrap: wrap; gap: var(--s4); align-items: end; }
+  .settings-fields > .form-field, .input-actions > .form-field { min-width: 0; margin: 0; }
+  .settings-fields > .form-field { flex: 0 1 14rem; }
+  .input-actions { justify-content: flex-end; }
+  .input-actions > .form-field { flex: 1 1 14rem; }
   .settings-danger { border-color: var(--danger); }
 }
 

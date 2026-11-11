@@ -63,8 +63,15 @@ export function dataset(now) {
     const content = starter(id, 'learning_page');
     return resource(content.name, i, { ...content, public_id: String(i + 1).padStart(32, '0') });
   });
-  const smtp = ['Awareness team', 'Training team'].map((name, i) =>
+  const smtp = [
+    'Awareness team',
+    'Training team',
+    'Uncertain submission',
+    'Untested sender',
+    'Updated sender',
+  ].map((name, i) =>
     resource(name, i, {
+      test_generation: i === 4 ? 2 : 1,
       interface_type: 'SMTP',
       host: 'smtp.example.test:587',
       from_address: `${name} <awareness@example.test>`,
@@ -74,6 +81,39 @@ export function dataset(now) {
       ignore_cert_errors: false,
     }),
   );
+  const profile_tests = [
+    { profile_id: 1, kind: 'email', outcome: 'accepted', ago: 3600 },
+    { profile_id: 1, kind: 'connection', outcome: 'passed', ago: 3500 },
+    { profile_id: 2, kind: 'email', outcome: 'accepted', ago: 7200 },
+    {
+      profile_id: 2,
+      kind: 'connection',
+      outcome: 'failed',
+      ago: 3000,
+      code: 'smtp_authentication_failed',
+      smtp_code: 535,
+    },
+    {
+      profile_id: 3,
+      kind: 'email',
+      outcome: 'unknown',
+      ago: 2800,
+      code: 'profile_test_interrupted',
+    },
+    { profile_id: 5, kind: 'email', outcome: 'accepted', ago: 5400 },
+  ].map((sample, index) => ({
+    id: `demo-profile-test-${index + 1}`,
+    profile_id: sample.profile_id,
+    generation: 1,
+    kind: sample.kind,
+    operator: 1,
+    email: sample.kind === 'email' ? 'operator@example.test' : null,
+    started_at: now - sample.ago - 2,
+    finished_at: now - sample.ago,
+    outcome: sample.outcome,
+    code: sample.code ?? '',
+    smtp_code: sample.smtp_code ?? null,
+  }));
   const users = source.users.map((u, i) => ({
     id: i + 1,
     username: u.username,
@@ -318,6 +358,7 @@ export function dataset(now) {
     pages,
     'learning-pages': learning,
     smtp,
+    profile_tests,
     users,
     domains,
     webhooks,

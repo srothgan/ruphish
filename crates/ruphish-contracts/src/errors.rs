@@ -11,6 +11,10 @@ pub enum ErrorCode {
     DraftInvalid,
     /// Choose a new launch time or immediate delivery before launching.
     DraftSchedulePast,
+    /// Test the current sending profile successfully before launching.
+    SendingProfileTestRequired,
+    /// Wait for the active profile test before starting another.
+    ProfileTestBusy,
     /// Invalid CSV encoding or record.
     CsvRowEncoding,
     /// Column count does not match the header.
@@ -123,6 +127,8 @@ impl ErrorCode {
             Self::FeatureDisabled => "FEATURE_DISABLED",
             Self::DraftInvalid => "DRAFT_INVALID",
             Self::DraftSchedulePast => "DRAFT_SCHEDULE_PAST",
+            Self::SendingProfileTestRequired => "SENDING_PROFILE_TEST_REQUIRED",
+            Self::ProfileTestBusy => "PROFILE_TEST_BUSY",
             Self::CsvRowEncoding => "CSV_ROW_ENCODING",
             Self::CsvRowColumns => "CSV_ROW_COLUMNS",
             Self::CsvRowEmail => "CSV_ROW_EMAIL",

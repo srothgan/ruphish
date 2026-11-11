@@ -22,6 +22,7 @@ All operations on this page require `modify_system`. The settings JSON body limi
 | Attribute | Type | Contract |
 | --- | --- | --- |
 | `verification_enabled` | `boolean` | Whether verification is required and checks may run. |
+| `sending_profile_test_required` | `boolean` | Require accepted current-configuration profile-test evidence for new campaign launches; defaults to false. |
 | `verification_expires` | `boolean` | Whether successful evidence has a time limit. |
 | `verification_validity_seconds` | `integer` | Successful evidence lifetime in seconds. |
 | `verification_recheck_seconds` | `integer` | Automatic recheck interval in seconds. |
@@ -50,6 +51,7 @@ Example response:
   "revision": 1,
   "policy": {
     "verification_enabled": false,
+    "sending_profile_test_required": false,
     "verification_expires": true,
     "verification_validity_seconds": 86400,
     "verification_recheck_seconds": 21600,
@@ -75,6 +77,7 @@ Request body (`request.json`):
 {
   "policy": {
     "verification_enabled": false,
+    "sending_profile_test_required": false,
     "verification_expires": true,
     "verification_validity_seconds": 86400,
     "verification_recheck_seconds": 21600,
@@ -99,6 +102,7 @@ Example response:
   "revision": 2,
   "policy": {
     "verification_enabled": false,
+    "sending_profile_test_required": false,
     "verification_expires": true,
     "verification_validity_seconds": 86400,
     "verification_recheck_seconds": 21600,
@@ -178,3 +182,7 @@ Example response:
 | `campaigns` | `integer` | Number of affected launched campaigns across owners. |
 | `cancelled_deliveries` | `integer` | Number of unsent deliveries cancelled by the operation. |
 | `completed_at` | `integer` | Completion time in UTC Unix seconds. |
+
+`policy.sending_profile_test_required` defaults to `false`. When true, campaign preparation and new launch require an accepted fixed-content email test on the selected profile's current sending configuration, with no later failed, interrupted, or unknown operational test. Active profile tests hold new launches. Connection-only success cannot qualify or restore a profile. Sending-setting changes invalidate evidence; renames do not. Already-launched campaigns continue under existing delivery behavior. Ineligible launches return `400` with `SENDING_PROFILE_TEST_REQUIRED`.
+
+This field is required in complete policy replacements. Authenticated feature responses also expose `sending_profile_test_required` for presentation. This adds a required field to the pre-release settings and feature contracts; clients constructing replacement policy bodies must include it.

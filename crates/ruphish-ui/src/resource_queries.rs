@@ -96,6 +96,11 @@ impl ResourceQueries {
     }
 
     pub fn saved(self, family: Family, resource: &Resource) {
+        if family == Family::Profiles {
+            expect_context::<crate::management_queries::ManagementQueries>()
+                .profile_tests
+                .invalidate(resource.metadata.id);
+        }
         // Query::confirmed updates the existing cache and cancels obsolete reads
         // before refetching; a failed refresh retains this confirmed metadata.
         self.summaries

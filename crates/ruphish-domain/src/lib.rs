@@ -29,3 +29,5 @@ pub mod landing;
 pub mod client;
 
 pub mod attribution;
+
+pub mod profile_tests;

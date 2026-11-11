@@ -19,6 +19,7 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
       'groups',
       'targets',
       'smtp',
+      'ruphish_profile_tests',
       'ruphish_domains',
       'ruphish_learning_pages',
       'ruphish_campaign_drafts',
@@ -99,7 +100,7 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
     }
     for (const s of data.smtp) {
       run(
-        'INSERT INTO smtp(id,user_id,name,interface_type,host,username,password,from_address,modified_date,ignore_cert_errors) VALUES(?,?,?,?,?,?,?,?,?,?)',
+        'INSERT INTO smtp(id,user_id,name,interface_type,host,username,password,from_address,modified_date,ignore_cert_errors,test_generation) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
         s.id,
         owner,
         s.name,
@@ -110,6 +111,25 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
         s.from_address,
         s.modified_date,
         0,
+        s.test_generation,
+      );
+    }
+    for (const attempt of [...data.profile_tests].sort((a, b) => a.started_at - b.started_at)) {
+      run(
+        'INSERT INTO ruphish_profile_tests(id,profile_id,generation,profile_revision,kind,operator,email,started_at,finished_at,deadline,outcome,code,smtp_code) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        attempt.id,
+        attempt.profile_id,
+        attempt.generation,
+        1,
+        attempt.kind,
+        authorIds.get(attempt.operator),
+        attempt.email,
+        attempt.started_at,
+        attempt.finished_at,
+        attempt.started_at + 120,
+        attempt.outcome,
+        attempt.code,
+        attempt.smtp_code,
       );
     }
     for (const p of data.pages) {
@@ -430,10 +450,11 @@ export function seed(db, now = Math.floor(Date.now() / 1000)) {
     // Migrations ran before these resources existed. Apply the same installation
     // features as the browser demo; individual outbound integrations stay inactive.
     run(
-      'UPDATE ruphish_settings SET verification_enabled=?,reporting_mailboxes_enabled=?,webhooks_enabled=?,revision=revision+1,updated_at=?,updated_by=? WHERE id=1',
+      'UPDATE ruphish_settings SET verification_enabled=?,reporting_mailboxes_enabled=?,webhooks_enabled=?,sending_profile_test_required=?,revision=revision+1,updated_at=?,updated_by=? WHERE id=1',
       Number(features.verification_enabled),
       Number(features.reporting_mailboxes_enabled),
       Number(features.webhooks_enabled),
+      Number(features.sending_profile_test_required),
       now,
       owner,
     );

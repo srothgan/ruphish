@@ -77,6 +77,9 @@ async fn prepare_authorized(
     let template = selection(c, Kind::Template, &input.template).await?;
     let page = selection(c, Kind::Page, &input.page).await?;
     let profile = selection(c, Kind::Profile, &input.profile).await?;
+    if !super::profile_tests::eligible(c, profile.id).await? {
+        return Err(Error::ProfileTestRequired);
+    }
     let policy = ruphish_application::campaign::preparation::policy(input, &page)?;
     let learning = if let Some(id) = policy.learning_page_id {
         Some(

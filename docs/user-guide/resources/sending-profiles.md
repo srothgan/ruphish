@@ -23,20 +23,26 @@ Port 465 uses an encrypted connection from the start. Other ports require STARTT
 
 IPv4 and IPv6 are selected automatically. Ruphish checks the resolved destinations before connecting, tries alternative approved addresses when a connection is unavailable, and authenticates and submits through one selected connection. You do not need to choose an address family. Keep the provider's hostname in the profile so TLS can verify its identity.
 
-There is no separate Ruphish verification approval required before a profile can send. Your provider may require verification of a sender address or domain; complete that in the provider's service.
+Your administrator can require a successful profile test before new campaigns launch. This checks SMTP submission, not ownership of the sender address or domain. Complete any sender-ownership verification separately in your provider's service.
 
 ## Check the connection and send a test
 
-1. Open the profile and choose **Send test**.
-2. Choose **Test connection only** to check connectivity and authentication without sending a message.
-3. Enter an inbox you control as the test recipient.
-4. Choose **Send test email** and inspect the received message.
+1. Open the saved profile's view. Testing is available here, without entering **Edit**.
+2. Open **Check & test** and choose **Test connection** to check connectivity and authentication immediately, without sending a message.
+3. Open **Check & test** and choose **Send test email** to reveal its separate recipient card above the profile settings.
+4. Enter an inbox you control and choose **Send test email**. Ruphish sends a fixed plain-text message; no template, landing page, URL, or personal details are required.
 
 A successful connection check does not test whether the provider accepts your message or sender. A test email checks submission, but the final check is finding it in the recipient inbox.
 
+The profile view shows separate connection and email-submission results with timestamps, plus the latest ten completed tests. History survives a restart and includes the operator, recipient when applicable, outcome, duration, and diagnostic details. One operational test can run per profile at a time.
+
+Changing sending settings or credentials marks earlier evidence as **Settings changed** and requires a new test when company policy demands one. Renaming the profile or saving unchanged settings preserves the evidence. Duplicating a profile starts with no test history.
+
+When **Require successful sending-profile test** is enabled in [company settings](../../administration/team-administration/company-settings.md#require-a-successful-sending-profile-test), a current-configuration email submission must have been accepted before a new campaign can launch. Connection-only success does not qualify. A later failed, interrupted, or unknown test revokes readiness until another profile email test succeeds. Tests do not expire automatically, and this policy does not pause campaigns already launched.
+
 When testing from an [email template](email-templates.md), select this profile to check your actual content. If the button says **Save and send test**, it saves your changes before sending; a sending failure does not undo the save.
 
-If the result is uncertain after a connection loss, check the inbox and provider's logs before sending again. The first attempt may already have been accepted.
+If the request response is lost, use **Check result** to reconcile the same operation without sending another email. If the stored submission outcome is unknown, check the inbox and provider's logs before deliberately starting another send. The first attempt may already have been accepted. Profile tests create no campaign events or public preview links.
 
 ## Choose the sender recipients see
 

@@ -245,6 +245,10 @@ pub fn failure_label(context: leptos_i18n::I18nContext<Locale>, code: &str) -> S
     let parsed = serde_json::from_value::<ErrorCode>(serde_json::Value::String(code.to_owned()));
     let text = match parsed {
         Ok(ErrorCode::DraftInvalid) => leptos_i18n::t_string!(context, errors.draft_invalid),
+        Ok(ErrorCode::ProfileTestBusy) => leptos_i18n::t_string!(context, errors.profile_test_busy),
+        Ok(ErrorCode::SendingProfileTestRequired) => {
+            leptos_i18n::t_string!(context, errors.sending_profile_test_required)
+        }
         Ok(ErrorCode::DraftSchedulePast) => {
             leptos_i18n::t_string!(context, errors.draft_schedule_past)
         }

@@ -135,6 +135,7 @@ CREATE TABLE `attachments` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `smtp` (
+  test_generation BIGINT NOT NULL DEFAULT 1,
   created_at VARCHAR(40),
   revision BIGINT NOT NULL DEFAULT 1,
   edited_by BIGINT,
@@ -501,6 +502,7 @@ CREATE TABLE ruphish_campaign_drafts (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE ruphish_settings (
+  sending_profile_test_required BOOLEAN NOT NULL DEFAULT FALSE,
  id BIGINT NOT NULL PRIMARY KEY CHECK (id=1),
  revision BIGINT NOT NULL,
  verification_enabled BOOLEAN NOT NULL,
@@ -566,9 +568,30 @@ INSERT INTO ruphish_write_guards VALUES ('accounts'),('cookie-key');
 INSERT INTO roles(id,slug,name,description) VALUES (1,'admin','Admin','System administrator with full permissions'),(2,'user','User','User role with edit access to objects and campaigns');
 INSERT INTO permissions(id,slug,name,description) VALUES (1,'view_objects','View Objects','View objects'),(2,'modify_objects','Modify Objects','Create and edit objects'),(3,'modify_system','Modify System','Manage system-wide configuration');
 INSERT INTO role_permissions VALUES (1,1),(1,2),(1,3),(2,1),(2,2);
-INSERT INTO ruphish_settings VALUES (1,1,FALSE,TRUE,86400,21600,FALSE,FALSE,0,NULL);
+INSERT INTO ruphish_settings (id,revision,verification_enabled,verification_expires,verification_validity_seconds,verification_recheck_seconds,reporting_mailboxes_enabled,webhooks_enabled,updated_at,updated_by) VALUES (1,1,FALSE,TRUE,86400,21600,FALSE,FALSE,0,NULL);
 
 CREATE UNIQUE INDEX campaigns_learning_public_id ON campaigns(learning_public_id);
+
+CREATE TABLE ruphish_profile_tests (
+  sequence BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  id VARCHAR(64) NOT NULL UNIQUE,
+  profile_id BIGINT NOT NULL,
+  generation BIGINT NOT NULL,
+  profile_revision BIGINT NOT NULL,
+  kind VARCHAR(16) NOT NULL CHECK(kind IN ('connection','email')),
+  operator BIGINT NOT NULL,
+  email VARCHAR(320),
+  started_at BIGINT NOT NULL,
+  finished_at BIGINT,
+  deadline BIGINT NOT NULL,
+  outcome VARCHAR(16) NOT NULL CHECK(outcome IN ('running','submitting','passed','accepted','failed','interrupted','unknown')),
+  code VARCHAR(64) NOT NULL DEFAULT '',
+  smtp_code INTEGER,
+  CHECK((finished_at IS NULL AND outcome IN ('running','submitting')) OR (finished_at IS NOT NULL AND outcome NOT IN ('running','submitting')))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+CREATE INDEX ruphish_profile_tests_history ON ruphish_profile_tests(profile_id,sequence);
+CREATE INDEX ruphish_profile_tests_evidence ON ruphish_profile_tests(profile_id,generation,sequence);
+
 
 -- Views
 CREATE VIEW ruphish_domain_policy AS

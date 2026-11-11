@@ -75,6 +75,7 @@ fn demo_responses_decode_through_the_existing_contracts() {
         assert!(prepare_creation(family, initial_format(family), reviews[0].clone()).is_err());
     }
     decode::<auth::BrowserSession>(&values, "/auth/session");
+    decode::<ruphish_contracts::profile_tests::History>(&values, "/api/smtp/1/tests");
     decode::<overview::Snapshot>(&values, "/api/overview");
     decode::<overview::PostureResponse>(&values, "/api/overview/posture?window=30d");
     decode::<campaign_reads::Directory>(&values, "/api/campaigns/directory");

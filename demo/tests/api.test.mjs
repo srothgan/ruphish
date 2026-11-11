@@ -543,6 +543,121 @@ function setup(storage = new Map(), data) {
   };
 }
 
+test('profile tests retain separate evidence, reject unsafe requests, reconcile repeats and enforce launch readiness', async (t) => {
+  t.mock.method(globalThis, 'fetch', () => {
+    throw new Error('Profile tests must remain simulated');
+  });
+  const data = dataset(now);
+  const original = structuredClone(data);
+  const f = setup(new Map(), data);
+  assert.equal((await f.request('/api/smtp/4/tests')).status, 401);
+  await f.login();
+  const initial = (await f.request('/api/smtp/4/tests')).value;
+  assert.equal(initial.required, true);
+  assert.equal(initial.eligible, false);
+  assert.deepEqual(initial.history, []);
+  assert.equal((await f.request('/api/smtp/1/tests')).value.eligible, true);
+  assert.equal((await f.request('/api/smtp/2/tests')).value.eligible, false);
+  assert.equal((await f.request('/api/smtp/3/tests')).value.email.outcome, 'unknown');
+  const changed = (await f.request('/api/smtp/5/tests')).value;
+  assert.equal(changed.generation, 2);
+  assert.equal(changed.email.generation, 1);
+  assert.equal(changed.eligible, false);
+  const campaign = structuredClone((await f.request('/api/campaign-drafts/1')).value.configuration);
+  campaign.selection.smtp = { id: 4, revision: '1' };
+  const blocked = await f.request('/api/campaign-drafts/prepare', 'POST', campaign);
+  assert.equal(blocked.value.code, 'SENDING_PROFILE_TEST_REQUIRED');
+  const connection = {
+    id: 'simulated-connection-test',
+    revision: 1,
+    kind: 'connection',
+    email: null,
+  };
+  assert.equal((await f.request('/api/smtp/4/tests', 'POST', connection)).value.outcome, 'passed');
+  assert.equal((await f.request('/api/smtp/4/tests')).value.eligible, false);
+  const submission = {
+    id: 'simulated-submission-test',
+    revision: 1,
+    kind: 'email',
+    email: 'operator@example.test',
+  };
+  const accepted = await f.request('/api/smtp/4/tests', 'POST', submission);
+  assert.equal(accepted.value.outcome, 'accepted');
+  assert.deepEqual(await f.request('/api/smtp/4/tests', 'POST', submission), accepted);
+  assert.equal(
+    (await f.request('/api/smtp/4/tests', 'POST', { ...submission, email: 'other@example.test' }))
+      .status,
+    412,
+  );
+  assert.equal(
+    (
+      await f.request('/api/smtp/4/tests', 'POST', {
+        ...submission,
+        id: 'stale-submission-test',
+        revision: 99,
+      })
+    ).status,
+    412,
+  );
+  assert.equal(
+    (
+      await f.request('/api/smtp/4/tests', 'POST', {
+        ...submission,
+        id: 'invalid-submission-test',
+        email: 'a@example.test\r\nBcc: outside@example.test',
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await f.request('/api/smtp/4/tests', 'POST', {
+        ...submission,
+        id: 'unknown-field-test',
+        password: 'never-store',
+      })
+    ).status,
+    400,
+  );
+  assert.equal((await f.request('/api/campaign-drafts/prepare', 'POST', campaign)).status, 200);
+  for (let i = 0; i < 12; i++) {
+    await f.request('/api/smtp/4/tests', 'POST', { ...connection, id: `later-connection-${i}` });
+  }
+  const history = (await f.request('/api/smtp/4/tests')).value;
+  assert.equal(history.history.length, 10);
+  assert.equal(
+    history.email.outcome,
+    'accepted',
+    'Latest email evidence survives beyond the displayed history',
+  );
+  assert.equal(history.eligible, true);
+  const settings = (await f.request('/api/settings')).value;
+  assert.equal((await f.request('/api/settings', 'PUT', { policy: settings.policy })).status, 412);
+  const saved = await f.request(
+    '/api/settings',
+    'PUT',
+    { policy: { ...settings.policy, sending_profile_test_required: false } },
+    { 'if-match': String(settings.revision) },
+  );
+  assert.equal(saved.value.policy.sending_profile_test_required, false);
+  assert.equal((await f.request('/api/smtp/2/tests')).value.eligible, true);
+  assert.equal(
+    (await f.request('/auth/session')).value.features.sending_profile_test_required,
+    false,
+  );
+  assert.deepEqual(
+    data,
+    original,
+    'Session-only simulations must not mutate the shared sample dataset',
+  );
+  const reset = setup(f.storage);
+  assert.deepEqual((await reset.request('/api/smtp/4/tests')).value.history, []);
+  assert.equal(
+    (await reset.request('/api/settings')).value.policy.sending_profile_test_required,
+    true,
+  );
+});
+
 test('recipient CSV downloads retain fields, stored dates and all selected pages with safe spreadsheet text', async (t) => {
   t.mock.method(globalThis, 'fetch', () => {
     throw new Error('No network');

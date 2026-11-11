@@ -21,6 +21,9 @@ fn decode(r: SqliteRow) -> Result<Settings, Error> {
         updated_by: r.try_get("updated_by").map_err(storage)?,
         policy: Policy {
             verification_enabled: r.try_get("verification_enabled").map_err(storage)?,
+            sending_profile_test_required: r
+                .try_get("sending_profile_test_required")
+                .map_err(storage)?,
             verification_expires: r.try_get("verification_expires").map_err(storage)?,
             verification_validity_seconds: r
                 .try_get("verification_validity_seconds")
@@ -129,10 +132,10 @@ impl Repository for SettingsStore {
             || old.policy.verification_expires != policy.verification_expires
             || old.policy.verification_validity_seconds != policy.verification_validity_seconds
             || old.policy.verification_recheck_seconds != policy.verification_recheck_seconds;
-        sqlx::query("UPDATE ruphish_settings SET revision=revision+1,verification_enabled=?,verification_expires=?,verification_validity_seconds=?,verification_recheck_seconds=?,reporting_mailboxes_enabled=?,webhooks_enabled=?,updated_at=?,updated_by=? WHERE id=1")
+        sqlx::query("UPDATE ruphish_settings SET revision=revision+1,verification_enabled=?,verification_expires=?,verification_validity_seconds=?,verification_recheck_seconds=?,reporting_mailboxes_enabled=?,webhooks_enabled=?,updated_at=?,updated_by=?,sending_profile_test_required=? WHERE id=1")
             .bind(policy.verification_enabled).bind(policy.verification_expires)
             .bind(policy.verification_validity_seconds).bind(policy.verification_recheck_seconds)
-            .bind(policy.reporting_mailboxes_enabled).bind(policy.webhooks_enabled).bind(now).bind(caller.id)
+            .bind(policy.reporting_mailboxes_enabled).bind(policy.webhooks_enabled).bind(now).bind(caller.id).bind(policy.sending_profile_test_required)
             .execute(&mut *tx).await.map_err(storage)?;
         if verification_changed {
             sqlx::query(

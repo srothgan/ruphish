@@ -10,6 +10,241 @@ fn client() -> Client {
 }
 
 #[test]
+fn saved_profile_tests_record_real_protocol_outcomes_and_reconcile_without_resending() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = ready(&mut process);
+    unlock(directory.path());
+    let client = client();
+    for (index, kind, rejection, lose_ack, expected) in [
+        (0, "connection", None, false, "passed"),
+        (1, "email", None, false, "accepted"),
+        (
+            2,
+            "email",
+            Some("550 synthetic rejection\r\n"),
+            false,
+            "failed",
+        ),
+        (3, "email", None, true, "unknown"),
+        (
+            4,
+            "email",
+            Some("451 synthetic temporary rejection\r\n"),
+            false,
+            "failed",
+        ),
+    ] {
+        let sink = MailSink::scenario(rejection, lose_ack);
+        let response = client.post(format!("{base}/api/smtp/"))
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&json!({"name":format!("Protocol sender {index}"),"host":sink.address.to_string(),"from_address":"sender@example.test"})).send().unwrap();
+        assert_eq!(response.status(), 201);
+        let profile: Value = response.json().unwrap();
+        let id = profile["id"].as_i64().unwrap();
+        let endpoint = format!("{base}/api/smtp/{id}/tests");
+        let body = json!({"id":format!("protocol-profile-test-{index}"),"revision":profile["revision"],"kind":kind,"email":if kind=="email" { Some("operator@example.test") } else { None }});
+        assert_eq!(
+            client.post(&endpoint).json(&body).send().unwrap().status(),
+            401
+        );
+        assert_eq!(
+            client
+                .post(&endpoint)
+                .bearer_auth("synthetic-bootstrap-token")
+                .json(&json!([
+                    body["id"],
+                    body["revision"],
+                    body["kind"],
+                    body["email"]
+                ]))
+                .send()
+                .unwrap()
+                .status(),
+            400
+        );
+        let mut invalid = body.clone();
+        invalid["revision"] = json!(999);
+        assert_eq!(
+            client
+                .post(&endpoint)
+                .bearer_auth("synthetic-bootstrap-token")
+                .json(&invalid)
+                .send()
+                .unwrap()
+                .status(),
+            412
+        );
+        invalid = body.clone();
+        invalid["email"] = json!("not-an-email\r\nBcc: external@example.test");
+        assert_eq!(
+            client
+                .post(&endpoint)
+                .bearer_auth("synthetic-bootstrap-token")
+                .json(&invalid)
+                .send()
+                .unwrap()
+                .status(),
+            400
+        );
+        let mut too_long = body.clone();
+        too_long["kind"] = json!("email");
+        too_long["email"] = json!(format!("{}@example.test", "a".repeat(321)));
+        assert_eq!(
+            client
+                .post(&endpoint)
+                .bearer_auth("synthetic-bootstrap-token")
+                .json(&too_long)
+                .send()
+                .unwrap()
+                .status(),
+            400
+        );
+        let initial: Value = client
+            .get(&endpoint)
+            .bearer_auth("synthetic-bootstrap-token")
+            .send()
+            .unwrap()
+            .json()
+            .unwrap();
+        assert!(
+            initial["history"].as_array().unwrap().is_empty(),
+            "Rejected input must not create attempts"
+        );
+        let result = client
+            .post(&endpoint)
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&body)
+            .send()
+            .unwrap();
+        assert_eq!(result.status(), 200, "{}", result.text().unwrap());
+        let attempt: Value = result.json().unwrap();
+        assert_eq!(attempt["outcome"], expected);
+        assert_eq!(attempt["id"], body["id"]);
+        let (commands, mail) = sink.result();
+        if kind == "connection" {
+            assert!(mail.is_empty());
+            assert!(
+                !commands
+                    .iter()
+                    .any(|c| c.starts_with("MAIL FROM") || c == "DATA")
+            );
+        } else if rejection.is_none() {
+            let message = mail_parser::MessageParser::default().parse(&mail).unwrap();
+            assert_eq!(message.subject(), Some("Ruphish sending profile test"));
+            let text = message.body_text(0).unwrap();
+            assert!(text.contains("This is a test email from Ruphish."));
+            assert!(
+                !message
+                    .parts()
+                    .any(|part| matches!(part.kind(), mail_parser::PartKind::Html)),
+                "The profile test must contain no HTML MIME part"
+            );
+            assert!(!String::from_utf8_lossy(&mail).contains("rid="));
+            assert!(
+                commands
+                    .iter()
+                    .any(|c| c == "RCPT TO:<operator@example.test>")
+            );
+        }
+        let replay: Value = client
+            .post(&endpoint)
+            .bearer_auth("synthetic-bootstrap-token")
+            .json(&body)
+            .send()
+            .unwrap()
+            .json()
+            .unwrap();
+        assert_eq!(
+            replay, attempt,
+            "The same operation cannot create a second SMTP connection"
+        );
+        let mut collision = body.clone();
+        collision["kind"] = json!(if kind == "email" {
+            "connection"
+        } else {
+            "email"
+        });
+        collision["email"] = if kind == "email" {
+            Value::Null
+        } else {
+            json!("operator@example.test")
+        };
+        assert_eq!(
+            client
+                .post(&endpoint)
+                .bearer_auth("synthetic-bootstrap-token")
+                .json(&collision)
+                .send()
+                .unwrap()
+                .status(),
+            412
+        );
+        let history: Value = client
+            .get(&endpoint)
+            .bearer_auth("synthetic-bootstrap-token")
+            .send()
+            .unwrap()
+            .json()
+            .unwrap();
+        assert_eq!(history["history"].as_array().unwrap().len(), 1);
+        assert_eq!(history["history"][0]["outcome"], expected);
+        assert!(
+            history["operators"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|u| u["username"] == "admin")
+        );
+        assert!(!history.to_string().contains("password"));
+    }
+    let saved: Value = client.post(format!("{base}/api/smtp/"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&json!({"name":"Recipient-dependent header", "host":"127.0.0.1:1", "from_address":"sender@example.test", "headers":[{"key":"{{.Position}}", "value":"synthetic"}]})).send().unwrap().json().unwrap();
+    let result = client.post(format!("{base}/api/smtp/{}/tests", saved["id"].as_i64().unwrap())).bearer_auth("synthetic-bootstrap-token")
+        .json(&json!({"id":"invalid-header-profile-test", "revision":saved["revision"], "kind":"email", "email":"operator@example.test"})).send().unwrap();
+    assert_eq!(result.status(), 200);
+    let result: Value = result.json().unwrap();
+    assert_eq!(result["outcome"], "failed");
+    assert_eq!(
+        result["code"], "delivery_content_invalid",
+        "Composition failure must be recorded before any SMTP connection is attempted"
+    );
+    process.stop();
+    let mut reopened = Process::start(directory.path(), "admin");
+    let base = ready(&mut reopened);
+    let persisted: Value = client
+        .get(format!("{base}/api/smtp/4/tests"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(persisted["history"][0]["outcome"], "unknown");
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        let pool = sqlx::SqlitePool::connect(&format!(
+            "sqlite:{}",
+            directory.path().join("installation.sqlite3").display()
+        ))
+        .await
+        .unwrap();
+        for table in ["email_requests", "results", "events", "mail_logs"] {
+            let count: i64 =
+                sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT count(*) FROM {table}")))
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(
+                count, 0,
+                "Profile diagnostics must not create preview or campaign data"
+            );
+        }
+        pool.close().await;
+    });
+}
+
+#[test]
 fn demo_csv_acceptance_cases_match_the_real_import_review() {
     let directory = workspace();
     let mut process = Process::start(directory.path(), "admin");
@@ -1003,6 +1238,7 @@ fn smtp_rejections_and_read_only_permissions_do_not_claim_success_or_queue_retri
         "/api/import/group/review",
         "/api/util/send_test_email",
         "/api/util/test_connection",
+        "/api/smtp/1/tests",
     ] {
         assert_eq!(
             client

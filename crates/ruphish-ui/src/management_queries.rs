@@ -20,6 +20,7 @@ pub(crate) struct ManagementQueries {
     overview: OverviewQueries,
     campaigns: CampaignQueries,
     pub settings: Query<(), ruphish_contracts::settings::Settings>,
+    pub profile_tests: Query<i64, ruphish_contracts::profile_tests::History>,
     pub users: Query<(), Vec<UserSummary>>,
     pub starters: Query<(), Vec<ruphish_contracts::starter_templates::Summary>>,
     pub starter: Query<String, ruphish_contracts::starter_templates::Entry>,
@@ -35,6 +36,14 @@ impl ManagementQueries {
         provide_context(Self {
             overview: expect_context(),
             campaigns: expect_context(),
+            profile_tests: Query::new(client, move |id| async move {
+                api.read(&format!("/api/smtp/{id}/tests")).await
+            })
+            .with_automatic_refresh(
+                |history: &ruphish_contracts::profile_tests::History| {
+                    history.summary.active.is_some()
+                },
+            ),
             settings: Query::new(
                 client,
                 move |()| async move { api.read("/api/settings").await },
@@ -123,6 +132,7 @@ impl ManagementQueries {
     }
 
     pub fn policy_changed(self) {
+        self.profile_tests.invalidate_where(|_| true);
         self.domain_dependencies_changed();
         self.domain.invalidate_where(|_| true);
         self.integrations.invalidate_where(|_| true);

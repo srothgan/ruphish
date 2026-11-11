@@ -72,8 +72,19 @@ async fn page_save_reuses_authoritative_diagnostics_and_preserves_failure_atomic
     let delivery = ruphish_application::delivery::Service::new(
         accounts.clone(),
         resources.clone(),
-        Arc::new(ruphish_adapters::smtp::Smtp::new(policy, String::new())),
+        Arc::new(ruphish_adapters::smtp::Smtp::new(
+            policy.clone(),
+            String::new(),
+        )),
         db.previews(),
+    );
+    let smtp = Arc::new(ruphish_adapters::smtp::Smtp::new(policy, String::new()));
+    let profile_tests = ruphish_application::profile_tests::Service::new(
+        db.profile_tests(),
+        smtp.clone(),
+        smtp.clone(),
+        smtp,
+        db.content_work(),
     );
     let router = ruphish_http::auth::router(
         ruphish_http::server::admin_router(&directory.path().join("dist/admin")).unwrap(),
@@ -85,6 +96,7 @@ async fn page_save_reuses_authoritative_diagnostics_and_preserves_failure_atomic
             accounts,
             resources,
             delivery,
+            profile_tests,
             campaigns: db.campaigns(),
             domains: db.domains(),
             mailer_enabled: false,

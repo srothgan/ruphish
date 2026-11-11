@@ -4,6 +4,8 @@ Development previews have short notes on GitHub Releases. This changelog records
 
 ## Unreleased
 
+- Check saved sending-profile connections and send fixed-content test emails from a grouped testing menu. Keep durable results and history, and optionally require a successful test of current settings before new campaigns launch.
+
 - Require numeric revisions for shared-resource updates and deletions; reject stale writes atomically and keep unsaved editor input with explicit conflict recovery.
 
 - Share application resources, campaign drafts, results and exports across the installation while retaining account and administrator permissions. Record read-only creator and last-editor attribution; preserve shared work when accounts are deleted.

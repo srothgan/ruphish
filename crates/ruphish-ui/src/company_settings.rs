@@ -307,6 +307,28 @@ pub(super) fn page(api: Api, token: String) -> impl IntoView {
                                     </Show>
                                 </section>
                                 <section class="settings-section">
+                                    <h2>{tr!(ui.sending_profiles)}</h2>
+                                    <Checkbox
+                                        label=trs!(ui.profile_test_policy)
+                                        checked=Signal::derive(move || {
+                                            draft
+                                                .with(|d| {
+                                                    d.as_ref()
+                                                        .is_some_and(|d| d.policy.sending_profile_test_required)
+                                                })
+                                        })
+                                        on_toggle=Callback::new(move |v| {
+                                            draft
+                                                .update(|d| {
+                                                    if let Some(d) = d {
+                                                        d.policy.sending_profile_test_required = v;
+                                                    }
+                                                })
+                                        })
+                                    />
+                                    <p>{tr!(ui.profile_test_policy_help)}</p>
+                                </section>
+                                <section class="settings-section">
                                     <h2>{tr!(ui.settings_integrations)}</h2>
                                     <Checkbox
                                         label=trs!(ui.reporting_mailboxes)

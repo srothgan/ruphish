@@ -764,7 +764,7 @@ fn edit(
                         .to_owned()
                 })
             >
-                {(family == Family::Templates || family == Family::Profiles)
+                {(family == Family::Templates)
                     .then(|| {
                         view! {
                             <ActionButton
@@ -862,9 +862,7 @@ fn edit(
                     {save_button()}
                 </FormFooter>
                 {move || {
-                    test_open
-                        .get()
-                        .then(|| test_panel(api, token.get_value(), family, editor, test_open))
+                    test_open.get().then(|| test_panel(api, token.get_value(), editor, test_open))
                 }}
             </QueryBoundary>
         </ManagementPage>
@@ -2186,18 +2184,12 @@ fn import_review_panel(review: RwSignal<ImportReview>, message: Message) -> impl
     }
 }
 
-fn test_panel(
-    api: Api,
-    token: String,
-    family: Family,
-    editor: Editor,
-    open: RwSignal<bool>,
-) -> impl IntoView {
+fn test_panel(api: Api, token: String, editor: Editor, open: RwSignal<bool>) -> impl IntoView {
     let i18n = ruphish_ui::localization::use_i18n();
 
     let token = StoredValue::new(token);
     let queries = expect_context::<ResourceQueries>();
-    let profiles = (family == Family::Templates).then(|| queries.list(Family::Profiles));
+    let profiles = queries.list(Family::Profiles);
     let pages = queries.list(Family::Pages);
     let selected = RwSignal::new(String::new());
     let page = RwSignal::new(String::new());
@@ -2211,7 +2203,8 @@ fn test_panel(
     // Keep profile identity stable while names and availability revalidate.
     let profile_name = Signal::derive(move || {
         profiles
-            .and_then(|read| read.data.get())
+            .data
+            .get()
             .and_then(|rows| {
                 rows.into_iter()
                     .find(|row| row.id.to_string() == selected.get())
@@ -2229,16 +2222,15 @@ fn test_panel(
                 .map(|row| row.name)
         }
     });
-    let profile_ready =
-        Signal::derive(move || family == Family::Profiles || profile_name.get().is_some());
+    let profile_ready = Signal::derive(move || profile_name.get().is_some());
     let close = move || {
         open.set(false);
-        finish_edit(editor, family);
+        finish_edit(editor, Family::Templates);
     };
-    let send = move |connection: bool| {
+    let send = move || {
         if busy.get_untracked()
             || !profile_ready.get_untracked()
-            || (!connection && page_name.get_untracked().is_none())
+            || page_name.get_untracked().is_none()
         {
             return;
         }
@@ -2247,12 +2239,11 @@ fn test_panel(
         busy.set(true);
         message.clear();
         spawn_local(async move {
-            if !connection
-                && (editor.draft.with_untracked(ResourceDraft::dirty)
-                    || editor
-                        .draft
-                        .with_untracked(|d| d.value()["id"].as_i64().unwrap_or(0) == 0))
-                && !save_draft(api, token.get_value(), family, editor).await
+            if (editor.draft.with_untracked(ResourceDraft::dirty)
+                || editor
+                    .draft
+                    .with_untracked(|d| d.value()["id"].as_i64().unwrap_or(0) == 0))
+                && !save_draft(api, token.get_value(), Family::Templates, editor).await
             {
                 message.error({
                     leptos_i18n::t_string!(
@@ -2264,23 +2255,8 @@ fn test_panel(
                 busy.set(false);
                 return;
             }
-            let (path, payload) = if connection {
-                let value = editor.draft.get_untracked().value().clone();
-                let profile = match serde_json::from_value::<input::SendingProfile>(value) {
-                    Ok(profile) => profile,
-                    Err(_) => {
-                        message.error(api.invalid_read());
-                        busy.set(false);
-                        return;
-                    }
-                };
-                ("/api/util/test_connection", json!(profile))
-            } else {
-                let id = if family == Family::Profiles {
-                    editor.draft.with_untracked(|d| d.value()["id"].as_i64())
-                } else {
-                    profile_id
-                };
+            let (path, payload) = {
+                let id = profile_id;
                 let Some(id) = id else {
                     message.error(api.invalid_read());
                     busy.set(false);
@@ -2291,11 +2267,7 @@ fn test_panel(
                     json!(input::TestRequest {
                         smtp: ruphish_contracts::resources::TestProfile::Saved { id },
                         template: input::EmailTemplate {
-                            name: if family == Family::Templates {
-                                editor.text("name")
-                            } else {
-                                String::new()
-                            },
+                            name: editor.text("name"),
                             ..Default::default()
                         },
                         page: input::LandingPage {
@@ -2315,17 +2287,10 @@ fn test_panel(
                 .await
             {
                 Ok(_) => message.status(
-                    if connection {
-                        leptos_i18n::t_string!(
-                            i18n,
-                            ui.connection_and_authentication_verified_no_email_sent
-                        )
-                    } else {
-                        leptos_i18n::t_string!(
-                            i18n,
-                            ui.accepted_by_smtp_server_inbox_delivery_is_not_confirmed
-                        )
-                    }
+                    leptos_i18n::t_string!(
+                        i18n,
+                        ui.accepted_by_smtp_server_inbox_delivery_is_not_confirmed
+                    )
                     .into(),
                 ),
                 Err(e) => message.error(e),
@@ -2350,59 +2315,49 @@ fn test_panel(
                     ui.test_the_selected_saved_content_with_one_recipient_saving_and_delivery_are_separ
                 )}
             </p>
-            {profiles
-                .map(|read| {
-                    view! {
-                        <QueryBoundary
-                            fetching=read.fetching
-                            has_data=Signal::derive(move || read.data.with(Option::is_some))
-                            error=read.error
-                            noun=trs!(ui.sending_profiles)
-                            refresh=read.refresh
-                        >
-                            <Select
-                                label=trs!(ui.sending_profile)
-                                value=selected
-                                disabled=Signal::derive(move || busy.get())
-                                on_change=Callback::new(move |v| selected.set(v))
-                            >
-                                <option value="">{tr!(ui.choose_a_profile)}</option>
-                                {move || {
-                                    (!selected.get().is_empty() && profile_name.get().is_none())
-                                        .then(|| {
-                                            view! {
-                                                <option value=selected.get() selected=true disabled=true>
-                                                    {tr!(ui.unavailable)}
-                                                </option>
-                                            }
-                                        })
-                                }}
-                                {move || {
-                                    read.data
-                                        .get()
-                                        .unwrap_or_default()
-                                        .into_iter()
-                                        .map(|row| {
-                                            let id = row.id.to_string();
-                                            let is_selected = selected.get() == id;
-                                            view! {
-                                                <option value=id selected=is_selected>
-                                                    {row.name}
-                                                </option>
-                                            }
-                                        })
-                                        .collect_view()
-                                }}
-                            </Select>
-                        </QueryBoundary>
-                    }
-                })}
-            <ActionButton
-                disabled=Signal::derive(move || busy.get() || !profile_ready.get())
-                on_click=move |_| send(true)
+            <QueryBoundary
+                fetching=profiles.fetching
+                has_data=Signal::derive(move || profiles.data.with(Option::is_some))
+                error=profiles.error
+                noun=trs!(ui.sending_profiles)
+                refresh=profiles.refresh
             >
-                {tr!(ui.test_connection_only)}
-            </ActionButton>
+                <Select
+                    label=trs!(ui.sending_profile)
+                    value=selected
+                    disabled=Signal::derive(move || busy.get())
+                    on_change=Callback::new(move |v| selected.set(v))
+                >
+                    <option value="">{tr!(ui.choose_a_profile)}</option>
+                    {move || {
+                        (!selected.get().is_empty() && profile_name.get().is_none())
+                            .then(|| {
+                                view! {
+                                    <option value=selected.get() selected=true disabled=true>
+                                        {tr!(ui.unavailable)}
+                                    </option>
+                                }
+                            })
+                    }}
+                    {move || {
+                        profiles
+                            .data
+                            .get()
+                            .unwrap_or_default()
+                            .into_iter()
+                            .map(|row| {
+                                let id = row.id.to_string();
+                                let is_selected = selected.get() == id;
+                                view! {
+                                    <option value=id selected=is_selected>
+                                        {row.name}
+                                    </option>
+                                }
+                            })
+                            .collect_view()
+                    }}
+                </Select>
+            </QueryBoundary>
             <div class="resource-columns">
                 {[
                     (recipient, trs!(ui.recipient_email)),
@@ -2477,7 +2432,7 @@ fn test_panel(
                     busy.get() || recipient.get().is_empty() || !profile_ready.get()
                         || page_name.get().is_none()
                 })
-                on_click=move |_| send(false)
+                on_click=move |_| send()
             >
                 {move || {
                     if busy.get() {

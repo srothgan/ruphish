@@ -40,6 +40,7 @@ for (const path of [
   '/api/webhooks/',
   '/api/reporting-mailboxes/',
   '/api/domains/',
+  '/api/smtp/1/tests',
   '/api/starter-templates/',
 ]) {
   responses[path] = await read(path);

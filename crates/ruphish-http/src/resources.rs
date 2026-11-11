@@ -28,6 +28,10 @@ pub(crate) fn routes() -> Router<AuthState> {
             );
     }
     routes
+        .route(
+            "/api/smtp/{id}/tests",
+            get(profile_test_history).post(profile_test_run),
+        )
         .route("/api/pages/preview", axum::routing::post(preview_landing))
         .route("/api/pages/validate", axum::routing::post(validate_page))
         .route(
@@ -393,6 +397,8 @@ pub(crate) fn resource_code(error: &app::Error) -> ErrorCode {
         app::Error::InUse => ErrorCode::ResourceInUse,
         app::Error::Invalid(_) | app::Error::Validation(_) => ErrorCode::ResourceInvalid,
         app::Error::DraftSchedulePast => ErrorCode::DraftSchedulePast,
+        app::Error::ProfileTestRequired => ErrorCode::SendingProfileTestRequired,
+        app::Error::ProfileTestBusy => ErrorCode::ProfileTestBusy,
         app::Error::FeatureDisabled(_) => ErrorCode::FeatureDisabled,
         app::Error::Delivery(_) => ErrorCode::DeliveryFailed,
         app::Error::Storage(_) | app::Error::Internal => ErrorCode::InternalError,
@@ -405,7 +411,7 @@ fn error_status(error: &app::Error) -> StatusCode {
         app::Error::Conflict(_) | app::Error::InUse => StatusCode::CONFLICT,
         app::Error::Changed => StatusCode::PRECONDITION_FAILED,
         app::Error::RevisionRequired => StatusCode::PRECONDITION_REQUIRED,
-        app::Error::FeatureDisabled(_) => StatusCode::CONFLICT,
+        app::Error::FeatureDisabled(_) | app::Error::ProfileTestBusy => StatusCode::CONFLICT,
         app::Error::Internal | app::Error::Storage(_) | app::Error::Delivery(_) => {
             StatusCode::INTERNAL_SERVER_ERROR
         }
@@ -413,9 +419,10 @@ fn error_status(error: &app::Error) -> StatusCode {
             StatusCode::UNAUTHORIZED
         }
         app::Error::Policy(_) => StatusCode::FORBIDDEN,
-        app::Error::Invalid(_) | app::Error::Validation(_) | app::Error::DraftSchedulePast => {
-            StatusCode::BAD_REQUEST
-        }
+        app::Error::Invalid(_)
+        | app::Error::Validation(_)
+        | app::Error::DraftSchedulePast
+        | app::Error::ProfileTestRequired => StatusCode::BAD_REQUEST,
     }
 }
 pub(crate) fn error(error: app::Error) -> Rejection {
@@ -860,4 +867,74 @@ async fn group_summary(context: Context, Path(id): Path<i64>) -> Result<Response
         .ok_or_else(|| error(app::Error::NotFound("Group")))?;
     let lookup = Lookup::load(&context, [&value.attribution]).await?;
     response(StatusCode::OK, &group_summary_value(value, &lookup)?, None)
+}
+
+async fn profile_test_history(
+    context: Context,
+    Path(id): Path<i64>,
+) -> Result<Response, Rejection> {
+    let user = context.api(None).await?;
+    let history = context
+        .profile_tests()
+        .read(user.identity, id)
+        .await
+        .map_err(error)?;
+    let mut ids = history
+        .history
+        .iter()
+        .chain(history.active.iter())
+        .chain(history.connection.iter())
+        .chain(history.email.iter())
+        .map(|a| a.operator)
+        .collect::<Vec<_>>();
+    ids.sort_unstable();
+    ids.dedup();
+    let operators = context
+        .display_identities(&ids)
+        .await?
+        .into_iter()
+        .map(|u| ruphish_contracts::attribution::UserReference {
+            id: u.id,
+            username: Some(u.username),
+            deleted: u.deleted,
+        })
+        .collect();
+    response(
+        StatusCode::OK,
+        &ruphish_contracts::profile_tests::History {
+            summary: history,
+            operators,
+        },
+        None,
+    )
+}
+async fn profile_test_run(
+    context: Context,
+    Path(id): Path<i64>,
+    body: Bytes,
+) -> Result<Response, Rejection> {
+    let caller = editor_identity(&context).await?;
+    let input: ruphish_contracts::profile_tests::Request =
+        ruphish_contracts::domains::decode_request(&body).map_err(|_| {
+            failure(
+                StatusCode::BAD_REQUEST,
+                ErrorCode::RequestInvalid,
+                "Expected a profile test request object",
+            )
+        })?;
+    let attempt = context
+        .profile_tests()
+        .run(
+            caller,
+            id,
+            ruphish_application::profile_tests::Request {
+                id: input.id,
+                revision: input.revision,
+                kind: input.kind,
+                email: input.email,
+            },
+        )
+        .await
+        .map_err(error)?;
+    response(StatusCode::OK, &attempt, None)
 }

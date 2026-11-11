@@ -523,12 +523,59 @@ function draftConfiguration(input) {
   return config;
 }
 
+function profileHistory(data, attempts, id, required) {
+  const profile = data.smtp.find((row) => row.id === id);
+  if (!profile) {
+    return null;
+  }
+  const rows = attempts.filter((row) => row.profile_id === id).toReversed();
+  const decisive = rows.find(
+    (row) =>
+      row.generation === profile.test_generation &&
+      ['accepted', 'failed', 'interrupted', 'unknown'].includes(row.outcome),
+  );
+  return {
+    generation: profile.test_generation,
+    required,
+    eligible: !required || (decisive?.kind === 'email' && decisive.outcome === 'accepted'),
+    active: null,
+    connection: rows.find((row) => row.kind === 'connection') ?? null,
+    email: rows.find((row) => row.kind === 'email') ?? null,
+    history: rows.slice(0, 10),
+    operators: data.authors,
+  };
+}
+
 export function createDemoApi({
   now = Math.floor(Date.now() / 1000),
   storage,
   data = dataset(now),
 } = {}) {
   const key = 'ruphish-demo-session-v1';
+  const profileAttempts = copy(data.profile_tests).sort((a, b) => a.started_at - b.started_at);
+  const testRequests = new Map(
+    profileAttempts.map((attempt) => [
+      attempt.id,
+      {
+        fingerprint: JSON.stringify([
+          attempt.profile_id,
+          attempt.operator,
+          1,
+          attempt.kind,
+          attempt.email,
+        ]),
+        attempt,
+      },
+    ]),
+  );
+  const testReady = (input) =>
+    profileHistory(
+      data,
+      profileAttempts,
+      input.selection?.smtp?.id,
+      settings.policy.sending_profile_test_required,
+    )?.eligible === true;
+
   // Drafts survive client-side navigation without mutating the samples. Reloading recreates this store.
   const drafts = new Map(
     data.drafts.map((draft) => [draft.id, { value: copy(draft), launch: null }]),
@@ -605,7 +652,12 @@ export function createDemoApi({
     }
     if (path === '/auth/session' && method === 'GET') {
       return json({
-        features: current ? features : null,
+        features: current
+          ? {
+              ...features,
+              sending_profile_test_required: settings.policy.sending_profile_test_required,
+            }
+          : null,
         preferences,
         csrf_token: 'demo-csrf',
         user: current
@@ -665,6 +717,24 @@ export function createDemoApi({
       return success('demo-key-not-a-real-credential');
     }
     if (path === '/api/settings' && ['GET', 'PUT'].includes(method)) {
+      if (method === 'PUT') {
+        if (current?.id !== 1) {
+          return failure(403);
+        }
+        if (request.headers.get('if-match')?.replaceAll('"', '') !== String(settings.revision)) {
+          return failure(412, 'RESOURCE_CHANGED');
+        }
+        if (typeof body.policy?.sending_profile_test_required !== 'boolean') {
+          return failure(400);
+        }
+        settings.policy = {
+          ...settings.policy,
+          sending_profile_test_required: body.policy.sending_profile_test_required,
+        };
+        settings.revision += 1;
+        settings.updated_at = now;
+        settings.updated_by = current.id;
+      }
       return json(settings);
     }
     if (path === '/api/overview' && method === 'GET') {
@@ -795,6 +865,9 @@ export function createDemoApi({
         : failure(400);
     }
     if (path === '/api/campaign-drafts/prepare' && method === 'POST') {
+      if (!testReady(body)) {
+        return failure(400, 'SENDING_PROFILE_TEST_REQUIRED');
+      }
       try {
         return json(review(data, body));
       } catch {
@@ -865,6 +938,9 @@ export function createDemoApi({
         }
         if (body.revision !== draft.revision) {
           return failure(412, 'RESOURCE_CHANGED');
+        }
+        if (!testReady(body.campaign)) {
+          return failure(400, 'SENDING_PROFILE_TEST_REQUIRED');
         }
         try {
           review(data, body.campaign);
@@ -1181,6 +1257,74 @@ export function createDemoApi({
         html: body.html,
         warnings: [],
       });
+    }
+    const profileTest = path.match(/^\/api\/smtp\/(\d+)\/tests$/);
+    if (profileTest) {
+      const id = Number(profileTest[1]);
+      const summary = profileHistory(
+        data,
+        profileAttempts,
+        id,
+        settings.policy.sending_profile_test_required,
+      );
+      if (!summary) {
+        return failure(404);
+      }
+      if (method === 'GET') {
+        return json(summary);
+      }
+      if (method !== 'POST') {
+        return failure(405);
+      }
+      if (
+        !['connection', 'email'].includes(body.kind) ||
+        typeof body.id !== 'string' ||
+        !/^[a-zA-Z0-9-]{16,64}$/u.test(body.id) ||
+        Object.keys(body).some((key) => !['id', 'revision', 'kind', 'email'].includes(key))
+      ) {
+        return failure(400);
+      }
+      const fingerprint = JSON.stringify([
+        id,
+        current.id,
+        body.revision,
+        body.kind,
+        body.email ?? null,
+      ]);
+      const previous = testRequests.get(body.id);
+      if (previous) {
+        return previous.fingerprint === fingerprint
+          ? json(previous.attempt)
+          : failure(412, 'RESOURCE_CHANGED');
+      }
+      if (body.revision !== data.smtp.find((row) => row.id === id).revision) {
+        return failure(412, 'RESOURCE_CHANGED');
+      }
+      if (
+        (body.kind === 'email' &&
+          (typeof body.email !== 'string' ||
+            new TextEncoder().encode(body.email).length > 320 ||
+            !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/u.test(body.email))) ||
+        (body.kind === 'connection' && body.email != null)
+      ) {
+        return failure(400);
+      }
+      const attempt = {
+        id: body.id,
+        profile_id: id,
+        generation: summary.generation,
+        kind: body.kind,
+        operator: current.id,
+        email: body.email ?? null,
+        started_at: now,
+        finished_at: now,
+        outcome: body.kind === 'email' ? 'accepted' : 'passed',
+        code: '',
+        smtp_code: null,
+      };
+      profileAttempts.push(attempt);
+      testRequests.set(body.id, { fingerprint, attempt });
+      return json(attempt);
     }
     if (
       ['/api/pages/validate', '/api/learning-pages/validate'].includes(path) &&

@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 pub struct Policy {
     /// Whether verification is required and checks may run.
     pub verification_enabled: bool,
+    /// Require a successful current-configuration sender test before campaign launch.
+    pub sending_profile_test_required: bool,
     /// Whether successful evidence has a time limit.
     pub verification_expires: bool,
     /// Successful evidence lifetime in seconds.
@@ -23,6 +25,7 @@ impl Default for Policy {
     fn default() -> Self {
         Self {
             verification_enabled: false,
+            sending_profile_test_required: false,
             verification_expires: true,
             verification_validity_seconds: 86400,
             verification_recheck_seconds: 21600,
@@ -90,6 +93,8 @@ impl Policy {
 pub struct Features {
     /// Whether verification is required and checks may run.
     pub verification_enabled: bool,
+    /// Require a successful current-configuration sender test before campaign launch.
+    pub sending_profile_test_required: bool,
     /// Whether mailbox network operations are authorized.
     pub reporting_mailboxes_enabled: bool,
     /// Whether webhook enqueueing and delivery are authorized.
@@ -100,6 +105,7 @@ impl From<&Policy> for Features {
     fn from(policy: &Policy) -> Self {
         Self {
             verification_enabled: policy.verification_enabled,
+            sending_profile_test_required: policy.sending_profile_test_required,
             reporting_mailboxes_enabled: policy.reporting_mailboxes_enabled,
             webhooks_enabled: policy.webhooks_enabled,
         }

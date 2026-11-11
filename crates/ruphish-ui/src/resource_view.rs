@@ -12,6 +12,7 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
     let i18n = ruphish_ui::localization::use_i18n();
 
     let queries = expect_context::<crate::resource_queries::ResourceQueries>();
+    let profile_id = id.parse::<i64>().ok();
     let read = queries.details.observe(move || (family, id.clone()));
     let data = Signal::derive(move || read.data.get().map(|(value, _)| value));
     let revision = Signal::derive(move || read.data.get().and_then(|(_, revision)| revision));
@@ -19,6 +20,23 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
     let can_edit = use_context::<ResourceAccess>().is_some_and(|access| access.0);
     let deletion = ResourceDeletion::new();
     let token = StoredValue::new(token);
+    let testing = (family == Family::Profiles)
+        .then_some(profile_id)
+        .flatten()
+        .map(|id| {
+            crate::profile_tests::Testing::new(
+                api,
+                token.get_value(),
+                id,
+                Signal::derive(move || {
+                    data.with(|d| d.as_ref().map_or(0, |r| r.metadata.revision))
+                }),
+                can_edit,
+                Signal::derive(move || {
+                    read.fetching.get() || deletion.busy.get() || data.with(Option::is_none)
+                }),
+            )
+        });
     let navigate = leptos_router::hooks::use_navigate();
     let deleted = Callback::new(move |id| {
         queries.deleted(family, id);
@@ -52,7 +70,16 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
                             view! {
                                 <PageHeader title=name>
 
-                                    <RefreshButton fetching=read.fetching on_refresh=read.refresh />
+                                    {testing.map(|testing| testing.actions())}
+                                    <RefreshButton
+                                        fetching=read.fetching
+                                        on_refresh=Callback::new(move |()| {
+                                            read.refresh.run(());
+                                            if let Some(testing) = testing {
+                                                testing.refresh();
+                                            }
+                                        })
+                                    />
                                     <ResourceActions
                                         edit_href=format!("/{}/{id}/edit", family.route())
                                         can_edit=can_edit
@@ -84,12 +111,16 @@ pub(super) fn show(api: Api, token: String, family: Family, id: String) -> impl 
                                         )>{tr!(ui.export_json)}</ActionButton>
                                     </ResourceActions>
                                 </PageHeader>
-                                <DetailCard>
-                                    {message.view()} {body(value)}
-                                    <AttributionInfo value=Signal::derive(move || {
-                                        attribution.clone()
-                                    }) />
-                                </DetailCard>
+                                <div class="settings-stack">
+                                    {testing.map(|testing| testing.email_form())}
+                                    <DetailCard>
+                                        {message.view()} {body(value)}
+                                        {testing.map(|testing| testing.results())}
+                                        <AttributionInfo value=Signal::derive(move || {
+                                            attribution.clone()
+                                        }) />
+                                    </DetailCard>
+                                </div>
                             }
                         })
                 }}
