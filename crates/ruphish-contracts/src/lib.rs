@@ -6,18 +6,13 @@
 pub mod attribution;
 pub mod auth;
 pub mod campaign;
-pub mod campaign_details;
-pub mod campaign_reads;
-pub mod campaign_workflow;
 pub mod common;
 pub mod domains;
-pub mod reporting;
-
-pub mod overview;
-
 pub mod errors;
 pub mod integrations;
-pub mod resource_details;
+pub mod overview;
+pub mod profile_diagnostics;
+pub mod reporting;
 pub mod resources;
 pub mod settings;
 pub mod starter_templates;
@@ -32,5 +27,3 @@ where
     serde::Deserialize::deserialize(deserializer)
 }
 pub use ruphish_domain::landing;
-
-pub mod profile_tests;

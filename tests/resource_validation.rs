@@ -79,7 +79,7 @@ async fn page_save_reuses_authoritative_diagnostics_and_preserves_failure_atomic
         db.previews(),
     );
     let smtp = Arc::new(ruphish_adapters::smtp::Smtp::new(policy, String::new()));
-    let profile_tests = ruphish_application::profile_tests::Service::new(
+    let profile_tests = ruphish_application::profile_diagnostics::Service::new(
         db.profile_tests(),
         smtp.clone(),
         smtp.clone(),

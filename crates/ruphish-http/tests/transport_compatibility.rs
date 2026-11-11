@@ -6,10 +6,10 @@ use axum::{
     response::Response,
     routing::{any, get, post},
 };
-use ruphish_contracts::{
-    common::Envelope,
-    resource_details::{Group, Metadata, Resource},
-};
+use ruphish_contracts::common::Envelope;
+use ruphish_contracts::resources::details::Group;
+use ruphish_contracts::resources::details::Metadata;
+use ruphish_contracts::resources::details::Resource;
 use ruphish_http::response;
 use serde_json::{Value, json};
 

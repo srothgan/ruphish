@@ -28,7 +28,7 @@ fn create(base: &str, key: &str, configuration: &Value, step: i64) -> Value {
     assert_eq!(response.status(), 201);
     let value: Value = response.json().unwrap();
     assert!(value["id"].as_i64().unwrap() > 0);
-    let confirmed: ruphish_contracts::campaign_reads::Draft =
+    let confirmed: ruphish_contracts::campaign::reads::Draft =
         serde_json::from_value(value.clone()).unwrap();
     assert_eq!(serde_json::to_value(confirmed).unwrap(), value);
     value
@@ -44,7 +44,7 @@ fn save(base: &str, path: &str, revision: Value, configuration: &Value, step: i6
     .unwrap()
     .json()
     .unwrap();
-    let confirmed: ruphish_contracts::campaign_reads::Draft =
+    let confirmed: ruphish_contracts::campaign::reads::Draft =
         serde_json::from_value(value.clone()).unwrap();
     assert_eq!(serde_json::to_value(confirmed).unwrap(), value);
     value

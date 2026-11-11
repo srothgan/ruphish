@@ -2,11 +2,11 @@
 #![cfg(target_arch = "wasm32")]
 #![allow(clippy::unwrap_used, reason = "Functional fixtures and assertions")]
 use leptos::prelude::*;
-use ruphish_contracts::{
-    resource_details::Kind,
-    resources::request::{Group, Recipient},
-};
-use ruphish_ui::{group_draft::GroupDraft, resource_state::ResourceDraft};
+use ruphish_contracts::resources::details::Kind;
+use ruphish_contracts::resources::request::Group;
+use ruphish_contracts::resources::request::Recipient;
+use ruphish_ui::resources::draft::ResourceDraft;
+use ruphish_ui::resources::recipients::draft::GroupDraft;
 use std::{cell::Cell, rc::Rc};
 use wasm_bindgen_test::wasm_bindgen_test;
 #[path = "support/resource_checkpoint.rs"]

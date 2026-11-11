@@ -13,7 +13,7 @@ Keep the summary structure, but update metadata handling and the meaning of sent
 | --- | --- | --- |
 | Operation | `GET /api/campaigns/summary` | `GET /api/campaigns/summary` |
 | Success | `200 OK` | `200 OK` |
-| Response type | `models.CampaignSummaries` | `campaign_details::Summaries` |
+| Response type | `models.CampaignSummaries` | `campaign::details::Summaries` |
 
 Use a Bearer API key. The [common changes](../common-contract-changes.md) explain shared access, error handling, metadata, and example conventions.
 

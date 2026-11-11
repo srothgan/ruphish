@@ -2,7 +2,7 @@
 #![cfg(target_arch = "wasm32")]
 #![allow(clippy::unwrap_used)]
 
-use ruphish_ui::browser_http::resource_request;
+use ruphish_ui::api::transport::resource_request;
 use serde_json::json;
 use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -78,13 +78,14 @@ async fn translated_text_updates_in_place_without_replacing_draft_state() {
 fn localized_observations_preserve_recorded_outcomes_and_external_details() {
     locale_window::install();
     use leptos::prelude::*;
-    use ruphish_ui::{localization::*, recipient_history::History};
+    use ruphish_ui::campaigns::delivery::history::History;
+    use ruphish_ui::localization::*;
     let _ = any_spawner::Executor::init_wasm_bindgen();
     let owner = Owner::new();
     owner.with(|| untrack(|| {
         let context = provide(Locale::en);
         let mut history = History::default();
-        let note = ruphish_ui::import_state::ImportNote::Email;
+        let note = ruphish_ui::resources::imports::preparation::ImportNote::Email;
         assert!(import_note(context, &note).contains("Attachments"));
         history.toggle();
         let (ticket, _) = history.begin(false).unwrap();
@@ -96,10 +97,10 @@ fn localized_observations_preserve_recorded_outcomes_and_external_details() {
         assert_eq!(event_label(context, history.events[&1]["message"].as_str().unwrap()), "E-Mail ge\u{f6}ffnet");
         assert_eq!(event_label(context, "An external diagnostic"), "An external diagnostic");
         assert!(!delivery_label(context, "accepted").contains("250"));
-        let error = ruphish_ui::import_state::ImportError::RequestFailed("External response".into());
+        let error = ruphish_ui::resources::imports::preparation::ImportError::RequestFailed("External response".into());
         assert_eq!(import_error(context, &error), "External response (IMPORT_REQUEST_FAILED)");
         assert_eq!(history.attempts[&2]["finished"],31);
-        assert_eq!(ruphish_ui::recipient_history::tone("accepted"),"success");
+        assert_eq!(ruphish_ui::campaigns::delivery::history::tone("accepted"),"success");
     }));
     owner.cleanup();
 }
@@ -107,7 +108,8 @@ fn localized_observations_preserve_recorded_outcomes_and_external_details() {
 #[wasm_bindgen_test]
 fn timestamps_use_jiff_zones_and_browser_locales_without_double_conversion() {
     use ruphish_domain::datetime::{named_zone, parse};
-    use ruphish_ui::{browser_datetime::render_locale, datetime::Label};
+    use ruphish_ui::shared::datetime::Label;
+    use ruphish_ui::shared::datetime::browser::render_locale;
     let instant = parse("2026-10-18T19:53:21.8939891Z").unwrap();
     for (zone, locale, expected) in [
         (
@@ -137,10 +139,9 @@ fn timestamps_use_jiff_zones_and_browser_locales_without_double_conversion() {
 #[wasm_bindgen_test]
 fn api_timestamp_values_reach_locale_display_without_losing_their_instant() {
     use ruphish_domain::datetime::named_zone;
-    use ruphish_ui::{
-        browser_datetime::render_locale,
-        datetime::{Label, instant},
-    };
+    use ruphish_ui::shared::datetime::Label;
+    use ruphish_ui::shared::datetime::browser::render_locale;
+    use ruphish_ui::shared::datetime::instant;
 
     // The API sends RFC3339 strings for campaign dates/activity, and integer
     // seconds for reporting, delivery attempts and integration history.
@@ -281,9 +282,9 @@ async fn create_edit_and_delete_preserve_payload_csrf_and_revision() {
 #[wasm_bindgen_test]
 fn import_draft_handoff_shares_edits_and_isolates_family_session_and_discard() {
     use leptos::prelude::*;
-    use ruphish_ui::{
-        import_drafts::ImportDrafts, import_state::prepare_creation, resource_state::ResourceDraft,
-    };
+    use ruphish_ui::resources::draft::ResourceDraft;
+    use ruphish_ui::resources::imports::drafts::ImportDrafts;
+    use ruphish_ui::resources::imports::preparation::prepare_creation;
     let owner = Owner::new();
     let store = owner.with(ImportDrafts::default);
     let imported = prepare_creation(
@@ -341,11 +342,10 @@ fn import_draft_handoff_shares_edits_and_isolates_family_session_and_discard() {
 #[wasm_bindgen_test]
 fn import_draft_capacity_and_expired_session_fail_without_overwriting_retained_work() {
     use leptos::prelude::*;
-    use ruphish_ui::{
-        import_drafts::ImportDrafts,
-        import_state::{ImportError, prepare_creation},
-        resource_state::ResourceDraft,
-    };
+    use ruphish_ui::resources::draft::ResourceDraft;
+    use ruphish_ui::resources::imports::drafts::ImportDrafts;
+    use ruphish_ui::resources::imports::preparation::ImportError;
+    use ruphish_ui::resources::imports::preparation::prepare_creation;
     let owner = Owner::new();
     let store = owner.with(ImportDrafts::default);
     let insert = || {
@@ -372,7 +372,7 @@ fn import_draft_capacity_and_expired_session_fail_without_overwriting_retained_w
 async fn campaign_launch_retry_preserves_reviewed_body_key_and_browser_auth_boundary() {
     let body = json!({"name":"Reviewed campaign","url":"https://training.example.test","selection":{"groups":[{"id":4,"revision":"group-v1"}],"template":{"id":9,"revision":"review-v1"},"page":{"id":6,"revision":"page-v1"},"smtp":{"id":7,"revision":"smtp-v1"}}});
     for _ in 0..2 {
-        let request = ruphish_ui::browser_http::launch_request(
+        let request = ruphish_ui::api::transport::launch_request(
             "https://admin.example.test/api/campaigns/",
             "csrf-canary",
             "same-launch-key",
@@ -414,11 +414,10 @@ fn account_preferences_change_text_and_format_independently_without_changing_ins
     use leptos::prelude::*;
     use ruphish_contracts::auth::Preferences;
     use ruphish_domain::datetime;
-    use ruphish_ui::{
-        datetime::Label,
-        display_preferences::DisplayPreferences,
-        localization::{self, Locale},
-    };
+    use ruphish_ui::localization;
+    use ruphish_ui::localization::Locale;
+    use ruphish_ui::shared::datetime::Label;
+    use ruphish_ui::shared::display_preferences::DisplayPreferences;
     let _ = any_spawner::Executor::init_wasm_bindgen();
     let owner = Owner::new();
     owner.with(|| {
@@ -475,11 +474,11 @@ fn account_preferences_change_text_and_format_independently_without_changing_ins
         );
         assert_eq!(
             datetime::zone_name(&state.zone()),
-            datetime::zone_name(&ruphish_ui::browser_datetime::detected_zone())
+            datetime::zone_name(&ruphish_ui::shared::datetime::browser::detected_zone())
         );
         assert_eq!(
             preview.get_untracked(),
-            ruphish_ui::browser_datetime::render(Label::at(instant, &state.zone()))
+            ruphish_ui::shared::datetime::browser::render(Label::at(instant, &state.zone()))
         );
     });
     owner.cleanup();
@@ -487,7 +486,8 @@ fn account_preferences_change_text_and_format_independently_without_changing_ins
 
 #[wasm_bindgen_test]
 fn preference_picker_choices_are_accepted_by_the_authoritative_domain() {
-    use ruphish_domain::{datetime, preferences::Preferences};
+    use ruphish_domain::account::preferences::Preferences;
+    use ruphish_domain::datetime;
     let zones = datetime::available_zones();
     assert!(zones.len() > 300);
     for expected in ["UTC", "Europe/Berlin", "Asia/Shanghai", "America/New_York"] {
@@ -501,10 +501,10 @@ fn preference_picker_choices_are_accepted_by_the_authoritative_domain() {
         .validate()
         .unwrap();
     }
-    let formats = ruphish_ui::browser_datetime::format_locale_options(
+    let formats = ruphish_ui::shared::datetime::browser::format_locale_options(
         "de",
         "zh-CN",
-        ruphish_ui::datetime::Label::at(
+        ruphish_ui::shared::datetime::Label::at(
             datetime::parse("2026-10-18T19:53:00Z").unwrap(),
             &datetime::named_zone("Europe/Berlin").unwrap(),
         ),
@@ -562,10 +562,9 @@ fn late_session_preferences_cannot_undo_a_confirmed_save() {
     locale_window::install();
     use leptos::prelude::*;
     use ruphish_contracts::auth::Preferences;
-    use ruphish_ui::{
-        display_preferences::DisplayPreferences,
-        localization::{self, Locale},
-    };
+    use ruphish_ui::localization;
+    use ruphish_ui::localization::Locale;
+    use ruphish_ui::shared::display_preferences::DisplayPreferences;
     let _ = any_spawner::Executor::init_wasm_bindgen();
     let owner = Owner::new();
     owner.with(|| {

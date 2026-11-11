@@ -4,9 +4,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { undo, redo } from '@codemirror/commands';
-import { VisualSession, visualOptions } from '../visual-session.mjs';
-import { TemplateVault } from '../template-html.mjs';
-import { createState, applyVisual } from '../state.mjs';
+import { VisualSession, visualOptions } from '../editor/visual/session.mjs';
+import { TemplateVault } from '../editor/template-html.mjs';
+import { createState, applyVisual } from '../editor/state.mjs';
 
 const vendor = fs.readFileSync(
   new URL('../node_modules/jodit/es2021/jodit.js', import.meta.url),

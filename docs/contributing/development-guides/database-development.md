@@ -33,7 +33,7 @@ Test the relevant cancellation, lock-timeout, pool-recovery, competing-writer, s
 
 Released migrations are immutable. The initial schemas are `crates/ruphish-adapters/migrations/{sqlite,mysql,postgres}/1_baseline.sql`. Append forward migrations when changing a released schema; do not edit a released file or its recorded checksum.
 
-The current providers construct their SQLx migration lists explicitly in `src/sqlite/migrations.rs`, `src/mysql/migrations.rs`, and `src/postgres/migrations.rs`. Adding a SQL file to a directory alone does not register it.
+The current providers construct their SQLx migration lists explicitly in `src/database/sqlite/startup/migrations.rs`, `src/database/mysql/startup/migrations.rs`, and `src/database/postgres/startup/migrations.rs`. Adding a SQL file to a directory alone does not register it.
 
 For a schema change:
 
@@ -49,9 +49,9 @@ SQL files are pinned to LF through Git attributes so checksums remain stable acr
 
 | Provider | Verification owner |
 | --- | --- |
-| SQLite | `src/sqlite/schema.rs` compares schema objects with an independent in-memory database built from the registered migrations |
-| MySQL | `src/mysql/schema_inventory.sql`, `src/mysql/schema.json`, and validation in `src/mysql/migrations.rs` |
-| PostgreSQL | The `INVENTORY` query and verification in `src/postgres/migrations.rs`, `schema.json`, and checked view definitions |
+| SQLite | `src/database/sqlite/startup/schema.rs` compares schema objects with an independent in-memory database built from the registered migrations |
+| MySQL | `src/database/mysql/startup/schema_inventory.sql`, `src/database/mysql/startup/schema.json`, and validation in `src/database/mysql/startup/migrations.rs` |
+| PostgreSQL | The `INVENTORY` query and verification in `src/database/postgres/startup/migrations.rs`, `schema.json`, and checked view definitions |
 
 All paths in this table are relative to `crates/ruphish-adapters/`. Generate changed server inventories from a fresh disposable schema after applying the intended migrations, using the same inventory query and normalization as the verifier. Exclude database names and data-dependent counters. For MySQL, use `SET NAMES utf8mb4 COLLATE utf8mb4_0900_bin`, matching application connections.
 

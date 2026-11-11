@@ -13,7 +13,7 @@ Adapt this operation to shared resources and the current email template contract
 | --- | --- | --- |
 | Operation | `GET /api/templates/{id}` | `GET /api/templates/{id}` |
 | Success | `200 OK` | `200 OK` |
-| Response type | `models.Template` | `resource_details::Resource<resource_details::Template>` |
+| Response type | `models.Template` | `resources::details::Resource<resources::details::Template>` |
 
 Use a Bearer API key. The [common changes](../common-contract-changes.md) explain shared access, error handling, metadata, and example conventions.
 

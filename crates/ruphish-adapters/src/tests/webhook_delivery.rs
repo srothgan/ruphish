@@ -34,7 +34,7 @@ async fn legacy_payload_signature_and_content_type_reach_receiver()
     let policy = crate::outbound::Policy::new(&["127.0.0.1".into()])?;
     let (received, outcome) = tokio::join!(
         receiver,
-        super::send(&policy, &url, "secret456", body, "legacy-fixture")
+        crate::integrations::webhook::send(&policy, &url, "secret456", body, "legacy-fixture")
     );
     received?;
     assert_eq!(outcome.status, Some(204));
@@ -46,11 +46,11 @@ async fn legacy_payload_signature_and_content_type_reach_receiver()
 #[test]
 fn legacy_signature_vectors() {
     assert_eq!(
-        super::signature("secret123", b"some payload456"),
+        crate::integrations::webhook::signature("secret123", b"some payload456"),
         Ok("sha256=ab7844c1e9149f8dc976c4188a72163c005930f3c2266a163ffe434230bdf761".into())
     );
     assert_eq!(
-        super::signature(
+        crate::integrations::webhook::signature(
             "secret456",
             br#"{"key1":"val1","key2":"val2","key3":"val3"}"#
         ),

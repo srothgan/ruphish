@@ -25,7 +25,7 @@ Responses combine the content fields above with [resource metadata](conventions.
 
 Create a resource.
 
-**Request:** resources::request::Group. **Response:** `201 Created`, `resource_details::Resource<resource_details::Group>` as `application/json`.
+**Request:** resources::request::Group. **Response:** `201 Created`, `resources::details::Resource<resources::details::Group>` as `application/json`.
 
 The response includes `ETag: "1"`. Save the returned revision for subsequent replacement or deletion.
 
@@ -87,7 +87,7 @@ Example response:
 
 List the stored resources. The response is an array, including `[]` when empty.
 
-**Request:** No body. **Response:** `200 OK`, `Vec<resource_details::Resource<resource_details::Group>>` as `application/json`.
+**Request:** No body. **Response:** `200 OK`, `Vec<resources::details::Resource<resources::details::Group>>` as `application/json`.
 
 ```sh
 curl --request GET "$RUPHISH_URL/api/groups/" \
@@ -131,7 +131,7 @@ Example response:
 
 Read one resource.
 
-**Request:** No body. **Response:** `200 OK`, `resource_details::Resource<resource_details::Group>` as `application/json`.
+**Request:** No body. **Response:** `200 OK`, `resources::details::Resource<resources::details::Group>` as `application/json`.
 
 The response includes an `ETag` containing the current quoted numeric revision, for example `ETag: "1"`.
 
@@ -175,7 +175,7 @@ Example response:
 
 Replace the editable content at the current revision.
 
-**Request:** resources::request::Group. **Response:** `200 OK`, `resource_details::Resource<resource_details::Group>` as `application/json`.
+**Request:** resources::request::Group. **Response:** `200 OK`, `resources::details::Resource<resources::details::Group>` as `application/json`.
 
 Returns the new revision and `ETag: "2"`. A stale revision returns `412`; read again before deciding whether to replace newer content.
 

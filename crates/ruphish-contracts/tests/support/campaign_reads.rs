@@ -94,7 +94,7 @@ fn draft_null_selections_are_distinct_from_missing_read_fields() {
 
 #[test]
 fn saved_draft_structure_is_complete_even_when_values_are_unfinished() {
-    use ruphish_domain::campaign_draft::Configuration as Input;
+    use ruphish_domain::campaign::draft::Configuration as Input;
     // Incomplete writes are legitimate; confirmed reads must spell out their defaults.
     let input: Input = serde_json::from_value(json!({})).unwrap();
     assert!(serde_json::from_value::<draft::Configuration>(json!({})).is_err());

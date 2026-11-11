@@ -1,10 +1,11 @@
 //! Shared domain and integration reads and their mutation dependencies.
-use crate::{
-    campaign_queries::CampaignQueries,
-    client::Api,
-    integrations::{Kind, Record},
-    overview_queries::OverviewQueries,
-};
+use crate::api::client::Api;
+use crate::api::error::ApiError;
+use crate::api::query::Query;
+use crate::campaigns::queries::CampaignQueries;
+use crate::integrations::Kind;
+use crate::integrations::Record;
+use crate::overview::queries::OverviewQueries;
 use leptos::prelude::*;
 use leptos_fetch::QueryClient;
 use ruphish_contracts::{
@@ -12,7 +13,6 @@ use ruphish_contracts::{
     domains::Domain,
     integrations::{Mailbox, Webhook},
 };
-use ruphish_ui::{api_error::ApiError, query::Query};
 use serde_json::Value;
 
 #[derive(Clone, Copy)]
@@ -20,7 +20,7 @@ pub(crate) struct ManagementQueries {
     overview: OverviewQueries,
     campaigns: CampaignQueries,
     pub settings: Query<(), ruphish_contracts::settings::Settings>,
-    pub profile_tests: Query<i64, ruphish_contracts::profile_tests::History>,
+    pub profile_tests: Query<i64, ruphish_contracts::profile_diagnostics::History>,
     pub users: Query<(), Vec<UserSummary>>,
     pub starters: Query<(), Vec<ruphish_contracts::starter_templates::Summary>>,
     pub starter: Query<String, ruphish_contracts::starter_templates::Entry>,
@@ -40,7 +40,7 @@ impl ManagementQueries {
                 api.read(&format!("/api/smtp/{id}/tests")).await
             })
             .with_automatic_refresh(
-                |history: &ruphish_contracts::profile_tests::History| {
+                |history: &ruphish_contracts::profile_diagnostics::History| {
                     history.summary.active.is_some()
                 },
             ),

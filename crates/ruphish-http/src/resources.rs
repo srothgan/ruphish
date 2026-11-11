@@ -12,8 +12,9 @@ use axum::{
 use ruphish_application::resources::{self as app, Content, Kind, Resource};
 use ruphish_contracts::common;
 use ruphish_contracts::errors::ErrorCode;
+use ruphish_contracts::resources as summaries_wire;
+use ruphish_contracts::resources::details;
 use ruphish_contracts::resources::request as wire;
-use ruphish_contracts::{resource_details as details, resources as summaries_wire};
 
 pub(crate) fn routes() -> Router<AuthState> {
     let mut routes = Router::new();
@@ -901,7 +902,7 @@ async fn profile_test_history(
         .collect();
     response(
         StatusCode::OK,
-        &ruphish_contracts::profile_tests::History {
+        &ruphish_contracts::profile_diagnostics::History {
             summary: history,
             operators,
         },
@@ -914,7 +915,7 @@ async fn profile_test_run(
     body: Bytes,
 ) -> Result<Response, Rejection> {
     let caller = editor_identity(&context).await?;
-    let input: ruphish_contracts::profile_tests::Request =
+    let input: ruphish_contracts::profile_diagnostics::Request =
         ruphish_contracts::domains::decode_request(&body).map_err(|_| {
             failure(
                 StatusCode::BAD_REQUEST,
@@ -927,7 +928,7 @@ async fn profile_test_run(
         .run(
             caller,
             id,
-            ruphish_application::profile_tests::Request {
+            ruphish_application::profile_diagnostics::Request {
                 id: input.id,
                 revision: input.revision,
                 kind: input.kind,

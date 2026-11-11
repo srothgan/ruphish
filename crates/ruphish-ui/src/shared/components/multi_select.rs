@@ -1,7 +1,8 @@
 use super::TextInput;
 use super::{ActionButton, Checkbox, Field};
+use crate::tr;
+use crate::trs;
 use leptos::prelude::*;
-use ruphish_ui::{tr, trs};
 
 /// A scroll-loading, searchable checkbox dropdown. The feature owns option loading.
 #[component]
@@ -16,7 +17,7 @@ pub(crate) fn MultiSelect(
     on_more: Callback<()>,
     on_retry: Callback<()>,
 ) -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
 
     let (trigger, panel) = super::info::anchored_nodes();
     let list = NodeRef::<leptos::html::Div>::new();

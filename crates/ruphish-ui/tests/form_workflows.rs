@@ -3,12 +3,13 @@
 #[path = "support/resource_checkpoint.rs"]
 mod resource_checkpoint;
 use resource_checkpoint::checkpoint;
-use ruphish_contracts::resource_details::Kind;
+use ruphish_contracts::resources::details::Kind;
 use ruphish_contracts::validation::{Code, ValidationReport};
 use ruphish_domain::validation::{Issue, Report};
-use ruphish_ui::{
-    api_error, form_state::FormState, form_validation, resource_state::ResourceDraft,
-};
+use ruphish_ui::api::error as api_error;
+use ruphish_ui::resources::draft::ResourceDraft;
+use ruphish_ui::shared::forms::state::FormState;
+use ruphish_ui::shared::forms::validation as form_validation;
 use serde_json::json;
 
 fn fields(report: &Report) -> Vec<&str> {
@@ -100,7 +101,7 @@ fn incomplete_campaign_reopened_on_review_requires_correction_but_remains_saveab
         .unwrap()
         .as_second();
     let mut value = json!({"name":"","url":"","selection":{"groups":[],"template":{"id":0},"page":{"id":0},"smtp":{"id":0}},"policy":{"redirect_url":""}});
-    let saved: ruphish_domain::campaign_draft::Configuration =
+    let saved: ruphish_domain::campaign::draft::Configuration =
         serde_json::from_value(value.clone()).unwrap();
     assert!(
         saved.validate(),
@@ -120,7 +121,7 @@ fn incomplete_campaign_reopened_on_review_requires_correction_but_remains_saveab
         ]
     );
     assert_eq!(
-        ruphish_domain::campaign_draft::field_step(&review.issues()[0].field),
+        ruphish_domain::campaign::draft::field_step(&review.issues()[0].field),
         0
     );
     value["name"] = json!("Training");
@@ -137,7 +138,7 @@ fn incomplete_campaign_reopened_on_review_requires_correction_but_remains_saveab
     );
     value["launch_local"] = json!({"local":"","time_zone":"Europe/Berlin"});
     assert!(
-        serde_json::from_value::<ruphish_domain::campaign_draft::Configuration>(value.clone())
+        serde_json::from_value::<ruphish_domain::campaign::draft::Configuration>(value.clone())
             .unwrap()
             .validate()
     );
@@ -175,14 +176,15 @@ fn incomplete_campaign_reopened_on_review_requires_correction_but_remains_saveab
 #[cfg_attr(not(target_arch = "wasm32"), test)]
 fn credentials_and_operational_failures_do_not_become_interchangeable_validation_errors() {
     let mut form = FormState::default();
-    let report = ruphish_domain::password::replacement("tiny", "different");
+    let report = ruphish_domain::account::password::replacement("tiny", "different");
     form.submit(report.issues());
     assert_eq!(form.issues(report.issues()).len(), 2);
     assert!(!format!("{report:?}").contains("tiny"));
     assert!(!format!("{report:?}").contains("different"));
-    assert!(ruphish_domain::password::replacement("éééé", "éééé").is_empty());
+    assert!(ruphish_domain::account::password::replacement("éééé", "éééé").is_empty());
     assert!(
-        !ruphish_domain::password::replacement(&"x".repeat(1025), &"x".repeat(1025)).is_empty()
+        !ruphish_domain::account::password::replacement(&"x".repeat(1025), &"x".repeat(1025))
+            .is_empty()
     );
     let mut hook = json!({"name":"Hook","url":"https://example.test/events","secret":""});
     assert_eq!(
@@ -298,7 +300,7 @@ fn campaign_step_jumps_require_skipped_content_and_recheck_resource_availability
         ["selection.groups"]
     );
     assert!(
-        serde_json::from_value::<ruphish_domain::campaign_draft::Configuration>(draft)
+        serde_json::from_value::<ruphish_domain::campaign::draft::Configuration>(draft)
             .unwrap()
             .validate(),
         "an incomplete edit remains saveable as a draft"

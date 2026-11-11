@@ -1,7 +1,8 @@
 //! Route-independent demo feedback. Payloads contain message kinds only.
 use super::{ActionButton, ButtonStyle, ControlSize};
+use crate::tr;
+use crate::trs;
 use leptos::prelude::*;
-use ruphish_ui::{tr, trs};
 
 #[component]
 pub(crate) fn DemoBanner() -> impl IntoView {
@@ -55,7 +56,7 @@ impl DemoNotifications {
 
 #[component]
 pub(crate) fn DemoToastHost(notifications: DemoNotifications) -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
     let notice = notifications.0;
     let text = move || {
         notice.get().map(|value| {

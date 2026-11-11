@@ -1,7 +1,7 @@
 use super::{ActionButton, ButtonStyle};
-use crate::feedback::Message;
+use crate::shared::feedback::Message;
+use crate::tr;
 use leptos::{html, prelude::*};
-use ruphish_ui::tr;
 
 /// Native modal focus containment and inert background. The persistent navigation
 /// guard opts out of automatic opening and owns its promise-based cancellation.

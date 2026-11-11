@@ -27,9 +27,11 @@ pub(crate) fn Tabs(
                 .filter_map(|(i, d)| (!d.get_untracked()).then_some(i))
                 .collect::<Vec<_>>()
         });
-        let Some(next) =
-            ruphish_ui::tabs::next_tab(&enabled, selected.get_untracked(), &event.key())
-        else {
+        let Some(next) = crate::shared::tab_navigation::next_tab(
+            &enabled,
+            selected.get_untracked(),
+            &event.key(),
+        ) else {
             return;
         };
         event.prevent_default();

@@ -4,8 +4,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import german from 'jodit/esm/langs/de.js';
 import { JSDOM } from 'jsdom';
-import { visualFrameDocument } from '../visual-shell.mjs';
-import { installVisualController } from '../visual-controller.mjs';
+import { visualFrameDocument } from '../editor/visual/shell.mjs';
+import { installVisualController } from '../editor/visual/controller.mjs';
 
 const vendor = fs.readFileSync(
   new URL('../node_modules/jodit/es2021/jodit.js', import.meta.url),

@@ -1,6 +1,9 @@
 //! Observable sender history, invalidation and launch policy across real providers.
 use super::*;
-use ruphish_application::profile_tests::{Kind as TestKind, Outcome, Request, Start};
+use ruphish_application::profile_diagnostics::Kind as TestKind;
+use ruphish_application::profile_diagnostics::Outcome;
+use ruphish_application::profile_diagnostics::Request;
+use ruphish_application::profile_diagnostics::Start;
 
 async fn exercise(db: &Database) {
     let who = company_settings::account(db).await.identity;

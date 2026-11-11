@@ -77,7 +77,7 @@ Example response:
 
 ## POST `/api/import/group`
 
-Parse CSV file parts and return recipients. **Request:** `multipart/form-data`. **Response:** `200 OK`, `Vec<resource_details::Recipient>` as JSON. Any invalid row fails the import with `400 CSV_ROWS_INVALID`; use review to inspect rejected rows.
+Parse CSV file parts and return recipients. **Request:** `multipart/form-data`. **Response:** `200 OK`, `Vec<resources::details::Recipient>` as JSON. Any invalid row fails the import with `400 CSV_ROWS_INVALID`; use review to inspect rejected rows.
 
 Save this as `recipients.csv`:
 
@@ -251,7 +251,7 @@ Example response:
 | Attribute | Type | Contract |
 | --- | --- | --- |
 | `html` | `string` | Prepared HTML. |
-| `warnings` | `resource_details::PageWarning[]` | Findings, including a required empty list when no issue is found. |
+| `warnings` | `resources::details::PageWarning[]` | Findings, including a required empty list when no issue is found. |
 
 | Attribute | Type | Contract |
 | --- | --- | --- |

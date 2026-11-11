@@ -17,7 +17,7 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 /// Public listener dependencies and installation-owned proxy trust.
 pub struct Services {
     /// Bounded, immutable public file snapshot; never admin assets.
-    pub assets: super::public_assets::Assets,
+    pub assets: crate::assets::public::Assets,
     /// Domain resource and verification repository.
     pub domains: Arc<dyn Repository>,
     /// Typed public interaction application.

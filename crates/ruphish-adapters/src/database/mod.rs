@@ -4,37 +4,46 @@
 //! Driver modules and constructors are deliberately inaccessible to consumers.
 //!
 //! ```compile_fail
-//! use ruphish_adapters::sqlite::StartupDatabase;
+//! use ruphish_adapters::database::sqlite::StartupDatabase;
 //! ```
 //! ```compile_fail
 //! fn bypass(db: &ruphish_adapters::database::Database) { db.pool(); }
 //! ```
 //! ```compile_fail
-//! use ruphish_adapters::postgres::StartupDatabase;
+//! use ruphish_adapters::database::postgres::StartupDatabase;
 //! ```
 //! ```compile_fail
-//! use ruphish_adapters::mysql::StartupDatabase;
+//! use ruphish_adapters::database::mysql::StartupDatabase;
 //! ```
-use crate::{mysql, outbound::Policy, postgres, sqlite};
+
+mod errors;
+mod health;
+pub mod migrations;
+pub(crate) mod mysql;
+mod mysql_config;
+pub(crate) mod postgres;
+mod postgres_config;
+#[cfg(test)]
+mod security_tests;
+mod sessions;
+pub(crate) mod sqlite;
+#[cfg(test)]
+mod tests;
+pub(crate) mod text;
+
+use crate::outbound::Policy;
 pub use app::storage::Error;
 use ruphish_application as app;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-mod mysql_config;
-mod postgres_config;
-#[cfg(test)]
-mod security_tests;
+
 pub use postgres_config::{PostgresConfig, PostgresTls};
-mod errors;
-mod health;
-mod sessions;
-pub(crate) mod text;
+
 pub(crate) use errors::commit_error;
 pub use mysql_config::{MySqlConfig, MySqlTls};
 pub use sessions::SessionStore;
-pub mod migrations;
 
 /// Supported connection settings. Unsupported engines cannot be silently selected.
 pub enum Config {
@@ -54,7 +63,7 @@ pub struct Database {
     backend: Backend,
     health: Arc<dyn app::health::Storage>,
     settings: Arc<dyn app::settings::Repository>,
-    profile_tests: Arc<dyn app::profile_tests::Repository>,
+    profile_tests: Arc<dyn app::profile_diagnostics::Repository>,
     rendering: Arc<tokio::sync::Semaphore>,
     sessions: Arc<dyn app::storage::Sessions>,
     accounts: Arc<dyn app::auth::Repository>,
@@ -87,7 +96,7 @@ pub async fn open(config: Config, policy: Policy) -> Result<Database, Error> {
             Ok(Database {
                 health: Arc::new(health::Probe::Sqlite(pool.clone())),
                 settings: Arc::new(sqlite::settings::SettingsStore::new(pool.clone())),
-                profile_tests: Arc::new(sqlite::profile_tests::Tests::new(pool.clone())),
+                profile_tests: Arc::new(sqlite::profile_diagnostics::Tests::new(pool.clone())),
                 sessions: Arc::new(sqlite::sessions::Sessions::new(pool.clone())),
                 accounts: Arc::new(sqlite::accounts::Accounts::new(pool.clone())),
                 resources: Arc::new(sqlite::resources::Resources::new(pool.clone())),
@@ -123,7 +132,7 @@ pub async fn open(config: Config, policy: Policy) -> Result<Database, Error> {
             Ok(Database {
                 health: Arc::new(health::Probe::MySql(pool.clone())),
                 settings: Arc::new(mysql::settings::SettingsStore::new(pool.clone())),
-                profile_tests: Arc::new(mysql::profile_tests::Tests::new(pool.clone())),
+                profile_tests: Arc::new(mysql::profile_diagnostics::Tests::new(pool.clone())),
                 sessions: Arc::new(mysql::sessions::Sessions::new(pool.clone())),
                 accounts: Arc::new(mysql::accounts::Accounts::new(pool.clone())),
                 resources: Arc::new(mysql::resources::Resources::new(pool.clone())),
@@ -159,7 +168,7 @@ pub async fn open(config: Config, policy: Policy) -> Result<Database, Error> {
             Ok(Database {
                 health: Arc::new(health::Probe::Postgres(pool.clone())),
                 settings: Arc::new(postgres::settings::SettingsStore::new(pool.clone())),
-                profile_tests: Arc::new(postgres::profile_tests::Tests::new(pool.clone())),
+                profile_tests: Arc::new(postgres::profile_diagnostics::Tests::new(pool.clone())),
                 sessions: Arc::new(postgres::sessions::Sessions::new(pool.clone())),
                 accounts: Arc::new(postgres::accounts::Accounts::new(pool.clone())),
                 resources: Arc::new(postgres::resources::Resources::new(pool.clone())),
@@ -202,7 +211,7 @@ impl Database {
     }
 
     /// Durable saved-profile tests.
-    pub fn profile_tests(&self) -> Arc<dyn app::profile_tests::Repository> {
+    pub fn profile_tests(&self) -> Arc<dyn app::profile_diagnostics::Repository> {
         self.profile_tests.clone()
     }
 
@@ -305,6 +314,3 @@ fn upgrade_error(error: sqlite::UpgradeError) -> Error {
         )),
     }
 }
-
-#[cfg(test)]
-mod tests;

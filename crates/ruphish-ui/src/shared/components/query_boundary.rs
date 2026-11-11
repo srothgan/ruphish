@@ -1,6 +1,8 @@
 use super::{ActionButton, Card, EmptyState, LoadingSpinner};
+use crate::api::read_state::ReadState;
+use crate::tr;
+use crate::trs;
 use leptos::prelude::*;
-use ruphish_ui::{read_state::ReadState, tr, trs};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(module = "/web/query-layout.mjs")]
@@ -31,7 +33,7 @@ pub(crate) fn QueryBoundary(
     #[prop(into, optional)] empty: Signal<bool>,
     children: Children,
 ) -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
     let state = Signal::derive(move || {
         ReadState::from_query(has_data.get(), fetching.get(), error.get().is_some())
     });

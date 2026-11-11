@@ -1,6 +1,6 @@
 //! Shared, transactional changes to event rows.
 use crate::{auth::Identity, resources::Error};
-pub use ruphish_domain::event_edit::*;
+pub use ruphish_domain::events::edit::*;
 
 /// Storage owns authorization, row conflicts and atomic event writes.
 #[async_trait::async_trait]

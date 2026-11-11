@@ -1,7 +1,9 @@
 //! Recovery actions never overwrite an editable draft or advance its base revision implicitly.
 use super::{ActionButton, ActionLink, Card, DeleteConfirmation};
+use crate::api::error::ApiError;
+use crate::tr;
+use crate::trs;
 use leptos::prelude::*;
-use ruphish_ui::{api_error::ApiError, tr, trs};
 
 #[component]
 pub(crate) fn WriteRecovery(
@@ -56,7 +58,7 @@ pub(crate) fn WriteRecovery(
                 description=trs!(ui.discard_reload_confirmation)
                 confirm_label=trs!(ui.discard_and_reload)
                 busy=busy
-                message=crate::feedback::Message::new(String::new())
+                message=crate::shared::feedback::Message::new(String::new())
                 on_cancel=Callback::new(move |_| confirm.set(false))
                 on_confirm=Callback::new(move |_| {
                     confirm.set(false);

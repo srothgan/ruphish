@@ -1,0 +1,304 @@
+//! Bounded resource parsing and validation using established format libraries.
+
+pub(crate) mod summaries;
+
+use crate::template::{self, Context};
+use base64::{Engine, engine::general_purpose::STANDARD};
+use lettre::message::Mailbox;
+use ruphish_application::resources::*;
+use std::io::{Cursor, Read, Write};
+
+/// Maximum authored/imported document size in bytes.
+pub const MAX_DOCUMENT: usize = 8 * 1024 * 1024;
+/// Maximum decoded attachment size before rendering.
+pub const MAX_ATTACHMENT: usize = 16 * 1024 * 1024;
+/// Total expanded bytes allowed across an Office archive.
+pub const MAX_ARCHIVE_EXPANDED: usize = 64 * 1024 * 1024;
+/// Concrete resource parser and template validator.
+pub struct Validate;
+/// Construct a safe validation failure without infrastructure details.
+pub(crate) fn invalid(message: impl Into<String>) -> Error {
+    Error::Invalid(message.into())
+}
+/// Synthetic recipient context used for validation and draft previews.
+pub fn sample() -> Context {
+    Context {
+        from: "Training <training@example.test>".into(),
+        email: "alice@example.test".into(),
+        first_name: "Alice".into(),
+        last_name: "Example".into(),
+        position: "Analyst".into(),
+        url: "https://example.test/?rid=preview-sample".into(),
+        base_url: "https://example.test".into(),
+        rid: "preview-sample".into(),
+        tracking_url: "https://example.test/track?rid=preview-sample".into(),
+        tracker: "<img src=\"https://example.test/track?rid=preview-sample\"/>".into(),
+    }
+}
+/// Shared draft context for email and page previews with an explicit sample recipient.
+pub(crate) fn sample_for(recipient: &Recipient) -> Context {
+    Context {
+        email: recipient.email.clone(),
+        first_name: recipient.first_name.clone(),
+        last_name: recipient.last_name.clone(),
+        position: recipient.position.clone(),
+        ..sample()
+    }
+}
+/// Render within document limits, discarding partial output on failure.
+pub fn render(source: &str, context: &Context) -> Result<String, Error> {
+    if source.len() > MAX_DOCUMENT {
+        return Err(invalid("Document exceeds 8 MiB"));
+    }
+    let output =
+        template::render(source, context).map_err(|e| invalid(format!("Template error: {e}")))?;
+    if output.len() > MAX_DOCUMENT {
+        return Err(invalid("Rendered document exceeds 8 MiB"));
+    }
+    Ok(output)
+}
+/// Parse one mailbox and reject header delimiters.
+pub fn mailbox(value: &str) -> Result<Mailbox, Error> {
+    if value.contains(['\r', '\n', '\0']) {
+        return Err(invalid("Invalid email address"));
+    }
+    value.parse().map_err(|_| {
+        invalid(if value.is_empty() {
+            "No email address specified"
+        } else {
+            "Invalid email address"
+        })
+    })
+}
+/// Accept DNS names, IPv4 and bracketed IPv6, retaining the default SMTP port.
+pub fn smtp_address(value: &str) -> Result<(String, u16), Error> {
+    let url = url::Url::parse(&format!("smtp://{value}"))
+        .map_err(|_| invalid("Invalid SMTP host or port"))?;
+    if !url.username().is_empty()
+        || url.password().is_some()
+        || !matches!(url.path(), "" | "/")
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(invalid("Invalid SMTP host or port"));
+    }
+    let host = url
+        .host_str()
+        .ok_or_else(|| invalid("No SMTP Host specified"))?
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .to_owned();
+    let port = url.port().unwrap_or(25);
+    if port == 0 {
+        return Err(invalid("Invalid SMTP port"));
+    }
+    Ok((host, port))
+}
+impl Validator for Validate {
+    fn page_preview(
+        &self,
+        html: &str,
+        mode: PagePreview<'_>,
+    ) -> Result<(String, Vec<PageWarning>), Error> {
+        let context;
+        let mode = match mode {
+            PagePreview::Landing(recipient) => {
+                context = sample_for(recipient);
+                crate::landing::Mode::Landing {
+                    context: &context,
+                    endpoint: None,
+                }
+            }
+            PagePreview::Learning => crate::landing::Mode::Learning,
+        };
+        let document = crate::landing::render(html, mode)?;
+        Ok((document.html, document.warnings))
+    }
+    fn page_warnings(&self, html: &str) -> Result<Vec<PageWarning>, Error> {
+        Ok(crate::landing::render(
+            html,
+            crate::landing::Mode::Landing {
+                context: &sample(),
+                endpoint: None,
+            },
+        )?
+        .warnings)
+    }
+    fn validate(&self, resource: &Input) -> Result<Vec<PageWarning>, Error> {
+        let context = sample();
+        match &resource.content {
+            Content::Group(targets) => {
+                for (index, target) in targets.iter().enumerate() {
+                    mailbox(&target.email).map_err(|e| e.at(format!("targets.{index}.email")))?;
+                }
+            }
+            Content::Template(t) => {
+                for (field, source) in [("subject", &t.subject), ("text", &t.text)] {
+                    render(source, &context).map_err(|e| e.at(field))?;
+                }
+                crate::email_html::document(&render(&t.html, &context).map_err(|e| e.at("html"))?)
+                    .map_err(|e| e.at("html"))?;
+                if !t.envelope_sender.is_empty() {
+                    mailbox(&t.envelope_sender).map_err(|e| e.at("envelope_sender"))?;
+                }
+                let mut total = 0usize;
+                for (index, a) in t.attachments.iter().enumerate() {
+                    let bytes = attachment(a, &context)
+                        .map_err(|e| e.at(format!("attachments.{index}")))?;
+                    total = total.saturating_add(bytes.len());
+                    if total > MAX_ARCHIVE_EXPANDED {
+                        return Err(invalid("Attachments exceed 64 MiB").at("attachments"));
+                    }
+                }
+            }
+            Content::LearningPage(p) => {
+                return self
+                    .page_preview(&p.html, PagePreview::Learning)
+                    .map(|(_, warnings)| warnings)
+                    .map_err(|e| e.at("html"));
+            }
+            Content::Page(p) => {
+                let warnings = self.page_warnings(&p.html).map_err(|e| e.at("html"))?;
+                let redirect =
+                    render(&p.redirect_url, &context).map_err(|e| e.at("redirect_url"))?;
+                crate::landing::redirect(&redirect, "https://example.test")
+                    .map_err(|e| e.at("redirect_url"))?;
+                return Ok(warnings);
+            }
+            Content::Profile(p) => {
+                mailbox(&p.from_address).map_err(|e| e.at("from_address"))?;
+                smtp_address(&p.host).map_err(|e| e.at("host"))?;
+                for (index, header) in p.headers.iter().enumerate() {
+                    let key = render(&header.key, &context)
+                        .map_err(|e| e.at(format!("headers.{index}.key")))?;
+                    if key.is_empty() || !key.bytes().all(|c| (33..=126).contains(&c) && c != b':')
+                    {
+                        return Err(invalid("Invalid rendered header name")
+                            .at(format!("headers.{index}.key")));
+                    }
+                    let value = render(&header.value, &context)
+                        .map_err(|e| e.at(format!("headers.{index}.value")))?;
+                    if value.contains(['\r', '\n', '\0']) {
+                        return Err(invalid("Rendered header contains a line break")
+                            .at(format!("headers.{index}.value")));
+                    }
+                }
+            }
+        }
+        Ok(Vec::new())
+    }
+}
+/// Apply the legacy Office/text template rules without filesystem extraction.
+pub fn attachment(a: &Attachment, context: &Context) -> Result<Vec<u8>, Error> {
+    if a.content.len() > MAX_ATTACHMENT * 4 / 3 + 4 {
+        return Err(invalid("Attachment exceeds 16 MiB"));
+    }
+    let bytes = STANDARD
+        .decode(&a.content)
+        .map_err(|_| invalid("Invalid base64 attachment"))?;
+    let extension = a.name.rsplit('.').next().unwrap_or("");
+    match extension {
+        "txt" | "html" | "ics" => Ok(render(
+            std::str::from_utf8(&bytes).map_err(|_| invalid("Text attachment is not UTF-8"))?,
+            context,
+        )?
+        .into_bytes()),
+        "docx" | "docm" | "pptx" | "xlsx" | "xlsm" => {
+            let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
+                .map_err(|_| invalid("Invalid Office archive"))?;
+            if archive.len() > 4096 {
+                return Err(invalid("Office archive has too many entries"));
+            }
+            let mut output = zip::ZipWriter::new(Cursor::new(Vec::new()));
+            let mut total = 0usize;
+            let mut expanded_output = 0usize;
+            for index in 0..archive.len() {
+                let mut file = archive
+                    .by_index(index)
+                    .map_err(|_| invalid("Invalid Office archive entry"))?;
+                if file.enclosed_name().is_none() || file.size() > MAX_ARCHIVE_EXPANDED as u64 {
+                    return Err(invalid("Unsafe Office archive entry"));
+                }
+                let name = file
+                    .name()
+                    .map_err(|_| invalid("Invalid archive filename"))?
+                    .into_owned();
+                let mut body = Vec::new();
+                (&mut file)
+                    .take((MAX_ARCHIVE_EXPANDED - total + 1) as u64)
+                    .read_to_end(&mut body)
+                    .map_err(|_| invalid("Invalid compressed Office entry"))?;
+                total = total.saturating_add(body.len());
+                if total > MAX_ARCHIVE_EXPANDED {
+                    return Err(invalid("Office archive exceeds expanded size limit"));
+                }
+                if name.ends_with(".xml") || name.ends_with(".rels") {
+                    if body.len() > MAX_DOCUMENT {
+                        return Err(invalid("Office XML exceeds 8 MiB"));
+                    }
+                    let source = std::str::from_utf8(&body)
+                        .map_err(|_| invalid("Office XML is not UTF-8"))?;
+                    body = render(&office_expressions(source), context)?.into_bytes();
+                }
+                expanded_output = expanded_output.saturating_add(body.len());
+                if expanded_output > MAX_ARCHIVE_EXPANDED {
+                    return Err(invalid("Rendered Office archive exceeds 64 MiB"));
+                }
+                let options = zip::write::SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Deflated);
+                output
+                    .start_file(name, options)
+                    .map_err(|_| invalid("Cannot compose Office archive"))?;
+                output
+                    .write_all(&body)
+                    .map_err(|_| invalid("Cannot compose Office archive"))?;
+            }
+            Ok(output
+                .finish()
+                .map_err(|_| invalid("Cannot finish Office archive"))?
+                .into_inner())
+        }
+        _ => Ok(bytes),
+    }
+}
+
+// Word escapes tokens in relationship URLs. Decode only the legacy token pattern;
+// changing unrelated URL escapes would corrupt ordinary links.
+fn office_expressions(source: &str) -> String {
+    let mut output = String::with_capacity(source.len());
+    let mut rest = source;
+    while let Some(start) = rest.find("%7b%7b.") {
+        output.push_str(&rest[..start]);
+        let after = &rest[start + 7..];
+        let end = after.bytes().take_while(u8::is_ascii_alphabetic).count();
+        if end > 0 && after[end..].starts_with("%7d%7d") {
+            let name = &after[..end];
+            output.push_str("{{.");
+            output.push_str(name);
+            output.push_str("}}");
+            rest = &after[end + 6..];
+            continue;
+        }
+        output.push_str("%7b%7b.");
+        rest = after;
+    }
+    output.push_str(rest);
+    output
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn malformed_office_markers_do_not_hide_later_valid_markers() {
+        let malformed = "%7b%7b.".repeat(65_536);
+        assert_eq!(super::office_expressions(&malformed), malformed);
+        assert_eq!(
+            super::office_expressions("%7b%7b.12%7b%7b.FirstName%7d%7d%20"),
+            "%7b%7b.12{{.FirstName}}%20"
+        );
+        assert_eq!(
+            super::office_expressions("%7b%7b.First_Name%7d%7d"),
+            "%7b%7b.First_Name%7d%7d"
+        );
+    }
+}

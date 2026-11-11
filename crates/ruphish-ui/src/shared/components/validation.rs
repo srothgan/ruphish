@@ -1,8 +1,9 @@
 //! Accessible form feedback; only changed field diagnostics notify their controls.
+use crate::api::error::ApiError;
+use crate::shared::forms::state::FormState;
 use leptos::prelude::*;
 use ruphish_contracts::validation::Issue;
 use ruphish_domain::validation::{Code, Report};
-use ruphish_ui::{api_error::ApiError, form_state::FormState};
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::atomic::{AtomicUsize, Ordering},
@@ -230,14 +231,14 @@ impl ValidationBinding {
         self.invalid().then(|| self.id.get_value())
     }
     pub(crate) fn view(self) -> impl IntoView {
-        let i18n = ruphish_ui::localization::use_i18n();
+        let i18n = crate::localization::use_i18n();
         view! {
             <Show when=move || self.invalid()>
                 <span class="field-error" id=self.id.get_value()>
                     {move || {
                         self.error
                             .get()
-                            .map(|code| ruphish_ui::localization::validation_label(i18n, code))
+                            .map(|code| crate::localization::validation_label(i18n, code))
                     }}
                 </span>
             </Show>
@@ -247,7 +248,7 @@ impl ValidationBinding {
 
 #[component]
 pub(crate) fn ValidationSummary(form: FormValidation) -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
     view! {
         <div class="validation-summary" role="alert" aria-atomic="true">
             <Show when=move || !form.visible.with(Vec::is_empty)>
@@ -265,10 +266,7 @@ pub(crate) fn ValidationSummary(form: FormValidation) -> impl IntoView {
                             .map(|issue| {
                                 view! {
                                     <li>
-                                        {ruphish_ui::localization::validation_label(
-                                            i18n,
-                                            issue.code,
-                                        )}
+                                        {crate::localization::validation_label(i18n, issue.code)}
                                     </li>
                                 }
                             })

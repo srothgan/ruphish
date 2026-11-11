@@ -77,9 +77,9 @@ macro_rules! trs {
 /// Translate frontend import failures while preserving server explanations and support codes.
 pub fn import_error(
     context: leptos_i18n::I18nContext<Locale>,
-    error: &crate::import_state::ImportError,
+    error: &crate::resources::imports::preparation::ImportError,
 ) -> String {
-    use crate::import_state::ImportError;
+    use crate::resources::imports::preparation::ImportError;
     let message = match error {
         ImportError::InvalidJson => leptos_i18n::t_string!(
             context,
@@ -136,9 +136,9 @@ pub fn import_error(
 /// Render import facts without storing language-dependent state.
 pub fn import_note(
     context: leptos_i18n::I18nContext<Locale>,
-    note: &crate::import_state::ImportNote,
+    note: &crate::resources::imports::preparation::ImportNote,
 ) -> String {
-    use crate::import_state::ImportNote;
+    use crate::resources::imports::preparation::ImportNote;
     match note {
         ImportNote::Unsaved => leptos_i18n::t_string!(
             context,

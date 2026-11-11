@@ -11,7 +11,7 @@ Delivery endpoints expose SMTP work independently of participant interactions. R
 
 Read the queue state, attempt summaries, and recent campaign activity.
 
-**Request:** Query: campaign::request::DeliveryPage. **Response:** `200 OK`, `campaign_reads::Delivery` as `application/json`.
+**Request:** Query: campaign::request::DeliveryPage. **Response:** `200 OK`, `campaign::reads::Delivery` as `application/json`.
 
 ```sh
 curl --request GET "$RUPHISH_URL/api/campaigns/1/delivery?sort=email&order=asc&limit=50" \
@@ -173,7 +173,7 @@ Attempt states are `preparing`, `submitting`, `retry`, `accepted`, `failed`, `un
 
 Read one recipient’s attempt history and editable event records.
 
-**Request:** Query: campaign::request::HistoryPage. **Response:** `200 OK`, `campaign_reads::History` as `application/json`.
+**Request:** Query: campaign::request::HistoryPage. **Response:** `200 OK`, `campaign::reads::History` as `application/json`.
 
 This independent example shows a recipient whose delivery has completed. Optional `before_attempt` and `before_event` are exclusive cursors; pass the corresponding `next_attempt` and `next_event` values to continue each history.
 

@@ -7,7 +7,7 @@ import {
   starterNotices,
 } from '../../ruphish-http/src/starter_templates/catalog.mjs';
 await build({
-  entryPoints: [fileURLToPath(new URL('./demo-http.mjs', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('./demo/http.mjs', import.meta.url))],
   outfile: fileURLToPath(new URL('./generated/demo.js', import.meta.url)),
   bundle: true,
   format: 'esm',

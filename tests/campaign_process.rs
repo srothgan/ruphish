@@ -163,11 +163,11 @@ fn read(base: &str, path: &str) -> Value {
         .unwrap();
     let route = path.split('?').next().unwrap_or(path);
     if route.ends_with("/delivery") {
-        let snapshot: ruphish_contracts::campaign_reads::Delivery =
+        let snapshot: ruphish_contracts::campaign::reads::Delivery =
             serde_json::from_value(value.clone()).unwrap();
         assert_eq!(serde_json::to_value(snapshot).unwrap(), value);
     } else if route.ends_with("/history") {
-        let snapshot: ruphish_contracts::campaign_reads::History =
+        let snapshot: ruphish_contracts::campaign::reads::History =
             serde_json::from_value(value.clone()).unwrap();
         assert_eq!(serde_json::to_value(snapshot).unwrap(), value);
     }
@@ -290,7 +290,7 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
             && path.starts_with("/api/campaigns/")
             && actual.get("success").is_none()
         {
-            use ruphish_contracts::campaign_details as wire;
+            use ruphish_contracts::campaign::details as wire;
             fn round_trip<T: serde::de::DeserializeOwned + serde::Serialize>(value: &Value) {
                 let decoded: T = serde_json::from_value(value.clone()).unwrap();
                 assert_eq!(serde_json::to_value(decoded).unwrap(), *value);
@@ -299,7 +299,7 @@ fn captured_go_campaign_api_cases_run_against_the_new_executable() {
                 "/api/campaigns/summary" => round_trip::<wire::Summaries>(&actual),
                 path if path.ends_with("/summary") => round_trip::<wire::Summary>(&actual),
                 path if path.ends_with("/results") => {
-                    round_trip::<ruphish_contracts::campaign_reads::Results>(&actual)
+                    round_trip::<ruphish_contracts::campaign::reads::Results>(&actual)
                 }
                 "/api/campaigns/" if actual.is_array() => {
                     round_trip::<Vec<wire::Campaign>>(&actual)

@@ -4,10 +4,10 @@ use ruphish_contracts::{
     resources::request::{Group, Recipient},
     validation::{Code, Issue, ValidationReport},
 };
-use ruphish_ui::{
-    form_state::FormState,
-    recipient_editor::{RowDraft, Submission, initially_ordered},
-};
+use ruphish_ui::resources::recipients::rows::RowDraft;
+use ruphish_ui::resources::recipients::rows::Submission;
+use ruphish_ui::resources::recipients::rows::initially_ordered;
+use ruphish_ui::shared::forms::state::FormState;
 
 fn recipient(email: &str) -> Recipient {
     Recipient {

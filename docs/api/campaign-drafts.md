@@ -45,7 +45,7 @@ Attribution follows the [shared response fields](conventions.md#attribution). `s
 
 Persist an editable configuration.
 
-**Request:** campaign::request::DraftCreate. **Response:** `201 Created`, `campaign_reads::Draft` as `application/json`.
+**Request:** campaign::request::DraftCreate. **Response:** `201 Created`, `campaign::reads::Draft` as `application/json`.
 
 An Idempotency-Key is required. Reuse it only for a retry of the same typed creation request; use a fresh key for a distinct draft.
 
@@ -153,7 +153,7 @@ Example response:
 
 List at most 50 saved drafts after the numeric cursor.
 
-**Request:** Query: campaign::request::DraftPage. **Response:** `200 OK`, `campaign_reads::Drafts` as `application/json`.
+**Request:** Query: campaign::request::DraftPage. **Response:** `200 OK`, `campaign::reads::Drafts` as `application/json`.
 
 ```sh
 curl --request GET "$RUPHISH_URL/api/campaign-drafts?after=0" \
@@ -226,7 +226,7 @@ Example response:
 
 Read a saved configuration.
 
-**Request:** No body. **Response:** `200 OK`, `campaign_reads::Draft` as `application/json`.
+**Request:** No body. **Response:** `200 OK`, `campaign::reads::Draft` as `application/json`.
 
 ```sh
 curl --request GET "$RUPHISH_URL/api/campaign-drafts/1" \
@@ -292,7 +292,7 @@ Example response:
 
 Replace configuration and editing step at the supplied revision.
 
-**Request:** campaign::request::DraftWrite. **Response:** `200 OK`, `campaign_reads::Draft` as `application/json`.
+**Request:** campaign::request::DraftWrite. **Response:** `200 OK`, `campaign::reads::Draft` as `application/json`.
 
 A retry with the preceding revision and identical saved configuration and step returns the saved draft. Other stale writes fail with `412`. Launched drafts cannot be edited.
 
@@ -400,7 +400,7 @@ Example response:
 
 Review launch input for a draft without saving or launching it.
 
-**Request:** campaign::Create. **Response:** `200 OK`, `campaign_workflow::Review` as `application/json`.
+**Request:** campaign::Create. **Response:** `200 OK`, `campaign::workflow::Review` as `application/json`.
 
 This endpoint takes a complete campaign command, not a saved draft ID. It rejects a resolved launch time in the past. Review fields have the same meaning as [campaign preparation](campaigns.md).
 
@@ -503,7 +503,7 @@ Example response:
 
 Launch the unchanged saved configuration at its reviewed revision.
 
-**Request:** campaign::LaunchDraft. **Response:** `200 OK`, `campaign_details::Campaign` as `application/json`.
+**Request:** campaign::LaunchDraft. **Response:** `200 OK`, `campaign::details::Campaign` as `application/json`.
 
 Every selected resource needs its reviewed revision. The command must match the saved configuration. Draft identity owns launch idempotency; repeated launch resolves to its committed execution, and an independent Idempotency-Key does not create another execution.
 
@@ -680,7 +680,7 @@ Example response:
 
 Remove an editable draft at the supplied query revision.
 
-**Request:** Query: common::Revision. **Response:** `200 OK`, `campaign_reads::DraftRemoval` as `application/json`.
+**Request:** Query: common::Revision. **Response:** `200 OK`, `campaign::reads::DraftRemoval` as `application/json`.
 
 This independent example assumes the draft has not been launched. The precondition is a query parameter, not If-Match or a JSON body.
 

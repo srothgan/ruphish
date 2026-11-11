@@ -14,7 +14,7 @@ test('website and docs build; unrelated application changes do not', () => {
   }
   assert.equal(
     affectsWebsite([
-      'crates/ruphish-ui/src/overview.rs',
+      'crates/ruphish-ui/src/overview/page.rs',
       'README.md',
       'other/docs/index.md',
       'assets/dashboard.png',

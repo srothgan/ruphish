@@ -1,8 +1,9 @@
 //! Authentication and account use cases, independent of HTTP and SQL.
+use ruphish_domain::account;
+use ruphish_domain::account::password;
+pub use ruphish_domain::account::password::PasswordError;
+pub use ruphish_domain::account::preferences::Preferences;
 pub use ruphish_domain::account::{Account, AccountError, Edit, Identity, Role};
-pub use ruphish_domain::password::PasswordError;
-pub use ruphish_domain::preferences::Preferences;
-use ruphish_domain::{account, password};
 use std::sync::Arc;
 
 /// An application failure with safe public messages.

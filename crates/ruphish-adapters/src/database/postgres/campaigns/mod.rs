@@ -1,0 +1,930 @@
+//! Atomic campaign persistence and durable queue adapters.
+
+mod directory;
+mod drafts;
+mod queue;
+
+use crate::database::postgres::InsertId;
+
+mod idempotency {
+    crate::campaigns::idempotency::repository!(sqlx::PgConnection, true);
+}
+use ruphish_application::campaign::idempotency::Operation;
+
+use ruphish_application::datetime;
+use ruphish_application::{
+    auth::Identity,
+    campaign::*,
+    resources::{Content, Error, Kind, Recipient, Resource},
+};
+use sqlx::{PgConnection, PgPool, Row, postgres::PgRow};
+
+/// Campaign adapter shares the startup-owned database pool.
+#[derive(Clone)]
+pub struct Campaigns {
+    pub(super) pool: PgPool,
+    content_work: ruphish_application::content_work::ContentWork,
+}
+impl Campaigns {
+    /// Use the existing startup/migration lifetime.
+    pub fn new(pool: PgPool, content_work: ruphish_application::content_work::ContentWork) -> Self {
+        Self { pool, content_work }
+    }
+}
+fn storage(error: sqlx::Error) -> Error {
+    crate::database::postgres::resource_error(error)
+}
+fn text(row: &PgRow, key: &str) -> Result<String, Error> {
+    Ok(row
+        .try_get::<Option<String>, _>(key)
+        .map_err(storage)?
+        .unwrap_or_default())
+}
+fn stamp(seconds: i64) -> Result<String, Error> {
+    datetime::utc_seconds(seconds).map_err(|_| Error::Invalid("Invalid campaign date".into()))
+}
+const ZERO: &str = "0001-01-01T00:00:00Z";
+fn random() -> Result<String, Error> {
+    let mut bytes = [0; 16];
+    getrandom::fill(&mut bytes).map_err(|_| Error::Internal)?;
+    Ok(hex::encode(bytes))
+}
+async fn selection(c: &mut PgConnection, kind: Kind, s: &Selection) -> Result<Resource, Error> {
+    let resource = crate::database::postgres::resources::load(c, kind, s.id).await?;
+    if s.revision
+        .as_ref()
+        .is_some_and(|v| v != &resource.revision.to_string())
+    {
+        return Err(Error::Changed);
+    }
+    Ok(resource)
+}
+async fn prepare_authorized(
+    work: &ruphish_application::content_work::ContentWork,
+    c: &mut PgConnection,
+    input: &Create,
+    now: i64,
+    lock_domain: bool,
+) -> Result<Prepared, Error> {
+    crate::database::text::bounded(&input.name, 255)?;
+    let launch = ruphish_application::campaign::preparation::validate(input, now)?;
+    let mut groups = Vec::new();
+    let mut audience = ruphish_application::campaign::preparation::AudienceBuilder::default();
+    for s in &input.groups {
+        groups.push(audience.add_group(selection(c, Kind::Group, s).await?)?);
+    }
+    let ruphish_application::campaign::preparation::Audience {
+        recipients,
+        conflicts,
+        conflict_count,
+    } = audience.finish()?;
+    let template = selection(c, Kind::Template, &input.template).await?;
+    let page = selection(c, Kind::Page, &input.page).await?;
+    let profile = selection(c, Kind::Profile, &input.profile).await?;
+    if !crate::database::postgres::profile_diagnostics::eligible(c, profile.id).await? {
+        return Err(Error::ProfileTestRequired);
+    }
+    let policy = ruphish_application::campaign::preparation::policy(input, &page)?;
+    let learning = if let Some(id) = policy.learning_page_id {
+        Some(
+            selection(
+                c,
+                Kind::LearningPage,
+                &Selection {
+                    id,
+                    revision: input.learning_revision.clone(),
+                },
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    // Validate syntax using the same renderer; recipient-dependent failures are still
+    // checked before every individual submission.
+    let source = input.url.clone();
+    let url = work
+        .run(move || crate::campaigns::preparation::url(&source))
+        .await?;
+    let domain_id = crate::database::postgres::domains::eligible(c, &url, now, lock_domain).await?;
+    let (page, policy) =
+        crate::campaigns::preparation::validate_content(work, page, policy, url).await?;
+    Ok(Prepared {
+        learning,
+        domain_id,
+        conflicts,
+        conflict_count,
+        groups,
+        template,
+        page,
+        profile,
+        recipients,
+        policy,
+        launch,
+    })
+}
+pub(super) async fn snapshot(
+    c: &mut PgConnection,
+    id: i64,
+) -> Result<crate::campaigns::snapshot::Snapshot, Error> {
+    let value: Option<String> =
+        sqlx::query_scalar("SELECT frozen_content FROM campaigns WHERE id=$1")
+            .bind(id)
+            .fetch_one(&mut *c)
+            .await
+            .map_err(storage)?;
+    crate::campaigns::snapshot::Snapshot::decode(value.as_deref().ok_or(Error::Internal)?)
+}
+async fn load(c: &mut PgConnection, id: i64) -> Result<Campaign, Error> {
+    load_aggregate(c, id, true).await
+}
+async fn load_aggregate(
+    c: &mut PgConnection,
+    id: i64,
+    include_groups: bool,
+) -> Result<Campaign, Error> {
+    let row = sqlx::query("SELECT * FROM campaigns WHERE id=$1 ")
+        .bind(id)
+        .fetch_optional(&mut *c)
+        .await
+        .map_err(storage)?
+        .ok_or(Error::NotFound("Campaign"))?;
+    let frozen = snapshot(c, id).await?;
+    let resources = vec![frozen.template(), frozen.page(), frozen.sender()];
+    let mut results = Vec::new();
+    for r in sqlx::query("SELECT * FROM results WHERE campaign_id=$1 ORDER BY id")
+        .bind(id)
+        .fetch_all(&mut *c)
+        .await
+        .map_err(storage)?
+    {
+        results.push(RecipientResult {
+            id: r.try_get("id").map_err(storage)?,
+            rid: text(&r, "r_id")?,
+            recipient: Recipient {
+                email: text(&r, "email")?,
+                first_name: text(&r, "first_name")?,
+                last_name: text(&r, "last_name")?,
+                position: text(&r, "position")?,
+            },
+            status: text(&r, "status")?,
+            ip: String::new(),
+            latitude: 0.0,
+            longitude: 0.0,
+            reported: r
+                .try_get::<Option<bool>, _>("reported")
+                .map_err(storage)?
+                .unwrap_or(false),
+            send_date: text(&r, "send_date")?,
+            modified_date: text(&r, "modified_date")?,
+        });
+    }
+    let mut events = Vec::new();
+    for e in sqlx::query("SELECT * FROM event_history WHERE campaign_id=$1 ORDER BY id")
+        .bind(id)
+        .fetch_all(&mut *c)
+        .await
+        .map_err(storage)?
+    {
+        events.push(Event {
+            client: crate::participant_privacy::client(
+                e.try_get::<Option<String>, _>("client")
+                    .map_err(storage)?
+                    .as_deref(),
+            )?,
+            record: None,
+            recipient_id: e.try_get("recipient_id").map_err(storage)?,
+            id: e.try_get("id").map_err(storage)?,
+            email: text(&e, "email")?,
+            time: text(&e, "time")?,
+            message: text(&e, "message")?,
+            details: crate::participant_privacy::details(&text(&e, "details")?),
+        });
+    }
+    let policy = sqlx::query("SELECT * FROM ruphish_campaign_policy WHERE campaign_id=$1")
+        .bind(id)
+        .fetch_optional(&mut *c)
+        .await
+        .map_err(storage)?
+        .map(|p| {
+            Ok::<_, Error>(InteractionPolicy {
+                track_opens: p.try_get("track_opens").map_err(storage)?,
+                redirect_url: text(&p, "redirect_url")?,
+                learning_page_id: p.try_get("learning_page_id").map_err(storage)?,
+            })
+        })
+        .transpose()?;
+    let mut groups = Vec::new();
+    if include_groups {
+        let group_ids: Vec<i64> = sqlx::query_scalar(
+            "SELECT group_id FROM ruphish_campaign_groups WHERE campaign_id=$1 ORDER BY ordinal",
+        )
+        .bind(id)
+        .fetch_all(&mut *c)
+        .await
+        .map_err(storage)?;
+        for group_id in group_ids {
+            match crate::database::postgres::resources::load(c, Kind::Group, group_id).await {
+                Ok(r) => groups.push(r),
+                Err(Error::NotFound(_)) => {}
+                Err(e) => return Err(e),
+            }
+        }
+    }
+    Ok(Campaign {
+        attribution: crate::database::postgres::attribution::read_at(
+            &row,
+            "user_id",
+            Some(text(&row, "created_date")?),
+        )?,
+        groups,
+        id,
+        name: text(&row, "name")?,
+        status: CampaignStatus::from_stored(&text(&row, "status")?).ok_or(Error::Internal)?,
+        created: text(&row, "created_date")?,
+        launch: text(&row, "launch_date")?,
+        send_by: text(&row, "send_by_date")?,
+        completed: text(&row, "completed_date")?,
+        url: text(&row, "url")?,
+        resources,
+        results,
+        events,
+        policy,
+    })
+}
+async fn header(c: &mut PgConnection, id: i64) -> Result<CampaignHeader, Error> {
+    let row=sqlx::query("SELECT c.created_date,c.user_id,c.edited_by,c.edited_at,c.id,c.name,c.status,c.launch_date,c.send_by_date,c.url,c.template_id,c.page_id,c.smtp_id,c.frozen_content::json->'template'->>'name' AS template_name,c.frozen_content::json->'template'->'content'->>'subject' AS subject,c.frozen_content::json->'template'->'content'->>'envelope_sender' AS envelope_sender,c.frozen_content::json->'sender'->>'name' AS profile_name,c.frozen_content::json->'sender'->'content'->>'from_address' AS from_address,c.frozen_content::json->'page'->>'name' AS page_name,(SELECT count(*) FROM results r WHERE r.campaign_id=c.id) AS total,p.campaign_id AS policy_id,p.redirect_url,p.learning_page_id,p.track_opens FROM campaigns c LEFT JOIN ruphish_campaign_policy p ON p.campaign_id=c.id WHERE c.id=$1 ").bind(id).fetch_optional(&mut *c).await.map_err(storage)?.ok_or(Error::NotFound("Campaign"))?;
+    let policy_id: Option<i64> = row.try_get("policy_id").map_err(storage)?;
+    let domain: Option<(i64,bool,i64)> = sqlx::query_as("SELECT d.id,d.enabled,(SELECT eligible_until FROM ruphish_domain_policy WHERE id=d.id) FROM ruphish_campaign_domains cd JOIN ruphish_domains d ON d.id=cd.domain_id  WHERE cd.campaign_id=$1").bind(id).fetch_optional(&mut *c).await.map_err(storage)?;
+    let domain_id = domain.map(|d| d.0);
+    let domain_block = domain
+        .map_or(Err("domain_not_verified"), |(_, enabled, until)| {
+            ruphish_domain::domains::eligibility(
+                enabled,
+                until,
+                ruphish_application::datetime::now().as_second(),
+            )
+        })
+        .err()
+        .map(str::to_owned);
+    Ok(CampaignHeader {
+        attribution: crate::database::postgres::attribution::read_at(
+            &row,
+            "user_id",
+            Some(text(&row, "created_date")?),
+        )?,
+        domain_id,
+        domain_block,
+        id,
+        name: text(&row, "name")?,
+        status: CampaignStatus::from_stored(&text(&row, "status")?).ok_or(Error::Internal)?,
+        launch: text(&row, "launch_date")?,
+        send_by: text(&row, "send_by_date")?,
+        url: text(&row, "url")?,
+        template: CampaignResource {
+            id: row
+                .try_get::<Option<i64>, _>("template_id")
+                .map_err(storage)?
+                .unwrap_or(0),
+            name: row.try_get("template_name").map_err(storage)?,
+        },
+        page: CampaignResource {
+            id: row
+                .try_get::<Option<i64>, _>("page_id")
+                .map_err(storage)?
+                .unwrap_or(0),
+            name: row.try_get("page_name").map_err(storage)?,
+        },
+        profile: CampaignResource {
+            id: row
+                .try_get::<Option<i64>, _>("smtp_id")
+                .map_err(storage)?
+                .unwrap_or(0),
+            name: row.try_get("profile_name").map_err(storage)?,
+        },
+        subject: row.try_get("subject").map_err(storage)?,
+        profile_sender: row.try_get("from_address").map_err(storage)?,
+        template_sender: row.try_get("envelope_sender").map_err(storage)?,
+        total: row.try_get("total").map_err(storage)?,
+        policy: policy_id
+            .map(|_| {
+                Ok::<_, Error>(InteractionPolicy {
+                    track_opens: row.try_get("track_opens").map_err(storage)?,
+                    redirect_url: text(&row, "redirect_url")?,
+                    learning_page_id: row.try_get("learning_page_id").map_err(storage)?,
+                })
+            })
+            .transpose()?,
+    })
+}
+#[async_trait::async_trait]
+impl Repository for Campaigns {
+    async fn header(&self, caller: Identity, id: i64) -> Result<CampaignHeader, Error> {
+        let mut tx = self.pool.begin().await.map_err(storage)?;
+        crate::database::postgres::resources::authorize(&mut tx, caller, false).await?;
+        let value = header(&mut tx, id).await?;
+        tx.commit().await.map_err(storage)?;
+        Ok(value)
+    }
+
+    async fn directory(
+        &self,
+        caller: Identity,
+        filter: ruphish_application::campaign::directory::Filter,
+        after: ruphish_application::campaign::directory::Cursor,
+        limit: i64,
+    ) -> Result<ruphish_application::campaign::directory::Page, Error> {
+        self.management_directory(caller, filter, after, limit)
+            .await
+    }
+    async fn overview_filtered(
+        &self,
+        caller: Identity,
+        after: i64,
+        limit: i64,
+        completed: Option<bool>,
+    ) -> Result<CampaignOverview, Error> {
+        let mut tx = crate::database::postgres::locks::snapshot(&self.pool)
+            .await
+            .map_err(storage)?;
+        crate::database::postgres::resources::authorize(&mut tx, caller, false).await?;
+        let limit = limit.clamp(1, 200);
+        let mut ids: Vec<i64> = sqlx::query_scalar(
+            "SELECT id FROM campaigns WHERE id>$1 AND ($2=0 OR ($3=1 AND status='Completed') OR ($4=2 AND (status IS NULL OR status<>'Completed'))) ORDER BY id LIMIT $5",
+        )
+        .bind(after)
+        .bind(completed.map(|v|if v{1i32}else{2}).unwrap_or(0))
+        .bind(completed.map(|v|if v{1i32}else{2}).unwrap_or(0))
+        .bind(completed.map(|v|if v{1i32}else{2}).unwrap_or(0))
+        .bind(limit + 1)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(storage)?;
+        let has_more = ids.len() > limit as usize;
+        ids.truncate(limit as usize);
+        let next_after = ids.last().copied().filter(|_| has_more);
+        let mut result = Vec::new();
+        for id in ids {
+            result.push(header(&mut tx, id).await?);
+        }
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::postgres::commit_error(e)))?;
+        Ok(CampaignOverview {
+            items: result,
+            next_after,
+        })
+    }
+
+    async fn prepare(&self, caller: Identity, input: &Create, now: i64) -> Result<Prepared, Error> {
+        let mut tx = crate::database::postgres::locks::snapshot(&self.pool)
+            .await
+            .map_err(storage)?;
+        crate::database::postgres::resources::authorize_review(&mut tx, caller).await?;
+        let value = prepare_authorized(&self.content_work, &mut tx, input, now, false).await?;
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::postgres::commit_error(e)))?;
+        Ok(value)
+    }
+    async fn create(
+        &self,
+        caller: Identity,
+        input: Create,
+        now: i64,
+    ) -> Result<ruphish_application::attribution::Saved<Campaign>, Error> {
+        self.create_inner(caller, input, now, None).await
+    }
+    async fn get(&self, caller: Identity, id: i64) -> Result<Campaign, Error> {
+        let mut tx = crate::database::postgres::locks::snapshot(&self.pool)
+            .await
+            .map_err(storage)?;
+        crate::database::postgres::resources::authorize(&mut tx, caller, false).await?;
+        let v = load(&mut tx, id).await?;
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::postgres::commit_error(e)))?;
+        Ok(v)
+    }
+    async fn list(&self, caller: Identity) -> Result<Vec<Campaign>, Error> {
+        let mut tx = crate::database::postgres::locks::snapshot(&self.pool)
+            .await
+            .map_err(storage)?;
+        crate::database::postgres::resources::authorize(&mut tx, caller, false).await?;
+        let weight: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(
+            crate::campaigns::listing::QUERY.replace('?', "$1"),
+        ))
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(storage)?;
+        crate::campaigns::listing::check(weight)?;
+        let ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM campaigns  ORDER BY id")
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(storage)?;
+        let mut values = Vec::new();
+        for id in ids {
+            values.push(load_aggregate(&mut tx, id, false).await?);
+        }
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::postgres::commit_error(e)))?;
+        Ok(values)
+    }
+    async fn complete(&self, caller: Identity, id: i64, now: i64) -> Result<(), Error> {
+        let mut tx = crate::database::postgres::locks::write(&self.pool)
+            .await
+            .map_err(storage)?;
+        crate::database::postgres::resources::authorize(&mut tx, caller, true).await?;
+        sqlx::query("SELECT id FROM campaigns WHERE id=$1 FOR UPDATE")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(storage)?;
+        let exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM campaigns WHERE id=$1 )")
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(storage)?;
+        if !exists {
+            return Err(Error::NotFound("Campaign"));
+        }
+        complete_transaction(&mut tx, id, now).await?;
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::postgres::commit_error(e)))?;
+        Ok(())
+    }
+    async fn delete(&self, caller: Identity, id: i64) -> Result<(), Error> {
+        let mut tx = crate::database::postgres::locks::write(&self.pool)
+            .await
+            .map_err(storage)?;
+        crate::database::postgres::resources::authorize(&mut tx, caller, true).await?;
+        sqlx::query("SELECT id FROM campaigns WHERE id=$1 FOR UPDATE")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(storage)?;
+        let exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM campaigns WHERE id=$1 )")
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(storage)?;
+        if !exists {
+            return Err(Error::NotFound("Campaign"));
+        }
+        crate::database::postgres::events::remove_campaign(&mut tx, id)
+            .await
+            .map_err(storage)?;
+        for sql in [
+            "DELETE FROM ruphish_legacy_queue_issues WHERE mail_log_id IN (SELECT id FROM mail_logs WHERE campaign_id=$1)",
+            "DELETE FROM ruphish_delivery_attempt WHERE result_id IN (SELECT id FROM results WHERE campaign_id=$1)",
+            "DELETE FROM ruphish_delivery WHERE campaign_id=$1",
+            "DELETE FROM ruphish_event_receipts WHERE result_id IN (SELECT id FROM results WHERE campaign_id=$1)",
+            "DELETE FROM ruphish_campaign_domains WHERE campaign_id=$1",
+            "DELETE FROM ruphish_campaign_policy WHERE campaign_id=$1",
+            "DELETE FROM ruphish_campaign_groups WHERE campaign_id=$1",
+            "DELETE FROM events WHERE campaign_id=$1",
+            "DELETE FROM results WHERE campaign_id=$1",
+            "DELETE FROM mail_logs WHERE campaign_id=$1",
+            "DELETE FROM campaigns WHERE id=$1",
+        ] {
+            sqlx::query(sql)
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .map_err(storage)?;
+        }
+        // Idempotency tombstones intentionally survive deletion: replay cannot relaunch.
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::postgres::commit_error(e)))?;
+        Ok(())
+    }
+    async fn deliveries_sorted(
+        &self,
+        caller: Identity,
+        id: i64,
+        after: i64,
+        limit: i64,
+        sorting: Option<
+            ruphish_domain::pagination::SortedPage<ruphish_domain::pagination::DeliverySort>,
+        >,
+    ) -> Result<DeliveryView, Error> {
+        let mut tx = crate::database::postgres::locks::snapshot(&self.pool)
+            .await
+            .map_err(storage)?;
+        crate::database::postgres::resources::authorize(&mut tx, caller, false).await?;
+        let exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM campaigns WHERE id=$1 )")
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(storage)?;
+        if !exists {
+            return Err(Error::NotFound("Campaign"));
+        }
+        let campaign = header(&mut tx, id).await?;
+        let counts: Vec<(String, i64)> = sqlx::query_as(
+            "SELECT state,count(*) FROM ruphish_delivery WHERE campaign_id=$1 GROUP BY state",
+        )
+        .bind(id)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(storage)?;
+        let counts = counts
+            .into_iter()
+            .map(|(state, count)| {
+                Ok((
+                    DeliveryState::from_stored(&state).ok_or(Error::Internal)?,
+                    count,
+                ))
+            })
+            .collect::<Result<_, Error>>()?;
+        let limit = limit.clamp(1, 200);
+        let mut rows = if let Some(order) = &sorting {
+            let position = order.after.clone().unwrap_or_default();
+            let tail = crate::campaigns::sort::tail(
+                crate::campaigns::sort::delivery(order.sort),
+                order.order,
+                "postgres",
+            )
+            .replace("campaign_id", "campaign_id_key");
+            let sql = crate::sql::placeholders(
+                format!(
+                    "{} {tail}",
+                    r#"WITH data AS (SELECT d.*,r.r_id,r.email,1 AS kind,0 AS draft_id,d.result_id AS campaign_id_key,(SELECT count(*) FROM ruphish_delivery_attempt a WHERE a.result_id=d.result_id) AS attempt_count FROM ruphish_delivery d JOIN results r ON r.id=d.result_id WHERE d.campaign_id=?)"#
+                ),
+                true,
+            );
+            sqlx::query(sqlx::AssertSqlSafe(sql))
+                .bind(id)
+                .bind(i32::from(order.after.is_some()))
+                .bind(i32::from(position.present))
+                .bind(&position.text)
+                .bind(position.number)
+                .bind(position.kind)
+                .bind(position.draft)
+                .bind(position.id)
+                .bind(limit + 1)
+                .fetch_all(&mut *tx)
+                .await
+                .map_err(storage)?
+        } else {
+            sqlx::query("SELECT d.*,r.r_id,r.email,(SELECT count(*) FROM ruphish_delivery_attempt a WHERE a.result_id=d.result_id) AS attempt_count FROM ruphish_delivery d JOIN results r ON r.id=d.result_id WHERE d.campaign_id=$1 AND d.result_id>$2 ORDER BY d.result_id LIMIT $3").bind(id).bind(after).bind(limit + 1).fetch_all(&mut *tx).await.map_err(storage)?
+        };
+        let next_cursor = if let Some(order) = &sorting {
+            if rows.len() > limit as usize {
+                let row = &rows[limit as usize - 1];
+                let position = ruphish_domain::pagination::Position {
+                    present: row.try_get::<i64, _>("sort_present").map_err(storage)? != 0,
+                    text: row.try_get("sort_text").map_err(storage)?,
+                    number: row.try_get("sort_number").map_err(storage)?,
+                    kind: 1,
+                    draft: 0,
+                    id: row.try_get("result_id").map_err(storage)?,
+                };
+                Some(serde_json::to_string(&order.cursor(position)).map_err(|_| Error::Internal)?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let has_more = rows.len() > limit as usize;
+        rows.truncate(limit as usize);
+        let mut items = Vec::new();
+        for row in rows {
+            let result_id = row.try_get("result_id").map_err(storage)?;
+            let mut attempts = Vec::new();
+            for a in sqlx::query("SELECT * FROM ruphish_delivery_attempt WHERE result_id=$1 ORDER BY generation DESC LIMIT 100").bind(result_id).fetch_all(&mut *tx).await.map_err(storage)? {
+                attempts.push(decode_attempt(a)?);
+            }
+            items.push(DeliveryItem {
+                attempt_count: row.try_get("attempt_count").map_err(storage)?,
+                id: result_id,
+                rid: text(&row, "r_id")?,
+                email: text(&row, "email")?,
+                state: DeliveryState::from_stored(&text(&row, "state")?).ok_or(Error::Internal)?,
+                due: row.try_get("due").map_err(storage)?,
+                retries: row.try_get("retries").map_err(storage)?,
+                generation: row.try_get("generation").map_err(storage)?,
+                code: text(&row, "code")?,
+                attempts,
+            });
+        }
+        let mut activity = Vec::new();
+        for e in sqlx::query(
+            "SELECT * FROM event_history WHERE campaign_id=$1 ORDER BY id DESC LIMIT 50",
+        )
+        .bind(id)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(storage)?
+        {
+            activity.push(Event {
+                client: crate::participant_privacy::client(
+                    e.try_get::<Option<String>, _>("client")
+                        .map_err(storage)?
+                        .as_deref(),
+                )?,
+                record: None,
+                recipient_id: e.try_get("recipient_id").map_err(storage)?,
+                id: e.try_get("id").map_err(storage)?,
+                email: text(&e, "email")?,
+                time: text(&e, "time")?,
+                message: text(&e, "message")?,
+                details: crate::participant_privacy::details(&text(&e, "details")?),
+            });
+        }
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::postgres::commit_error(e)))?;
+        Ok(DeliveryView {
+            next_cursor,
+            next_after: items.last().map(|r| r.id).filter(|_| has_more),
+            activity,
+            campaign,
+            counts,
+            items,
+        })
+    }
+    async fn recipient_history(
+        &self,
+        caller: Identity,
+        campaign: i64,
+        result: i64,
+        before_attempt: Option<i64>,
+        before_event: Option<i64>,
+    ) -> Result<RecipientHistory, Error> {
+        let mut tx = crate::database::postgres::locks::snapshot(&self.pool)
+            .await
+            .map_err(storage)?;
+        crate::database::postgres::resources::authorize(&mut tx, caller, false).await?;
+        let email: String = sqlx::query_scalar("SELECT r.email FROM results r JOIN campaigns c ON c.id=r.campaign_id WHERE c.id=$1 AND r.id=$2")
+            .bind(campaign).bind(result).fetch_optional(&mut *tx).await.map_err(storage)?.ok_or(Error::NotFound("Recipient"))?;
+        let mut rows = sqlx::query("SELECT * FROM ruphish_delivery_attempt WHERE result_id=$1 AND ($2::bigint IS NULL OR generation<$3) ORDER BY generation DESC LIMIT 101")
+            .bind(result).bind(before_attempt).bind(before_attempt).fetch_all(&mut *tx).await.map_err(storage)?;
+        let more_attempts = rows.len() > 100;
+        rows.truncate(100);
+        let mut attempts = Vec::new();
+        for a in rows {
+            attempts.push(decode_attempt(a)?);
+        }
+        let mut rows = sqlx::query("SELECT * FROM event_history WHERE campaign_id=$1 AND recipient_id=$2 AND ($3::bigint IS NULL OR id<$4) ORDER BY id DESC LIMIT 101")
+            .bind(campaign).bind(result).bind(before_event).bind(before_event).fetch_all(&mut *tx).await.map_err(storage)?;
+        let more_events = rows.len() > 100;
+        rows.truncate(100);
+        let mut events = Vec::new();
+        for e in rows {
+            let record = crate::database::postgres::event_edit::load(
+                &mut tx,
+                campaign,
+                result,
+                e.try_get("id").map_err(storage)?,
+            )
+            .await?;
+            events.push(Event {
+                client: crate::participant_privacy::client(
+                    e.try_get::<Option<String>, _>("client")
+                        .map_err(storage)?
+                        .as_deref(),
+                )?,
+                record: Some(record.clone()),
+                recipient_id: e.try_get("recipient_id").map_err(storage)?,
+                id: e.try_get("id").map_err(storage)?,
+                email: text(&e, "email")?,
+                time: record.current.time.clone(),
+                message: record.current.kind.label().to_owned(),
+                details: crate::participant_privacy::details(&text(&e, "details")?),
+            });
+        }
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::postgres::commit_error(e)))?;
+        Ok(RecipientHistory {
+            result_id: result,
+            email,
+            next_attempt: attempts
+                .last()
+                .map(|a| a.generation)
+                .filter(|_| more_attempts),
+            next_event: events.last().map(|e| e.id).filter(|_| more_events),
+            attempts,
+            events,
+        })
+    }
+    async fn resolve(
+        &self,
+        caller: Identity,
+        campaign: i64,
+        result: i64,
+        generation: i64,
+        action: &str,
+        now: i64,
+    ) -> Result<(), Error> {
+        let mut tx = crate::database::postgres::locks::write(&self.pool)
+            .await
+            .map_err(storage)?;
+        crate::database::postgres::resources::authorize(&mut tx, caller, true).await?;
+        sqlx::query("SELECT id FROM campaigns WHERE id=$1  FOR UPDATE")
+            .bind(campaign)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(storage)?;
+        let row=sqlx::query("SELECT d.state,d.generation,c.smtp_id FROM ruphish_delivery d JOIN campaigns c ON c.id=d.campaign_id WHERE d.result_id=$1 AND d.campaign_id=$2  AND c.status!='Completed'").bind(result).bind(campaign).fetch_optional(&mut *tx).await.map_err(storage)?.ok_or(Error::NotFound("Delivery"))?;
+        if row.try_get::<i64, _>("generation").map_err(storage)? != generation {
+            return Err(Error::Changed);
+        }
+        let state = DeliveryState::from_stored(&text(&row, "state")?).ok_or(Error::Internal)?;
+        let target =
+            resolve_delivery(state, action).map_err(|error| Error::Invalid(error.to_string()))?;
+        sqlx::query("UPDATE ruphish_delivery SET state=$1,generation=generation+1,lease_until=0,due=$2,retries=0,code='' WHERE result_id=$3").bind(target.as_str()).bind(now).bind(result).execute(&mut *tx).await.map_err(storage)?;
+        sqlx::query("DELETE FROM ruphish_profile_cooldown WHERE profile_id=$1")
+            .bind(row.try_get::<i64, _>("smtp_id").map_err(storage)?)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+        sqlx::query("UPDATE results SET status=CASE WHEN status IN ('Email Opened','Clicked Link','Submitted Data') THEN status ELSE $1 END,send_date=$2,modified_date=$3 WHERE id=$4").bind(if target == DeliveryState::Accepted {"Email Sent"} else {"Sending"}).bind(stamp(now)?).bind(stamp(now)?).bind(result).execute(&mut *tx).await.map_err(storage)?;
+        if target == DeliveryState::Accepted {
+            let inserted = sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id) SELECT r.campaign_id,r.email,$1,'email_sent',$2,r.id FROM results r WHERE r.id=$3 AND NOT EXISTS(SELECT 1 FROM event_history e WHERE e.campaign_id=r.campaign_id AND e.recipient_id=r.id AND e.message='Email Sent') RETURNING id")
+                .bind(stamp(now)?)
+                .bind(serde_json::json!({"action":action,"actor":caller.id}).to_string())
+                .bind(result).fetch_optional(&mut *tx).await.map_err(storage)?;
+            if let Some(inserted) = inserted {
+                crate::database::postgres::events::publish(
+                    &mut tx,
+                    inserted.insert_id().map_err(storage)?,
+                    "application",
+                )
+                .await
+                .map_err(storage)?;
+            }
+        }
+        let inserted=sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata,recipient_id) SELECT campaign_id,email,$1,'delivery_reconciled',$2,id FROM results WHERE id=$3 RETURNING id").bind(stamp(now)?).bind(serde_json::json!({"action":action,"actor":caller.id}).to_string()).bind(result).fetch_one(&mut *tx).await.map_err(storage)?;
+        crate::database::postgres::events::publish(
+            &mut tx,
+            inserted.insert_id().map_err(storage)?,
+            "application",
+        )
+        .await
+        .map_err(storage)?;
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::postgres::commit_error(e)))?;
+        Ok(())
+    }
+}
+
+fn decode_attempt(a: PgRow) -> Result<Attempt, Error> {
+    Ok(Attempt {
+        generation: a.try_get("generation").map_err(storage)?,
+        started: a.try_get("started").map_err(storage)?,
+        finished: a.try_get("finished").map_err(storage)?,
+        state: AttemptState::from_stored(&text(&a, "state")?).ok_or(Error::Internal)?,
+        stage: text(&a, "stage")?,
+        smtp_code: a.try_get("smtp_code").map_err(storage)?,
+        message_id: text(&a, "message_id")?,
+    })
+}
+
+impl Campaigns {
+    async fn create_inner(
+        &self,
+        caller: Identity,
+        mut input: Create,
+        now: i64,
+        draft: Option<(i64, i64)>,
+    ) -> Result<ruphish_application::attribution::Saved<Campaign>, Error> {
+        let mut tx = crate::database::postgres::locks::write(&self.pool)
+            .await
+            .map_err(storage)?;
+        crate::database::postgres::resources::authorize(&mut tx, caller, true).await?;
+        if draft.is_some() {
+            input.idempotency = None;
+        }
+        if let Some((id, revision)) = draft {
+            let saved = drafts::launching(&mut tx, id).await?;
+            if let Some(campaign_id) = saved.campaign_id {
+                let record = load(&mut tx, campaign_id).await?;
+                return crate::database::postgres::attribution::saved(&mut tx, record).await;
+            }
+            ruphish_application::campaign::drafts::validate_launch(&saved, revision, &input, now)?;
+        }
+        if let Some(request) = &input.idempotency
+            && let Some(id) =
+                idempotency::lookup(&mut tx, caller.id, Operation::Campaign, request).await?
+        {
+            let record = load(&mut tx, id).await?;
+            return crate::database::postgres::attribution::saved(&mut tx, record).await;
+        }
+        let p = prepare_authorized(&self.content_work, &mut tx, &input, now, true).await?;
+        let created = stamp(now)?;
+        let launch = stamp(p.launch)?;
+        let end = input.send_by.map(stamp).transpose()?.unwrap_or(ZERO.into());
+        let status = if p.launch <= now {
+            "In progress"
+        } else {
+            "Queued"
+        };
+        let id=sqlx::query("INSERT INTO campaigns(user_id,name,created_date,launch_date,send_by_date,completed_date,template_id,page_id,status,smtp_id,url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id").bind(caller.id).bind(&input.name).bind(&created).bind(&launch).bind(end).bind(ZERO).bind(p.template.id).bind(p.page.id).bind(status).bind(p.profile.id).bind(&input.url).fetch_one(&mut *tx).await.map_err(storage)?.insert_id().map_err(storage)?;
+        crate::database::postgres::attribution::edit(&mut tx, "campaigns", id, caller.id, &created)
+            .await?;
+        let frozen = crate::campaigns::snapshot::Snapshot::capture(
+            &p.template,
+            &p.page,
+            &p.profile,
+            p.learning.as_ref(),
+        )?;
+        let learning_public_id = p.learning.as_ref().map(|_| random()).transpose()?;
+        sqlx::query("UPDATE campaigns SET frozen_content=$1,learning_public_id=$2 WHERE id=$3")
+            .bind(frozen.encode()?)
+            .bind(learning_public_id)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+        sqlx::query("INSERT INTO ruphish_campaign_domains VALUES($1,$2)")
+            .bind(id)
+            .bind(p.domain_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+        sqlx::query("INSERT INTO ruphish_campaign_policy(campaign_id,redirect_url,learning_page_id,track_opens) VALUES($1,$2,$3,$4)")
+            .bind(id)
+            .bind(&p.policy.redirect_url)
+            .bind(p.policy.learning_page_id)
+            .bind(p.policy.track_opens)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+        let inserted=sqlx::query("INSERT INTO events(campaign_id,email,time,kind,metadata) VALUES($1,'',$2,'campaign_created','') RETURNING id").bind(id).bind(&created).fetch_one(&mut *tx).await.map_err(storage)?;
+        crate::database::postgres::events::publish(
+            &mut tx,
+            inserted.insert_id().map_err(storage)?,
+            "application",
+        )
+        .await
+        .map_err(storage)?;
+        for (index, r) in p.recipients.iter().enumerate() {
+            let due = send_date(p.launch, input.send_by, index, p.recipients.len())
+                .ok_or_else(|| Error::Invalid("Campaign schedule overflow".into()))?;
+            let rid = loop {
+                let candidate = random()?;
+                let exists:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM results WHERE r_id=$1 UNION ALL SELECT 1 FROM email_requests WHERE r_id=$2)").bind(&candidate).bind(&candidate).fetch_one(&mut *tx).await.map_err(storage)?;
+                if !exists {
+                    break candidate;
+                }
+            };
+            let result=sqlx::query("INSERT INTO results(campaign_id,user_id,r_id,email,first_name,last_name,position,status,ip,latitude,longitude,send_date,reported,modified_date) VALUES($1,$2,$3,$4,$5,$6,$7,$8, '',0,0,$9,FALSE,$10) RETURNING id").bind(id).bind(caller.id).bind(rid).bind(&r.email).bind(&r.first_name).bind(&r.last_name).bind(&r.position).bind(if due<=now {"Sending"} else {"Scheduled"}).bind(stamp(due)?).bind(&created).fetch_one(&mut *tx).await.map_err(storage)?.insert_id().map_err(storage)?;
+            sqlx::query("INSERT INTO ruphish_delivery(result_id,campaign_id,state,due) VALUES($1,$2,'ready',$3)").bind(result).bind(id).bind(due).execute(&mut *tx).await.map_err(storage)?;
+        }
+        if let Some(request) = &input.idempotency {
+            idempotency::remember(&mut tx, caller.id, Operation::Campaign, request, id).await?;
+        }
+        for (index, g) in p.groups.iter().enumerate() {
+            sqlx::query("INSERT INTO ruphish_campaign_groups VALUES($1,$2,$3)")
+                .bind(id)
+                .bind(index as i64)
+                .bind(g.id)
+                .execute(&mut *tx)
+                .await
+                .map_err(storage)?;
+        }
+        if let Some((draft_id, _)) = draft {
+            sqlx::query("UPDATE ruphish_campaign_drafts SET campaign_id=$1,revision=revision+1,modified=$2 WHERE id=$3 ").bind(id).bind(now).bind(draft_id).execute(&mut *tx).await.map_err(storage)?;
+            sqlx::query("UPDATE ruphish_campaign_drafts SET edited_by=$1,edited_at=$2 WHERE id=$3")
+                .bind(caller.id)
+                .bind(&created)
+                .bind(draft_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(storage)?;
+        }
+        let campaign = load(&mut tx, id).await?;
+        let campaign = crate::database::postgres::attribution::saved(&mut tx, campaign).await?;
+        tx.commit()
+            .await
+            .map_err(|e| Error::Storage(crate::database::postgres::commit_error(e)))?;
+        Ok(campaign)
+    }
+}
+
+/// Shared completion transition for campaign and installation-wide actions.
+pub(super) async fn complete_transaction(
+    c: &mut PgConnection,
+    id: i64,
+    now: i64,
+) -> Result<(), Error> {
+    sqlx::query("UPDATE campaigns SET status='Completed',completed_date=$1 WHERE id=$2 AND (status IS NULL OR status!='Completed')").bind(stamp(now)?).bind(id).execute(&mut *c).await.map_err(storage)?;
+    sqlx::query("UPDATE ruphish_delivery_attempt SET state='cancelled',finished=$1 WHERE state='preparing' AND result_id IN (SELECT result_id FROM ruphish_delivery WHERE campaign_id=$2 AND state='preparing')").bind(now).bind(id).execute(&mut *c).await.map_err(storage)?;
+    sqlx::query("UPDATE ruphish_delivery SET state='cancelled',generation=generation+1,lease_until=0 WHERE campaign_id=$1 AND state IN ('ready','retry','preparing','blocked')").bind(id).execute(&mut *c).await.map_err(storage)?;
+    sqlx::query("DELETE FROM mail_logs WHERE campaign_id=$1")
+        .bind(id)
+        .execute(&mut *c)
+        .await
+        .map_err(storage)?;
+    Ok(())
+}

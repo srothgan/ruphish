@@ -1,4 +1,9 @@
 //! Destination policy applied to resolved socket addresses, before connecting.
+
+#[cfg(test)]
+#[path = "tests/outbound.rs"]
+pub(crate) mod tests;
+
 use crate::resources::invalid;
 use ipnet::IpNet;
 use ruphish_application::resources::Error;
@@ -212,7 +217,3 @@ pub(crate) fn public_ip(address: IpAddr) -> bool {
     .iter()
     .any(|n| n.parse::<ipnet::IpNet>().is_ok_and(|n| n.contains(&ip)))
 }
-
-#[cfg(test)]
-#[path = "tests/outbound.rs"]
-mod tests;

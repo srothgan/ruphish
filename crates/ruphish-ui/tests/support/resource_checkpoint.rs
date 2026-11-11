@@ -1,5 +1,6 @@
-use ruphish_contracts::resource_details::{self, Kind};
-use ruphish_ui::resource_state::Confirmed;
+use ruphish_contracts::resources::details as resource_details;
+use ruphish_contracts::resources::details::Kind;
+use ruphish_ui::resources::draft::Confirmed;
 use serde_json::{Value, json};
 
 pub fn checkpoint(kind: Kind, fields: Value, revision: &str) -> Confirmed {

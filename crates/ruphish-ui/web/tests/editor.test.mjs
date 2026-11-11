@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { undo, redo } from '@codemirror/commands';
 import { CompletionContext } from '@codemirror/autocomplete';
-import { createState, templateCompletions } from '../state.mjs';
+import { createState, templateCompletions } from '../editor/state.mjs';
 
 const fixture = JSON.parse(
   fs.readFileSync(

@@ -1,5 +1,5 @@
+use crate::tr;
 use leptos::{html, prelude::*};
-use ruphish_ui::tr;
 use wasm_bindgen::{JsCast, prelude::*};
 
 #[wasm_bindgen(module = "/web/anchored-panel.mjs")]
@@ -15,7 +15,7 @@ pub(crate) fn InfoPopover(
     #[prop(into)] label: Signal<String>,
     #[prop(into)] explanation: Signal<String>,
 ) -> impl IntoView {
-    let i18n = ruphish_ui::localization::use_i18n();
+    let i18n = crate::localization::use_i18n();
 
     let (trigger, panel) = anchored_nodes();
     let heading_id = format!("{id}-heading");

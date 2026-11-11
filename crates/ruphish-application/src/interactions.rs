@@ -1,6 +1,6 @@
 //! Typed public interactions, with no representation for submitted field values.
 use crate::resources::Error;
-pub use ruphish_domain::client::Info as ClientInfo;
+pub use ruphish_domain::events::client_info::Info as ClientInfo;
 
 /// Public request purpose, independently of delivery status.
 #[derive(Clone)]

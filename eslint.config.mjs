@@ -51,7 +51,7 @@ export default [
     languageOptions: { globals: globals.node },
   },
   {
-    files: ['crates/ruphish-ui/web/*.mjs', 'website/src/**/*.{js,mjs}'],
+    files: ['crates/ruphish-ui/web/**/*.mjs', 'website/src/**/*.{js,mjs}'],
     ignores: ['crates/ruphish-ui/web/build*.mjs'],
     languageOptions: { globals: globals.browser },
   },
@@ -65,7 +65,7 @@ export default [
     languageOptions: { globals: globals.browser },
   },
   {
-    files: ['crates/ruphish-adapters/src/landing-collector.js'],
+    files: ['crates/ruphish-adapters/src/landing/collector.js'],
     languageOptions: {
       sourceType: 'script',
       // The Rust landing-page renderer supplies these two bindings.

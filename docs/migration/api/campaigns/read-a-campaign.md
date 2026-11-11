@@ -13,7 +13,7 @@ Update the campaign parser for shared visibility, nullable dates, snapshots, and
 | --- | --- | --- |
 | Operation | `GET /api/campaigns/{id}` | `GET /api/campaigns/{id}` |
 | Success | `200 OK` | `200 OK` |
-| Response type | `models.Campaign` | `campaign_details::Campaign` |
+| Response type | `models.Campaign` | `campaign::details::Campaign` |
 
 Use a Bearer API key. The [common changes](../common-contract-changes.md) explain shared access, error handling, metadata, and example conventions.
 

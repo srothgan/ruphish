@@ -1,6 +1,7 @@
 //! Real Leptos owners/effects; no browser automation or arbitrary sleeps.
 use leptos::prelude::*;
-use ruphish_ui::{recipient_history::History, view_tasks::ViewTasks};
+use ruphish_ui::campaigns::delivery::history::History;
+use ruphish_ui::shared::tasks::ViewTasks;
 use std::{cell::Cell, rc::Rc};
 use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::JsFuture;
@@ -115,7 +116,7 @@ async fn closing_a_dialog_does_not_cancel_its_user_list_reload_or_history_retry(
 
 #[wasm_bindgen_test]
 async fn mounted_history_rejects_a_delayed_terminal_callback_after_an_edit() {
-    use ruphish_ui::api_error::ApiError;
+    use ruphish_ui::api::error::ApiError;
     let _ = any_spawner::Executor::init_wasm_bindgen();
     for status in [403, 404] {
         let owner = Owner::new();
@@ -208,7 +209,7 @@ async fn leaving_the_page_cancels_pending_work_and_prevents_late_state_writes() 
 
 #[wasm_bindgen_test]
 fn successful_http_status_does_not_hide_broken_json() {
-    use ruphish_ui::browser_http::decode;
+    use ruphish_ui::api::transport::decode;
     for body in ["", "{", "<html>upstream error</html>"] {
         assert!(decode(200, body).is_err());
     }
@@ -226,7 +227,8 @@ extern "C" {
 
 #[wasm_bindgen_test]
 async fn production_transport_crosses_wasm_boundary_and_marks_failed_writes_uncertain() {
-    use ruphish_ui::browser_http::{resource_request, send};
+    use ruphish_ui::api::transport::resource_request;
+    use ruphish_ui::api::transport::send;
     struct Restore(js_sys::Function);
     impl Drop for Restore {
         fn drop(&mut self) {

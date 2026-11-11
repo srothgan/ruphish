@@ -1,6 +1,6 @@
 // Exercise the real demo dispatcher for Rust contract validation; stdout is synthetic JSON only.
 import { readFileSync } from 'node:fs';
-import { createDemoApi } from '../crates/ruphish-ui/web/demo-api.mjs';
+import { createDemoApi } from '../crates/ruphish-ui/web/demo/api.mjs';
 const memory = new Map();
 const api = createDemoApi({
   now: 1793016000,

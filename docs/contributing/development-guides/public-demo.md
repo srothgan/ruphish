@@ -89,12 +89,12 @@ Temporary campaign drafts preserve the normal UI save-and-redirect behavior with
 ## Code ownership
 
 - `assets/website-demo/`: the single scenario source, materializer, SQL seeder, and existing screenshot recorder.
-- `crates/ruphish-ui/web/demo-api.mjs`: explicit demo endpoints, read projections, and nonpersistent responses.
-- `crates/ruphish-ui/web/demo-http.mjs` and `build-demo.mjs`: browser-only request executor and generated bundle.
-- `crates/ruphish-ui/web/demo-export.mjs`: synthetic CSV/XLSX serialization with production export columns.
-- `crates/ruphish-ui/web/demo-csv.mjs`: bounded, nonpersistent CSV review for the demo; `demo/recipient-csv-cases.json` supplies shared real-server/demo acceptance expectations.
+- `crates/ruphish-ui/web/demo/api.mjs`: explicit demo endpoints, read projections, and nonpersistent responses.
+- `crates/ruphish-ui/web/demo/http.mjs` and `build-demo.mjs`: browser-only request executor and generated bundle.
+- `crates/ruphish-ui/web/demo/export.mjs`: synthetic CSV/XLSX serialization with production export columns.
+- `crates/ruphish-ui/web/demo/csv.mjs`: bounded, nonpersistent CSV review for the demo; `demo/recipient-csv-cases.json` supplies shared real-server/demo acceptance expectations.
 - `crates/ruphish-ui/src/shared/components/toasts.rs`: shared demo notifications; feature modules announce success only after their normal response validation.
-- `crates/ruphish-ui/src/account.rs`, locale files, and shared CSS: demo notice, credentials, accessible feedback, and translations.
+- `crates/ruphish-ui/src/account/pages.rs`, locale files, and shared CSS: demo notice, credentials, accessible feedback, and translations.
 - `demo/tests/` and `crates/ruphish-ui/tests/demo_contracts.rs`: independent demo functionality, real DTO decoding, static routing, and installed SQLite seed/reopen checks.
 - `.github/workflows/demo.yml`: dedicated demo path selection, contracts, optimized build, Cargo cache, deployment artifact and gate. Normal application checks remain in `.github/workflows/validation.yml`. Shared dataset changes select the product checks through `.github/paths.yml`.
 

@@ -1,5 +1,6 @@
 //! One transaction algorithm shared by the three SQL providers.
-use ruphish_domain::event_edit::{Fact, Presence};
+use ruphish_domain::events::edit::Fact;
+use ruphish_domain::events::edit::Presence;
 
 pub(crate) fn fact(time: String, message: String, details: &str) -> Fact {
     let safe: serde_json::Value =

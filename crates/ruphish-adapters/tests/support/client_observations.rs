@@ -1,6 +1,9 @@
 //! Coarse categories persist across providers, edits, retries and exports.
 use super::*;
-use ruphish_domain::client::{Browser, Device, Info, OperatingSystem};
+use ruphish_domain::events::client_info::Browser;
+use ruphish_domain::events::client_info::Device;
+use ruphish_domain::events::client_info::Info;
+use ruphish_domain::events::client_info::OperatingSystem;
 
 pub(super) async fn exercise(
     db: &Database,
@@ -97,12 +100,12 @@ pub(super) async fn exercise(
             actor,
             campaign.id,
             recipient.id,
-            ruphish_domain::event_edit::Change {
+            ruphish_domain::events::edit::Change {
                 request_id: "client-event-edit-1".into(),
                 event_id: Some(submitted.id),
                 revision: 0,
-                action: ruphish_domain::event_edit::Action::Edit,
-                value: Some(ruphish_domain::event_edit::Value {
+                action: ruphish_domain::events::edit::Action::Edit,
+                value: Some(ruphish_domain::events::edit::Value {
                     time: submitted.time.clone(),
                     kind: ruphish_domain::events::Kind::LinkClicked,
                     presence: Default::default(),

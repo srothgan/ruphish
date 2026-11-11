@@ -10,11 +10,11 @@ const interaction = await readFile(
   'utf8',
 );
 const collector = await readFile(
-  new URL('../../../ruphish-adapters/src/landing-collector.js', import.meta.url),
+  new URL('../../../ruphish-adapters/src/landing/collector.js', import.meta.url),
   'utf8',
 );
 const messages = await readFile(
-  new URL('../../../ruphish-adapters/src/landing-locales.json', import.meta.url),
+  new URL('../../../ruphish-adapters/src/landing/locales.json', import.meta.url),
   'utf8',
 );
 const tick = () => new Promise((resolve) => setImmediate(resolve));

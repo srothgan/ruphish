@@ -13,7 +13,7 @@ Adapt this operation to shared resources and the current sending profile contrac
 | --- | --- | --- |
 | Operation | `GET /api/smtp/` | `GET /api/smtp/` |
 | Success | `200 OK` | `200 OK` |
-| Response type | `[]models.SMTP` | `Vec<resource_details::Resource<resource_details::Profile>>` |
+| Response type | `[]models.SMTP` | `Vec<resources::details::Resource<resources::details::Profile>>` |
 
 Use a Bearer API key. The [common changes](../common-contract-changes.md) explain shared access, error handling, metadata, and example conventions.
 
