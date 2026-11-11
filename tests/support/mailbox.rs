@@ -16,6 +16,7 @@ pub struct State {
     pub oversized: Vec<u32>,
     pub seen: Vec<u32>,
     pub reject_ack: bool,
+    pub reject_login: bool,
     pub logins: usize,
     pub internal_dates: BTreeMap<u32, String>,
     pub arrive_on_search: BTreeMap<u32, Vec<u8>>,
@@ -102,7 +103,9 @@ impl Mailbox {
                     let mut prefix = Vec::new();
                     let mut result = "OK completed";
                     if command.starts_with("LOGIN ") {
-                        if command.contains("service") && command.contains("MAILBOX-SECRET-CANARY")
+                        if !state.reject_login
+                            && command.contains("service")
+                            && command.contains("MAILBOX-SECRET-CANARY")
                         {
                             state.logins += 1;
                         } else {

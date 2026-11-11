@@ -4,6 +4,8 @@ Development previews have short notes on GitHub Releases. This changelog records
 
 ## Unreleased
 
+- Keep mailbox checkpoint recovery available after later connection failures, restarts, and ordinary configuration edits; expose its persistent state as `reset_required` in the API.
+- Protect an untouched campaign draft from silent navigation after a lost creation response, and reconcile retries using the original creation identity and confirmed save checkpoint.
 - Dismiss operation feedback with a close control; successful messages disappear after five seconds. Keep company-settings approval separate from save progress and results, and make back navigation more prominent.
 - Use consistent English and German connection-test wording for sending profiles and reporting mailboxes, with a clearer **Tests** menu for sending profiles.
 

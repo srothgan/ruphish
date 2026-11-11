@@ -440,6 +440,7 @@ CREATE TABLE `ruphish_mailboxes` (
   `code` VARCHAR(255) NOT NULL DEFAULT '',
   `ignore_cert_errors` BOOLEAN NOT NULL DEFAULT FALSE,
   initial_since VARCHAR(40),
+  reset_required BOOLEAN NOT NULL DEFAULT FALSE,
   PRIMARY KEY (`id`),
   UNIQUE KEY mailbox_name (`owner_id`,`name`),
   CHECK (port BETWEEN 1 AND 65535)

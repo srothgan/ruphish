@@ -128,7 +128,7 @@ async fn poll_mailbox(
         let _ = session.logout().await;
         return Ok(());
     }
-    if c.validity != validity {
+    if c.reset_required || c.validity != validity {
         return Err("mailbox_uidvalidity_changed");
     }
     for uid in store.pending_acknowledgements(c, validity).await? {

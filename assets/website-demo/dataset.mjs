@@ -196,6 +196,7 @@ export function dataset(now) {
     frequency: 300,
     revision: 1,
     last_check: now - 300,
+    reset_required: false,
     last_success: now - 300,
     next_check: now + 300,
     running: false,

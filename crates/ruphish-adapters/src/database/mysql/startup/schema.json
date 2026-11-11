@@ -264,6 +264,7 @@
   ["column", "ruphish_mailboxes", "owner_id", 5, "bigint", "YES", null, "", "", null],
   ["column", "ruphish_mailboxes", "password", 12, "longtext", "NO", null, "", "", "utf8mb4_0900_bin"],
   ["column", "ruphish_mailboxes", "port", 10, "bigint", "NO", null, "", "", null],
+  ["column", "ruphish_mailboxes", "reset_required", 31, "tinyint(1)", "NO", "0", "", "", null],
   ["column", "ruphish_mailboxes", "restrict_domain", 15, "varchar(255)", "NO", "", "", "", "utf8mb4_0900_bin"],
   ["column", "ruphish_mailboxes", "revision", 7, "bigint", "NO", "1", "", "", null],
   ["column", "ruphish_mailboxes", "tls", 13, "bigint", "NO", null, "", "", null],

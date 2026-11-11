@@ -101,13 +101,14 @@ curl --request POST "$RUPHISH_URL/api/reporting-mailboxes/1/validate" \
   "last_success": 0,
   "next_check": 0,
   "running": false,
+  "reset_required": false,
   "code": ""
 }
 ```
 
 ## Behavior and verification
 
-Validation opens a real mailbox connection and checks the saved credentials. It does not schedule a report scan. Use the separate check action when report processing is intended. Imported mailbox processing boundaries and closed-campaign rules are explained in the data-conversion guide.
+Validation opens a real mailbox connection and checks the saved credentials. It does not schedule a report scan or clear `reset_required`; a successful login does not authorize resetting the saved message checkpoint. Use the separate check action when report processing is intended. Imported mailbox processing boundaries and closed-campaign rules are explained in the data-conversion guide.
 
 Handle an unsuccessful connection as a failed HTTP operation, and avoid displaying a success message solely because JSON could be decoded.
 

@@ -57,6 +57,8 @@ Focused coverage lives in `crates/ruphish-adapters/tests/email_tracking.rs`, `te
 
 Workers perform external work outside long-lived SQL transactions. Persist claims, fencing generations, and checkpoints through application-owned interfaces, then record outcomes through the provider's atomic operations.
 
+Mailbox checkpoint recovery has a persisted `reset_required` flag, separate from the most recent attempt's diagnostic. Once observed, a UIDVALIDITY change prevents report processing until an explicit revision-checked reset or a mailbox-identity change. Login failures and ordinary metadata edits cannot clear it. Claim completion must retain its revision and lease fence so stale work cannot restore a reset requirement after recovery.
+
 Trace a change through acquisition, cancellation, timeout, retry, competing processes, shutdown, and restart. An external side effect may have succeeded even if the local result was lost. Do not report every transport failure as a definite rollback, automatically retry a possibly accepted send, or claim exactly-once delivery.
 
 ## Verify the change

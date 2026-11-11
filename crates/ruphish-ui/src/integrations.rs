@@ -949,7 +949,11 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                     })}
                 <Show when=move || {
                     !kind.webhook()
-                        && value.get().is_some_and(|v| v.code() == "mailbox_uidvalidity_changed")
+                        && value
+                            .get()
+                            .is_some_and(|v| {
+                                matches!(v, Record::Mailbox(ref mailbox) if mailbox.reset_required)
+                            })
                 }>
                     {editable
                         .then(|| {
@@ -1111,7 +1115,13 @@ fn detail(api: Api, token: String, kind: Kind, id: i64) -> impl IntoView {
                             !kind.webhook()
                                 && value
                                     .get()
-                                    .is_some_and(|v| v.code() == "mailbox_uidvalidity_changed")
+                                    .is_some_and(|v| {
+                                        matches!(
+                                            v,
+                                            Record::Mailbox(ref mailbox)
+                                            if mailbox.reset_required
+                                        )
+                                    })
                         }>
                             <p role="alert">
                                 {tr!(

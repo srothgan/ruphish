@@ -70,6 +70,8 @@ pub struct Mailbox {
     pub next_check: i64,
     /// Whether a worker currently owns a check.
     pub running: bool,
+    /// The checkpoint must be explicitly reset before reports can be processed.
+    pub reset_required: bool,
     /// Application-owned outcome code.
     pub code: String,
     /// Recent processing attempts.

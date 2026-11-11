@@ -773,7 +773,10 @@ pub(crate) fn CreateCampaign(
     let navigate = use_navigate();
     let zone = StoredValue::new(local_zone());
     let generation = u64::from(initial.is_some() && saved.is_none());
-    let persistence = crate::campaigns::drafts::Persistence::new(saved.as_ref());
+    let persistence = match crate::campaigns::drafts::Persistence::new(api, saved.as_ref()) {
+        Ok(persistence) => persistence,
+        Err(error) => return view! { <p role="alert">{error}</p> }.into_any(),
+    };
     let initial_step = saved
         .as_ref()
         .and_then(|s| s["step"].as_u64())
@@ -813,7 +816,11 @@ pub(crate) fn CreateCampaign(
     let message = Message::new(String::new());
     let can_edit = editable();
     crate::shared::navigation::protect_draft(move || {
-        draft.with(|d| d.generation != persistence.saved_generation.get() || d.launch.is_some())
+        draft.with(|d| {
+            d.generation != persistence.saved_generation.get()
+                || d.launch.is_some()
+                || persistence.unconfirmed.get()
+        })
     });
     let recipient = RwSignal::new(String::new());
     let retry_review = RwSignal::new(0u64);
@@ -1106,11 +1113,21 @@ pub(crate) fn CreateCampaign(
                                 .await
                             {
                                 Ok(saved) => {
+                                    let generation = draft
+                                        .with_untracked(|d| d.generation.wrapping_add(1));
+                                    if let Err(error) = persistence.accept(api, &saved, generation)
+                                    {
+                                        persistence.write_error.set(Some(error.clone()));
+                                        message.error(error.message);
+                                        busy.set(false);
+                                        return;
+                                    }
                                     if let Some(id) = saved["campaign_id"].as_i64() {
-                                        draft.update(|d| d.launch = None);
-                                        persistence
-                                            .saved_generation
-                                            .set(draft.with_untracked(|d| d.generation));
+                                        draft
+                                            .update(|d| {
+                                                d.launch = None;
+                                                d.generation = persistence.saved_generation.get_untracked();
+                                            });
                                         recovery_navigate
                                             .get_value()(
                                             &format!("/campaigns/{id}/delivery"),
@@ -1119,23 +1136,12 @@ pub(crate) fn CreateCampaign(
                                         busy.set(false);
                                         return;
                                     }
-                                    let generation = draft
-                                        .with_untracked(|d| d.generation.wrapping_add(1));
                                     draft
                                         .set(Draft {
                                             value: saved["configuration"].clone(),
                                             generation,
                                             ..Default::default()
                                         });
-                                    persistence.revision.set(saved["revision"].as_i64());
-                                    persistence.saved_generation.set(generation);
-                                    persistence.modified.set(saved["modified"].clone());
-                                    persistence
-                                        .attribution
-                                        .set(
-                                            serde_json::from_value(saved.clone()).unwrap_or_default(),
-                                        );
-                                    persistence.write_error.set(None);
                                     step.set(saved["step"].as_u64().unwrap_or(0).min(3) as usize);
                                     message.clear();
                                 }
@@ -1940,7 +1946,7 @@ pub(crate) fn CreateCampaign(
                 </FormFooter>
             </QueryBoundary>
         </ManagementPage>
-    }
+    }.into_any()
 }
 
 fn show(api: Api, token: String, id: String, section: Section) -> impl IntoView {

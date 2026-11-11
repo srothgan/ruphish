@@ -204,7 +204,9 @@ async fn contract(config: Config, inspect: &mut Inspector) {
     db.close().await;
     drop(repo);
     peer.state.lock().unwrap().reject_ack = false;
-    let db = database::open(config, policy).await.unwrap();
+    let db = database::open(copy_config(&config), policy.clone())
+        .await
+        .unwrap();
     poll(&db, saved.id).await;
     assert_eq!(
         inspect
@@ -304,9 +306,66 @@ async fn contract(config: Config, inspect: &mut Inspector) {
     poll(&db, saved.id).await;
     let changed = repo.mailbox(ADMIN, saved.id).await.unwrap();
     assert_eq!(changed.code, "mailbox_uidvalidity_changed");
-    repo.resume_mailbox(ADMIN, saved.id, changed.revision)
+    assert!(changed.reset_required);
+    // A later transport failure must not erase the durable need to reset the checkpoint.
+    peer.state.lock().unwrap().reject_login = true;
+    poll(&db, saved.id).await;
+    let failed = repo.mailbox(COLLEAGUE, saved.id).await.unwrap();
+    assert_eq!(failed.code, "mailbox_authentication_failed");
+    assert!(failed.reset_required);
+    peer.state.lock().unwrap().reject_login = false;
+    drop(repo);
+    db.close().await;
+    let db = database::open(copy_config(&config), policy).await.unwrap();
+    let repo = db.integrations();
+    assert!(
+        repo.mailbox(COLLEAGUE, saved.id)
+            .await
+            .unwrap()
+            .reset_required
+    );
+    let mut metadata = edit(peer.address.port(), Some(changed.revision));
+    metadata.frequency = 120;
+    let updated = repo
+        .save_mailbox(COLLEAGUE, Some(saved.id), metadata)
         .await
         .unwrap();
+    assert!(
+        updated.reset_required,
+        "ordinary edits cannot authorize a new checkpoint"
+    );
+    assert!(matches!(
+        repo.resume_mailbox(ADMIN, saved.id, changed.revision).await,
+        Err(Error::Changed)
+    ));
+    // Even if the server presents the old UIDVALIDITY again, recovery stays explicit.
+    {
+        let mut state = peer.state.lock().unwrap();
+        state.validity = 41;
+        state.messages.insert(99, message("earlier"));
+    }
+    poll(&db, saved.id).await;
+    assert_eq!(
+        inspect
+            .scalar("SELECT last_uid FROM ruphish_mailboxes WHERE name='Reports'")
+            .await,
+        38
+    );
+    {
+        let mut state = peer.state.lock().unwrap();
+        state.validity = 42;
+        state.messages.remove(&99);
+    }
+    let (first, second) = tokio::join!(
+        repo.resume_mailbox(ADMIN, saved.id, updated.revision),
+        repo.resume_mailbox(COLLEAGUE, saved.id, updated.revision),
+    );
+    let resumed = match (first, second) {
+        (Ok(saved), Err(Error::Changed)) | (Err(Error::Changed), Ok(saved)) => saved,
+        _ => panic!("exactly one concurrent checkpoint reset must succeed"),
+    };
+    assert!(!resumed.reset_required);
+    assert_eq!(resumed.revision, updated.revision + 1);
     repo.poll_mailboxes().await.unwrap();
     assert_eq!(
         inspect

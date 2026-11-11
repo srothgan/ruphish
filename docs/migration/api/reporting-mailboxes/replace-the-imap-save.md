@@ -31,6 +31,7 @@ Use a Bearer API key. The [common changes](../common-contract-changes.md) explai
 | `enabled`, `host`, `username`, `folder`, `restrict_domain`, `ignore_cert_errors` | Boolean/string connection fields. | Names/types retained; current connection and validation rules apply. |
 | `last_login`, `modified_date` | RFC 3339 strings in legacy configuration. | Use attribution timestamps and operational `last_check`, `last_success`, `next_check` Unix-second integers; these are different observations, not simple renames. |
 | `revision`, attribution, `history`, `running`, `code` | Absent. | Added concurrency, attribution, operational history, boolean running state, and diagnostic code. |
+| `reset_required` | Absent. | Read-only boolean; checkpoint recovery remains required even if the latest `code` changes. |
 | Update precondition | No explicit version. | JSON integer `revision` from the last read; missing → 428, stale → 412. |
 | Success | 201 envelope confirming settings saved. | 200 mailbox object including new revision; no returned password. |
 
@@ -127,11 +128,14 @@ curl --request PUT "$RUPHISH_URL/api/reporting-mailboxes/1" \
   "last_success": 0,
   "next_check": 0,
   "running": false,
+  "reset_required": false,
   "code": ""
 }
 ```
 
 ## Behavior and verification
+
+Ordinary edits preserve `reset_required`; it is not a writable field. Changing host, port, username, or folder starts a new checkpoint. Otherwise use the explicit resume action with the current revision after reviewing the reset requirement.
 
 Existing imported mailboxes should be edited, not recreated on every save. For an additional mailbox use `POST /api/reporting-mailboxes/`, omit revision, and provide a password. Writes require `modify_objects` and the global feature to be enabled. Unknown write fields are rejected; translate names/types and remove old read-only fields.
 
