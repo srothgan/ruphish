@@ -660,11 +660,24 @@ fn mailbox_certificate_policy_covers_tls_modes_and_restart() {
         draft["ignore_cert_errors"] = json!(true);
         draft["enabled"] = json!(true);
         draft.as_object_mut().unwrap().remove("password");
+        let before = get(&client, &base, &path);
+        let response = request(&client, &base, reqwest::Method::PUT, &path, Some(&draft));
+        assert_eq!(response.status(), 400);
+        let rejected: Value = response.json().unwrap();
+        assert_eq!(
+            rejected["validation"]["issues"],
+            json!([{"field":"password","code":"credential_reentry_required"}])
+        );
+        assert_eq!(get(&client, &base, &path), before);
+        assert_eq!(peer.state.lock().unwrap().logins, usize::from(verified));
+        // Weakening verification requires explicit reentry of the credential.
+        draft["password"] = json!("MAILBOX-SECRET-CANARY");
         let response = request(&client, &base, reqwest::Method::PUT, &path, Some(&draft));
         assert_eq!(response.status(), 200);
         saved = response.json().unwrap();
         assert_eq!(saved["ignore_cert_errors"], true);
         assert!(saved.get("password").is_none());
+        draft.as_object_mut().unwrap().remove("password");
         let checked = wait_check(&client, &base, id, 0);
         assert_eq!(checked["code"], "passed");
         assert_eq!(get(&client, &base, &path)["ignore_cert_errors"], true);
