@@ -253,15 +253,48 @@ impl Input {
     pub fn validation(&self) -> crate::validation::Report {
         self.content.validation(&self.name)
     }
-    /// Resolve a replacement credential only from an authorized saved record.
-    pub fn resolve_content(self, previous: Option<&Resource>) -> Content {
-        self.content.map(
-            |password| {
-                password.unwrap_or_else(|| match previous.map(|r| &r.content) {
-                    Some(Content::Profile(profile)) => profile.password.clone(),
-                    _ => String::new(),
-                })
-            },
+    /// Resolve credentials from an authorized saved record without changing their connection boundary.
+    pub fn resolve_content(
+        self,
+        previous: Option<&Resource>,
+    ) -> Result<Content, crate::validation::Report> {
+        let password = match (&self.content, previous.map(|r| &r.content)) {
+            (Content::Profile(profile), Some(Content::Profile(saved)))
+                if profile.password.is_none() && !saved.password.is_empty() =>
+            {
+                use crate::mail_credentials::{Connection, smtp_address};
+                let address = |host: &str| {
+                    smtp_address(host).map_err(|message| {
+                        let mut report = crate::validation::Report::default();
+                        report.reject("host", crate::validation::Code::Invalid, message);
+                        report
+                    })
+                };
+                let (host, port) = address(&profile.host)?;
+                let (old_host, old_port) = address(&saved.host)?;
+                Connection {
+                    host: &host,
+                    port,
+                    username: &profile.username,
+                    implicit_tls: port == 465,
+                    ignore_cert_errors: profile.ignore_cert_errors,
+                }
+                .retain_password(
+                    &Connection {
+                        host: &old_host,
+                        port: old_port,
+                        username: &saved.username,
+                        implicit_tls: old_port == 465,
+                        ignore_cert_errors: saved.ignore_cert_errors,
+                    },
+                    &saved.password,
+                )?
+            }
+            (Content::Profile(profile), _) => profile.password.clone().unwrap_or_default(),
+            _ => String::new(),
+        };
+        Ok(self.content.map(
+            |_| password,
             |page| LearningPage {
                 html: page.html,
                 public_id: match previous.map(|r| &r.content) {
@@ -269,7 +302,7 @@ impl Input {
                     _ => String::new(),
                 },
             },
-        )
+        ))
     }
 }
 /// List metadata deliberately excludes bodies, attachments and credentials.

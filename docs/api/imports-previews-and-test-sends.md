@@ -406,7 +406,7 @@ Test SMTP connectivity and authentication without sending a message.
 
 **Request:** resources::request::SendingProfile. **Response:** `200 OK`, `common::Envelope<()>` as `application/json`.
 
-The request is a sending-profile write object. With an existing ID, omitted password preserves the saved credential. See [sending profile fields](sending-profiles.md#request-fields).
+The request is a sending-profile write object. With an existing ID, an omitted password preserves the saved credential only within its saved connection settings. Changing the host, port, username, or disabling certificate verification requires an explicit password; otherwise the request returns `400` with validation issue `password: credential_reentry_required` before any connection. See [sending profile fields](sending-profiles.md#request-fields).
 
 Request body (`request.json`):
 
@@ -498,4 +498,4 @@ Example response:
 | `last_name` | `string` | Recipient family name. |
 | `position` | `string` | Recipient position. |
 
-`template.name` and `page.name` select saved resources; inline body fields in those objects are not used as replacement content. `smtp` is either `{"source":"saved","id":1}` or `{"source":"draft","profile":{...}}`, where `profile` is the [sending-profile write object](sending-profiles.md#request-fields). The draft form can use an existing ID to preserve an omitted password. Recipient fields control this test’s address and personalization. Success acknowledges the send operation; a lost response does not make repeating it safe.
+`template.name` and `page.name` select saved resources; inline body fields in those objects are not used as replacement content. `smtp` is either `{"source":"saved","id":1}` or `{"source":"draft","profile":{...}}`, where `profile` is the [sending-profile write object](sending-profiles.md#request-fields). The draft form can use an existing ID to preserve an omitted password only within its saved connection settings, under the same rule as connection tests. Recipient fields control this test’s address and personalization. Success acknowledges the send operation; a lost response does not make repeating it safe.

@@ -72,27 +72,7 @@ pub fn mailbox(value: &str) -> Result<Mailbox, Error> {
 }
 /// Accept DNS names, IPv4 and bracketed IPv6, retaining the default SMTP port.
 pub fn smtp_address(value: &str) -> Result<(String, u16), Error> {
-    let url = url::Url::parse(&format!("smtp://{value}"))
-        .map_err(|_| invalid("Invalid SMTP host or port"))?;
-    if !url.username().is_empty()
-        || url.password().is_some()
-        || !matches!(url.path(), "" | "/")
-        || url.query().is_some()
-        || url.fragment().is_some()
-    {
-        return Err(invalid("Invalid SMTP host or port"));
-    }
-    let host = url
-        .host_str()
-        .ok_or_else(|| invalid("No SMTP Host specified"))?
-        .trim_start_matches('[')
-        .trim_end_matches(']')
-        .to_owned();
-    let port = url.port().unwrap_or(25);
-    if port == 0 {
-        return Err(invalid("Invalid SMTP port"));
-    }
-    Ok((host, port))
+    ruphish_domain::mail_credentials::smtp_address(value).map_err(invalid)
 }
 impl Validator for Validate {
     fn page_preview(

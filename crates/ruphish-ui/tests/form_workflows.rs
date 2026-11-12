@@ -175,6 +175,34 @@ fn incomplete_campaign_reopened_on_review_requires_correction_but_remains_saveab
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 #[cfg_attr(not(target_arch = "wasm32"), test)]
 fn credentials_and_operational_failures_do_not_become_interchangeable_validation_errors() {
+    let failure = api_error::response(400, Ok(json!({"validation":{"issues":[{"field":"password","code":"credential_reentry_required"}]}})), str::to_owned).unwrap_err();
+    let report = failure.validation.unwrap();
+    assert_eq!(report.issues[0].code, Code::CredentialReentryRequired);
+    for field in [
+        "password",
+        "host",
+        "port",
+        "username",
+        "tls",
+        "ignore_cert_errors",
+    ] {
+        let mut form = FormState::default();
+        let ticket = form.ticket();
+        assert!(form.receive(ticket, report.clone()));
+        assert_eq!(
+            form.field(&[], "password"),
+            Some(Code::CredentialReentryRequired)
+        );
+        form.edit(field);
+        assert!(
+            form.issues(&[]).is_empty(),
+            "correcting the connection must clear stale password feedback"
+        );
+        assert!(
+            !form.receive(ticket, report.clone()),
+            "late failures must not replace corrected state"
+        );
+    }
     let mut form = FormState::default();
     let report = ruphish_domain::account::password::replacement("tiny", "different");
     form.submit(report.issues());

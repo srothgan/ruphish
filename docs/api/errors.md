@@ -44,6 +44,8 @@ A validation response can include:
 
 `validation.issues` is a bounded array of objects with `field` (dot-separated path with zero-based array positions) and `code` (validation reason). Submitted field values are not echoed.
 
+For mail connection changes, `credential_reentry_required` on `password` means the saved credential cannot be reused with the requested connection settings. Supply a password explicitly or restore the saved settings. The response uses HTTP `400` and top-level code `RESOURCE_INVALID`.
+
 ## Status handling
 
 | HTTP status | Client action |

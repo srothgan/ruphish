@@ -1238,6 +1238,7 @@
     "draft_schedule_past": "The saved launch time is in the past. Choose a future time or clear it to launch now."
   },
   "validation": {
+    "credential_reentry_required": "Connection settings changed. Re-enter the password.",
     "scheduled_help": "Choose a local date, time and time zone. Daylight saving changes are handled automatically.",
     "summary": "Check the highlighted fields before continuing.",
     "required": "This field is required.",

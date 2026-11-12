@@ -528,12 +528,27 @@ async fn mailbox_edits_are_owner_scoped_revision_checked_and_secret_preserving()
     update.password = None;
     update.revision = Some(mailbox.revision);
     update.name = "Renamed reports".into();
-    update.ignore_cert_errors = true;
     let updated = integrations
         .save_mailbox(caller(), Some(mailbox.id), update)
         .await
         .unwrap();
     assert!(updated.has_password);
+    assert!(!updated.ignore_cert_errors);
+    let password: String = sqlx::query_scalar("SELECT password FROM ruphish_mailboxes WHERE id=?")
+        .bind(mailbox.id)
+        .fetch_one(&database.inspection_pool())
+        .await
+        .unwrap();
+    assert_eq!(password, "MAILBOX-CANARY");
+    // Disabling verification is a separate edit with an explicitly supplied password.
+    let mut bypass = edit();
+    bypass.name = updated.name.clone();
+    bypass.revision = Some(updated.revision);
+    bypass.ignore_cert_errors = true;
+    let updated = integrations
+        .save_mailbox(caller(), Some(mailbox.id), bypass)
+        .await
+        .unwrap();
     assert!(updated.ignore_cert_errors);
     let mut stale = edit();
     stale.revision = Some(mailbox.revision);

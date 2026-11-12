@@ -66,7 +66,7 @@ The identifier-change warning and **Resume with new arrivals** action remain ava
 
 ## Edit, disable, or delete a mailbox
 
-Leave the password blank during an edit to retain it. Enter a new password to replace it.
+Leave the password blank during ordinary edits to retain it. If you change the server, port, username, or TLS mode, or turn off certificate verification, re-enter the password before saving. Changing the folder or polling settings does not require re-entry. Enter a new password to replace it.
 
 Disabling the mailbox pauses scheduled checks and preserves its progress. Ordinary settings changes preserve progress too. Changing the host, port, username, or folder identifies a different mailbox and starts monitoring new arrivals.
 

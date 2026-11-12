@@ -54,7 +54,7 @@ Use **Additional headers** only when your mail setup needs them. Add each header
 
 ## Update credentials or connection settings
 
-Open **Edit** to change the profile. A blank password field keeps the saved password. Enter a new value to replace it, or select **Clear the saved password** to remove it.
+Open **Edit** to change the profile. A blank password field keeps the saved password for ordinary edits. If you change the server, port, or username, or turn off certificate verification, re-enter the password before saving or testing the connection. Enter a new value to replace it, or select **Clear the saved password** to remove it.
 
 Passwords are not included in profile exports or copies. Enter the password again when creating a profile from an import or duplicate.
 

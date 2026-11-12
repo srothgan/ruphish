@@ -493,6 +493,111 @@ fn profile_credentials_are_write_only_and_clear_only_when_requested() {
 }
 
 #[test]
+fn saved_smtp_credentials_cannot_be_rebound_by_edits_or_draft_tests() {
+    let directory = workspace();
+    let mut process = Process::start(directory.path(), "admin");
+    let base = ready(&mut process);
+    unlock(directory.path());
+    let client = client();
+    let user: Value = client.post(format!("{base}/api/users/"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&json!({"username":"resource-editor","password":"synthetic-password","role":"user","password_change_required":false}))
+        .send().unwrap().error_for_status().unwrap().json().unwrap();
+    let key = user["api_key"].as_str().unwrap();
+    let original_peer = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let other_peer = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    original_peer.set_nonblocking(true).unwrap();
+    other_peer.set_nonblocking(true).unwrap();
+    let original: Value = client.post(format!("{base}/api/smtp/"))
+        .bearer_auth("synthetic-bootstrap-token")
+        .json(&json!({"name":"Bound credential","host":original_peer.local_addr().unwrap().to_string(),"username":"service","password":"saved-secret-canary","from_address":"sender@example.test"}))
+        .send().unwrap().error_for_status().unwrap().json().unwrap();
+    let path = format!("{base}/api/smtp/{}", original["id"]);
+    for (field, value) in [
+        ("host", json!(other_peer.local_addr().unwrap().to_string())),
+        ("username", json!("another-identity")),
+        ("ignore_cert_errors", json!(true)),
+    ] {
+        let mut draft = original.clone();
+        draft[field] = value;
+        for endpoint in ["save", "test_connection", "send_test_email"] {
+            let request = match endpoint {
+                "save" => client.put(&path)
+                    .header("If-Match", format!("\"{}\"", original["revision"]))
+                    .json(&draft),
+                "test_connection" => client.post(format!("{base}/api/util/test_connection")).json(&draft),
+                _ => client.post(format!("{base}/api/util/send_test_email"))
+                    .json(&json!({"email":"recipient@example.test","smtp":{"source":"draft","profile":draft}})),
+            };
+            let response = request
+                .bearer_auth(key)
+                .timeout(Duration::from_secs(5))
+                .send()
+                .unwrap();
+            assert_eq!(response.status(), 400, "{endpoint}: {field}");
+            let body: Value = response.json().unwrap();
+            assert_eq!(
+                body["validation"]["issues"],
+                json!([{"field":"password","code":"credential_reentry_required"}])
+            );
+            assert!(!body.to_string().contains("saved-secret-canary"));
+        }
+    }
+    // Neither destination is contacted, including for a draft send that bypasses saving.
+    for peer in [&original_peer, &other_peer] {
+        assert!(
+            matches!(peer.accept(), Err(error) if error.kind() == std::io::ErrorKind::WouldBlock)
+        );
+    }
+    let unchanged: Value = client
+        .get(&path)
+        .bearer_auth(key)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(
+        unchanged, original,
+        "rejected writes must preserve configuration and revision"
+    );
+    let mut replacement = original.clone();
+    replacement["host"] = json!(other_peer.local_addr().unwrap().to_string());
+    replacement["password"] = json!("replacement-secret-canary");
+    let updated: Value = client
+        .put(&path)
+        .bearer_auth(key)
+        .header("If-Match", format!("\"{}\"", original["revision"]))
+        .json(&replacement)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(updated["host"], replacement["host"]);
+    assert_eq!(updated["has_password"], true);
+    assert!(updated.get("password").is_none());
+    process.stop();
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let pool = sqlx::SqlitePool::connect(&format!(
+            "sqlite:{}",
+            directory.path().join("installation.sqlite3").display()
+        ))
+        .await
+        .unwrap();
+        let password: String = sqlx::query_scalar("SELECT password FROM smtp WHERE id=?")
+            .bind(original["id"].as_i64().unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(password, "replacement-secret-canary");
+        pool.close().await;
+    });
+}
+
+#[test]
 fn smtp_cram_negotiates_and_delivers_without_fallback_or_secret_diagnostics() {
     use std::io::{BufRead, BufReader};
     let directory = workspace();
@@ -613,7 +718,7 @@ fn smtp_cram_negotiates_and_delivers_without_fallback_or_secret_diagnostics() {
         });
         let create = client().post(format!("{base}/api/smtp/"))
             .bearer_auth("synthetic-bootstrap-token")
-            .json(&json!({"name":format!("Authentication {address}"),"host":address.to_string(),"from_address":"sender@example.test","username":if send {"tim"} else {"stored-identity"},"password":"initial-test-password"}))
+            .json(&json!({"name":format!("Authentication {address}"),"host":address.to_string(),"from_address":"sender@example.test","username":"tim","password":"initial-test-password"}))
             .send().unwrap().error_for_status().unwrap();
         let mut profile: Value = create.json().unwrap();
         assert!(profile.get("password").is_none());
@@ -659,13 +764,14 @@ fn smtp_cram_negotiates_and_delivers_without_fallback_or_secret_diagnostics() {
             assert!(!body.contains("\"password\""));
         }
         let profile_id = profile["id"].as_i64().unwrap();
+        let saved_profile = profile.clone();
         let (path, body) = if send {
             (
                 "send_test_email",
                 json!({"smtp":{"source":"saved","id":profile["id"]},"email":"recipient@example.test","first_name":"Alice"}),
             )
         } else {
-            profile["username"] = json!("tim");
+            profile["from_address"] = json!("draft-sender@example.test");
             ("test_connection", profile)
         };
         let response = client()
@@ -689,7 +795,7 @@ fn smtp_cram_negotiates_and_delivers_without_fallback_or_secret_diagnostics() {
                 .json()
                 .unwrap();
             assert_eq!(
-                saved["username"], "stored-identity",
+                saved, saved_profile,
                 "connection checks must not save draft settings"
             );
         }

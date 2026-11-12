@@ -36,6 +36,7 @@ impl FormState {
                 && !matches!(
                     issue.code,
                     Code::PasswordMismatch
+                        | Code::CredentialReentryRequired
                         | Code::ScheduleOrder
                         | Code::RecheckMargin
                         | Code::RedirectConflict

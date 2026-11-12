@@ -21,6 +21,8 @@ pub enum Code {
     PasswordLong,
     /// Confirmation differs from the candidate.
     PasswordMismatch,
+    /// Retaining a saved credential would send it outside its connection boundary.
+    CredentialReentryRequired,
     /// A scheduled draft must use a current or future instant.
     SchedulePast,
     /// Distribution cannot end before launch.

@@ -16,7 +16,7 @@ These resources are shared across the installation. Reads require `view_objects`
 | `host` | `string` | Service hostname. |
 | `port` | `integer` | Service port. |
 | `username` | `string` | Service login name. |
-| `password` | `string or null` | Replacement password, 1–4,096 bytes; omission or null preserves it. |
+| `password` | `string or null` | Replacement password, 1–4,096 bytes; omission or null preserves it only within the saved connection settings described below. |
 | `tls` | `boolean` | Use implicit TLS; false requests STARTTLS. |
 | `ignore_cert_errors` | `boolean` | Explicit certificate-verification exception. |
 | `folder` | `string` | Monitored mailbox folder. |
@@ -25,7 +25,7 @@ These resources are shared across the installation. Reads require `view_objects`
 | `frequency` | `integer` | Polling interval: 30–31,540,000 seconds. |
 | `revision` | `integer or null` | Expected saved revision; absent only for creation. |
 
-Unknown fields are rejected. Omit `revision` on creation; supply it on updates. `password` is required on creation. Omission or null preserves the stored secret on update; an empty replacement is rejected.
+Unknown fields are rejected. Omit `revision` on creation; supply it on updates. `password` is required on creation. Omission or null preserves the stored secret only while the host, port, username, and TLS mode remain equivalent and certificate verification is not weakened; an empty replacement is rejected. Changing those settings without a replacement returns `400` with validation issue `password: credential_reentry_required` and leaves the configuration, revision, and processing progress unchanged. Renaming, changing folders or polling settings, and restoring certificate verification can retain the password. This intentionally tightens the previous credential-retention contract without a database migration.
 
 ## Response fields
 
