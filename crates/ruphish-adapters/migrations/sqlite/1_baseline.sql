@@ -1,54 +1,57 @@
 -- Ruphish release baseline. Fresh installs and direct Gophish conversions share this schema.
 
-CREATE TABLE ruphish_deleted_accounts (id BIGINT PRIMARY KEY, username VARCHAR(255) NOT NULL);
-
-CREATE TABLE "attachments" (
-  "id" integer primary key autoincrement,
-  "template_id" bigint,
-  "content" varchar(255),
-  "type" varchar(255),
-  "name" varchar(255)
+CREATE TABLE ruphish_deleted_accounts (
+  id BIGINT NOT NULL PRIMARY KEY,
+  username VARCHAR(255) NOT NULL
 );
 
-CREATE TABLE "campaigns" (
+CREATE TABLE attachments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  template_id BIGINT,
+  content TEXT,
+  type VARCHAR(255),
+  name VARCHAR(255)
+);
+
+CREATE TABLE campaigns (
   edited_by BIGINT,
   edited_at VARCHAR(40),
-  "id" integer primary key autoincrement,
-  "user_id" bigint,
-  "name" varchar(255) NOT NULL,
-  "created_date" datetime,
-  "completed_date" datetime,
-  "template_id" bigint,
-  "page_id" bigint,
-  "status" varchar(255),
-  "url" varchar(255),
-  "smtp_id" bigint,
-  "launch_date" DATETIME,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id BIGINT,
+  name VARCHAR(255) NOT NULL,
+  created_date DATETIME,
+  completed_date DATETIME,
+  template_id BIGINT,
+  page_id BIGINT,
+  status VARCHAR(255),
+  url VARCHAR(255),
+  smtp_id BIGINT,
+  launch_date DATETIME,
   send_by_date DATETIME,
   frozen_content TEXT,
   learning_public_id VARCHAR(64)
 );
 
-CREATE TABLE "email_requests" (
-  "id" integer primary key autoincrement,
-  "user_id" integer,
-  "template_id" integer,
-  "page_id" integer,
-  "first_name" varchar(255),
-  "last_name" varchar(255),
-  "email" varchar(255),
-  "position" varchar(255),
-  "url" varchar(255),
-  "r_id" varchar(255),
-  "from_address" varchar(255)
+CREATE TABLE email_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER,
+  template_id INTEGER,
+  page_id INTEGER,
+  first_name VARCHAR(255),
+  last_name VARCHAR(255),
+  email VARCHAR(255),
+  position VARCHAR(255),
+  url VARCHAR(255),
+  r_id VARCHAR(255),
+  from_address VARCHAR(255)
 );
 
-CREATE TABLE "events" (
-  "id" integer primary key autoincrement,
-  "campaign_id" bigint,
-  "email" varchar(255),
-  "time" datetime,
-  "kind" varchar(255),
+CREATE TABLE events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id BIGINT,
+  email VARCHAR(255),
+  time DATETIME,
+  kind VARCHAR(255),
   metadata BLOB,
   recipient_id BIGINT,
   source VARCHAR(255) NOT NULL DEFAULT 'application',
@@ -58,104 +61,104 @@ CREATE TABLE "events" (
   client TEXT
 );
 
-CREATE TABLE "group_targets" (
-  "group_id" bigint,
-  "target_id" bigint
+CREATE TABLE group_targets (
+  group_id BIGINT,
+  target_id BIGINT
 );
 
-CREATE TABLE "groups" (
+CREATE TABLE groups (
   created_at VARCHAR(40),
   revision BIGINT NOT NULL DEFAULT 1,
   edited_by BIGINT,
   edited_at VARCHAR(40),
-  "id" integer primary key autoincrement,
-  "user_id" bigint,
-  "name" varchar(255),
-  "modified_date" datetime
-);
-
-CREATE TABLE headers (
-  id integer primary key autoincrement,
-  key varchar(255),
-  value varchar(255),
-  "smtp_id" bigint
-);
-
-CREATE TABLE "imap" (
-  "user_id" bigint,
-  "host" varchar(255),
-  "port" integer,
-  "username" varchar(255),
-  "password" varchar(255),
-  "modified_date" datetime default CURRENT_TIMESTAMP,
-  "tls" BOOLEAN,
-  "enabled" BOOLEAN,
-  "folder" varchar(255),
-  "restrict_domain" varchar(255),
-  "delete_reported_campaign_email" BOOLEAN,
-  "last_login" datetime,
-  "imap_freq" integer,
-  ignore_cert_errors BOOLEAN
-);
-
-CREATE TABLE "mail_logs" (
-  "id" integer primary key autoincrement,
-  "campaign_id" integer,
-  "user_id" integer,
-  "send_date" datetime,
-  "send_attempt" integer,
-  "r_id" varchar(255),
-  "processing" boolean
-);
-
-CREATE TABLE "pages" (
-  created_at VARCHAR(40),
-  revision BIGINT NOT NULL DEFAULT 1,
-  edited_by BIGINT,
-  edited_at VARCHAR(40),
-  "id" integer primary key autoincrement,
-  "user_id" bigint,
-  "name" varchar(255),
-  "html" varchar(255),
-  "modified_date" datetime,
-  redirect_url VARCHAR(255)
-);
-
-CREATE TABLE "permissions" (
-  "id"          INTEGER PRIMARY KEY AUTOINCREMENT,
-  "slug"        VARCHAR(255) NOT NULL UNIQUE,
-  "name"        VARCHAR(255) NOT NULL UNIQUE,
-  "description" VARCHAR(255)
-);
-
-CREATE TABLE "results" (
-  "id" integer primary key autoincrement,
-  "campaign_id" bigint,
-  "user_id" bigint,
-  "r_id" varchar(255),
-  "email" varchar(255),
-  "first_name" varchar(255),
-  "last_name" varchar(255),
-  "status" varchar(255) NOT NULL,
-  "ip" varchar(255),
-  "latitude" real,
-  "longitude" real,
-  position VARCHAR(255),
-  send_date DATETIME,
-  reported boolean default 0,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id BIGINT,
+  name VARCHAR(255),
   modified_date DATETIME
 );
 
-CREATE TABLE "role_permissions" (
-  "role_id"       INTEGER NOT NULL,
-  "permission_id" INTEGER NOT NULL
+CREATE TABLE headers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  key VARCHAR(255),
+  value VARCHAR(255),
+  smtp_id BIGINT
 );
 
-CREATE TABLE "roles" (
-  "id"          INTEGER PRIMARY KEY AUTOINCREMENT,
-  "slug"        VARCHAR(255) NOT NULL UNIQUE,
-  "name"        VARCHAR(255) NOT NULL UNIQUE,
-  "description" VARCHAR(255)
+CREATE TABLE imap (
+  user_id BIGINT,
+  host VARCHAR(255),
+  port INTEGER,
+  username VARCHAR(255),
+  password VARCHAR(255),
+  modified_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+  tls BOOLEAN,
+  enabled BOOLEAN,
+  folder VARCHAR(255),
+  restrict_domain VARCHAR(255),
+  delete_reported_campaign_email BOOLEAN,
+  last_login DATETIME,
+  imap_freq INTEGER,
+  ignore_cert_errors BOOLEAN
+);
+
+CREATE TABLE mail_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id INTEGER,
+  user_id INTEGER,
+  send_date DATETIME,
+  send_attempt INTEGER,
+  r_id VARCHAR(255),
+  processing BOOLEAN
+);
+
+CREATE TABLE pages (
+  created_at VARCHAR(40),
+  revision BIGINT NOT NULL DEFAULT 1,
+  edited_by BIGINT,
+  edited_at VARCHAR(40),
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id BIGINT,
+  name VARCHAR(255),
+  html TEXT,
+  modified_date DATETIME,
+  redirect_url VARCHAR(255)
+);
+
+CREATE TABLE permissions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug VARCHAR(255) NOT NULL UNIQUE,
+  name VARCHAR(255) NOT NULL UNIQUE,
+  description VARCHAR(255)
+);
+
+CREATE TABLE results (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id BIGINT,
+  user_id BIGINT,
+  r_id VARCHAR(255),
+  email VARCHAR(255),
+  first_name VARCHAR(255),
+  last_name VARCHAR(255),
+  status VARCHAR(255) NOT NULL,
+  ip VARCHAR(255),
+  latitude REAL,
+  longitude REAL,
+  position VARCHAR(255),
+  send_date DATETIME,
+  reported BOOLEAN DEFAULT 0,
+  modified_date DATETIME
+);
+
+CREATE TABLE role_permissions (
+  role_id INTEGER NOT NULL,
+  permission_id INTEGER NOT NULL
+);
+
+CREATE TABLE roles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug VARCHAR(255) NOT NULL UNIQUE,
+  name VARCHAR(255) NOT NULL UNIQUE,
+  description VARCHAR(255)
 );
 
 CREATE TABLE ruphish_auth_state (
@@ -195,7 +198,7 @@ CREATE TABLE ruphish_campaign_groups (
   campaign_id INTEGER NOT NULL,
   ordinal INTEGER NOT NULL,
   group_id INTEGER NOT NULL,
-  PRIMARY KEY(campaign_id,ordinal)
+  PRIMARY KEY(campaign_id, ordinal)
 );
 
 CREATE TABLE ruphish_campaign_creation (
@@ -204,11 +207,11 @@ CREATE TABLE ruphish_campaign_creation (
   request_key TEXT NOT NULL,
   fingerprint TEXT NOT NULL,
   resource_id INTEGER NOT NULL,
-  PRIMARY KEY(owner_id,operation,request_key)
+  PRIMARY KEY(owner_id, operation, request_key)
 );
 
 CREATE TABLE ruphish_campaign_policy (
-  track_opens INTEGER NOT NULL DEFAULT 1 CHECK(track_opens IN (0,1)),
+  track_opens INTEGER NOT NULL DEFAULT 1 CHECK (track_opens IN (0, 1)),
   campaign_id INTEGER PRIMARY KEY,
   redirect_url TEXT NOT NULL,
   learning_page_id INTEGER
@@ -217,9 +220,9 @@ CREATE TABLE ruphish_campaign_policy (
 CREATE TABLE ruphish_delivery (
   result_id INTEGER PRIMARY KEY,
   campaign_id INTEGER NOT NULL,
-  state TEXT NOT NULL CHECK(state IN ('ready','preparing','submitting','retry','accepted','failed','unknown','blocked','cancelled')),
+  state TEXT NOT NULL CHECK (state IN ('ready', 'preparing', 'submitting', 'retry', 'accepted', 'failed', 'unknown', 'blocked', 'cancelled')),
   due INTEGER NOT NULL,
-  retries INTEGER NOT NULL DEFAULT 0 CHECK(retries BETWEEN 0 AND 8),
+  retries INTEGER NOT NULL DEFAULT 0 CHECK (retries BETWEEN 0 AND 8),
   generation INTEGER NOT NULL DEFAULT 0,
   lease_until INTEGER NOT NULL DEFAULT 0,
   last_claim INTEGER NOT NULL DEFAULT 0,
@@ -239,7 +242,7 @@ CREATE TABLE ruphish_delivery_attempt (
   smtp_code INTEGER,
   message_id TEXT NOT NULL,
   resource_revision TEXT NOT NULL DEFAULT '',
-  PRIMARY KEY(result_id,generation)
+  PRIMARY KEY(result_id, generation)
 );
 
 CREATE TABLE ruphish_domain_checks (
@@ -249,9 +252,9 @@ CREATE TABLE ruphish_domain_checks (
   scheduled_at INTEGER NOT NULL,
   started_at INTEGER,
   finished_at INTEGER,
-  outcome TEXT CHECK(outcome IN ('passed','failed','timed_out')),
+  outcome TEXT CHECK (outcome IN ('passed', 'failed', 'timed_out')),
   code TEXT NOT NULL DEFAULT '',
-  CHECK((finished_at IS NULL AND outcome IS NULL) OR (finished_at IS NOT NULL AND outcome IS NOT NULL))
+  CHECK ((finished_at IS NULL AND outcome IS NULL) OR (finished_at IS NOT NULL AND outcome IS NOT NULL))
 );
 
 CREATE TABLE ruphish_domains (
@@ -279,14 +282,14 @@ CREATE TABLE ruphish_domains (
   generation INTEGER NOT NULL DEFAULT 0,
   failures INTEGER NOT NULL DEFAULT 0,
   routing_proof TEXT NOT NULL DEFAULT '',
-  UNIQUE(owner_id,origin)
+  UNIQUE (owner_id, origin)
 );
 
-CREATE TABLE "ruphish_event_receipts" (
+CREATE TABLE ruphish_event_receipts (
   result_id INTEGER NOT NULL,
   request_id TEXT NOT NULL,
   event_id BIGINT,
-  PRIMARY KEY(result_id,request_id)
+  PRIMARY KEY(result_id, request_id)
 );
 
 CREATE TABLE ruphish_learning_pages (
@@ -314,10 +317,10 @@ CREATE TABLE ruphish_mailbox_messages (
   state TEXT NOT NULL,
   code TEXT NOT NULL,
   acknowledged INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY(mailbox_id,uidvalidity,uid)
+  PRIMARY KEY(mailbox_id, uidvalidity, uid)
 );
 
-CREATE TABLE "ruphish_mailbox_runs" (
+CREATE TABLE ruphish_mailbox_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   mailbox_id INTEGER NOT NULL,
   started INTEGER NOT NULL,
@@ -327,7 +330,7 @@ CREATE TABLE "ruphish_mailbox_runs" (
   rejected INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE "ruphish_mailboxes" (
+CREATE TABLE ruphish_mailboxes (
   created_at VARCHAR(40),
   edited_by BIGINT,
   edited_at VARCHAR(40),
@@ -337,7 +340,7 @@ CREATE TABLE "ruphish_mailboxes" (
   revision INTEGER NOT NULL DEFAULT 1,
   enabled INTEGER NOT NULL,
   host TEXT NOT NULL,
-  port INTEGER NOT NULL CHECK(port BETWEEN 1 AND 65535),
+  port INTEGER NOT NULL CHECK (port BETWEEN 1 AND 65535),
   username TEXT NOT NULL,
   password TEXT NOT NULL,
   tls INTEGER NOT NULL,
@@ -352,14 +355,14 @@ CREATE TABLE "ruphish_mailboxes" (
   lease INTEGER NOT NULL DEFAULT 0,
   last_check INTEGER NOT NULL DEFAULT 0,
   last_success INTEGER NOT NULL DEFAULT 0,
-  modified_date TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  modified_date TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   last_login TEXT NOT NULL DEFAULT '0001-01-01T00:00:00Z',
   failures INTEGER NOT NULL DEFAULT 0,
   code TEXT NOT NULL DEFAULT '',
-  ignore_cert_errors INTEGER NOT NULL DEFAULT 0 CHECK(ignore_cert_errors IN (0,1)),
+  ignore_cert_errors INTEGER NOT NULL DEFAULT 0 CHECK (ignore_cert_errors IN (0, 1)),
   initial_since VARCHAR(40),
   reset_required INTEGER NOT NULL DEFAULT 0,
-  UNIQUE(owner_id,name)
+  UNIQUE (owner_id, name)
 );
 
 CREATE TABLE ruphish_profile_cooldown (
@@ -381,7 +384,7 @@ CREATE TABLE ruphish_sessions (
 );
 
 CREATE TABLE ruphish_settings (
-  sending_profile_test_required INTEGER NOT NULL DEFAULT 0 CHECK(sending_profile_test_required IN (0,1)),
+  sending_profile_test_required INTEGER NOT NULL DEFAULT 0 CHECK (sending_profile_test_required IN (0, 1)),
   id INTEGER NOT NULL PRIMARY KEY CHECK (id=1),
   revision INTEGER NOT NULL,
   verification_enabled INTEGER NOT NULL,
@@ -402,7 +405,7 @@ CREATE TABLE ruphish_user_preferences (
   show_utc_offset INTEGER NOT NULL DEFAULT 1
 );
 
-CREATE TABLE "ruphish_webhook_attempts" (
+CREATE TABLE ruphish_webhook_attempts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   job_id INTEGER NOT NULL,
   attempt INTEGER NOT NULL,
@@ -412,7 +415,7 @@ CREATE TABLE "ruphish_webhook_attempts" (
   code TEXT NOT NULL DEFAULT 'running'
 );
 
-CREATE TABLE "ruphish_webhook_jobs" (
+CREATE TABLE ruphish_webhook_jobs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   webhook_id INTEGER NOT NULL,
   revision INTEGER NOT NULL,
@@ -422,7 +425,7 @@ CREATE TABLE "ruphish_webhook_jobs" (
   due INTEGER NOT NULL DEFAULT 0,
   lease INTEGER NOT NULL DEFAULT 0,
   code TEXT NOT NULL DEFAULT '',
-  UNIQUE(webhook_id,event_id)
+  UNIQUE (webhook_id, event_id)
 );
 
 CREATE TABLE ruphish_webhook_state (
@@ -440,121 +443,59 @@ CREATE TABLE smtp (
   revision BIGINT NOT NULL DEFAULT 1,
   edited_by BIGINT,
   edited_at VARCHAR(40),
-  id integer primary key autoincrement,
-  user_id bigint,
-  interface_type varchar(255),
-  name varchar(255),
-  host varchar(255),
-  username varchar(255),
-  password varchar(255),
-  from_address varchar(255),
-  modified_date datetime default CURRENT_TIMESTAMP,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id BIGINT,
+  interface_type VARCHAR(255),
+  name VARCHAR(255),
+  host VARCHAR(255),
+  username VARCHAR(255),
+  password VARCHAR(255),
+  from_address VARCHAR(255),
+  modified_date DATETIME DEFAULT CURRENT_TIMESTAMP,
   ignore_cert_errors BOOLEAN
 );
 
-CREATE TABLE "targets" (
-  "id" integer primary key autoincrement,
-  "first_name" varchar(255),
-  "last_name" varchar(255),
-  "email" varchar(255),
-  "position" varchar(255)
+CREATE TABLE targets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  first_name VARCHAR(255),
+  last_name VARCHAR(255),
+  email VARCHAR(255),
+  position VARCHAR(255)
 );
 
-CREATE TABLE "templates" (
+CREATE TABLE templates (
   created_at VARCHAR(40),
   revision BIGINT NOT NULL DEFAULT 1,
   edited_by BIGINT,
   edited_at VARCHAR(40),
-  "id" integer primary key autoincrement,
-  "user_id" bigint,
-  "name" varchar(255),
-  "subject" varchar(255),
-  "text" varchar(255),
-  "html" varchar(255),
-  "modified_date" datetime,
-  envelope_sender varchar(255)
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id BIGINT,
+  name VARCHAR(255),
+  subject VARCHAR(255),
+  text TEXT,
+  html TEXT,
+  modified_date DATETIME,
+  envelope_sender VARCHAR(255)
 );
 
-CREATE TABLE "users" (
-  "id" integer primary key autoincrement,
-  "username" varchar(255) NOT NULL UNIQUE,
-  "hash" varchar(255),
-  "api_key" varchar(255) NOT NULL UNIQUE,
-  "role_id" INTEGER,
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username VARCHAR(255) NOT NULL UNIQUE,
+  hash VARCHAR(255),
+  api_key VARCHAR(255) NOT NULL UNIQUE,
+  role_id INTEGER,
   password_change_required BOOLEAN,
-  last_login datetime,
+  last_login DATETIME,
   account_locked BOOLEAN
 );
 
-CREATE TABLE "webhooks" (
-  "id" integer primary key autoincrement,
-  "name" varchar(255),
-  "url" varchar(1000),
-  "secret" varchar(255),
-  "is_active" boolean default 0
+CREATE TABLE webhooks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name VARCHAR(255),
+  url VARCHAR(1000),
+  secret VARCHAR(255),
+  is_active BOOLEAN DEFAULT 0
 );
-
-CREATE UNIQUE INDEX events_create_key ON events(campaign_id,recipient_id,create_key);
-
-CREATE INDEX events_recipient_identity ON events(recipient_id,id);
-
-CREATE INDEX ruphish_campaign_domain ON ruphish_campaign_domains(domain_id,campaign_id);
-
-CREATE INDEX ruphish_campaign_drafts_owner ON ruphish_campaign_drafts(owner_id,id);
-
-CREATE INDEX ruphish_campaign_learning_page ON ruphish_campaign_policy(learning_page_id,campaign_id);
-
-CREATE INDEX ruphish_campaign_page ON campaigns(page_id,status);
-
-CREATE INDEX ruphish_campaign_profile ON campaigns(smtp_id,status);
-
-CREATE INDEX ruphish_campaign_template ON campaigns(template_id,status);
-
-CREATE INDEX ruphish_delivery_campaign ON ruphish_delivery(campaign_id,state);
-
-CREATE INDEX ruphish_delivery_due ON ruphish_delivery(state,due,campaign_id);
-
-CREATE INDEX ruphish_delivery_fairness ON ruphish_delivery(campaign_id,last_claim);
-
-CREATE UNIQUE INDEX ruphish_domain_checks_active ON ruphish_domain_checks(domain_id) WHERE finished_at IS NULL;
-
-CREATE INDEX ruphish_domain_checks_recent ON ruphish_domain_checks(domain_id,id DESC);
-
-CREATE INDEX ruphish_domains_due ON ruphish_domains(due,lease_until);
-
-CREATE INDEX ruphish_events_campaign ON events(campaign_id,id);
-
-CREATE INDEX ruphish_events_campaign_time ON events(campaign_id,time,id);
-
-CREATE INDEX ruphish_events_recipient ON events(campaign_id,email,id);
-
-CREATE INDEX ruphish_group_targets_group ON group_targets(group_id);
-
-CREATE INDEX ruphish_groups_owner ON groups(user_id);
-
-CREATE UNIQUE INDEX ruphish_learning_pages_owner_name ON ruphish_learning_pages(user_id,name);
-
-CREATE INDEX ruphish_mailbox_history ON ruphish_mailbox_runs(mailbox_id,id);
-
-CREATE INDEX ruphish_mailbox_runs_unfinished ON ruphish_mailbox_runs(mailbox_id) WHERE finished IS NULL;
-
-CREATE INDEX ruphish_pages_owner ON pages(user_id);
-
-CREATE INDEX ruphish_results_campaign ON results(campaign_id,id);
-
-CREATE INDEX ruphish_results_rid ON results(r_id);
-
-CREATE INDEX ruphish_sessions_expiry ON ruphish_sessions(expires);
-
-CREATE INDEX ruphish_smtp_owner ON smtp(user_id);
-
-CREATE INDEX ruphish_templates_owner ON templates(user_id);
-
-CREATE INDEX ruphish_webhook_attempts_unfinished ON ruphish_webhook_attempts(job_id) WHERE finished IS NULL;
-
-CREATE INDEX ruphish_webhook_due ON ruphish_webhook_jobs(state,due,lease);
-
-CREATE UNIQUE INDEX campaigns_learning_public_id ON campaigns(learning_public_id);
 
 CREATE TABLE ruphish_profile_tests (
   sequence INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -562,53 +503,126 @@ CREATE TABLE ruphish_profile_tests (
   profile_id BIGINT NOT NULL,
   generation BIGINT NOT NULL,
   profile_revision BIGINT NOT NULL,
-  kind VARCHAR(16) NOT NULL CHECK(kind IN ('connection','email')),
+  kind VARCHAR(16) NOT NULL CHECK (kind IN ('connection', 'email')),
   operator BIGINT NOT NULL,
   email VARCHAR(320),
   started_at BIGINT NOT NULL,
   finished_at BIGINT,
   deadline BIGINT NOT NULL,
-  outcome VARCHAR(16) NOT NULL CHECK(outcome IN ('running','submitting','passed','accepted','failed','interrupted','unknown')),
+  outcome VARCHAR(16) NOT NULL CHECK (outcome IN ('running', 'submitting', 'passed', 'accepted', 'failed', 'interrupted', 'unknown')),
   code VARCHAR(64) NOT NULL DEFAULT '',
   smtp_code INTEGER,
-  CHECK((finished_at IS NULL AND outcome IN ('running','submitting')) OR (finished_at IS NOT NULL AND outcome NOT IN ('running','submitting')))
+  CHECK ((finished_at IS NULL AND outcome IN ('running', 'submitting')) OR (finished_at IS NOT NULL AND outcome NOT IN ('running', 'submitting')))
 );
-CREATE INDEX ruphish_profile_tests_history ON ruphish_profile_tests(profile_id,sequence);
-CREATE INDEX ruphish_profile_tests_evidence ON ruphish_profile_tests(profile_id,generation,sequence);
 
-CREATE VIEW event_history AS SELECT id,campaign_id,email,time,CASE kind WHEN 'campaign_created' THEN 'Campaign Created' WHEN 'email_sent' THEN 'Email Sent' WHEN 'email_error' THEN 'Error Sending Email' WHEN 'email_opened' THEN 'Email Opened' WHEN 'link_clicked' THEN 'Clicked Link' WHEN 'form_submitted' THEN 'Submitted Data' WHEN 'email_reported' THEN 'Email Reported' WHEN 'delivery_reconciled' THEN 'Delivery reconciled' ELSE kind END AS message,metadata AS details,recipient_id,source,edited,revision,client FROM events;
+-- Indexes
+CREATE UNIQUE INDEX events_create_key ON events (campaign_id, recipient_id, create_key);
+CREATE INDEX events_recipient_identity ON events (recipient_id, id);
+CREATE INDEX ruphish_campaign_domain ON ruphish_campaign_domains (domain_id, campaign_id);
+CREATE INDEX ruphish_campaign_drafts_owner ON ruphish_campaign_drafts (owner_id, id);
+CREATE INDEX ruphish_campaign_learning_page ON ruphish_campaign_policy (learning_page_id, campaign_id);
+CREATE INDEX ruphish_campaign_page ON campaigns (page_id, status);
+CREATE INDEX ruphish_campaign_profile ON campaigns (smtp_id, status);
+CREATE INDEX ruphish_campaign_template ON campaigns (template_id, status);
+CREATE INDEX ruphish_delivery_campaign ON ruphish_delivery (campaign_id, state);
+CREATE INDEX ruphish_delivery_due ON ruphish_delivery (state, due, campaign_id);
+CREATE INDEX ruphish_delivery_fairness ON ruphish_delivery (campaign_id, last_claim);
+CREATE UNIQUE INDEX ruphish_domain_checks_active ON ruphish_domain_checks (domain_id) WHERE finished_at IS NULL;
+CREATE INDEX ruphish_domain_checks_recent ON ruphish_domain_checks (domain_id, id DESC);
+CREATE INDEX ruphish_domains_due ON ruphish_domains (due, lease_until);
+CREATE INDEX ruphish_events_campaign ON events (campaign_id, id);
+CREATE INDEX ruphish_events_campaign_time ON events (campaign_id, time, id);
+CREATE INDEX ruphish_events_recipient ON events (campaign_id, email, id);
+CREATE INDEX ruphish_group_targets_group ON group_targets (group_id);
+CREATE INDEX ruphish_groups_owner ON groups (user_id);
+CREATE UNIQUE INDEX ruphish_learning_pages_owner_name ON ruphish_learning_pages (user_id, name);
+CREATE INDEX ruphish_mailbox_history ON ruphish_mailbox_runs (mailbox_id, id);
+CREATE INDEX ruphish_mailbox_runs_unfinished ON ruphish_mailbox_runs (mailbox_id) WHERE finished IS NULL;
+CREATE INDEX ruphish_pages_owner ON pages (user_id);
+CREATE INDEX ruphish_results_campaign ON results (campaign_id, id);
+CREATE INDEX ruphish_results_rid ON results (r_id);
+CREATE INDEX ruphish_sessions_expiry ON ruphish_sessions (expires);
+CREATE INDEX ruphish_smtp_owner ON smtp (user_id);
+CREATE INDEX ruphish_templates_owner ON templates (user_id);
+CREATE INDEX ruphish_webhook_attempts_unfinished ON ruphish_webhook_attempts (job_id) WHERE finished IS NULL;
+CREATE INDEX ruphish_webhook_due ON ruphish_webhook_jobs (state, due, lease);
+CREATE UNIQUE INDEX campaigns_learning_public_id ON campaigns (learning_public_id);
+CREATE INDEX ruphish_profile_tests_history ON ruphish_profile_tests (profile_id, sequence);
+CREATE INDEX ruphish_profile_tests_evidence ON ruphish_profile_tests (profile_id, generation, sequence);
+CREATE INDEX ruphish_webhook_state_owner ON ruphish_webhook_state (owner_id);
+CREATE INDEX ruphish_attachments_template ON attachments (template_id);
+CREATE INDEX ruphish_headers_smtp ON headers (smtp_id);
+
+CREATE VIEW event_history AS SELECT
+  id,
+  campaign_id,
+  email,
+  time,
+  CASE kind
+    WHEN 'campaign_created' THEN 'Campaign Created'
+    WHEN 'email_sent' THEN 'Email Sent'
+    WHEN 'email_error' THEN 'Error Sending Email'
+    WHEN 'email_opened' THEN 'Email Opened'
+    WHEN 'link_clicked' THEN 'Clicked Link'
+    WHEN 'form_submitted' THEN 'Submitted Data'
+    WHEN 'email_reported' THEN 'Email Reported'
+    WHEN 'delivery_reconciled' THEN 'Delivery reconciled'
+    ELSE kind
+  END AS message,
+  metadata AS details,
+  recipient_id,
+  source,
+  edited,
+  revision,
+  client
+FROM events;
 
 CREATE VIEW ruphish_domain_policy AS
- SELECT d.id,
- CASE WHEN NOT s.verification_enabled THEN 9223372036854775807
-      WHEN d.verified_until<=0 THEN 0
-      WHEN NOT s.verification_expires THEN 9223372036854775807
-      ELSE d.checked_at+s.verification_validity_seconds END AS eligible_until,
- (NOT s.verification_enabled OR d.verified_until>0) AS serves,
- s.verification_enabled AS verification_required,
- CASE WHEN s.verification_enabled AND s.verification_expires AND d.verified_until>0
-      THEN d.checked_at+s.verification_validity_seconds ELSE NULL END AS expires_at
- FROM ruphish_domains d CROSS JOIN ruphish_settings s WHERE s.id=1;
+SELECT
+  d.id,
+  CASE
+    WHEN NOT s.verification_enabled THEN 9223372036854775807
+    WHEN d.verified_until <= 0 THEN 0
+    WHEN NOT s.verification_expires THEN 9223372036854775807
+    ELSE d.checked_at + s.verification_validity_seconds
+  END AS eligible_until,
+  (NOT s.verification_enabled OR d.verified_until > 0) AS serves,
+  s.verification_enabled AS verification_required,
+  CASE
+    WHEN s.verification_enabled AND s.verification_expires AND d.verified_until > 0
+      THEN d.checked_at + s.verification_validity_seconds
+    ELSE NULL
+  END AS expires_at
+FROM ruphish_domains d
+CROSS JOIN ruphish_settings s
+WHERE s.id = 1;
 
-CREATE TRIGGER ruphish_event_delete AFTER DELETE ON events BEGIN DELETE FROM ruphish_webhook_attempts WHERE job_id IN (SELECT id FROM ruphish_webhook_jobs WHERE event_id=OLD.id); DELETE FROM ruphish_webhook_jobs WHERE event_id=OLD.id; END;
+CREATE TRIGGER ruphish_event_delete AFTER DELETE ON events
+BEGIN
+  DELETE FROM ruphish_webhook_attempts
+  WHERE job_id IN (SELECT id FROM ruphish_webhook_jobs WHERE event_id = OLD.id);
+  DELETE FROM ruphish_webhook_jobs WHERE event_id = OLD.id;
+END;
 
-CREATE TRIGGER ruphish_event_insert AFTER INSERT ON events WHEN NEW.source<>'operator' BEGIN
- INSERT INTO ruphish_webhook_jobs(webhook_id,revision,event_id)
- SELECT w.id,s.revision,NEW.id FROM webhooks w JOIN ruphish_webhook_state s ON s.webhook_id=w.id
- WHERE w.is_active=1 AND (SELECT webhooks_enabled FROM ruphish_settings WHERE id=1)=1;
+CREATE TRIGGER ruphish_event_insert AFTER INSERT ON events
+WHEN NEW.source <> 'operator'
+BEGIN
+  INSERT INTO ruphish_webhook_jobs (webhook_id, revision, event_id)
+  SELECT w.id, s.revision, NEW.id
+  FROM webhooks w
+  JOIN ruphish_webhook_state s ON s.webhook_id = w.id
+  WHERE w.is_active = 1 AND (SELECT webhooks_enabled FROM ruphish_settings WHERE id = 1) = 1;
 END;
 
 -- Initial installation settings. Legacy conversion derives integration flags after import.
-INSERT INTO roles VALUES (1,'admin','Admin','System administrator with full permissions');
-INSERT INTO roles VALUES (2,'user','User','User role with edit access to objects and campaigns');
-INSERT INTO permissions VALUES (1,'view_objects','View Objects','View objects in Gophish');
-INSERT INTO permissions VALUES (2,'modify_objects','Modify Objects','Create and edit objects in Gophish');
-INSERT INTO permissions VALUES (3,'modify_system','Modify System','Manage system-wide configuration');
-INSERT INTO role_permissions VALUES (1,1);
-INSERT INTO role_permissions VALUES (2,1);
-INSERT INTO role_permissions VALUES (1,2);
-INSERT INTO role_permissions VALUES (2,2);
-INSERT INTO role_permissions VALUES (1,3);
-INSERT INTO ruphish_settings (id,revision,verification_enabled,verification_expires,verification_validity_seconds,verification_recheck_seconds,reporting_mailboxes_enabled,webhooks_enabled,updated_at,updated_by) VALUES (1,1,0,1,86400,21600,0,0,0,NULL);
-
-CREATE INDEX ruphish_webhook_state_owner ON ruphish_webhook_state(owner_id);
+INSERT INTO roles (id, slug, name, description) VALUES (1, 'admin', 'Admin', 'System administrator with full permissions');
+INSERT INTO roles (id, slug, name, description) VALUES (2, 'user', 'User', 'User role with edit access to objects and campaigns');
+INSERT INTO permissions (id, slug, name, description) VALUES (1, 'view_objects', 'View Objects', 'View objects in Gophish');
+INSERT INTO permissions (id, slug, name, description) VALUES (2, 'modify_objects', 'Modify Objects', 'Create and edit objects in Gophish');
+INSERT INTO permissions (id, slug, name, description) VALUES (3, 'modify_system', 'Modify System', 'Manage system-wide configuration');
+INSERT INTO role_permissions (role_id, permission_id) VALUES (1, 1);
+INSERT INTO role_permissions (role_id, permission_id) VALUES (2, 1);
+INSERT INTO role_permissions (role_id, permission_id) VALUES (1, 2);
+INSERT INTO role_permissions (role_id, permission_id) VALUES (2, 2);
+INSERT INTO role_permissions (role_id, permission_id) VALUES (1, 3);
+INSERT INTO ruphish_settings (id, revision, verification_enabled, verification_expires, verification_validity_seconds, verification_recheck_seconds, reporting_mailboxes_enabled, webhooks_enabled, updated_at, updated_by) VALUES (1, 1, 0, 1, 86400, 21600, 0, 0, 0, NULL);

@@ -401,6 +401,13 @@ mod mysql_proxy;
 #[path = "support/observation_history.rs"]
 mod observation_history;
 
+const DUPLICATE_ROLE_AND_PERMISSION_IDENTITIES: [&str; 4] = [
+    "INSERT INTO roles(id,slug,name) VALUES(100,'admin','Another role')",
+    "INSERT INTO roles(id,slug,name) VALUES(100,'another-role','Admin')",
+    "INSERT INTO permissions(id,slug,name) VALUES(100,'view_objects','Another permission')",
+    "INSERT INTO permissions(id,slug,name) VALUES(100,'another-permission','View Objects')",
+];
+
 #[tokio::test]
 #[ignore = "Requires canonical MySQL fixture and RUPHISH_MYSQL_TEST_PORT"]
 async fn mysql_baseline_preserves_populated_history_and_retry_tombstones() {
@@ -409,6 +416,13 @@ async fn mysql_baseline_preserves_populated_history_and_retry_tombstones() {
         .await
         .unwrap();
     db.close().await;
+    for query in DUPLICATE_ROLE_AND_PERMISSION_IDENTITIES {
+        let error = sqlx::query(query).execute(&mut inspect).await.unwrap_err();
+        assert!(
+            error.as_database_error().unwrap().is_unique_violation(),
+            "{query}: {error}"
+        );
+    }
     sqlx::raw_sql(observation_history::HISTORY)
         .execute(&mut inspect)
         .await
@@ -449,6 +463,13 @@ async fn postgres_baseline_preserves_populated_history_and_retry_tombstones() {
         .unwrap();
     db.close().await;
     let mut inspect = postgres_inspect(&config).await;
+    for query in DUPLICATE_ROLE_AND_PERMISSION_IDENTITIES {
+        let error = sqlx::query(query).execute(&mut inspect).await.unwrap_err();
+        assert!(
+            error.as_database_error().unwrap().is_unique_violation(),
+            "{query}: {error}"
+        );
+    }
     sqlx::raw_sql(observation_history::HISTORY)
         .execute(&mut inspect)
         .await
@@ -3238,6 +3259,18 @@ async fn postgres_schema_drift_is_rejected_and_restoration_recovers() {
         (
             "ALTER TABLE users ALTER COLUMN username DROP NOT NULL",
             "ALTER TABLE users ALTER COLUMN username SET NOT NULL",
+        ),
+        (
+            "ALTER TABLE ruphish_learning_pages ALTER COLUMN name TYPE VARCHAR(255) COLLATE \"default\"",
+            "ALTER TABLE ruphish_learning_pages ALTER COLUMN name TYPE VARCHAR(255) COLLATE \"C\"",
+        ),
+        (
+            "ALTER TABLE ruphish_learning_pages ALTER COLUMN public_id TYPE VARCHAR(32) COLLATE \"default\"",
+            "ALTER TABLE ruphish_learning_pages ALTER COLUMN public_id TYPE VARCHAR(32) COLLATE \"C\"",
+        ),
+        (
+            "ALTER TABLE roles DROP CONSTRAINT roles_slug_key",
+            "ALTER TABLE roles ADD CONSTRAINT roles_slug_key UNIQUE(slug)",
         ),
         (
             "UPDATE _sqlx_migrations SET success=FALSE",

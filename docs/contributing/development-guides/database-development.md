@@ -45,6 +45,8 @@ For a schema change:
 
 SQL files are pinned to LF through Git attributes so checksums remain stable across platforms. Never initialize populated unrecognized storage as an empty installation.
 
+Use lowercase `snake_case` identifiers, uppercase SQL keywords and types, two-space indentation, and one column or table constraint per line. Leave identifiers unquoted unless the provider requires quoting; MySQL uses backticks for reserved names such as `groups` and `key`, while PostgreSQL's `COLLATE "C"` retains its double quotes. Give seed inserts explicit column lists. Preserve the MySQL baseline's `-- Views` boundary and `CREATE TABLE` line prefixes: conversion uses them to separate and rename staging objects. Formatting changes still change migration checksums, so the released-migration rule applies to them too.
+
 ## Update schema verification
 
 | Provider | Verification owner |
