@@ -77,6 +77,7 @@
     "client_tablet": "Tablet",
     "client_observation_help": "Browser, Betriebssystem und Gerät werden aus der jeweiligen Anfrage abgeleitet und können ungenau sein. Sie beschreiben die Beobachtung, keine verifizierte Person oder ein verifiziertes Gerät.",
     "track_email_opens": "E-Mail-Öffnungen erfassen",
+    "track_email_opens_help": "E-Mail-Scanner und Datenschutzfunktionen können Öffnungen automatisch auslösen.",
     "not_tracked": "Nicht erfasst",
     "skip_certificate_verification": "Zertifikatsprüfung überspringen",
     "skip_certificate_verification_help": "Für kontrollierte Testumgebungen. Die Verbindung bleibt verschlüsselt, aber die Identität des Mailservers wird nicht überprüft.",

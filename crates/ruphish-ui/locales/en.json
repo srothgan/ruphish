@@ -77,6 +77,7 @@
     "client_tablet": "Tablet",
     "client_observation_help": "Browser, operating system and device are inferred from each request and may be inaccurate. They describe the observation, not a verified person or device.",
     "track_email_opens": "Track email opens",
+    "track_email_opens_help": "Email scanners and privacy features may register opens automatically.",
     "not_tracked": "Not tracked",
     "skip_certificate_verification": "Skip certificate verification",
     "skip_certificate_verification_help": "For controlled test environments. The connection stays encrypted, but the mail server's identity is not verified.",

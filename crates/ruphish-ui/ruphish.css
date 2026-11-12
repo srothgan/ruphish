@@ -415,7 +415,7 @@
   .login-form { padding: var(--s6); background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md); }
   .login-form > p { color: var(--muted); margin-bottom: var(--s5); }
   .login-form form { display: grid; gap: var(--s5); }
-  .login-form button { margin-top: var(--s2); width: 100%; }
+  .login-form form > button[type=submit] { margin-top: var(--s2); width: 100%; }
   .login-screen.session-screen { display: grid; place-items: center; min-height: 100vh; min-height: 100dvh; max-width: none; margin: 0; padding: var(--s5); }
 
   /* App shell + sidebar — deep teal-ink, a filled active pill (no left border). */

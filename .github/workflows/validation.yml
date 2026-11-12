@@ -71,16 +71,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        id: distribution
-        with:
-          path: dist/admin
-          key: admin-assets-v2-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', '.cargo/**', 'Trunk.toml', 'crates/ruphish-ui/**', 'crates/ruphish-domain/**', 'crates/ruphish-contracts/**') }}
       - uses: ./.github/actions/toolchain
+        id: toolchain
         with:
           browser: 'true'
           format-ui: 'true'
           cache-group: browser
+      - name: Restore development distribution
+        if: steps.toolchain.outputs.cache-restore == 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        id: distribution
+        with:
+          path: dist/admin
+          key: admin-assets-v2-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', '.cargo/**', 'Trunk.toml', 'crates/ruphish-ui/**', 'crates/ruphish-domain/**', 'crates/ruphish-contracts/**') }}
       - name: Install browser dependencies
         run: npm ci --prefix crates/ruphish-ui/web
       - name: Browser Rust and Leptos formatting
@@ -109,6 +112,12 @@ jobs:
           path: dist/admin/
           retention-days: 2
           if-no-files-found: error
+      - name: Save development distribution
+        if: steps.toolchain.outputs.cache-save == 'true' && steps.distribution.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: dist/admin
+          key: ${{ steps.distribution.outputs.cache-primary-key }}
 
   native:
     name: Linux native and executable acceptance
