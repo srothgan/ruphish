@@ -254,6 +254,28 @@ async fn fresh_schema_has_no_implicit_accounts_and_never_overwrites_existing_fil
             .unwrap(),
         "ok"
     );
+    let error =
+        sqlx::query("INSERT INTO ruphish_deleted_accounts(id,username) VALUES(NULL,'deleted')")
+            .execute(&mut connection)
+            .await
+            .unwrap_err();
+    assert_eq!(
+        error.as_database_error().unwrap().kind(),
+        sqlx::error::ErrorKind::NotNullViolation
+    );
+    for query in [
+        "EXPLAIN QUERY PLAN SELECT * FROM attachments WHERE template_id=1 ORDER BY id",
+        "EXPLAIN QUERY PLAN SELECT * FROM headers WHERE smtp_id=1 ORDER BY id",
+    ] {
+        let plans = sqlx::query(query).fetch_all(&mut connection).await.unwrap();
+        assert!(
+            plans.iter().any(|row| {
+                let detail: String = row.get("detail");
+                detail.starts_with("SEARCH ") && detail.contains("USING INDEX")
+            }),
+            "resource children must be found through an index: {query}"
+        );
+    }
     connection.close().await.unwrap();
 }
 
