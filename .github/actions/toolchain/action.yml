@@ -16,6 +16,13 @@ inputs:
   cache-save:
     description: Populate the dependency cache from this job when writes are allowed
     default: 'true'
+outputs:
+  cache-restore:
+    description: Whether the effective cache mode permits restoring caches
+    value: ${{ steps.cache.outputs.restore }}
+  cache-save:
+    description: Whether the effective cache mode permits saving caches
+    value: ${{ steps.cache.outputs.save }}
 runs:
   using: composite
   steps:

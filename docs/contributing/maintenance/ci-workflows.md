@@ -58,7 +58,7 @@ Normal source checks share a development UI artifact only when its source/depend
 
 The CI entry point separates cache readers from writers. PR and non-main manual runs read caches; main push/manual runs can write. Nightly main runs can write, while branch runs read. Release workflows use `cache-mode: none`, so shipped artifacts and their validation do not consume mutable CI caches. Gates and deployment jobs also disable cache access.
 
-The toolchain action respects the effective cache mode and fails on an unexpected value. Keep this policy aligned with `.github/scripts/cache-policy.test.mjs` when changing workflow calls or cache steps.
+The toolchain action respects the effective cache mode, exposes restore/save permissions to callers, and fails on an unexpected value. The development UI cache uses these permissions for separate restore and save steps: readers never attempt writes, and release validation skips both operations and builds fresh assets. Keep this policy aligned with `.github/scripts/cache-policy.test.mjs` when changing workflow calls or cache steps.
 
 ## Gates and deployment boundaries
 

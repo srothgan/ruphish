@@ -1367,7 +1367,6 @@ pub(crate) fn CreateCampaign(
                                 ui.changes_to_saved_templates_or_sending_profiles_can_affect_scheduled_emails_and_r
                             )}
                         </p>
-                        <p>{tr!(ui.all_submissions_recorded)}</p>
                         <section class="resource-section">
                             <Checkbox
                                 label=trs!(ui.track_email_opens)
@@ -1381,6 +1380,7 @@ pub(crate) fn CreateCampaign(
                                     draft.update(|d| d.set_track_opens(checked))
                                 })
                             />
+                            <p class="resource-usage">{tr!(ui.track_email_opens_help)}</p>
                             <h2>{tr!(ui.redirect_after_submission_optional)}</h2>
                             <p>{tr!(ui.campaign_redirect_defaults)}</p>
                             <Show when=move || {

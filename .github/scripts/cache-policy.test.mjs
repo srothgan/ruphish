@@ -121,6 +121,60 @@ test('toolchain reads cache permissions in a Node action and fails closed withou
   }
 });
 
+test('development assets restore and save only when allowed, rebuilding without an exact hit', () => {
+  const toolchain = read('../actions/toolchain/action.yml');
+  for (const [output, permission] of [
+    ['cache-restore', 'restore'],
+    ['cache-save', 'save'],
+  ]) {
+    assert.match(
+      toolchain,
+      new RegExp(
+        `^ {2}${output}:\\n {4}description: .+\\n {4}value: \\$\\{\\{ steps\\.cache\\.outputs\\.${permission} \\}\\}`,
+        'm',
+      ),
+    );
+  }
+  const assets = jobs(workflows['validation.yml']).assets;
+  const steps = assets.split(/^ {6}- /m).slice(1);
+  const restore = steps.find((step) => step.includes('uses: actions/cache/restore@'));
+  const save = steps.find((step) => step.includes('uses: actions/cache/save@'));
+  const build = steps.find((step) => step.startsWith('name: Build development distribution\n'));
+  assert.doesNotMatch(assets, /uses: actions\/cache@/);
+  assert.match(assets, /uses: \.\/\.github\/actions\/toolchain\n {8}id: toolchain\n/);
+  assert.match(restore, /id: distribution\n/);
+  assert.match(restore, /key: admin-assets-v2-\$\{\{ hashFiles\(/);
+  assert.match(save, /key: \$\{\{ steps\.distribution\.outputs\.cache-primary-key \}\}/);
+  assert.match(build, /run: trunk build --locked\n/);
+  for (const step of [restore, save]) {
+    assert.match(step, /path: dist\/admin\n/);
+  }
+  for (const [access, canRestore, canSave] of [
+    ['none', false, false],
+    ['read', true, false],
+    ['write', true, true],
+  ]) {
+    for (const hit of [undefined, 'false', 'true']) {
+      const context = {
+        steps: {
+          toolchain: {
+            outputs: { 'cache-restore': String(canRestore), 'cache-save': String(canSave) },
+          },
+          distribution: { outputs: { 'cache-hit': canRestore ? hit : undefined } },
+        },
+      };
+      const enabled = (step) => {
+        const guard = step.match(/^ {8}if: (.+)$/m)[1];
+        return runInNewContext(guard.replace(/\.([\w-]+)/g, "['$1']"), context);
+      };
+      const exactHit = canRestore && hit === 'true';
+      assert.equal(enabled(restore), canRestore, `${access}: restore`);
+      assert.equal(enabled(build), !exactHit, `${access}: build`);
+      assert.equal(enabled(save), canSave && !exactHit, `${access}: save`);
+    }
+  }
+});
+
 test('CI gates reject failed, cancelled, missing or duplicate suite executions', () => {
   const ci = jobs(workflows['pr.yml']);
   for (const first of ['success', 'skipped', 'failure', 'cancelled', undefined]) {
