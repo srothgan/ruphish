@@ -1,0 +1,22 @@
+<div class="theme-control" data-theme-control data-preference="auto" hidden>
+  <svg class="light-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" /></svg>
+  <svg class="dark-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z" /></svg>
+  <svg class="auto-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="12" rx="2" /><path d="M2 20h20m-13-4-1 4m7-4 1 4" /></svg>
+  <select data-theme-select aria-label="Color theme" title="Choose color theme">
+    <option value="light">Light</option>
+    <option value="dark">Dark</option>
+    <option value="auto" selected>System</option>
+  </select>
+</div>
+<style>
+  .theme-control { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding-inline: 8px; border-radius: 6px; color: inherit; font: 500 0.9375rem 'IBM Plex Sans', sans-serif; }
+  .theme-control[hidden] { display: none; }
+  .theme-control:hover { background: var(--hover); color: var(--ink); }
+  .theme-control:focus-within { outline: 2px solid var(--theme-focus, var(--link)); outline-offset: 3px; }
+  :global(.site-header) .theme-control, :global(header.header) .theme-control { --theme-focus: var(--nav-focus); }
+  svg { display: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  [data-preference='light'] .light-icon, [data-preference='dark'] .dark-icon, [data-preference='auto'] .auto-icon { display: block; }
+  select { min-height: 44px; padding: 8px 0; border: 0; color: inherit; background: transparent; font: inherit; cursor: pointer; }
+  select:focus { outline: none; }
+  option { color: var(--ink); background: var(--paper); }
+</style>

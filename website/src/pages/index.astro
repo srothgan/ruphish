@@ -1,6 +1,6 @@
 ---
 import Site from '../layouts/Site.astro';
-import { Tabs, TabItem } from '@astrojs/starlight/components';
+import Tabs from '../components/Tabs.astro';
 import { Code } from 'astro:components';
 import { repository, demo, description } from '../site';
 
@@ -66,24 +66,22 @@ const projectLinks = [
       <a class="text-link" href="/docs/getting-started/install-ruphish/">Installation guide</a>
     </div>
     <div class="install-commands">
-      <Tabs>
-        {installers.map(({ id, label, command, href, link }) => (
-          <TabItem label={label}>
-            <div class="command">
-              {id === 'install-docker' && <p class="command-note">Save <code>compose.yaml</code> from the <a href={href}>Docker setup guide</a> first, then run:</p>}
-              <div class="command-line">
-                <Code code={command} lang={id === 'install-windows' ? 'powershell' : 'bash'} theme="github-light" />
-                <button class="copy-button" type="button" data-copy={command} data-copy-label={label} aria-label={`Copy ${label} command`} title={`Copy ${label} command`} hidden>
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <g class="copy-icon"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M15 9V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h4" /></g>
-                    <path class="copied-icon" d="m5 12 4 4L19 6" />
-                    <path class="copy-error-icon" d="m6 6 12 12M6 18 18 6" />
-                  </svg>
-                </button>
-              </div>
-              <p class="install-note"><a href={href}>{link}</a></p>
+      <Tabs label="Installation method" tabs={installers}>
+        {installers.map(({ id, label, command, href, link }, index) => (
+          <div class="command" role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-tab`} hidden={index !== 0}>
+            {id === 'install-docker' && <p class="command-note">Save <code>compose.yaml</code> from the <a href={href}>Docker setup guide</a> first, then run:</p>}
+            <div class="command-line">
+              <Code code={command} lang={id === 'install-windows' ? 'powershell' : 'bash'} themes={{ light: 'github-light', dark: 'github-dark' }} defaultColor={false} />
+              <button class="copy-button" type="button" data-copy={command} data-copy-label={label} aria-label={`Copy ${label} command`} title={`Copy ${label} command`} hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <g class="copy-icon"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M15 9V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h4" /></g>
+                  <path class="copied-icon" d="m5 12 4 4L19 6" />
+                  <path class="copy-error-icon" d="m6 6 12 12M6 18 18 6" />
+                </svg>
+              </button>
             </div>
-          </TabItem>
+            <p class="install-note"><a href={href}>{link}</a></p>
+          </div>
         ))}
       </Tabs>
       <p class="visually-hidden" aria-live="polite" aria-atomic="true" data-copy-status></p>

@@ -47,11 +47,13 @@ export default defineConfig({
       social: [
         { icon: 'github', label: 'Ruphish on GitHub', href: 'https://github.com/srothgan/ruphish' },
       ],
-      customCss: ['./src/styles/fonts.css', './src/styles/docs.css'],
+      customCss: ['./src/styles/fonts.css', './src/styles/theme.css', './src/styles/docs.css'],
       components: {
         Head: './src/components/DocsHead.astro',
         SocialIcons: './src/components/DocsLinks.astro',
         Footer: './src/components/DocsFooter.astro',
+        ThemeProvider: './src/components/ThemeProvider.astro',
+        ThemeSelect: './src/components/ThemeSelect.astro',
       },
       routeMiddleware: './src/docs-middleware.ts',
       disable404Route: true,

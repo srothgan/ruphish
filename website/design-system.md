@@ -15,7 +15,7 @@ Ruphish is a privacy-respecting security simulation tool. Its interface should m
 
 ## Theme and color
 
-The theme combines a deep teal navigation area, pale teal-tinted application background and white content surfaces. Teal is the primary action color. Red signals destructive actions and errors; amber signals caution; blue signals information or active work.
+Light mode combines deep teal navigation, a pale teal canvas, and white content surfaces. Dark mode uses neutral charcoal surfaces with light foregrounds. Teal is the primary action color. Red signals destructive actions and errors; amber signals caution; blue signals information or active work. The table below describes the light palette; `src/styles/theme.css` owns both modes.
 
 | Role | Token | Color | Use |
 | --- | --- | --- | --- |
@@ -91,11 +91,13 @@ The landing page introduces Ruphish with one short headline, a clear explanation
 
 Use a centered hero and screenshot. Align feature prose and the About page to the left. The headline scales from approximately 42px on narrow screens to 84px on wide screens; body text is 17?19px. Use larger 48?100px spacing between website sections while retaining the original 4px spacing scale within components. Primary website actions are at least 48px tall.
 
-Keep the landing page light, with pale teal canvas and white image surfaces. Starlight retains its light/dark theme control; adapt both themes through semantic color tokens. Self-host fonts. Use the original SVG wordmark in navigation, its white variant on the footer, and the R symbol as the favicon. Preserve attribution for the IBM Plex lettering.
+All public pages and documentation share Light, Dark, and System theme selection through the same header control and saved preference. Light mode uses the pale teal canvas and white content surfaces; dark mode uses neutral charcoal surfaces with light text and brighter teal links. Keep readable foreground/background pairs together rather than changing a section's background independently. Self-host fonts. Use the white SVG wordmark on the dark navigation and footer, and the R symbol as the favicon. Preserve attribution for the IBM Plex lettering.
+
+`src/styles/theme.css` owns both palettes. `src/styles/site.css` scopes public-page styles to `.site-page`; `src/styles/docs.css` maps Starlight's semantic variables onto the shared palette. Theme initialization and preference handling live in `src/theme.js`, inlined before paint by `ThemeProvider.astro`; both layouts use `ThemeSelect.astro`. Retain the existing `starlight-theme` storage key. When storage is unavailable, selection still works for the current page. Code highlighting follows the resolved theme, including an explicit choice that differs from the operating system.
 
 ## Documentation experience
 
-Starlight owns navigation, search, theme selection, headings, code blocks, on-page contents, and previous/next links. Customize tokens and carefully scoped components instead of rebuilding these features. Organize the sidebar by reader goal: getting started, user guide, administration, HTTP API, migration, and contributing. Keep the getting-started section expanded and supporting sections collapsible.
+Starlight owns documentation navigation, search, headings, code blocks, on-page contents, and previous/next links. Its theme provider and selector use the same website components as public pages. Customize tokens and carefully scoped components instead of rebuilding documentation features. Public installation tabs use the website's small `Tabs.astro` component so the landing page does not import Starlight's documentation styles. Organize the sidebar by reader goal: getting started, user guide, administration, HTTP API, migration, and contributing. Keep the getting-started section expanded and supporting sections collapsible.
 
 Keep documentation prose around 49rem wide, with comfortable line height, clearly distinguished code, and horizontally scrollable wide tables. Search must retain its keyboard shortcut and mobile dialog. Edit links point to the authoritative Markdown under the repository's docs directory. The shared footer includes project links, licensing, and a Gophish acknowledgment while preserving Starlight's page navigation.
 

@@ -1,0 +1,30 @@
+---
+interface Props {
+  label: string;
+  tabs: { id: string; label: string }[];
+}
+const { label, tabs } = Astro.props;
+---
+<div class="tab-group" data-tab-group>
+  <div class="tab-list" role="tablist" aria-label={label}>
+    {tabs.map(({ id, label }, index) => (
+      <button type="button" role="tab" id={`${id}-tab`} aria-controls={`${id}-panel`} aria-selected={index === 0 ? 'true' : 'false'} tabindex={index === 0 ? 0 : -1}>{label}</button>
+    ))}
+  </div>
+  <slot />
+</div>
+<script>
+  import { setupTabs } from '../tabs.mjs';
+  for (const group of document.querySelectorAll<HTMLElement>('[data-tab-group]')) {
+    setupTabs(group);
+  }
+</script>
+<style>
+  .tab-group { min-width: 0; }
+  .tab-list { display: flex; flex-wrap: wrap; gap: 4px; }
+  button { min-height: 44px; padding: 8px 12px; border: 0; border-radius: 6px; color: var(--muted); background: transparent; font: inherit; cursor: pointer; }
+  button[aria-selected='true'] { color: var(--link); background: var(--hover); font-weight: 600; }
+  button:hover { background: var(--hover); }
+  button:focus-visible { outline: 2px solid var(--link); outline-offset: -5px; }
+  @media (max-width: 480px) { button { font-size: 0.9375rem; } }
+</style>

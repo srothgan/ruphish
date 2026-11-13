@@ -4,6 +4,8 @@ import '../styles/site.css';
 import wordmark from '../assets/ruphish-wordmark-white.svg';
 import ProjectFooter from '../components/ProjectFooter.astro';
 import ExternalLinkIcon from '../components/ExternalLinkIcon.astro';
+import ThemeProvider from '../components/ThemeProvider.astro';
+import ThemeSelect from '../components/ThemeSelect.astro';
 import Analytics from '@vercel/analytics/astro';
 import SpeedInsights from '@vercel/speed-insights/astro';
 import { repository, demo, socialImage, description as defaultDescription } from '../site';
@@ -13,10 +15,11 @@ const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site) : undefin
 const ogImage = Astro.site ? new URL(socialImage, Astro.site) : undefined;
 ---
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <ThemeProvider />
     <meta name="description" content={description} />
     <meta name="theme-color" content="#0c2f2b" />
     <meta name="generator" content={Astro.generator} />
@@ -34,7 +37,7 @@ const ogImage = Astro.site ? new URL(socialImage, Astro.site) : undefined;
     <Analytics />
     <SpeedInsights />
   </head>
-  <body>
+  <body class="site-page">
     <a class="skip-link" href="#main">Skip to content</a>
     <header class="site-header">
       <div class="shell header-inner">
@@ -49,6 +52,7 @@ const ogImage = Astro.site ? new URL(socialImage, Astro.site) : undefined;
           <a href={demo} class="external-link">Demo <ExternalLinkIcon /></a>
           <a href="/blog/" aria-current={Astro.url.pathname.startsWith('/blog/') ? 'page' : undefined}>Blog</a>
           <a href={repository} class="external-link">GitHub <ExternalLinkIcon /></a>
+          <ThemeSelect />
         </nav>
       </div>
     </header>
