@@ -2,37 +2,25 @@
 
 Development previews have short notes on GitHub Releases. This changelog records user-facing changes for final releases.
 
-## Unreleased
+## 0.1.0 - 2026-11-13
 
-- Improve SQLite attachment and mail-header lookups, align role and permission uniqueness across database providers, and make PostgreSQL learning-page text comparisons independent of the database's default collation.
-- Keep mailbox checkpoint recovery available after later connection failures, restarts, and ordinary configuration edits; expose its persistent state as `reset_required` in the API.
-- Protect an untouched campaign draft from silent navigation after a lost creation response, and reconcile retries using the original creation identity and confirmed save checkpoint.
-- Dismiss operation feedback with a close control; successful messages disappear after five seconds. Keep company-settings approval separate from save progress and results, and make back navigation more prominent.
-- Use consistent English and German connection-test wording for sending profiles and reporting mailboxes, with a clearer **Tests** menu for sending profiles.
+Initial release of Ruphish, a self-hosted phishing simulation platform and successor to Gophish.
 
-- Check saved sending-profile connections and send fixed-content test emails from a grouped testing menu. Keep durable results and history, and optionally require a successful test of current settings before new campaigns launch.
+### Added
 
-- Require numeric revisions for shared-resource updates and deletions; reject stale writes atomically and keep unsaved editor input with explicit conflict recovery.
+- Create personalized phishing emails with reusable recipient groups, email templates, attachments, and landing pages.
+- Save campaign drafts, preview and review content before launch, and send immediately or schedule delivery over a chosen time window.
+- Send through your own SMTP service, test sending profiles, and inspect delivery attempts with recovery options for uncertain sends.
+- Manage campaign domains and verify them before use, with an optional administrator policy requiring verification.
+- Show reusable learning pages after form submissions to explain the exercise and help recipients recognize phishing.
+- Explore dashboards and campaign and recipient timelines, with optional email-open tracking, click and submission events, password-presence indicators, and browser and device categories. Export results as CSV or Excel (XLSX).
+- Process reported phishing emails through multiple IMAP mailboxes and forward campaign events to signed webhooks.
+- Work together on shared resources, drafts, campaigns, and results, with account permissions, creator and editor attribution, and protection against conflicting edits.
+- Use the interface in English or German, with separate date-format and time-zone preferences.
+- Automate resource management, campaigns, and reporting through a documented HTTP API.
+- Run as a standalone native executable with the administration interface included, or deploy with Docker Compose. Choose SQLite, MySQL, or PostgreSQL for storage.
+- Migrate supported Gophish SQLite and MySQL databases.
 
-- Share application resources, campaign drafts, results and exports across the installation while retaining account and administrator permissions. Record read-only creator and last-editor attribution; preserve shared work when accounts are deleted.
+The built-in submission collector records interactions and password presence without collecting entered usernames, passwords, one-time codes, or other form values. Learning pages provide educational content without tracking training completion. See [participant data](https://ruphish.com/docs/user-guide/results/participant-data/) for collection details and limits.
 
-Initial release of a Gophish successor with a native Rust server, a Rust/WASM administration interface, and independent API contracts. Feature coverage follows the documented differences and privacy boundaries.
-
-- Let regular users manage shared webhooks and reporting mailboxes under administrator feature switches; reject configuration saves while a feature is disabled.
-- Initialize reporting mailboxes from active campaigns' actual sends, match reports across campaign creators, and ignore new reports after campaign completion while preserving polling progress.
-- Record coarse browser, OS, and device categories on clicks and submissions, with per-event recipient details and consistent exports/webhooks; exclude raw headers and network identities.
-- Manage recipient groups, email templates, landing pages, reusable static learning pages, attachments, and sending profiles.
-- Select hosted learning pages as campaign redirect destinations without adding training-completion tracking.
-- Choose campaign email-open tracking before launch, with disabled metrics shown as not tracked and enabled defaults for migrated campaigns.
-- Save campaign drafts with numeric IDs and idempotent creation, review campaigns before launch, and schedule delivery with explicit recovery for uncertain sends.
-- Freeze campaign email, attachments, sender identity/headers, landing pages and learning content at launch while keeping SMTP transport settings and domain eligibility live.
-- Review dashboards and campaign/recipient timelines, with CSV and XLSX exports.
-- Use fixed DNS, IPv4, or IPv6 campaign origins over HTTP or HTTPS; required verification remains restricted to DNS hostnames over HTTPS.
-- Verify campaign domains, process reports through multiple IMAP mailboxes, and deliver signed webhooks.
-- Use English or German interface text with independent date-format and time-zone preferences.
-- Run with SQLite, MySQL, or PostgreSQL, with migration support for recognized Gophish SQLite and MySQL histories.
-- Deploy with Docker Compose and environment-based configuration, or use a standalone native executable with the administration UI embedded.
-- Automate campaign workflows through documented Ruphish contracts, with separate `/api/`, `/auth/`, and `/internal/` interfaces.
-- Track participant interactions and password presence without collecting entered credentials or other form values through the built-in collector.
-
-See [differences from Gophish](https://ruphish.com/docs/migration/changes-to-review-before-migrating/) for intentional changes and migration considerations.
+Start with the [installation guide](https://ruphish.com/docs/getting-started/install-ruphish/) or [your first campaign](https://ruphish.com/docs/getting-started/run-your-first-campaign/). If you are moving from Gophish, review the [migration guide](https://ruphish.com/docs/migration/): Ruphish has its own interface and API contracts, so existing integrations need review.
