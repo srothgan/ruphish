@@ -15,7 +15,7 @@ const { compact = false } = Astro.props;
   <div class="footer-bottom"><span>© 2026 Simon Peter Rothgang</span><p>An independent project inspired by Gophish. Not affiliated with its maintainers.</p></div>
 </footer>
 <style>
-  .project-footer { --footer-text: #eef4f2; --footer-heading: #fff; background: #0c2f2b; color: var(--footer-text); padding: 56px max(32px, calc((100% - 1320px) / 2)) 24px; font-family: 'IBM Plex Sans', sans-serif; }
+  .project-footer { --footer-text: var(--nav-text); --footer-heading: var(--nav-text); background: var(--nav-bg); color: var(--footer-text); padding: 56px max(32px, calc((100% - 1320px) / 2)) 24px; font-family: 'IBM Plex Sans', sans-serif; }
   .footer-content { display: grid; grid-template-columns: 1.4fr repeat(3, 1fr); gap: 36px; align-items: start; }
   img { display: block; max-width: 100%; height: auto; }
   .footer-brand p { font-size: 0.9375rem; margin-top: 16px; line-height: 1.6; }
@@ -25,12 +25,13 @@ const { compact = false } = Astro.props;
   .project-footer p { color: var(--footer-text); }
   .project-footer a:hover { text-decoration: underline; color: var(--footer-heading); }
   .external-link { display: inline-flex; align-items: center; gap: 4px; }
-  a:focus-visible { outline: 2px solid #5cc8bb; outline-offset: 4px; }
-  .footer-bottom { margin-top: 40px; padding-top: 20px; border-top: 1px solid #28534c; display: flex; flex-wrap: wrap; gap: 12px 32px; justify-content: space-between; font-size: 0.75rem; }
+  a:focus-visible { outline: 2px solid var(--nav-focus); outline-offset: 4px; }
+  .footer-bottom { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--nav-line); display: flex; flex-wrap: wrap; gap: 12px 32px; justify-content: space-between; font-size: 0.75rem; }
   .footer-bottom p { margin: 0; font-size: inherit; line-height: 1.6; max-width: 490px; }
   .compact { --footer-text: var(--sl-color-text); --footer-heading: var(--sl-color-white); background: transparent; padding: 32px 0 0; margin-top: 32px; border-top: 1px solid var(--sl-color-hairline); }
   .compact .footer-content { grid-template-columns: repeat(3, 1fr); gap: 24px; }
   .compact .footer-bottom { border-color: var(--sl-color-hairline); }
+  .compact a:focus-visible { outline-color: var(--link); }
   @media (max-width: 800px) { .footer-content { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 480px) {
     .project-footer { padding: 40px 16px 24px; }

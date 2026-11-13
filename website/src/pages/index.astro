@@ -1,5 +1,7 @@
 ---
 import Site from '../layouts/Site.astro';
+import Tabs from '../components/Tabs.astro';
+import { Code } from 'astro:components';
 import { repository, demo, description } from '../site';
 
 const structuredData = {
@@ -16,6 +18,34 @@ const structuredData = {
   offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
   author: { '@type': 'Person', name: 'Simon Peter Rothgang' },
 };
+
+const installers = [
+  { id: 'install-docker', label: 'Docker', command: 'docker compose up -d --wait', href: '/docs/getting-started/install-ruphish/#install-and-start', link: 'Docker setup guide' },
+  { id: 'install-unix', label: 'Linux/macOS', command: 'curl -fsSL https://www.ruphish.com/install.sh | sh', href: '/docs/getting-started/install-ruphish/', link: 'Native installation guide' },
+  { id: 'install-windows', label: 'Windows', command: 'irm https://www.ruphish.com/install.ps1 | iex', href: '/docs/getting-started/install-ruphish/', link: 'Native installation guide' },
+];
+
+const capabilities = [
+  { title: 'Prepare', text: 'Build personalized emails from recipient groups, templates, attachments, and landing pages, or start from ready-made content. Save a draft and review it before launch.', link: 'Creating a campaign', href: '/docs/user-guide/campaigns/create-a-campaign/' },
+  { title: 'Send', text: 'Deliver through your own SMTP service, immediately or over a chosen time window. Follow every delivery attempt and resolve sends that could not be confirmed.', link: 'Monitoring sending', href: '/docs/user-guide/campaigns/monitor-sending/' },
+  { title: 'Understand', text: 'Move from the dashboard to a campaign and each recipient’s timeline. Export results as CSV or Excel for your own analysis.', link: 'Reading the results', href: '/docs/user-guide/results/view-campaign-results/' },
+  { title: 'Connect', text: 'Process reported emails from IMAP mailboxes, forward events to signed webhooks, and automate your work through the HTTP API.', link: 'Using the API', href: '/docs/api/' },
+];
+
+const timeline = [
+  { time: '09:02', event: 'Email sent', details: [] },
+  { time: '09:14', event: 'Email opened', details: [] },
+  { time: '09:21', event: 'Link clicked', details: [{ text: 'Firefox', style: 'neutral' }, { text: 'Windows', style: 'neutral' }, { text: 'Desktop', style: 'neutral' }] },
+  { time: '09:22', event: 'Form submitted', details: [{ text: 'Password entered', style: 'warning' }] },
+  { time: '09:40', event: 'Email reported', details: [] },
+];
+
+const projectLinks = [
+  { title: 'MIT License', text: 'Use, change, and share Ruphish freely.', href: `${repository}/blob/main/LICENSE` },
+  { title: 'Releases', text: 'Download the latest version and read what changed.', href: `${repository}/releases/latest` },
+  { title: 'Roadmap', text: 'See the priorities for upcoming releases.', href: `${repository}/blob/main/ROADMAP.md` },
+  { title: 'Contribute', text: 'Report issues, suggest features, or improve code, docs, and translations.', href: `${repository}/blob/main/CONTRIBUTING.md` },
+];
 ---
 <Site title="Ruphish - Open-source phishing simulation & Gophish successor">
   <section class="hero shell" aria-labelledby="hero-title">
@@ -29,17 +59,120 @@ const structuredData = {
       </a>
     </figure>
   </section>
-  <section class="shell workflow" aria-labelledby="workflow-title">
-    <div class="section-intro"><h2 id="workflow-title">The whole exercise,<br />in one place.</h2><p>Keep the context from preparation through reporting, with the details close at hand.</p></div>
-    <div class="capabilities">
-      <article><h3>Prepare with confidence</h3><p>Bring together recipients, email templates, landing pages, and sending profiles. Save a draft and review it before launch.</p><a href="/docs/user-guide/campaigns/create-a-campaign/#save-and-resume-a-draft">Preparing a campaign</a></article>
-      <article><h3>Know what happened</h3><p>Follow delivery status and recorded interactions. Move from the overview to an individual campaign and its recipient timeline.</p><a href="/docs/user-guide/results/view-campaign-results/">Reading the dashboard</a></article>
-      <article><h3>Make results useful</h3><p>Compare observations, review reported messages, and export results for your own analysis. Understand what each metric can tell you.</p><a href="/docs/user-guide/results/understand-the-metrics/">Understanding the metrics</a></article>
+  <section class="shell install" aria-labelledby="install-title">
+    <div class="install-intro">
+      <h2 id="install-title">Run it on your own server.</h2>
+      <p>Choose Docker or the native binary. Both include the administration interface and store data in SQLite by default, with MySQL and PostgreSQL also supported.</p>
+      <a class="text-link" href="/docs/getting-started/install-ruphish/">Installation guide</a>
+    </div>
+    <div class="install-commands">
+      <Tabs label="Installation method" tabs={installers}>
+        {installers.map(({ id, label, command, href, link }, index) => (
+          <div class="command" role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-tab`} hidden={index !== 0}>
+            {id === 'install-docker' && <p class="command-note">Save <code>compose.yaml</code> from the <a href={href}>Docker setup guide</a> first, then run:</p>}
+            <div class="command-line">
+              <Code code={command} lang={id === 'install-windows' ? 'powershell' : 'bash'} themes={{ light: 'github-light', dark: 'github-dark' }} defaultColor={false} />
+              <button class="copy-button" type="button" data-copy={command} data-copy-label={label} aria-label={`Copy ${label} command`} title={`Copy ${label} command`} hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <g class="copy-icon"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M15 9V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h4" /></g>
+                  <path class="copied-icon" d="m5 12 4 4L19 6" />
+                  <path class="copy-error-icon" d="m6 6 12 12M6 18 18 6" />
+                </svg>
+              </button>
+            </div>
+            <p class="install-note"><a href={href}>{link}</a></p>
+          </div>
+        ))}
+      </Tabs>
+      <p class="visually-hidden" aria-live="polite" aria-atomic="true" data-copy-status></p>
     </div>
   </section>
-  <section class="project-story">
-    <div class="shell story-inner"><h2>A familiar idea.<br />A new chapter.</h2><div><p>Ruphish grew out of using Gophish during a master’s thesis. It carries those useful workflows forward with a Rust backend, a new administration interface, and ideas from hands-on experience and the community.</p><a class="text-link" href="/about/">Why I’m building Ruphish</a></div></div>
+  <section class="shell workflow" aria-labelledby="workflow-title">
+    <div class="section-intro"><h2 id="workflow-title">The whole exercise,<br />in one place.</h2><p>Work on shared campaigns as a team, in English or German, with account permissions and protection against conflicting edits.</p></div>
+    <div class="capabilities">
+      {capabilities.map(({ title, text, link, href }) => (
+        <article><h3>{title}</h3><p>{text}</p><a href={href}>{link}</a></article>
+      ))}
+    </div>
   </section>
-  <section class="shell start-section"><div><h2>Take a look around.</h2><p>Explore sample campaigns, templates, and results in the demo. Actions are simulated: changes are not saved and no emails are sent.</p></div><a class="button tertiary" href={demo}>Try the demo</a></section>
+  <section class="records" aria-labelledby="records-title">
+    <div class="shell records-inner">
+      <div class="records-intro">
+        <h2 id="records-title">What people did,<br />not what they typed.</h2>
+        <p>Ruphish records each step of a recipient’s interaction and whether a password was entered. The built-in submission collector never stores entered usernames, passwords, one-time codes, or other form values.</p>
+        <a class="text-link" href="/docs/user-guide/results/participant-data/">How participant data is handled</a>
+      </div>
+      <figure class="timeline">
+        <ol>
+          {timeline.map(({ time, event, details }) => (
+            <li>
+              <span class="timeline-time">{time}</span>
+              <span class="timeline-event">{event}</span>
+              {details.length > 0 && <span class="timeline-details">{details.map(({ text, style }) => <span class={`badge ${style}`}>{text}</span>)}</span>}
+            </li>
+          ))}
+        </ol>
+        <figcaption>Sample recipient timeline with synthetic data</figcaption>
+      </figure>
+    </div>
+  </section>
+  <section class="migration" aria-labelledby="migration-title">
+    <div class="shell migration-inner">
+      <h2 id="migration-title">Coming from Gophish?</h2>
+      <div>
+        <p>Ruphish covers the Gophish campaign workflows with a new interface and API. Bring your existing data across, and review what changes before you switch.</p>
+        <ul>
+          <li>Migrate supported Gophish SQLite and MySQL databases.</li>
+          <li>Conversion clears captured event details and IP and location values from active data.</li>
+          <li>Familiar API paths can behave differently, so review integrations before reconnecting them.</li>
+        </ul>
+        <a class="text-link" href="/docs/migration/">Migration guide</a>
+      </div>
+    </div>
+  </section>
+  <section class="shell open-source" aria-labelledby="open-source-title">
+    <div class="section-intro"><h2 id="open-source-title">Open source,<br />built in the open.</h2><p>Ruphish is maintained independently by Simon Peter Rothgang. <a href="/about/">About the project</a></p></div>
+    <div class="project-links">
+      {projectLinks.map(({ title, text, href }) => (
+        <a href={href}><h3>{title}</h3><p>{text}</p></a>
+      ))}
+    </div>
+  </section>
+  <script>
+    const status = document.querySelector<HTMLElement>('[data-copy-status]');
+    if (navigator.clipboard?.writeText && status) {
+      for (const button of document.querySelectorAll<HTMLButtonElement>('.copy-button')) {
+        let reset: number | undefined;
+        const label = button.dataset.copyLabel;
+        const defaultLabel = `Copy ${label} command`;
+        button.hidden = false;
+        button.addEventListener('click', async () => {
+          if (button.disabled) return;
+          button.disabled = true;
+          window.clearTimeout(reset);
+          status.textContent = '';
+          try {
+            await navigator.clipboard.writeText(button.dataset.copy ?? '');
+            button.dataset.state = 'copied';
+            button.setAttribute('aria-label', 'Copied');
+            button.title = 'Copied';
+            status.textContent = `Copied the ${label} command.`;
+          } catch {
+            button.dataset.state = 'error';
+            button.setAttribute('aria-label', 'Copy failed. Select the command and copy it manually.');
+            button.title = 'Copy failed';
+            status.textContent = `Could not copy the ${label} command. Select it and copy it manually.`;
+          } finally {
+            button.disabled = false;
+          }
+          reset = window.setTimeout(() => {
+            delete button.dataset.state;
+            button.setAttribute('aria-label', defaultLabel);
+            button.title = defaultLabel;
+          }, 2000);
+        });
+      }
+    }
+  </script>
   <script type="application/ld+json" set:html={JSON.stringify(structuredData)} is:inline />
 </Site>

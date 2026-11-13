@@ -2,21 +2,35 @@
 import Site from '../layouts/Site.astro';
 import { repository } from '../site';
 ---
-<Site title="About Ruphish" description="Why Simon Peter Rothgang is building Ruphish: a project inspired by using Gophish during an Information Systems master’s thesis in Münster, Germany.">
+<Site title="About Ruphish" description="What Ruphish is, the principles behind it, who maintains it, and how to get involved in the open-source successor to Gophish.">
   <article class="about shell">
-    <header class="about-heading"><h1>A project I valued.<br />An idea worth continuing.</h1><p class="lead">Ruphish began with my master’s thesis, a tool I enjoyed using, and the wish to keep improving it.</p></header>
+    <header class="about-heading"><h1>Phishing simulations,<br />built in the open.</h1><p class="lead">Ruphish is an open-source, self-hosted phishing simulation platform. It continues the idea of Gophish on a new foundation and is maintained independently.</p></header>
     <div class="prose">
-      <h2>Where it started</h2>
-      <p>I’m Simon Peter Rothgang, an Information Systems master’s student from Münster, Germany. I used <a href="https://getgophish.com/">Gophish</a> during my master’s thesis and really appreciated the project and what it made possible.</p>
-      <p>I was disappointed by the lack of ongoing maintenance. There were things I wanted to improve from my own experience, and ideas in the Gophish issue tracker that I wanted to explore. I decided to build on the workflows I liked and give the project a new direction.</p>
-      <h2>What I’m building</h2>
-      <p>Ruphish is my independently maintained successor: a native Rust backend and a new Rust/WASM administration interface. Its direction comes from practical experience, features I wished I had during my thesis, and requests raised by the Gophish community.</p>
-      <p>The focus is on understandable campaign workflows, useful reporting, and careful handling of participant data. The supported tracking model records interaction events and optional presence indicators. It does not offer collection of participant-entered credentials or arbitrary form values. The <a href="/docs/user-guide/results/participant-data/">participant-data guide</a> explains the model and its implications.</p>
-      <h2>Built on a contribution I respect</h2>
-      <p>Gophish made phishing simulation accessible to many people, including me. Ruphish acknowledges that foundation and preserves attribution for reused material. This is an independent project, without an official affiliation with the Gophish maintainers.</p>
-      <h2>Follow the work</h2>
-      <p>Ruphish is under active development. The current starting point is a source build and a local Docker exercise; downloadable releases are not yet the documented installation path. The docs describe the current source and distinguish supported workflows from compatibility differences.</p>
-      <p>You can <a href={repository}>explore the source</a>, <a href={`${repository}/issues`}>share an issue or a feature idea</a>, or <a href="/docs/getting-started/">try Ruphish locally</a>.</p>
+      <h2>What Ruphish is</h2>
+      <p>Ruphish helps teams prepare phishing simulations, send them through their own mail service, and understand how people respond. It runs as a standalone native executable or with Docker Compose and stores its data in SQLite, MySQL, or PostgreSQL.</p>
+      <p>The source is available on <a href={repository}>GitHub</a> under the <a href={`${repository}/blob/main/LICENSE`}>MIT License</a>.</p>
+      <h2>What guides the project</h2>
+      <ul>
+        <li><strong>Your installation, your data.</strong> Ruphish is self-hosted. Campaign content, recipients, and results stay in the database you operate.</li>
+        <li><strong>Observe behaviour, not secrets.</strong> A simulation should show how people respond without putting them at risk. The built-in submission collector records interactions and whether a password was entered, never the entered values. The <a href="/docs/user-guide/results/participant-data/">participant-data guide</a> explains the model and its limits.</li>
+        <li><strong>Results that say what they mean.</strong> Ruphish separates observed events from summary metrics and documents <a href="/docs/user-guide/results/understand-the-metrics/">what each metric can tell you</a>.</li>
+        <li><strong>Learning over blame.</strong> Learning pages explain the exercise right after a submission, so the simulation helps people recognise phishing next time.</li>
+      </ul>
+      <p>Ruphish is meant for simulations you are authorised to run in your organisation.</p>
+      <h2>Who maintains it</h2>
+      <p>Ruphish is built and maintained by Simon Peter Rothgang, an Information Systems master’s student from Münster, Germany. It started with using Gophish during a master’s thesis on phishing and spear-phishing; <a href="/blog/introducing-ruphish/">Introducing Ruphish</a> tells that story.</p>
+      <h2>Relationship to Gophish</h2>
+      <p><a href="https://getgophish.com/">Gophish</a> made phishing simulation accessible to many people. Ruphish acknowledges that foundation and preserves attribution for reused material in its <a href={`${repository}/blob/main/THIRD-PARTY-NOTICES.md`}>third-party notices</a>. It is an independent project, without an official affiliation with the Gophish maintainers.</p>
+      <p>Ruphish has its own interface and API. Supported Gophish SQLite and MySQL databases can be migrated; the <a href="/docs/migration/">migration guide</a> explains what to review first.</p>
+      <h2>Where the project stands</h2>
+      <p>Version 0.1.0 is the first release. The <a href={`${repository}/blob/main/CHANGELOG.md`}>changelog</a> records what each release includes, and the <a href={`${repository}/blob/main/ROADMAP.md`}>roadmap</a> describes the priorities for the next ones.</p>
+      <h2>Get involved</h2>
+      <ul>
+        <li><a href={`${repository}/issues`}>Report a bug or share a feature idea</a> on GitHub.</li>
+        <li>Improve code, documentation, or translations by following the <a href={`${repository}/blob/main/CONTRIBUTING.md`}>contributing guide</a>.</li>
+        <li>Report suspected vulnerabilities privately as described in the <a href={`${repository}/blob/main/SECURITY.md`}>security policy</a>.</li>
+      </ul>
+      <p>Participation follows the <a href={`${repository}/blob/main/CODE_OF_CONDUCT.md`}>code of conduct</a>.</p>
     </div>
   </article>
 </Site>

@@ -68,7 +68,7 @@ npx astro build
 npx astro preview --host 127.0.0.1 --port 4321
 ```
 
-Pagefind search is generated during the build. Stop the dev server before starting preview on the same port. A local build without `SITE_URL` or a Vercel production domain may warn that a sitemap cannot be generated; that does not validate or invalidate documentation links.
+Pagefind search is generated during the build. Stop the dev server before starting preview on the same port. Every build uses the canonical site URL `https://www.ruphish.com` from `website/astro.config.mjs` for the sitemap and page metadata. A generated sitemap does not establish that documentation links are correct.
 
 ## Verify a documentation change
 

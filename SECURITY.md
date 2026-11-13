@@ -2,11 +2,9 @@
 
 Report suspected security vulnerabilities through GitHub private vulnerability reporting. Do not post exploit details in public issues, discussions, or pull requests.
 
-> TODO before publication: Once `srothgan/ruphish` is public, enable GitHub private vulnerability reporting, verify that external reporters can use it, and add the direct reporting link here. GitHub does not offer this reporting channel for private repositories.
-
 ## Report a vulnerability
 
-In the repository, open **Security → Advisories → Report a vulnerability** to start a private report. If that option is unavailable, do not submit vulnerability details through a public issue. You may open a blank issue asking only for a private reporting contact, without describing the vulnerability or affected installation.
+[Report a vulnerability privately](https://github.com/srothgan/ruphish/security/advisories/new), or open **Security → Advisories → Report a vulnerability** in the repository. If that option is unavailable, do not submit vulnerability details through a public issue. You may open a blank issue asking only for a private reporting contact, without describing the vulnerability or affected installation.
 
 Include what you know; a complete exploit or proposed fix is not required:
 
