@@ -17,12 +17,7 @@ const sections = [
   ['Contributing', 'contributing'],
 ];
 
-// Production uses its assigned Vercel domain; a custom domain can override SITE_URL.
-const site =
-  process.env.SITE_URL ||
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-    : undefined);
+const site = 'https://www.ruphish.com';
 
 export default defineConfig({
   site,
@@ -35,15 +30,13 @@ export default defineConfig({
       description: 'Guides and reference for running phishing simulations with Ruphish.',
       logo: { src: './src/assets/ruphish-wordmark-white.svg', alt: 'Ruphish', replacesTitle: true },
       favicon: '/favicon.svg',
-      head: site
-        ? [
-            {
-              tag: 'meta',
-              attrs: { property: 'og:image', content: new URL(socialImage, site).href },
-            },
-            { tag: 'meta', attrs: { property: 'og:image:alt', content: 'Ruphish' } },
-          ]
-        : [],
+      head: [
+        {
+          tag: 'meta',
+          attrs: { property: 'og:image', content: new URL(socialImage, site).href },
+        },
+        { tag: 'meta', attrs: { property: 'og:image:alt', content: 'Ruphish' } },
+      ],
       social: [
         { icon: 'github', label: 'Ruphish on GitHub', href: 'https://github.com/srothgan/ruphish' },
       ],

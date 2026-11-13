@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 
 // Allow full crawling and point crawlers at the generated sitemap index.
-// The sitemap URL tracks whatever production domain SITE_URL resolves to.
+// Use the canonical domain configured in astro.config.mjs.
 export const GET: APIRoute = ({ site }) => {
   const lines = ['User-agent: *', 'Allow: /'];
   if (site) lines.push('', `Sitemap: ${new URL('sitemap-index.xml', site).href}`);
