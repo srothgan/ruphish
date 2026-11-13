@@ -8,11 +8,9 @@ Milestones describe priorities, not release dates; scope may change with feedbac
 
 ## 0.1.0 - First release
 
-**Status: In progress until shipped.** Cover Gophish campaign workflows within the documented feature and privacy boundaries.
+**Status: Released on 2026-11-13.** Cover Gophish campaign workflows within the documented feature and privacy boundaries.
 
-See the [changelog](CHANGELOG.md) for existing capabilities.
-
-Implemented in the development version:
+See the [changelog](CHANGELOG.md) for all included capabilities. Highlights:
 
 - **Email-open tracking:** Choose tracking per campaign before launch; new and migrated campaigns default to enabled. Disabled metrics show **Not tracked** or **-**.
 - **Campaign URLs:** Support fixed DNS, IPv4, and IPv6 origins over HTTP or HTTPS. Required verification limits eligibility to DNS hostnames over HTTPS.
@@ -21,11 +19,7 @@ Implemented in the development version:
 - **Integration access:** Let regular users manage their own mailbox and webhook configurations when an administrator enables the feature. Webhook delivery spans campaign creators; campaign management remains creator-scoped.
 - **Starter and learning pages:** Bundle editable offline email/landing templates and static educational pages for post-submission redirects.
 - **Administration and monitoring:** Provide domain-verification policy, integration feature switches, and HTTP liveness/readiness probes.
-
-Remaining release work:
-
-- **Distribution:** Publish verified release binaries and a Docker image.
-- **Release verification:** Complete security checks and workflow, migration, upgrade, recovery, and distribution acceptance. Feature-level tests and documentation checks do not establish full release acceptance.
+- **Distribution:** Publish release binaries with native installers and a Docker image.
 
 ## 0.2.0 - Administration and campaign operations
 
