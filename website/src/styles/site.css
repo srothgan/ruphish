@@ -84,7 +84,6 @@
 .site-page .timeline-time { font-family: 'IBM Plex Mono', monospace; font-size: 0.875rem; line-height: 1.7; color: var(--muted); }
 .site-page .timeline-event { font-weight: 500; line-height: 1.5; }
 .site-page .timeline-details { grid-column: 2; display: flex; flex-wrap: wrap; gap: 6px; }
-.site-page .timeline figcaption { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line-strong); color: var(--muted); font-size: 0.875rem; line-height: 1.6; }
 .site-page .migration { padding-block: 80px; border-bottom: 1px solid var(--line); }
 .site-page .migration-inner { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: start; gap: 64px; }
 .site-page .migration p { max-width: 620px; color: var(--muted); }

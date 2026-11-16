@@ -24,7 +24,7 @@ const structuredData = {
   mainEntityOfPage: Astro.site ? new URL(Astro.url.pathname, Astro.site).href : undefined,
 };
 ---
-<Site title={`${title} | Ruphish blog`} description={description}>
+<Site title={title} description={description}>
   <article class="blog shell">
     <header>
       <p class="back-link"><a href="/blog/">← Back to blog</a></p>

@@ -1,5 +1,5 @@
 ---
-title: Ruphish documentation
+title: Documentation
 description: Learn to run campaigns, operate Ruphish, use its API, and contribute changes.
 ---
 

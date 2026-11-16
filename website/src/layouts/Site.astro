@@ -8,9 +8,10 @@ import ThemeProvider from '../components/ThemeProvider.astro';
 import ThemeSelect from '../components/ThemeSelect.astro';
 import Analytics from '@vercel/analytics/astro';
 import SpeedInsights from '@vercel/speed-insights/astro';
-import { repository, demo, socialImage, description as defaultDescription } from '../site';
+import { repository, demo, socialImage, description as defaultDescription, pageTitle } from '../site';
 interface Props { title: string; description?: string; }
 const { title, description = defaultDescription } = Astro.props;
+const documentTitle = pageTitle(title);
 const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site) : undefined;
 const ogImage = Astro.site ? new URL(socialImage, Astro.site) : undefined;
 ---
@@ -23,16 +24,17 @@ const ogImage = Astro.site ? new URL(socialImage, Astro.site) : undefined;
     <meta name="description" content={description} />
     <meta name="theme-color" content="#0c2f2b" />
     <meta name="generator" content={Astro.generator} />
-    <title>{title}</title>
+    <title>{documentTitle}</title>
     {canonical && <link rel="canonical" href={canonical} />}
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Ruphish" />
-    <meta property="og:title" content={title} />
+    <meta property="og:title" content={documentTitle} />
     <meta property="og:description" content={description} />
     {canonical && <meta property="og:url" content={canonical} />}
     {ogImage && <meta property="og:image" content={ogImage} />}
     {ogImage && <meta property="og:image:alt" content="Ruphish" />}
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={documentTitle} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <Analytics />
     <SpeedInsights />
