@@ -8,61 +8,69 @@ Milestones describe priorities, not release dates; scope may change with feedbac
 
 ## 0.1.0 - First release
 
-**Status: Released on 2026-11-13.** Cover Gophish campaign workflows within the documented feature and privacy boundaries.
+**Status: Released on 2026-11-13.** Covers Gophish campaign workflows with supported migration, shared resources and campaigns, account permissions, and protection against conflicting edits. Event histories retain repeated observations while summaries distinguish recipient counts from event counts. The built-in submission collector records password presence without collecting entered values. Editable starter templates and learning pages support campaign preparation and education.
 
-See the [changelog](CHANGELOG.md) for all included capabilities. Highlights:
+See the [changelog](CHANGELOG.md) for the complete release summary, including delivery, integrations, database support, and installation options.
 
-- **Email-open tracking:** Choose tracking per campaign before launch; new and migrated campaigns default to enabled. Disabled metrics show **Not tracked** or **-**.
-- **Campaign URLs:** Support fixed DNS, IPv4, and IPv6 origins over HTTP or HTTPS. Required verification limits eligibility to DNS hostnames over HTTPS.
-- **Client observations:** Show read-only browser, OS, and device categories per click/submission event, associated with the existing recipient. Exclude entered values, raw headers, IP/geolocation, and fingerprinting.
-- **Reporting mailboxes:** Initialize new mailbox scans from the earliest actual Ruphish send in any active campaign, or new arrivals if none exists. Match across campaign creators, keep polling between campaigns, and ignore reports after completion without blocking mailbox progress.
-- **Integration access:** Let regular users manage their own mailbox and webhook configurations when an administrator enables the feature. Webhook delivery spans campaign creators; campaign management remains creator-scoped.
-- **Starter and learning pages:** Bundle editable offline email/landing templates and static educational pages for post-submission redirects.
-- **Administration and monitoring:** Provide domain-verification policy, integration feature switches, and HTTP liveness/readiness probes.
-- **Distribution:** Publish release binaries with native installers and a Docker image.
+## 0.2.0 - Campaign management
 
-## 0.2.0 - Administration and campaign operations
+**Status: Proposed.** Improve preparing, scheduling, and running campaigns.
 
-**Status: Proposed.** Simplify daily administration and repeated campaigns.
-
-- **Logs and auditing:** Add filtered admin diagnostics, redacted downloads, bounded history, and audit records for sensitive actions.
-- **Admin settings:** Extend configuration controls based on operational needs.
 - **Recurring campaigns:** Add recurrence, rotate paired email templates and landing pages between runs, and support recipient exclusions with launch authorization.
 - **Working-hour schedules:** Limit sending to configured weekdays and hours, with explicit time-zone and daylight-saving behavior.
 - **Pause and resume:** Pause campaign delivery and resume remaining work while preserving observations and delivery history.
 - **Scheduled completion:** Automatically complete campaigns at a chosen date and time while retaining results.
-- **Sending checks:** Add configurable limits and improve content, SMTP, and domain preflight checks.
-- **Mail OAuth:** Support OAuth authentication for sending profiles and reporting mailboxes.
-- **Bounce processing:** Correlate structured delivery-status notifications with sent messages and record confirmed delivery failures, leaving ambiguous notifications unresolved.
-- **QR codes:** Embed recipient-specific campaign QR codes in email templates.
+- **Viewer role:** Add a built-in read-only role for shared resources, campaigns, and results, with consistent restrictions across the interface and API.
+- **Anonymous reporting:** Add a reporting mode that uses random recipient IDs instead of names and email addresses in results and exports. Define how identity mappings are handled; reporting remains pseudonymous where IDs can still be linked back to recipients.
 - **Group CSV export:** Export recipient groups as editable, reusable CSV files.
 
-## 0.3.0 - Deeper reporting and integrations
+## 0.3.0 - Mail and administration
 
-**Status: Proposed.** Make changes over time easier to understand and share.
+**Status: Proposed.** Improve mail authentication, delivery controls, and operational diagnostics.
 
+- **OAuth authentication for SMTP and IMAP:** Support provider-issued tokens for sending profiles and reporting mailboxes. Define supported providers and authorization flows before implementation; signing into Ruphish itself is covered separately under future access features.
+- **Sending limits and checks:** Add configurable sending limits and extend content, SMTP, and domain preflight checks beyond the existing profile tests and optional successful-test requirement for launch.
+- **Bounce processing:** Correlate structured delivery-status notifications with sent messages and record confirmed delivery failures, leaving ambiguous notifications unresolved.
+- **Logs and auditing:** Add filtered admin diagnostics, redacted downloads, bounded history, and audit records for sensitive actions.
+
+## 0.4.0 - Reporting and analysis
+
+**Status: Proposed.** Improve analysis within and across campaigns, including changes over time and sharing results.
+
+- **Reporting rates and time-to-report:** Highlight positive reporting behavior and how quickly campaign messages are reported.
 - **Comparisons:** Compare campaigns and periods using consistent metrics and audiences.
-- **Positive behavior:** Highlight reporting rates and time-to-report.
 - **Trends:** Analyze audiences, campaigns, and templates while preserving historical meaning.
-- **Scanner activity:** Investigate better automation and false-positive classification, including operator review, while retaining observations and showing classification uncertainty.
+- **Reports and integrations:** Add shareable summaries and improve API and webhook reporting workflows.
 - **Link and attachment interactions:** Distinguish individual link and landing-page interactions and investigate separate tracking for existing email attachments.
-- **Reporting integrations:** Add shareable summaries and improve API and webhook reporting workflows.
+- **Scanner activity (exploratory):** Investigate automation and false-positive classification, including operator review, while retaining observations and showing classification uncertainty.
+
+## Future possibilities
+
+These possibilities have no assigned release or delivery order. Feedback and implementation scope will help determine priorities.
+
+### Access and administration
+
+- **Single sign-on (SSO) and multi-factor authentication (MFA):** Assess signing into Ruphish through an identity provider and additional authentication protection for administrators.
+- **Organization boundaries:** Assess separate access boundaries within an installation; resources and campaigns are already shared within the current workspace.
+- **Multiple-domain certificates:** Assess per-domain certificate management and automatic renewal.
+
+### Recipients and integrations
+
+- **Recipients and groups:** Discuss independent recipient management, memberships, and compatibility implications.
 - **Custom recipient fields:** Import additional recipient fields and use them in templates with validation.
 - **Directory imports:** Import recipients and groups from LDAP/Active Directory with a review step.
-
-## Ideas for discussion
-
-These ideas have no committed release target:
-
-- **Batch reports:** Consider multiple distinct recipient-ID/origin pairs in one reported message; the first release rejects ambiguous attribution.
-- **Embedded pages:** Consider authored iframe/frame support; the first release keeps embedded-document restrictions and provides ordinary landing pages and starter templates.
-- **Recipients and groups:** Discuss independent recipient management, memberships, and compatibility implications.
-- **SSO, MFA, and team access:** Assess single sign-on, administrator MFA, shared resources, and organization boundaries.
 - **Active campaign audiences:** Discuss adding or removing recipients during active runs, with explicit authorization and preserved audience and reporting history.
+- **Batch reports:** Consider multiple distinct recipient-ID/origin pairs in one reported message; the first release rejects ambiguous attribution.
 - **Out-of-office detection:** Investigate whether absence replies can be classified reliably without depending on language-specific subject matching.
-- **Multiple-domain certificates:** Assess per-domain certificate management and automatic renewal.
+
+### Learning and scenarios
+
+- **QR codes:** Embed recipient-specific campaign QR codes in email templates.
 - **Learning outcomes:** Explore acknowledgement events, completion tracking, and external training integrations after the initial static learning pages.
-- **Aggregate-only reporting:** Explore results that cannot be linked back to individual recipients.
-- **Multi-step scenarios:** Explore sign-in, MFA, and consent decisions without collecting authentication secrets.
+- **Multi-step scenarios:** Explore authoring and measuring individual sign-in, MFA, and consent decisions without collecting authentication secrets, beyond the intermediate steps already present in interactive starter pages.
+- **Embedded pages:** Consider authored iframe/frame support; the first release keeps embedded-document restrictions and provides ordinary landing pages and starter templates.
+
+### Exploratory ideas
+
 - **AI assistance:** Explore optional content and report drafting with explicit data-sharing controls.
 - **MCP:** Explore scoped read access and draft preparation independently of in-app AI.
