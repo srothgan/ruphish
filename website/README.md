@@ -41,7 +41,7 @@ node --test tools/theme.test.mjs tools/tabs.test.mjs
 node --test tools/releases.test.ts tools/installers.test.ts
 npx astro check
 npx astro build
-node --test tools/theme.artifact.mjs
+node --test tools/theme.artifact.mjs tools/titles.artifact.mjs
 node --test tools/installers.artifact.ts
 ```
 
