@@ -29,23 +29,23 @@
   color-scheme: dark;
   --ink: #eef4f2;
   --muted: #bac6c2;
-  --canvas: #15191c;
-  --paper: #1e2529;
-  --line: #37464b;
+  --canvas: #18181b;
+  --paper: #202023;
+  --line: #343438;
   --line-strong: #70847d;
-  --hover: #2a353a;
+  --hover: #2a2a2e;
   --link: #7cd9cb;
   --action: #7cd9cb;
   --action-hover: #a1e9df;
   --on-action: #102622;
-  --tint: #202f32;
+  --tint: #1d2927;
   --positive-text: #a5e1ba;
   --warning-bg: #3b301e;
   --warning-text: #f2d99e;
   --info-text: #a9d1ff;
   --danger: #ffb4bd;
-  --nav-bg: #111719;
-  --nav-hover: #263137;
+  --nav-bg: #141416;
+  --nav-hover: #2a2a2e;
   --shadow: #00000066;
 }
 
