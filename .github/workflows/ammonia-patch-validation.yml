@@ -1,0 +1,26 @@
+name: Temporary Ammonia patch validation
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  patch:
+    if: github.head_ref == 'fix/ammonia-security-patch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/toolchain
+        with:
+          dependencies: 'true'
+      - name: Generate patched lockfile
+        run: cargo update -p ammonia --precise 4.2.5
+      - name: Show Cargo-generated change
+        run: git diff -- Cargo.lock
+      - name: Check dependency policy
+        run: cargo deny check advisories bans licenses sources
+      - name: Check resource rendering and sanitization
+        run: cargo test -p ruphish-adapters --test resource_formats --locked
