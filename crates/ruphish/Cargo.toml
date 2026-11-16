@@ -11,7 +11,7 @@ embedded-assets = ["ruphish-http/embedded-assets"]
 
 [dependencies]
 axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio"] }
-axum-server = { version = "0.8.0", default-features = false, features = ["tls-rustls-no-provider"] }
+axum-server = { version = "0.9.0", default-features = false, features = ["tls-rustls-no-provider"] }
 clap = { version = "4.6.7", features = ["derive"] }
 hyper-util = { version = "0.1.21", default-features = false, features = ["tokio"] }
 ruphish-adapters = { version = "0.1.0-dev", path = "../ruphish-adapters" }
