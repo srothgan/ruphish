@@ -35,6 +35,7 @@ const path =
     'auth-session-timeout': '/login?next=/campaigns',
     'auth-logout': '/campaigns',
     'auth-expired': '/campaigns',
+    'auth-expired-pageshow': '/campaigns',
     'auth-reload': '/campaigns',
     'auth-navigation-failed': '/login?next=/campaigns',
     'conflict-draft': '/campaigns/drafts/1/edit',
@@ -133,6 +134,11 @@ const dom = new JSDOM('<!doctype html><html><body></body></html>', {
   pretendToBeVisual: true,
 });
 const win = dom.window;
+// jsdom 31 queues initial load/pageshow. Finish that lifecycle before mounting so
+// startup session revalidation cannot race a scenario's request assertions.
+if (win.document.readyState !== 'complete') {
+  await new Promise((resolve) => win.addEventListener('load', resolve, { once: true }));
+}
 // JSDOM cannot load a new document. Observe the actual Location boundary instead.
 const authNavigations = [];
 let authNavigationFailure = scenario === 'auth-navigation-failed';
@@ -429,7 +435,7 @@ let releaseSession;
 let sessionExpired = false;
 let authSignedIn =
   scenario.startsWith('auth-existing') ||
-  ['auth-logout', 'auth-expired', 'auth-reload'].includes(scenario);
+  ['auth-logout', 'auth-expired', 'auth-expired-pageshow', 'auth-reload'].includes(scenario);
 let authLoginRelease;
 let authLoginStatus = 200;
 let authSessionFinished = 0;
@@ -1459,7 +1465,7 @@ if (scenario.startsWith('auth-')) {
     assert.equal(authLoginCount, 0, 'retrying a session read never submits credentials');
     process.exit(0);
   }
-  if (['auth-logout', 'auth-expired', 'auth-reload'].includes(scenario)) {
+  if (['auth-logout', 'auth-expired', 'auth-expired-pageshow', 'auth-reload'].includes(scenario)) {
     await until(() => document.querySelector('.admin-shell'));
     if (scenario === 'auth-logout') {
       document.querySelector('.account-trigger').click();
@@ -1479,10 +1485,14 @@ if (scenario.startsWith('auth-')) {
         { url: 'https://admin.example.test/login', replacement: true },
       ]);
     } else {
-      sessionExpired = scenario === 'auth-expired';
+      sessionExpired = scenario.startsWith('auth-expired');
       authSignedIn = !sessionExpired;
       authAccessChanged = scenario === 'auth-reload';
-      win.dispatchEvent(new win.Event('focus'));
+      win.dispatchEvent(
+        scenario === 'auth-expired-pageshow'
+          ? new win.PageTransitionEvent('pageshow', { persisted: true })
+          : new win.Event('focus'),
+      );
       await until(() => authNavigations.length > 0);
       if (sessionExpired) {
         await expectTransition('Your session ended.', 'Taking you to sign-in to continue.');

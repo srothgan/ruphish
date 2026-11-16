@@ -22,6 +22,7 @@ for (const scenario of [
   'auth-session-timeout',
   'auth-logout',
   'auth-expired',
+  'auth-expired-pageshow',
   'auth-reload',
   'auth-navigation-failed',
   'conflict-draft',
