@@ -95,6 +95,10 @@ All public pages and documentation share Light, Dark, and System theme selection
 
 `src/styles/theme.css` owns both palettes. `src/styles/site.css` scopes public-page styles to `.site-page`; `src/styles/docs.css` maps Starlight's semantic variables onto the shared palette. Theme initialization and preference handling live in `src/theme.js`, inlined before paint by `ThemeProvider.astro`; both layouts use `ThemeSelect.astro`. Retain the existing `starlight-theme` storage key. When storage is unavailable, selection still works for the current page. Code highlighting follows the resolved theme, including an explicit choice that differs from the operating system.
 
+## Page titles
+
+Use `Page title | Ruphish` for every document title. Public pages pass only their descriptive page title to `Site.astro`; `src/site.ts` owns the brand and delimiter shared with Starlight. Blog posts use their article title without a separate blog suffix. Keep Open Graph and Twitter titles consistent with the document title, and keep visible headings free of the branding suffix.
+
 ## Documentation experience
 
 Starlight owns documentation navigation, search, headings, code blocks, on-page contents, and previous/next links. Its theme provider and selector use the same website components as public pages. Customize tokens and carefully scoped components instead of rebuilding documentation features. Public installation tabs use the website's small `Tabs.astro` component so the landing page does not import Starlight's documentation styles. Organize the sidebar by reader goal: getting started, user guide, administration, HTTP API, migration, and contributing. Keep the getting-started section expanded and supporting sections collapsible.

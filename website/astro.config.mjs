@@ -5,7 +5,7 @@ import mdx from '@astrojs/mdx';
 import { unified } from '@astrojs/markdown-remark';
 import { existsSync } from 'node:fs';
 import { documentationIntegration, remarkDocLinks, sourceRoot } from './tools/docs.mjs';
-import { socialImage } from './src/site.ts';
+import { socialImage, siteName, titleDelimiter } from './src/site.ts';
 import { resolve } from 'node:path';
 
 const sections = [
@@ -26,7 +26,8 @@ export default defineConfig({
   integrations: [
     documentationIntegration(),
     starlight({
-      title: 'Ruphish',
+      title: siteName,
+      titleDelimiter,
       description: 'Guides and reference for running phishing simulations with Ruphish.',
       logo: { src: './src/assets/ruphish-wordmark-white.svg', alt: 'Ruphish', replacesTitle: true },
       favicon: '/favicon.svg',

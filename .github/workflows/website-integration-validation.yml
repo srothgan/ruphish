@@ -29,5 +29,5 @@ jobs:
         working-directory: website
       - run: npx astro build
         working-directory: website
-      - run: node --test tools/theme.artifact.mjs
+      - run: node --test tools/theme.artifact.mjs tools/titles.artifact.mjs
         working-directory: website
