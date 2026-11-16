@@ -9,6 +9,7 @@ const expected = new Map([
   ['about/index.html', 'About | Ruphish'],
   ['blog/index.html', 'Blog | Ruphish'],
   ['blog/introducing-ruphish/index.html', 'Introducing Ruphish, an open-source successor to Gophish | Ruphish'],
+  ['docs/index.html', 'Documentation | Ruphish'],
   ['404.html', 'Page not found | Ruphish'],
 ]);
 
@@ -26,6 +27,6 @@ test('built public pages and docs use consistent document and social titles', as
     if (expected.has(path)) assert.equal(title, expected.get(path), path);
     assert.equal(document.querySelector('meta[property="og:title"]')?.getAttribute('content'), title, path + ': Open Graph title');
     const twitter = document.querySelector('meta[name="twitter:title"]');
-    if (twitter) assert.equal(twitter.getAttribute('content'), title, path + ': Twitter title');
+    assert.equal(twitter?.getAttribute('content'), title, path + ': Twitter title');
   }
 });
