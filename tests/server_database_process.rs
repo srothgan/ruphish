@@ -345,7 +345,7 @@ pub(super) fn exercise(mut database_config: Value, mut fault: impl FnMut(&Path, 
     );
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(super) enum Fault<'a> {
     RejectInsert(&'a str),
     RestoreInsert(&'a str),
@@ -373,33 +373,127 @@ pub(super) fn fault_statements(provider: &str, fault: Fault<'_>) -> Vec<String> 
 
 #[test]
 fn sqlite_process_full_production_workflow() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
     exercise(json!({}), |path, fault| {
         use sqlx::Connection;
-        tokio::runtime::Runtime::new().unwrap().block_on(async {
+        runtime.block_on(async {
             let mut connection = sqlx::SqliteConnection::connect_with(
                 &sqlx::sqlite::SqliteConnectOptions::new()
                     .filename(path.join("installation.sqlite3")),
             )
             .await
             .unwrap();
-            for statement in fault_statements("sqlite3", fault) {
-                if matches!(fault, Fault::AssertEmptyLaunch) {
-                    assert_eq!(
-                        sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(statement))
-                            .fetch_one(&mut connection)
-                            .await
-                            .unwrap(),
-                        0
-                    );
-                } else {
-                    sqlx::raw_sql(sqlx::AssertSqlSafe(statement))
-                        .execute(&mut connection)
-                        .await
-                        .unwrap();
-                }
-            }
+            let result = sqlite_fault(&mut connection, fault).await;
+            let closed = connection.close().await;
+            assert!(result.is_ok(), "SQLite fixture fault {fault:?}: {result:?}");
+            closed.unwrap();
         });
     });
+}
+
+async fn sqlite_fault(
+    connection: &mut sqlx::SqliteConnection,
+    fault: Fault<'_>,
+) -> Result<(), sqlx::Error> {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let result = sqlite_fault_transaction(connection, fault).await;
+        // Only fixture setup retries. Application requests and their rollback/recovery
+        // assertions must still expose failures. SQLITE_BUSY leaves this transaction
+        // uncommitted; SQLx rolls it back before another attempt on the connection.
+        let busy = result.as_ref().err().is_some_and(|error| {
+            error
+                .as_database_error()
+                .and_then(|error| error.code())
+                .and_then(|code| code.parse::<u32>().ok())
+                .is_some_and(|code| code & 0xff == 5)
+        });
+        if !busy || Instant::now() >= deadline {
+            return result;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
+async fn sqlite_fault_transaction(
+    connection: &mut sqlx::SqliteConnection,
+    fault: Fault<'_>,
+) -> Result<(), sqlx::Error> {
+    use sqlx::Connection;
+    let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+    for statement in fault_statements("sqlite3", fault) {
+        if matches!(fault, Fault::AssertEmptyLaunch) {
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(statement))
+                    .fetch_one(&mut *transaction)
+                    .await?,
+                0
+            );
+        } else {
+            sqlx::raw_sql(sqlx::AssertSqlSafe(statement))
+                .execute(&mut *transaction)
+                .await?;
+        }
+    }
+    transaction.commit().await
+}
+
+#[tokio::test]
+async fn sqlite_fault_waits_for_a_competing_writer_and_preserves_injected_failure() {
+    use sqlx::Connection;
+    let directory = workspace_without_assets();
+    let options = sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(directory.join("installation.sqlite3"))
+        .create_if_missing(true)
+        .busy_timeout(Duration::ZERO);
+    let mut writer = sqlx::SqliteConnection::connect_with(&options)
+        .await
+        .unwrap();
+    sqlx::raw_sql("CREATE TABLE events(id INTEGER PRIMARY KEY)")
+        .execute(&mut writer)
+        .await
+        .unwrap();
+    let mut inspector = sqlx::SqliteConnection::connect_with(&options)
+        .await
+        .unwrap();
+    let held = writer.begin_with("BEGIN IMMEDIATE").await.unwrap();
+    let mut injection = tokio::spawn(async move {
+        let result = sqlite_fault(&mut inspector, Fault::RejectInsert("events")).await;
+        (inspector, result)
+    });
+    // A zero SQLite busy timeout forces the same SQLITE_BUSY failure seen in CI.
+    // Keep the actual writer lock until the fixture has had a chance to retry.
+    let early = tokio::time::timeout(Duration::from_millis(100), &mut injection).await;
+    assert!(
+        early.is_err(),
+        "fault setup must wait for the writer: {early:?}"
+    );
+    held.commit().await.unwrap();
+    let (mut inspector, result) = injection.await.unwrap();
+    result.unwrap();
+    let rejected = sqlx::query("INSERT INTO events VALUES(1)")
+        .execute(&mut writer)
+        .await
+        .unwrap_err();
+    assert!(rejected.to_string().contains("injected write failure"));
+    sqlite_fault(&mut inspector, Fault::RestoreInsert("events"))
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO events VALUES(1)")
+        .execute(&mut writer)
+        .await
+        .unwrap();
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM events")
+        .fetch_one(&mut writer)
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+    let invalid = sqlite_fault(&mut inspector, Fault::RejectInsert("missing_table"))
+        .await
+        .unwrap_err();
+    assert!(invalid.to_string().contains("no such table"));
+    inspector.close().await.unwrap();
+    writer.close().await.unwrap();
 }
 
 fn post(base: &str, path: &str, value: &Value) -> Value {

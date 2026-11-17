@@ -11,6 +11,8 @@ Run from the repository root with the [development tools](../development-setup/i
 
 SQLite tests run without a database service. Relevant adapter targets include `sqlite_upgrade` for historical schemas and `database_providers` for shared scenarios. MySQL and PostgreSQL cases are opt-in and normally reported as ignored. Explicit `--ignored` runs need a prepared service; ignored cases are not passing provider evidence.
 
+The executable SQLite provider scenario installs faults through a separate connection while application workers are active. Its fixture changes use immediate transactions and retry only SQLite busy errors for up to a 30-second retry window, in addition to an in-flight SQLite busy wait. Other SQL errors fail immediately, and exhausted contention identifies the attempted fault. These retries apply only to fixture setup; application requests and rollback, delivery and recovery assertions are not retried or relaxed. Run `cargo test -p ruphish --test startup_process server_database_process:: --locked -- --nocapture` for the provider scenario and its real-lock contention regression.
+
 Use a focused filter while developing. For example, MySQL transport preflight can run separately from the historical sweep:
 
 ```sh

@@ -14,6 +14,7 @@ The [shared validation workflow](../../../.github/workflows/validation.yml) owns
 | `pr.yml` | Pull request to main, push to main, manual dispatch | Selects applicable source/demo checks; manual dispatch selects full checks |
 | `pr-title.yml` | PR opened, edited, synchronized, or reopened against main | Checks the conventional title format |
 | `nightly.yml` | Daily at 02:23 UTC or manual dispatch | Runs full source acceptance, including server versions and bounded measurement |
+| `advisories.yml` | Daily at 03:47 UTC or manual dispatch | Checks RustSec advisories with an independent failure status |
 | `codeql.yml` | Pull request to main, push to main, Monday at 04:27 UTC, manual dispatch | Runs default CodeQL security queries for Rust, JavaScript/TypeScript, and GitHub Actions, excluding test-only files |
 | `release.yml` | Push to main changing `Cargo.toml`, or manual dispatch | A workspace version increase selects full release validation, then creates the tag and publishes; unchanged versions skip release jobs and manual runs never publish |
 
@@ -32,7 +33,7 @@ Shared build inputs include manifests, lockfile, toolchain, formatter/dependency
 
 The always-run quality job installs root npm tools, checks formatting/lint, runs workflow/fixture-initialization script tests, and lints workflows. Changes limited to script test files still exercise these checks without selecting product builds. Issue templates, CODEOWNERS, and Dependabot configuration do not select product acceptance by themselves.
 
-The Rust dependency policy job also runs on every validation, independently of changed paths. It runs `cargo deny check advisories bans licenses sources`, so newly reported vulnerabilities are checked even when a PR does not change its dependencies. The validation gate requires this job to succeed; a failed, cancelled, missing or skipped dependency check blocks the PR gate.
+The Rust dependency policy job also runs on every validation, independently of changed paths. It runs `cargo deny check bans licenses sources` to enforce crate, license and source restrictions. The validation gate requires this job to succeed; a failed, cancelled, missing or skipped dependency check blocks the PR gate. Newly published advisories are checked separately, so they do not change the result of PR or nightly source validation.
 
 The pinned path-filter action compares PR merge commits with their base using Git. Push selection uses changes since the prior main revision. Full checkout history supports deleted paths and both sides of renames. Nightly, release, and manual full runs bypass filtering.
 
@@ -70,7 +71,11 @@ Nightly and release do not deploy the demo. Releases have their own gate and pub
 
 ## Dependencies and workflow changes
 
-Dependabot's checked-in configuration schedules updates. Maintainers must separately verify alerts/security-update settings in GitHub. Every PR, main, nightly and release source validation runs Rust advisory, license, source and bans checks. Release additionally runs root/browser npm audits and repeats Cargo advisory checks before optimized builds. Advisory checks detect known reported dependency vulnerabilities; they do not prove that all code is secure, and a new advisory requires a new check run to be detected.
+Dependabot's checked-in configuration schedules version updates. Maintainers must separately verify alerts/security-update settings in GitHub; the weekly version-update schedule does not set the frequency of vulnerability alerts. Every PR, main, nightly and release source validation enforces Rust license, source and bans policy.
+
+The [dependency advisory workflow](../../../.github/workflows/advisories.yml) runs `cargo deny check advisories` daily and on manual dispatch using the shared pinned toolchain and read-only caches. Findings fail that workflow visibly without failing the PR or nightly validation gate. The schedule starts after the workflow is merged into the default branch. This RustSec check complements Dependabot alerts; neither system guarantees identical advisory coverage or timing. Investigate its failures and update affected dependencies rather than suppressing the result.
+
+Release still requires root/browser npm audits and Cargo advisory checks before optimized builds. Advisory checks detect known reported dependency vulnerabilities; they do not prove that all code is secure, and a new advisory requires a new check run to be detected.
 
 CI shell commands use Node 26.8.1, including result and gate jobs. Workflow lint installs Go 1.26.10 explicitly and sets `GOTOOLCHAIN=local`, so a tool requiring a newer compiler fails instead of downloading a different Go release. Release jobs install Skopeo package `1.13.3+ds1-2ubuntu0.24.04.3` explicitly. Update these pins deliberately when upgrading tools.
 
