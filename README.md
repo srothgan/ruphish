@@ -11,7 +11,7 @@
 
 [Website](https://ruphish.com/) · [Live demo](https://demo.ruphish.com/) · [Documentation](https://ruphish.com/docs/) · [Installation](https://ruphish.com/docs/getting-started/install-ruphish/) · [Contributing](CONTRIBUTING.md)
 
-Ruphish helps teams run phishing simulations, send personalized campaigns through their mail service, and understand the results.
+Ruphish is an open-source, self-hosted phishing simulation platform and independent successor to Gophish, built for teams to prepare campaigns and understand their results.
 
 Demo credentials: username `demo` and password `demodemo`.
 
@@ -19,7 +19,7 @@ Demo credentials: username `demo` and password `demodemo`.
 
 ## About
 
-Ruphish is a successor to Gophish with a new interface and API. You can migrate supported Gophish SQLite and MySQL databases; review the [migration guide](https://ruphish.com/docs/migration/) before moving your data or adapting an integration.
+Ruphish has its own interface and API. You can migrate supported Gophish SQLite and MySQL databases; review the [migration guide](https://ruphish.com/docs/migration/) before moving your data or adapting an integration.
 
 ## What you can do
 
@@ -35,16 +35,16 @@ Participant tracking is designed around interaction events and optional presence
 
 ## Start here
 
-| Your goal | Guide |
-| --- | --- |
-| Try and run a local campaign | [Your first campaign](https://ruphish.com/docs/getting-started/run-your-first-campaign/) |
-| Install a release binary or run the Docker image | [Installation](https://ruphish.com/docs/getting-started/install-ruphish/) |
-| Run campaigns and understand results | [User guide](https://ruphish.com/docs/user-guide/) |
-| Configure databases, TLS, accounts, or recovery | [Administration](https://ruphish.com/docs/administration/) |
-| Integrate with Ruphish | [HTTP API](https://ruphish.com/docs/api/) |
-| Bring an existing Gophish installation across | [Migration and compatibility](https://ruphish.com/docs/migration/) |
-| Change code, translations, or documentation | [Contributing](CONTRIBUTING.md) |
-| Report a suspected security vulnerability | [Security policy](SECURITY.md) |
+- [Run your first campaign](https://ruphish.com/docs/getting-started/run-your-first-campaign/) with a local walkthrough.
+- [Install Ruphish](https://ruphish.com/docs/getting-started/install-ruphish/) using a release binary or Docker.
+- [Explore the user guide](https://ruphish.com/docs/user-guide/) to run campaigns and understand results.
+- [Administer your installation](https://ruphish.com/docs/administration/) with guides for databases, TLS, accounts, and recovery.
+- [Use the HTTP API](https://ruphish.com/docs/api/) to integrate Ruphish with your own tools.
+- [Migrate from Gophish](https://ruphish.com/docs/migration/) and understand compatibility differences.
+- [Contribute](CONTRIBUTING.md) code, translations, or documentation.
+- [Report a vulnerability privately](SECURITY.md) through the security reporting process.
+
+Have you tried Ruphish? [Share how it went](https://github.com/srothgan/ruphish/discussions/87), including what worked well and where you got stuck.
 
 For your own application or automation, use an API key and follow the [HTTP API reference](https://ruphish.com/docs/api/) for endpoints, request and response examples, and permissions.
 
