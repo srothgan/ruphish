@@ -269,7 +269,7 @@ jobs:
       - uses: ./.github/actions/toolchain
         with:
           dependencies: 'true'
-      - run: cargo deny check advisories bans licenses sources
+      - run: cargo deny check bans licenses sources
 
   public:
     name: Docker DNS TLS SMTP acceptance

@@ -31,10 +31,33 @@ function check(value) {
   runInNewContext(gate, { process: { env: { RESULTS: JSON.stringify(value) } } });
 }
 
-test('dependency job always runs the advisory and dependency policy checks', () => {
+test('dependency job enforces policy without coupling validation to new advisories', () => {
   const job = workflow.match(/^ {2}dependencies:\n([\s\S]*?)(?=^ {2}\w+:)/m)[1];
   assert.doesNotMatch(job, /^ {4}(?:if|needs):/m);
-  assert.match(job, /run: cargo deny check advisories bans licenses sources\n/);
+  assert.match(job, /run: cargo deny check bans licenses sources\n/);
+  assert.doesNotMatch(workflow, /cargo deny check[^\n]*advisories/);
+});
+
+test('scheduled advisories fail independently while release still requires them', () => {
+  const advisories = readFileSync(
+    new URL('../workflows/advisories.yml', import.meta.url),
+    'utf8',
+  ).replaceAll('\r\n', '\n');
+  assert.match(advisories, /^ {2}schedule:\n {4}- cron:/m);
+  assert.match(advisories, /^ {2}workflow_dispatch:/m);
+  assert.match(advisories, /run: cargo deny check advisories\n/);
+  assert.doesNotMatch(advisories, /continue-on-error|\|\|\s*true/);
+  assert.doesNotMatch(advisories, /uses: \.\/\.github\/workflows\/validation\.yml/);
+
+  const release = readFileSync(
+    new URL('../workflows/release.yml', import.meta.url),
+    'utf8',
+  ).replaceAll('\r\n', '\n');
+  const security = release.match(/^ {2}security:\n([\s\S]*?)(?=^ {2}\w+:)/m)[1];
+  assert.match(security, /run: cargo deny check advisories\n/);
+  assert.doesNotMatch(security, /continue-on-error|\|\|\s*true/);
+  const assets = release.match(/^ {2}assets:\n([\s\S]*?)(?=^ {2}\w+:)/m)[1];
+  assert.match(assets, /^ {4}needs: \[[^\n]*\bsecurity\b[^\n]*\]/m);
 });
 
 test('housekeeping and website changes can pass without product jobs', () => {
