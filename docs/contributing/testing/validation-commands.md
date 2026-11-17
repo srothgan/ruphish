@@ -36,6 +36,10 @@ cargo test -p ruphish-domain --test settings --locked
 
 Choose the crate and test target for the changed rule; use a module or test-name filter when it narrows a larger target meaningfully. To apply Rust formatting, run `cargo fmt --all`. `cargo check` can provide compilation evidence during iteration when a build or Clippy has not already checked that target.
 
+## Fuzzing
+
+For generated input exploration, see [fuzzing](fuzzing.md). Its isolated harness tests and bounded campaigns have separate toolchain and resource requirements; normal Cargo tests do not run the fuzz targets.
+
 ## Executable workflows
 
 The `startup_process` target includes independently selectable modules. Choose a relevant filter:

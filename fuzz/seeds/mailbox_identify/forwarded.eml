@@ -1,0 +1,7 @@
+From: Employee <employee@example.test>
+Content-Type: message/rfc822
+
+From: training@other.test
+Content-Type: text/html
+
+<a href="https://training.test/?rid=abc123">Report</a>

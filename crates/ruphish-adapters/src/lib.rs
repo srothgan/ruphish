@@ -7,6 +7,9 @@ pub mod database;
 pub mod domain_verification;
 mod email_html;
 mod event_edit;
+#[cfg(feature = "fuzzing")]
+#[doc(hidden)]
+pub mod fuzzing;
 pub mod imports;
 pub(crate) mod integrations;
 pub mod landing;
