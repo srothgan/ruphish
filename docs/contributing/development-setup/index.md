@@ -32,6 +32,8 @@ npm ci --prefix crates/ruphish-ui/web
 
 The browser dependencies supply editor assets and test utilities. Node is a build/test dependency; the native application does not need it at runtime.
 
+Input fuzzing has its own optional [toolchain and setup](../testing/fuzzing.md#prepare-fuzzing-tools). It does not change the product toolchain or require the administration interface to be built.
+
 ## Build the interface
 
 Set `NO_COLOR` before invoking Trunk. In PowerShell:

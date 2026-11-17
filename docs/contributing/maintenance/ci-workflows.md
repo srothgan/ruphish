@@ -15,6 +15,7 @@ The [shared validation workflow](../../../.github/workflows/validation.yml) owns
 | `pr-title.yml` | PR opened, edited, synchronized, or reopened against main | Checks the conventional title format |
 | `nightly.yml` | Daily at 02:23 UTC or manual dispatch | Runs full source acceptance, including server versions and bounded measurement |
 | `advisories.yml` | Daily at 03:47 UTC or manual dispatch | Checks RustSec advisories with an independent failure status |
+| `fuzz.yml` | Pull request to main, Tuesday at 05:19 UTC, manual dispatch | Runs [bounded input fuzzing](../testing/fuzzing.md#ci-behavior), with selected PR targets and longer scheduled/manual campaigns |
 | `codeql.yml` | Pull request to main, push to main, Monday at 04:27 UTC, manual dispatch | Runs default CodeQL security queries for Rust, JavaScript/TypeScript, and GitHub Actions, excluding test-only files |
 | `release.yml` | Push to main changing `Cargo.toml`, or manual dispatch | A workspace version increase selects full release validation, then creates the tag and publishes; unchanged versions skip release jobs and manual runs never publish |
 

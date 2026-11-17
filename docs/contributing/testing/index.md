@@ -13,6 +13,7 @@ Start with the guarantee your change affects. A domain rule, SQL transaction, br
 | --- | --- |
 | Business rule or state transition | Domain tests: accepted/rejected inputs and independently expected outcomes |
 | Request or response shape | Contract serialization and HTTP tests, plus affected browser consumers |
+| Input parsing or transformation | [Bounded fuzz targets](fuzzing.md) and ordinary regressions for discovered failures |
 | Persistence or concurrency | Adapter/provider tests: stored values, atomicity, competing writers, rollback, and uncertain outcomes |
 | Server startup or background workflow | `tests/startup_process.rs` and its modules: actual process, HTTP/protocol effects, restart, and shutdown |
 | Browser transformation or request | Native UI tests for platform-independent logic, JavaScript tests for changed browser modules, or WASM request tests for the affected browser contract |

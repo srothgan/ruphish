@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-exclude = ["vendor/sqlx-core"]
+exclude = ["vendor/sqlx-core", "fuzz"]
 members = [
     "crates/ruphish-domain",
     "crates/ruphish-contracts",

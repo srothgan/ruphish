@@ -6,6 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+# Narrow access to private parsers for the isolated fuzz harness.
+fuzzing = []
+
 [dependencies]
 ammonia = "4.2"
 argon2 = "0.6.0"

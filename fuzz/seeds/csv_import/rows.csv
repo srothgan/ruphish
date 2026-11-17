@@ -1,0 +1,4 @@
+Email,First Name,Last Name,Position
+alice@example.test,"Alice, Example",Example,Analyst
+bad@example.test
+bob@example.test,,,
