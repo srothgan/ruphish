@@ -1,9 +1,10 @@
 # Contributing to Ruphish
 
-Start with the behavior you want to improve and the people it affects. A useful contribution explains the problem, changes its authoritative implementation, and provides evidence that the intended workflow works.
+Thanks for your interest in helping with Ruphish! You can contribute code, improve the docs, translate the interface, report a bug, or share what it was like to use. Small improvements are welcome too.
 
 Participation follows the [Code of Conduct](CODE_OF_CONDUCT.md), which also explains how to report conduct concerns privately.
 
+- For questions or experiences using Ruphish, join the [discussions](https://github.com/srothgan/ruphish/discussions). You don't need a finished feature proposal to start a conversation.
 - For code changes, follow [development setup](https://ruphish.com/docs/contributing/development-setup/) and the [architecture boundaries](https://ruphish.com/docs/contributing/development-guides/architecture/).
 - For documentation, follow the [documentation guide](https://ruphish.com/docs/contributing/development-guides/documentation-and-website/). Small corrections are welcome; larger changes should keep user tasks, API contracts, and contributor instructions distinct.
 - For translations, use the [localization guide](https://ruphish.com/docs/contributing/development-guides/localization/).
