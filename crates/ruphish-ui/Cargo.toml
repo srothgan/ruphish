@@ -29,7 +29,7 @@ workspace = true
 
 [target.wasm32-unknown-unknown.dependencies]
 gloo-net = { version = "0.7.0", default-features = false, features = ["http", "json"] }
-jiff = { version = "0.2", features = ["js"] }
+jiff = { version = "1.0", features = ["js"] }
 js-sys = "0.3.106"
 leptos = { version = "0.8.22", default-features = false, features = ["csr"] }
 leptos-fetch = "0.4.10"
