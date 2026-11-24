@@ -16,6 +16,7 @@ resolver = "3"
 # Cargo ignores dependency-workspace patches. Keep these aligned with the product
 # workspace; the dependency_graph test checks the patches and shared lock entries.
 [patch.crates-io]
+gtmpl-ng = { path = "../vendor/gtmpl-ng" }
 sqlx-core = { path = "../vendor/sqlx-core" }
 sqlx-sqlite = { git = "https://github.com/transact-rs/sqlx", rev = "10462fa4414c6c7f1ed1d39bb31678e3b726878c" }
 

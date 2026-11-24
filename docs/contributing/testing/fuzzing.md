@@ -57,7 +57,7 @@ In a POSIX shell:
 export CARGO_NET_OFFLINE=true
 ```
 
-Unset this variable when finished if later dependency work needs the network. The separate manifest must retain the product's patched dependencies, including SQLx. Update dependencies through Cargo, review both lockfiles and patch declarations, and rerun the relevant harness tests after changing them.
+Unset this variable when finished if later dependency work needs the network. The separate manifest must retain the product's patched dependencies, including SQLx and the temporary `gtmpl-ng` escape-decoder fix. Update dependencies through Cargo, review both lockfiles and patch declarations, and rerun the relevant harness tests after changing them. The template seed `utf8-escape-crash.txt` preserves the malformed Unicode escape found by scheduled fuzzing; the application template regressions also verify typed rejection and subsequent rendering.
 
 ## Run a bounded campaign
 

@@ -1,7 +1,7 @@
 //! Shared instant parsing, UTC persistence and IANA-zone conversion.
 //!
 //! Presentation chooses a locale separately; time-zone rules have one owner here.
-pub use jiff::{Timestamp, Zoned, tz::TimeZone};
+pub use jiff::{Timestamp, ZonedDateTime, tz::TimeZone};
 
 /// Go's absent-date sentinel, retained at legacy API/storage boundaries.
 pub const ZERO: &str = "0001-01-01T00:00:00Z";
@@ -124,7 +124,7 @@ pub fn resolve_local(local: &str, zone: &str) -> Result<Timestamp, Error> {
     }
     let date: jiff::civil::DateTime = local.parse().map_err(|_| Error::InvalidLocal)?;
     named_zone(zone)?
-        .to_ambiguous_zoned(date)
+        .to_ambiguous_zoned_datetime(date)
         .compatible()
         .map(|date| date.timestamp())
         .map_err(|_| Error::OutOfRange)
@@ -133,7 +133,7 @@ pub fn resolve_local(local: &str, zone: &str) -> Result<Timestamp, Error> {
 /// Value for a datetime-local form control in the selected display zone.
 pub fn local_input(value: Timestamp, zone: &TimeZone) -> String {
     value
-        .to_zoned(zone.clone())
+        .to_zoned_datetime(zone.clone())
         .strftime("%Y-%m-%dT%H:%M")
         .to_string()
 }

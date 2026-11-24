@@ -74,7 +74,7 @@ impl Label {
 
     /// Full readable date/time at minute precision.
     pub fn at(value: Timestamp, zone: &TimeZone) -> Self {
-        let date = value.to_zoned(zone.clone());
+        let date = value.to_zoned_datetime(zone.clone());
         Self {
             year: date.year(),
             month: date.month(),
@@ -95,8 +95,8 @@ impl Label {
         last: i64,
         zone: &TimeZone,
     ) -> Result<Self, Error> {
-        let start = datetime::from_seconds(first)?.to_zoned(zone.clone());
-        let end = datetime::from_seconds(last)?.to_zoned(zone.clone());
+        let start = datetime::from_seconds(first)?.to_zoned_datetime(zone.clone());
+        let end = datetime::from_seconds(last)?.to_zoned_datetime(zone.clone());
         let mut label = Self::at(datetime::from_seconds(seconds)?, zone);
         label.style = if step >= 86_400 {
             "date"

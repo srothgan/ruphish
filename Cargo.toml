@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-exclude = ["vendor/sqlx-core", "fuzz"]
+exclude = ["vendor/sqlx-core", "vendor/gtmpl-ng", "fuzz"]
 members = [
     "crates/ruphish-domain",
     "crates/ruphish-contracts",
@@ -49,6 +49,9 @@ lto = "thin"
 codegen-units = 1
 
 [patch.crates-io]
+# Temporary UTF-8 escape-decoder fix; remove when an upstream release includes it.
+# Source, regression coverage and removal steps: vendor/gtmpl-ng/README.ruphish.md.
+gtmpl-ng = { path = "vendor/gtmpl-ng" }
 # WARNING: Temporary vendored SQLx fix from an unmerged upstream PR.
 # TODO: Once https://github.com/transact-rs/sqlx/pull/4350 is merged, replace this
 # path patch with an exact upstream Git revision containing the fix, validate it,

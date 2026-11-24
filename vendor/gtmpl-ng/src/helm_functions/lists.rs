@@ -1,0 +1,723 @@
+use crate::{FuncError, Value};
+use std::collections::HashSet;
+
+/// Get the first element of a list
+pub fn first(args: &[Value]) -> Result<Value, FuncError> {
+    let list = args.first().ok_or(FuncError::ExactlyXArgs(
+        "This function requires exactly 1 argument.".to_string(),
+        1,
+    ))?;
+
+    match list {
+        Value::Array(arr) => arr
+            .first()
+            .cloned()
+            .ok_or(FuncError::Generic("Array is empty".to_string())),
+        _ => Err(FuncError::Generic("Argument must be an array".to_string())),
+    }
+}
+
+/// Get the first element of a list (must version)
+pub fn must_first(args: &[Value]) -> Result<Value, FuncError> {
+    first(args)
+}
+
+/// Get all elements except the first
+pub fn rest(args: &[Value]) -> Result<Value, FuncError> {
+    let list = args.first().ok_or(FuncError::ExactlyXArgs(
+        "This function requires exactly 1 argument.".to_string(),
+        1,
+    ))?;
+
+    match list {
+        Value::Array(arr) => {
+            if arr.is_empty() {
+                Ok(Value::Array(vec![]))
+            } else {
+                Ok(Value::Array(arr[1..].to_vec()))
+            }
+        }
+        _ => Err(FuncError::Generic("Argument must be an array".to_string())),
+    }
+}
+
+/// Get all elements except the first (must version)
+pub fn must_rest(args: &[Value]) -> Result<Value, FuncError> {
+    rest(args)
+}
+
+/// Get the last element of a list
+pub fn last(args: &[Value]) -> Result<Value, FuncError> {
+    let list = args.first().ok_or(FuncError::ExactlyXArgs(
+        "This function requires exactly 1 argument.".to_string(),
+        1,
+    ))?;
+
+    match list {
+        Value::Array(arr) => arr
+            .last()
+            .cloned()
+            .ok_or(FuncError::Generic("Array is empty".to_string())),
+        _ => Err(FuncError::Generic("Argument must be an array".to_string())),
+    }
+}
+
+/// Get the last element of a list (must version)
+pub fn must_last(args: &[Value]) -> Result<Value, FuncError> {
+    last(args)
+}
+
+/// Get all elements except the last
+pub fn initial(args: &[Value]) -> Result<Value, FuncError> {
+    let list = args.first().ok_or(FuncError::ExactlyXArgs(
+        "This function requires exactly 1 argument.".to_string(),
+        1,
+    ))?;
+
+    match list {
+        Value::Array(arr) => {
+            if arr.is_empty() {
+                Ok(Value::Array(vec![]))
+            } else {
+                Ok(Value::Array(arr[..arr.len() - 1].to_vec()))
+            }
+        }
+        _ => Err(FuncError::Generic("Argument must be an array".to_string())),
+    }
+}
+
+/// Get all elements except the last (must version)
+pub fn must_initial(args: &[Value]) -> Result<Value, FuncError> {
+    initial(args)
+}
+
+/// Append element to list
+pub fn append(args: &[Value]) -> Result<Value, FuncError> {
+    let list = args.first().ok_or(FuncError::ExactlyXArgs(
+        "This function requires exactly 2 arguments.".to_string(),
+        2,
+    ))?;
+    let element = args.get(1).ok_or(FuncError::ExactlyXArgs(
+        "This function requires exactly 2 arguments.".to_string(),
+        2,
+    ))?;
+
+    match list {
+        Value::Array(arr) => {
+            let mut new_arr = arr.clone();
+            new_arr.push(element.clone());
+            Ok(Value::Array(new_arr))
+        }
+        _ => Err(FuncError::Generic(
+            "First argument must be an array".to_string(),
+        )),
+    }
+}
+
+/// Append element to list (must version)
+pub fn must_append(args: &[Value]) -> Result<Value, FuncError> {
+    append(args)
+}
+
+/// Prepend element to list
+pub fn prepend(args: &[Value]) -> Result<Value, FuncError> {
+    let list = args.first().ok_or(FuncError::ExactlyXArgs(
+        "This function requires exactly 2 arguments.".to_string(),
+        2,
+    ))?;
+    let element = args.get(1).ok_or(FuncError::ExactlyXArgs(
+        "This function requires exactly 2 arguments.".to_string(),
+        2,
+    ))?;
+
+    match list {
+        Value::Array(arr) => {
+            let mut new_arr = vec![element.clone()];
+            new_arr.extend(arr.clone());
+            Ok(Value::Array(new_arr))
+        }
+        _ => Err(FuncError::Generic(
+            "First argument must be an array".to_string(),
+        )),
+    }
+}
+
+/// Prepend element to list (must version)
+pub fn must_prepend(args: &[Value]) -> Result<Value, FuncError> {
+    prepend(args)
+}
+
+/// Concatenate multiple lists
+pub fn concat(args: &[Value]) -> Result<Value, FuncError> {
+    let mut result = Vec::new();
+
+    for arg in args {
+        match arg {
+            Value::Array(arr) => result.extend(arr.clone()),
+            _ => {
+                return Err(FuncError::Generic(
+                    "All arguments must be arrays".to_string(),
+                ))
+            }
+        }
+    }
+
+    Ok(Value::Array(result))
+}
+
+/// Reverse a list
+pub fn reverse(args: &[Value]) -> Result<Value, FuncError> {
+    let list = args.first().ok_or(FuncError::ExactlyXArgs(
+        "This function requires exactly 1 argument.".to_string(),
+        1,
+    ))?;
+
+    match list {
+        Value::Array(arr) => {
+            let mut reversed = arr.clone();
+            reversed.reverse();
+            Ok(Value::Array(reversed))
+        }
+        _ => Err(FuncError::Generic("Argument must be an array".to_string())),
+    }
+}
+
+/// Reverse a list (must version)
+pub fn must_reverse(args: &[Value]) -> Result<Value, FuncError> {
+    reverse(args)
+}
+
+/// Get unique elements from a list
+pub fn uniq(args: &[Value]) -> Result<Value, FuncError> {
+    let list = args.first().ok_or(FuncError::ExactlyXArgs(
+        "This function requires exactly 1 argument.".to_string(),
+        1,
+    ))?;
+
+    match list {
+        Value::Array(arr) => {
+            let mut seen = HashSet::new();
+            let mut result = Vec::new();
+
+            for item in arr {
+                let key = format!("{:?}", item);
+                if seen.insert(key) {
+                    result.push(item.clone());
+                }
+            }
+
+            Ok(Value::Array(result))
+        }
+        _ => Err(FuncError::Generic("Argument must be an array".to_string())),
+    }
+}
+
+/// Get unique elements from a list (must version)
+pub fn must_uniq(args: &[Value]) -> Result<Value, FuncError> {
+    uniq(args)
+}
+
+/// Remove elements from list
+pub fn without(args: &[Value]) -> Result<Value, FuncError> {
+    let list = args.first().ok_or(FuncError::AtLeastXArgs(
+        "This function requires at least 2 arguments.".to_string(),
+        2,
+    ))?;
+
+    match list {
+        Value::Array(arr) => {
+            let to_remove: Vec<String> = args[1..].iter().map(|v| format!("{:?}", v)).collect();
+            let result: Vec<Value> = arr
+                .iter()
+                .filter(|item| !to_remove.contains(&format!("{:?}", item)))
+                .cloned()
+                .collect();
+            Ok(Value::Array(result))
+        }
+        _ => Err(FuncError::Generic(
+            "First argument must be an array".to_string(),
+        )),
+    }
+}
+
+/// Remove elements from list (must version)
+pub fn must_without(args: &[Value]) -> Result<Value, FuncError> {
+    without(args)
+}
+
+/// Check if list contains element
+pub fn has(args: &[Value]) -> Result<Value, FuncError> {
+    let list = args.first().ok_or(FuncError::ExactlyXArgs(
+        "This function requires exactly 2 arguments.".to_string(),
+        2,
+    ))?;
+    let element = args.get(1).ok_or(FuncError::ExactlyXArgs(
+        "This function requires exactly 2 arguments.".to_string(),
+        2,
+    ))?;
+
+    match list {
+        Value::Array(arr) => {
+            let element_key = format!("{:?}", element);
+            let found = arr.iter().any(|item| format!("{:?}", item) == element_key);
+            Ok(Value::Bool(found))
+        }
+        _ => Err(FuncError::Generic(
+            "First argument must be an array".to_string(),
+        )),
+    }
+}
+
+/// Check if list contains element (must version)
+pub fn must_has(args: &[Value]) -> Result<Value, FuncError> {
+    has(args)
+}
+
+/// Remove nil/empty values from list
+pub fn compact(args: &[Value]) -> Result<Value, FuncError> {
+    let list = args.first().ok_or(FuncError::ExactlyXArgs(
+        "This function requires exactly 1 argument.".to_string(),
+        1,
+    ))?;
+
+    match list {
+        Value::Array(arr) => {
+            let result: Vec<Value> = arr
+                .iter()
+                .filter(|item| !crate::utils::is_absent_or_nil(item))
+                .cloned()
+                .collect();
+            Ok(Value::Array(result))
+        }
+        _ => Err(FuncError::Generic("Argument must be an array".to_string())),
+    }
+}
+
+/// Remove nil/empty values from list (must version)
+pub fn must_compact(args: &[Value]) -> Result<Value, FuncError> {
+    compact(args)
+}
+
+/// Slice a list
+pub fn slice(args: &[Value]) -> Result<Value, FuncError> {
+    let list = args.first().ok_or(FuncError::AtLeastXArgs(
+        "This function requires at least 2 arguments.".to_string(),
+        2,
+    ))?;
+    let start = args.get(1).ok_or(FuncError::AtLeastXArgs(
+        "This function requires at least 2 arguments.".to_string(),
+        2,
+    ))?;
+
+    let start = start
+        .to_string()
+        .parse::<usize>()
+        .map_err(|_| FuncError::Generic("Start index must be a number".to_string()))?;
+
+    let end = if let Some(end_val) = args.get(2) {
+        Some(
+            end_val
+                .to_string()
+                .parse::<usize>()
+                .map_err(|_| FuncError::Generic("End index must be a number".to_string()))?,
+        )
+    } else {
+        None
+    };
+
+    match list {
+        Value::Array(arr) => {
+            let end = end.unwrap_or(arr.len());
+            if start > arr.len() || end > arr.len() || start > end {
+                return Err(FuncError::Generic("Invalid slice range".to_string()));
+            }
+            Ok(Value::Array(arr[start..end].to_vec()))
+        }
+        _ => Err(FuncError::Generic(
+            "First argument must be an array".to_string(),
+        )),
+    }
+}
+
+/// Slice a list (must version)
+pub fn must_slice(args: &[Value]) -> Result<Value, FuncError> {
+    slice(args)
+}
+
+/// Generate a list of numbers from 0 to n-1
+pub fn until(args: &[Value]) -> Result<Value, FuncError> {
+    let count = args.first().ok_or(FuncError::ExactlyXArgs(
+        "This function requires exactly 1 argument.".to_string(),
+        1,
+    ))?;
+
+    let count = count
+        .to_string()
+        .parse::<i64>()
+        .map_err(|_| FuncError::Generic("Argument must be a number".to_string()))?;
+
+    let count = crate::helm_functions::bounded_elements(count, "until")?;
+    let result: Vec<Value> = (0..count).map(|i| Value::Number(i.into())).collect();
+    Ok(Value::Array(result))
+}
+
+/// Generate a list of numbers with step
+pub fn until_step(args: &[Value]) -> Result<Value, FuncError> {
+    let start = args.first().ok_or(FuncError::ExactlyXArgs(
+        "This function requires exactly 3 arguments.".to_string(),
+        3,
+    ))?;
+    // `untilStep start stop step`, as Helm documents it: `untilStep 3 6 2` is `[3 5]`.
+    // This used to read the second argument as the step and the third as the stop, so
+    // that example answered with an empty list instead -- silently, which is worse
+    // than refusing it.
+    let end = args.get(1).ok_or(FuncError::ExactlyXArgs(
+        "This function requires exactly 3 arguments.".to_string(),
+        3,
+    ))?;
+    let step = args.get(2).ok_or(FuncError::ExactlyXArgs(
+        "This function requires exactly 3 arguments.".to_string(),
+        3,
+    ))?;
+
+    let start = start
+        .to_string()
+        .parse::<i64>()
+        .map_err(|_| FuncError::Generic("Start must be a number".to_string()))?;
+    let end = end
+        .to_string()
+        .parse::<i64>()
+        .map_err(|_| FuncError::Generic("Stop must be a number".to_string()))?;
+    let step = step
+        .to_string()
+        .parse::<i64>()
+        .map_err(|_| FuncError::Generic("Step must be a number".to_string()))?;
+
+    if step == 0 {
+        return Err(FuncError::Generic("Step cannot be zero".to_string()));
+    }
+
+    // The loop itself is the bound here: a step that never reaches the end simply
+    // stops, so what needs checking is how many values fit between the two.
+    crate::helm_functions::bounded_elements(
+        end.saturating_sub(start)
+            .saturating_div(step)
+            .saturating_abs(),
+        "untilStep",
+    )?;
+    let mut result = Vec::new();
+    if step > 0 {
+        let mut i = start;
+        while i < end {
+            result.push(Value::Number(i.into()));
+            i += step;
+        }
+    } else {
+        let mut i = start;
+        while i > end {
+            result.push(Value::Number(i.into()));
+            i += step;
+        }
+    }
+
+    Ok(Value::Array(result))
+}
+
+/// Generate a sequence of numbers
+pub fn seq(args: &[Value]) -> Result<Value, FuncError> {
+    let start = args.first().ok_or(FuncError::AtLeastXArgs(
+        "This function requires at least 1 argument.".to_string(),
+        1,
+    ))?;
+
+    let start = start
+        .to_string()
+        .parse::<i64>()
+        .map_err(|_| FuncError::Generic("Start must be a number".to_string()))?;
+
+    let end = if let Some(end_val) = args.get(1) {
+        end_val
+            .to_string()
+            .parse::<i64>()
+            .map_err(|_| FuncError::Generic("End must be a number".to_string()))?
+    } else {
+        start
+    };
+
+    let (from, to) = if args.len() == 1 {
+        (1, start)
+    } else {
+        (start, end)
+    };
+    crate::helm_functions::bounded_elements(to.saturating_sub(from).saturating_add(1), "seq")?;
+    let result: Vec<Value> = (from..=to).map(|i| Value::Number(i.into())).collect();
+
+    Ok(Value::Array(result))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `slice` is both Go's builtin and a Helm function, and registering the Helm set
+    /// replaces the builtin -- which is what Helm itself does, since its function map
+    /// goes over Go's builtins. So with this feature on, `slice` takes a list and
+    /// refuses a string, and that precedence is the documented behaviour rather than an
+    /// accident of registration order.
+    #[test]
+    fn the_helm_slice_replaces_gos_builtin() {
+        use crate::helm_functions::HELM_FUNCTIONS;
+        use crate::{Context, Template, Value};
+
+        let render = |source: &str| {
+            let mut tmpl = Template::default();
+            tmpl.add_funcs(HELM_FUNCTIONS);
+            tmpl.parse(source).expect("parses");
+            tmpl.render(&Context::from(Value::Nil))
+        };
+
+        assert_eq!(render("{{ slice (list 1 2 3 4) 1 3 }}").unwrap(), "[2 3]");
+        let error = render(r#"{{ slice "hello" 1 3 }}"#)
+            .expect_err("the helm slice takes a list, not a string");
+        assert!(error.to_string().contains("must be an array"), "{error}");
+    }
+
+    #[test]
+    fn test_first() {
+        let list = Value::Array(vec![
+            Value::Number(1.into()),
+            Value::Number(2.into()),
+            Value::Number(3.into()),
+        ]);
+        let result = first(&[list]).unwrap();
+        assert_eq!(result.to_string(), "1");
+    }
+
+    #[test]
+    fn test_last() {
+        let list = Value::Array(vec![
+            Value::Number(1.into()),
+            Value::Number(2.into()),
+            Value::Number(3.into()),
+        ]);
+        let result = last(&[list]).unwrap();
+        assert_eq!(result.to_string(), "3");
+    }
+
+    #[test]
+    fn test_append() {
+        let list = Value::Array(vec![Value::Number(1.into()), Value::Number(2.into())]);
+        let result = append(&[list, Value::Number(3.into())]).unwrap();
+        if let Value::Array(arr) = result {
+            assert_eq!(arr.len(), 3);
+            assert_eq!(arr[2].to_string(), "3");
+        } else {
+            panic!("Expected array");
+        }
+    }
+
+    #[test]
+    fn test_reverse() {
+        let list = Value::Array(vec![
+            Value::Number(1.into()),
+            Value::Number(2.into()),
+            Value::Number(3.into()),
+        ]);
+        let result = reverse(&[list]).unwrap();
+        if let Value::Array(arr) = result {
+            assert_eq!(arr[0].to_string(), "3");
+            assert_eq!(arr[2].to_string(), "1");
+        } else {
+            panic!("Expected array");
+        }
+    }
+
+    #[test]
+    fn test_uniq() {
+        let list = Value::Array(vec![
+            Value::Number(1.into()),
+            Value::Number(2.into()),
+            Value::Number(2.into()),
+            Value::Number(3.into()),
+        ]);
+        let result = uniq(&[list]).unwrap();
+        if let Value::Array(arr) = result {
+            assert_eq!(arr.len(), 3);
+        } else {
+            panic!("Expected array");
+        }
+    }
+
+    #[test]
+    fn test_until() {
+        let result = until(&[Value::Number(5.into())]).unwrap();
+        if let Value::Array(arr) = result {
+            assert_eq!(arr.len(), 5);
+            assert_eq!(arr[0].to_string(), "0");
+            assert_eq!(arr[4].to_string(), "4");
+        } else {
+            panic!("Expected array");
+        }
+    }
+
+    #[test]
+    fn test_seq() {
+        let result = seq(&[Value::Number(3.into())]).unwrap();
+        if let Value::Array(arr) = result {
+            assert_eq!(arr.len(), 3);
+            assert_eq!(arr[0].to_string(), "1");
+            assert_eq!(arr[2].to_string(), "3");
+        } else {
+            panic!("Expected array");
+        }
+    }
+
+    #[test]
+    fn test_concat() {
+        let list1 = Value::Array(vec![Value::Number(1.into()), Value::Number(2.into())]);
+        let list2 = Value::Array(vec![Value::Number(3.into()), Value::Number(4.into())]);
+        let result = concat(&[list1, list2]).unwrap();
+        if let Value::Array(arr) = result {
+            assert_eq!(arr.len(), 4);
+        } else {
+            panic!("Expected array");
+        }
+    }
+
+    #[test]
+    fn test_rest() {
+        let list = Value::Array(vec![
+            Value::Number(1.into()),
+            Value::Number(2.into()),
+            Value::Number(3.into()),
+        ]);
+        let result = rest(&[list]).unwrap();
+        if let Value::Array(arr) = result {
+            assert_eq!(arr.len(), 2);
+            assert_eq!(arr[0].to_string(), "2");
+            assert_eq!(arr[1].to_string(), "3");
+        } else {
+            panic!("Expected array");
+        }
+    }
+
+    #[test]
+    fn test_initial() {
+        let list = Value::Array(vec![
+            Value::Number(1.into()),
+            Value::Number(2.into()),
+            Value::Number(3.into()),
+        ]);
+        let result = initial(&[list]).unwrap();
+        if let Value::Array(arr) = result {
+            assert_eq!(arr.len(), 2);
+            assert_eq!(arr[0].to_string(), "1");
+            assert_eq!(arr[1].to_string(), "2");
+        } else {
+            panic!("Expected array");
+        }
+    }
+
+    #[test]
+    fn test_prepend() {
+        let list = Value::Array(vec![Value::Number(2.into()), Value::Number(3.into())]);
+        let result = prepend(&[list, Value::Number(1.into())]).unwrap();
+        if let Value::Array(arr) = result {
+            assert_eq!(arr.len(), 3);
+            assert_eq!(arr[0].to_string(), "1");
+        } else {
+            panic!("Expected array");
+        }
+    }
+
+    #[test]
+    fn test_without() {
+        let list = Value::Array(vec![
+            Value::Number(1.into()),
+            Value::Number(2.into()),
+            Value::Number(3.into()),
+        ]);
+        let result = without(&[list, Value::Number(2.into())]).unwrap();
+        if let Value::Array(arr) = result {
+            assert_eq!(arr.len(), 2);
+        } else {
+            panic!("Expected array");
+        }
+    }
+
+    #[test]
+    fn test_has() {
+        let list = Value::Array(vec![
+            Value::Number(1.into()),
+            Value::Number(2.into()),
+            Value::Number(3.into()),
+        ]);
+        let result = has(&[list.clone(), Value::Number(2.into())]).unwrap();
+        assert_eq!(result, Value::Bool(true));
+
+        let result = has(&[list, Value::Number(5.into())]).unwrap();
+        assert_eq!(result, Value::Bool(false));
+    }
+
+    #[test]
+    fn test_compact() {
+        let list = Value::Array(vec![
+            Value::Number(1.into()),
+            Value::Nil,
+            Value::Number(2.into()),
+            Value::NoValue,
+            Value::Number(3.into()),
+        ]);
+        let result = compact(&[list]).unwrap();
+        if let Value::Array(arr) = result {
+            assert_eq!(arr.len(), 3);
+        } else {
+            panic!("Expected array");
+        }
+    }
+
+    #[test]
+    fn test_slice() {
+        let list = Value::Array(vec![
+            Value::Number(1.into()),
+            Value::Number(2.into()),
+            Value::Number(3.into()),
+            Value::Number(4.into()),
+            Value::Number(5.into()),
+        ]);
+        let result = slice(&[list, Value::Number(1.into()), Value::Number(3.into())]).unwrap();
+        if let Value::Array(arr) = result {
+            assert_eq!(arr.len(), 2);
+            assert_eq!(arr[0].to_string(), "2");
+            assert_eq!(arr[1].to_string(), "3");
+        } else {
+            panic!("Expected array");
+        }
+    }
+
+    /// `untilStep start stop step`. The expectations are Helm's own documented
+    /// examples; the previous test asserted the argument order this implementation
+    /// happened to have rather than the one Helm charts are written against.
+    #[test]
+    fn until_step_takes_start_stop_step() {
+        let numbers = |args: &[Value]| match until_step(args).unwrap() {
+            Value::Array(values) => values.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            other => panic!("expected an array, got {other:?}"),
+        };
+        let number = |n: i64| Value::Number(n.into());
+
+        // Helm: "untilStep 3 6 2 will produce [3 5]".
+        assert_eq!(numbers(&[number(3), number(6), number(2)]), ["3", "5"]);
+        assert_eq!(
+            numbers(&[number(0), number(10), number(2)]),
+            ["0", "2", "4", "6", "8"]
+        );
+        // A step that steps away from the stop yields nothing rather than looping.
+        assert!(numbers(&[number(0), number(10), number(-1)]).is_empty());
+        assert_eq!(
+            numbers(&[number(5), number(0), number(-2)]),
+            ["5", "3", "1"]
+        );
+        assert!(until_step(&[number(0), number(10), number(0)]).is_err());
+    }
+}

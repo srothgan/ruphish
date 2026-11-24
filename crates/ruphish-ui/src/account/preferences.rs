@@ -62,7 +62,7 @@ pub(crate) fn DisplayPreferencesForm(api: Api, token: String) -> impl IntoView {
                 datetime::named_zone(&name).ok().map(|zone| {
                     let offset = preview_instant
                         .get_value()
-                        .to_zoned(zone)
+                        .to_zoned_datetime(zone)
                         .strftime("UTC%:z")
                         .to_string();
                     let label = format!("{} ({offset})", name.replace('_', " "));

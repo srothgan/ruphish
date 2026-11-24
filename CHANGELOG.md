@@ -2,6 +2,13 @@
 
 Development previews have short notes on GitHub Releases. This changelog records user-facing changes for final releases.
 
+## Unreleased
+
+### Fixed
+
+- Reject malformed template escape sequences without panicking, and correctly render valid escapes followed by ordinary text or other escape types.
+- Update dependencies to include fixes for SMTP transport, cookie parsing, and URL parsing security advisories.
+
 ## 0.1.0 - 2026-11-13
 
 Initial release of Ruphish, a self-hosted phishing simulation platform and successor to Gophish.
