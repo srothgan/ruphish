@@ -4,6 +4,49 @@ use ruphish_adapters::template::{self, Context};
 use serde_json::Value;
 
 #[test]
+fn malformed_unicode_escapes_return_parse_errors_and_leave_rendering_usable() {
+    let context = Context {
+        first_name: "Ada".into(),
+        ..Context::default()
+    };
+    let crash = std::str::from_utf8(include_bytes!(
+        "../../../fuzz/seeds/template_render/utf8-escape-crash.txt"
+    ))
+    .unwrap();
+    for source in [
+        crash,
+        r#"{{"\x$é?"}}"#,
+        r#"{{"\xé"}}"#,
+        r#"{{"\x41\xé"}}"#,
+        r#"{{"\u123é"}}"#,
+        r#"{{"\u0041\u123é"}}"#,
+        r#"{{"\U000123é"}}"#,
+        r#"{{"\x1"}}"#,
+        r#"{{"\u123"}}"#,
+        r#"{{"\U0001234"}}"#,
+    ] {
+        let error = template::render(source, &context).unwrap_err();
+        assert_eq!(error.kind, template::ErrorKind::Parse, "{source:?}");
+        assert!(error.output.is_empty(), "{source:?}");
+        assert_eq!(
+            template::render("Hello {{.FirstName}}!", &context).unwrap(),
+            "Hello Ada!"
+        );
+    }
+    for (source, expected) in [
+        (r#"{{"\x41plain"}}"#, "Aplain"),
+        (r#"{{"\xC3\xA9plain"}}"#, "éplain"),
+        (r#"{{"\x41é"}}"#, "Aé"),
+        (r#"{{"\u0041plain"}}"#, "Aplain"),
+        (r#"{{"\u0041\u00E9plain"}}"#, "Aéplain"),
+        (r#"{{"\U0001F600plain"}}"#, "😀plain"),
+        (r#"{{"\x41\u0042\U00000043"}}"#, "ABC"),
+    ] {
+        assert_eq!(template::render(source, &context).unwrap(), expected);
+    }
+}
+
+#[test]
 fn captured_go_template_cases_match_outputs_and_error_classes() {
     let cases: Vec<Value> = serde_json::from_str(include_str!(
         "../../../tests/fixtures/gophish-v0.12.1/templates.json"

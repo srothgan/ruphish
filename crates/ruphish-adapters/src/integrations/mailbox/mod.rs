@@ -326,7 +326,7 @@ pub(crate) async fn initial_uid(
         ruphish_application::datetime::parse_stored(since).map_err(|_| "mailbox_storage_failed")?;
     let date = ruphish_application::datetime::from_seconds(stamp.as_second().saturating_sub(86400))
         .map_err(|_| "mailbox_storage_failed")?
-        .to_zoned(
+        .to_zoned_datetime(
             ruphish_application::datetime::named_zone("UTC")
                 .map_err(|_| "mailbox_storage_failed")?,
         )
